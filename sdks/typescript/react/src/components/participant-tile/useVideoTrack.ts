@@ -23,7 +23,8 @@ export function useVideoTrack(videoRef: RefObject<HTMLVideoElement | null>, trac
       setStatus("idle");
       return;
     }
-    video.srcObject = new MediaStream([track]);
+    const stream = new MediaStream([track]);
+    video.srcObject = stream;
     setStatus(track.muted ? "muted" : "loading");
     const onLoaded = () => {
       loadedRef.current = true;
@@ -47,6 +48,8 @@ export function useVideoTrack(videoRef: RefObject<HTMLVideoElement | null>, trac
       track.removeEventListener("unmute", onUnmute);
       track.removeEventListener("ended", onEnded);
       video.srcObject = null;
+      // Release this playback wrapper without stopping the track owned by the call.
+      stream.removeTrack(track);
     };
   }, [enabled, track, videoRef]);
   return status;

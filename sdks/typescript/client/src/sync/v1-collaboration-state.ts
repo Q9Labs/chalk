@@ -1,6 +1,6 @@
 import type { SyncV1ClientFrame, SyncV1ServerFrame } from "../generated/sync";
-import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
-import { chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "../collaboration/wire";
+import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
+import { chatReactionsFromFrame, chatMessageFromFrame, chatReadReceiptFromFrame, reactionFromFrame } from "../collaboration/wire";
 import { encodeV1ClientFrame } from "./v1-codec";
 import { rejectV1Deferred, resolveV1Deferred, type V1Deferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
@@ -15,7 +15,7 @@ type ChatPageDeferred = V1Deferred<ChalkChatPageResult>;
 type ChatReadDeferred = V1Deferred<ChalkChatReadReceipt>;
 
 export type V1CollaborationHelloExtension = {
-  readonly name: "collaboration_v1";
+  readonly name: "collaboration_v1" | "collaboration_v2";
   readonly chat_cursor: {
     readonly after_sequence: string | null;
     readonly retained_floor_sequence: string | null;
@@ -37,17 +37,18 @@ export class V1CollaborationState {
   readonly #reactions = new Map<string, ReactionDeferred>();
   readonly #chatSends = new Map<string, ChatSendDeferred>();
   readonly #chatPages = new Map<string, ChatPageDeferred>();
+  readonly #chatReactions = new Map<string, V1Deferred<ChalkChatReactions>>();
   readonly #chatReads = new Map<string, ChatReadDeferred>();
   #state: V1CollaborationExtensionState;
   #participantCapabilities: Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>> = {};
   #chatAfterSequence: string | null;
-  #requestedVersion: 0 | 1;
+  #requestedVersion: 0 | 1 | 2;
 
   constructor(options: V1CollaborationStateOptions) {
     this.#options = options;
     const cursor = options.request === false ? { afterSequence: null, retainedFloorSequence: null } : (options.request?.chatCursor ?? { afterSequence: null, retainedFloorSequence: null });
     this.#chatAfterSequence = cursor.afterSequence;
-    this.#requestedVersion = options.request === false ? 0 : 1;
+    this.#requestedVersion = options.request === false ? 0 : options.request?.name === "collaboration_v2" ? 2 : 1;
     this.#state = {
       negotiated: false,
       version: null,
@@ -58,13 +59,13 @@ export class V1CollaborationState {
     };
   }
 
-  get requestedVersion(): 0 | 1 {
+  get requestedVersion(): 0 | 1 | 2 {
     return this.#requestedVersion;
   }
 
   get helloExtension(): V1CollaborationHelloExtension | null {
     if (this.#requestedVersion === 0) return null;
-    return { name: "collaboration_v1", chat_cursor: { after_sequence: this.#chatAfterSequence, retained_floor_sequence: this.#state.retainedFloorSequence } };
+    return { name: this.#requestedVersion === 2 ? "collaboration_v2" : "collaboration_v1", chat_cursor: { after_sequence: this.#chatAfterSequence, retained_floor_sequence: this.#state.retainedFloorSequence } };
   }
 
   getState(): V1CollaborationExtensionState {
@@ -83,7 +84,7 @@ export class V1CollaborationState {
   acceptWelcome(frame: Extract<SyncV1ServerFrame, { readonly type: "welcome" }>): void {
     if ("extensions" in frame) {
       const extension = frame.extensions[0];
-      const version = 1;
+      const version = extension.name === "collaboration_v2" ? 2 : 1;
       if (this.#requestedVersion !== version) throw new V1ReplicaError("collaboration welcome version does not match the requested extension");
       this.#state = {
         negotiated: true,
@@ -125,9 +126,33 @@ export class V1CollaborationState {
     return this.#sendTrackedRequest(clientMessageId, frame, this.#chatSends);
   }
 
+  reactToChatMessage(input: ChalkChatReactionInput): Promise<ChalkChatReactions> {
+    this.#assertReady("sendChat");
+    if (this.#state.version !== 2) throw new V1SyncError("message reactions require collaboration_v2", "collaboration_unavailable");
+    this.#assertCapacity();
+    const requestId = this.#nextRequestId();
+    return this.#sendTrackedRequest(requestId, { type: "chat_reaction_set", request_id: requestId, message_id: input.messageId, emoji: input.emoji, on: input.on }, this.#chatReactions);
+  }
+
+  chatReactions(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_reactions" }>): void {
+    this.#requireNegotiated();
+    this.#emit({ type: "chat_reactions", state: chatReactionsFromFrame(frame) });
+  }
+
+  chatReactionResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_reaction_result" }>): void {
+    this.#requireLive();
+    this.#requireNegotiated();
+    const deferred = this.#chatReactions.get(frame.request_id);
+    if (!deferred) return;
+    this.#chatReactions.delete(frame.request_id);
+    if (frame.outcome === "accepted") {
+      this.chatReactions(frame.state);
+      resolveV1Deferred(deferred, chatReactionsFromFrame(frame.state));
+    } else rejectV1Deferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
+  }
+
   markChatRead(sequence: string): Promise<ChalkChatReadReceipt> {
     this.#assertReady();
-    if (this.#state.version !== 1) throw new V1SyncError("durable chat read receipts require collaboration_v1", "collaboration_unavailable");
     this.#assertCapacity();
     const requestId = this.#nextRequestId();
     const frame = { type: "chat_read_set", request_id: requestId, sequence } as const;
@@ -211,7 +236,7 @@ export class V1CollaborationState {
 
   chatReadReceipt(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_read_receipt" }>): void {
     this.#requireLive();
-    this.#requireVersion(1);
+    this.#requireNegotiated();
     const receipt = chatReadReceiptFromFrame(frame);
     this.#rememberChatReadReceipt(receipt);
     this.#emit({ type: "chat_read_receipt", receipt });
@@ -219,7 +244,7 @@ export class V1CollaborationState {
 
   chatReadResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_read_result" }>): void {
     this.#requireLive();
-    this.#requireVersion(1);
+    this.#requireNegotiated();
     const deferred = this.#chatReads.get(frame.request_id);
     if (!deferred) return;
     this.#chatReads.delete(frame.request_id);
@@ -240,6 +265,8 @@ export class V1CollaborationState {
     this.#reactions.clear();
     this.#chatSends.clear();
     this.#chatPages.clear();
+    for (const deferred of this.#chatReactions.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
+    this.#chatReactions.clear();
     this.#chatReads.clear();
   }
 
@@ -283,11 +310,11 @@ export class V1CollaborationState {
 
   #assertCapacity(): void {
     const maximum = Math.min(this.#options.maxPendingRequests ?? MAX_COLLABORATION_REQUESTS_IN_FLIGHT, MAX_COLLABORATION_REQUESTS_IN_FLIGHT);
-    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size + this.#chatReads.size >= maximum) throw new V1SyncError("collaboration in-flight capacity exceeded", "capacity");
+    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size + this.#chatReads.size + this.#chatReactions.size >= maximum) throw new V1SyncError("collaboration in-flight capacity exceeded", "capacity");
   }
 
   #assertRequestIdAvailable(id: string): void {
-    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id) || this.#chatReads.has(id)) throw new V1SyncError("collaboration request ID is already pending", "request_id_conflict");
+    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id) || this.#chatReads.has(id) || this.#chatReactions.has(id)) throw new V1SyncError("collaboration request ID is already pending", "request_id_conflict");
   }
 
   #nextRequestId(): string {
@@ -302,11 +329,6 @@ export class V1CollaborationState {
 
   #requireNegotiated(): void {
     if (!this.#state.negotiated) throw new V1ReplicaError("collaboration frame arrived without a negotiated extension");
-  }
-
-  #requireVersion(version: 1): void {
-    this.#requireNegotiated();
-    if (this.#state.version !== version) throw new V1ReplicaError("collaboration_v1 frame arrived on a different extension version");
   }
 
   #emit(event: V1CollaborationEvent): void {

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Cancel01Icon, UserAdd01Icon } from "../../utils/icons";
-import { Avatar } from "../atomic";
+import { IconButton, Spinner } from "@q9labsai/chalk-ui";
+import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
-import { ChalkBadge, ChalkButton, ChalkIconButton, ChalkPanel, ChalkSpinner } from "../chalk-ui";
-import { ClassicAdmissionPanel } from "./ClassicAdmissionPanel";
+import { Cancel01Icon } from "../../utils/icons";
+import { Avatar } from "../atomic";
 
 export interface AdmissionParticipant {
   id: string;
@@ -22,115 +22,151 @@ export interface AdmissionPanelProps {
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly participants: AdmissionParticipant[];
-  readonly onAdmit: (id: string) => void;
-  readonly onDeny: (id: string) => void;
-  readonly onAdmitAll?: () => void;
-  readonly onDenyAll?: () => void;
+  readonly onAdmit: (id: string) => void | Promise<void>;
+  readonly onDeny: (id: string) => void | Promise<void>;
+  readonly onAdmitAll?: () => void | Promise<void>;
+  readonly onDenyAll?: () => void | Promise<void>;
 }
 
-const ROW_CLASS = "flex min-h-14 items-center gap-3 px-1 py-2";
-const BULK_BUTTON_CLASS = "h-8 min-h-0 rounded-[8px] px-2.5 text-xs font-semibold";
+const TEXT_BUTTON_CLASS =
+  "inline-flex h-7 items-center rounded-[6px] px-2 text-xs font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
 
-function getWaitingLabel(date?: Date): string {
-  if (!date) return "Waiting to join";
-  const minutes = Math.floor((Date.now() - date.getTime()) / 60000);
+const ADMIT_BUTTON_CLASS =
+  "inline-flex h-8 items-center rounded-[7px] border border-transparent bg-[var(--chalk-app-control-active)] px-3 text-[13px] font-semibold text-[var(--chalk-app-control-active-text)] transition-colors hover:border-[var(--chalk-app-control-active-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
+
+const DENY_BUTTON_CLASS =
+  "inline-flex h-8 items-center rounded-[7px] px-2.5 text-[13px] font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
+
+function getWaitingLabel(joinedAt?: Date): string {
+  if (!joinedAt) return "Waiting to join";
+  const minutes = Math.floor((Date.now() - joinedAt.getTime()) / 60_000);
   if (minutes < 1) return "Waiting to join";
   return `Waiting ${minutes} min`;
 }
 
-/**
- * Admission lives inside the Participants panel as a quiet section: a title with a live count,
- * one 56px row per waiting person with a decisive Admit and a quiet Deny, and bulk actions only
- * once there is more than one request. Standalone use wraps the same section in a panel.
- */
 const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 60000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const perform = async (action: () => void | Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn’t update this join request.");
+    } finally {
+      setBusy(false);
+    }
+  };
   const pending = participants.length;
-  const showBulkActions = pending > 1 && (onAdmitAll !== undefined || onDenyAll !== undefined);
 
-  const section = (
+  const list = (
     <>
-      <header className="flex min-h-10 items-center justify-between gap-3 px-1">
-        <div className="flex min-w-0 items-center gap-2" aria-live="polite">
-          <h3 className="text-sm font-semibold text-[var(--chalk-app-text)]">Admission</h3>
-          <ChalkBadge tone="accent" count={pending} className="!min-h-5 !min-w-5 !px-1.5 !text-[11px] !text-[var(--chalk-app-control-active-text)]" />
-          {loading ? <ChalkSpinner className="size-4" /> : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {showBulkActions && onAdmitAll ? (
-            <ChalkButton variant="ghost" onClick={onAdmitAll} className={BULK_BUTTON_CLASS}>
-              Admit all
-            </ChalkButton>
-          ) : null}
-          {showBulkActions && onDenyAll ? (
-            <ChalkButton variant="ghost" onClick={onDenyAll} className={cn(BULK_BUTTON_CLASS, "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-danger)]")}>
-              Deny all
-            </ChalkButton>
-          ) : null}
-          {onClose ? (
-            <ChalkIconButton type="button" onClick={onClose} size="sm" className="text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" aria-label="Close admission">
-              <Cancel01Icon size={16} />
-            </ChalkIconButton>
-          ) : null}
-        </div>
-      </header>
-
-      {pending === 0 ? (
-        <p role="status" className="flex min-h-11 items-center gap-2.5 px-1 text-[13px] text-[var(--chalk-app-text-muted)]">
-          <UserAdd01Icon size={16} className="shrink-0 opacity-70" aria-hidden="true" />
-          No one is waiting to join
+      {error ? (
+        <p role="alert" className="text-sm text-[var(--chalk-danger-text)]">
+          {error}
         </p>
-      ) : (
-        <ul className={cn("m-0 list-none p-0", !inline && "max-h-80 overflow-y-auto")} aria-label="Admission requests">
-          {participants.map((p) => (
-            <li key={p.id} className={ROW_CLASS}>
-              <Avatar src={p.avatarUrl} name={p.displayName} size="sm" />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-semibold text-[var(--chalk-app-text)]" title={p.displayName}>
-                  {p.displayName}
-                </span>
-                <span className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(p.joinedAt)}</span>
+      ) : null}
+      {pending > 0 ? (
+        <div className="flex h-9 items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--chalk-app-text-muted)]" aria-live="polite">
+            {pending === 1 ? "1 waiting" : `${pending} waiting`}
+          </span>
+          <div className="flex items-center gap-1">
+            {loading ? <Spinner size="sm" aria-label="Updating admission" /> : null}
+            {pending > 1 && onAdmitAll ? (
+              <button type="button" disabled={busy || loading} onClick={() => void perform(onAdmitAll)} className={TEXT_BUTTON_CLASS}>
+                Admit all
+              </button>
+            ) : null}
+            {pending > 1 && onDenyAll ? (
+              <button type="button" disabled={busy || loading} onClick={() => void perform(onDenyAll)} className={TEXT_BUTTON_CLASS}>
+                Deny all
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <ul aria-label="Waiting to join" className="m-0 list-none p-0">
+        {pending === 0 ? (
+          <li className="py-10 text-center text-sm text-[var(--chalk-app-text-muted)]" role="status">
+            No one is waiting to join
+          </li>
+        ) : (
+          participants.map((participant) => (
+            <li key={participant.id} className="call-person-row">
+              <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" className="!h-8 !w-8" generated />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[var(--chalk-app-text)]">
+                  <bdi>{participant.displayName}</bdi>
+                </p>
+                <p className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(participant.joinedAt)}</p>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <ChalkButton variant="solid" tone="accent" onClick={() => onAdmit(p.id)} className="h-8 min-h-0 rounded-[8px] px-3 text-xs font-semibold !text-[var(--chalk-app-control-active-text)]" aria-label={`Admit ${p.displayName}`}>
+              <div className="flex shrink-0 items-center gap-1">
+                <button type="button" disabled={busy || loading} onClick={() => void perform(() => onAdmit(participant.id))} className={ADMIT_BUTTON_CLASS} aria-label={`Admit ${participant.displayName}`}>
                   Admit
-                </ChalkButton>
-                <ChalkIconButton size="sm" onClick={() => onDeny(p.id)} className="text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-danger)]" aria-label={`Deny ${p.displayName}`}>
-                  <Cancel01Icon size={16} />
-                </ChalkIconButton>
+                </button>
+                <button type="button" disabled={busy || loading} onClick={() => void perform(() => onDeny(participant.id))} className={DENY_BUTTON_CLASS} aria-label={`Deny ${participant.displayName}`}>
+                  Deny
+                </button>
               </div>
             </li>
-          ))}
-        </ul>
-      )}
+          ))
+        )}
+      </ul>
     </>
   );
 
   if (inline) {
     return (
-      <section role="region" aria-label="Admission requests" className={cn("mb-2 border-b border-[var(--chalk-app-line)] pb-3", className)}>
-        {section}
+      <section role="region" aria-label="Admission requests" className={cn("flex flex-col", className)}>
+        {list}
       </section>
     );
   }
 
   return (
-    <ChalkPanel className={cn("w-80 rounded-lg bg-[var(--chalk-app-panel)] p-3 shadow-[var(--chalk-app-shadow-sm)]", className)} contentClassName="flex min-h-0 flex-col" role="complementary" aria-label="Admission requests">
-      {section}
-    </ChalkPanel>
+    <div className={cn("flex w-80 flex-col overflow-hidden rounded-[12px] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)]", className)} role="complementary" aria-label="Admission requests">
+      <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-4 py-3">
+        <h2 className="text-sm font-semibold text-[var(--chalk-app-text)]">Waiting to join</h2>
+        {onClose ? <IconButton icon={<Cancel01Icon className="h-4 w-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close admission" className="text-[var(--chalk-app-text-muted)] hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" /> : null}
+      </div>
+      <div className="max-h-80 overflow-y-auto px-4 pb-2">{list}</div>
+    </div>
   );
 });
 
 AdmissionPanelSurface.displayName = "AdmissionPanelSurface";
 
 export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
-  return <ClassicAdmissionPanel {...props} />;
+  const client = useSpaceClient();
+  const participantsSlice = useParticipants();
+  const canManageAdmission = useCan("manageAdmission");
+  const participants = canManageAdmission ? participantsSlice.admissionQueue.map((request) => ({ id: request.requestId, displayName: request.displayName })) : [];
+
+  return (
+    <AdmissionPanelSurface
+      {...props}
+      participants={participants}
+      onAdmit={(requestId) => client.participants.admit(requestId)}
+      onDeny={(requestId) => client.participants.deny(requestId)}
+      onAdmitAll={async () => {
+        await Promise.all(participants.map((participant) => client.participants.admit(participant.id)));
+      }}
+      onDenyAll={async () => {
+        await Promise.all(participants.map((participant) => client.participants.deny(participant.id)));
+      }}
+    />
+  );
 }
 
 AdmissionPanel.displayName = "AdmissionPanel";

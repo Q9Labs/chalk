@@ -1,10 +1,11 @@
+import { CHALK_REACTIONS } from "../collaboration/types";
 import { Clock, Context, Effect, Layer, Scope } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import type { ActiveReaction, Reaction } from "./types";
 const MAX_VISIBLE_REACTIONS = 24;
-const REACTIONS = new Set<Reaction>(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
+const REACTIONS = new Set<Reaction>(CHALK_REACTIONS);
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ReactionsControllerEffects = {
   readonly send: (emoji: Reaction) => ClientEffect<ActiveReaction>;

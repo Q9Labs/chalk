@@ -246,3 +246,39 @@ are ignored and reset probe evidence. Set `watchdog: false` in
 replacement: reason, up to two measured round trips, up to two outstanding probe
 ages (not RTT estimates), and the next back-off. Consumer telemetry exceptions do
 not prevent recovery. Subscription stop detaches without waiting for socket close.
+
+### Screen capture source hints
+
+```ts
+await client.media.setScreenShareEnabled(true, { surface: "window" });
+const { capture } = client.getSnapshot().media.screenShare;
+// capture?.surface is the actual picker selection; capture?.label is its label.
+await client.media.setScreenShareEnabled(false);
+```
+
+`surface` accepts `"monitor"`, `"window"`, or `"browser"`. These are browser hints, not filters or guarantees. The browser's picker always decides; unsupported hints do not prevent capture. The call's own tab is excluded where supported, and source switching is enabled. `audio` defaults to `false`; `true` requests capture audio from the browser. The current single-track screen publication remains video-only (captured audio is not published). Missing source settings or labels are reported as `null`.
+
+### Message reactions
+
+```ts
+await client.chat.react({ messageId, emoji: "👏", on: true });
+await client.chat.react({ messageId, emoji: "👏", on: false });
+```
+
+The action sets a desired state, never toggles it. Retrying the same request leaves one membership (or none). Anyone with `sendChat` may react. `CHALK_REACTIONS` exports the fixed 24-emoji set shared with call reactions. Unsupported emoji are rejected. A message has at most 128 reaction memberships across all emoji; adding another returns `overloaded`, while removal remains available.
+
+Each message's `reactions` contains `{ emoji, count, participantIds }`; IDs identify who reacted and can be resolved through the participant roster. Old messages/servers may omit the wire fields; the client normalizes them to an empty list and revision `"0"`. New history includes current reactions. Loaded messages update live, and reconnecting reloads their reaction snapshots. Revisions keep delayed broadcasts/history responses from rolling state backward. Actions taken while reconnecting use the same persisted, participant-scoped offline queue as chat messages. They are cleared if the participant or Episode changes and fail if the message has expired. Deleting a message cascades to its reactions under existing retention.
+
+Message reactions are stored separately from recording facts and are not rendered or added to recording timelines yet. Recording validators accept all 24 call-reaction emoji.
+
+#### Wire compatibility and rollout
+
+SpaceClient negotiates `collaboration_v2` for the 24-emoji set and per-message reactions. Deploy the migration and recording validators, then Sync, before deploying this SDK. Sync continues to serve `collaboration_v1` with the original message shape and six call emoji; it never broadcasts the new per-message frames or expanded call emoji to those sockets. Older SDKs therefore keep working against the updated server. The base sync protocol remains v1. Low-level `createV1SyncClient` consumers opt in with `collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } }`; the default low-level extension stays v1. `reactToChatMessage(input)` rejects locally unless v2 was negotiated. New SpaceClient versions require the updated Sync server; there is no downgrade of the message-reaction feature.
+
+### Shared tab audio
+
+`await client.media.setScreenShareEnabled(true, { surface: "browser", audio: true })` requests tab audio. The browser picker remains authoritative: selecting a window or declining audio still shares video normally. Audio is published separately as `screen_audio`; it starts, stops, and is revoked with the share, never with the microphone. `media.screenShare.hasAudio` reports local live audio; `participants.roster[].media.screenShareHasAudio` reports the remote publication. `media.remote` contains the received track.
+
+The sharer keeps local playback (`suppressLocalAudioPlayback: false`). Display audio disables echo cancellation, noise suppression and automatic gain control to preserve music; microphone capture and its processing are unchanged. System audio is excluded to avoid sending the call back to itself. Headphones avoid acoustic doubling through the microphone; local playback cannot be preserved while guaranteeing that loudspeakers never leak into it. Chrome documents [local playback control](https://developer.chrome.com/blog/screen-sharing-improvements-in-chrome-109) and [system-audio feedback](https://developer.chrome.com/docs/web-platform/screen-sharing-controls). [Meet documents the same “Also share tab audio” picker control](https://support.google.com/meet/answer/9308856?hl=en). No public X documentation establishing its echo default was found.
+
+Shared tab audio is excluded from recordings until the recording format supports it. React Native display capture behavior is unchanged.

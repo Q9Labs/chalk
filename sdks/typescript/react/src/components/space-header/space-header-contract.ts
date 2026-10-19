@@ -1,20 +1,35 @@
 export interface SpaceHeaderProps {
   spaceName: string;
-  logoUrl?: string;
+  people?: readonly { readonly participantId: string; readonly displayName: string }[];
+  onTogglePeople?: () => void;
+  knockCount?: number;
+  shareUrl?: string;
+  callLinkOpen?: boolean;
+  onCallLinkToggle?: () => void;
+  diagnostics?: readonly { readonly label: string; readonly value: string }[];
+  weakConnection?: boolean;
+  onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;
+  shortcuts?: {
+    readonly isMuted?: boolean;
+    readonly onToggleMute?: () => void;
+    readonly onToggleVideo?: () => void;
+    readonly onToggleHand?: () => void;
+    readonly onToggleChat?: () => void;
+    readonly onTogglePeople?: () => void;
+    readonly onToggleLayout?: () => void;
+    readonly onClosePanel?: () => void;
+    readonly onPushToTalk?: (enabled: boolean) => void;
+  };
+  colorScheme?: "light" | "dark";
+  onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   duration?: number;
   isRecording?: boolean;
   isTranscribing?: boolean;
-  layout?: "grid" | "focus" | "presentation";
-  onLayoutChange?: (layout: "grid" | "focus" | "presentation") => void;
-  onInvite?: () => void;
-  onInfo?: () => void;
-  onSettings?: () => void;
+  layout?: "grid" | "focus";
+  onLayoutChange?: (layout: "grid" | "focus") => void;
   className?: string;
 }
 
 export function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }

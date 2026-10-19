@@ -279,6 +279,7 @@ defmodule ChalkSync.ProviderBridge.Codec do
   defp decode_source("microphone"), do: {:ok, :microphone}
   defp decode_source("camera"), do: {:ok, :camera}
   defp decode_source("screen"), do: {:ok, :screen}
+  defp decode_source("screen_audio"), do: {:ok, :screen_audio}
 
   defp decode_source(source) when is_binary(source), do: {:error, :invalid_source}
   defp decode_source(_source), do: {:error, :malformed_response}

@@ -8,6 +8,7 @@ import type {
   V1AdmissionPolicy,
   V1AssignableRole,
   V1CollaborationEvent,
+  V1CollaborationClient,
   V1CommandResult,
   V1DirectedRequest,
   V1DirectedRequestResult,
@@ -152,6 +153,10 @@ export class FixtureSyncClient {
     return result.message;
   }
 
+  reactToChatMessage: V1CollaborationClient["reactToChatMessage"] = async () => {
+    throw new TypeError("The packed fixture negotiates collaboration_v1; message reactions require collaboration_v2");
+  };
+
   async markChatRead(sequence: string) {
     return {
       participantId: this.#access.subject.participantId,
@@ -273,6 +278,7 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
     subscribeCollaboration: client.subscribeCollaboration,
     sendReaction: client.sendReaction.bind(client),
     sendChatMessage: client.sendChatMessage.bind(client),
+    reactToChatMessage: client.reactToChatMessage,
     markChatRead: client.markChatRead.bind(client),
     readChatPage: client.readChatPage.bind(client),
     onDirectedRequest: client.onDirectedRequest,
@@ -284,9 +290,42 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
   };
 }
 
+// Direct calls keep protocol dispatch statically allowlisted and narrow each message variant.
+// fallow-ignore-next-line complexity
 function dispatchServerMessage(handlers: ServerMessageHandlers, message: ServerMessage): void {
-  const handler = handlers[message.type] as (value: ServerMessage) => void;
-  handler(message);
+  switch (message.type) {
+    case "state":
+      handlers.state(message);
+      return;
+    case "ack":
+      handlers.ack(message);
+      return;
+    case "collaboration_event":
+      handlers.collaboration_event(message);
+      return;
+    case "collaboration_result":
+      handlers.collaboration_result(message);
+      return;
+    case "directed_request":
+      handlers.directed_request(message);
+      return;
+    case "directed_request_result":
+      handlers.directed_request_result(message);
+      return;
+    case "peers":
+      handlers.peers(message);
+      return;
+    case "signal":
+      handlers.signal(message);
+      return;
+    case "force_failure":
+      handlers.force_failure(message);
+      return;
+    default: {
+      const unhandled: never = message;
+      throw new TypeError(`Unhandled server message: ${unhandled}`);
+    }
+  }
 }
 
 function resolvePending<T>(pendingRequests: Map<string, PendingRequest<T>>, id: string, value: T): void {

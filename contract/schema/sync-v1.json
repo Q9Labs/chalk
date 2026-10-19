@@ -70,6 +70,7 @@
     "chatAttachmentFileNameUtf8Bytes": 255,
     "chatAttachmentMaxBytes": 26214400,
     "chatPageMaxMessages": 100,
+    "chatReactionMaxMemberships": 128,
     "chatPageEncodedBytes": 131072,
     "reactionTtlMs": 5000,
     "reactionRateWindowMs": 10000,
@@ -131,7 +132,7 @@
     },
     {
       "id": "live",
-      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "ping"],
+      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       "heartbeat": {
         "intervalMs": 20000,
         "missedDeadlinesBeforeClose": 2
@@ -645,6 +646,8 @@
   ],
   "mediaPlanePort": {
     "sources": ["microphone", "camera", "screen"],
+    "publicationSources": ["microphone", "camera", "screen", "screen_audio"],
+    "screenAudioControlSource": "screen",
     "clientRuntime": {
       "operations": ["set_local_publication_target", "observe_local_publications", "observe_remote_publications"],
       "enableRequiresLocalConsent": true
@@ -727,8 +730,9 @@
   },
   "collaboration": {
     "extension": "collaboration_v1",
+    "messageReactionsExtension": "collaboration_v2",
     "capabilities": ["sendReaction", "sendChat"],
-    "reactions": ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+    "reactions": ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"],
     "attachmentMimeTypes": [
       "image/png",
       "image/jpeg",
@@ -758,6 +762,10 @@
       "exactFields": ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]
     },
     "clientFrames": {
+      "setChatReaction": {
+        "type": "chat_reaction_set",
+        "exactFields": ["type", "request_id", "message_id", "emoji", "on"]
+      },
       "sendReaction": {
         "type": "reaction_send",
         "exactFields": ["type", "operation_id", "reaction"]
@@ -777,6 +785,16 @@
       }
     },
     "serverFrames": {
+      "chatReactions": {
+        "type": "chat_reactions",
+        "exactFields": ["type", "message_id", "revision", "reactions"]
+      },
+      "chatReactionResult": {
+        "type": "chat_reaction_result",
+        "acceptedFields": ["type", "request_id", "outcome", "state"],
+        "rejectedFields": ["type", "request_id", "outcome", "error_code"],
+        "outcomes": ["accepted", "rejected"]
+      },
       "reaction": {
         "type": "reaction",
         "exactFields": ["type", "event_id", "participant_id", "display_name", "reaction", "occurred_at", "expires_at"]
@@ -789,7 +807,8 @@
       },
       "chatMessage": {
         "type": "chat_message",
-        "exactFields": ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"]
+        "exactFields": ["type", "message_id", "client_message_id", "sequence", "participant_id", "display_name", "text", "attachments", "created_at"],
+        "optionalFields": ["reactions", "reaction_revision"]
       },
       "chatSendResult": {
         "type": "chat_send_result",

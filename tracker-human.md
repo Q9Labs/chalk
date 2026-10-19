@@ -238,9 +238,29 @@ Generated from tracker.yaml; run pnpm generate:tracker after editing it.
 
 Ideas without a current user journey. These are not planned work.
 
+### Spaces and Episodes
+
+1. **Finish hidden call states in the client** (Not started · size M)
+    The redesigned call hides these states and controls because the public client
+    doesn't expose them. Each is client work; none needs a Sync or API change.
+    - Let a host set who can join from People.
+    - Show upload progress for chat attachments, with the outgoing upload bubble.
+    - Keep the current screen share when a person opens Change and cancels the picker.
+    - Show when someone's screen share is connecting or paused.
+    - Tell a Participant why they left the Episode: removed by a host, the Episode
+      ended, or joined from another tab.
+
+2. **Move a call to this tab** (Unclear · size Unknown)
+    Nothing lets a Participant move a live call from one tab or device to another.
+    Open question: The takeover behaviour isn't defined yet.
+    - Define what taking over does to the first session and whether the person confirms
+      it.
+    - Build the join path in Sync and the API, and the Take over here action in the
+      call.
+
 ### Identity and Tenants
 
-1. **Manage Tenant members and invitations** (Not started · size M · P1)
+3. **Manage Tenant members and invitations** (Not started · size M · P1)
     The API supports Tenant membership and Roles. Invitations and the dashboard are
     removed; people management has no current user journey.
     - Design people management only when a real user journey requires it.
@@ -249,14 +269,14 @@ Ideas without a current user journey. These are not planned work.
 
 ### Media
 
-2. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
+4. **Measure media usage per Tenant and Episode** (Not started · size M · P2)
     The Usage type has egress and Participant-minute fields, but both Cloudflare
     adapters always report zero, so media cost cannot be measured or limited.
     - Collect usage in both Cloudflare adapters and attribute it to Tenant and Episode.
     - Reconcile one live Episode against the provider bill, then expose usage to policy
       limits.
 
-3. **Custom SFU** (Unclear · size XL · P1)
+5. **Custom SFU** (Unclear · size XL · P1)
     Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It
     is one task in two parts: the SFU itself, then its integration into Chalk.
     Open question: The SFU design and scope are not defined yet.
@@ -265,9 +285,28 @@ Ideas without a current user journey. These are not planned work.
     - Part 2, the integration: add a MediaPlane adapter, web and native clients,
       credential renewal and Recording capture on top of it.
 
+6. **Show when a shared screen is degraded** (Unclear · size Unknown)
+    The redesigned call can draw weak and low-quality states on a shared screen, but
+    nothing measures how a remote share arrives, and screens publish a single layer.
+    Open question: No receive-side quality measurement exists to build on.
+    - Find a receive-side quality signal for someone else's screen share.
+    - Decide whether screens need a lower-quality layer.
+    - Feed the weak and low-quality states in the call.
+
+### Sync
+
+7. **Numbered hands and named moderation** (Not started · size M)
+    Raised hands are only up or down, mute and camera-stop events don't say who did it,
+    and a full Episode has no join rejection reason the call can show. Each needs a Sync
+    protocol field, so Sync ships before the SDKs.
+    - Keep the order hands were raised in, and let a host lower someone else's hand.
+    - Name the Participant who muted someone or stopped their camera.
+    - Give a full Episode its own join rejection reason.
+    - Number raised hands and name the moderator in the call.
+
 ### Collaboration
 
-4. **Selectable sound packs** (Not started · size M · P3)
+8. **Selectable sound packs** (Not started · size M · P3)
     Chalk has one set of sounds. There are no packs and no way for a Tenant to choose
     one.
     - Define packs and a Tenant setting, wire them into web and native events, and
@@ -275,7 +314,7 @@ Ideas without a current user journey. These are not planned work.
 
 ### Transcription
 
-5. **Live captions in a Space** (Not started · size L · P3)
+9. **Live captions in a Space** (Not started · size L · P3)
     Captions are off in Chalk and no live caption path exists. The Transcript panel only
     shows finished Transcripts.
     - Deliver live partial and final captions with consent, capability checks and
@@ -284,7 +323,7 @@ Ideas without a current user journey. These are not planned work.
 
 ### Security and compliance
 
-6. **Tenant-set chat retention** (Not started · size M · P2)
+10. **Tenant-set chat retention** (Not started · size M · P2)
     Tenants can set retention for Recordings and Transcripts but not for chat, and Sync
     has no chat purge.
     - Add chat retention to Tenant policy and purge expired messages and their
@@ -296,33 +335,33 @@ Ideas without a current user journey. These are not planned work.
 
 ### SDK and embedding
 
-7. **SDK app name in server telemetry** (Not started · size S · P1)
+11. **SDK app name in server telemetry** (Not started · size S · P1)
     No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
     - Add appName with the bounds from theory.md and carry it on HTTP and WebSocket
       requests into spans and logs.
     - Check omitted and oversized values and that appName never affects authorization.
 
-8. **Swift SDK** (Not started · size XL · P2)
+12. **Swift SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-9. **Kotlin SDK** (Not started · size XL · P2)
+13. **Kotlin SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-10. **Python SDK** (Not started · size XL · P2)
+14. **Python SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-11. **Go SDK** (Not started · size XL · P2)
+15. **Go SDK** (Not started · size XL · P2)
     Only TypeScript SDKs exist.
     - Define the supported surface, generate or write the package, and ship it with an
       independent consumer build and contract fixtures.
 
-12. **Embed a Space in an iframe** (Not started · size L · P2)
+16. **Embed a Space in an iframe** (Not started · size L · P2)
     The SDK can be embedded, but there is no supported iframe contract for origins,
     access handoff or lifecycle messages.
     - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
@@ -331,7 +370,7 @@ Ideas without a current user journey. These are not planned work.
 
 ### Integrations and webhooks
 
-13. **Connect third-party apps** (Not started · size M · P2)
+17. **Connect third-party apps** (Not started · size M · P2)
     Composio integrations and their management UI have been removed. Future integrations
     need a concrete user journey before implementation.
     - Build a page to browse the app catalog, connect, refresh and disconnect an app,
@@ -341,7 +380,7 @@ Ideas without a current user journey. These are not planned work.
 
 ### Other products
 
-14. **Run several local stacks at once** (Not started · size S)
+18. **Run several local stacks at once** (Not started · size S)
     The local stack allows one runtime per machine, fixes its container and database
     names, and its stop command fails its own ownership check, so parallel agents
     collide.
@@ -349,12 +388,12 @@ Ideas without a current user journey. These are not planned work.
     - Make stopping the stack work after a rebase or a supervisor restart.
     - Stop the local unused-code check from failing on untracked scratchpad scripts.
 
-15. **Desktop app** (Not started · size XL · P3)
+19. **Desktop app** (Not started · size XL · P3)
     No desktop app exists; the browser is the desktop surface.
     - Decide scope and distribution, then build with native integration, updates and a
       release proof.
 
-16. **Bring your own agents** (Unclear · size XL · P3)
+20. **Bring your own agents** (Unclear · size XL · P3)
     People bring their own agents into a Space, as an assistant beside them or acting on
     their behalf. Agents can already join as Participants, but nothing lets a person
     bring, authorize or direct one.

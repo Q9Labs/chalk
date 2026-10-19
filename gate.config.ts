@@ -1,7 +1,7 @@
 import { defineGate, lanes } from "@q9labsai/gates";
 import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
 
-const taskIds = ["self-test", "hygiene", "secrets", "generated", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "browser-tests", "build", "recorder", "publint", "attw"];
+const taskIds = ["self-test", "hygiene", "secrets", "generated", "format", "fallow", "semgrep", "boundaries", "osv", "services", "contracts", "image-size", "syncpack", "types", "tests", "browser-tests", "build", "call-performance", "call-leaks", "recorder", "publint", "attw"];
 // Format is always on so documentation-only changes are still checked.
 const alwaysIds = new Set(["self-test", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [

@@ -1,10 +1,7 @@
-import React from "react";
-import { ClassicReconnectingOverlay } from "./ClassicReconnectingOverlay";
-import { ReconnectingNotice } from "./ReconnectingNotice";
-
-/** A reconnecting state shorter than this shows a non-blocking notice; longer shows the modal. */
-export const RECONNECTING_NOTICE_MS = 10_000;
-
+import { memo, useEffect, useState } from "react";
+import { CallLimbo } from "../call-limbo/CallLimbo";
+import { StatusSurface } from "../chalk/StatusSurface";
+export const RECONNECTING_NOTICE_MS = 2_000;
 export interface ReconnectingOverlayProps {
   isVisible: boolean;
   status: "connecting" | "reconnecting" | "failed";
@@ -15,22 +12,22 @@ export interface ReconnectingOverlayProps {
   className?: string;
   showNotice?: boolean;
 }
-
-export const ReconnectingOverlay = React.memo<ReconnectingOverlayProps>((props: ReconnectingOverlayProps) => {
-  const isReconnecting = props.isVisible && props.status === "reconnecting";
-  const [escalated, setEscalated] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!isReconnecting) {
-      setEscalated(false);
-      return;
-    }
-    const timer = setTimeout(() => setEscalated(true), RECONNECTING_NOTICE_MS);
+export const ReconnectingOverlay = memo(function ReconnectingOverlay({ isVisible, status, onRetry, onLeft, message, showNotice }: ReconnectingOverlayProps) {
+  const reconnecting = isVisible && status === "reconnecting";
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    setElapsed(false);
+    if (!reconnecting) return;
+    const timer = setTimeout(() => setElapsed(true), RECONNECTING_NOTICE_MS);
     return () => clearTimeout(timer);
-  }, [isReconnecting]);
-
-  if (isReconnecting && !escalated) return props.showNotice === false ? null : <ReconnectingNotice className={props.className} />;
-  return <ClassicReconnectingOverlay {...props} />;
+  }, [reconnecting]);
+  if (status === "reconnecting") return showNotice === false ? null : <CallLimbo overlay blocking={false} active={reconnecting && elapsed} message={message ?? "Reconnecting…"} />;
+  if (!isVisible) return null;
+  if (status === "failed")
+    return (
+      <div className="absolute inset-0 z-50">
+        <StatusSurface phase="failed" reason={message} onRetry={onRetry} onHome={onLeft} />
+      </div>
+    );
+  return <CallLimbo overlay message={message ?? "Joining the call…"} />;
 });
-
-ReconnectingOverlay.displayName = "ReconnectingOverlay";

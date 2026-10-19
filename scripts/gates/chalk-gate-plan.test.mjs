@@ -133,16 +133,32 @@ test("scoped builds include workspace dependencies without widening other lanes"
   const command = (id) => plan.tasks.find((task) => task.id === id).command;
   assert.deepEqual(command("build"), ["pnpm", "exec", "turbo", "run", "build", "--force", "--filter=web..."]);
   assert.deepEqual(command("types"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "check-types"]);
-  assert.deepEqual(command("tests"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "test", "--coverage"]);
+  assert.equal(plan.tasks.find((task) => task.id === "tests").selected, false);
+  assert.equal(command("tests"), null);
+  assert.deepEqual(command("browser-tests"), ["pnpm", "--filter", "web", "run", "test"]);
   assert.deepEqual(
     createGatePlan(["apps/web/src/main.ts"], { workspaces, workspaceConcurrency: 2 })
-      .tasks.find((task) => task.id === "tests")
+      .tasks.find((task) => task.id === "types")
       .command.slice(0, 2),
     ["pnpm", "--workspace-concurrency=2"],
   );
   const docs = createGatePlan(["docs/guide.md"], { workspaces });
   assert.equal(docs.tasks.find((task) => task.id === "build").command, null);
   assert.deepEqual(docs.services, { api: false, sync: false });
+});
+
+test("separate call timing and leak budgets follow call renderers and full gates", () => {
+  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "packages/whiteboard/src/index.ts", "pnpm-lock.yaml"]) {
+    const lane = createGatePlan([file]).tasks.find((task) => task.id === "call-performance");
+    assert.equal(lane.selected, true, file);
+    assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--timing-only"]);
+    const leaks = createGatePlan([file]).tasks.find((task) => task.id === "call-leaks");
+    assert.equal(leaks.selected, true, file);
+    assert.deepEqual(leaks.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--leaks-only", "--out", "artifacts/call-leaks.json"]);
+  }
+  assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-performance").selected, false);
+  assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-leaks").selected, false);
+  assert.equal(createGatePlan([], { full: true }).tasks.find((task) => task.id === "call-leaks").selected, true);
 });
 
 // CI skips a root job when Chalk's plan selects none of its lanes, so q9gate must never run a full gate that Chalk's
@@ -159,7 +175,7 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
   assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "tests", "build"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "build"] });
   assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
@@ -171,6 +187,8 @@ test("every lane runs in exactly one CI lane group", () => {
   assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
   assert.equal(laneGroup("publint"), "build");
   assert.equal(laneGroup("browser-tests"), "browser-tests");
+  assert.equal(laneGroup("call-performance"), "browser-tests");
+  assert.equal(laneGroup("call-leaks"), "browser-tests");
   assert.equal(laneGroup("a-new-lane"), "checks");
   assert.equal(laneGroupLanes(lanes, undefined), lanes);
   assert.throws(

@@ -1,6 +1,6 @@
 import type { Participant } from "../participant-grid/ParticipantGrid";
 
-export type StageLayout = "grid" | "focus" | "presentation";
+export type StageLayout = "grid" | "focus";
 
 export const WHITEBOARD_ITEM_ID = "whiteboard";
 
@@ -12,7 +12,7 @@ export type StageItem = { readonly kind: "participant"; readonly id: string; rea
 export function buildStageItems(participants: readonly Participant[], whiteboardOpen: boolean): StageItem[] {
   const items: StageItem[] = participants.map((participant) => ({ kind: "participant", id: participant.id, participant }));
   for (const participant of participants) {
-    if (participant.isScreenSharing && participant.screenShareTrack) {
+    if (participant.isScreenSharing) {
       items.push({ kind: "screen-share", id: screenShareItemId(participant.id), participant });
     }
   }
@@ -51,42 +51,40 @@ export interface PrimaryContext {
   readonly seenAt: ReadonlyMap<string, number>;
 }
 
-function newestScreenShare(items: readonly StageItem[], seenAt: ReadonlyMap<string, number>): StageItem | undefined {
-  let newest: StageItem | undefined;
-  let newestSeen = -1;
+function firstScreenShare(items: readonly StageItem[], seenAt: ReadonlyMap<string, number>): StageItem | undefined {
+  let first: StageItem | undefined;
+  let firstSeen = Infinity;
   for (const item of items) {
     if (item.kind !== "screen-share") continue;
-    const seen = seenAt.get(item.id) ?? -1;
-    if (seen >= newestSeen) {
-      newest = item;
-      newestSeen = seen;
+    const seen = seenAt.get(item.id) ?? Infinity;
+    if (!first || seen < firstSeen) {
+      first = item;
+      firstSeen = seen;
     }
   }
-  return newest;
+  return first;
 }
 
 function participantWhere(items: readonly StageItem[], predicate: (participant: Participant) => boolean): StageItem | undefined {
   return items.find((item) => item.kind === "participant" && predicate(item.participant));
 }
 
-/**
- * Picks the primary tile for spotlight layouts. `presentation` is content-first, `focus` is speaker-first;
- * both fall back through the same chain. Returns null when there is nothing to show.
- */
+/** A pin wins; otherwise the first live share, board, then active speaker leads Spotlight. */
 export function choosePrimary(items: readonly StageItem[], context: PrimaryContext): StageItem | null {
   if (items.length === 0) return null;
   const pinned = context.pinnedId ? items.find((item) => item.id === context.pinnedId) : undefined;
   if (pinned) return pinned;
-
-  const content = () => newestScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
-  const speaker = () =>
-    participantWhere(items, (participant) => participant.isActiveSpeaker === true) ?? participantWhere(items, (participant) => participant.isSpeaking === true) ?? (context.lastSpeakerId ? items.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId) : undefined);
-  const ordered = context.layout === "presentation" ? [content, speaker] : [speaker, content];
-  for (const pick of ordered) {
-    const item = pick();
-    if (item) return item;
-  }
-  return participantWhere(items, (participant) => !participant.isLocal) ?? participantWhere(items, () => true) ?? items[0] ?? null;
+  const content = firstScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
+  if (content) return content;
+  return (
+    participantWhere(items, (participant) => participant.isActiveSpeaker === true) ??
+    participantWhere(items, (participant) => participant.isSpeaking === true) ??
+    (context.lastSpeakerId ? items.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId) : undefined) ??
+    participantWhere(items, (participant) => !participant.isLocal) ??
+    participantWhere(items, () => true) ??
+    items[0] ??
+    null
+  );
 }
 
 /** Grid order: pinned item first, everything else in stable order. */

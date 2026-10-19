@@ -1,6 +1,6 @@
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
-import type { ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
+import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
 export const V1_CAPABILITIES = [
   "publishAudio",
@@ -178,18 +178,19 @@ export type V1ChatCursor = {
   readonly retainedFloorSequence: string | null;
 };
 export type V1CollaborationExtensionRequest = {
-  readonly name: "collaboration_v1";
+  readonly name: "collaboration_v1" | "collaboration_v2";
   readonly chatCursor: V1ChatCursor;
 };
 export type V1CollaborationExtensionState = {
   readonly negotiated: boolean;
-  readonly version: 1 | null;
+  readonly version: 1 | 2 | null;
   readonly capabilities: readonly ChalkSyncV1CollaborationCapability[];
   readonly chatHeadSequence: string | null;
   readonly retainedFloorSequence: string | null;
   readonly readReceipts: readonly ChalkChatReadReceipt[];
 };
 export type V1CollaborationEvent =
+  | { readonly type: "chat_reactions"; readonly state: ChalkChatReactions }
   | {
       readonly type: "reaction";
       readonly reaction: ChalkReactionEvent;
@@ -212,6 +213,7 @@ export type V1CollaborationClient = {
   readonly subscribeCollaboration: (listener: (event: V1CollaborationEvent) => void) => () => void;
   readonly sendReaction: (reaction: ChalkReaction) => Promise<ChalkReactionEvent>;
   readonly sendChatMessage: (input: ChalkSendChatMessageInput) => Promise<ChalkChatMessage>;
+  readonly reactToChatMessage: (input: ChalkChatReactionInput) => Promise<ChalkChatReactions>;
   readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };

@@ -1,6 +1,6 @@
 export { ChalkProvider } from "./bindings/context";
 export type { ChalkProviderProps } from "./bindings/context";
-export { useCan, useChat, useConnection, useMedia, useOffline, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
+export { useCan, useChat, useConnection, useMedia, useScreenShare, useOffline, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
 export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
 export { RecordingSpaceView } from "./components/space-view/RecordingSpaceView";
@@ -20,42 +20,16 @@ export type {
 } from "./components/recording-history/RecordingHistoryPanel";
 export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./components/whiteboard-view/RecordingWhiteboardView";
 export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "./components/whiteboard-view/RecordingWhiteboardView";
-export { Entrance } from "./components/entrance/Entrance";
-export type { EntranceProps, EntranceSettings } from "./components/entrance/Entrance";
 export { Logo } from "./components/logo/Logo";
 export type { LogoProps, LogoVariant } from "./components/logo/Logo";
 export type { ChalkTheme, ChalkThemeTokens } from "./theme";
-export {
-  ChalkAlert,
-  ChalkBackdrop,
-  ChalkBadge,
-  ChalkButton,
-  ChalkCheckbox,
-  ChalkControlGroup,
-  ChalkDialogPanel,
-  ChalkDivider,
-  ChalkEmptyState,
-  ChalkIconButton,
-  ChalkInput,
-  ChalkMenu,
-  ChalkMenuItem,
-  ChalkPanel,
-  ChalkRadio,
-  ChalkSelect,
-  ChalkSlider,
-  ChalkSpinner,
-  ChalkTextarea,
-  ChalkToggle,
-  ChalkTooltipPanel,
-} from "./components/chalk-ui";
+export { ChalkAlert, ChalkBackdrop, ChalkBadge, ChalkButton, ChalkDialogPanel, ChalkDivider, ChalkEmptyState, ChalkIconButton, ChalkInput, ChalkMenu, ChalkMenuItem, ChalkPanel, ChalkSpinner, ChalkTextarea, ChalkToggle } from "./components/chalk-ui";
 export type {
   ChalkAlertProps,
   ChalkBackdropProps,
   ChalkBadgeProps,
   ChalkButtonProps,
   ChalkButtonVariant,
-  ChalkCheckboxProps,
-  ChalkControlGroupProps,
   ChalkDialogPanelProps,
   ChalkDividerProps,
   ChalkEmptyStateProps,
@@ -64,12 +38,34 @@ export type {
   ChalkMenuItemProps,
   ChalkMenuProps,
   ChalkPanelProps,
-  ChalkRadioProps,
-  ChalkSelectProps,
-  ChalkSliderProps,
   ChalkSpinnerProps,
   ChalkTextareaProps,
   ChalkToggleProps,
   ChalkTone,
-  ChalkTooltipPanelProps,
 } from "./components/chalk-ui";
+
+export { CallLimbo } from "./components/call-limbo/CallLimbo";
+export type { CallLimboProps } from "./components/call-limbo/CallLimbo";
+
+export { ChalkPopover, ChalkSegmentedControl, ChalkCopyButton, ChalkSheet, ChalkToast, ChalkMenuLabel, ChalkTooltip } from "./components/chalk-ui";
+
+export { ToastStack } from "./components/toast-stack/ToastStack";
+export type { Toast, ToastStackProps } from "./components/toast-stack/ToastStack";
+
+export { captureFlip } from "./internal/call-motion";
+
+export type { ChalkSheetProps, ChalkToastProps } from "./components/chalk-ui";
+
+export type { ScreenShareOptions, ScreenShareSurface, ScreenShareCapture } from "@q9labsai/chalk-client";
+
+export type { ChatReactionInput, ChatReaction, ChatReactions } from "@q9labsai/chalk-client";
+
+export type { MessageReaction, ReactChatMessage, UseChatResult } from "./bindings/hooks";
+export { CHALK_REACTIONS } from "@q9labsai/chalk-client";
+
+export { ControlBar } from "./components/control-bar/ControlBar";
+export type { ControlBarProps, ControlBarButtonName } from "./components/control-bar/ControlBar";
+export { SpaceHeader } from "./components/space-header/SpaceHeader";
+export type { SpaceHeaderProps } from "./components/space-header/SpaceHeader";
+export { CallReady, type CallReadyProps } from "./components/call-limbo/CallReady";
+export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";

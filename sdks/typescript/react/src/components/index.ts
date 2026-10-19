@@ -32,13 +32,12 @@ export { ParticipantsPanel } from "./participants-panel/ParticipantsPanel";
 export type { ParticipantListParticipant, ParticipantListVariant, ParticipantsPanelProps } from "./participants-panel/ParticipantsPanel";
 export { AdmissionPanel } from "./admission-panel/AdmissionPanel";
 export type { AdmissionPanelProps, AdmissionParticipant } from "./admission-panel/AdmissionPanel";
-export { SettingsPanel } from "./composite/SettingsPanel";
-export type { SettingsPanelProps } from "./composite/SettingsPanel";
 export { ReactionsOverlay } from "./composite/ReactionsOverlay";
 export type { ReactionsOverlayProps } from "./composite/ReactionsOverlay";
 export { ScreenShareView } from "./composite/ScreenShareView";
 export type { ScreenShareViewProps } from "./composite/ScreenShareView";
-export { Entrance } from "./entrance/Entrance";
-export type { EntranceProps, EntranceSettings } from "./entrance/Entrance";
 export { Logo } from "./logo/Logo";
 export type { LogoProps, LogoVariant } from "./logo/Logo";
+
+export { CallLimbo } from "./call-limbo/CallLimbo";
+export type { CallLimboProps } from "./call-limbo/CallLimbo";

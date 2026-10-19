@@ -116,7 +116,7 @@ export interface RecordingPresentationReactionV1 {
   readonly id: string;
   readonly participantId: string;
   readonly displayName: string;
-  readonly value: "👍" | "❤️" | "😂" | "😮" | "😢" | "🎉";
+  readonly value: "👍" | "❤️" | "😂" | "😮" | "🎉" | "👏" | "😀" | "😅" | "🙏" | "🔥" | "✅" | "👀" | "💯" | "🤔" | "😢" | "🙌" | "🚀" | "👌" | "😍" | "🤝" | "💡" | "⭐" | "😎" | "🥳";
   readonly occurredAtMs: number;
   readonly expiresAtMs: number;
 }

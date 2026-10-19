@@ -45,6 +45,14 @@ defmodule ChalkSync.Fanout.Collaboration do
     :exit, _reason -> {:error, :dependency_unavailable}
   end
 
+  def publish_chat_reactions(server, %EpisodeKey{} = episode, frame) do
+    transport = GenServer.call(server, {:publish, episode, frame}, 1_000)
+    publish_external(transport, :chat_reactions, episode, frame)
+    :ok
+  catch
+    :exit, _reason -> {:error, :dependency_unavailable}
+  end
+
   @spec publish_reaction(GenServer.server(), EpisodeKey.t(), map()) ::
           :ok | {:error, :dependency_unavailable}
   def publish_reaction(server \\ __MODULE__, %EpisodeKey{} = episode, event) do
@@ -67,7 +75,7 @@ defmodule ChalkSync.Fanout.Collaboration do
 
   @spec accept_external(GenServer.server(), :chat_head | :reaction, EpisodeKey.t(), map()) :: :ok
   def accept_external(server \\ __MODULE__, kind, %EpisodeKey{} = episode, frame)
-      when kind in [:chat_head, :chat_read_receipt, :reaction] do
+      when kind in [:chat_head, :chat_read_receipt, :reaction, :chat_reactions] do
     GenServer.cast(server, {:external, key(episode), frame})
   end
 
@@ -177,6 +185,10 @@ defmodule ChalkSync.Fanout.Collaboration do
       head_sequence: frame["head_sequence"],
       retained_floor_sequence: frame["retained_floor_sequence"]
     })
+  end
+
+  defp publish_external({module, adapter}, :chat_reactions, episode, frame) do
+    module.publish_reaction(adapter, episode, frame)
   end
 
   defp publish_external({module, adapter}, :reaction, episode, frame) do

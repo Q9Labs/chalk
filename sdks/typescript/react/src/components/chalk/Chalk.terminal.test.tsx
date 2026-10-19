@@ -8,8 +8,6 @@ import { control, terminalTestPlatform } from "../../../../client/src/space-clie
 import { Chalk } from "./Chalk";
 
 vi.mock("../space-view/SpaceView", () => ({ SpaceView: () => <div>Live Space</div> }));
-vi.mock("../entrance/Entrance", () => ({ Entrance: () => <div>Entrance</div> }));
-vi.mock("../composite/SettingsDialog", () => ({ SettingsDialog: () => null }));
 vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialog: () => null }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,7 +40,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
     document.body.append(container);
     const root = createRoot(container);
     try {
-      await act(async () => root.render(<Chalk client={client} entrance={false} defaults={{ microphone: false, camera: false }} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
       await act(async () => {
         await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
       });
@@ -52,8 +50,8 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       expect(onEpisodeEnded).not.toHaveBeenCalled();
       expect(onJoined).not.toHaveBeenCalled();
       expect(onLeft).not.toHaveBeenCalled();
-      expect(container.textContent).toContain("The Episode has ended");
-      expect(container.textContent).not.toContain("Entering");
+      expect(container.textContent).toContain("The call ended");
+      expect(container.textContent).not.toContain("Joining");
     } finally {
       await act(async () => root.unmount());
       client.dispose();
@@ -113,7 +111,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       expect(onError).not.toHaveBeenCalled();
       expect(onLeft).toHaveBeenCalledTimes(ending === "expired Access" ? 0 : 1);
       if (ending === "server end" || ending === "participant end") {
-        expect(container.textContent).toContain("Episode ended");
+        expect(container.textContent).toContain("The call ended");
         expect(container.textContent).not.toContain("Unable to enter");
       }
     } finally {

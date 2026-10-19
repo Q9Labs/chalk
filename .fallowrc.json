@@ -1,6 +1,16 @@
 {
   "entry": [
     "gate.config.ts",
+    "scripts/dev/share-audio-proof.mjs",
+    "apps/web/src/call-states/main.tsx",
+    "apps/web/src/call-states/web-space-journey.tsx",
+    "apps/web/src/call-states/web-space-boundary.ts",
+    "apps/web/src/call-states/performance.tsx",
+    "apps/web/vite.call-states.config.ts",
+    "apps/web/vite.call-performance.config.ts",
+    "apps/web/scripts/capture-call-states.mjs",
+    "apps/web/scripts/verify-call-layouts.mjs",
+    "apps/web/scripts/verify-call-integration.mjs",
     "e2e.config.ts",
     "tests/*.e2e.ts",
     "**/*.test.ts",

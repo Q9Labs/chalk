@@ -1,4 +1,4 @@
-import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "./plane";
+import type { ClientMediaPlane, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
@@ -21,7 +21,7 @@ import type {
 } from "./types";
 import type { PublicationCursor } from "./tracks";
 type LocalTrackState = {
-  readonly source: MediaSource;
+  readonly source: MediaPublicationSource;
   readonly track: MediaStreamTrack;
   transceiver: RTCRtpTransceiver | null;
   providerPublicationId: string | null;
@@ -54,10 +54,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #replaceMediaConnection: (() => Promise<CloudflareSFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
-  readonly #locallyPausedSources = new Set<MediaSource>();
-  readonly #localTracks = new Map<MediaSource, LocalTrackState>();
-  readonly #reusableLocalTransceivers = new Map<MediaSource, RTCRtpTransceiver>();
-  readonly #reusableLocalPublicationIds = new Map<MediaSource, string>();
+  readonly #locallyPausedSources = new Set<MediaPublicationSource>();
+  readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
+  readonly #reusableLocalTransceivers = new Map<MediaPublicationSource, RTCRtpTransceiver>();
+  readonly #reusableLocalPublicationIds = new Map<MediaPublicationSource, string>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -129,7 +129,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#schedulePoll(0);
   }
-  prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
+  prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
     this.#requireActive();
     validateTrackSource(source, track);
     if (this.#localTracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
@@ -156,9 +156,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaPublicationSource): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
+    if (source === "screen_audio") {
+      try {
+        await this.#retireLocalPublication(source);
+      } finally {
+        this.#removeOwnedLocalTrack(state);
+        this.#localTracks.delete(source);
+        this.#publishSnapshot();
+        this.#emitLocal();
+      }
+      return;
+    }
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
     if (state.transceiver) this.#reusableLocalTransceivers.set(source, state.transceiver);
     if (state.providerPublicationId) this.#reusableLocalPublicationIds.set(source, state.providerPublicationId);
@@ -175,7 +186,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const generation = this.#generation;
     this.#setPhase("connecting", null);
     await this.#activatePreparedTracks(
-      [...this.#localTracks.values()].filter((state) => state.source !== "screen"),
+      [...this.#localTracks.values()].filter((state) => state.source === "microphone" || state.source === "camera"),
       generation,
     );
   }
@@ -207,6 +218,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#schedulePoll(0);
   }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
+    const result = await this.#setSinglePublicationTarget(target);
+    if (target.source !== "screen" || !this.#localTracks.has("screen_audio") || (result.outcome !== "confirmed" && result.outcome !== "satisfied")) return result;
+    return this.#setSinglePublicationTarget({ ...target, source: "screen_audio" });
+  }
+  async #setSinglePublicationTarget(target: Omit<MediaPlaneTarget, "source"> & { readonly source: MediaPublicationSource }): Promise<MediaPlaneResult> {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result") return resolved.result;
     const state = resolved.value;
@@ -222,10 +238,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return mediaTargetFailure(error);
     }
   }
-  #pausedTarget(target: MediaPlaneTarget): boolean {
+  #pausedTarget(target: Omit<MediaPlaneTarget, "source"> & { readonly source: MediaPublicationSource }): boolean {
     return target.enabled && this.#locallyPausedSources.has(target.source);
   }
-  setLocalSourceIntent(source: MediaSource, enabled: boolean): void {
+  setLocalSourceIntent(source: MediaPublicationSource, enabled: boolean): void {
+    if (source === "screen") this.setLocalSourceIntent("screen_audio", enabled);
     if (enabled) {
       this.#locallyPausedSources.delete(source);
       return;
@@ -236,9 +253,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.desiredEnabled = false;
     state.track.enabled = false;
   }
-  async closeForcedLocalPublication(source: MediaSource): Promise<void> {
+  async closeForcedLocalPublication(source: MediaPublicationSource): Promise<void> {
     this.setLocalSourceIntent(source, false);
     await this.#retireLocalPublication(source);
+    if (source === "screen") await this.#retireLocalPublication("screen_audio");
     if (!this.#replaceMediaConnection) return;
     const generation = this.#generation;
     await this.#serializeSDP(async () => {
@@ -263,7 +281,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // Never satisfy it from a browser slot whose provider track is gone.
     if (state.providerPublicationId === publicationId) await this.#retireLocalPublication(state.source);
   }
-  async #retireLocalPublication(source: MediaSource): Promise<void> {
+  async #retireLocalPublication(source: MediaPublicationSource): Promise<void> {
     const state = this.#localTracks.get(source);
     const transceiver = state?.transceiver ?? this.#reusableLocalTransceivers.get(source);
     const publicationId = state?.providerPublicationId ?? this.#reusableLocalPublicationIds.get(source);
@@ -1176,8 +1194,8 @@ function validateClientOptions(options: CloudflareSFUClientOptions): void {
 function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
   if (!bootstrap.connectionId.trim() || !bootstrap.stunServer.trim()) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
 }
-function validateTrackSource(source: MediaSource, track: MediaStreamTrack): void {
-  const valid = source === "microphone" ? track.kind === "audio" : track.kind === "video";
+function validateTrackSource(source: MediaPublicationSource, track: MediaStreamTrack): void {
+  const valid = source === "microphone" || source === "screen_audio" ? track.kind === "audio" : track.kind === "video";
   if (!valid) throw new CloudflareSFUError(`The prepared ${source} track has an incompatible kind`, "media_failed");
 }
 function desiredRemotePublications(publications: readonly CloudflareSFUPublication[], participantId: string): Map<string, CloudflareSFUPublication> {

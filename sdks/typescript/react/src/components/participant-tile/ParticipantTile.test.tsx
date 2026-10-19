@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { TileShell } from "./TileShell";
 import { ParticipantTileSurface } from "./ParticipantTile";
 
 describe("ParticipantTile", () => {
@@ -17,4 +18,17 @@ describe("ParticipantTile", () => {
       await act(async () => root.unmount());
     }
   });
+});
+
+it("handles a double click when a focused tile has no single-click action", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const onDoubleClick = vi.fn();
+  try {
+    await act(async () => root.render(<TileShell label="Focused screen" accentColor="white" onDoubleClick={onDoubleClick} />));
+    container.querySelector('[role="region"]')?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(onDoubleClick).toHaveBeenCalledOnce();
+  } finally {
+    await act(async () => root.unmount());
+  }
 });

@@ -1,28 +1,22 @@
-import React from "react";
-import { toast } from "sonner";
-import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { ClassicToastStack } from "./ClassicToastStack";
-export interface Toast {
-  id: string;
-  message: string;
-  type?: "info" | "success" | "warning" | "error";
-  duration?: number;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
+import { memo } from "react";
+import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
+import { cn } from "../../utils/cn";
+export interface Toast extends Omit<ChalkToastProps, "onDismiss"> {
+  readonly id: string;
 }
 export interface ToastStackProps {
-  toasts: Toast[];
-  onDismiss: (id: string) => void;
-  position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
-  maxVisible?: number;
-  participantColorSeed?: string;
-  participantGradientPreference?: ParticipantGradientPreference;
-  className?: string;
+  readonly toasts: readonly Toast[];
+  readonly onDismiss: (id: string) => void;
+  readonly position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
+  readonly maxVisible?: number;
+  readonly className?: string;
 }
-export const ToastStack = React.memo<ToastStackProps>((props) => {
-  return <ClassicToastStack {...props} />;
+export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisible = 3, className }: ToastStackProps) {
+  return (
+    <div data-part="toast-stack" className={cn("chalk-toasts", className)}>
+      {toasts.slice(-maxVisible).map((toast) => (
+        <ChalkToast key={toast.id} {...toast} onDismiss={() => onDismiss(toast.id)} />
+      ))}
+    </div>
+  );
 });
-ToastStack.displayName = "ToastStack";
-export { toast };

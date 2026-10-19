@@ -154,6 +154,7 @@ func shortFenceSQL(catalog purgeCatalog, target string) string {
 	// A tenant advisory fence serializes this operator. Brief table writer
 	// fences also cover callbacks, FK cascades and global user-linked rows;
 	// they never update retained rows and release within the deadline.
+	// Catalog-wide scans cannot spend the short fence budget compiling JIT code.
 	return `set local timezone='UTC';set local jit=off;set local statement_timeout='2s';set local lock_timeout='200ms';set local transaction_timeout='3s';select pg_advisory_xact_lock(hashtextextended(` + purgeLiteral("chalk-tenant-purge:"+target) + `,0));lock table ` + strings.Join(names, ",") + ` in share row exclusive mode`
 }
 

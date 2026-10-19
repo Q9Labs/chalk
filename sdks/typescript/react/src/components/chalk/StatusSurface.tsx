@@ -1,117 +1,87 @@
 "use client";
 
 import type React from "react";
+import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 
-import type { EpisodeSummary } from "@q9labsai/chalk-client";
-
-import { CheckmarkCircle02Icon, Clock01Icon, Radio01Icon, UserGroupIcon } from "../../utils/icons";
-import { ChalkBadge, ChalkButton, ChalkPanel } from "../chalk-ui";
-
-export type StatusSurfacePhase = "leaving" | "left" | "episode-ended" | "failed";
-
+export type StatusSurfacePhase = "entering" | "left" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
 export interface StatusSurfaceProps {
-  readonly message: string;
+  readonly phase: StatusSurfacePhase;
+  readonly callName?: string;
+  readonly reason?: string;
+  readonly theme?: ChalkTheme;
+  readonly onRejoin?: () => void;
+  readonly onHome?: () => void;
   readonly onRetry?: () => void;
-  /** Lifecycle state used to decorate completed leave and natural Episode-end surfaces. */
-  readonly phase?: StatusSurfacePhase;
-  readonly spaceName?: string;
-  readonly episode?: EpisodeSummary | null;
-  readonly endedAt?: string | null;
-  /** Optional values are shown only when the root has measured and supplied them. */
-  readonly durationSeconds?: number | null;
-  readonly participantCount?: number | null;
+  readonly onReportProblem?: () => void;
+  readonly rejoinDisabled?: boolean;
   readonly retryPending?: boolean;
-  readonly retryError?: string | null;
 }
 
-/** The shared lifecycle status surface used by Chalk and its preview adapter. */
-export function StatusSurface({ message, onRetry, phase = "failed", spaceName, episode, endedAt, durationSeconds, participantCount, retryPending = false, retryError }: StatusSurfaceProps): React.JSX.Element {
-  const isExitSummary = phase === "left" || phase === "episode-ended";
-  const title = phase === "left" ? "You left this Space" : phase === "episode-ended" ? "Episode ended" : null;
-  const canShowEpisodeDetails = isExitSummary && Boolean(episode?.id || episode?.startedAt || endedAt || (durationSeconds !== undefined && durationSeconds !== null) || (participantCount !== undefined && participantCount !== null));
-  const measuredDuration = durationSeconds ?? episodeDurationSeconds(episode?.startedAt, endedAt);
-  const retryLabel = "Try again";
-
+/** All terminal call states share the same quiet page and host-owned navigation. */
+export function StatusSurface({ phase, callName = "the call", reason, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
+  const copy = {
+    entering: { title: `Joining ${callName}…`, detail: "" },
+    left: { title: `You left ${callName}`, detail: "" },
+    "episode-ended": { title: "The call ended", detail: "" },
+    failed: { title: `Couldn’t connect to ${callName}`, detail: "Check your internet connection, then try again." },
+    removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
+    full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },
+    elsewhere: { title: "You joined from another tab", detail: `${callName} is open in another tab or window. Use it here instead?` },
+  }[phase];
+  const retry = onRejoin ?? onRetry;
+  const canRetry = phase === "left" || phase === "failed" || phase === "full" || phase === "elsewhere";
   return (
-    <main data-chalk-status={phase} className="grid h-full min-h-0 place-items-center bg-[var(--chalk-canvas)] p-6 text-[var(--chalk-text)]">
-      <ChalkPanel className="w-full max-w-lg text-center" contentClassName="grid justify-items-center gap-5">
-        {isExitSummary ? (
-          <ChalkBadge tone={phase === "episode-ended" ? "accent" : "success"} className="!h-14 !w-14 !rounded-full !p-0 text-[var(--chalk-accent-text)]">
-            <span aria-hidden="true">{phase === "episode-ended" ? <Radio01Icon size={26} /> : <CheckmarkCircle02Icon size={26} />}</span>
-          </ChalkBadge>
-        ) : null}
-
-        <div className="grid justify-items-center gap-2">
-          {title ? <h1 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-text)]">{title}</h1> : null}
-          <p role="status" className="text-sm leading-6 text-[var(--chalk-muted-text)]">
-            {message}
-          </p>
-          {isExitSummary && spaceName ? <p className="text-xs text-[var(--chalk-muted-text)]">{spaceName}</p> : null}
-        </div>
-
-        {canShowEpisodeDetails ? (
-          <dl className="grid w-full gap-2 rounded-lg border border-[var(--chalk-line)] bg-[var(--chalk-canvas)]/45 p-3 text-left text-xs text-[var(--chalk-muted-text)] sm:grid-cols-2">
-            {episode?.id ? (
-              <div className="min-w-0 sm:col-span-2">
-                <dt className="font-semibold uppercase tracking-[0.08em]">Episode</dt>
-                <dd className="mt-1 truncate font-mono text-[var(--chalk-text)]">{episode.id}</dd>
-              </div>
-            ) : null}
-            {episode?.startedAt ? <SummaryMetric label="Started" value={formatTimestamp(episode.startedAt)} /> : null}
-            {endedAt ? <SummaryMetric label="Ended" value={formatTimestamp(endedAt)} /> : null}
-            {measuredDuration !== null ? <SummaryMetric label="Duration" value={formatDuration(measuredDuration)} icon={<Clock01Icon size={14} />} /> : null}
-            {participantCount !== undefined && participantCount !== null ? <SummaryMetric label="Participants" value={String(participantCount)} icon={<UserGroupIcon size={14} />} /> : null}
-          </dl>
-        ) : null}
-
-        {retryError ? (
-          <p role="alert" className="w-full rounded-lg border border-[var(--chalk-danger)]/35 bg-[var(--chalk-danger-surface)] px-3 py-2 text-left text-sm text-[var(--chalk-danger)]">
-            {retryError}
-          </p>
-        ) : null}
-
-        {onRetry ? (
-          <ChalkButton type="button" onClick={onRetry} disabled={retryPending} loading={retryPending} variant="solid" tone="accent" aria-label={retryLabel} className="text-sm font-semibold text-[var(--chalk-accent-text)]">
-            {retryLabel}
-          </ChalkButton>
-        ) : null}
-      </ChalkPanel>
+    <main
+      data-chalk
+      data-chalk-theme={theme?.colorScheme ?? "dark"}
+      data-chalk-status={phase}
+      style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}
+      className="chalk-root relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]"
+    >
+      <h1 role={phase === "entering" ? "status" : undefined} style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap" }}>
+        {copy.title}
+      </h1>
+      {reason || copy.detail ? <p className="text-[14px] text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
+      <div data-part="status-actions" className="mt-5 flex gap-7">
+        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
+        {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
+      </div>
+      {onReportProblem && phase !== "entering" ? (
+        <button type="button" onClick={onReportProblem} className="mt-[18px] px-2.5 py-2 text-[13px] text-[var(--chalk-muted-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
+          Report a problem
+        </button>
+      ) : null}
     </main>
   );
 }
 
-function SummaryMetric({ icon, label, value }: { readonly icon?: React.ReactNode; readonly label: string; readonly value: string }): React.JSX.Element {
+function StatusIcon({ retry = false }: { readonly retry?: boolean }) {
   return (
-    <div>
-      <dt className="flex items-center gap-1 font-semibold uppercase tracking-[0.08em]">
-        {icon}
-        {label}
-      </dt>
-      <dd className="mt-1 text-[var(--chalk-text)]">{value}</dd>
-    </div>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      {retry ? (
+        <>
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+        </>
+      ) : (
+        <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
+      )}
+    </svg>
   );
 }
 
-function episodeDurationSeconds(startedAt: string | null | undefined, endedAt: string | null | undefined): number | null {
-  if (!startedAt || !endedAt) return null;
-  const started = Date.parse(startedAt);
-  const ended = Date.parse(endedAt);
-  if (!Number.isFinite(started) || !Number.isFinite(ended) || ended < started) return null;
-  return Math.round((ended - started) / 1000);
-}
-
-function formatTimestamp(value: string): string {
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return value;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(timestamp);
-}
-
-function formatDuration(seconds: number): string {
-  const roundedSeconds = Math.max(0, Math.round(seconds));
-  const hours = Math.floor(roundedSeconds / 3600);
-  const minutes = Math.floor((roundedSeconds % 3600) / 60);
-  const remainingSeconds = roundedSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
-  return `${remainingSeconds}s`;
+function StatusAction({ icon, label, onClick, disabled }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick: () => void; readonly disabled?: boolean }): React.JSX.Element {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4 }} className="group flex flex-col items-center gap-2 text-[var(--chalk-soft-text)] outline-none disabled:pointer-events-none disabled:opacity-50">
+      <span
+        aria-hidden="true"
+        data-part="status-action-circle"
+        style={{ borderRadius: "50%", color: "var(--chalk-text)" }}
+        className="grid h-14 w-14 place-items-center rounded-full bg-[var(--chalk-raised)] text-[var(--chalk-text)] transition-transform duration-150 ease-out group-hover:bg-[var(--chalk-hover)] group-active:scale-[.94] group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-[var(--chalk-text)] motion-reduce:transition-none"
+      >
+        {icon}
+      </span>
+      {label}
+    </button>
+  );
 }

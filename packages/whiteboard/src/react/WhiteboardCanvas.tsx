@@ -150,32 +150,56 @@ function valueOr<T>(value: T | undefined, fallback: T): T {
   return value === undefined ? fallback : value;
 }
 
-function useExternalStylesheet(id: string, href: string): ExternalStylesheetState {
+const STYLESHEET_ID = "chalk-excalidraw-styles";
+
+/** Starts loading the board's stylesheet before anyone opens the board, so the board opens without waiting for it. */
+export function preloadWhiteboardStylesheet(href: string = DEFAULT_EXCALIDRAW_CSS): void {
+  if (typeof document !== "undefined") boardStylesheet(href);
+}
+
+function boardStylesheet(href: string): Element {
+  const existing = document.getElementById(STYLESHEET_ID) ?? document.querySelector('link[href*="excalidraw"], style[data-href*="excalidraw"]');
+  if (existing) return existing;
+  const link = document.createElement("link");
+  link.id = STYLESHEET_ID;
+  link.rel = "stylesheet";
+  link.href = href;
+  // A link can finish before the board mounts, so it records its own outcome.
+  link.addEventListener("load", () => (link.dataset.state = "loaded"));
+  link.addEventListener("error", () => (link.dataset.state = "failed"));
+  document.head.appendChild(link);
+  return link;
+}
+
+function isManagedStylesheet(element: Element): element is HTMLLinkElement {
+  return element instanceof HTMLLinkElement && element.id === STYLESHEET_ID;
+}
+
+function useExternalStylesheet(href: string): ExternalStylesheetState {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    const existing = document.getElementById(id) as HTMLLinkElement | null;
-    if (existing || document.querySelector('link[href*="excalidraw"], style[data-href*="excalidraw"]')) {
+    const element = boardStylesheet(href);
+    const fail = () => setError(`Failed to load ${href}`);
+    const ownLink = isManagedStylesheet(element);
+    if (!ownLink || element.dataset.state === "loaded") {
       setLoaded(true);
       return;
     }
+    if (element.dataset.state === "failed") {
+      fail();
+      return;
+    }
 
-    const link = document.createElement("link");
-    link.id = id;
-    link.rel = "stylesheet";
-    link.href = href;
-    link.onload = () => setLoaded(true);
-    link.onerror = () => setError(`Failed to load ${href}`);
-    document.head.appendChild(link);
-
+    const load = () => setLoaded(true);
+    element.addEventListener("load", load);
+    element.addEventListener("error", fail);
     return () => {
-      link.onload = null;
-      link.onerror = null;
+      element.removeEventListener("load", load);
+      element.removeEventListener("error", fail);
     };
-  }, [href, id]);
+  }, [href]);
 
   return { error, loaded };
 }
@@ -422,7 +446,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedLatex, setSelectedLatex] = useState<string | null>(null);
   const excalidraw = useExcalidrawModule(props.onLoadError, setLoadError);
-  const stylesheet = useExternalStylesheet("chalk-excalidraw-styles", configuration.excalidrawCssPath);
+  const stylesheet = useExternalStylesheet(configuration.excalidrawCssPath);
   const collaboration = useWhiteboardCollaboration({
     canDraw: configuration.canDraw,
     collab: props.collab,

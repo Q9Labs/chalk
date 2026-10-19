@@ -2,6 +2,12 @@
 
 ## 5.0.0 (unreleased)
 
+- React participant tiles accept a normalized `audioLevel` for voice-responsive speaking rings and generated avatars.
+
+- Align quick reactions with the call design: 👍 ❤️ 😂 😮 🎉 👏.
+- React: ChalkCopyButton supports an optional visible label for diagnostics; icon-only defaults are unchanged.
+- React: Export ControlBar and SpaceHeader at the package root. ControlBar command errors retain public `ClientFailure` codes and the originating media source; optional `callLinkOpen` and `onCallLinkToggle` props let the call-link card own its toggle.
+
 ### Added (React Native)
 
 - Added a new React Native `Chalk` call view with `ChalkProps`: header, stage, dock, sheets, menus and toasts, drawn inside the safe area on phone and iPad.
@@ -57,6 +63,8 @@
 - BREAKING: Removed feedback report submission, UI, collection helpers and operator endpoints.
 - BREAKING: removes client telemetry, preset palettes, textures, background-effect controls and icon animations. Light/dark mode, custom tokens and fun avatars remain.
 - BREAKING: removes RealtimeKit, public status, Tenant invitations, audit-log and Users API operations and the regions catalog.
+- BREAKING: leaving a call is instant. A guest leaves with no dialog and a host gets a menu with Leave call and End call for everyone, so the preview `LeaveDialog` and `JoinFailedScreen` are removed, along with `PreviewStatus` and `PreviewEpisodeEnded`.
+- The pages shown before and after a call are one dark page with round icon actions. `Chalk` takes `onRejoin` and `onHome`; the page no longer shows the Episode id, timing or a "Leaving" screen.
 - No packages published. Existing integrations pinned to 4.1.15 remain pinned.
 
 All notable public changes to this project will be documented in this file.

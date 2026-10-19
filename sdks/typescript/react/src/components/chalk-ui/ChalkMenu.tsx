@@ -1,46 +1,72 @@
-import { forwardRef, type HTMLAttributes } from "react";
-
+import { Menu } from "@base-ui/react/menu";
+import { useRef, type ReactElement, type ReactNode } from "react";
 import { cn } from "../../utils/cn";
-import { CLASSIC_PANEL_CLASSES, type ChalkTone } from "./common";
-
-export interface ChalkMenuProps extends HTMLAttributes<HTMLDivElement> {
-  readonly tone?: ChalkTone;
+export interface ChalkMenuProps {
+  readonly trigger: ReactElement;
+  readonly children: ReactNode;
+  readonly side?: "top" | "bottom";
+  readonly className?: string;
 }
-
-export const ChalkMenu = forwardRef<HTMLDivElement, ChalkMenuProps>(function ChalkMenu({ children, className, style, tone = "neutral", role = "menu", ...props }, ref) {
+export function ChalkMenu({ trigger, children, side = "bottom", className }: ChalkMenuProps) {
+  const container = useRef<HTMLElement>(null);
   return (
-    <div ref={ref} className={cn(cn(CLASSIC_PANEL_CLASSES, "rounded-lg p-1 text-[var(--chalk-app-text,var(--chalk-text))] shadow-[var(--chalk-app-shadow-sm,var(--chalk-shadow))]"), className)} role={role} style={{ position: "relative", ...style }} {...props}>
-      <div className="relative z-[1]">{children}</div>
-    </div>
-  );
-});
-
-ChalkMenu.displayName = "ChalkMenu";
-
-export interface ChalkMenuItemProps extends HTMLAttributes<HTMLDivElement> {
-  readonly tone?: ChalkTone;
-
-  readonly disabled?: boolean;
-}
-
-export const ChalkMenuItem = forwardRef<HTMLDivElement, ChalkMenuItemProps>(function ChalkMenuItem({ children, className, disabled = false, style, tabIndex, tone = "neutral", ...props }, ref) {
-  return (
-    <div
-      ref={ref}
-      aria-disabled={disabled || undefined}
-      className={cn(
-        "flex min-h-9 items-center rounded-md px-3 py-2 text-sm outline-none transition-colors hover:bg-[var(--chalk-app-control-hover,var(--chalk-stage))] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line,var(--chalk-focus))]",
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
-        className,
-      )}
-      role="menuitem"
-      style={{ position: "relative", ...style }}
-      tabIndex={disabled ? -1 : (tabIndex ?? 0)}
-      {...props}
+    <span
+      ref={(element) => {
+        container.current = element?.closest<HTMLElement>("[data-chalk]") ?? element;
+      }}
+      style={{ display: "contents" }}
     >
-      <span className="relative z-[1]">{children}</span>
+      <Menu.Root>
+        <Menu.Trigger render={trigger} />
+        <Menu.Portal container={container}>
+          <Menu.Positioner side={side} align={side === "top" ? "center" : "end"} sideOffset={side === "top" ? 10 : 6} collisionPadding={8} className="chalk-menu-positioner">
+            <Menu.Popup data-part="menu" className={cn("chalk-menu", className)}>
+              {children}
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+    </span>
+  );
+}
+export interface ChalkMenuItemProps {
+  readonly children: ReactNode;
+  readonly checked?: boolean;
+  readonly disabled?: boolean;
+  readonly onClick?: () => void;
+  readonly closeOnClick?: boolean;
+}
+export function ChalkMenuItem({ children, checked, disabled, onClick, closeOnClick }: ChalkMenuItemProps) {
+  const content = (
+    <>
+      {checked !== undefined ? (
+        <span data-part="menu-check" className="chalk-menu-check" aria-hidden="true">
+          {checked ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          ) : null}
+        </span>
+      ) : null}
+      {children}
+    </>
+  );
+  if (checked !== undefined)
+    return (
+      <Menu.Item data-part="menu-item" className="chalk-menu-item" role="menuitemradio" aria-checked={checked} disabled={disabled} onClick={onClick} closeOnClick={closeOnClick}>
+        {content}
+      </Menu.Item>
+    );
+  return (
+    <Menu.Item data-part="menu-item" className="chalk-menu-item" disabled={disabled} onClick={onClick} closeOnClick={closeOnClick}>
+      {content}
+    </Menu.Item>
+  );
+}
+export function ChalkMenuLabel({ children }: { readonly children: ReactNode }) {
+  return (
+    <div data-part="menu-label" className="chalk-menu-label">
+      {children}
     </div>
   );
-});
-
-ChalkMenuItem.displayName = "ChalkMenuItem";
+}

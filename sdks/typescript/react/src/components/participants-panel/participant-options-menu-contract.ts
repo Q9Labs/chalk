@@ -5,6 +5,8 @@ export interface ParticipantOptionsMenuProps {
   variant: ParticipantListVariant;
   canManageParticipants: boolean;
   onClose: () => void;
+  onAssignRole?: (id: string, role: string) => Promise<unknown>;
+  onStopParticipantScreenShare?: (id: string) => Promise<unknown>;
   onMuteParticipant?: (id: string) => void;
   onRequestUnmute?: (id: string) => void | Promise<unknown>;
   onStopParticipantCamera?: (id: string) => void;

@@ -1,11 +1,13 @@
-import React, { useMemo, useRef } from "react";
+import { Facehash } from "@q9labsai/facehash/react";
+import React, { useMemo, useRef, useState } from "react";
 
-import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
+import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import { cn } from "../../utils/cn";
-import { getParticipantColor, type ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { HandIcon, MicrophoneOff01Icon, Monitor01Icon, WifiOffIcon } from "../../utils/icons";
+import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
-import { ChalkBadge } from "../chalk-ui";
+import { ChalkMenu, ChalkMenuItem, ChalkSheet } from "../chalk-ui";
 import { TileShell } from "./TileShell";
 import { useVideoTrack } from "./useVideoTrack";
 
@@ -15,16 +17,19 @@ export interface ParticipantTileProps {
     displayName: string;
     isLocal?: boolean;
     isSpeaking?: boolean;
+    /** Normalized voice level (0–1). Activity-only integrations use a neutral speaking level. */
+    audioLevel?: number;
     isMuted?: boolean;
     isVideoEnabled?: boolean;
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
+    handRaiseOrder?: number;
     /** 0 means unknown; 1–2 show a poor-connection badge. */
     connectionQuality?: 0 | 1 | 2 | 3 | 4;
     avatarUrl?: string;
   };
   videoTrack?: MediaStreamTrack | null;
-  /** Mirror the video horizontally. Defaults to true for the local participant's own camera. */
+  /** Mirror the video horizontally. Defaults to the persisted self-view preference for local cameras, false for remote cameras. */
   mirror?: boolean;
   showName?: boolean;
   showStatus?: boolean;
@@ -32,6 +37,7 @@ export interface ParticipantTileProps {
   onClick?: () => void;
   onDoubleClick?: () => void;
   pinned?: boolean;
+  primary?: boolean;
   className?: string;
   style?: React.CSSProperties;
   children?: React.ReactNode;
@@ -74,6 +80,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   onClick,
   onDoubleClick,
   pinned,
+  primary,
   className,
   style,
   children,
@@ -84,8 +91,21 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   animatedAvatars = true,
 }: ParticipantTileSurfaceProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
-  const mirrored = mirror ?? participant.isLocal === true;
+  const phone = useMediaQuery("(max-width:640px)");
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const openOptions = () => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setOptionsOpen(true);
+  };
+  const closeOptions = () => {
+    setOptionsOpen(false);
+    queueMicrotask(() => returnFocus.current?.focus());
+  };
+  const [localMirrored] = useMirrorSetting();
+  const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
+  const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
   const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
 
   return (
@@ -93,59 +113,115 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       label={`Video tile for ${participant.displayName}`}
       accentColor={colors.primary}
       pinned={pinned}
-      onClick={onClick}
+      lift={!primary}
+      speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
+      audioLevel={participant.audioLevel}
+      onClick={onClick && phone ? openOptions : onClick}
       onDoubleClick={onDoubleClick}
       className={cn(aspectRatioClasses[aspectRatio], className)}
       style={style}
       dataTour={participant.isLocal ? "local-video" : "video-grid"}
       hidden={hidden}
       corner={
-        showStatus && hasPoorConnection ? (
-          <ChalkBadge tone="danger" className="pointer-events-none absolute top-2 right-2 z-20 min-h-0 min-w-0 p-1" role="status" aria-label={`${participant.displayName} has a poor connection`}>
-            <WifiOffIcon size={12} className="text-[var(--chalk-danger)]" />
-          </ChalkBadge>
-        ) : null
+        <>
+          {showStatus && hasPoorConnection ? (
+            <span role="img" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
+              <SignalBars />
+            </span>
+          ) : null}
+          {onClick && !phone ? (
+            <span className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+              <ChalkMenu
+                trigger={
+                  <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
+                    <StageIcon name="more" size={18} />
+                  </button>
+                }
+              >
+                <ChalkMenuItem onClick={onClick}>
+                  {pinned ? "Unpin" : "Pin"} {participant.displayName}
+                </ChalkMenuItem>
+              </ChalkMenu>
+            </span>
+          ) : null}
+        </>
       }
       chip={
         showName || showStatus ? (
           <>
-            {!mediaVisible && showAvatar && <Avatar name={participant.displayName} src={participant.avatarUrl} size="xs" generated={generatedAvatars} animated={animatedAvatars} gradientPreference={gradientPreference} className="hidden shrink-0 @[240px]:flex" />}
+            {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             {showName && (
-              <span className="min-w-0 truncate text-[11px] leading-4 font-medium tracking-[-0.01em] text-white @[240px]:text-[13px] @[240px]:leading-5" title={participant.displayName}>
+              <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
                 {participant.displayName}
-                {participant.isLocal && participant.displayName !== "You" && <span className="text-white/65"> (You)</span>}
+                {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
               </span>
             )}
-            {showStatus && (participant.isMuted || participant.isSpeaking || participant.isHandRaised || participant.isScreenSharing) && (
-              <span className="flex shrink-0 items-center gap-1 @[240px]:gap-1.5">
-                {participant.isMuted && <MicrophoneOff01Icon size={14} className="h-3 w-3 text-[var(--chalk-app-danger,var(--chalk-danger))] @[240px]:h-3.5 @[240px]:w-3.5" aria-label="Muted" />}
-                {!participant.isMuted && participant.isSpeaking && (
-                  <span className="chalk-sound-bars" role="img" aria-label="Speaking">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                )}
-                {participant.isHandRaised && (
-                  <span className={cn("flex h-4 w-4 items-center justify-center rounded-full bg-[var(--chalk-yellow,#e2c25f)] text-[#1b1d22] @[240px]:h-[18px] @[240px]:w-[18px]", !prefersReducedMotion && "chalk-animate-hand-bounce")} aria-label="Hand raised">
-                    <HandIcon size={11} className="h-2.5 w-2.5 @[240px]:h-[11px] @[240px]:w-[11px]" />
-                  </span>
-                )}
-                {participant.isScreenSharing && <Monitor01Icon size={14} className="h-3 w-3 text-white/85 @[240px]:h-3.5 @[240px]:w-3.5" aria-label="Sharing screen" />}
+            {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
+            {showStatus && participant.isHandRaised && (
+              <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
+                <StageIcon name="hand" size={14} />
+                {participant.handRaiseOrder ? <b className="ml-px text-[11px] font-bold">{participant.handRaiseOrder}</b> : null}
               </span>
             )}
           </>
         ) : null
       }
     >
-      <div className={cn("relative z-10 block h-full w-full overflow-hidden transition-opacity duration-300 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
+      <div className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-200 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
       {!mediaVisible && showAvatar && (
-        <div className="chalk-participant-wash absolute inset-0 z-10 flex items-center justify-center">
-          <span aria-hidden="true" className={cn("relative grid scale-50 place-items-center rounded-full @[240px]:scale-100", participant.isSpeaking && !participant.isMuted && "chalk-voice-halo")}>
-            <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={generatedAvatars} animated={animatedAvatars} className="opacity-90" gradientPreference={gradientPreference} />
-          </span>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div aria-hidden="true" className="overflow-hidden rounded-full" style={{ width: "clamp(32px,42cqmin,150px)", height: "clamp(32px,42cqmin,150px)" }}>
+            {generatedAvatars && !participant.avatarUrl ? (
+              <Facehash
+                role="img"
+                aria-label={`Avatar for ${participant.displayName}`}
+                className={cn(
+                  !phone &&
+                    !prefersReducedMotion &&
+                    animatedAvatars &&
+                    "group-hover/tile:[&_svg>g]:!transform-none [&_svg>g]:transition-[translate] [&_svg>g]:duration-[90ms] [&_svg>g]:ease-linear [&_text]:origin-bottom [&_text]:[transform-box:fill-box] [&_text]:transition-[scale] [&_text]:duration-[90ms] [&_text]:ease-linear",
+                  !phone && !prefersReducedMotion && participant.isSpeaking && !participant.isMuted && "[&_svg>g]:translate-y-[calc(var(--chalk-voice-level)*-5px)] [&_text]:scale-y-[calc(1_+_var(--chalk-voice-level)*.55)]",
+                )}
+                name={participant.displayName || participant.id}
+                size="100%"
+                variant="solid"
+                intensity3d="dramatic"
+                interactive={!phone && !prefersReducedMotion && animatedAvatars}
+                enableBlink={!phone && !prefersReducedMotion && animatedAvatars}
+                colors={recipe.facehashColors}
+              />
+            ) : (
+              <Avatar name={participant.displayName} src={participant.avatarUrl} size="xl" generated={false} style={{ width: "100%", height: "100%" }} />
+            )}
+          </div>
         </div>
       )}
+      {phone && onClick ? (
+        <ChalkSheet
+          open={optionsOpen}
+          onOpenChange={(open) => {
+            if (open) openOptions();
+            else closeOptions();
+          }}
+          title={`Options for ${participant.displayName}`}
+        >
+          <div className="flex items-center gap-3 px-2 pt-1 pb-3.5 text-base font-semibold">
+            <Avatar name={participant.displayName} size="sm" />
+            {participant.displayName}
+          </div>
+          <button
+            type="button"
+            className="flex min-h-[52px] w-full items-center gap-3.5 rounded-[16px] bg-[var(--chalk-raised)] px-4 text-left text-base leading-[1.4] hover:bg-[var(--chalk-hover)] active:bg-[var(--chalk-pressed)]"
+            onClick={() => {
+              onClick();
+              closeOptions();
+            }}
+          >
+            <StageIcon name="pin" size={20} className="text-[var(--chalk-soft-text)]" />
+            <span>{pinned ? "Unpin" : "Pin"}</span>
+          </button>
+        </ChalkSheet>
+      ) : null}
       {children}
     </TileShell>
   );
@@ -153,3 +229,14 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
 
 ParticipantTile.displayName = "ParticipantTile";
 ParticipantTileSurface.displayName = "ParticipantTileSurface";
+
+/** The weak-connection cue shares the mockup's three compact signal bars. */
+export function SignalBars(): React.JSX.Element {
+  return (
+    <span aria-hidden="true" className="inline-flex h-3 items-end gap-0.5">
+      {[6, 9, 12, 15].map((height, index) => (
+        <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "#e2bd3a" : "rgba(255,255,255,.3)" }} />
+      ))}
+    </span>
+  );
+}

@@ -1,15 +1,15 @@
-import { Clock, Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { Clock, Context, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
-import { requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
+import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import { V1SyncError } from "../sync/v1-error";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
-import type { IncomingMediaRequest, MediaSlice } from "./types";
+import type { IncomingMediaRequest, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
@@ -34,7 +34,7 @@ export type MediaControllerEffects = {
   ) => void;
   readonly setMicrophoneEnabled: (enabled: boolean) => ClientEffect<void>;
   readonly setCameraEnabled: (enabled: boolean) => ClientEffect<void>;
-  readonly setScreenShareEnabled: (enabled: boolean) => ClientEffect<void>;
+  readonly setScreenShareEnabled: (enabled: boolean, options?: ScreenShareOptions) => ClientEffect<void>;
   readonly selectMicrophone: (deviceId: string) => ClientEffect<void>;
   readonly selectCamera: (deviceId: string) => ClientEffect<void>;
   readonly selectSpeaker: (deviceId: string) => ClientEffect<void>;
@@ -91,6 +91,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
   #ports: ConnectionPorts | null = null;
   #screenEndedPending = false;
+  #screenAudioTrack: MediaStreamTrack | null = null;
   #unsubscribeMedia: (() => void) | null = null;
   #unsubscribeRequests: (() => void) | null = null;
   #unsubscribeSync: (() => void) | null = null;
@@ -119,7 +120,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> => this.#set("microphone", enabled);
   setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
-  setScreenShareEnabled = (enabled: boolean): ClientEffect<void> => (enabled ? this.#startScreen() : this.#stopScreen());
+  setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#startScreen(options) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
       this.#selection.selectCapture("microphone", deviceId);
@@ -210,6 +211,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribeScreenEnded = null;
     this.#unsubscribePorts = null;
     this.#ports = null;
+    this.#screenAudioTrack?.stop();
+    this.#screenAudioTrack = null;
     for (const track of this.#tracks.values()) track.stop();
     this.#tracks.clear();
     this.#clearRequests();
@@ -321,7 +324,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       );
   }
-  #startScreen(): ClientEffect<void> {
+  #startScreen(options?: ScreenShareOptions): ClientEffect<void> {
     let intentRevision = 0;
     return Effect.sync(() => {
       intentRevision = (this.#intentRevisions.get("screen") ?? 0) + 1;
@@ -334,33 +337,68 @@ class MediaControllerRuntime implements MediaControllerEffects {
           this.#serialize(
             "screen",
             this.#connection.runCommand((ports) => {
-              let stream: MediaStream | null = null;
               let track: MediaStreamTrack | null = null;
               let prepared = false;
               return Effect.suspend(() => {
-                if (this.#tracks.has("screen")) {
+                if (this.#tracks.has("screen") && options === undefined) {
                   return Effect.void;
                 }
-                return foreign(() => this.#selection.getDisplayMedia({ video: true, audio: false })).pipe(
-                  Effect.tap((captured) =>
+                return Effect.acquireUseRelease(
+                  foreign(() => this.#selection.getDisplayMedia(displayMediaConstraints(options))).pipe(Effect.mapError((cause) => captureError(cause, "startScreenShare", "Screen sharing permission was denied"))),
+                  (stream) =>
                     Effect.sync(() => {
-                      stream = captured;
                       this.#assertActivePorts(ports, "startScreenShare");
-                      track = requireDisplayVideoTrack(captured);
-                      this.#tracks.set("screen", track);
-                      ports.media.prepareLocalTrack("screen", track);
-                      prepared = true;
-                      track.addEventListener("ended", () => this.#handleScreenEnded(track!));
-                      this.#screenEndedPending = false;
-                      this.#publish();
+                      track = requireDisplayVideoTrack(stream);
+                      return { stream, track };
+                    }).pipe(
+                      Effect.tap(() => {
+                        const previous = this.#tracks.get("screen");
+                        if (!previous) return Effect.void;
+                        return foreign(() => ports.sync.setScreenShareEnabled(false)).pipe(
+                          Effect.andThen(this.#clearScreenAudio(ports.media)),
+                          Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              this.#assertActivePorts(ports, "startScreenShare");
+                              this.#tracks.delete("screen");
+                              previous.stop();
+                            }),
+                          ),
+                        );
+                      }),
+                      Effect.tap(({ stream: captured, track: screenTrack }) =>
+                        Effect.sync(() => {
+                          const audio = captured.getAudioTracks()[0];
+                          for (const extra of captured.getAudioTracks().slice(1)) extra.stop();
+                          ports.media.prepareLocalTrack("screen", screenTrack);
+                          prepared = true;
+                          this.#tracks.set("screen", screenTrack);
+                          this.#screenAudioTrack = audio ?? null;
+                          if (audio) {
+                            ports.media.prepareLocalTrack("screen_audio", audio);
+                            audio.addEventListener("ended", () => this.#handleScreenAudioEnded(audio, ports));
+                          }
+                          screenTrack.addEventListener("ended", () => this.#handleScreenEnded(screenTrack));
+                          this.#screenEndedPending = false;
+                          this.#publish();
+                        }),
+                      ),
+                      Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(true))),
+
+                      Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "startScreenShare"))),
+
+                      Effect.asVoid,
+                      Effect.catch((cause) =>
+                        (prepared ? this.#clearScreenAudio(ports.media) : Effect.void).pipe(
+                          Effect.ignore,
+                          Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
+                        ),
+                      ),
+                    ),
+                  (stream, exit) =>
+                    Effect.sync(() => {
+                      if (Exit.isFailure(exit)) stopStream(stream);
                     }),
-                  ),
-                  Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(true))),
-
-                  Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "startScreenShare"))),
-
-                  Effect.asVoid,
-                  Effect.catch((cause) => this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
                 );
               });
             }),
@@ -404,6 +442,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
                   ),
                   Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(false))),
                   Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "stopScreenShare"))),
+                  Effect.andThen(this.#clearScreenAudio(ports.media)),
                   Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
                   Effect.tap(() =>
                     Effect.sync(() => {
@@ -431,6 +470,16 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       )
       .pipe(Effect.mapError(normalizeClientError));
+  }
+  #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
+    return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#screenAudioTrack?.stop();
+          this.#screenAudioTrack = null;
+        }),
+      ),
+    );
   }
   #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
     const pause = Effect.runPromise(this.#localTarget(ports, source, false));
@@ -526,6 +575,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#ports?.media !== ports?.media) this.#observedPublicationIds.clear();
     this.#ports = ports;
     if (!ports) {
+      this.#screenAudioTrack?.stop();
+      this.#screenAudioTrack = null;
       for (const track of this.#tracks.values()) track.stop();
       this.#tracks.clear();
       this.#screenEndedPending = false;
@@ -549,7 +600,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #applyRemoteMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
     for (const publication of ports.media.getSnapshot().remoteTracks) {
-      publication.track.enabled = snapshot.media?.items.some((item) => item.participantId === publication.participantId && item.source === publication.source && item.enabled) ?? false;
+      publication.track.enabled = snapshot.media?.items.some((item) => item.participantId === publication.participantId && item.source === (publication.source === "screen_audio" ? "screen" : publication.source) && item.enabled) ?? false;
     }
   }
   #applyForcedMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
@@ -570,8 +621,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #pauseForcedSource(ports: ConnectionPorts, source: MediaSource): void {
     const pendingEnable = this.#hasPendingEnable(source);
     if (!pendingEnable) {
-      this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
-      if (source !== "screen") this.#intent[source] = false;
+      this.#clearForcedIntent(source);
     }
     const track = this.#tracks.get(source);
     if (track) track.enabled = false;
@@ -579,6 +629,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (ports.media.closeForcedLocalPublication) void ports.media.closeForcedLocalPublication(source).catch(() => undefined);
     if (pendingEnable) ports.media.setLocalSourceIntent?.(source, true);
     this.#publish();
+  }
+  #clearForcedIntent(source: MediaSource): void {
+    this.#intentRevisions.set(source, (this.#intentRevisions.get(source) ?? 0) + 1);
+    if (source !== "screen") this.#intent[source] = false;
+    else if (this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
   }
   #hasPendingEnable(source: MediaSource): boolean {
     const revision = this.#pendingEnables.get(source);
@@ -633,6 +688,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
     this.#publish();
   }
+  #handleScreenAudioEnded(track: MediaStreamTrack, ports: ConnectionPorts): void {
+    this.#fork(
+      this.#serialize(
+        "screen",
+        Effect.suspend(() => {
+          if (this.#screenAudioTrack !== track || this.#ports !== ports) return Effect.void;
+          return this.#clearScreenAudio(ports.media).pipe(Effect.ensuring(Effect.sync(() => this.#publish())));
+        }),
+      ).pipe(Effect.ignore),
+    );
+  }
   #handleScreenEnded(track = this.#tracks.get("screen")): void {
     if (!track || this.#tracks.get("screen") !== track) return;
     if (this.#connection.getSnapshot().state === "reconnecting") {
@@ -651,7 +717,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
       screen: localMedia("screen", this.#tracks, snapshot, false, state, this.#pendingSources.has("screen")),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
-    const media = Object.freeze({ ...current.media, local, remote, screenShare: local.screen, incomingRequests: this.#requests });
+    const media = Object.freeze({
+      ...current.media,
+      local,
+      remote,
+      screenShare: {
+        ...local.screen,
+        hasAudio: Boolean(this.#screenAudioTrack?.readyState === "live" && snapshot?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live")),
+        ...(local.screen.track ? { capture: screenShareCapture(local.screen.track) } : {}),
+      },
+      incomingRequests: this.#requests,
+    });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
 }
@@ -715,7 +791,10 @@ function activeLocalMediaState(connectionState: ReturnType<ConnectionLifecycleCa
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameLocalMedia(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests);
+  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests);
+}
+function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
+  return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;
 }
 function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
   return left.source === right.source && left.state === right.state && left.track === right.track;

@@ -12,7 +12,9 @@
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "preview": "vite preview",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
-    "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit"
+    "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
+    "perf:call": "node scripts/check-call-performance.mjs",
+    "perf:call:propose": "node scripts/propose-call-budgets.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.43.0",
@@ -43,6 +45,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^29.1.1",
+    "playwright": "^1.62.1",
     "rehype-autolink-headings": "7.1.0",
     "rehype-slug": "6.0.0",
     "remark-gfm": "4.0.1",

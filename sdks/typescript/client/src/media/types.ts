@@ -1,4 +1,4 @@
-import type { MediaPublication, MediaSource } from "./plane";
+import type { MediaPublication, MediaPublicationSource } from "./plane";
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
   readonly stunServer: string;
@@ -17,12 +17,12 @@ export type CloudflareSFUTrackRequest = {
     readonly priorityOrdering: "none" | "asciibetical";
     readonly ridNotAvailable: "none" | "asciibetical";
   };
-  readonly source?: MediaSource;
+  readonly source?: MediaPublicationSource;
   readonly publicationId?: string;
 };
 export type CloudflareSFUCloseTrackRequest = {
   readonly mid: string;
-  readonly source: MediaSource;
+  readonly source: MediaPublicationSource;
   readonly publicationId: string;
 };
 export type CloudflareSFUTracksResponse = {
@@ -37,7 +37,7 @@ export type CloudflareSFUTracksResponse = {
 };
 export type CloudflareSFUPublication = {
   readonly participantId: string;
-  readonly source: MediaSource;
+  readonly source: MediaPublicationSource;
   readonly publicationId: string;
 };
 export type CloudflareSFUPublicationSnapshot = {

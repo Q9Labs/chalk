@@ -18,7 +18,7 @@ const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json"
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // Their tests drive a real browser, so CI runs them in their own job with the browser installed.
-const browserTestWorkspaceNames = new Set(["@chalk/sdk-web-consumer-e2e"]);
+const browserTestWorkspaceNames = new Set(["web", "@chalk/sdk-web-consumer-e2e"]);
 const targetRoots = {
   web: ["web", "@q9labsai/chalk-react", "@chalk/sdk-web-consumer-e2e"],
   mobile: ["@q9labsai/chalk-mobile", "@q9labsai/chalk-react-native"],
@@ -360,6 +360,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/chalk-gate-plan.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
       "apps/sync/scripts/reliability_harness.test.mjs",
+      "scripts/gates/call-performance-metrics.test.mjs",
       "scripts/prod-proof/*.test.mjs",
       "scripts/web-proof/*.test.mjs",
     ]),
@@ -389,6 +390,20 @@ export function createGatePlan(files, options = {}) {
     task("tests", "Affected workspace tests with coverage", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", ["--coverage"], [workspaceConcurrency, "--sort"])),
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
+    task("call-performance", "Call performance budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call rendering inputs or full gate", [
+      "node",
+      "apps/web/scripts/check-call-performance.mjs",
+      "--gate",
+      "--timing-only",
+    ]),
+    task("call-leaks", "Call lifecycle leak budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call lifecycle inputs or full gate", [
+      "node",
+      "apps/web/scripts/check-call-performance.mjs",
+      "--gate",
+      "--leaks-only",
+      "--out",
+      "artifacts/call-leaks.json",
+    ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
       "publint",
@@ -480,7 +495,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], build: ["build", "publint", "attw"] };
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests", "call-performance", "call-leaks"], build: ["build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";

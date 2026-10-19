@@ -138,12 +138,21 @@ async function verifyDirectedRequests(alice, bob) {
   await invoke(bob, "declineMediaRequest", camera.requestId);
 }
 
+// Resting call controls fade and ignore the pointer until it moves, so move it
+// the way a person would before reaching for the dock.
+async function showCallControls(page) {
+  const { width, height } = page.viewportSize();
+  await page.mouse.move(width / 2, height / 2);
+  await page.mouse.move(width / 2 + 10, height / 2 + 10);
+  await page.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+}
+
 async function verifyCollaborations(alice, bob) {
   const text = "Hello from the packed SDK: 👍 ❤️ 😂 😮 😢 🎉";
   const chatMessage = await invoke(alice, "sendChatMessage", { text });
   if (chatMessage.text !== text) throw new TypeError("Packed SDK chat action returned the wrong message");
   await waitFor(bob, (snapshot, expected) => snapshot.chat.messages.some((message) => message.clientMessageId === expected && message.participantId === "alice"), chatMessage.clientMessageId);
-  await bob.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await showCallControls(bob);
   await bob.getByRole("button", { name: "Chat", exact: true }).click();
   await bob.getByText(text, { exact: true }).waitFor({ state: "visible" });
 
@@ -156,18 +165,18 @@ async function verifyCollaborations(alice, bob) {
 }
 
 async function verifyImageAttachment(sender, receiver, fileName = "packed-upload.png") {
-  await sender.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+  await showCallControls(sender);
   await sender.getByRole("button", { name: "Chat", exact: true }).click();
   const chooserReady = sender.waitForEvent("filechooser");
   await sender.getByRole("button", { name: "Attach files", exact: true }).click();
   const chooser = await chooserReady;
   await chooser.setFiles({ name: fileName, mimeType: "image/png", buffer: await readFile(join(repositoryDirectory, "apps/web/public/brand/chalk/chalk-icon-192.png")) });
   await sender.locator('[aria-label="Attachments"]').waitFor({ state: "visible" });
-  await sender.getByPlaceholder("Type a message...").fill("Image from the packed SDK");
+  await sender.getByRole("textbox", { name: "Message", exact: true }).fill("Image from the packed SDK");
   await sender.getByRole("button", { name: "Send message", exact: true }).click();
   await receiver.getByRole("img", { name: fileName, exact: true }).waitFor({ state: "visible" });
   await receiver.waitForFunction((expected) => [...document.images].some((image) => image.alt === expected && image.complete && image.naturalWidth > 0), fileName);
-  await sender.getByRole("button", { name: "Close chat", exact: true }).click();
+  await sender.getByRole("button", { name: "Close panel", exact: true }).click();
 }
 
 async function verifyPairJoined(alice, bob) {

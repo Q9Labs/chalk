@@ -9,6 +9,7 @@ const MAX_CHAT_TEXT_BYTES = 16_384;
 const MAX_CHAT_TEXT_SCALARS = 4_000;
 const encoder = new TextEncoder();
 const allowedMimeTypes = new Set<string>(CHALK_CHAT_ATTACHMENT_MIME_TYPES);
+const chatMessageFields = ["reactionRevision", "messageId", "clientMessageId", "sequence", "participantId", "displayName", "text", "createdAt"] as const;
 
 export function validateChatMessage(input: ChatSendInput): string | null {
   const attachments = input.attachments ?? [];
@@ -31,7 +32,12 @@ export function chatDigest(bytes: ArrayBuffer): string {
 }
 
 export function chatMessageFor(message: ChalkChatMessage): ChatMessage {
-  return Object.freeze({ ...message, attachments: Object.freeze([...message.attachments]) });
+  return Object.freeze({
+    ...message,
+    reactionRevision: message.reactionRevision ?? "0",
+    reactions: Object.freeze((message.reactions ?? []).map((reaction) => Object.freeze({ ...reaction, participantIds: Object.freeze([...reaction.participantIds]) }))),
+    attachments: Object.freeze([...message.attachments]),
+  });
 }
 
 export function chatReceiptFor(receipt: ChalkChatReadReceipt): ChatReadReceipt {
@@ -39,6 +45,7 @@ export function chatReceiptFor(receipt: ChalkChatReadReceipt): ChatReadReceipt {
 }
 
 export function mergeChatMessage(messages: readonly ChatMessage[], existing: ChatMessage, incoming: ChatMessage): readonly ChatMessage[] {
+  if (compareChatSequence(existing.reactionRevision ?? "0", incoming.reactionRevision ?? "0") > 0) incoming = { ...incoming, reactions: existing.reactions, reactionRevision: existing.reactionRevision };
   if (sameChatMessage(existing, incoming)) return messages;
   return Object.freeze(
     messages
@@ -65,13 +72,7 @@ function validateChatAttachment(attachment: ChatAttachment): string | null {
 
 function sameChatMessage(left: ChatMessage, right: ChatMessage): boolean {
   return (
-    left.messageId === right.messageId &&
-    left.clientMessageId === right.clientMessageId &&
-    left.sequence === right.sequence &&
-    left.participantId === right.participantId &&
-    left.displayName === right.displayName &&
-    left.text === right.text &&
-    left.createdAt === right.createdAt &&
+    chatMessageFields.every((field) => left[field] === right[field]) &&
     left.attachments.length === right.attachments.length &&
     left.attachments.every((attachment, index) => {
       const candidate = right.attachments[index];

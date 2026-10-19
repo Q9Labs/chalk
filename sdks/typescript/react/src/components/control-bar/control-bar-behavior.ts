@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { useCan, useChat, useMedia, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
-import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
+import { commandFailure } from "./command-failure";
+import { useMirrorSetting } from "../../internal/useMirrorSetting";
+import type { ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
+import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MediaDevice {
@@ -12,15 +14,31 @@ export interface MediaDevice {
   groupId?: string;
 }
 
-export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "transcription" | "handraise" | "reactions" | "whiteboard" | "pip" | "settings" | "more" | "info" | "thumbsup" | "leave";
+export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
-  position?: "bottom" | "top";
-  placement?: "inline" | "floating";
+  shareUrl?: string;
+  callLinkOpen?: boolean;
+  onCallLinkToggle?: () => void;
+  layout?: "focus" | "grid";
+  onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
-  showLabels?: boolean;
   buttons?: ControlBarButtonName[];
 
+  microphoneTrack?: MediaStreamTrack | null;
+  cameraTrack?: MediaStreamTrack | null;
+  microphoneWarning?: boolean;
+  cameraWarning?: boolean;
+  speakingWhileMuted?: boolean;
+  noiseSuppression?: boolean;
+  onNoiseSuppressionChange?: (enabled: boolean) => void;
+  mirrored?: boolean;
+  onMirrorChange?: (mirrored: boolean) => void;
+  onTestSpeaker?: () => void;
+  onStartScreenShare?: (options: ScreenShareOptions) => void;
+  onCopyError?: () => void;
+  onFullscreenError?: () => void;
+  knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
   cameraPending?: boolean;
@@ -30,11 +48,8 @@ export interface ControlBarSurfaceProps {
   isRecordingPending?: boolean;
   isChatOpen?: boolean;
   isParticipantsOpen?: boolean;
-  isTranscriptionEnabled?: boolean;
   isHandRaised?: boolean;
   isWhiteboardOpen?: boolean;
-  isPictureInPictureActive?: boolean;
-  duration?: number;
   unreadChatCount?: number;
   audioInputDevices?: readonly MediaDevice[];
   audioOutputDevices?: readonly MediaDevice[];
@@ -52,15 +67,11 @@ export interface ControlBarSurfaceProps {
   onToggleRecording?: () => void;
   onToggleChat?: () => void;
   onToggleParticipants?: () => void;
-  onToggleTranscription?: () => void;
   onToggleHandRaise?: () => void;
   onToggleWhiteboard?: () => void;
-  onTogglePictureInPicture?: () => Promise<void> | void;
   onOpenReactions?: () => void;
-  onOpenSettings?: () => void;
-  onOpenMore?: () => void;
-  onOpenInfo?: () => void;
   onLeft?: () => void;
+  onEndForEveryone?: () => void;
 
   participantColorSeed?: string;
   participantGradientPreference?: ParticipantGradientPreference;
@@ -72,41 +83,32 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
-  readonly position?: "bottom" | "top";
-  readonly placement?: "inline" | "floating";
+  /** Local self-view only. Omit to use the persisted mirror preference. */
+  readonly mirrored?: boolean;
+  readonly onMirrorChange?: (mirrored: boolean) => void;
+  readonly shareUrl?: string;
+  readonly callLinkOpen?: boolean;
+  readonly onCallLinkToggle?: () => void;
+  readonly layout?: "focus" | "grid";
+  readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
-  /** A shared Episode clock supplied by the owning Space surface. */
-  readonly duration?: number;
-  readonly showLabels?: boolean;
   readonly buttons?: ControlBarButtonName[];
   readonly activePanel?: "chat" | "participants" | null;
   readonly onToggleChat?: () => void;
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly onOpenReactions?: () => void;
-  readonly onOpenSettings?: () => void;
-  readonly onOpenMore?: () => void;
-  readonly onOpenInfo?: () => void;
   readonly onLeaveRequest?: () => void;
+  /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
+  readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
-  readonly onCommandError?: (message: string | null) => void;
+  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource) => void;
   readonly participantColorSeed?: string;
   readonly participantGradientPreference?: ParticipantGradientPreference;
   readonly className?: string;
 }
 
-export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "thumbsup", "pip", "settings"];
-
-export function formatControlBarDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(secs).padStart(2, "0")}`;
-}
+export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "reactions"];
 
 interface DeviceGroups {
   readonly audioinput: MediaDevice[];
@@ -139,7 +141,6 @@ function withSelectedDeviceFallback(devices: readonly MediaDevice[] | undefined,
 }
 
 interface ControlBarSurfaceBehaviorOptions {
-  readonly placement: "inline" | "floating";
   readonly density: "comfortable" | "compact";
   readonly buttons?: ControlBarButtonName[];
   readonly audioInputDevices?: readonly MediaDevice[];
@@ -160,12 +161,9 @@ interface ControlBarSurfaceBehavior {
   readonly effectiveAudioOutputDevices: readonly MediaDevice[];
   readonly effectiveVideoInputDevices: readonly MediaDevice[];
   readonly showLeave: boolean;
-  readonly mediaButtons: readonly ControlBarButtonName[];
-  readonly interactionButtons: readonly ControlBarButtonName[];
 }
 
 export function useControlBarSurfaceBehavior({
-  placement,
   density,
   buttons,
   audioInputDevices,
@@ -183,7 +181,7 @@ export function useControlBarSurfaceBehavior({
   const buttonsToRender = buttons ?? DEFAULT_CONTROL_BAR_BUTTONS;
 
   useEffect(() => {
-    if (!detectDevices || placement !== "floating" || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
+    if (!detectDevices || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
     let cancelled = false;
     const syncDevices = async () => {
       try {
@@ -205,14 +203,12 @@ export function useControlBarSurfaceBehavior({
       cancelled = true;
       navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
     };
-  }, [density, detectDevices, placement]);
+  }, [density, detectDevices]);
 
   const effectiveAudioInputDevices = withSelectedDeviceFallback(mergeDevices(audioInputDevices, detectedDevices.audioinput), selectedAudioInput, "Current microphone", "audioinput");
   const effectiveAudioOutputDevices = withSelectedDeviceFallback(mergeDevices(audioOutputDevices, detectedDevices.audiooutput), selectedAudioOutput, "Current speaker", "audiooutput");
   const effectiveVideoInputDevices = withSelectedDeviceFallback(mergeDevices(videoInputDevices, detectedDevices.videoinput), selectedVideoInput, "Current camera", "videoinput");
   const showLeave = buttonsToRender.includes("leave");
-  const mediaButtons = buttonsToRender.filter((button) => button === "mic" || button === "video" || button === "screenshare" || button === "record" || button === "whiteboard" || button === "handraise");
-  const interactionButtons = buttonsToRender.filter((button) => button === "participants" || button === "chat" || button === "transcription" || button === "thumbsup" || button === "pip" || button === "reactions" || button === "settings" || button === "more" || button === "info");
 
   return {
     themeVariables,
@@ -221,19 +217,19 @@ export function useControlBarSurfaceBehavior({
     effectiveAudioOutputDevices,
     effectiveVideoInputDevices,
     showLeave,
-    mediaButtons,
-    interactionButtons,
   };
 }
 
 interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
-  readonly commandError: string | null;
+  readonly commandError: ClientFailure | null;
 }
 
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
+  const [mirrored, setMirrored] = useMirrorSetting();
   const client = useSpaceClient();
   const self = useSelf();
+  const participants = useParticipants();
   const media = useMedia();
   const chat = useChat();
   const recording = useRecording();
@@ -248,20 +244,19 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const recordingStatus = recording.current?.status;
   const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
-  const measuredEpisodeDuration = useEpisodeDuration();
-  const episodeDuration = props.duration ?? measuredEpisodeDuration;
-  const [commandError, setCommandError] = useState<string | null>(null);
+  const [noiseSuppression, setNoiseSuppression] = useState(true);
+  const [commandError, setCommandError] = useState<ClientFailure | null>(null);
 
   const run = useCallback(
-    async (command: () => Promise<unknown>) => {
+    async (command: () => Promise<unknown>, source?: MediaSource) => {
       setCommandError(null);
-      props.onCommandError?.(null);
+      props.onCommandError?.(null, source);
       try {
         await command();
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : "This command could not be completed.";
-        if (!props.onCommandError) setCommandError(message);
-        props.onCommandError?.(message);
+        const failure = commandFailure(cause);
+        if (!props.onCommandError) setCommandError(failure);
+        props.onCommandError?.(failure, source);
       }
     },
     [props.onCommandError],
@@ -280,7 +275,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
 
   const buttons = (props.buttons ?? DEFAULT_CONTROL_BAR_BUTTONS).filter((button) => {
     if (button === "screenshare") return canPublishScreen;
-    if (button === "reactions" || button === "thumbsup") return canSendReaction;
+    if (button === "reactions") return canSendReaction;
     if (button === "handraise") return canRaiseHand;
     if (button === "whiteboard") return canDrawWhiteboard;
     if (button === "record") return canManageRecording;
@@ -291,8 +286,27 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const videoInputDevices: MediaDevice[] = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" }));
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
+    detectDevices: false,
     buttons,
-    duration: episodeDuration,
+    microphoneTrack: media.local.microphone.track,
+    cameraTrack: media.local.camera.track,
+    mirrored: props.mirrored ?? mirrored,
+    onMirrorChange: props.onMirrorChange ?? (props.mirrored === undefined ? setMirrored : undefined),
+    microphoneWarning: media.local.microphone.state === "failed" || media.local.microphone.state === "unavailable",
+    cameraWarning: media.local.camera.state === "failed" || media.local.camera.state === "unavailable",
+    noiseSuppression,
+    onNoiseSuppressionChange: media.local.microphone.track
+      ? (enabled) =>
+          void run(async () => {
+            await media.local.microphone.track?.applyConstraints({ noiseSuppression: enabled });
+            setNoiseSuppression(enabled);
+          }, "microphone")
+      : undefined,
+    onStartScreenShare: (options) =>
+      void run(async () => {
+        await client.media.setScreenShareEnabled(true, options);
+      }, "screen"),
+    shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     cameraPending: media.local.camera.state === "requesting",
@@ -304,28 +318,55 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     isParticipantsOpen: props.activePanel === "participants",
     isHandRaised: self.handRaised,
     unreadChatCount: chat.unreadCount,
+    knockCount: self.can("manageAdmission") ? participants.admissionQueue.length : 0,
     audioInputDevices,
     audioOutputDevices,
     videoInputDevices,
     selectedAudioInput: media.selection.microphone ?? undefined,
     selectedAudioOutput: media.selection.speaker ?? undefined,
     selectedVideoInput: media.selection.camera ?? undefined,
-    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled)),
-    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled)),
-    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId)),
+    onTestSpeaker: () =>
+      void run(async () => {
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const output = context.createMediaStreamDestination();
+        const audio = new Audio();
+        try {
+          if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
+          audio.srcObject = output.stream;
+          oscillator.connect(gain).connect(output);
+          gain.gain.value = 0.15;
+          oscillator.frequency.value = 440;
+          oscillator.start();
+          await audio.play();
+          await new Promise<void>((resolve) => {
+            oscillator.onended = () => resolve();
+            oscillator.stop(context.currentTime + 0.4);
+          });
+        } finally {
+          audio.pause();
+          audio.srcObject = null;
+          oscillator.disconnect();
+          gain.disconnect();
+          output.stream.getTracks().forEach((track) => track.stop());
+          await context.close();
+        }
+      }),
+    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone"),
+    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera"),
+    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId)),
-    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId)),
-    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing)),
+    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
+    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
     onToggleWhiteboard: props.onToggleWhiteboard,
     onOpenReactions: props.onOpenReactions,
-    onOpenSettings: props.onOpenSettings,
-    onOpenMore: props.onOpenMore,
-    onOpenInfo: props.onOpenInfo,
     onLeft: leave,
+    onEndForEveryone: props.onEndForEveryone,
   };
 
   return { surfaceProps, commandError };

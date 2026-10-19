@@ -1,7 +1,7 @@
 "use client";
 
-import type { Capability, ChatSlice, ConnectionSlice, MediaSlice, OfflineSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
-import { useCallback, useContext, useSyncExternalStore } from "react";
+import type { Capability, ChatReaction, ChatMessage, ChatSlice, ConnectionSlice, MediaSlice, OfflineSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
+import { useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
 import { SpaceClientContext } from "./context";
 
@@ -49,8 +49,18 @@ export function useMedia(): MediaSlice {
   return useSnapshotSlice(selectMedia);
 }
 
-export function useChat(): ChatSlice {
-  return useSnapshotSlice(selectChat);
+export type MessageReaction = ChatReaction & { readonly isMine: boolean };
+export type ReactChatMessage = Omit<ChatMessage, "reactions"> & { readonly reactions: readonly MessageReaction[] };
+export type UseChatResult = Omit<ChatSlice, "messages"> & { readonly messages: readonly ReactChatMessage[]; readonly react: SpaceClient["chat"]["react"] };
+
+export function useChat(): UseChatResult {
+  const chat = useSnapshotSlice(selectChat);
+  const self = useSelf();
+  const client = useSpaceClient();
+  return useMemo(
+    () => ({ ...chat, react: client.chat.react, messages: chat.messages.map((message) => ({ ...message, reactions: (message.reactions ?? []).map((reaction) => ({ ...reaction, isMine: self.participantId !== null && reaction.participantIds.includes(self.participantId) })) })) }),
+    [chat, client, self.participantId],
+  );
 }
 
 /** Actions held while the connection recovers, and whether the user still has to decide about them. */
@@ -72,4 +82,11 @@ export function useWhiteboard(): WhiteboardSlice {
 
 export function useCan(capability: Capability): boolean {
   return useSelf().can(capability);
+}
+
+/** Local capture state and the action that opens the browser's share picker. */
+export function useScreenShare() {
+  const client = useSpaceClient();
+  const { screenShare } = useMedia();
+  return { ...screenShare, setEnabled: client.media.setScreenShareEnabled };
 }

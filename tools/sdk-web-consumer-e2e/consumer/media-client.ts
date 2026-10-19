@@ -1,4 +1,4 @@
-import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "@q9labsai/chalk-client";
+import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
@@ -55,26 +55,34 @@ export class FixtureMediaClient {
   getSnapshot = () => this.#snapshot;
   subscribe = (listener: () => void) => (this.#listeners.add(listener), () => this.#listeners.delete(listener));
 
-  prepareLocalTrack(source: MediaSource, track: MediaStreamTrack): void {
+  // This consumer checks the packed SDK's published sources; shared tab audio is
+  // proved by scripts/dev/share-audio-proof.mjs, so the fake doesn't send it.
+  prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
+    if (source === "screen_audio") return;
     this.#local.set(source, { track, enabled: false });
     if (source === "screen") track.addEventListener("ended", this.#onScreenEnded, { once: true });
     this.#publish();
   }
 
-  async clearPreparedLocalTrack(source: MediaSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaPublicationSource): Promise<void> {
+    if (source === "screen_audio") return;
     const local = this.#local.get(source);
     if (!local) return;
     local.enabled = false;
-    for (const peer of this.#peers.values()) {
-      const sender = peer.senders.get(source);
-      if (sender) await sender.replaceTrack(null);
-      peer.senders.delete(source);
-    }
+    await this.#detachLocalTrack(source);
     releaseTrack(local.track);
     this.#local.delete(source);
     this.#sendPublications();
     await this.#renegotiateAll();
     this.#publish();
+  }
+
+  async #detachLocalTrack(source: MediaSource): Promise<void> {
+    for (const peer of this.#peers.values()) {
+      const sender = peer.senders.get(source);
+      if (sender) await sender.replaceTrack(null);
+      peer.senders.delete(source);
+    }
   }
 
   async start(stream: MediaStream): Promise<void> {
@@ -317,7 +325,7 @@ function fixtureBootstrap(input: CloudflareSFUBootstrap | FixtureMediaAccess): C
   return input.clientPayload;
 }
 
-export function reconcileFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: Map<string, CloudflareSFURemoteTrack>): void {
+function reconcileFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: Map<string, CloudflareSFURemoteTrack>): void {
   const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
   for (const [key, remote] of received) {
     if (wanted.has(key)) continue;
@@ -326,11 +334,11 @@ export function reconcileFixtureRemoteTracks(remotePublications: readonly MediaP
   }
 }
 
-export function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {
+function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {
   received.set(`${remote.participantId}:${remote.source}`, remote);
 }
 
-export function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
+function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
   const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
   return [...received].filter(([key]) => wanted.has(key)).map(([, remote]) => remote);
 }

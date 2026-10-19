@@ -4,7 +4,7 @@ import type { AudioParticipant } from "../components/audio-output/AudioOutput";
 import type { Participant } from "../components/participant-grid/ParticipantGrid";
 import type { ParticipantListParticipant } from "../components/participants-panel/ParticipantsPanel";
 
-/** Returns the first participant with a live screen-share track for presentation mode. */
+/** Returns the first participant with a live screen-share track for the Spotlight layout. */
 export function toActiveScreenShare(participants: readonly Participant[]): Participant | undefined {
   return participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack != null);
 }
@@ -13,7 +13,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
   const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>>>();
   const stateByParticipant = new Map(participants.map((participant) => [participant.participantId, participant.media]));
   for (const publication of remoteMedia) {
-    if (publication.source === "microphone") continue;
+    if (publication.source === "microphone" || publication.source === "screen_audio") continue;
     const state = stateByParticipant.get(publication.participantId);
     if (!state || (publication.source === "camera" ? state.camera : state.screenShare) !== "active") continue;
     const media = remoteByParticipant.get(publication.participantId) ?? {};
@@ -61,7 +61,7 @@ export function toAudioParticipants(remoteMedia: readonly RemoteMedia[]): AudioP
     if (publication.track.kind !== "audio") continue;
     const participant = byParticipant.get(publication.participantId) ?? { id: publication.participantId };
     if (publication.source === "microphone") participant.audioTrack = publication.track;
-    if (publication.source === "screen") participant.screenShareAudioTrack = publication.track;
+    if (publication.source === "screen_audio") participant.screenShareAudioTrack = publication.track;
     byParticipant.set(publication.participantId, participant);
   }
   return [...byParticipant.values()];

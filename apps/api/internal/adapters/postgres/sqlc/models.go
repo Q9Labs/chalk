@@ -999,6 +999,15 @@ type SyncChatMessage struct {
 	MessageText           string             `json:"message_text"`
 	EncodedBytes          int64              `json:"encoded_bytes"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ReactionRevision      int64              `json:"reaction_revision"`
+}
+
+type SyncChatMessageReaction struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	MessageID     pgtype.UUID `json:"message_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+	Emoji         string      `json:"emoji"`
 }
 
 type SyncChatReadReceipt struct {

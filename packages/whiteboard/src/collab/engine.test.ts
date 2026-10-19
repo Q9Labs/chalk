@@ -5,9 +5,11 @@ import type { ExcalidrawImperativeAPI } from "./types";
 beforeAll(async () => {
   window.matchMedia = vi.fn(() => ({ matches: false, media: "", onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: () => false }));
   Object.defineProperty(HTMLCanvasElement.prototype, "getContext", { configurable: true, value: vi.fn(() => ({ filter: "none", measureText: () => ({ width: 0 }) })) });
+  // Excalidraw's cold import takes seconds in jsdom on a loaded runner. Load it once
+  // here, so each test's timeout covers only its own work.
   await import("@excalidraw/excalidraw");
   await import("./engine");
-}, 30_000);
+}, 60_000);
 
 it.each(["snapshot", "clear update"])("discards the retired scene after a new-scene %s", async (kind) => {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
@@ -34,16 +36,10 @@ it.each(["snapshot", "clear update"])("discards the retired scene after a new-sc
 afterEach(() => vi.useRealTimers());
 
 it.each(["initial snapshot", "recovery snapshot", "remote update"])("submits only the retained local draft after an %s", async (kind) => {
-  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
-  const { ExcalidrawCollabEngine } = await import("./engine");
-  const { toWireElement } = await import("./wire");
-  vi.useFakeTimers();
-  const api = createCanvas(restoreElements, restoreAppState);
+  const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture();
   const make = (id: string, version = 1, versionNonce = 1) => restoreElements([{ type: "rectangle", id, index: id === "received" ? "a0" : id === "edited" ? "a1" : "a2", x: 0, y: 0, width: 100, height: 100, version, versionNonce, isDeleted: false }], null);
   const received = make("received");
   const old = make("edited");
-  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
-  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
   try {
     if (kind !== "initial snapshot") engine.handleRemoteSnapshot({ sceneId: "scene", elements: [...received, ...old].map(toWireElement) });
     // There is no user action after the incoming scene.
@@ -65,15 +61,9 @@ it.each(["initial snapshot", "recovery snapshot", "remote update"])("submits onl
 });
 
 it("keeps retained local drafts on the existing debounce during incremental remote updates", async () => {
-  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
-  const { ExcalidrawCollabEngine } = await import("./engine");
-  const { toWireElement } = await import("./wire");
-  vi.useFakeTimers();
-  const api = createCanvas(restoreElements, restoreAppState);
+  const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture();
   const local = restoreElements([{ type: "rectangle", id: "draft", index: "a0", x: 0, y: 0, width: 100, height: 100, version: 1, versionNonce: 1, isDeleted: false }], null);
   const remote = restoreElements([{ ...local[0], id: "remote", index: "a1" }], null);
-  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
-  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
   try {
     engine.handleRemoteSnapshot({ sceneId: "scene", elements: [] });
     api.updateScene({ elements: local });
@@ -93,16 +83,10 @@ it("keeps retained local drafts on the existing debounce during incremental remo
 });
 
 it("submits a local version that wins an equal-version reconciliation without echoing the remote winner", async () => {
-  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
-  const { ExcalidrawCollabEngine } = await import("./engine");
-  const { toWireElement } = await import("./wire");
-  vi.useFakeTimers();
-  const api = createCanvas(restoreElements, restoreAppState);
+  const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture();
   const local = restoreElements([{ type: "rectangle", id: "conflict", index: "a0", x: 0, y: 0, width: 100, height: 100, version: 2, versionNonce: 1, isDeleted: false }], null);
   const remote = restoreElements([{ ...local[0], versionNonce: 2 }], null);
   api.updateScene({ elements: local });
-  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
-  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
   try {
     engine.handleRemoteSnapshot({ sceneId: "scene", elements: remote.map(toWireElement) });
     await vi.advanceTimersByTimeAsync(0);
@@ -116,6 +100,17 @@ it("submits a local version that wins an equal-version reconciliation without ec
     engine.dispose();
   }
 });
+
+async function createReconciliationFixture() {
+  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
+  const { ExcalidrawCollabEngine } = await import("./engine");
+  const { toWireElement } = await import("./wire");
+  vi.useFakeTimers();
+  const api = createCanvas(restoreElements, restoreAppState);
+  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
+  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  return { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement };
+}
 
 function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").restoreElements, restoreAppState: typeof import("@excalidraw/excalidraw").restoreAppState, pointerUps: (() => void)[] = []): ExcalidrawImperativeAPI {
   let elements = restoreElements([], null);
@@ -164,8 +159,7 @@ it("acknowledges the submitted version, then delivers final points mutated durin
     const stroke = fixture.api.getSceneElementsIncludingDeleted()[0];
     Object.assign(stroke, { version: 2, versionNonce: 2, width: 200 });
     // Excalidraw mutates existing elements. No further input is needed to flush the final state.
-    pending.resolve({ operationId: "first", sceneId: "scene", revision: "1" });
-    await vi.advanceTimersByTimeAsync(0);
+    await acknowledgeFirstCommit(pending);
     expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
     expect(fixture.submitUpdate.mock.calls[0]?.[0].elements[0]?.version).toBe(1);
     expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.version).toBe(2);
@@ -246,8 +240,7 @@ it("sends a stroke finished during a submission as soon as it is acknowledged, w
     fixture.draw("second", 1);
     fixture.pointerUp();
     fixture.canvasChange();
-    pending.resolve({ operationId: "first", sceneId: "scene", revision: "1" });
-    await vi.advanceTimersByTimeAsync(0);
+    await acknowledgeFirstCommit(pending);
     expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
     expect(fixture.submitUpdate.mock.calls[1]?.[0].elements.map((element) => element.id)).toEqual(["second"]);
   } finally {
@@ -463,22 +456,11 @@ it("leaves a stroke that is still being drawn to its own pointer-up when the can
 
 it.each(["drawing", "resizing"])("applies a winning peer edit once local %s on the same element ends", async (interaction) => {
   const fixture = await createDeliveryFixture();
-  const getAppState = fixture.api.getAppState;
-  let editing = true;
-  fixture.api.getAppState = () => ({
-    ...getAppState(),
-    newElement: editing && interaction === "drawing" ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null,
-    resizingElement: editing && interaction === "resizing" ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null,
-  });
+  const finishEditing = trackLocalInteraction(fixture, interaction);
   try {
-    fixture.draw("shared", 1);
-    await vi.advanceTimersByTimeAsync(150);
-    fixture.draw("shared", 2);
-    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+    await deferPeerEdit(fixture);
     expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(2);
-    editing = false;
-    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
-    await vi.advanceTimersByTimeAsync(150);
+    await finishEditing();
     expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(5);
     expect(fixture.submitUpdate).toHaveBeenCalledOnce();
   } finally {
@@ -488,18 +470,11 @@ it.each(["drawing", "resizing"])("applies a winning peer edit once local %s on t
 
 it("keeps a newer local edit when the deferred peer version is reconciled", async () => {
   const fixture = await createDeliveryFixture();
-  const getAppState = fixture.api.getAppState;
-  let editing = true;
-  fixture.api.getAppState = () => ({ ...getAppState(), newElement: editing ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null });
+  const finishEditing = trackLocalInteraction(fixture);
   try {
-    fixture.draw("shared", 1);
-    await vi.advanceTimersByTimeAsync(150);
-    fixture.draw("shared", 2);
-    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+    await deferPeerEdit(fixture);
     fixture.draw("shared", 9);
-    editing = false;
-    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
-    await vi.advanceTimersByTimeAsync(150);
+    await finishEditing();
     expect(fixture.api.getSceneElementsIncludingDeleted()[0]?.version).toBe(9);
     expect(fixture.submitUpdate).toHaveBeenCalledTimes(2);
     expect(fixture.submitUpdate.mock.calls[1]?.[0].elements[0]?.version).toBe(9);
@@ -510,24 +485,44 @@ it("keeps a newer local edit when the deferred peer version is reconciled", asyn
 
 it("discards deferred peer edits when the scene is cleared", async () => {
   const fixture = await createDeliveryFixture();
-  const getAppState = fixture.api.getAppState;
-  let editing = true;
-  fixture.api.getAppState = () => ({ ...getAppState(), newElement: editing ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null });
+  const finishEditing = trackLocalInteraction(fixture);
   try {
-    fixture.draw("shared", 1);
-    await vi.advanceTimersByTimeAsync(150);
-    fixture.draw("shared", 2);
-    fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+    await deferPeerEdit(fixture);
     fixture.engine.handleRemoteSnapshot({ sceneId: "cleared", elements: [] });
-    editing = false;
-    fixture.engine.handleChange(fixture.api.getSceneElementsIncludingDeleted(), fixture.api.getAppState(), {});
-    await vi.advanceTimersByTimeAsync(150);
+    await finishEditing();
     expect(fixture.api.getSceneElementsIncludingDeleted()).toEqual([]);
     expect(fixture.submitUpdate).toHaveBeenCalledOnce();
   } finally {
     fixture.engine.dispose();
   }
 });
+
+async function acknowledgeFirstCommit(pending: ReturnType<typeof deferredCommit>) {
+  pending.resolve({ operationId: "first", sceneId: "scene", revision: "1" });
+  await vi.advanceTimersByTimeAsync(0);
+}
+
+async function deferPeerEdit(fixture: Awaited<ReturnType<typeof createDeliveryFixture>>) {
+  fixture.draw("shared", 1);
+  await vi.advanceTimersByTimeAsync(150);
+  fixture.draw("shared", 2);
+  fixture.engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: fixture.make("shared", 5).map(fixture.toWireElement) });
+}
+
+function trackLocalInteraction(fixture: Awaited<ReturnType<typeof createDeliveryFixture>>, interaction = "drawing") {
+  const getAppState = fixture.api.getAppState;
+  let editing = true;
+  fixture.api.getAppState = () => ({
+    ...getAppState(),
+    newElement: editing && interaction === "drawing" ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null,
+    resizingElement: editing && interaction === "resizing" ? (fixture.api.getSceneElementsIncludingDeleted()[0] ?? null) : null,
+  });
+  return async () => {
+    editing = false;
+    fixture.canvasChange();
+    await vi.advanceTimersByTimeAsync(150);
+  };
+}
 
 async function createDeliveryFixture() {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");

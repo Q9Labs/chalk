@@ -173,7 +173,7 @@ export type ChalkLocalMedia = {
 
 export type ChalkRemoteMedia = {
   readonly participantId: string;
-  readonly source: ChalkMediaSource;
+  readonly source: ChalkMediaSource | "screen_audio";
   readonly publicationId: string;
   readonly track: MediaStreamTrack;
 };

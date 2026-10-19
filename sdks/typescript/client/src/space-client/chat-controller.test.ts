@@ -23,7 +23,7 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
   const sendRequests = new Map<string, (frame: SendRequest) => void>();
   let requestId = 1000;
   const collaboration = new V1CollaborationState({
-    request: undefined,
+    request: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     requestIds: { next: () => id(++requestId) },
     maxPendingRequests: undefined,
     isLive: () => platform.sync.getSnapshot().connection.phase === "live",
@@ -45,7 +45,7 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
     recovery_id: id(999),
     mode: "up_to_date",
     head: { revision: 0, state_schema_version: 1, state_digest: "0".repeat(64) },
-    extensions: [{ name: "collaboration_v1", capabilities: ["sendChat"], participant_capabilities: {}, chat_head_sequence: initial.at(-1)?.sequence ?? null, retained_floor_sequence: initial[0]?.sequence ?? null, read_receipts: [] }],
+    extensions: [{ name: "collaboration_v2", capabilities: ["sendChat"], participant_capabilities: {}, chat_head_sequence: initial.at(-1)?.sequence ?? null, retained_floor_sequence: initial[0]?.sequence ?? null, read_receipts: [] }],
   });
   const sync = {
     ...platform.sync,
@@ -56,6 +56,7 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
     getCollaborationExtensionState: () => collaboration.getState(),
     subscribeCollaboration: collaboration.subscribe.bind(collaboration),
     sendChatMessage: collaboration.sendChatMessage.bind(collaboration),
+    reactToChatMessage: collaboration.reactToChatMessage.bind(collaboration),
     readChatPage: collaboration.readChatPage.bind(collaboration),
   };
   const access = opaqueAccessGrant("chat-catch-up");
@@ -109,8 +110,25 @@ async function setup(initial: readonly MessageFrame[] = [], localParticipantId =
     await send.acknowledge();
     return send.message;
   }
+  async function catchUpRange(messages: MessageFrame[], start: number, end: number, source: "own" | "peer", floor = 1) {
+    for (let sequence = start; sequence <= end; sequence += 1) {
+      messages.push(source === "own" ? await acknowledge(sequence) : message(sequence));
+      head(sequence, floor);
+      await drain(messages);
+    }
+  }
   if (drainInitial) await drain(initial);
-  return { client, collaboration, sent, requests, head, phase, page, drain, beginSend, acknowledge, sequences: () => client.getSnapshot().chat.messages.map((item) => item.sequence) };
+  return { client, collaboration, sent, requests, head, phase, page, drain, beginSend, acknowledge, catchUpRange, sequences: () => client.getSnapshot().chat.messages.map((item) => item.sequence) };
+}
+
+async function withChatHistory(run: (harness: Awaited<ReturnType<typeof setup>>, messages: MessageFrame[]) => Promise<void>) {
+  const harness = await setup();
+  const messages: MessageFrame[] = [];
+  try {
+    await run(harness, messages);
+  } finally {
+    harness.client.dispose();
+  }
 }
 
 describe("Chat controller catch-up", () => {
@@ -208,43 +226,21 @@ describe("Chat controller catch-up", () => {
     }
   });
 
-  it("keeps normal catch-up cost at zero per own message and one per peer head", async () => {
-    const harness = await setup();
-    const messages: MessageFrame[] = [];
-    try {
-      for (let sequence = 1; sequence <= 100; sequence += 1) {
-        messages.push(await harness.acknowledge(sequence));
-        harness.head(sequence);
-        await harness.drain(messages);
-      }
+  it("keeps normal catch-up cost at zero per own message and one per peer head", () =>
+    withChatHistory(async (harness, messages) => {
+      await harness.catchUpRange(messages, 1, 100, "own");
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(0);
-      for (let sequence = 101; sequence <= 200; sequence += 1) {
-        messages.push(message(sequence));
-        harness.head(sequence);
-        await harness.drain(messages);
-      }
+      await harness.catchUpRange(messages, 101, 200, "peer");
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(100);
       expect(harness.sequences()).toEqual(messages.map((item) => item.sequence));
-    } finally {
-      harness.client.dispose();
-    }
-  });
+    }));
 
-  it("keeps own-send catch-up cost at zero when a new Episode starts above sequence 1", async () => {
-    const harness = await setup();
-    const messages: MessageFrame[] = [];
-    try {
-      for (let sequence = 101; sequence <= 110; sequence += 1) {
-        messages.push(await harness.acknowledge(sequence));
-        harness.head(sequence, 101);
-        await harness.drain(messages);
-      }
+  it("keeps own-send catch-up cost at zero when a new Episode starts above sequence 1", () =>
+    withChatHistory(async (harness, messages) => {
+      await harness.catchUpRange(messages, 101, 110, "own", 101);
       expect(harness.sent.filter((frame) => frame.type === "chat_page_request")).toHaveLength(0);
       expect(harness.sequences()).toEqual(messages.map((item) => item.sequence));
-    } finally {
-      harness.client.dispose();
-    }
-  });
+    }));
 
   it("converges on both participants under seeded random acknowledgements, deliveries, heads and reconnects", async () => {
     for (let seed = 1; seed <= 40; seed += 1) {
@@ -304,4 +300,60 @@ describe("Chat controller catch-up", () => {
       }
     }
   }, 60_000);
+});
+
+describe("message reactions", () => {
+  it("sets an explicit reaction and never rolls a snapshot backward", async () => {
+    const h = await setup([message(1)]);
+    try {
+      const input = { messageId: id(1), emoji: "👏", on: true } as const;
+      const pending = h.client.chat.react(input);
+      await settle();
+      const request = h.sent.findLast((frame) => frame.type === "chat_reaction_set");
+      expect(request).toMatchObject({ type: "chat_reaction_set", message_id: id(1), emoji: "👏", on: true });
+      if (!request || request.type !== "chat_reaction_set") throw new Error("Missing reaction request");
+      const state = { type: "chat_reactions", message_id: id(1), revision: "2", reactions: [{ emoji: "👏", participant_ids: [participantId, peerId] }] } as const;
+      h.collaboration.chatReactionResult({ type: "chat_reaction_result", request_id: request.request_id, outcome: "accepted", state });
+      await expect(pending).resolves.toMatchObject({ reactions: [{ emoji: "👏", count: 2, participantIds: [participantId, peerId] }] });
+      h.collaboration.chatReactions({ ...state, revision: "1", reactions: [] });
+      h.collaboration.chatMessage(message(1));
+      expect(h.client.getSnapshot().chat.messages[0]?.reactions).toEqual([{ emoji: "👏", count: 2, participantIds: [participantId, peerId] }]);
+    } finally {
+      h.client.dispose();
+    }
+  });
+
+  it("keeps a reaction that arrives before the message history page", async () => {
+    const h = await setup([], participantId, false);
+    try {
+      h.collaboration.chatReactions({ type: "chat_reactions", message_id: id(1), revision: "1", reactions: [{ emoji: "👍", participant_ids: [peerId] }] });
+      h.collaboration.chatMessage(message(1));
+      expect(h.client.getSnapshot().chat.messages[0]?.reactions).toMatchObject([{ emoji: "👍", count: 1 }]);
+    } finally {
+      h.client.dispose();
+    }
+  });
+
+  it("refreshes loaded message reactions when collaboration reconnects", async () => {
+    const h = await setup([message(1)]);
+    try {
+      h.collaboration.disconnect("test");
+      h.phase("recovering");
+      h.collaboration.acceptWelcome({
+        type: "welcome",
+        protocol: 1,
+        participant_id: participantId,
+        participant_generation: 1,
+        recovery_id: id(999),
+        mode: "up_to_date",
+        head: { revision: 0, state_schema_version: 1, state_digest: "0".repeat(64) },
+        extensions: [{ name: "collaboration_v2", capabilities: ["sendChat"], participant_capabilities: {}, chat_head_sequence: "1", retained_floor_sequence: "1", read_receipts: [] }],
+      });
+      h.phase("live");
+      await h.drain([{ ...message(1), reaction_revision: "1", reactions: [{ emoji: "❤️", participant_ids: [peerId] }] }]);
+      expect(h.client.getSnapshot().chat.messages[0]?.reactions).toMatchObject([{ emoji: "❤️", count: 1 }]);
+    } finally {
+      h.client.dispose();
+    }
+  });
 });

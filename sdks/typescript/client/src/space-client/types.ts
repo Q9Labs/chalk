@@ -1,4 +1,4 @@
-import type { MediaSource } from "../media/plane";
+import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
@@ -141,11 +141,12 @@ export type LocalMedia = {
 };
 export type RemoteMedia = {
   readonly participantId: string;
-  readonly source: MediaSource;
+  readonly source: MediaSource | "screen_audio";
   readonly publicationId: string;
   readonly track: MediaStreamTrack;
 };
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
+export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";
 export type MediaSlice = {
   readonly devices: {
     readonly microphones: readonly MediaDevice[];
@@ -159,13 +160,16 @@ export type MediaSlice = {
   };
   readonly local: Readonly<Record<MediaSource, LocalMedia>>;
   readonly remote: readonly RemoteMedia[];
-  readonly screenShare: LocalMedia;
+  readonly screenShare: LocalMedia & { readonly hasAudio?: boolean; readonly capture?: ScreenShareCapture };
   readonly incomingRequests: readonly IncomingMediaRequest[];
 };
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
+export type ChatReactionInput = import("../collaboration/types").ChalkChatReactionInput;
+export type ChatReaction = import("../collaboration/types").ChalkChatReaction;
+export type ChatReactions = import("../collaboration/types").ChalkChatReactions;
 export type ChatReadReceipt = ChalkChatReadReceipt;
-export type OfflineActionKind = "chat_message" | "hand_raise" | "hand_lower";
+export type OfflineActionKind = "chat_message" | "chat_reaction" | "hand_raise" | "hand_lower";
 export type OfflineActionsPolicy = "ask" | "send" | "discard";
 export type OfflineAction = {
   readonly id: string;

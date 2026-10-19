@@ -152,4 +152,54 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
              effect == :revoke_publication
            end)
   end
+
+  test "tab audio stays outside v1 projections and preserves the microphone on reconstruction" do
+    episode = %EpisodeKey{
+      tenant_id: "11111111-1111-4111-8111-111111111111",
+      space_id: "22222222-2222-4222-8222-222222222222",
+      episode_id: "33333333-3333-4333-8333-333333333333"
+    }
+
+    participant_id = "44444444-4444-4444-8444-444444444444"
+    Memory.reset()
+
+    :ok =
+      Memory.seed_episode(episode, [
+        %{id: participant_id, generation: 1, display_name: "Participant", role: "owner"}
+      ])
+
+    publications =
+      Enum.map([:microphone, :screen_audio], fn source ->
+        %{
+          participant_id: participant_id,
+          source: source,
+          enabled: true,
+          publication_id: "shared-#{source}"
+        }
+      end)
+
+    {:ok, adapter} =
+      MediaPlaneTestAdapter.start_link(
+        outcomes: %{observe_episode_publications: {:ok, publications}}
+      )
+
+    previous = Application.get_env(:chalk_sync, :media_plane)
+    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:chalk_sync, :media_plane, previous),
+        else: Application.delete_env(:chalk_sync, :media_plane)
+    end)
+
+    {:ok, live, _} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert Enum.all?(live.media_items, & &1["enabled"])
+    refute Enum.any?(live.media_items, &(&1["source"] == "screen_audio"))
+
+    assert Enum.find(live.media_items, &(&1["source"] == "microphone"))["enabled"]
+    assert {:ok, persisted, []} = LiveEpisode.reconcile(live)
+    assert persisted.media_items == live.media_items
+    assert {:ok, rebuilt, _} = LiveEpisode.reconcile(LiveEpisode.new(episode))
+    assert rebuilt.media_items == live.media_items
+  end
 end

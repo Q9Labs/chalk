@@ -533,7 +533,6 @@ wishlist:
     theory: theory.md#product-memory
     code:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react/src/components/transcript-panel/TranscriptPanel.tsx
   - id: security_and_compliance.chat_retention
     title: Tenant-set chat retention
     area: security_and_compliance
@@ -714,3 +713,69 @@ wishlist:
     code:
       - apps
       - sdks/typescript
+  - id: episode_core.call_client_states
+    title: Finish hidden call states in the client
+    area: episode_core
+    state: planned
+    summary: >-
+      The redesigned call hides these states and controls because the public client doesn't
+      expose them. Each is client work; none needs a Sync or API change.
+    size: M
+    remaining:
+      - Let a host set who can join from People.
+      - Show upload progress for chat attachments, with the outgoing upload bubble.
+      - Keep the current screen share when a person opens Change and cancels the picker.
+      - Show when someone's screen share is connecting or paused.
+      - >-
+        Tell a Participant why they left the Episode: removed by a host, the Episode ended, or joined
+        from another tab.
+    code:
+      - sdks/typescript/client/src/space-client/participants-controller.ts
+      - sdks/typescript/client/src/space-client/chat-controller.ts
+      - sdks/typescript/client/src/space-client/media-controller.ts
+      - sdks/typescript/client/src/sync/v1-client.ts
+      - sdks/typescript/react/src/selectors/space-selectors.ts
+  - id: realtime_sync.call_moderation_details
+    title: Numbered hands and named moderation
+    area: realtime_sync
+    state: planned
+    summary: >-
+      Raised hands are only up or down, mute and camera-stop events don't say who did it, and a
+      full Episode has no join rejection reason the call can show. Each needs a Sync protocol field,
+      so Sync ships before the SDKs.
+    size: M
+    remaining:
+      - Keep the order hands were raised in, and let a host lower someone else's hand.
+      - Name the Participant who muted someone or stopped their camera.
+      - Give a full Episode its own join rejection reason.
+      - Number raised hands and name the moderator in the call.
+    code:
+      - apps/sync/lib/chalk_sync/episodes/reducer.ex
+      - sdks/typescript/client/src/space-client/participants-controller.ts
+  - id: media.remote_share_quality
+    title: Show when a shared screen is degraded
+    area: media
+    state: unknown
+    summary: >-
+      The redesigned call can draw weak and low-quality states on a shared screen, but nothing
+      measures how a remote share arrives, and screens publish a single layer.
+    size: Unknown
+    remaining:
+      - Find a receive-side quality signal for someone else's screen share.
+      - Decide whether screens need a lower-quality layer.
+      - Feed the weak and low-quality states in the call.
+    uncertainty: No receive-side quality measurement exists to build on.
+    code:
+      - sdks/typescript/client/src/media/client.ts
+  - id: episode_core.take_over_from_another_tab
+    title: Move a call to this tab
+    area: episode_core
+    state: unknown
+    summary: Nothing lets a Participant move a live call from one tab or device to another.
+    size: Unknown
+    remaining:
+      - Define what taking over does to the first session and whether the person confirms it.
+      - Build the join path in Sync and the API, and the Take over here action in the call.
+    uncertainty: The takeover behaviour isn't defined yet.
+    code:
+      - sdks/typescript/client/src/space-client/reload-rejoin.ts

@@ -164,13 +164,13 @@ export function SpaceRoute() {
 }
 ```
 
-Set `entrance={false}` to enter directly with `displayName` and `defaults`. If the application already owns a client, pass `client={spaceClient}` instead of `space` and `getAccess`; `<Chalk />` uses that client and does not dispose it.
+The React call enters directly with `displayName` and `defaults`. If the application already owns a client, pass `client={spaceClient}` instead of `space` and `getAccess`; `<Chalk />` uses that client and does not dispose it.
 
 ```tsx
-<Chalk client={spaceClient} entrance={false} />
+<Chalk client={spaceClient} />
 ```
 
-`<Entrance />` is the public component for a custom entry surface. It covers display-name and device setup as well as admission waiting. `theme` is the only styling door; size and position `<Chalk />` through its parent element.
+The React call joins directly through CallLimbo. Applications can collect a display name before mounting it; microphone and camera selection remain available in the call. `theme` is the only styling door; size and position `<Chalk />` through its parent element.
 
 ## Build custom UI with ChalkProvider
 

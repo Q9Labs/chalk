@@ -1,10 +1,15 @@
-import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { Chalk, Entrance, type EntranceSettings } from "@q9labsai/chalk-react";
+import { useTheme } from "../../lib/theme-context";
+import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { canonicalSpaceInviteLink, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
+type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
+const displayNameStorageKey = "chalk.display-name";
+const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
+type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 export function SpacePage({
   slug,
   navigatePublicSpace = replacePublicSpaceHistory,
@@ -12,6 +17,8 @@ export function SpacePage({
   readonly slug?: string;
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
 } = {}) {
+  const { mode } = useTheme();
+  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly reason: string | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -22,10 +29,19 @@ export function SpacePage({
       return null; // Storage may be disabled; manual entry remains available.
     }
   });
-  const initialDisplayName = useMemo(() => new URLSearchParams(globalThis.location?.search ?? "").get("name") ?? "", []);
-  const entranceDeviceDefaults = useMemo(() => ({ microphone: true, camera: true }), []);
-  const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? initialDisplayName);
-  const [entranceSettings, setEntranceSettings] = useState<EntranceSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, microphone: reloadMarker.microphone, camera: reloadMarker.camera } : null);
+  const [automaticName] = useState(() => {
+    const queryName = new URLSearchParams(globalThis.location?.search ?? "").get("name")?.trim();
+    if (queryName) return queryName;
+    try {
+      return globalThis.localStorage.getItem(displayNameStorageKey)?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
+  const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
+  const [callName, setCallName] = useState(slug ?? "Call");
+  const autoArrivalAttempted = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +50,7 @@ export function SpacePage({
   const reloadAttempted = useRef(false);
   const pendingRef = useRef<PendingArrival | null>(null);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
-  const defaultEntranceSettings = useMemo<EntranceSettings>(() => ({ displayName, ...entranceDeviceDefaults }), [displayName, entranceDeviceDefaults]);
+  const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -43,22 +59,10 @@ export function SpacePage({
       if (arrival?.arrival.arrival_handle) void client.leaveSpacePublicInviteArrival(arrival.arrival.arrival_handle).catch(() => undefined);
     };
   }, [client]);
-  const prepareEntrance = useCallback(async () => {
-    const token = spaceInviteToken();
-    if (token) {
-      await client.prepareSpaceEntrance(token);
-      return;
-    }
-  }, [client]);
   const complete = useCallback((prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
     if (!active.current) {
       void prepared.finish().catch(() => undefined);
       return;
-    }
-    try {
-    } catch (cause) {
-      void prepared.finish().catch(() => undefined);
-      throw cause;
     }
     pendingRef.current = null;
     setPending(null);
@@ -69,7 +73,7 @@ export function SpacePage({
     reloadAttempted.current = true;
     const marker = reloadMarker;
     setDisplayName(marker.displayName);
-    setEntranceSettings({ displayName: marker.displayName, microphone: marker.microphone, camera: marker.camera });
+    setEntranceSettings({ displayName: marker.displayName, ...devicesOff });
     setPreparing(true);
     const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug }));
     void recovery
@@ -82,12 +86,17 @@ export function SpacePage({
       });
   }, [client, complete, reloadMarker, slug]);
   const start = useCallback(
-    (settings: EntranceSettings = defaultEntranceSettings) => {
+    (settings: WebJoinSettings = defaultJoinOptions) => {
       const normalizedDisplayName = settings.displayName.trim();
       const inviteToken = spaceInviteToken();
       if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
       setDisplayName(normalizedDisplayName);
-      setEntranceSettings(settings);
+      setEntranceSettings({ displayName: normalizedDisplayName, ...devicesOff });
+      try {
+        globalThis.localStorage.setItem(displayNameStorageKey, normalizedDisplayName);
+      } catch {
+        /* Joining works with storage disabled. */
+      }
       if (slug && !inviteToken) {
         setError(neutralSpaceError);
         return;
@@ -108,13 +117,14 @@ export function SpacePage({
             return;
           }
           const { arrival, inviteLink, spaceName } = result;
+          setCallName(spaceName);
           if (arrival.state === "pending") {
             const nextPending = { arrival, inviteLink, spaceName } satisfies PendingArrival;
             pendingRef.current = nextPending;
             setPending(nextPending);
             return;
           }
-          if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
+          if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
           const prepared = result.prepared ?? createPreparedPublicSpace(client, arrival);
           complete(prepared, inviteLink, spaceName);
         })
@@ -125,8 +135,13 @@ export function SpacePage({
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, defaultEntranceSettings, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, defaultJoinOptions, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
+  useEffect(() => {
+    if (!automaticName || reloadMarker || autoArrivalAttempted.current) return;
+    autoArrivalAttempted.current = true;
+    start({ displayName: automaticName, ...devicesOff });
+  }, [automaticName, reloadMarker, start]);
   useEffect(() => {
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
@@ -140,7 +155,7 @@ export function SpacePage({
           timer = globalThis.setTimeout(poll, retryDelay(arrival.retry_after));
           return;
         }
-        if (arrival.state !== "admitted") throw new Error(neutralSpaceError);
+        if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
         const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
         const prepared = createPreparedPublicSpace(client, resumed);
         if (cancelled || !active.current) {
@@ -195,45 +210,71 @@ export function SpacePage({
     },
     [spaceAccess],
   );
+  if (terminal)
+    return (
+      <main className="relative h-dvh">
+        <StatusSurface
+          phase={terminal.phase}
+          callName={terminal.callName}
+          reason={terminal.reason}
+          theme={{ colorScheme: mode }}
+          rejoinDisabled={Boolean(spaceAccess) || preparing}
+          onRejoin={() => {
+            setTerminal(null);
+            start(entranceSettings ?? defaultJoinOptions);
+          }}
+          onHome={() => {
+            void terminal
+              .cleanup()
+              .then(() => globalThis.location.assign("/"))
+              .catch(() => setError("Couldn’t leave the call. Try again."));
+          }}
+        />
+        {error ? (
+          <p role="alert" className="absolute inset-x-6 bottom-6 text-center text-sm">
+            {error}
+          </p>
+        ) : null}
+      </main>
+    );
   if (spaceAccess) {
-    const settings = entranceSettings ?? defaultEntranceSettings;
+    const settings = entranceSettings ?? defaultJoinOptions;
     return (
       <LocalSpace
         reloadMarker={spaceAccess.prepared.reloadMarker}
         credential={spaceAccess.prepared.credential}
         displayName={settings.displayName}
         defaults={{ microphone: settings.microphone, camera: settings.camera }}
-        deviceSelection={settings}
         getAccess={spaceAccess.prepared.getAccess}
         connectionAccess={spaceAccess.prepared.connectionAccess}
-        inviteLink={spaceAccess.inviteLink}
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
-        spaceDescription={spaceAccess.prepared.spaceDescription}
+        inviteLink={spaceAccess.inviteLink}
+        onTerminal={(phase, cleanup, reason) => {
+          setTerminal({ phase, cleanup, reason, callName: spaceAccess.spaceName });
+          void cleanup().catch(() => setError("Couldn’t leave the call. Try Home again."));
+        }}
       />
     );
   }
-  if (reloadMarker && preparing)
-    return (
-      <main className="flex h-dvh items-center justify-center" role="status">
-        Returning to the Episode…
-      </main>
-    );
-  if (pending) return <SpaceArrival displayName={displayName} error={error} pending preparing={preparing} onCancel={cancel} onDisplayNameChange={setDisplayName} onEnter={() => start()} />;
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Entrance
-        spaceName={slug ?? "Space"}
-        defaultDisplayName={displayName}
-        defaults={entranceSettings ?? defaultEntranceSettings}
-        selectedAudioInput={entranceSettings?.audioInputDeviceId}
-        selectedVideoInput={entranceSettings?.videoInputDeviceId}
-        selectedAudioOutput={entranceSettings?.audioOutputDeviceId}
-        joining={preparing}
-        error={error ?? undefined}
-        onJoin={start}
-        onPrepare={prepareEntrance}
-      />
+      {pending ? (
+        <CallLimbo spaceName={pending.spaceName} message={error ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+      ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
+        <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
+      ) : error ? (
+        <CallLimbo spaceName={callName} message={error} action={{ label: "Ask again", onClick: () => start() }} />
+      ) : (
+        <NameNeeded
+          spaceName={callName}
+          displayName={displayName}
+          onDisplayNameChange={(name) => {
+            setDisplayName(name);
+          }}
+          onJoin={() => start()}
+        />
+      )}
     </main>
   );
 }
@@ -245,7 +286,6 @@ type JoinedSpaceAccess = {
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
-  readonly spaceDescription?: string;
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 type PendingArrival = {
@@ -295,7 +335,17 @@ async function resumePendingArrival(client: PublicInviteClient, pending: Pending
   if (!inviteToken || !arrivalHandle) throw new Error(neutralSpaceError);
   return client.arriveBySpacePublicInvite(inviteToken, displayName.trim(), { arrivalHandle });
 }
+class AdmissionError extends Error {
+  constructor(readonly state: string) {
+    super(state);
+  }
+}
 function neutralMessage(cause: unknown): string {
+  if (cause instanceof AdmissionError) {
+    if (cause.state === "rejected") return "The host declined your request to join.";
+    if (cause.state === "unavailable") return "Your request to join expired or is no longer available.";
+    return "Your request to join is no longer active.";
+  }
   if (cause && typeof cause === "object" && "status" in cause) {
     if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
     if (cause.status === 401) return neutralSpaceError;
@@ -310,13 +360,12 @@ function LocalSpace({
   credential,
   displayName,
   defaults,
-  deviceSelection,
   getAccess,
   connectionAccess,
-  inviteLink,
   onFinish,
   spaceName,
-  spaceDescription,
+  inviteLink,
+  onTerminal,
 }: {
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential;
@@ -325,35 +374,41 @@ function LocalSpace({
     readonly microphone: boolean;
     readonly camera: boolean;
   };
-  readonly deviceSelection?: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId">;
   readonly getAccess: PreparedPublicSpace["getAccess"];
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
-  readonly spaceDescription?: string;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, reason?: string) => void;
 }) {
-  const client = useMemo(() => {
-    const nextClient = createLocalSpaceClient({ credential, getAccess, connectionAccess });
-    selectEntranceDevices(nextClient, deviceSelection);
-    return nextClient;
-  }, [connectionAccess, credential, deviceSelection, getAccess]);
+  const { mode, setPreference } = useTheme();
+  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
+  const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
-  const releaseFromLifecycle = useCallback(() => {
-    intentionallyLeft.current = true;
-    try {
-      globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
-    } catch {
-      /* Storage may be disabled. */
-    }
-    void release().catch(() => undefined);
-  }, [release]);
+  const endObserved = useRef(false);
+  const releaseFromLifecycle = useCallback(
+    (phase: ExitPhase, reason?: string) => {
+      if (endObserved.current) return;
+      endObserved.current = true;
+      intentionallyLeft.current = true;
+      try {
+        globalThis.sessionStorage.removeItem(reloadRejoinStorageKey);
+      } catch {
+        /* Storage may be disabled. */
+      }
+      onTerminal(phase, release, reason);
+    },
+    [onTerminal, release],
+  );
   useEffect(() => {
-    if (connection.status === "failed") releaseFromLifecycle();
-  }, [connection.status, releaseFromLifecycle]);
+    if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
+    else if (connection.removedByHost) releaseFromLifecycle("removed");
+    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.message);
+  }, [connection, releaseFromLifecycle]);
+
   useEffect(() => {
     if (pendingRelease.current !== undefined) {
       globalThis.clearTimeout(pendingRelease.current);
@@ -389,85 +444,58 @@ function LocalSpace({
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
-      <Chalk client={client} entrance={false} displayName={displayName} defaults={defaults} logoUrl="/brand/chalk/chalk-logo.svg" spaceName={spaceName} spaceDescription={spaceDescription} inviteLink={inviteLink} onEpisodeEnded={releaseFromLifecycle} onLeft={releaseFromLifecycle} />
+      {homeError ? <p role="alert">{homeError}</p> : null}
+      <Chalk
+        theme={{ colorScheme: mode }}
+        onColorSchemeChange={setPreference}
+        client={client}
+        displayName={displayName}
+        defaults={defaults}
+        spaceName={spaceName}
+        inviteLink={inviteLink}
+        onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
+        onLeft={() => {
+          const latest = client.getSnapshot().connection;
+          releaseFromLifecycle(latest.episodeEnded ? "episode-ended" : latest.removedByHost ? "removed" : "left");
+        }}
+        onJoined={() => {
+          intentionallyLeft.current = false;
+        }}
+        onHome={() => {
+          void release()
+            .then(() => globalThis.location.assign("/"))
+            .catch(() => setHomeError("Couldn’t leave the call. Try Home again."));
+        }}
+      />
     </main>
   );
 }
-function selectEntranceDevices(client: ReturnType<typeof createLocalSpaceClient>, selection: Pick<EntranceSettings, "audioInputDeviceId" | "videoInputDeviceId" | "audioOutputDeviceId"> | undefined): void {
-  const audioInputDeviceId = selection?.audioInputDeviceId;
-  const videoInputDeviceId = selection?.videoInputDeviceId;
-  const audioOutputDeviceId = selection?.audioOutputDeviceId;
-  const requested = [
-    audioInputDeviceId ? { kind: "microphone", select: () => client.media.selectMicrophone(audioInputDeviceId) } : undefined,
-    videoInputDeviceId ? { kind: "camera", select: () => client.media.selectCamera(videoInputDeviceId) } : undefined,
-    audioOutputDeviceId ? { kind: "speaker", select: () => client.media.selectSpeaker(audioOutputDeviceId) } : undefined,
-  ].filter(
-    (
-      item,
-    ): item is {
-      readonly kind: "microphone" | "camera" | "speaker";
-      readonly select: () => Promise<void>;
-    } => item !== undefined,
-  );
-  for (const item of requested) {
-    void item.select().catch(() => {});
-  }
-}
-function SpaceArrival({
-  displayName,
-  error,
-  pending,
-  preparing,
-  onCancel,
-  onDisplayNameChange,
-  onEnter,
-}: {
-  readonly displayName: string;
-  readonly error: string | null;
-  readonly pending: boolean;
-  readonly preparing: boolean;
-  readonly onCancel: () => Promise<void>;
-  readonly onDisplayNameChange: (displayName: string) => void;
-  readonly onEnter: () => void;
-}) {
+/** The web asks only for identity. Devices are requested inside the admitted call. */
+export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#f7f6f2] p-6 text-center text-[#0c0e12]">
-      <section className="w-full max-w-md rounded-lg border border-[#deddd7] bg-white p-6 text-left shadow-[0_22px_54px_rgba(12,14,18,0.08)]">
-        <h1 className="text-2xl font-semibold">{pending ? "Waiting to enter" : "Enter this Space"}</h1>
-        <p className="mt-2 text-sm leading-6 text-[#555b65]">{pending ? "The host must approve your arrival." : "Choose the name other Participants will see."}</p>
-        {!pending ? (
-          <>
-            <label className="mt-6 block text-sm font-medium" htmlFor="display-name">
-              Your name
-            </label>
-            <input
-              id="display-name"
-              autoComplete="name"
-              value={displayName}
-              onChange={(event) => onDisplayNameChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onEnter();
-              }}
-              className="mt-2 h-11 w-full rounded-md border border-[#deddd7] px-3 text-sm outline-none focus-visible:border-[#74b7cf]"
-              placeholder="Enter your name"
-            />
-          </>
-        ) : null}
-        {error ? (
-          <p role="alert" className="mt-4 text-sm text-[#b94c4c]">
-            {error}
-          </p>
-        ) : null}
-        {pending ? (
-          <button type="button" className="mt-6 h-11 w-full rounded-md border border-[#deddd7] text-sm font-medium" onClick={() => void onCancel()} disabled={preparing}>
-            Cancel
-          </button>
-        ) : (
-          <button type="button" className="mt-6 h-11 w-full rounded-md bg-[#0c0e12] text-sm font-medium text-white disabled:opacity-50" onClick={onEnter} disabled={!displayName.trim() || preparing}>
-            {preparing ? "Preparing…" : "Continue"}
-          </button>
-        )}
-      </section>
-    </main>
+    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`}>
+      <form
+        className="mt-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (displayName.trim()) onJoin();
+        }}
+      >
+        <label htmlFor="join-display-name" className="mb-2 block text-sm text-[var(--chalk-app-text-muted)]">
+          Your name
+        </label>
+        <input
+          id="join-display-name"
+          autoComplete="name"
+          autoFocus
+          value={displayName}
+          onChange={(event) => onDisplayNameChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3 text-center text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+        />
+        <ChalkButton type="submit" variant="outline" className="mt-4 !h-11" disabled={!displayName.trim()}>
+          Join
+        </ChalkButton>
+      </form>
+    </CallLimbo>
   );
 }
