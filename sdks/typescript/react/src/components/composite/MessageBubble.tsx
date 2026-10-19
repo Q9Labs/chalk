@@ -95,7 +95,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       const controller = new AbortController();
       downloadController.current = controller;
       try {
-        const response = await fetch(url, { signal: controller.signal });
+        // The preview image may have cached this URL without CORS headers, which would fail this fetch.
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error(`Attachment download failed (${response.status})`);
         const blobUrl = URL.createObjectURL(await response.blob());
         const link = document.createElement("a");
