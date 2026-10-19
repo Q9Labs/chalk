@@ -2,6 +2,8 @@
 
 ## 5.0.0
 
+- Replace phone device choices with Flip camera when two or more cameras are available; audio stays with the operating system.
+
 - Make the desktop layout control a direct Spotlight/Grid toggle. Let `ChalkMenuItem.closeOnClick` keep device choices open, and `ChalkSheet.accessibleLabel` retain a stable accessible name while showing the call name.
 
 - Add call-link QR sharing, diagnostics copy, keyboard shortcuts, and optional `Chalk`/`SpaceView` `shareUrl` and `onReportProblem` callbacks. Rebuild the call dock with device and screen-source split controls, tab-audio capture, and phone More actions.

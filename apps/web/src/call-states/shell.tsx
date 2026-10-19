@@ -5,7 +5,21 @@ import { Chalk, ChalkProvider, ControlBar, SpaceHeader } from "@q9labsai/chalk-r
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
-function ShellCall({ host = false, report = false, blocked = false, paged = false, initialColorScheme }: { readonly host?: boolean; readonly report?: boolean; readonly blocked?: boolean; readonly paged?: boolean; readonly initialColorScheme?: ThemePreference }) {
+function ShellCall({
+  host = false,
+  report = false,
+  blocked = false,
+  paged = false,
+  singleCamera = false,
+  initialColorScheme,
+}: {
+  readonly host?: boolean;
+  readonly report?: boolean;
+  readonly blocked?: boolean;
+  readonly paged?: boolean;
+  readonly singleCamera?: boolean;
+  readonly initialColorScheme?: ThemePreference;
+}) {
   const [command, setCommand] = useState("");
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [client] = useState(() => {
@@ -19,10 +33,7 @@ function ShellCall({ host = false, report = false, blocked = false, paged = fals
             { deviceId: "mic-1", label: "Built-in Microphone" },
             { deviceId: "mic-2", label: "Headset Microphone" },
           ],
-          cameras: [
-            { deviceId: "cam-1", label: "Built-in Camera" },
-            { deviceId: "cam-2", label: "External Camera" },
-          ],
+          cameras: [{ deviceId: "cam-1", label: "Built-in Camera" }, ...(singleCamera ? [] : [{ deviceId: "cam-2", label: "External Camera" }])],
           speakers: [{ deviceId: "speaker-1", label: "Built-in Speakers" }],
         },
         selection: { microphone: "mic-1", camera: "cam-1", speaker: "speaker-1" },
@@ -33,6 +44,10 @@ function ShellCall({ host = false, report = false, blocked = false, paged = fals
       ...instance,
       media: {
         ...instance.media,
+        selectCamera: async (deviceId: string) => {
+          await instance.media.selectCamera(deviceId);
+          setCommand(`Selected camera: ${deviceId}`);
+        },
         setScreenShareEnabled: async (enabled: boolean, options?: ScreenShareOptions) => {
           setCommand(JSON.stringify({ enabled, ...options }));
           await instance.media.setScreenShareEnabled(enabled, options);
@@ -113,6 +128,7 @@ export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-call", title: "Shell guest", render: () => <ShellCall /> },
   { id: "shell-light", title: "Shell guest in Light", render: () => <ShellCall initialColorScheme="light" /> },
   { id: "shell-host-light", title: "Shell host in Light", render: () => <ShellCall host initialColorScheme="light" /> },
+  { id: "shell-single-camera", title: "Shell with one camera", render: () => <ShellCall singleCamera /> },
   { id: "shell-host", title: "Shell host", render: () => <ShellCall host /> },
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },
   { id: "shell-report-light", title: "Shell report callback, Light", render: () => <ShellCall report initialColorScheme="light" /> },

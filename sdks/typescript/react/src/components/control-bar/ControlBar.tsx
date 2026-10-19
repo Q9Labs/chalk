@@ -10,6 +10,7 @@ import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
 import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarSurfaceProps, type ControlBarProps } from "./control-bar-behavior";
 import { ShellIcon } from "./ShellIcon";
+import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
@@ -98,46 +99,25 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       <span className="chalk-shell-gap chalk-shell-desktop" />
 
       <span className="chalk-shell-phone">
-        <DockLayout
-          layout={props.layout ?? "focus"}
-          onLayoutChange={props.onLayoutChange ?? (() => {})}
-          microphone={
-            <DevicePopover
-              type="mic"
-              isActive={!props.isMuted}
-              onToggle={props.onToggleMute ?? (() => {})}
-              devices={effectiveAudioInputDevices}
-              selectedDeviceId={props.selectedAudioInput}
-              onDeviceChange={props.onAudioInputChange ?? (() => {})}
-              secondaryDevices={effectiveAudioOutputDevices}
-              selectedSecondaryDeviceId={props.selectedAudioOutput}
-              onSecondaryDeviceChange={props.onAudioOutputChange}
-              track={props.microphoneTrack}
-              noiseSuppression={props.noiseSuppression}
-              onNoiseSuppressionChange={props.onNoiseSuppressionChange}
-              onTestSpeaker={props.onTestSpeaker}
-              orientation="down"
-            />
-          }
-          camera={
-            <DevicePopover
-              type="video"
-              isActive={props.isVideoEnabled ?? true}
-              onToggle={props.onToggleVideo ?? (() => {})}
-              devices={effectiveVideoInputDevices}
-              selectedDeviceId={props.selectedVideoInput}
-              onDeviceChange={props.onVideoInputChange ?? (() => {})}
-              track={props.cameraTrack}
-              mirrored={props.mirrored}
-              onMirrorChange={props.onMirrorChange}
-              orientation="down"
-            />
-          }
-        >
+        <DockLayout layout={props.layout ?? "focus"} onLayoutChange={props.onLayoutChange ?? (() => {})}>
           <button type="button" className="chalk-sheet-row" aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
             <CallLinkIcon />
             <span>{props.onCallLinkToggle ? linkLabel : "Copy link"}</span>
           </button>
+          {has("video") && effectiveVideoInputDevices.length >= 2 ? (
+            <button
+              type="button"
+              className="chalk-sheet-row"
+              disabled={!props.onVideoInputChange}
+              onClick={() => {
+                const camera = nextCamera(effectiveVideoInputDevices, props.selectedVideoInput, props.cameraTrack);
+                if (camera) props.onVideoInputChange?.(camera.deviceId);
+              }}
+            >
+              <ShellIcon name="flip" />
+              <span>Flip camera</span>
+            </button>
+          ) : null}
           {has("screenshare") && canCaptureDisplay ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleScreenShare}>
               <ShellIcon name="share" />

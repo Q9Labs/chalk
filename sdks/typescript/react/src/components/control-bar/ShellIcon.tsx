@@ -1,4 +1,10 @@
 const GLYPHS = {
+  flip: (
+    <>
+      <path d="M3 8h3l2-3h8l2 3h3v12H3z" />
+      <path d="M8 14a4 4 0 0 1 7-2l1 1M16 10v3h-3M16 15a4 4 0 0 1-7 2l-1-1M8 19v-3h3" />
+    </>
+  ),
   mic: (
     <>
       <rect x="9" y="2" width="6" height="12" rx="3" />

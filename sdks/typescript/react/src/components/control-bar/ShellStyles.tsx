@@ -458,14 +458,6 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   gap: 8px;
   padding: 8px;
 }
-.chalk-shell-more-devices {
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-}
-.chalk-shell-more-devices .chalk-shell-caret {
-  display: grid !important;
-}
 .chalk-shell-recording {
   display: flex;
   align-items: center;
