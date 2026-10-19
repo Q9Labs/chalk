@@ -16,11 +16,10 @@ gradle.projectsEvaluated {
     workletsBuilds.configureEach { task ->
       task.doLast {
         worklets.fileTree("\${buildDir}/intermediates/cxx/\${cmakeType}").include("**/obj/*/libworklets.so").each { so ->
+          // Delete first: the legacy file can share an inode with the AGP output, and copying over it truncates the source.
           def legacy = new File("\${buildDir}/intermediates/cmake/\${legacyType}/obj/\${so.parentFile.name}/libworklets.so")
-          println "[chalk] \${so} is \${so.length()} bytes; legacy copy \${legacy.exists() ? 'exists' : 'is missing'}"
           legacy.delete()
           worklets.copy { from so; into legacy.parentFile }
-          println "[chalk] legacy copy is \${legacy.length()} bytes"
         }
       }
     }

@@ -183,25 +183,6 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
 
-      - name: Diagnose worklets native libraries
-        if: always()
-        working-directory: apps/mobile/android
-        run: |
-          pkg=$(ls -d ../../../node_modules/.pnpm/react-native-worklets@*/node_modules/react-native-worklets | head -1)
-          echo "package: $pkg"
-          find "$pkg/android/build" "$pkg/android/.cxx" -name 'libworklets.so' -exec stat -c '%i links=%h bytes=%s %n' {} + 2>&1 || true
-          for so in $(find "$pkg/android/build" -name libworklets.so 2>/dev/null); do
-            echo "== $so"
-            sha256sum "$so"
-            readelf -h "$so" | grep -i machine
-            echo "defined dynamic symbols mentioning worklets: $(nm -D --defined-only "$so" | grep -c worklets)"
-            nm -D --defined-only "$so" | grep -i -E "EventHandlerRegistry|Serializable" | head -8 || true
-          done
-          for cc in $(find "$pkg/android/.cxx" -name compile_commands.json 2>/dev/null); do
-            echo "== $cc"
-            grep -o -E -- '-fvisibility=[a-z-]*|-DNDEBUG|-DJS_RUNTIME_[A-Z]+|-DREACT_NATIVE_MINOR_VERSION=[0-9]+' "$cc" | sort | uniq -c
-          done
-
       - name: Preserve unsigned Android evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
