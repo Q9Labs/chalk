@@ -25,7 +25,7 @@ The API must be ready, but recording and transcription can be disabled: this
 proof tests the live web call, not media processing. The separate recording and
 transcript proofs still require both media capabilities before a nightly can hold.
 
-Run browser suites on testbox, not a developer laptop. For hosted runs,
+Run browser suites on the M4 with `CHALK_REMOTE_NEEDS_BROWSER=1 scripts/gates/remote.sh -- <command>`, not a developer laptop. For hosted runs,
 `web-call-proof.yml` accepts an environment and returns `result=passed` only
 when the test, cleanup, and encrypted evidence upload pass. Nightly runs it after
 deploy and after the recording/transcript proof. Both workflows share the same
