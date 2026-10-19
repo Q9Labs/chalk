@@ -192,7 +192,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
 /** "Nora, Akash and Sofia are in the call." First names, and a count past three. */
 function inCall(names: readonly string[]): string {
   const first = names.map((name) => name.split(" ")[0] ?? name);
-  if (!first.length) return "People are in the call.";
+  if (!first.length) return "Nobody is in the call right now.";
   if (first.length === 1) return `${first[0]} is in the call.`;
   const shown = first.length > 3 ? [...first.slice(0, 2), `${first.length - 2} others`] : first;
   return `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)} are in the call.`;

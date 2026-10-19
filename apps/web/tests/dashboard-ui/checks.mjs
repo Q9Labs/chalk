@@ -130,6 +130,17 @@ try {
     check("top bar opens Developer", (await tab.getByRole("heading", { name: "Developer", level: 1 }).count()) === 1);
     await context.close();
   }
+  for (const [count, text] of [
+    [0, "Nobody is in the call right now."],
+    [1, "Nora is in the call."],
+    [3, "Nora, Akash and Sofia are in the call."],
+  ]) {
+    const { tab, context } = await open(CALL, { set: `live=1&liveParticipants=${count}` });
+    const banner = tab.getByRole("status").filter({ hasText: "Live now" });
+    check(`live call with ${count} participants has accurate copy`, (await banner.getByText(text, { exact: false }).count()) === 1 && !(await tab.locator("body").textContent()).includes("People are in the call"));
+    check(`live call with ${count} participants keeps Live now and Join`, (await banner.getByText("Live now", { exact: true }).count()) === 1 && (await tab.getByRole("link", { name: "Join call", exact: true }).isVisible()));
+    await context.close();
+  }
   // Theme switch from the account menu, kept across a reload.
   {
     const { tab, context } = await open("/dashboard");
