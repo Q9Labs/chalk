@@ -23,7 +23,8 @@ every night, and on manual dispatch. `Select gate jobs` runs
 same plan as the lanes to pick the jobs a pull request needs: the API gate, the
 Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
 per lane group: `checks` (every lane that no other group names, including type
-checks), `tests`, `browser-tests` (workspaces whose tests drive Chromium), and
+checks), `tests` (non-browser workspaces), `browser-tests` (the web app and SDK
+consumer workspaces whose tests drive Chromium), and
 `build` (with Publint and Are The Types Wrong, which read the build output).
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when the

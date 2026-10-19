@@ -12,13 +12,18 @@ paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.prop
 description = "Checked-in tests and API docs use obvious placeholder credentials."
 paths = ['''^apps/docs/src/content/docs/api/authentication\.mdx$''', '''_test\.go$''', '''\.test\.ts$''', '''\.test\.tsx$''']
 
-# The next two exceptions match whole lines and name no path, because `gitleaks dir` skips every file
+# The following exceptions match whole lines and name no path, because `gitleaks dir` skips every file
 # that an allowlist path matches, even when the allowlist also needs a line match. gitleaks starts each
 # line with the newline before it, so each pattern opens with `^\s*`.
 [[allowlists]]
 description = "The Space page test helpers use one placeholder capability token."
 regexTarget = "line"
 regexes = ['''^\s*export const spacePageTestToken = "cspi1\.test-capability";$''']
+
+[[allowlists]]
+description = "The public Space journey uses one placeholder invitation URL."
+regexTarget = "line"
+regexes = ['''^\s*const path = "/space/design-lab\?name=Ada#spaceInviteToken=cspi1\.fixture";$''']
 
 [[allowlists]]
 description = "The release manifest records a keystore hash and a 1Password item ID, not the secrets themselves."

@@ -1,42 +1,23 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { startCallHarness } from "./browser-harness";
 
-const origin = "http://127.0.0.1:3098";
-let server: ChildProcess;
+let origin: string;
+let stop: (() => Promise<void>) | undefined;
 let browser: Browser;
-let deadline: ReturnType<typeof setTimeout>;
 
 beforeAll(async () => {
-  const occupied = await fetch(origin, { signal: AbortSignal.timeout(1000) }).then(
-    () => true,
-    () => false,
-  );
-  if (occupied) throw new Error(`Card harness port is occupied: ${origin}`);
-  server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3098", "--strictPort"], { cwd: fileURLToPath(new URL("../..", import.meta.url)), detached: true, stdio: "ignore" });
-  deadline = setTimeout(() => {
-    if (server.pid) process.kill(-server.pid, "SIGTERM");
-  }, 180_000);
-  let ready = false;
-  for (let attempt = 0; attempt < 150; attempt++) {
-    if (server.exitCode !== null) throw new Error(`Card harness exited: ${server.exitCode}`);
-    ready = await fetch(`${origin}/call-states.html`).then(
-      (response) => response.ok,
-      () => false,
-    );
-    if (ready) break;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  if (!ready) throw new Error("Card harness did not become ready");
+  ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({ headless: true });
 }, 60_000);
 
 afterAll(async () => {
-  clearTimeout(deadline);
-  await browser?.close();
-  if (server?.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
+  try {
+    await browser?.close();
+  } finally {
+    await stop?.();
+  }
 });
 
 async function journey(run: (page: Page) => Promise<void>, phone = false) {
@@ -66,18 +47,21 @@ async function capture(page: Page, name: string) {
 
 async function openPeople(page: Page, state = "card-people") {
   await page.goto(`${origin}/call-states.html?state=${state}`);
-  const opener = page.getByRole("button", { name: "Participants", exact: true });
-  await opener.waitFor();
-  if (state !== "card-knocks") await opener.click();
+  if (state !== "card-knocks") {
+    if (await page.getByRole("button", { name: "More options", exact: true }).isVisible()) {
+      await page.getByRole("button", { name: "More options", exact: true }).click();
+      await page.getByRole("dialog", { name: "More options", exact: true }).getByRole("button", { name: "People", exact: true }).click();
+    } else await page.getByRole("button", { name: /^People, \d+$/ }).click();
+  }
   await page.getByRole("tab", { name: /^People/ }).waitFor();
 }
 
 it(
-  "opens People and Chat by keyboard, then Escape returns to the dock",
+  "opens People and Chat by keyboard, then Escape returns to the People control",
   async () =>
     journey(async (page) => {
       await page.goto(`${origin}/call-states.html?state=card-guest`);
-      const opener = page.getByRole("button", { name: "Participants", exact: true });
+      const opener = page.getByRole("button", { name: /^People, \d+$/ });
       await opener.focus();
       await page.keyboard.press("Enter");
       const people = page.getByRole("tab", { name: /^People/ });
@@ -85,8 +69,9 @@ it(
       await page.keyboard.press("ArrowRight");
       await page.waitForFunction(() => document.querySelector('[data-card-tab="chat"]')?.getAttribute("aria-selected") === "true");
       await page.keyboard.press("Escape");
-      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Participants");
-      expect(await opener.getAttribute("aria-pressed")).toBe("false");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label")?.startsWith("People, "));
+      expect(await opener.evaluate((element) => element === document.activeElement)).toBe(true);
+      await people.waitFor({ state: "hidden" });
     }),
   30_000,
 );

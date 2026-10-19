@@ -1,38 +1,17 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import { startCallHarness } from "./browser-harness";
 
 vi.setConfig({ testTimeout: 30_000 });
 
-const origin = "http://127.0.0.1:3098";
-let server: ChildProcess;
+let origin: string;
+let stop: (() => Promise<void>) | undefined;
 let browser: Browser;
 let page: Page;
-let deadline: ReturnType<typeof setTimeout>;
-const stopServer = () => {
-  if (server?.pid && server.exitCode === null) process.kill(-server.pid, "SIGTERM");
-};
 beforeAll(async () => {
-  const occupied = await fetch(origin, { signal: AbortSignal.timeout(1000) }).then(
-    () => true,
-    () => false,
-  );
-  if (occupied) throw new Error(`Stage harness port occupied: ${origin}`);
-  server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", "3098", "--strictPort"], { cwd: resolve(import.meta.dirname, "../.."), detached: true, stdio: "ignore" });
-  deadline = setTimeout(stopServer, 360_000);
-  for (let attempt = 0; attempt < 150; attempt += 1) {
-    if (server.exitCode !== null) throw new Error(`Stage harness exited ${server.exitCode}`);
-    if (
-      await fetch(`${origin}/call-states.html`).then(
-        (response) => response.ok,
-        () => false,
-      )
-    )
-      break;
-    await new Promise((done) => setTimeout(done, 200));
-  }
+  ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   page.on("pageerror", (error) => console.error("Stage harness page error:", error.message));
@@ -44,9 +23,11 @@ afterEach(async () => {
   await page.screenshot({ path: resolve(process.env.STAGE_ARTIFACTS, `${name}.png`) });
 });
 afterAll(async () => {
-  await browser?.close();
-  clearTimeout(deadline);
-  stopServer();
+  try {
+    await browser?.close();
+  } finally {
+    await stop?.();
+  }
 });
 async function open(state: string) {
   await page.goto(`${origin}/call-states.html?state=${state}`, { waitUntil: "domcontentloaded" });

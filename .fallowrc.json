@@ -9,7 +9,6 @@
     "apps/web/vite.call-states.config.ts",
     "apps/web/vite.call-performance.config.ts",
     "apps/web/scripts/capture-call-states.mjs",
-    "apps/web/scripts/capture-join-sequence.mjs",
     "apps/web/scripts/verify-call-layouts.mjs",
     "apps/web/scripts/verify-call-integration.mjs",
     "e2e.config.ts",

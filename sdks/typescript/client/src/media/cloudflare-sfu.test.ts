@@ -255,7 +255,7 @@ describe("remote publication recovery", () => {
     );
   });
   it("recovers from a second independent receiver expiry after receiving media", async () => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    const replaceMediaConnection = sequentialReplacementConnections();
     await withTimedHarness(
       async (harness) => {
         await harness.client.start(fakeStream());
@@ -347,7 +347,7 @@ describe("remote publication recovery", () => {
     });
   });
   it("recovers from two independent publish failures in a solo call", async () => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    const replaceMediaConnection = sequentialReplacementConnections();
     await withTimedHarness(
       async (harness) => {
         harness.transport.failNextStaleLocalPublish = true;
@@ -370,10 +370,7 @@ describe("remote publication recovery", () => {
     const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
     await withTimedHarness(
       async (harness) => {
-        await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
-        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
-        rejectRemotePulls(harness, (track) => track.location === "remote");
-        await expect(harness.client.refreshRemotePublications()).rejects.toThrow("unavailable");
+        await startFailedRemoteRecovery(harness);
         await vi.advanceTimersByTimeAsync(120_000);
         expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
         expect(harness.peers).toHaveLength(2);
@@ -382,13 +379,10 @@ describe("remote publication recovery", () => {
     );
   });
   it("does not let a local publish restart a failed remote recovery", async () => {
-    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    const replaceMediaConnection = sequentialReplacementConnections();
     await withTimedHarness(
       async (harness) => {
-        await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
-        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
-        rejectRemotePulls(harness, (track) => track.location === "remote");
-        await expect(harness.client.refreshRemotePublications()).rejects.toThrow("unavailable");
+        await startFailedRemoteRecovery(harness);
         expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
 
         harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
@@ -407,6 +401,16 @@ describe("remote publication recovery", () => {
     );
   });
 });
+function sequentialReplacementConnections() {
+  const replacement = vi.fn(async () => bootstrap(`replacement-${replacement.mock.calls.length}`));
+  return replacement;
+}
+async function startFailedRemoteRecovery(harness: ReturnType<typeof createHarness>): Promise<void> {
+  await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+  harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
+  rejectRemotePulls(harness, (track) => track.location === "remote");
+  await expect(harness.client.refreshRemotePublications()).rejects.toThrow("unavailable");
+}
 function rejectRemotePulls(harness: ReturnType<typeof createHarness>, shouldReject: (track: CloudflareSFUTrackRequest) => boolean): void {
   const addTracks = harness.transport.addTracks.bind(harness.transport);
   vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {

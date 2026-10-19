@@ -133,10 +133,12 @@ test("scoped builds include workspace dependencies without widening other lanes"
   const command = (id) => plan.tasks.find((task) => task.id === id).command;
   assert.deepEqual(command("build"), ["pnpm", "exec", "turbo", "run", "build", "--force", "--filter=web..."]);
   assert.deepEqual(command("types"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "check-types"]);
-  assert.deepEqual(command("tests"), ["pnpm", "--workspace-concurrency=1", "--sort", "--filter", "web", "run", "test", "--coverage"]);
+  assert.equal(plan.tasks.find((task) => task.id === "tests").selected, false);
+  assert.equal(command("tests"), null);
+  assert.deepEqual(command("browser-tests"), ["pnpm", "--filter", "web", "run", "test"]);
   assert.deepEqual(
     createGatePlan(["apps/web/src/main.ts"], { workspaces, workspaceConcurrency: 2 })
-      .tasks.find((task) => task.id === "tests")
+      .tasks.find((task) => task.id === "types")
       .command.slice(0, 2),
     ["pnpm", "--workspace-concurrency=2"],
   );
@@ -173,7 +175,7 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
   assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "build"] });
   assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
   assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
