@@ -34,8 +34,9 @@ export interface ChalkMenuItemProps {
   readonly checked?: boolean;
   readonly disabled?: boolean;
   readonly onClick?: () => void;
+  readonly closeOnClick?: boolean;
 }
-export function ChalkMenuItem({ children, checked, disabled, onClick }: ChalkMenuItemProps) {
+export function ChalkMenuItem({ children, checked, disabled, onClick, closeOnClick }: ChalkMenuItemProps) {
   const content = (
     <>
       {checked !== undefined ? (
@@ -52,12 +53,12 @@ export function ChalkMenuItem({ children, checked, disabled, onClick }: ChalkMen
   );
   if (checked !== undefined)
     return (
-      <Menu.Item data-part="menu-item" className="chalk-menu-item" role="menuitemradio" aria-checked={checked} disabled={disabled} onClick={onClick}>
+      <Menu.Item data-part="menu-item" className="chalk-menu-item" role="menuitemradio" aria-checked={checked} disabled={disabled} onClick={onClick} closeOnClick={closeOnClick}>
         {content}
       </Menu.Item>
     );
   return (
-    <Menu.Item data-part="menu-item" className="chalk-menu-item" disabled={disabled} onClick={onClick}>
+    <Menu.Item data-part="menu-item" className="chalk-menu-item" disabled={disabled} onClick={onClick} closeOnClick={closeOnClick}>
       {content}
     </Menu.Item>
   );

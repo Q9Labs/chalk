@@ -59,7 +59,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
             <span data-part="call-timer" className="chalk-call-timer">
               {formatDuration(duration)}
             </span>
-            <ChalkSheet variant="details" open={open} onOpenChange={setOpen} title="Call details">
+            <ChalkSheet variant="details" open={open} onOpenChange={setOpen} title={spaceName} accessibleLabel="Call details">
               {props.onCallLinkToggle ? (
                 <button
                   type="button"

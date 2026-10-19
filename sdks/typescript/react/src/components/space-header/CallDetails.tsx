@@ -2,6 +2,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
 import { shareQr } from "./share-qr";
+import { ShellIcon } from "../control-bar/ShellIcon";
 import type { SpaceHeaderProps } from "./space-header-contract";
 
 export const CALL_SHORTCUTS = [
@@ -186,9 +187,15 @@ export function CallDetails({
       </section>
       {diagnostics.length ? (
         <section className="chalk-shell-section">
-          <button type="button" className="chalk-shell-detail-action" aria-expanded={details} onClick={() => setDetails(!details)}>
-            Connection: {diagnostics[0]?.value.toLowerCase()}
-            <span>{details ? "Hide details" : "Details"}</span>
+          <button type="button" className="chalk-shell-detail-action chalk-shell-connection" aria-expanded={details} onClick={() => setDetails(!details)}>
+            <span className="chalk-shell-connection-bars" aria-hidden="true">
+              {[6, 9, 12, 15].map((height) => (
+                <i key={height} style={{ height }} />
+              ))}
+            </span>
+            <span>Connection: {diagnostics[0]?.value.toLowerCase()}</span>
+            <span className="chalk-shell-connection-details">{details ? "Hide details" : "Details"}</span>
+            <ShellIcon name={details ? "up2" : "down"} size={18} />
           </button>
           {details ? (
             <>
@@ -228,11 +235,13 @@ export function CallDetails({
           </span>
         </button>
         <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
-          Keyboard shortcuts<span aria-hidden="true">›</span>
+          Keyboard shortcuts
+          <ShellIcon name="right" size={18} />
         </button>
         {onReportProblem ? (
           <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
-            Report a problem<span aria-hidden="true">›</span>
+            Report a problem
+            <ShellIcon name="right" size={18} />
           </button>
         ) : null}
       </section>

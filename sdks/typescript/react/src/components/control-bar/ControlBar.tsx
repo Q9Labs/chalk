@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
-import { CallEnd01Icon, CircleIcon, Edit02Icon, Message01Icon, SmileIcon, UserGroupIcon, Maximize01Icon, HandIcon, Monitor01Icon } from "../../utils/icons";
+import { HandIcon } from "../../utils/icons";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { CallLinkIcon } from "./CallLinkIcon";
@@ -9,6 +9,7 @@ import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
 import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarSurfaceProps, type ControlBarProps } from "./control-bar-behavior";
+import { ShellIcon } from "./ShellIcon";
 import { ShellStyles } from "./ShellStyles";
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
@@ -45,10 +46,10 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
     const request = document.fullscreenElement ? document.exitFullscreen() : frame?.requestFullscreen();
     void request?.then(() => setFullscreen(Boolean(document.fullscreenElement))).catch(() => props.onFullscreenError?.());
   };
-  const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <Message01Icon />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
+  const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <ShellIcon name="chat" />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
   const copyLink = () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.());
   const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
-  const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <SmileIcon />, props.onOpenReactions, undefined, 0, props.isHandRaised) : null;
+  const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <ShellIcon name="smile" />, props.onOpenReactions, undefined, 0, props.isHandRaised) : null;
   return (
     <div ref={dock} data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
       <ShellStyles />
@@ -91,11 +92,9 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       {has("screenshare") ? <ShareControl sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
       {reactions}
       {!reactions && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
-      {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <Edit02Icon />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
-      {has("record") && (props.onToggleRecording || props.displayOnly) ? (
-        <span className="chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <CircleIcon className={props.isRecording ? "fill-current" : ""} />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span>
-      ) : null}
-      <span className="chalk-shell-desktop">{iconButton(fullscreen ? "Exit fullscreen" : "Fullscreen", <Maximize01Icon />, toggleFullscreen, fullscreen)}</span>
+      {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
+      {has("record") && (props.onToggleRecording || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span> : null}
+      <span className="chalk-shell-desktop">{iconButton(fullscreen ? "Exit fullscreen" : "Fullscreen", <ShellIcon name={fullscreen ? "min" : "max"} />, toggleFullscreen, fullscreen)}</span>
       <span className="chalk-shell-gap chalk-shell-desktop" />
 
       <span className="chalk-shell-phone">
@@ -141,26 +140,28 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           </button>
           {has("screenshare") && canCaptureDisplay ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleScreenShare}>
-              <Monitor01Icon />
+              <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
             </button>
           ) : null}
           {has("whiteboard") ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleWhiteboard}>
-              <Edit02Icon />
+              <ShellIcon name="pen" />
               <span>Board</span>
             </button>
           ) : null}
           {has("chat") ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleChat}>
-              <Message01Icon />
+              <ShellIcon name="chat" />
               <span>Chat</span>
+              <ShellIcon name="right" size={20} className="chalk-shell-sheet-end" />
             </button>
           ) : null}
           {has("participants") ? (
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleParticipants}>
-              <UserGroupIcon />
+              <ShellIcon name="users" />
               <span>People</span>
+              <ShellIcon name="right" size={20} className="chalk-shell-sheet-end" />
             </button>
           ) : null}
         </DockLayout>
@@ -171,7 +172,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onEndForEveryone={props.onEndForEveryone}
           renderButton={(buttonProps) => (
             <ChalkIconButton {...buttonProps} size="lg" tone="danger" aria-label="Leave call">
-              <CallEnd01Icon />
+              <ShellIcon name="hang" />
             </ChalkIconButton>
           )}
         />

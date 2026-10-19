@@ -5,10 +5,11 @@ export interface ChalkSheetProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
+  readonly accessibleLabel?: string;
   readonly children: ReactNode;
 }
 /** Base UI owns the focus trap, Escape, outside press and return to the opener. */
-export function ChalkSheet({ open, onOpenChange, title, children, variant = "default" }: ChalkSheetProps) {
+export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
   const container = useRef<HTMLElement>(null);
   return (
     <span
@@ -20,7 +21,7 @@ export function ChalkSheet({ open, onOpenChange, title, children, variant = "def
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal container={container}>
           <Dialog.Backdrop data-part="sheet-scrim" className="chalk-sheet-scrim" />
-          <Dialog.Popup data-part={variant === "panel" ? "panel-card" : "sheet"} data-variant={variant} className="chalk-sheet">
+          <Dialog.Popup aria-label={accessibleLabel} data-part={variant === "panel" ? "panel-card" : "sheet"} data-variant={variant} className="chalk-sheet">
             <div data-part="sheet-handle" className="chalk-sheet-handle" />
             {variant !== "details" ? (
               <Dialog.Title className="sr-only">{title}</Dialog.Title>

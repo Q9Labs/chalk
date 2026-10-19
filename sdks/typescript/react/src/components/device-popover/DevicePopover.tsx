@@ -1,10 +1,11 @@
 import { Menu } from "@base-ui/react/menu";
 import { useEffect, useRef, useState } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
-import { Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon, ArrowDown01Icon, VolumeHighIcon } from "../../utils/icons";
+import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
+import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 
 export interface DevicePopoverProps {
@@ -124,7 +125,7 @@ export function DevicePopover({
       <ChalkTooltip
         trigger={
           <button type="button" className="chalk-shell-main" aria-label={busy ? `Updating ${mic ? "microphone" : "camera"}` : label} aria-pressed={isActive} disabled={disabled || busy} onClick={onToggle}>
-            {mic ? isActive ? <Microphone01Icon /> : <MicrophoneOff01Icon /> : isActive ? <Video01Icon /> : <VideoOffIcon />}
+            <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />
           </button>
         }
       >
@@ -135,7 +136,7 @@ export function DevicePopover({
         className="chalk-device-menu"
         trigger={
           <button type="button" className="chalk-shell-caret" aria-label={`Select ${mic ? "microphone" : "camera"}`} disabled={disabled}>
-            <ArrowDown01Icon />
+            <ShellIcon name="down" />
           </button>
         }
       >
@@ -143,7 +144,7 @@ export function DevicePopover({
         <ChalkMenuLabel>{mic ? "Microphone" : "Camera"}</ChalkMenuLabel>
         {devices.length ? (
           devices.map((device) => (
-            <ChalkMenuItem key={device.deviceId} checked={selectedDeviceId === device.deviceId} onClick={() => onDeviceChange(device.deviceId)}>
+            <ChalkMenuItem key={device.deviceId} checked={selectedDeviceId === device.deviceId} onClick={() => onDeviceChange(device.deviceId)} closeOnClick={false}>
               <span className="chalk-shell-device-label">
                 {device.label || (mic ? "Microphone" : "Camera")}
                 {mic && selectedDeviceId === device.deviceId ? <InputLevel track={track} /> : null}
@@ -159,11 +160,11 @@ export function DevicePopover({
             <Menu.Separator className="chalk-shell-menu-separator" />
             <ChalkMenuLabel>Speaker</ChalkMenuLabel>
             {secondaryDevices?.map((device) => (
-              <ChalkMenuItem key={device.deviceId} checked={selectedSecondaryDeviceId === device.deviceId} onClick={() => onSecondaryDeviceChange?.(device.deviceId)}>
+              <ChalkMenuItem key={device.deviceId} checked={selectedSecondaryDeviceId === device.deviceId} onClick={() => onSecondaryDeviceChange?.(device.deviceId)} closeOnClick={false}>
                 {device.label || "Speaker"}
               </ChalkMenuItem>
             ))}
-            <ChalkMenuItem disabled={!onTestSpeaker} onClick={onTestSpeaker}>
+            <ChalkMenuItem disabled={!onTestSpeaker} onClick={onTestSpeaker} closeOnClick={false}>
               <VolumeHighIcon />
               Test speaker
             </ChalkMenuItem>

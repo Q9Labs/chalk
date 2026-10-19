@@ -2,7 +2,7 @@ import { Menu } from "@base-ui/react/menu";
 import { useState } from "react";
 import type { ScreenShareOptions, ScreenShareSurface } from "@q9labsai/chalk-client";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
-import { ArrowDown01Icon, Monitor01Icon, MonitorOffIcon } from "../../utils/icons";
+import { ShellIcon } from "./ShellIcon";
 
 function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   return (
@@ -41,7 +41,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
       <ChalkTooltip
         trigger={
           <button type="button" className="chalk-shell-main" aria-label={sharing ? "Stop sharing" : "Share screen"} aria-pressed={sharing} onClick={() => (sharing || !onStart ? onToggle?.() : start(surface))}>
-            {sharing ? <MonitorOffIcon /> : <Monitor01Icon />}
+            <ShellIcon name={sharing ? "shareOff" : "share"} />
           </button>
         }
       >
@@ -52,7 +52,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
         className="chalk-device-menu"
         trigger={
           <button type="button" className="chalk-shell-caret" aria-label="Share options">
-            <ArrowDown01Icon />
+            <ShellIcon name="down" />
           </button>
         }
       >

@@ -39,6 +39,10 @@ try {
  await page.keyboard.press('Escape');
  await page.setViewportSize({width:1440,height:900});
  await load();
+ await page.getByRole('button',{name:'Switch to grid',exact:true}).click();
+ await page.getByRole('button',{name:'Switch to spotlight',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Switch to spotlight',exact:true}).click();
+ await page.getByRole('button',{name:'Switch to grid',exact:true}).waitFor();
  for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
   await page.setViewportSize(viewport);
   const trigger=page.getByRole('button',{name:'Reactions',exact:true});
@@ -90,6 +94,10 @@ try {
  await page.getByRole('button',{name:'Done',exact:true}).click();
  await page.getByRole('dialog').waitFor({state:'detached'});
  await load('shell-host');
+ await page.getByRole('button',{name:'Record',exact:true}).click();
+ await page.getByRole('button',{name:'Stop recording',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Stop recording',exact:true}).click();
+ await page.getByRole('button',{name:'Record',exact:true}).waitFor();
  await page.getByRole('button',{name:'Leave call',exact:true}).filter({visible:true}).click();
  await page.getByRole('menuitem',{name:'End call for everyone',exact:true}).waitFor();
  await page.getByRole('menuitem',{name:'Leave call',exact:true}).waitFor();

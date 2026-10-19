@@ -112,6 +112,7 @@ export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-seams", title: "Shell merge seams", render: () => <ShellSeams /> },
   { id: "shell-call", title: "Shell guest", render: () => <ShellCall /> },
   { id: "shell-light", title: "Shell guest in Light", render: () => <ShellCall initialColorScheme="light" /> },
+  { id: "shell-host-light", title: "Shell host in Light", render: () => <ShellCall host initialColorScheme="light" /> },
   { id: "shell-host", title: "Shell host", render: () => <ShellCall host /> },
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },
   { id: "shell-report-light", title: "Shell report callback, Light", render: () => <ShellCall report initialColorScheme="light" /> },

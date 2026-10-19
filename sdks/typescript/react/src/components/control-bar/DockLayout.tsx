@@ -13,7 +13,7 @@ export function DockLayout({ layout, onLayoutChange, children, microphone, camer
       <ChalkSheet title="More options" open={open} onOpenChange={setOpen}>
         <div
           data-part="dock-layout-group"
-          className="chalk-sheet-group"
+          className="chalk-sheet-group chalk-shell-more-group"
           onClick={(event) => {
             if (event.target instanceof Element && event.target.closest("button.chalk-sheet-row")) setOpen(false);
           }}
