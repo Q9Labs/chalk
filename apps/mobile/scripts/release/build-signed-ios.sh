@@ -136,8 +136,6 @@ build_dir=$(mktemp -d "$output_dir/.chalk-xcodebuild.XXXXXX")
 chmod 700 "$build_dir"
 archive_path="$build_dir/Chalk.xcarchive"
 archive_log="$build_dir/archive.log"
-# The Release archive bundles the JavaScript, and Metro resolves the workspace SDKs from their built dist.
-(cd "$repo_root" && pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies)
 echo "Building Chalk's signed iOS archive."
 if ! xcodebuild \
   -workspace "$mobile_root/ios/Chalk.xcworkspace" \
@@ -220,6 +218,11 @@ embedded_screen_share_uuid=$(plutil -extract UUID raw -o - "$temp_dir/embedded-s
 embedded_screen_share_app_id=$(plutil -extract Entitlements.application-identifier raw -o - "$temp_dir/embedded-screen-share.plist")
 if [[ "$embedded_screen_share_uuid" != "$expected_screen_share_profile_uuid" || "$embedded_screen_share_app_id" != "$expected_team_id.$expected_screen_share_bundle_id" ]]; then
   echo "The Chalk IPA contains an unexpected screen-share provisioning profile." >&2
+  exit 1
+fi
+
+if [[ -z $(find "$app_path" -path '*/ChalkWhiteboard.bundle/chalk-whiteboard/index.html' -print -quit) ]]; then
+  echo "The Chalk IPA does not contain the embedded whiteboard renderer." >&2
   exit 1
 fi
 
