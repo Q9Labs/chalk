@@ -8,6 +8,8 @@ export function ParticipantOptionsMenu({
   variant,
   canManageParticipants,
   onClose,
+  onAssignRole,
+  onStopParticipantScreenShare,
   onMuteParticipant,
   onRequestUnmute,
   onStopParticipantCamera,
@@ -20,7 +22,7 @@ export function ParticipantOptionsMenu({
 }: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
-  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant);
+  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || !!onAssignRole || !!onStopParticipantScreenShare);
 
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
@@ -116,6 +118,20 @@ export function ParticipantOptionsMenu({
             </button>
           ) : null}
 
+          {participant.isScreenSharing && onStopParticipantScreenShare ? (
+            <button type="button" className={menuItemClassName} onClick={() => void runParticipantAction(() => onStopParticipantScreenShare(participant.id), onClose, onCommandError)}>
+              Stop screen share
+            </button>
+          ) : null}
+          {onAssignRole
+            ? participant.eligibleRoles
+                ?.filter((role) => role !== participant.role)
+                .map((role) => (
+                  <button type="button" key={role} className={menuItemClassName} onClick={() => void runParticipantAction(() => onAssignRole(participant.id, role), onClose, onCommandError)}>
+                    Make <bdi>{role}</bdi>
+                  </button>
+                ))
+            : null}
           {onRemoveParticipant ? (
             <button
               type="button"

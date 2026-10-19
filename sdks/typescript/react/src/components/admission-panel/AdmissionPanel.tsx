@@ -22,10 +22,10 @@ export interface AdmissionPanelProps {
 
 interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly participants: AdmissionParticipant[];
-  readonly onAdmit: (id: string) => void;
-  readonly onDeny: (id: string) => void;
-  readonly onAdmitAll?: () => void;
-  readonly onDenyAll?: () => void;
+  readonly onAdmit: (id: string) => void | Promise<void>;
+  readonly onDeny: (id: string) => void | Promise<void>;
+  readonly onAdmitAll?: () => void | Promise<void>;
+  readonly onDenyAll?: () => void | Promise<void>;
 }
 
 const TEXT_BUTTON_CLASS =
@@ -52,10 +52,29 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
     return () => window.clearInterval(timer);
   }, []);
 
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const perform = async (action: () => void | Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn’t update this join request.");
+    } finally {
+      setBusy(false);
+    }
+  };
   const pending = participants.length;
 
   const list = (
     <>
+      {error ? (
+        <p role="alert" className="text-sm text-[var(--chalk-danger-text)]">
+          {error}
+        </p>
+      ) : null}
       {pending > 0 ? (
         <div className="flex h-9 items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--chalk-app-text-muted)]" aria-live="polite">
@@ -64,12 +83,12 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           <div className="flex items-center gap-1">
             {loading ? <Spinner size="sm" aria-label="Updating admission" /> : null}
             {pending > 1 && onAdmitAll ? (
-              <button type="button" onClick={onAdmitAll} className={TEXT_BUTTON_CLASS}>
+              <button type="button" disabled={busy || loading} onClick={() => void perform(onAdmitAll)} className={TEXT_BUTTON_CLASS}>
                 Admit all
               </button>
             ) : null}
             {pending > 1 && onDenyAll ? (
-              <button type="button" onClick={onDenyAll} className={TEXT_BUTTON_CLASS}>
+              <button type="button" disabled={busy || loading} onClick={() => void perform(onDenyAll)} className={TEXT_BUTTON_CLASS}>
                 Deny all
               </button>
             ) : null}
@@ -77,24 +96,26 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
         </div>
       ) : null}
 
-      <ul aria-label="Waiting to join" className="m-0 list-none divide-y divide-[var(--chalk-app-line)] p-0">
+      <ul aria-label="Waiting to join" className="m-0 list-none p-0">
         {pending === 0 ? (
           <li className="py-10 text-center text-sm text-[var(--chalk-app-text-muted)]" role="status">
             No one is waiting to join
           </li>
         ) : (
           participants.map((participant) => (
-            <li key={participant.id} className="flex items-center gap-3 py-3">
-              <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" className="h-10 w-10" />
+            <li key={participant.id} className="call-person-row">
+              <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" className="!h-8 !w-8" generated />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-[var(--chalk-app-text)]">{participant.displayName}</p>
+                <p className="truncate text-sm font-medium text-[var(--chalk-app-text)]">
+                  <bdi>{participant.displayName}</bdi>
+                </p>
                 <p className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(participant.joinedAt)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <button type="button" onClick={() => onAdmit(participant.id)} className={ADMIT_BUTTON_CLASS} aria-label={`Admit ${participant.displayName}`}>
+                <button type="button" disabled={busy || loading} onClick={() => void perform(() => onAdmit(participant.id))} className={ADMIT_BUTTON_CLASS} aria-label={`Admit ${participant.displayName}`}>
                   Admit
                 </button>
-                <button type="button" onClick={() => onDeny(participant.id)} className={DENY_BUTTON_CLASS} aria-label={`Deny ${participant.displayName}`}>
+                <button type="button" disabled={busy || loading} onClick={() => void perform(() => onDeny(participant.id))} className={DENY_BUTTON_CLASS} aria-label={`Deny ${participant.displayName}`}>
                   Deny
                 </button>
               </div>
@@ -136,13 +157,13 @@ export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
     <AdmissionPanelSurface
       {...props}
       participants={participants}
-      onAdmit={(requestId) => void client.participants.admit(requestId)}
-      onDeny={(requestId) => void client.participants.deny(requestId)}
-      onAdmitAll={() => {
-        for (const participant of participants) void client.participants.admit(participant.id);
+      onAdmit={(requestId) => client.participants.admit(requestId)}
+      onDeny={(requestId) => client.participants.deny(requestId)}
+      onAdmitAll={async () => {
+        await Promise.all(participants.map((participant) => client.participants.admit(participant.id)));
       }}
-      onDenyAll={() => {
-        for (const participant of participants) void client.participants.deny(participant.id);
+      onDenyAll={async () => {
+        await Promise.all(participants.map((participant) => client.participants.deny(participant.id)));
       }}
     />
   );

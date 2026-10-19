@@ -134,8 +134,8 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
           await page.getByRole("button", { name: "Leave call", exact: true }).waitFor({ state: "hidden" });
         } else if (journey === "panels") {
           for (const [open, close] of [
-            ["Chat", "Close chat"],
-            [/^People, \d+$/, "Close participants panel"],
+            ["Chat", "Close panel"],
+            [/^People, \d+$/, "Close panel"],
           ]) {
             await click(open);
             await page.getByRole("button", { name: close, exact: true }).waitFor();
