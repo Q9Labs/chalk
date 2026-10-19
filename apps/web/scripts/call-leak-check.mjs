@@ -34,6 +34,7 @@ export function leakFailures(samples, budgets, { left = false } = {}) {
 
 async function sample(page, cdp, settleMs) {
   await page.waitForTimeout(settleMs);
+  await waitForToastTeardown(page);
   let previous;
   for (let attempt = 0; attempt < 6; attempt++) {
     await cdp.send("HeapProfiler.collectGarbage");
@@ -54,6 +55,16 @@ async function sample(page, cdp, settleMs) {
     previous = current;
   }
   throw new Error(`Resource teardown did not stabilize: ${JSON.stringify(previous)}`);
+}
+
+async function waitForToastTeardown(page) {
+  try {
+    // Info toasts last 5 seconds, followed by a 160 ms exit animation.
+    await page.waitForFunction(() => !document.querySelector('[data-part="toast-stack"] [data-part="toast"]'), undefined, { timeout: 6000 });
+  } catch (error) {
+    if (error.name !== "TimeoutError") throw error;
+    throw new Error("Call toasts did not expire within 6000 ms; refusing to sample retained DOM", { cause: error });
+  }
 }
 
 async function snapshot(cdp, directory, id) {
@@ -182,7 +193,10 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
       // Mounting once leaves V8 compiling hot render paths throughout the measured
       // tail. Exercise the same journey before measuring steady-state heap growth.
       const warmupCycles = injection ? 1 : budgets.cycles;
-      for (let index = 1; index < warmupCycles; index++) await cycle();
+      for (let index = 1; index < warmupCycles; index++) {
+        await cycle();
+        await waitForToastTeardown(page);
+      }
       const baseline = warmupCycles === 1 ? cold : await sample(page, cdp, budgets.settleMs);
       // Warm-up must not hide retained resources, even if their growth later stops.
       const warmupFailures = Object.entries(budgets.metrics).flatMap(([metric, limit]) => (metric !== "heapMiB" && baseline[metric] - cold[metric] > limit.allowance ? [`${metric}: warm-up excess ${(baseline[metric] - cold[metric]).toFixed(4)} > ${limit.allowance}`] : []));
