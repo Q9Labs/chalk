@@ -49,6 +49,17 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  const body = { action: "set-allowed-websites", origins: [], padding: "" };
+  const overhead = Buffer.byteLength(JSON.stringify(body));
+  for (const bytes of [1024 * 1024, 1024 * 1024 + 1]) {
+    const response = await fetch(`${origin}/dashboard-api/developer`, {
+      method: "POST",
+      headers: { Origin: origin, Cookie: "fx_session=new", "X-CSRF-Token": "fixture-csrf-new", "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, padding: "x".repeat(bytes - overhead) }),
+    });
+    await response.arrayBuffer();
+    check(`fixture body limit at ${bytes} bytes`, response.status === (bytes === 1024 * 1024 ? 200 : 413), `status=${response.status}`);
+  }
   // Sign-in buttons build the right /auth/start URLs.
   {
     const { tab, context } = await open("/dashboard/sign-in?returnTo=/dashboard/developer", { signedOut: true });

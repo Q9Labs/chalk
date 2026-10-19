@@ -1,6 +1,6 @@
 import { stopFixturePages } from "./oauth-test-support.mjs";
 import { strict as assert } from "node:assert";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from "node:fs/promises";
@@ -11,6 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
 // A recording transport forwards every operation to the real API. Fault injection
 // exercises rate-limit handling only; no engine success response is fabricated.
 assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through tests/dashboard/real-engine.sh");
+const apiOrigin = new URL(process.env.DASHBOARD_TEST_API_ORIGIN).origin;
 const requests = [];
 const unsupportedBodies = [];
 let rateLimitPath;
@@ -24,7 +25,12 @@ const engine = createServer(async (request, response) => {
     return;
   }
   try {
-    const upstream = await fetch(new URL(request.url, process.env.DASHBOARD_TEST_API_ORIGIN), { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
+    const incoming = new URL(request.url, "http://localhost");
+    const target = new URL(apiOrigin);
+    target.pathname = incoming.pathname;
+    target.search = incoming.search;
+    assert.equal(target.origin, apiOrigin);
+    const upstream = await fetch(target, { method: request.method, headers: request.headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : body, redirect: "manual" });
     const result = Buffer.from(await upstream.arrayBuffer());
     if (["GET", "POST"].includes(request.method) && new URL(request.url, "http://localhost").pathname.endsWith("/transcripts") && upstream.status < 300) {
       await writeFile(resolve(import.meta.dirname, "../../../../artifacts/dashboard-engine-transcripts.json"), result);
@@ -74,6 +80,18 @@ try {
   await writeFile(resolve(sandbox, "functions/fixture/[[path]].ts"), `export { onRequest } from ${JSON.stringify(entry)};\n`);
   engine.listen(0, "127.0.0.1");
   await once(engine, "listening");
+  for (const path of ["http://127.0.0.1:1/healthz?probe=absolute", "//127.0.0.1:1/healthz?probe=network"]) {
+    const status = await new Promise((accept, reject) => {
+      const request = httpRequest({ hostname: "127.0.0.1", port: engine.address().port, method: "GET", path }, (response) => {
+        response.resume();
+        response.once("end", () => accept(response.statusCode));
+      });
+      request.once("error", reject);
+      request.end();
+    });
+    assert.equal(status, 200, "The recording transport must keep the configured API authority");
+  }
+  console.log("PASS: recording transport ignores absolute and network-path request authorities");
   const portProbe = createServer();
   await new Promise((ready, reject) => portProbe.once("error", reject).listen(0, "127.0.0.1", ready));
   const port = portProbe.address().port;

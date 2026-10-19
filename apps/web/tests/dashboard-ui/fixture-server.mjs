@@ -139,10 +139,20 @@ function cookies(request) {
   );
 }
 const csrfFor = (account) => `fixture-csrf-${account}`;
+class RequestBodyTooLarge extends Error {}
+const MAX_BODY_BYTES = 1024 * 1024;
 async function readBody(request) {
-  let text = "";
-  for await (const chunk of request) text += chunk;
-  return text ? JSON.parse(text) : {};
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+    bytes += chunk.length;
+    if (bytes > MAX_BODY_BYTES) {
+      request.resume();
+      throw new RequestBodyTooLarge();
+    }
+    chunks.push(chunk);
+  }
+  return bytes ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -394,6 +404,11 @@ const server = createServer(async (request, response) => {
     }
     proxy(request, response);
   } catch (error) {
+    if (error instanceof RequestBodyTooLarge) {
+      response.setHeader("Connection", "close");
+      fail(response, 413, "body_too_large");
+      return;
+    }
     console.error(error);
     fail(response, 500, "fixture_error");
   }
