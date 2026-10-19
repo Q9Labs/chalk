@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 var (
@@ -97,7 +99,13 @@ func rateLimitKey(r *http.Request, options ClientIPOptions) string {
 		return "participant:" + subject.TenantID.String() + ":" + subject.ParticipantID.String()
 	}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok {
-		return "principal:" + principalRateLimitKey(principal)
+		key := "principal:" + principalRateLimitKey(principal)
+		if principal.Kind == authentication.PrincipalService {
+			if tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id")); err == nil {
+				key += ":tenant:" + tenantID.String()
+			}
+		}
+		return key
 	}
 
 	return "ip:" + clientIP(r, options)
