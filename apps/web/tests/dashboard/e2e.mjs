@@ -447,11 +447,15 @@ try {
   assert.equal((await post(malik, "/dashboard-api/home", { action: "archive-call", spaceId: foreign.spaceId, tenantId: firstTenant }, other.csrfToken)).status, 400);
 
   assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-allowed-websites", origins: ["https://example.test", "http://localhost:3000"] }, other.csrfToken)).status, 200);
-  assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ cors_allowed_origins: ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"] }) });
+  assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ cors_allowed_origins: ["https://chalkmeet.com", "https://example.test", "http://localhost:3000", origin] }) });
   const websites = await post(malik, "/dashboard-api/developer", { action: "allowed-websites" }, other.csrfToken);
   assert.equal(websites.status, 200);
-  const expectedWebsites = ["https://chalkmeet.com", "https://example.test", "http://localhost:3000"].toSorted();
+  const expectedWebsites = ["https://chalkmeet.com", "https://example.test", "http://localhost:3000", origin].toSorted();
   assert.deepEqual((await websites.json()).allowedWebsites.toSorted(), expectedWebsites);
+  assert.deepEqual((await tenantFor("malik")).cors_allowed_origins.toSorted(), expectedWebsites);
+  const writesBeforeLimit = unsupportedBodies.length;
+  assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-allowed-websites", origins: Array.from({ length: 31 }, (_, i) => `https://site-${i}.example.test`) }, other.csrfToken)).status, 400);
+  assert.equal(unsupportedBodies.length, writesBeforeLimit, "The 32-origin limit includes both dashboard origins");
   assert.deepEqual((await tenantFor("malik")).cors_allowed_origins.toSorted(), expectedWebsites);
   const homeOffset = requests.length;
   const home = await ada.request("/dashboard-api/home");

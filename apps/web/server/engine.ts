@@ -21,7 +21,7 @@ export async function resolveTenant(env: DashboardEnvironment, person: Identity,
 }
 export async function engine(env: DashboardEnvironment, person: Identity) {
   const tenantId = await resolveTenant(env, person);
-  return { api: await client(env), tenantId };
+  return { api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN };
 }
 export type Engine = Awaited<ReturnType<typeof engine>>;
 const apiFailure = z.object({ error: z.object({ code: z.string().max(100) }) });

@@ -3,6 +3,7 @@ import { UUIDSchema, DateTimeStringSchema } from "@q9labsai/chalk-client/effect"
 import type { WebhookDeliveryDetail } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { run } from "./engine";
+import { DashboardError } from "./http";
 import { keyDTO, webhookDTO } from "./dto";
 import type { AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
 export async function developerPage(engine: Engine, cursors: { keyCursor?: string; webhookCursor?: string }): Promise<DeveloperDTO> {
@@ -40,7 +41,9 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
       return { allowedWebsites: tenant.cors_allowed_origins } satisfies AllowedWebsitesDTO;
     }
     case "set-allowed-websites": {
-      const tenant = await run(engine.api.tenants.updateTenant({ params, payload: { cors_allowed_origins: action.origins } }));
+      const origins = [...new Set([...action.origins, engine.dashboardOrigin])];
+      if (origins.length > 32) throw new DashboardError(400, "too_many_origins");
+      const tenant = await run(engine.api.tenants.updateTenant({ params, payload: { cors_allowed_origins: origins } }));
       return { allowedWebsites: tenant.cors_allowed_origins } satisfies AllowedWebsitesDTO;
     }
     case "create-key": {

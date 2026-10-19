@@ -61,13 +61,15 @@ try {
       probe.listen(port, "127.0.0.1", () => probe.close(accept));
     });
   }
+  // Vite resolves the lazy whiteboard viewer through the package's built root entry.
+  await completed(start("pnpm", ["exec", "turbo", "run", "build", "--filter=@q9labsai/chalk-whiteboard..."]));
   const video = resolve(temporary, "session.mp4");
   await completed(start("ffmpeg", ["-loglevel", "error", "-f", "lavfi", "-i", "color=c=gray:s=160x90:r=1", "-t", "120", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]));
   const vite = start("pnpm", ["--filter", "web", "exec", "vite", "--host", "127.0.0.1", "--port", "3070", "--strictPort"]);
   await ready("http://127.0.0.1:3070/dashboard/sign-in", vite);
   const fixture = start(process.execPath, ["apps/web/tests/dashboard-ui/fixture-server.mjs"], { env: { ...process.env, FIXTURE_VIDEO: video } });
   await ready("http://127.0.0.1:3071/__fixture/log", fixture);
-  await completed(start(process.execPath, ["apps/web/tests/dashboard-ui/checks.mjs", require.resolve("playwright"), "http://127.0.0.1:3071"]));
+  await completed(start(process.execPath, ["apps/web/tests/dashboard-ui/checks.mjs", require.resolve("playwright").replace(/index\.js$/, "index.mjs"), "http://127.0.0.1:3071"]));
 } finally {
   clearTimeout(deadline);
   clearInterval(watcher);

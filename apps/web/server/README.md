@@ -173,7 +173,7 @@ retain their existing Axiom trace evidence as described in `docs/observability.m
 
 ## Allowed websites
 
-Developer GET includes `allowedWebsites`. POST `allowed-websites` reads only that setting; POST `set-allowed-websites` takes `origins` and requires an online WorkOS session. Both use the generated public Tenant operations under the authenticated Tenant. Updates accept only HTTPS origins or `http://localhost:<port>` (no credentials, paths, queries or fragments), deduplicate origins, and always retain `https://chalkmeet.com` within the API's 32-origin limit. First sign-in provisions that permanent origin and the environment's dashboard origin. Sign-up is open: no allowlist or waitlist.
+Developer GET includes `allowedWebsites`. POST `allowed-websites` reads only that setting; POST `set-allowed-websites` takes `origins` and requires an online WorkOS session. Both use the generated public Tenant operations under the authenticated Tenant. Updates accept only HTTPS origins or `http://localhost:<port>` (no credentials, paths, queries or fragments), deduplicate origins, and always retain `https://chalkmeet.com` and the configured `DASHBOARD_ORIGIN` within the API's 32-origin limit. First sign-in provisions that permanent origin and the environment's dashboard origin. Sign-up is open: no allowlist or waitlist.
 
 ## Webhook edits
 

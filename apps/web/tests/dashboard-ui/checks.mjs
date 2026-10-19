@@ -1,4 +1,4 @@
-// Drives the dashboard build against the DTO fixture in headless Helium and prints one line per check.
+// Drives the dashboard build against the DTO fixture in headless Chromium and prints one line per check.
 // Usage: node dashboard-checks.mjs <playwright index.mjs> <fixture origin>
 const [playwrightPath, origin] = process.argv.slice(2);
 const { chromium } = await import(playwrightPath);
