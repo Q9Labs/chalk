@@ -1,4 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
@@ -44,6 +46,60 @@ async function capture(page: Page, name: string) {
   await mkdir(process.env.CARD_ARTIFACTS, { recursive: true });
   await page.screenshot({ path: `${process.env.CARD_ARTIFACTS}/${name}.png` });
 }
+
+it("downloads a cross-origin inline photo with its filename, without a new tab, and retries failures", async () => {
+  const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l6cAAAAASUVORK5CYII=", "base64");
+  let failDownload = false;
+  const images = createServer((_request, response) => {
+    response.writeHead(failDownload ? 503 : 200, { "Content-Type": "image/png", "Access-Control-Allow-Origin": origin, "Cache-Control": "no-store" });
+    response.end(failDownload ? "unavailable" : bytes);
+  });
+  images.listen(0, "127.0.0.1");
+  await once(images, "listening");
+  try {
+    const address = images.address();
+    if (!address || typeof address === "string") throw new Error("Image server has no port");
+    const photoUrl = `http://127.0.0.1:${address.port}/photo.png`;
+    await journey(async (page) => {
+      await page.goto(`${origin}/call-states.html?state=card-photo-cross-origin&photoUrl=${encodeURIComponent(photoUrl)}`);
+      await page.getByRole("button", { name: /^People,/ }).click();
+      await page.getByRole("tab", { name: "Chat", exact: true }).click();
+      await page.getByRole("button", { name: "View q9labs-logo-lockup-white-on-black.jpg", exact: true }).click();
+      const viewer = page.getByRole("dialog", { name: "Photo viewer" });
+      const image = viewer.getByRole("img", { name: "q9labs-logo-lockup-white-on-black.jpg", exact: true });
+      await image.waitFor();
+      await image.evaluate((element) => {
+        if (!(element instanceof HTMLImageElement)) throw new Error("Photo viewer image is missing");
+        return element.decode();
+      });
+      expect(await image.getAttribute("src")).toBe(photoUrl);
+      const pages = page.context().pages().length;
+      let downloads = 0;
+      page.on("download", () => downloads++);
+      const downloadButton = viewer.getByRole("button", { name: "Download q9labs-logo-lockup-white-on-black.jpg", exact: true });
+      failDownload = true;
+      await downloadButton.click();
+      await viewer.getByRole("alert").waitFor();
+      expect(await downloadButton.isEnabled()).toBe(true);
+      expect(downloads).toBe(0);
+      failDownload = false;
+      const [download] = await Promise.all([page.waitForEvent("download"), downloadButton.click()]);
+      expect(download.suggestedFilename()).toBe("q9labs-logo-lockup-white-on-black.jpg");
+      expect(await download.failure()).toBeNull();
+      const saved = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      for await (const chunk of saved) chunks.push(Buffer.from(chunk));
+      expect(Buffer.concat(chunks)).toEqual(bytes);
+      expect(downloads).toBe(1);
+      expect(page.context().pages()).toHaveLength(pages);
+      expect(await image.getAttribute("src")).toBe(photoUrl);
+      expect(await viewer.isVisible()).toBe(true);
+      expect((await fetch(photoUrl)).headers.get("Content-Disposition")).toBeNull();
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => images.close((error) => (error ? reject(error) : resolve())));
+  }
+}, 30_000);
 
 async function openPeople(page: Page, state = "card-people") {
   await page.goto(`${origin}/call-states.html?state=${state}`);

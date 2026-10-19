@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
 import { commandFailure } from "./command-failure";
+import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -82,6 +83,9 @@ export interface ControlBarSurfaceProps {
 }
 
 export interface ControlBarProps {
+  /** Local self-view only. Omit to use the persisted mirror preference. */
+  readonly mirrored?: boolean;
+  readonly onMirrorChange?: (mirrored: boolean) => void;
   readonly shareUrl?: string;
   readonly callLinkOpen?: boolean;
   readonly onCallLinkToggle?: () => void;
@@ -222,6 +226,7 @@ interface ConnectedControlBarBehavior {
 }
 
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
+  const [mirrored, setMirrored] = useMirrorSetting();
   const client = useSpaceClient();
   const self = useSelf();
   const participants = useParticipants();
@@ -285,6 +290,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     buttons,
     microphoneTrack: media.local.microphone.track,
     cameraTrack: media.local.camera.track,
+    mirrored: props.mirrored ?? mirrored,
+    onMirrorChange: props.onMirrorChange ?? (props.mirrored === undefined ? setMirrored : undefined),
     microphoneWarning: media.local.microphone.state === "failed" || media.local.microphone.state === "unavailable",
     cameraWarning: media.local.camera.state === "failed" || media.local.camera.state === "unavailable",
     noiseSuppression,
