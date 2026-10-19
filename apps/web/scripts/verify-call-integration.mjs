@@ -97,6 +97,15 @@ try {
       await page.getByText("Chalk can’t use your camera.", { exact: true }).waitFor();
       await page.getByRole("button", { name: "Unmute microphone", exact: true }).click();
       await page.getByText("Chalk can’t use your microphone.", { exact: true }).waitFor();
+      await page.goto(`${origin}/call-states.html?state=integration-terminal`);
+      await page.getByRole("button", { name: "Report a problem", exact: true }).click();
+      await page.getByRole("textbox", { name: "What went wrong?", exact: true }).fill("The call disconnected.");
+      await page.getByRole("button", { name: "Send", exact: true }).click();
+      await page.getByRole("heading", { name: "Sent", exact: true }).waitFor();
+      assert.equal(await page.getByLabel("Submitted problem", { exact: true }).innerText(), "The call disconnected.");
+      await page.getByRole("button", { name: "Done", exact: true }).click();
+      await page.getByRole("heading", { name: "Sent", exact: true }).waitFor({ state: "hidden" });
+      assert.equal(await page.getByRole("button", { name: "Report a problem", exact: true }).evaluate((element) => element === document.activeElement), true, "the report dialog returns terminal focus");
       assert.deepEqual(errors, [], `${device}: no runtime errors`);
       console.log(`${device}: call-link sharing/focus, People/Chat card, stage continuity and typed media failures passed`);
     } finally {

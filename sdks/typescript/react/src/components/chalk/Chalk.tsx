@@ -13,6 +13,8 @@ import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SpaceView } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
+import { CallDialog } from "../space-header/CallDetails";
+import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
   readonly chat?: boolean;
@@ -69,7 +71,6 @@ export type ChalkProps = SpaceIntegration &
     readonly onRejoin?: () => void;
     /** Home on the pages shown after the call. Without it the page has no Home action. */
     readonly onHome?: () => void;
-    readonly onReportProblem?: () => void;
     /** Host-provided terminal reason when the transport cannot distinguish it. */
     readonly terminalState?: "removed" | "full" | "elsewhere";
   };
@@ -80,6 +81,14 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     setLocalColorScheme(next);
     props.onColorSchemeChange?.(next);
   };
+  const [reportOpen, setReportOpen] = useState(false);
+  const reportTrigger = useRef<HTMLButtonElement>(null);
+  const openReport = props.onReportProblem
+    ? () => {
+        reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+        setReportOpen(true);
+      }
+    : undefined;
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -107,7 +116,13 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     <>
       <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
-          <SpaceExperience {...props} theme={{ ...props.theme, colorScheme }} onColorSchemeChange={changeColorScheme} resolvedColorScheme={colorScheme} />
+          <SpaceExperience {...props} theme={{ ...props.theme, colorScheme }} onColorSchemeChange={changeColorScheme} resolvedColorScheme={colorScheme} onOpenReport={openReport} />
+          {props.onReportProblem ? (
+            <>
+              <ShellStyles />
+              <CallDialog kind={reportOpen ? "report" : null} onClose={() => setReportOpen(false)} onReportProblem={props.onReportProblem} diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`} returnFocus={reportTrigger} />
+            </>
+          ) : null}
         </ChalkProvider>
       </div>
     </>
@@ -116,6 +131,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
 function SpaceExperience(
   props: ChalkProps & {
     readonly resolvedColorScheme: ChalkColorScheme;
+    readonly onOpenReport?: () => void;
   },
 ): React.JSX.Element {
   const client = useSpaceClient();
@@ -182,17 +198,16 @@ function SpaceExperience(
   }, [connection.status, props.onJoined, props.onLeft]);
   const callName = props.spaceName ?? props.space;
   const statusTheme = { ...props.theme, colorScheme: props.resolvedColorScheme };
-  if (props.terminalState && props.terminalState !== handledTerminal)
-    return <StatusSurface phase={props.terminalState} callName={callName} theme={statusTheme} onRejoin={props.onRejoin ?? retryAutomaticJoin} onHome={props.onHome} onReportProblem={props.onReportProblem} retryPending={retryPending} />;
+  if (props.terminalState && props.terminalState !== handledTerminal) return <StatusSurface phase={props.terminalState} callName={callName} theme={statusTheme} onRejoin={props.onRejoin ?? retryAutomaticJoin} onHome={props.onHome} onReportProblem={props.onOpenReport} retryPending={retryPending} />;
   if (connection.status === "idle")
     return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
   if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
-  if (connection.status === "failed" && connection.lastError?.code === "episode.ended") return <StatusSurface phase="episode-ended" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onReportProblem} />;
+  if (connection.status === "failed" && connection.lastError?.code === "episode.ended") return <StatusSurface phase="episode-ended" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} />;
   if (connection.status === "failed") {
-    return <StatusSurface phase="failed" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onReportProblem} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
+    return <StatusSurface phase="failed" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
   if (connection.status === "leaving" || connection.status === "left")
-    return <StatusSurface phase={episodeEnded ? "episode-ended" : "left"} callName={callName} theme={statusTheme} onReportProblem={props.onReportProblem} onRejoin={props.onRejoin ?? retryAutomaticJoin} rejoinDisabled={connection.status === "leaving" || retryPending} onHome={props.onHome} />;
+    return <StatusSurface phase={episodeEnded ? "episode-ended" : "left"} callName={callName} theme={statusTheme} onReportProblem={props.onOpenReport} onRejoin={props.onRejoin ?? retryAutomaticJoin} rejoinDisabled={connection.status === "leaving" || retryPending} onHome={props.onHome} />;
   return (
     <div className="relative h-full min-h-0">
       <SpaceSurface {...props} spaceName={spaceName} />
