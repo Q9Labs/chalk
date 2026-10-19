@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { loadReleaseConfig } from "../src/config.js";
@@ -43,6 +44,20 @@ describe("direct DeepInfra contract", () => {
       },
     });
     await expect(provider.transcribe(request)).rejects.toMatchObject({ kind: "timeout" });
+  });
+
+  // Native synthetic-silence response, with the empty array observed in nightly's
+  // content-free diagnostics. The original failed response was not retained.
+  const noSpeechResponse: unknown = JSON.parse(readFileSync(new URL("./fixtures/deepinfra-no-speech.json", import.meta.url), "utf8"));
+
+  it("accepts empty segment arrays only when the provider returns no content", async () => {
+    const provider = new DeepInfraWhisperProvider({ policy, token: "test-token", fetch: async () => Response.json(noSpeechResponse) });
+    expect(await provider.transcribe(request)).toMatchObject({ text: "", segments: [], quality: { segmentCount: 0, wordCount: 0 } });
+  });
+
+  it.each([{ text: "spoken words", segments: [], words: null }, { text: "", segments: [], words: [{ start: 0, end: 1, text: "spoken" }] }, { text: "", segments: null }, { text: "" }, { text: "", segments: {} }])("rejects missing timings or content without segments: %j", async (body) => {
+    const provider = new DeepInfraWhisperProvider({ policy, token: "test-token", fetch: async () => Response.json(body) });
+    await expect(provider.transcribe(request)).rejects.toMatchObject({ kind: "schema", schemaFailure: { fieldPath: "segments" } });
   });
 
   it("rejects a provider response beyond the configured byte bound", async () => {

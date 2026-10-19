@@ -1,0 +1,14 @@
+{
+  "request_id": "sanitized-request",
+  "inference_status": {
+    "status": "succeeded",
+    "runtime_ms": 73,
+    "cost": 9.99e-5
+  },
+  "text": "",
+  "segments": [],
+  "language": "en",
+  "input_length_ms": 30000,
+  "words": null,
+  "duration": 30.0
+}

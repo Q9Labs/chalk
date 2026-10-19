@@ -253,6 +253,26 @@ describe("provider sequencing", () => {
 describe("provider segment timing contract", () => {
   const parse = (body: unknown) => parseProviderResult(body, { provider: "deepinfra", model: "openai/whisper-large-v3-turbo", versionContract: "test", maxTextChars: 1024, maxSegments: 100, maxWords: 100, maxAudioSeconds: 900 });
 
+  it("normalizes a no-speech response without inventing cues", () => {
+    const provider = parse({ text: "", segments: [], words: null });
+    const document = normalizeTranscriptChunk({
+      jobId: assignment.jobId,
+      episodeId: assignment.episodeId,
+      episodeStartMs: assignment.chunk.episodeStartMs,
+      episodeEndMs: assignment.chunk.episodeEndMs,
+      sourceStartMs: assignment.chunk.sourceStartMs,
+      sourceEndMs: assignment.chunk.sourceEndMs,
+      manifest: validateSpeakerTurnManifest(sourceManifest(), assignment),
+      provider,
+      attempt: assignment.attempt,
+      measuredAudioMs: 10_000,
+      sourceIdentity: assignment.chunk.sourceIdentity,
+      sourceTrackClass: assignment.chunk.sourceTrackClass,
+    });
+    expect(document.cues).toEqual([]);
+    expect(document.quality).toMatchObject({ segmentCount: 0, wordCount: 0 });
+  });
+
   it.each([false, true])("retains overlapping segment text without repeating words (word timings: %s)", (withWords) => {
     // Production logged this inequality, but not the actual timestamps.
     const words = [
