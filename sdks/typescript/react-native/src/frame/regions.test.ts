@@ -14,6 +14,12 @@ describe("frameRegions", () => {
     expect(stage).toEqual({ x: 67, y: 8, width: 852 - 118 - 16, height: 393 - 8 - 21 - 4 });
   });
 
+  it("starts the landscape header and stage below the top inset, as portrait does", () => {
+    const { header, stage } = frameRegions("landscape", 852, 393, { top: 24, bottom: 0, left: 0, right: 0 });
+    expect(header.y).toBe(32);
+    expect(stage).toEqual({ x: 8, y: 32, width: 852 - 16, height: 393 - 32 - 0 - 4 });
+  });
+
   it("narrows the iPad stage when the side card is open", () => {
     const closed = frameRegions("pad", 820, 1180, { top: 24, bottom: 20, left: 0, right: 0 });
     const open = frameRegions("pad", 820, 1180, { top: 24, bottom: 20, left: 0, right: 0 }, true);

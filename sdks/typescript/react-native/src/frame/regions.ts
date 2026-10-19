@@ -44,9 +44,10 @@ export function frameRegions(arrangement: Arrangement, width: number, height: nu
   }
   if (arrangement === "landscape") {
     const dockHeight = 52;
+    const topEdge = top + 8;
     return {
-      header: { x: left, y: 8, width: width - left - right, height: 44 },
-      stage: { x: left + STAGE_GAP, y: 8, width: width - left - right - 2 * STAGE_GAP, height: height - 8 - bottom - 4 },
+      header: { x: left, y: topEdge, width: width - left - right, height: 44 },
+      stage: { x: left + STAGE_GAP, y: topEdge, width: width - left - right - 2 * STAGE_GAP, height: height - topEdge - bottom - 4 },
       dock: { x: left, y: height - (bottom + 6) - dockHeight, width: width - left - right, height: dockHeight },
     };
   }
