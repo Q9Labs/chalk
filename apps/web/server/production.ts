@@ -1,8 +1,8 @@
 import type { DashboardBindings } from "./config";
 import { handleDashboard } from "./application";
-import { workosProvider } from "./workos";
+import { oauthProvider } from "./oauth";
 export const onRequest: PagesFunction<DashboardBindings> = (context) =>
   handleDashboard(context.request, context.env, (env) => {
-    if (env.DASHBOARD_IDENTITY_PROVIDER !== "workos") throw new Error("Deployed entrypoint does not support fixture identity");
-    return workosProvider(env);
+    if (env.DASHBOARD_IDENTITY_PROVIDER !== "oauth") throw new Error("Deployed entrypoint does not support fixture identity");
+    return oauthProvider(env);
   });

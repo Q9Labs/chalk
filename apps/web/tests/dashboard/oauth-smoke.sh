@@ -2,23 +2,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 : "${CHALK_API_SERVICE_SECRETS:?Run this as the final command of real-engine.sh}"
-if [[ -z "${WORKOS_API_KEY:-}" ]]; then
-  exec 2password run --env "WORKOS_API_KEY=op://dev/Chalk WorkOS Staging API key/credential" -- bash "$0"
-fi
+for name in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET APPLE_SERVICES_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY; do
+  if [[ -z "${!name:-}" ]]; then echo "Missing OAuth runtime binding: $name" >&2; exit 1; fi
+done
 # CLI bindings are printed as plain text; .dev.vars bindings are hidden.
 exec python3 - <<'PY'
 import json, os, pathlib, secrets, signal, socket, subprocess, tempfile, time
 
-seconds = int(os.environ.get("DASHBOARD_WORKOS_SMOKE_SECONDS", "1800"))
+seconds = int(os.environ.get("DASHBOARD_OAUTH_SMOKE_SECONDS", "1800"))
 if seconds <= 0:
-    raise SystemExit("DASHBOARD_WORKOS_SMOKE_SECONDS must be positive")
+    raise SystemExit("DASHBOARD_OAUTH_SMOKE_SECONDS must be positive")
 with socket.socket() as probe:
     probe.bind(("127.0.0.1", 8788))
 web = pathlib.Path("apps/web").resolve()
 if not (web / "dist/client/index.html").exists():
     raise SystemExit("Build apps/web first: pnpm exec turbo run build --filter=web...")
 os.umask(0o077)
-temporary = tempfile.TemporaryDirectory(prefix="chalk-workos-smoke-", dir="/tmp", ignore_cleanup_errors=True)
+temporary = tempfile.TemporaryDirectory(prefix="chalk-oauth-smoke-", dir="/tmp", ignore_cleanup_errors=True)
 sandbox = pathlib.Path(temporary.name)
 pages = None
 watchdog = None
@@ -36,15 +36,13 @@ try:
             (sandbox / "public" / asset.name).symlink_to(asset)
     (sandbox / "functions").symlink_to(web / "functions", target_is_directory=True)
     bindings = {
-        "DASHBOARD_IDENTITY_PROVIDER": "workos",
+        "DASHBOARD_IDENTITY_PROVIDER": "oauth",
         "CHALK_ENVIRONMENT": "local",
         "DASHBOARD_ORIGIN": "http://localhost:8788",
-        "WORKOS_REDIRECT_URI": "http://localhost:8788/auth/callback",
-        "WORKOS_CLIENT_ID": "client_01M577Y8Q06G4VFFFBCZZBYMYJ",
+        **{name: os.environ.pop(name) for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "APPLE_SERVICES_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY")},
         "CHALK_API_ORIGIN": "http://127.0.0.1:18080",
         "DASHBOARD_SERVICE_TOKEN": os.environ["CHALK_API_SERVICE_SECRETS"],
-        "WORKOS_COOKIE_PASSWORD": secrets.token_urlsafe(48),
-        "WORKOS_API_KEY": os.environ.pop("WORKOS_API_KEY"),
+        "SESSION_SECRET": os.environ.pop("SESSION_SECRET", secrets.token_urlsafe(48)),
     }
     (sandbox / ".dev.vars").write_text("".join(f"{key}={json.dumps(value)}\n" for key, value in bindings.items()))
     del bindings
@@ -55,7 +53,7 @@ try:
     ], cwd=web, env={**os.environ, "CI": "true", "WRANGLER_SEND_METRICS": "false"}, start_new_session=True)
     owner, upstream, group = os.getpid(), os.getppid(), pages.pid
     deadline = time.monotonic() + seconds
-    print(f"WorkOS smoke owner PID {owner}; Pages group {group}; deadline {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() + seconds))}", flush=True)
+    print(f"OAuth smoke owner PID {owner}; Pages group {group}; deadline {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() + seconds))}", flush=True)
     watchdog = os.fork()
     if watchdog == 0:
         signal.signal(signal.SIGTERM, signal.SIG_DFL)

@@ -25,7 +25,7 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
   if (action.action === "refresh-access") {
     const encoded = readCookie(request, env, `seat_${action.spaceId}`);
     if (!encoded) throw new DashboardError(401, "join_required");
-    const seat = seatSchema.parse(await unseal(encoded, env.WORKOS_COOKIE_PASSWORD, "owner-seat"));
+    const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
     if (seat.userId !== person.userId || seat.sessionId !== person.sessionId || seat.spaceId !== action.spaceId || seat.expiresAt <= Date.now()) throw new DashboardError(401, "join_required");
     const access = await run(
       engine.api.default.issueAccessGrant({
@@ -60,7 +60,7 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
     response,
     env,
     `seat_${action.spaceId}`,
-    await seal({ userId: person.userId, sessionId: person.sessionId, spaceId: action.spaceId, episodeId, participantId: result.participant.id, generation: result.participant.generation, expiresAt: Date.now() + 86400000 }, env.WORKOS_COOKIE_PASSWORD, "owner-seat"),
+    await seal({ userId: person.userId, sessionId: person.sessionId, spaceId: action.spaceId, episodeId, participantId: result.participant.id, generation: result.participant.generation, expiresAt: Date.now() + 86400000 }, env.SESSION_SECRET, "owner-seat"),
     86400,
   );
   return response;
@@ -69,6 +69,6 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
 export async function viewerSeat(request: Request, env: DashboardEnvironment, person: Identity, spaceId: string, episodeId: string): Promise<string | null> {
   const encoded = readCookie(request, env, `seat_${spaceId}`);
   if (!encoded) return null;
-  const seat = seatSchema.parse(await unseal(encoded, env.WORKOS_COOKIE_PASSWORD, "owner-seat"));
+  const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
   return seat.userId === person.userId && seat.sessionId === person.sessionId && seat.spaceId === spaceId && seat.episodeId === episodeId && seat.expiresAt > Date.now() ? seat.participantId : null;
 }

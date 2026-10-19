@@ -2,87 +2,139 @@
 
 The static site uses named Cloudflare Pages Functions only under `/auth/*` and
 `/dashboard-api/*`. `server/` is imported only by those Functions. The production
-composition root imports WorkOS, never `tests/dashboard/fixture-provider.ts`.
+composition root imports `oauth.ts`, never `tests/dashboard/fixture-provider.ts`.
 There is no dashboard database or generic engine proxy. The production web build
-emits `dist/client/_worker.js` and its generated `_routes.json`, so the existing
-release archive includes the Functions while site/docs paths remain static.
+emits the advanced-mode directory `dist/client/_worker.js/` with an `index.js`
+entrypoint and its generated `_routes.json`. The release archive preserves this
+directory while site/docs paths remain static.
+
+## Build output
+
+`build:dashboard-functions` uses the lockfile's Wrangler 4.107.0 with
+`wrangler pages functions build --outdir dist/client/_worker.js`. Do not use
+`--outfile`: that flag writes a multipart upload envelope, not JavaScript, and
+`wrangler pages deploy` cannot compile it as a Pages worker. The dashboard suite
+requires the directory and `index.js`, syntax-checks every JavaScript module, and
+scans all those modules for fixture identity code. Both the Pages deployment and
+the web Release archive consume the same validated directory. The fixture e2e
+harness compiles named Functions separately; the OAuth smoke harness excludes
+`_worker.js` regardless of whether it is a file or directory.
 
 ## Browser contract
 
 Import DTOs and request schemas from `src/lib/dashboard/contracts.ts`.
 All responses, including errors and redirects, are `Cache-Control: no-store`.
-POST JSON with `Origin` equal to `DASHBOARD_ORIGIN` and `X-CSRF-Token` obtained
-from `GET /auth/session`. GET dashboard endpoints never refresh or provision.
-An expired session returns `RefreshRequiredDTO` (401) with a CSRF token derived
-from the still-valid signed binding cookie, so a new tab can bootstrap refresh
-without cached JS state. Follow it with `POST /auth/refresh`;
-retry a 503 later without discarding the cookie. A terminal refresh clears it.
-Serialize refresh in the UI; WorkOS owns its 30-second replay-grace semantics.
+POST JSON with `Origin` exactly equal to `DASHBOARD_ORIGIN` and `X-CSRF-Token`
+obtained from `GET /auth/session`. Apple is the only cross-site POST exception:
+its callback accepts only form data with `Origin: https://appleid.apple.com`,
+bound to an unexpired, provider-specific sealed login transaction and its state.
+All other mutation routes retain exact-Origin and session-bound CSRF checks.
 
-- `GET /auth/start?provider=google|apple&returnTo=/dashboard`: PKCE redirect.
-- `GET /auth/callback`: fixed code/state callback; clears the login transaction.
+- `GET /auth/start?provider=google|apple&returnTo=/dashboard`: provider redirect.
+  Google uses authorization code + S256 PKCE, state and nonce, scopes
+  `openid email profile`. Apple uses code, state, nonce, scopes `name email`,
+  and `response_mode=form_post` (Apple does not support PKCE).
+- `GET /auth/callback/google`: code/state callback.
+- `POST /auth/callback/apple`: form code/state and optional first-sign-in `user`.
+  Both callbacks clear their own login transaction on success or failure.
 - `GET /auth/session`: profile plus session-bound CSRF token, no provider tokens.
-- `POST /auth/refresh`, `POST /auth/sign-out`: strict empty JSON object.
-  Sign-out revokes the provider session; clear this account's local bookmarks
-  when `clearLocalBookmarks` is true.
-- `GET /dashboard-api/home?cursor=...`: owned, unarchived Spaces and one batch live
-  read. `POST`: `HomeAction`.
+  An expired/invalid session returns 401 `sign_in_required`: sign in again.
+- `POST /auth/sign-out`: strict empty JSON object. Clears session and binding
+  cookies; clear this account's local bookmarks when `clearLocalBookmarks` is true.
+  This is local sign-out, not Google/Apple account logout or token revocation.
+- `GET /dashboard-api/home?cursor=...`: owned, unarchived Spaces and one batch
+  live read. `POST`: `HomeAction`.
 - `GET /dashboard-api/call?spaceId=...&cursor=...`: call, signed invite and Episode
   history. `POST`: `CallAction` (settings, rotate link, knocks, end for everyone).
-- `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode, recordings,
-  and attendance availability. `POST`: `PastSessionAction` (artifact URLs,
-  transcripts, export, deletion). Artifact URLs are short-lived; request again
-  on expiry. The caller never supplies storage keys.
-- `GET /dashboard-api/developer?keyCursor=...&webhookCursor=...`: keys and webhooks. `POST`:
-  `DeveloperAction`. Secret-creation/rotation returns only the newly minted
-  user-requested secret; list/read DTOs cannot contain secrets. Webhook update
-  and deletion require the displayed revision and a stable idempotency key.
+- `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
+  recordings and attendance. `POST`: `PastSessionAction` (artifact URLs,
+  transcripts, export, deletion). Artifact URLs expire; request again on expiry.
+- `GET /dashboard-api/developer?keyCursor=...&webhookCursor=...`: keys and webhooks.
+  `POST`: `DeveloperAction`. Secret mutations return only the newly minted,
+  user-requested secret. Updates require revision and stable idempotency keys.
 
-Joined-only bookmarks use the existing public invite/call client. Owner `join`
-prepares the Entrance, creates/reuses a live Episode and admits an owner Guest.
-`refresh-access` takes only a Space ID and optional current media token (absence requests a replacement media connection): the
-Participant identity and generation come from a session-bound, purpose-sealed
-HttpOnly seat cookie. No action accepts an arbitrary Participant ID or promotes
-a joined-only call to owned status.
-The server does not return Tenant configuration, WorkOS tokens, service bearer,
-provider credentials, recording storage keys, webhook events or raw responses.
+Joined-only bookmarks use the public invite/call client. Owner `join` prepares
+an Entrance, creates/reuses a live Episode and admits an owner Guest.
+`refresh-access` is media reconnection, not an identity-session refresh: it takes
+only a Space ID and optional current media token. Participant identity and
+generation come from a session-bound, purpose-sealed HttpOnly seat cookie.
+Nothing accepts arbitrary Participant IDs or promotes joined-only calls.
+The server never returns provider tokens, credentials, Tenant configuration,
+service bearer, storage keys, webhook events or raw engine responses.
 
-## Bindings
+## Identity and session
 
-Set non-secret vars per Pages environment in `wrangler.toml` / Pages settings:
-`CHALK_ENVIRONMENT` (`local|test|staging|production`), `CHALK_API_ORIGIN`,
-`DASHBOARD_ORIGIN` (exact origin, no trailing slash), `WORKOS_CLIENT_ID`,
-`WORKOS_REDIRECT_URI` (exactly `<DASHBOARD_ORIGIN>/auth/callback`), and
-`DASHBOARD_IDENTITY_PROVIDER=workos`.
+Both providers' ID tokens are verified with WebCrypto against their HTTPS JWKS,
+including RS256 signature, issuer, audience (and authorized party), expiry and
+nonce. Keys are fetched on exchange, not on dashboard reads. Google's `sub` and
+Apple's `sub` are the identities; email is profile data, not an account key.
+Apple's client secret is an ES256 JWT signed from the PKCS#8 key with a five-minute
+expiry, `iss=APPLE_TEAM_ID`, `sub=APPLE_SERVICES_ID`, and
+`aud=https://appleid.apple.com`.
 
-Provision these **secret** bindings from 1Password vault `dev` into Pages;
-never commit values, print them, or expose them through `VITE_*`:
+Our AES-GCM sealed session contains provider, subject, a random session ID,
+display name, email, optional avatar URL and an absolute expiry 30 days after
+sign-in. There are no refresh tokens, rolling sessions or refresh endpoint.
+Provider outages do not invalidate an already issued session. Provider-side
+revocation is not checked during this 30-day lifetime. Signing out removes the
+browser cookie; a copied cookie remains valid until its absolute expiry or a
+`SESSION_SECRET` rotation. This is the deliberate stateless-session trade-off.
 
-- `WORKOS_API_KEY`: environment's WorkOS server key.
-- `WORKOS_COOKIE_PASSWORD`: >=32 random characters; rotating it invalidates login
-  transactions, CSRF bindings and all sealed sessions.
-- `DASHBOARD_SERVICE_TOKEN`: engine's dedicated, explicitly scoped service bearer,
-  not System and not a user's API key. Tenant identity is always resolved from
-  `workos:<CHALK_ENVIRONMENT>:<WorkOS user ID>` on each request, never browser input.
+HTTPS session/binding cookies are host-only `__Host-chalk_*` with
+`Secure; HttpOnly; SameSite=Lax; Path=/`. The ten-minute Apple login cookie alone
+uses `SameSite=None; Secure`, so the browser sends it on Apple's cross-site POST.
+Google's login cookie stays Lax. Loopback HTTP local/test uses `local_chalk_*`
+names, never production names. Cookie purposes are authenticated separately.
 
-Configure WorkOS Google and Apple connections only, the fixed callback URI, and
-access-token lifetime **at most 300 seconds**. The adapter rejects longer-lived
-JWTs. Sensitive operations additionally query WorkOS's online session list;
-revoked/expired sessions cannot create or rotate credentials, delete resources,
-archive a call, or end an Episode. A WorkOS outage fails closed for these actions. Webhook updates are also online-
-gated because changing their destination can redirect sensitive deliveries.
-No D1, KV, R2 or other dashboard storage bindings are required.
+Apple sends name only on the first authorization. When present, it is kept in
+the sealed session. A repeat sign-in started from a valid same-account session
+retains it if Apple omits it. With no database, it cannot be recovered after
+cookie loss/expiry; email is the fallback. Google and Apple sign-ins are separate
+accounts even if their emails match. There is no account linking or migration.
 
-HTTPS uses `__Host-chalk_session` and similarly prefixed login/binding cookies,
-with `Secure; HttpOnly; SameSite=Lax; Path=/` and no Domain attribute. Explicit
-loopback HTTP local/test configurations use `local_chalk_*`, never the production
-cookie names. Login transaction and CSRF binding cookies are AES-GCM sealed with
-separate authenticated purposes. Both have bounded expiry.
+## Runtime bindings
+
+Set all values per Pages environment; never expose credentials through `VITE_*`.
+`config.ts` validates these bindings:
+
+| Value                         | Meaning                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `CHALK_ENVIRONMENT`           | `local`, `test`, `staging`, or `production`; identity namespace          |
+| `CHALK_API_ORIGIN`            | Engine URL; HTTPS required outside local/test                            |
+| `DASHBOARD_ORIGIN`            | Exact dashboard origin, no trailing slash; HTTPS outside local/test      |
+| `DASHBOARD_IDENTITY_PROVIDER` | `oauth` (default) or `fixture` (local/test only)                         |
+| `GOOGLE_CLIENT_ID`            | Google's web OAuth client ID                                             |
+| `GOOGLE_CLIENT_SECRET`        | Secret web-client credential                                             |
+| `APPLE_SERVICES_ID`           | Apple's web Services ID, not an app bundle ID                            |
+| `APPLE_TEAM_ID`               | Apple developer team ID                                                  |
+| `APPLE_KEY_ID`                | ID of the Sign in with Apple signing key                                 |
+| `APPLE_PRIVATE_KEY`           | Secret PKCS#8 PEM Apple key (preserve actual newlines)                   |
+| `SESSION_SECRET`              | Secret, at least 32 random characters; rotation invalidates all cookies  |
+| `DASHBOARD_SERVICE_TOKEN`     | Secret constrained engine service bearer, never System or a user API key |
+
+The fixture still needs placeholder provider values but never uses credentials.
+Production Functions reject fixture mode even with a local environment setting.
+No D1, KV, R2 or other dashboard storage binding is needed.
+
+Callback URLs are derived from `DASHBOARD_ORIGIN`, never accepted from a caller:
+
+| Environment | Google                                               | Apple                                               |
+| ----------- | ---------------------------------------------------- | --------------------------------------------------- |
+| Local       | `http://localhost:8788/auth/callback/google`         | `http://localhost:8788/auth/callback/apple`         |
+| Staging     | `https://staging.chalkmeet.com/auth/callback/google` | `https://staging.chalkmeet.com/auth/callback/apple` |
+| Production  | `https://chalkmeet.com/auth/callback/google`         | `https://chalkmeet.com/auth/callback/apple`         |
+
+Register Google's exact authorized redirect URIs. Set the Google consent screen
+app name/domain to Chalk/chalkmeet.com, verify the domain, and publish the consent
+screen for real users. Register Apple's web domains and HTTPS return URLs on the
+Services ID. Apple rejects HTTP/localhost return URLs: the local Apple URL above
+is only for fixture coverage; real Apple smoke must use staging or production
+HTTPS. Apple's cross-site login cookie also requires HTTPS.
 
 ## Engine integration
 
 Every operation uses the generated `@q9labsai/chalk-client/effect` client.
-`resolveTenant` finds the authenticated user's `workos:<environment>:<user id>`
+`resolveTenant` finds the authenticated user's `<provider>:<environment>:<sub>`
 external ID. Only the sign-in callback provisions on an authoritative 404;
 429s never cause creation. Dashboard API errors return `engine_rate_limited`,
 `retryable: true`, `retryAfterSeconds: 60`, and `Retry-After: 60`. Callback failures
@@ -107,59 +159,58 @@ is used by Pages. Key creation accepts only the explicit non-Tenant scope enum;
 rotation sends only expiry, never scopes. The engine also refuses rotation of
 legacy keys containing `tenants:write`.
 
-## Local real-engine proof
+## Verification
 
-`bash apps/web/tests/dashboard/real-engine.sh` prepares isolated PostgreSQL,
-runs migrations and the real local API, then drives the named Pages Functions
-in workerd through `wrangler pages dev` using only the fixture identity provider.
-Run heavy checks through `scripts/gates/remote.sh`; PostgreSQL's `psql` client
-must be installed on that disposable box. No WorkOS or vendor secrets are needed.
-The transport records requests and can inject a 429, but forwards all successful
-operations to the production API. Ended Episode/provider Artifact rows are seeded
-in PostgreSQL; no recording or transcription vendor is called, and Sync is not
-needed for those ended-session reads or cross-account rejection checks.
-
-The proof covers two account bootstraps, repeat binding, every named foreign-ID
-mutation, foreign Space/Episode reads, persisted Space rename/admission and
-Allowed websites, seat attendance, Origin/CSRF, refresh/revocation, online-gated
-secret creation/rotation, response credential redaction, and callback throttling.
-The owner join path uses generated direct admission only after resolving the
-signed-in person's Tenant. Its server-derived UUIDv8 Participant ID hashes a
-versioned domain, Tenant, owner, Space, Episode and idempotency key. Retrying a
-join with the same key returns the same seat; a deliberate new join uses a new
-key. Guests and invites retain policy admission. The proof checks owner grants
-for open and knock Episodes, guest policy waiting and same-key replay. Ephemeral
-Ed25519 signing keys and a strict local Cloudflare session-allocation endpoint
-exercise actual API signing without vendor credentials. The completed leave
-state for a new-seat check is a database fixture, not a Sync handshake.
-Real Google/Apple WorkOS setup, live Sync and vendor media remain separate
-operator smoke checks.
-
-## Real WorkOS smoke check
-
-Runs the real named Pages Functions and local engine against **WorkOS Staging**
-(Google and Apple), not the fixture identity provider. Build the web assets first.
-From the repository root:
+Run heavy checks on the M4 (never a paid timing box):
 
 ```sh
-DASHBOARD_ENGINE_DEADLINE_SECONDS=1800 DASHBOARD_WORKOS_SMOKE_SECONDS=1800 bash apps/web/tests/dashboard/real-engine.sh bash apps/web/tests/dashboard/workos-smoke.sh
+CHALK_REMOTE_NEEDS_BROWSER=1 bash scripts/gates/remote.sh -- bash apps/web/tests/dashboard/check.sh
+CHALK_REMOTE_NEEDS_BROWSER=1 bash scripts/gates/remote.sh -- pnpm exec bash scripts/gates/commit.sh --base origin/master
 ```
 
-Open `http://localhost:8788`. Only `q9labs.ai@gmail.com` can use Google while the
-consent screen is in Testing. The script injects the Staging API key with
-`2password run`, writes secret bindings only into a private temporary directory
-outside the repo, and generates a fresh cookie password per run. Ctrl-C or the
-30-minute deadline stops Pages and the harness's API, vendor fixture, Redis and
-Postgres. Never use production credentials. The engine remains disposable local
-state; this does not prove live Sync or vendor media. Shell checks prove the
-signed-out 401 and Google/Apple authorization redirects; completing sign-in and
-dashboard actions requires a browser operator.
+The dashboard check builds the production worker, proves fixture code is absent,
+checks types and local-key/JWKS token verification, then runs isolated PostgreSQL,
+the real API and real named Pages Functions in workerd. Successful engine calls
+are real; the recording transport injects only 429 failures. Fixture identity
+covers both providers, state/nonce/PKCE mismatches, Apple POST route/Origin
+restrictions, callback replay, expiry, sign-out, A/B resource isolation,
+Origin/CSRF, Tenant idempotency, response redaction and throttling. RSA keys are
+generated locally and served over HTTP for bad-signature/audience/issuer/expiry/
+nonce cases. The Apple ES256 client-secret signature, header and claims are checked.
+No real provider or media vendor credentials are needed.
 
-`real-engine.sh` accepts an optional final command (arguments are preserved); no
-arguments still runs exactly `pnpm --filter web run test:dashboard`. Its watchdog
-uses `DASHBOARD_ENGINE_DEADLINE_SECONDS` (default 240 seconds). The smoke server
-uses `DASHBOARD_WORKOS_SMOKE_SECONDS` (default 1800 seconds); set both for a longer
-operator session.
+## Manual real-provider smoke
+
+After the lead registers redirects/domains and installs all runtime bindings:
+
+1. On staging HTTPS, open `/auth/start?provider=google`. Confirm Chalk's consent
+   screen, complete sign-in, and check `/auth/session` and `/dashboard-api/home`
+   return 200 with `Cache-Control: no-store`. Repeat sign-in: same Tenant.
+2. Start Apple from a fresh browser profile with `/auth/start?provider=apple`.
+   Complete Apple ID/2FA. In Network verify the callback is a POST to
+   `/auth/callback/apple`, followed by `/dashboard`. Check name/email/session and
+   Home; first authorization should retain name. Reauthorize from that session
+   to verify retention when Apple omits the first-sign-in profile.
+3. With both sign-ins using the same email, verify separate dashboard accounts.
+   Read the session's CSRF token, POST `{}` to `/auth/sign-out` with exact Origin
+   and `X-CSRF-Token`, and confirm the cookies disappear and session returns 401.
+4. Rejected consent/state must return the provider-specific sign-in error, never
+   a dashboard session. Record only status/route/request ID, not codes or cookies.
+5. Repeat steps on production after promotion with its own runtime values.
+
+For a local Google-only smoke, build web, inject the seven OAuth values through
+`2password run --env NAME=op://…` (or `2password env run` with an untracked
+reference template), then run the owned, bounded local stack:
+
+```sh
+DASHBOARD_ENGINE_DEADLINE_SECONDS=1800 DASHBOARD_OAUTH_SMOKE_SECONDS=1800 bash apps/web/tests/dashboard/real-engine.sh bash apps/web/tests/dashboard/oauth-smoke.sh
+```
+
+`oauth-smoke.sh` writes bindings only to a mode-0600 temporary `.dev.vars`, never
+CLI binding arguments. It owns and cleans up Pages on exit, owner loss or deadline.
+It creates an ephemeral session secret unless supplied; restarting invalidates
+local sessions. Apple is not smoke-tested on HTTP localhost. Live Sync and vendor
+media still need their separate operator checks.
 
 ## Failure evidence
 
@@ -173,7 +224,7 @@ retain their existing Axiom trace evidence as described in `docs/observability.m
 
 ## Allowed websites
 
-Developer GET includes `allowedWebsites`. POST `allowed-websites` reads only that setting; POST `set-allowed-websites` takes `origins` and requires an online WorkOS session. Both use the generated public Tenant operations under the authenticated Tenant. Updates accept only HTTPS origins or `http://localhost:<port>` (no credentials, paths, queries or fragments), deduplicate origins, and always retain `https://chalkmeet.com` within the API's 32-origin limit. First sign-in provisions that permanent origin and the environment's dashboard origin. Sign-up is open: no allowlist or waitlist.
+Developer GET includes `allowedWebsites`. POST `allowed-websites` reads only that setting; POST `set-allowed-websites` takes `origins`. Both use the generated public Tenant operations under the authenticated Tenant. Updates accept only HTTPS origins or `http://localhost:<port>` (no credentials, paths, queries or fragments), deduplicate origins, and always retain `https://chalkmeet.com` within the API's 32-origin limit. First sign-in provisions that permanent origin and the environment's dashboard origin. Sign-up is open: no allowlist or waitlist.
 
 ## Webhook edits
 

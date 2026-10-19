@@ -28,9 +28,7 @@ export async function developerPage(engine: Engine, cursors: { keyCursor?: strin
     nextWebhookCursor: webhooks.page.next_cursor,
   };
 }
-export function requiresOnline(action: { action: string }): boolean {
-  return ["set-allowed-websites", "create-key", "rotate-key", "revoke-key", "create-webhook", "update-webhook", "rotate-webhook-secret", "delete-webhook", "delete-transcript", "end-for-everyone", "archive-call"].includes(action.action);
-}
+
 export async function developerMutation(engine: Engine, action: DeveloperAction) {
   const api = engine.api.default;
   const params = { tenant_id: engine.tenantId };
