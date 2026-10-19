@@ -9,7 +9,7 @@ type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" |
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
-type ExitPhase = "left" | "episode-ended" | "failed";
+type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 export function SpacePage({
   slug,
   navigatePublicSpace = replacePublicSpaceHistory,
@@ -404,7 +404,9 @@ function LocalSpace({
     [onTerminal, release],
   );
   useEffect(() => {
-    if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.message);
+    if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
+    else if (connection.removedByHost) releaseFromLifecycle("removed");
+    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.message);
   }, [connection, releaseFromLifecycle]);
 
   useEffect(() => {
@@ -452,7 +454,10 @@ function LocalSpace({
         spaceName={spaceName}
         inviteLink={inviteLink}
         onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
-        onLeft={() => releaseFromLifecycle("left")}
+        onLeft={() => {
+          const latest = client.getSnapshot().connection;
+          releaseFromLifecycle(latest.episodeEnded ? "episode-ended" : latest.removedByHost ? "removed" : "left");
+        }}
         onJoined={() => {
           intentionallyLeft.current = false;
         }}

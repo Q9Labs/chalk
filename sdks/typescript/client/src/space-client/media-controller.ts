@@ -1,4 +1,4 @@
-import { Clock, Context, Effect, Layer, Scope, Semaphore } from "effect";
+import { Clock, Context, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
@@ -337,64 +337,68 @@ class MediaControllerRuntime implements MediaControllerEffects {
           this.#serialize(
             "screen",
             this.#connection.runCommand((ports) => {
-              let stream: MediaStream | null = null;
               let track: MediaStreamTrack | null = null;
               let prepared = false;
               return Effect.suspend(() => {
                 if (this.#tracks.has("screen") && options === undefined) {
                   return Effect.void;
                 }
-                return foreign(() => this.#selection.getDisplayMedia(displayMediaConstraints(options))).pipe(
-                  Effect.map((captured) => {
-                    stream = captured;
-                    this.#assertActivePorts(ports, "startScreenShare");
-                    track = requireDisplayVideoTrack(captured);
-                    return { stream: captured, track };
-                  }),
-                  Effect.tap(() => {
-                    const previous = this.#tracks.get("screen");
-                    if (!previous) return Effect.void;
-                    return foreign(() => ports.sync.setScreenShareEnabled(false)).pipe(
-                      Effect.andThen(this.#clearScreenAudio(ports.media)),
-                      Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
-                      Effect.tap(() =>
+                return Effect.acquireUseRelease(
+                  foreign(() => this.#selection.getDisplayMedia(displayMediaConstraints(options))).pipe(Effect.mapError((cause) => captureError(cause, "startScreenShare", "Screen sharing permission was denied"))),
+                  (stream) =>
+                    Effect.sync(() => {
+                      this.#assertActivePorts(ports, "startScreenShare");
+                      track = requireDisplayVideoTrack(stream);
+                      return { stream, track };
+                    }).pipe(
+                      Effect.tap(() => {
+                        const previous = this.#tracks.get("screen");
+                        if (!previous) return Effect.void;
+                        return foreign(() => ports.sync.setScreenShareEnabled(false)).pipe(
+                          Effect.andThen(this.#clearScreenAudio(ports.media)),
+                          Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              this.#assertActivePorts(ports, "startScreenShare");
+                              this.#tracks.delete("screen");
+                              previous.stop();
+                            }),
+                          ),
+                        );
+                      }),
+                      Effect.tap(({ stream: captured, track: screenTrack }) =>
                         Effect.sync(() => {
-                          this.#assertActivePorts(ports, "startScreenShare");
-                          this.#tracks.delete("screen");
-                          previous.stop();
+                          const audio = captured.getAudioTracks()[0];
+                          for (const extra of captured.getAudioTracks().slice(1)) extra.stop();
+                          ports.media.prepareLocalTrack("screen", screenTrack);
+                          prepared = true;
+                          this.#tracks.set("screen", screenTrack);
+                          this.#screenAudioTrack = audio ?? null;
+                          if (audio) {
+                            ports.media.prepareLocalTrack("screen_audio", audio);
+                            audio.addEventListener("ended", () => this.#handleScreenAudioEnded(audio, ports));
+                          }
+                          screenTrack.addEventListener("ended", () => this.#handleScreenEnded(screenTrack));
+                          this.#screenEndedPending = false;
+                          this.#publish();
                         }),
                       ),
-                    );
-                  }),
-                  Effect.tap(({ stream: captured, track: screenTrack }) =>
-                    Effect.sync(() => {
-                      const audio = captured.getAudioTracks()[0];
-                      for (const extra of captured.getAudioTracks().slice(1)) extra.stop();
-                      ports.media.prepareLocalTrack("screen", screenTrack);
-                      prepared = true;
-                      this.#tracks.set("screen", screenTrack);
-                      this.#screenAudioTrack = audio ?? null;
-                      if (audio) {
-                        ports.media.prepareLocalTrack("screen_audio", audio);
-                        audio.addEventListener("ended", () => this.#handleScreenAudioEnded(audio, ports));
-                      }
-                      screenTrack.addEventListener("ended", () => this.#handleScreenEnded(screenTrack));
-                      this.#screenEndedPending = false;
-                      this.#publish();
-                    }),
-                  ),
-                  Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(true))),
+                      Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(true))),
 
-                  Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "startScreenShare"))),
+                      Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "startScreenShare"))),
 
-                  Effect.asVoid,
-                  Effect.catch((cause) =>
-                    (prepared ? this.#clearScreenAudio(ports.media) : Effect.void).pipe(
-                      Effect.ignore,
-                      Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
-                      Effect.ensuring(Effect.sync(() => stopStream(stream))),
+                      Effect.asVoid,
+                      Effect.catch((cause) =>
+                        (prepared ? this.#clearScreenAudio(ports.media) : Effect.void).pipe(
+                          Effect.ignore,
+                          Effect.andThen(this.#rollbackCapture({ action: "startScreenShare", cause, fallback: Effect.sync(() => stopStream(stream)), media: ports.media, permissionMessage: "Screen sharing permission was denied", prepared, source: "screen", track })),
+                        ),
+                      ),
                     ),
-                  ),
+                  (stream, exit) =>
+                    Effect.sync(() => {
+                      if (Exit.isFailure(exit)) stopStream(stream);
+                    }),
                 );
               });
             }),
