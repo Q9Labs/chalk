@@ -21,6 +21,8 @@ class GitHubRetry(unittest.TestCase):
         root = Path(temporary.name)
         self.count = root / 'calls'
         self.pids = root / 'pids'
+        self.ready = root / 'ready'
+        self.ready.mkdir()
         gh = root / 'gh'
         gh.write_text(f'#!{sys.executable}\n' + r'''
 import json
@@ -36,6 +38,9 @@ count.write_text(str(attempt))
 with open(os.environ['GH_FAKE_PIDS'], 'a') as pids:
     pids.write(f'{os.getpid()}\n')
 if os.environ.get('GH_FAKE_HANG') == '1':
+    if attempt == 1:
+        # Exercise startup that takes longer than the call's 0.3-second timeout.
+        time.sleep(0.4)
     child = os.fork()
     if child == 0:
         if os.environ.get('GH_FAKE_IGNORE_TERM') == '1':
@@ -44,6 +49,7 @@ if os.environ.get('GH_FAKE_HANG') == '1':
         with open(os.environ['GH_FAKE_PIDS'], 'a') as pids:
             pids.write(f'{os.getpid()}\n')
         print('partial response', flush=True)
+        Path(os.environ['GH_FAKE_READY'], str(os.getppid())).touch()
         time.sleep(5)
         os._exit(0)
     signal.alarm(5)
@@ -64,6 +70,7 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
             'GITHUB_REPOSITORY': 'example/repository',
             'GH_FAKE_COUNT': str(self.count),
             'GH_FAKE_PIDS': str(self.pids),
+            'GH_FAKE_READY': str(self.ready),
             'GH_FAKE_FAILURES': '3',
             'GH_FAKE_ERROR': 'gh: Server Error (HTTP 502)',
         })
@@ -73,11 +80,23 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
 
     def test_hanging_calls_terminate_the_process_tree(self):
         self.github = GitHub(timeout=0.3)
+        communicate = subprocess.Popen.communicate
+
+        def communicate_when_ready(process, *args, **kwargs):
+            if kwargs.get('timeout') == self.github.timeout:
+                # Both PIDs and the partial response must exist before timing the hang.
+                deadline = time.monotonic() + 3
+                while not (self.ready / str(process.pid)).exists():
+                    self.assertLess(time.monotonic(), deadline, 'gh fixture did not become ready')
+                    time.sleep(0.005)
+            return communicate(process, *args, **kwargs)
+
         for method, attempts, ignore_term in ((method, attempts, ignore_term)
                 for method, attempts in (('request', 4), ('pages', 4), ('post', 1))
                 for ignore_term in ('0', '1')):
             with self.subTest(method=method, ignore_term=ignore_term), patch.dict(
-                    os.environ, GH_FAKE_HANG='1', GH_FAKE_IGNORE_TERM=ignore_term), patch('github_release.backoff_sleep') as sleep:
+                    os.environ, GH_FAKE_HANG='1', GH_FAKE_IGNORE_TERM=ignore_term), patch('github_release.backoff_sleep') as sleep, patch.object(
+                    subprocess.Popen, 'communicate', communicate_when_ready):
                 self.count.unlink(missing_ok=True)
                 self.pids.unlink(missing_ok=True)
                 with self.assertRaises(subprocess.CalledProcessError) as caught:
