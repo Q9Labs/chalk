@@ -100,7 +100,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 
       <span className="chalk-shell-phone">
         <DockLayout layout={props.layout ?? "focus"} onLayoutChange={props.onLayoutChange ?? (() => {})}>
-          <button type="button" className="chalk-sheet-row" aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
+          <button type="button" data-call-link-trigger className="chalk-sheet-row" aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
             <CallLinkIcon />
             <span>{props.onCallLinkToggle ? linkLabel : "Copy link"}</span>
           </button>
@@ -157,7 +157,17 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           )}
         />
       ) : null}
-      <span className="chalk-shell-corner chalk-shell-people">{iconButton(linkLabel, <CallLinkIcon />, props.onCallLinkToggle ?? copyLink, props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined)}</span>
+      <span className="chalk-shell-corner chalk-shell-people">
+        <ChalkTooltip
+          trigger={
+            <ChalkIconButton size="lg" data-call-link-trigger aria-label={linkLabel} aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
+              <CallLinkIcon />
+            </ChalkIconButton>
+          }
+        >
+          {linkLabel}
+        </ChalkTooltip>
+      </span>
       <span className="chalk-shell-corner chalk-shell-chat">{chat}</span>
     </div>
   );

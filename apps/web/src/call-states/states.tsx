@@ -1,3 +1,4 @@
+import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
 import { CARD_STATES } from "./card";
@@ -39,6 +40,7 @@ export const CALL_STATES: readonly CallState[] = [
   ...STAGE_STATES,
   ...CARD_STATES,
   ...STATES_LANE,
+  ...INTEGRATION_STATES,
   { id: "foundation-motion-dark", title: "Foundation motion Dark", render: () => <FoundationKit scheme="dark" initialNotice={false} /> },
   { id: "foundation-motion-light", title: "Foundation motion Light", render: () => <FoundationKit scheme="light" initialNotice={false} /> },
   { id: "foundation-kit-dark", title: "Foundation primitives Dark", render: () => <FoundationKit scheme="dark" /> },

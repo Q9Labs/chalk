@@ -65,7 +65,7 @@ try {
     await page.keyboard.press("Enter");
   } else {
     await page.getByRole("button", { name: "More options", exact: true }).click();
-    await page.getByRole("button", { name: "Participants", exact: true }).click();
+    await page.getByRole("button", { name: "People", exact: true }).click();
   }
   const people = page.getByRole("complementary", { name: "Participants list", exact: true });
   await people.waitFor();
@@ -74,7 +74,7 @@ try {
     await person.scrollIntoViewIfNeeded();
     assert.equal(await person.isVisible(), true, "People reaches the first, middle and last people without grid paging");
   }
-  await page.getByRole("button", { name: "Close participants panel", exact: true }).click();
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
   await page.goto(`${origin}/call-states.html?state=duo`);
   const phoneStage = page.getByTestId("stage");
   assert.equal(await page.locator('[data-part="dock-more-glyph"]').getAttribute("d"), "M5 12h.01M12 12h.01M19 12h.01");
