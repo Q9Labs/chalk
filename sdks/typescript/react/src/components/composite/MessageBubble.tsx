@@ -1,6 +1,6 @@
 import { CHALK_REACTIONS, type ChatMessage, type ChatReactionInput, type ChatAttachment, type ChatReadReceipt } from "@q9labsai/chalk-client";
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon, Download01Icon } from "../../utils/icons";
+import { ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
@@ -326,7 +326,9 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
             </span>
             {photo ? (
               <a className="call-photo-viewer-control" href={resolvedUrls.get(photo.attachmentId)} download={photo.fileName} target="_blank" rel="noopener noreferrer" aria-label={`Download ${photo.fileName}`}>
-                <Download01Icon />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" />
+                </svg>
               </a>
             ) : null}
             <button type="button" className="call-photo-viewer-control" aria-label="Close photo viewer" onClick={closePhotoViewer}>

@@ -3,8 +3,7 @@ import type { ChatAttachment, ChatReadReceipt, ChatSendInput, ChatUploadFile, Ch
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChat, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
-import { SentIcon } from "../../utils/icons";
-import { Cancel01Icon, Upload01Icon } from "../../utils/icons";
+import { Cancel01Icon } from "../../utils/icons";
 import { Button } from "@q9labsai/chalk-ui";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { MessageBubble } from "./MessageBubble";
@@ -410,7 +409,9 @@ export const ChatPanelSurface = React.memo(
               <>
                 {!pickChatFiles ? <input ref={fileInputRef} type="file" multiple className="sr-only" aria-label="Choose attachments" accept={CHALK_CHAT_ATTACHMENT_MIME_TYPES.join(",")} onChange={(event) => selectFiles(event.target.files)} /> : null}
                 <Button type="button" variant="ghost" size="icon" className="call-attach-button" disabled={disabled || sending || pickingFiles || stagedFiles.length >= CHALK_CHAT_ATTACHMENT_LIMITS.maximumPerMessage} onClick={() => void chooseFiles()} aria-label="Attach files">
-                  <Upload01Icon className="h-5 w-5" />
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20.5 11.2l-8.4 8.4a5 5 0 0 1-7.1-7.1l8.4-8.4a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4l7.7-7.7" />
+                  </svg>
                 </Button>
               </>
             ) : null}
@@ -430,7 +431,9 @@ export const ChatPanelSurface = React.memo(
               rows={1}
             />
             <Button type="button" size="icon" className="call-send-button" disabled={(!draft.trim() && stagedFiles.length === 0) || disabled || sending || pickingFiles} onClick={() => void send()} aria-label="Send message">
-              <SentIcon className="h-5 w-5" />
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
             </Button>
           </div>
         </div>

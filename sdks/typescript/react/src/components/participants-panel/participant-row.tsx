@@ -2,7 +2,7 @@ import type { ParticipantListParticipant, ParticipantListVariant } from "./Parti
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useState, useRef, useEffect } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { MoreVerticalIcon, MicrophoneOff01Icon, VideoOffIcon, Edit02Icon } from "../../utils/icons";
+import { MicrophoneOff01Icon, VideoOffIcon, Edit02Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";
 import { ParticipantOptionsMenu } from "./participant-options-menu";
@@ -122,7 +122,9 @@ export function ParticipantRow({
             }}
           >
             <Popover.Trigger className={cn("call-person-options", optionsButtonClassName)} aria-label={`Options for ${participant.displayName}`}>
-              <MoreVerticalIcon className="h-4 w-4" />
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h.01M12 12h.01M19 12h.01" />
+              </svg>
             </Popover.Trigger>
             <Popover.Portal container={rootRef.current?.closest<HTMLElement>("[data-chalk]") ?? undefined}>
               <Popover.Positioner side="bottom" align="end" sideOffset={6} collisionPadding={8} className="chalk-popover-positioner">
