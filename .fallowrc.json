@@ -11,6 +11,7 @@
     "apps/web/scripts/capture-call-states.mjs",
     "apps/web/scripts/capture-join-sequence.mjs",
     "apps/web/scripts/verify-call-layouts.mjs",
+    "apps/web/scripts/verify-call-integration.mjs",
     "e2e.config.ts",
     "tests/*.e2e.ts",
     "**/*.test.ts",

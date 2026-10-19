@@ -4,7 +4,7 @@ import { ThemeProvider } from "../lib/theme-context";
 import { SpacePage } from "../components/space/SpacePage";
 import "../styles.css";
 
-const path = "/space/design-lab?entry=dashboard&name=Ada&devices=off";
+const path = "/space/design-lab?name=Ada#spaceInviteToken=cspi1.fixture";
 history.replaceState({}, "", path);
 const rootRoute = createRootRoute({
   component: () => (

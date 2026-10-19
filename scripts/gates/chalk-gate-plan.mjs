@@ -495,7 +495,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], build: ["build", "publint", "attw"] };
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests", "call-performance", "call-leaks"], build: ["build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";
