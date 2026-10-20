@@ -650,6 +650,7 @@ from space_public_admission_requests
 where tenant_id = $1
   and space_id = $2
   and (not $3::boolean or state = $4::text)
+  and (not $3::boolean or state <> 'pending' or expires_at > now())
 order by requested_at, request_handle
 limit $5::integer
 `

@@ -35,7 +35,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
       }),
     ),
     nextCursor: episodes.pagination.next_cursor,
-    knocks: knocks.requests.map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state })),
+    knocks: knocks.requests.filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now()).map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state })),
   };
 }
 export async function callMutation(engine: Engine, action: Exclude<CallAction, { action: "join" | "refresh-access" }>) {

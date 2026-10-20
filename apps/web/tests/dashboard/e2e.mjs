@@ -352,13 +352,42 @@ try {
     const pending = (await waitingCall.json()).knocks;
     assert.equal(pending.length, 1);
     assert.equal(pending[0].state, "pending");
+    const joined = await post(ada, "/dashboard-api/call", { action: "join", spaceId: knockingSpace, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    assert.equal(joined.status, 200, await joined.clone().text());
+    const episodeId = (await joined.json()).access.subject.episode_id;
+    const ended = await post(ada, "/dashboard-api/call", { action: "end-for-everyone", spaceId: knockingSpace, episodeId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    assert.equal(ended.status, 200, await ended.clone().text());
+    const afterEnd = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
+    assert.equal((await afterEnd.json()).knocks.length, 1, "Unexpired Space knocks remain valid after an Episode ends");
+    for (let index = 0; index < 50; index++) {
+      const stale = await fetch(`${apiOrigin}/v1/public/space-invite-arrivals`, {
+        method: "POST",
+        headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ space_invite_token: inviteToken, display_name: `Expired guest ${index}` }),
+      });
+      assert.equal(stale.status, 201, await stale.clone().text());
+    }
+    sql(`update space_public_admission_requests set requested_at=now()-interval '10 minutes', expires_at=now()-interval '1 second' where space_id='${knockingSpace}' and request_handle<>'${pending[0].handle}'`);
+    const actionable = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
+    assert.deepEqual(
+      (await actionable.json()).knocks.map((knock) => knock.handle),
+      [pending[0].handle],
+      "Expired knocks cannot fill the engine list limit and hide a valid request",
+    );
+    sql(`update space_public_admission_requests set expires_at=now()-interval '1 second' where space_id='${knockingSpace}'`);
+    const raw = await fetch(`${apiOrigin}/v1/tenants/${firstTenant}/spaces/${knockingSpace}/public-admission-requests?state=pending`, { headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret" } });
+    assert.equal(raw.status, 200);
+    assert.equal((await raw.json()).requests.length, 0, "Engine excludes expired pending knocks before its list limit");
+    const expired = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
+    assert.deepEqual((await expired.json()).knocks, [], "Dashboard filters expired knocks at the server boundary");
+    sql(`update space_public_admission_requests set expires_at=now()+interval '5 minutes' where space_id='${knockingSpace}'`);
     const decisionKey = crypto.randomUUID();
     const decided = await post(ada, "/dashboard-api/call", { action: "deny-knock", spaceId: knockingSpace, requestHandle: pending[0].handle, idempotencyKey: decisionKey }, session.csrfToken);
     assert.equal(decided.status, 200, await decided.clone().text());
     const afterDecision = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
     assert.deepEqual((await afterDecision.json()).knocks, []);
   }
-  console.log("PASS: real public-invite pending knocks disappear after denial");
+  console.log("PASS: real engine retains Space knocks after Episode end; dashboard hides expired and denied knocks");
 
   const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(keyResponse.status, 200, await keyResponse.clone().text());

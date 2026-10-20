@@ -1,0 +1,160 @@
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+
+export async function refreshChecks({ open, fixture, check, CALL }) {
+  const visible = (tab, selector) =>
+    tab
+      .locator(selector)
+      .waitFor({ state: "visible", timeout: 8000 })
+      .then(
+        () => true,
+        () => false,
+      );
+  const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
+  const screenshot = async (tab, name) => {
+    if (!process.env.DASHBOARD_REFRESH_ARTIFACTS) return;
+    await mkdir(process.env.DASHBOARD_REFRESH_ARTIFACTS, { recursive: true });
+    await tab.screenshot({ path: resolve(process.env.DASHBOARD_REFRESH_ARTIFACTS, `${name}.png`), fullPage: true });
+  };
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&liveParticipants=0&knocks=1" });
+    let navigations = 0;
+    tab.on("framenavigated", (frame) => {
+      if (frame === tab.mainFrame()) navigations++;
+    });
+    await screenshot(tab, "live");
+    await fixture("set?ending=1&knocks=0");
+    check("Call shows the ending session during engine shutdown", await visible(tab, '.srow a[aria-label^="Session"]'));
+    await fixture("set?end=1");
+    const ended = await visible(tab, '.srow a[aria-label*=", 7 min,"]');
+    await screenshot(tab, "ended");
+    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.orow").count()) === 0 && (await tab.locator(".srow").getByText("Recording", { exact: true }).count()) === 1);
+    await context.close();
+  }
+  {
+    // A pending request alone must keep refreshing, even without a live Episode.
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=1" });
+    await fixture("set?knocks=0");
+    const removed = await tab
+      .locator(".orow")
+      .waitFor({ state: "hidden", timeout: 8000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    check("Call drops a pending knock when the server stops returning it", removed);
+    await context.close();
+  }
+  {
+    const { tab, context } = await open("/dashboard", { set: "live=1" });
+    await fixture("set?live=0");
+    const ended = await tab
+      .locator(".live")
+      .waitFor({ state: "hidden", timeout: 8000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    const stopped = await reads("home");
+    await tab.waitForTimeout(5500);
+    check("Home clears Live without a reload and stops polling when idle", ended && (await reads("home")) === stopped);
+    await context.close();
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1" });
+    // Chromium headless has no background-tab lifecycle; dispatch the browser's visibility contract.
+    await tab.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const before = await reads("call");
+    await fixture("set?end=1");
+    await tab.waitForTimeout(5500);
+    check("hidden tab does not poll", (await reads("call")) === before);
+    await tab.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    check("visible tab refreshes immediately", await visible(tab, '.srow a[aria-label^="Session"]'));
+    await context.close();
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1" });
+    await fixture("set?fail=call");
+    const before = await reads("call");
+    await tab.waitForTimeout(5500);
+    check("failed background refresh keeps ready content without a skeleton or error", (await reads("call")) > before && (await tab.locator(".liveb").count()) === 1 && (await tab.locator('[aria-busy="true"],.errp').count()) === 0);
+    await fixture("set?fail=&end=1");
+    check("background refresh retries after failure", await visible(tab, '.srow a[aria-label^="Session"]'));
+    await context.close();
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1" });
+    await fixture("set?expire=1");
+    await tab.waitForURL("**/dashboard/sign-in**", { timeout: 8000 }).catch(() => {});
+    check("background 401 still redirects to sign-in", new URL(tab.url()).pathname === "/dashboard/sign-in");
+    await context.close();
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "live=1" });
+    await tab.getByRole("button", { name: "Show older sessions" }).click();
+    await tab.waitForTimeout(500);
+    const rows = await tab.locator(".srow").count();
+    await tab.waitForTimeout(5500);
+    check("Call refresh keeps previously opened history pages", rows === 9 && (await tab.locator(".srow").count()) === rows);
+    await context.close();
+  }
+  {
+    const { tab, context } = await open("/dashboard/developer");
+    await fixture("set?fail=webhook-deliveries");
+    await tab.getByRole("button", { name: "Send test event" }).click();
+    const failure = await tab
+      .getByText("Couldn’t load deliveries", { exact: true })
+      .waitFor({ state: "visible", timeout: 4000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    check("explicit non-polling reload still exposes its error and retry", failure && (await tab.getByRole("button", { name: "Try again" }).count()) === 1);
+    await context.close();
+  }
+  for (const action of ["deny", "admission", "rename"]) {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=1" });
+    let release;
+    let captured;
+    const held = new Promise((accept) => {
+      release = accept;
+    });
+    const started = new Promise((accept) => {
+      captured = accept;
+    });
+    await tab.route(
+      "**/dashboard-api/call?*",
+      async (route) => {
+        const response = await route.fetch();
+        captured();
+        await held;
+        await route.fulfill({ response });
+      },
+      { times: 1 },
+    );
+    // Force a read before the write, then deliver its stale response after the write.
+    await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    const raced = await Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
+    if (action === "deny") await tab.getByRole("button", { name: "Deny", exact: true }).click();
+    if (action === "admission") await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
+    if (action === "rename") {
+      await tab.getByRole("button", { name: "More actions for Q9 team" }).click();
+      await tab.getByRole("menuitem", { name: "Rename", exact: true }).click();
+      await tab.getByRole("dialog").getByRole("textbox").fill("Sample renamed call");
+      await tab.getByRole("button", { name: "Save name", exact: true }).click();
+    }
+    await tab.waitForTimeout(500);
+    release();
+    await tab.waitForTimeout(500);
+    const kept =
+      action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
+    check(`stale refresh cannot undo ${action}`, raced && kept);
+    await context.close();
+  }
+}

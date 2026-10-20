@@ -233,7 +233,7 @@ async function dashboard(request, response, page, url, entry) {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
       if (isLive && !query.cursor) episodes.unshift({ id: uuid(0x2ff), status: "active", startedAt: at(0, 10, 2), endedAt: null, participantCount: participants.length, recordings: [], recordingsNextCursor: null });
       const live = isLive ? { id: uuid(0x2ff), count: participants.length, participants } : null;
-      return send(response, 200, { call: callDTO(call), inviteUrl: inviteURL(call), episodes, live, nextCursor: start + 7 < own.length ? String(start + 7) : null, knocks: [] });
+      return send(response, 200, { call: callDTO(call), inviteUrl: inviteURL(call), episodes, live, nextCursor: start + 7 < own.length ? String(start + 7) : null, knocks: data.knocks ?? [] });
     }
     if (page === "past-session") {
       const episode = data.sessions.find((item) => item.id === query.episodeId);
@@ -276,6 +276,10 @@ async function dashboard(request, response, page, url, entry) {
     case "set-admission":
       call.admission = action.admission;
       return send(response, 200, { call: callDTO(call) });
+    case "approve-knock":
+    case "deny-knock":
+      data.knocks = data.knocks.filter((knock) => knock.handle !== action.requestHandle);
+      return send(response, 200, { ok: true });
     case "archive-call":
     case "restore-call":
       call.archived = action.action === "archive-call";
@@ -394,6 +398,17 @@ const server = createServer(async (request, response) => {
           } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
+          else if (key === "freshLive") {
+            accounts.hasan.live = true;
+            accounts.hasan.sessions = [];
+          } else if (key === "ending") {
+            accounts.hasan.live = false;
+            accounts.hasan.sessions = [{ id: uuid(0x2ff), status: "ending", startedAt: at(0, 10, 2), endedAt: null, people: ["Nora Patel"], kept: "none" }];
+          } else if (key === "end") {
+            accounts.hasan.live = false;
+            accounts.hasan.sessions = accounts.hasan.sessions.filter((episode) => episode.id !== uuid(0x2ff));
+            accounts.hasan.sessions.unshift({ id: uuid(0x2ff), status: "ended", startedAt: at(0, 10, 2), endedAt: at(0, 10, 9), people: ["Nora Patel"], kept: "recording" });
+          } else if (key === "knocks") accounts.hasan.knocks = value === "1" ? [{ handle: "sample-knock", name: "Sample guest", state: "pending", requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }] : [];
           else if (key === "liveParticipants") {
             if (!["0", "1", "3"].includes(value)) return fail(response, 400, "invalid_participant_count");
             state.liveParticipantCount = Number(value);

@@ -21,30 +21,65 @@ function useSignInRedirect(): () => void {
 
 type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
 
-/** Loads one page's data when `key` changes. A session that can't be refreshed goes to sign-in. */
-export function useLoad<T>(load: () => Promise<T>, key: string) {
+/** Loads a page; optional polling keeps ready data on screen, including after a failed refresh. */
+export function useLoad<T>(load: () => Promise<T>, key: string, refreshInterval?: (data: T) => number | undefined) {
   const [state, setState] = useState<Load<T>>({ kind: "loading" });
-  const [attempt, setAttempt] = useState(0);
   const toSignIn = useSignInRedirect();
-  const latest = useRef(load);
-  latest.current = load;
+  const latest = useRef({ load, polling: refreshInterval !== undefined });
+  const refresh = useRef<(options?: { force?: boolean; background?: boolean }) => void>(() => {});
+  latest.current = { load, polling: refreshInterval !== undefined };
   useEffect(() => {
     let current = true;
+    let revision = 0;
+    let pending = false;
     setState({ kind: "loading" });
-    latest.current().then(
-      (data) => current && setState({ kind: "ready", data }),
-      (error: unknown) => {
-        if (!current) return;
-        if (needsSignIn(error)) toSignIn();
-        else setState({ kind: "error", error });
-      },
-    );
+    refresh.current = ({ force = false, background = true } = {}) => {
+      if (pending && !force) return;
+      pending = true;
+      const request = ++revision;
+      latest.current.load().then(
+        (data) => {
+          if (!current || request !== revision) return;
+          pending = false;
+          setState({ kind: "ready", data });
+        },
+        (error: unknown) => {
+          if (!current || request !== revision) return;
+          pending = false;
+          if (needsSignIn(error)) toSignIn();
+          else setState((value) => (background && value.kind === "ready" ? value : { kind: "error", error }));
+        },
+      );
+    };
+    refresh.current();
     return () => {
       current = false;
+      refresh.current = () => {};
     };
-  }, [key, attempt, toSignIn]);
-  const reload = useCallback(() => setAttempt((value) => value + 1), []);
-  const update = useCallback((change: (data: T) => T) => setState((value) => (value.kind === "ready" ? { kind: "ready", data: change(value.data) } : value)), []);
+  }, [key, toSignIn]);
+  const interval = state.kind === "ready" ? refreshInterval?.(state.data) : undefined;
+  const polling = refreshInterval !== undefined;
+  useEffect(() => {
+    if (!polling) return;
+    const visibleRefresh = () => {
+      if (document.visibilityState === "visible") refresh.current();
+    };
+    const becameVisible = () => {
+      if (document.visibilityState === "visible") refresh.current({ force: true });
+    };
+    const timer = interval === undefined ? undefined : window.setInterval(visibleRefresh, interval);
+    document.addEventListener("visibilitychange", becameVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", becameVisible);
+    };
+  }, [interval, polling]);
+  const reload = useCallback(() => refresh.current({ force: true, background: false }), []);
+  const update = useCallback((change: (data: T) => T) => {
+    setState((value) => (value.kind === "ready" ? { kind: "ready", data: change(value.data) } : value));
+    // Writes call update after success. Discard older reads and prefer a new server read.
+    if (latest.current.polling) refresh.current({ force: true });
+  }, []);
   return { state, reload, update };
 }
 

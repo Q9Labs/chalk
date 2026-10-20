@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO, RecordingDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
@@ -18,7 +18,20 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 ];
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
-  const { state, reload, update } = useLoad(() => readPage("call", { spaceId }), `call:${spaceId}`);
+  const pages = useRef(1);
+  const { state, reload, update } = useLoad(
+    async () => {
+      let data = await readPage("call", { spaceId });
+      // Refresh the pages already opened, so polling does not collapse older rows.
+      for (let page = 1; page < pages.current && data.nextCursor; page++) {
+        const older = await readPage("call", { spaceId, cursor: data.nextCursor });
+        data = { ...data, episodes: [...data.episodes, ...older.episodes], nextCursor: older.nextCursor };
+      }
+      return data;
+    },
+    `call:${spaceId}`,
+    (data) => (data.live || data.episodes.some((episode) => episode.status !== "ended") || data.knocks.length ? 5000 : undefined),
+  );
   const [renaming, setRenaming] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
@@ -181,7 +194,17 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
               <SessionRow key={episode.id} spaceId={spaceId} episode={episode} />
             ))}
           </div>
-          {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
+          {nextCursor ? (
+            <MoreButton
+              label="Show older sessions"
+              cursor={nextCursor}
+              load={(cursor) => readPage("call", { spaceId, cursor })}
+              onLoaded={(page) => {
+                pages.current++;
+                update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }));
+              }}
+            />
+          ) : null}
         </>
       )}
       {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}

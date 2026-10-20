@@ -20,7 +20,20 @@ async function inviteLink(call: HomeCallDTO): Promise<string> {
 const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...call });
 
 export function HomePage() {
-  const { state, reload, update } = useLoad(() => readPage("home", {}), "home");
+  const pages = useRef(1);
+  const { state, reload, update } = useLoad(
+    async () => {
+      let data = await readPage("home", {});
+      // Refresh the pages already opened, so polling does not collapse older rows.
+      for (let page = 1; page < pages.current && data.nextCursor; page++) {
+        const older = await readPage("home", { cursor: data.nextCursor });
+        data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
+      }
+      return data;
+    },
+    "home",
+    (data) => (data.live.some((call) => call.episode) ? 5000 : undefined),
+  );
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
   const toast = useToast();
@@ -99,7 +112,15 @@ export function HomePage() {
             ))}
           </div>
           {state.data.nextCursor ? (
-            <MoreButton label="Show more calls" cursor={state.data.nextCursor} load={(cursor) => readPage("home", { cursor })} onLoaded={(page) => update((data) => ({ calls: [...data.calls, ...page.calls], live: [...data.live, ...page.live], nextCursor: page.nextCursor }))} />
+            <MoreButton
+              label="Show more calls"
+              cursor={state.data.nextCursor}
+              load={(cursor) => readPage("home", { cursor })}
+              onLoaded={(page) => {
+                pages.current++;
+                update((data) => ({ calls: [...data.calls, ...page.calls], live: [...data.live, ...page.live], nextCursor: page.nextCursor }));
+              }}
+            />
           ) : null}
         </>
       )}

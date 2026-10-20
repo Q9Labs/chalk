@@ -49,6 +49,7 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
   for (const value of ["0", "1000", "-1", "1.5", "NaN", "Infinity", "", "1001", "2000000000"]) {
     const response = await fetch(`${origin}/__fixture/set?delay=${encodeURIComponent(value)}`);
     await response.arrayBuffer();
