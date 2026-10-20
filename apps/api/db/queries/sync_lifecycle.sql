@@ -718,3 +718,31 @@ cross join lateral (
         and p.joined_at is not null
 ) departure
 where episodes.tenant_id = sqlc.arg(tenant_id) and episodes.space_id = sqlc.arg(space_id) and episodes.id = sqlc.arg(episode_id);
+
+-- name: ListDueAdmissionRequests :many
+select requests.* from sync_admission_requests requests
+join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id = requests.space_id
+  and episodes.id = requests.episode_id
+where requests.status = 'pending' and requests.decision_external_operation_id is null
+  and requests.expires_at <= now() and episodes.status = 'active'
+order by requests.expires_at, requests.admission_request_id
+limit sqlc.arg(page_size)::integer;
+
+-- name: LockEpisodeAdmissionRequest :one
+select * from sync_admission_requests
+where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
+  and episode_id = sqlc.arg(episode_id) and admission_request_id = sqlc.arg(admission_request_id)
+for update;
+
+-- name: ReserveEpisodeAdmissionDecision :execrows
+update sync_admission_requests
+set decision_external_operation_id = sqlc.arg(external_operation_id)
+where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
+  and episode_id = sqlc.arg(episode_id) and admission_request_id = sqlc.arg(admission_request_id)
+  and status = 'pending' and decision_external_operation_id is null;
+
+
+-- name: GetAdmissionDecisionOperationName :one
+select operation_name from sync_external_operations
+where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
+  and external_operation_id = sqlc.arg(external_operation_id);

@@ -476,7 +476,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure cspi1 public invite keyring: %w", err)
 		}
-		publicInviteRepository := postgres.NewPublicInviteRepositoryWithPool(pool)
+		publicInviteRepository := postgres.NewPublicInviteRepositoryWithPool(pool).WithEpisodeLifecycle(episodeRepository)
 		service, err := publicinvites.NewServiceWithLifecycle(publicInviteRepository, publicInviteRepository, signer)
 		if err != nil {
 			return fmt.Errorf("configure public invite service: %w", err)

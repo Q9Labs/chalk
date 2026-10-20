@@ -938,6 +938,25 @@ func (q *Queries) FailPendingTenantControlOperationsForEnd(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const getAdmissionDecisionOperationName = `-- name: GetAdmissionDecisionOperationName :one
+select operation_name from sync_external_operations
+where tenant_id = $1 and episode_id = $2
+  and external_operation_id = $3
+`
+
+type GetAdmissionDecisionOperationNameParams struct {
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
+}
+
+func (q *Queries) GetAdmissionDecisionOperationName(ctx context.Context, arg GetAdmissionDecisionOperationNameParams) (string, error) {
+	row := q.db.QueryRow(ctx, getAdmissionDecisionOperationName, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
+	var operation_name string
+	err := row.Scan(&operation_name)
+	return operation_name, err
+}
+
 const getEpisodeCreateRequest = `-- name: GetEpisodeCreateRequest :one
 select tenant_id, space_id, request_key, request_fingerprint, episode_id, created_at
 from episode_create_requests
@@ -1054,6 +1073,51 @@ func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubje
 		&i.AdmissionLifecycleIntentID,
 	)
 	return i, err
+}
+
+const listDueAdmissionRequests = `-- name: ListDueAdmissionRequests :many
+select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from sync_admission_requests requests
+join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id = requests.space_id
+  and episodes.id = requests.episode_id
+where requests.status = 'pending' and requests.decision_external_operation_id is null
+  and requests.expires_at <= now() and episodes.status = 'active'
+order by requests.expires_at, requests.admission_request_id
+limit $1::integer
+`
+
+func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]SyncAdmissionRequest, error) {
+	rows, err := q.db.Query(ctx, listDueAdmissionRequests, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SyncAdmissionRequest
+	for rows.Next() {
+		var i SyncAdmissionRequest
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SpaceID,
+			&i.EpisodeID,
+			&i.AdmissionRequestID,
+			&i.RequestKey,
+			&i.RequestFingerprint,
+			&i.ParticipantID,
+			&i.DisplayName,
+			&i.Role,
+			&i.Status,
+			&i.DecisionExternalOperationID,
+			&i.RequestedAt,
+			&i.ExpiresAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockActiveParticipantsForTenantEnd = `-- name: LockActiveParticipantsForTenantEnd :many
@@ -1202,6 +1266,47 @@ func (q *Queries) LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDead
 		&i.DeadlineGeneration,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockEpisodeAdmissionRequest = `-- name: LockEpisodeAdmissionRequest :one
+select tenant_id, space_id, episode_id, admission_request_id, request_key, request_fingerprint, participant_id, display_name, role, status, decision_external_operation_id, requested_at, expires_at, completed_at from sync_admission_requests
+where tenant_id = $1 and space_id = $2
+  and episode_id = $3 and admission_request_id = $4
+for update
+`
+
+type LockEpisodeAdmissionRequestParams struct {
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
+	AdmissionRequestID pgtype.UUID `json:"admission_request_id"`
+}
+
+func (q *Queries) LockEpisodeAdmissionRequest(ctx context.Context, arg LockEpisodeAdmissionRequestParams) (SyncAdmissionRequest, error) {
+	row := q.db.QueryRow(ctx, lockEpisodeAdmissionRequest,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.AdmissionRequestID,
+	)
+	var i SyncAdmissionRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AdmissionRequestID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.ParticipantID,
+		&i.DisplayName,
+		&i.Role,
+		&i.Status,
+		&i.DecisionExternalOperationID,
+		&i.RequestedAt,
+		&i.ExpiresAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -1827,6 +1932,36 @@ func (q *Queries) MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkT
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const reserveEpisodeAdmissionDecision = `-- name: ReserveEpisodeAdmissionDecision :execrows
+update sync_admission_requests
+set decision_external_operation_id = $1
+where tenant_id = $2 and space_id = $3
+  and episode_id = $4 and admission_request_id = $5
+  and status = 'pending' and decision_external_operation_id is null
+`
+
+type ReserveEpisodeAdmissionDecisionParams struct {
+	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	SpaceID             pgtype.UUID `json:"space_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	AdmissionRequestID  pgtype.UUID `json:"admission_request_id"`
+}
+
+func (q *Queries) ReserveEpisodeAdmissionDecision(ctx context.Context, arg ReserveEpisodeAdmissionDecisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveEpisodeAdmissionDecision,
+		arg.ExternalOperationID,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.AdmissionRequestID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const reserveEpisodeCreateRequest = `-- name: ReserveEpisodeCreateRequest :one

@@ -156,6 +156,12 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			}
 			count++
 		}
+		expired, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(count))
+		if err != nil {
+			return err
+		}
+		count += expired
+
 		return nil
 	})
 	return count, err

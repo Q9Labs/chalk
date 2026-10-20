@@ -21,14 +21,15 @@ type publicInviteQuerier interface {
 	CreateSpacePublicArrival(context.Context, sqlc.CreateSpacePublicArrivalParams) (sqlc.SpacePublicArrival, error)
 	CreateSpacePublicInvite(context.Context, sqlc.CreateSpacePublicInviteParams) (sqlc.SpacePublicInvite, error)
 	GetAutoSpaceLifecycle(context.Context, sqlc.GetAutoSpaceLifecycleParams) (sqlc.AutoSpaceLifecycle, error)
-	GetSpacePublicAdmissionRequest(context.Context, sqlc.GetSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
+	GetSpacePublicAdmissionRequest(context.Context, sqlc.GetSpacePublicAdmissionRequestParams) (sqlc.GetSpacePublicAdmissionRequestRow, error)
+	GetSpacePublicAdmissionRequestForArrival(context.Context, sqlc.GetSpacePublicAdmissionRequestForArrivalParams) (sqlc.GetSpacePublicAdmissionRequestForArrivalRow, error)
 	GetSpacePublicArrival(context.Context, pgtype.UUID) (sqlc.SpacePublicArrival, error)
 	GetSpacePublicArrivalByIdempotency(context.Context, sqlc.GetSpacePublicArrivalByIdempotencyParams) (sqlc.SpacePublicArrival, error)
 	GetSpacePublicArrivalForCredential(context.Context, sqlc.GetSpacePublicArrivalForCredentialParams) (sqlc.SpacePublicArrival, error)
 	GetSpacePublicInvite(context.Context, sqlc.GetSpacePublicInviteParams) (sqlc.SpacePublicInvite, error)
 	GetSpacePublicInviteByHandle(context.Context, []byte) (sqlc.SpacePublicInvite, error)
 	ListDueAutoSpaceLifecycles(context.Context, sqlc.ListDueAutoSpaceLifecyclesParams) ([]sqlc.AutoSpaceLifecycle, error)
-	ListPendingSpacePublicAdmissionRequests(context.Context, sqlc.ListPendingSpacePublicAdmissionRequestsParams) ([]sqlc.SpacePublicAdmissionRequest, error)
+	ListPendingSpacePublicAdmissionRequests(context.Context, sqlc.ListPendingSpacePublicAdmissionRequestsParams) ([]sqlc.ListPendingSpacePublicAdmissionRequestsRow, error)
 	LockSpacePublicAdmissionRequest(context.Context, sqlc.LockSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
 	LockSpacePublicArrival(context.Context, pgtype.UUID) (sqlc.SpacePublicArrival, error)
 	LockSpacePublicArrivalByIdempotency(context.Context, sqlc.LockSpacePublicArrivalByIdempotencyParams) (sqlc.SpacePublicArrival, error)
@@ -55,6 +56,7 @@ type publicInviteTransactor interface {
 type PublicInviteRepository struct {
 	queries    publicInviteQuerier
 	transactor publicInviteTransactor
+	lifecycle  EpisodeLifecycleRepository
 }
 
 var _ publicinvites.Repository = PublicInviteRepository{}
@@ -69,7 +71,14 @@ func NewPublicInviteRepository(queries publicInviteQuerier, transactors ...publi
 }
 
 func NewPublicInviteRepositoryWithPool(pool *pgxpool.Pool) PublicInviteRepository {
-	return NewPublicInviteRepository(sqlc.New(pool), pool)
+	repository := NewPublicInviteRepository(sqlc.New(pool), pool)
+	repository.lifecycle = NewEpisodeLifecycleRepository(pool)
+	return repository
+}
+
+func (r PublicInviteRepository) WithEpisodeLifecycle(lifecycle EpisodeLifecycleRepository) PublicInviteRepository {
+	r.lifecycle = lifecycle
+	return r
 }
 
 func NewPublicInvitesRepositoryWithPool(pool *pgxpool.Pool) PublicInviteRepository {
@@ -345,44 +354,6 @@ func matchesExpectedProviderBinding(current sqlc.SpacePublicArrival, input publi
 	return !input.MatchProviderBinding || (current.Provider.String == input.ExpectedProvider && current.ProviderSubject.String == input.ExpectedProviderSubject)
 }
 
-func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
-	var result publicinvites.AdmissionRequest
-	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
-		arrival, err := queries.LockSpacePublicArrival(ctx, uuid(request.ArrivalHandle))
-		if errors.Is(err, pgx.ErrNoRows) {
-			return publicinvites.ErrArrivalNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("lock public arrival for admission request: %w", err)
-		}
-		if publicinvites.ArrivalState(arrival.State) != publicinvites.ArrivalPending {
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-		request.TenantID = utilities.IDFromBytes(arrival.TenantID.Bytes)
-		request.SpaceID = utilities.IDFromBytes(arrival.SpaceID.Bytes)
-		row, err := queries.CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{
-			RequestHandle: uuid(request.RequestHandle), ArrivalHandle: uuid(request.ArrivalHandle),
-			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, DisplayName: request.DisplayName,
-			RequestedAt: timestamptz(&request.RequestedAt), ExpiresAt: timestamptz(&request.ExpiresAt),
-		})
-		if uniqueViolation(err) {
-			return publicinvites.ErrInvalidAdmissionRequest
-		}
-		if err != nil {
-			return fmt.Errorf("create public admission request: %w", err)
-		}
-		result = mapPublicAdmissionRequest(row)
-		if result.ArrivalHandle != request.ArrivalHandle || result.TenantID != request.TenantID || result.SpaceID != request.SpaceID || result.DisplayName != request.DisplayName {
-			return publicinvites.ErrIdempotencyConflict
-		}
-		if result.State != publicinvites.AdmissionRequestPending && result.State != publicinvites.AdmissionRequestApproved {
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-		return nil
-	})
-	return result, err
-}
-
 func (r PublicInviteRepository) GetAdmissionRequest(ctx context.Context, tenantID, spaceID, requestHandle utilities.ID) (publicinvites.AdmissionRequest, error) {
 	row, err := r.queries.GetSpacePublicAdmissionRequest(ctx, sqlc.GetSpacePublicAdmissionRequestParams{
 		TenantID: uuid(tenantID), SpaceID: uuid(spaceID), RequestHandle: uuid(requestHandle),
@@ -393,7 +364,7 @@ func (r PublicInviteRepository) GetAdmissionRequest(ctx context.Context, tenantI
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public admission request: %w", err)
 	}
-	return mapPublicAdmissionRequest(row), nil
+	return mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)), nil
 }
 
 func (r PublicInviteRepository) ListAdmissionRequests(ctx context.Context, tenantID, spaceID utilities.ID, state publicinvites.AdmissionRequestState, pageSize int32) ([]publicinvites.AdmissionRequest, error) {
@@ -405,12 +376,12 @@ func (r PublicInviteRepository) ListAdmissionRequests(ctx context.Context, tenan
 	}
 	result := make([]publicinvites.AdmissionRequest, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, mapPublicAdmissionRequest(row))
+		result = append(result, mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)))
 	}
 	return result, nil
 }
 
-func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, input publicinvites.DecideAdmissionRequestInput) (publicinvites.AdmissionRequest, publicinvites.Arrival, error) {
+func (r PublicInviteRepository) decideLegacyAdmissionRequest(ctx context.Context, input publicinvites.DecideAdmissionRequestInput) (publicinvites.AdmissionRequest, publicinvites.Arrival, error) {
 	if input.Decision != publicinvites.DecisionApprove && input.Decision != publicinvites.DecisionDeny {
 		return publicinvites.AdmissionRequest{}, publicinvites.Arrival{}, publicinvites.ErrInvalidAdmissionDecision
 	}
