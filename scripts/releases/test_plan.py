@@ -36,9 +36,10 @@ class ReleasePlan(unittest.TestCase):
                                          PLAN_ROOT=str(root / 'plan'), GITHUB_OUTPUT=str(root / 'output')))
         return result
 
-    def cut(self, api, hour, *, manual=False):
+    def cut(self, api, hour, *, manual=False, workflow_sha=None):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ,
-                GITHUB_OUTPUT=str(Path(directory) / 'output')), patch.object(release, 'datetime') as clock:
+                GITHUB_OUTPUT=str(Path(directory) / 'output'), GITHUB_SHA=workflow_sha or api.tip), \
+                patch.object(release, 'datetime') as clock:
             clock.now.return_value = datetime(2026, 10, 17, hour, tzinfo=timezone.utc)
             release.plan(api, SimpleNamespace(manual=manual))
             return dict(line.split('=', 1) for line in (Path(directory) / 'output').read_text().splitlines())
@@ -57,6 +58,13 @@ class ReleasePlan(unittest.TestCase):
         self.assertEqual(result['should_cut'], 'true')
         self.assertEqual(result['target_sha'], api.tip)
         self.assertEqual(api.items[-1]['ref'], api.tip)
+
+    def test_queued_workflow_cannot_cut_a_newer_orchestration_revision(self):
+        api = MemoryGitHub()
+        api.tip = 'b' * 40
+        api.gates[0]['head_sha'] = api.tip
+        self.assertEqual(self.cut(api, 2, workflow_sha=SHA)['should_cut'], 'false')
+        self.assertEqual(api.items, [])
 
     def test_two_serial_checks_reserve_only_one_cut(self):
         api = MemoryGitHub()
@@ -133,7 +141,7 @@ class ReleasePlan(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(api, 'artifact', side_effect=artifact):
             root = Path(directory)
             self.assertTrue(release.previous_production(api)['recorder_control'])
-            with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'cut-output'), GITHUB_RUN_ID='1'):
+            with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'cut-output'), GITHUB_RUN_ID='1', GITHUB_SHA=SHA):
                 release.plan(api, SimpleNamespace(manual=True))
             cut = dict(line.split('=', 1) for line in (root / 'cut-output').read_text().splitlines())
             self.assertEqual(cut['recorder_control'], 'true')

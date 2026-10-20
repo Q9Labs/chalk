@@ -66,7 +66,7 @@ class RetainedReleaseTests(unittest.TestCase):
         api.items.append(dict(id=1, environment='nightly', payload=info, latest_status='inactive', created_at='2026-10-16T00:00:00Z'))
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'output'
-            with patch.dict(os.environ, GITHUB_OUTPUT=str(output)):
+            with patch.dict(os.environ, GITHUB_OUTPUT=str(output), GITHUB_SHA=SHA):
                 with patch.object(api, 'artifact', side_effect=ValueError('artifact expired')):
                     release.plan(api, SimpleNamespace(manual=True))
             values = output.read_text()
