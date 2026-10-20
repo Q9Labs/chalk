@@ -1,11 +1,13 @@
 import { SpaceClientError, type ClientFailure, type MediaSource, type ScreenShareOptions } from "@q9labsai/chalk-client";
 import { readThemePreference, persistThemePreference, type ThemePreference } from "../lib/theme";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Chalk, ChalkProvider, ControlBar, SpaceHeader } from "@q9labsai/chalk-react";
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
 function ShellCall({
+  browserCameras = false,
+  cameraOn = false,
   host = false,
   report = false,
   blocked = false,
@@ -13,6 +15,8 @@ function ShellCall({
   singleCamera = false,
   initialColorScheme,
 }: {
+  readonly browserCameras?: boolean;
+  readonly cameraOn?: boolean;
   readonly host?: boolean;
   readonly report?: boolean;
   readonly blocked?: boolean;
@@ -23,7 +27,7 @@ function ShellCall({
   const [command, setCommand] = useState("");
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [client] = useState(() => {
-    const snapshot = liveSnapshot({ others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
+    const snapshot = liveSnapshot({ self: browserCameras ? { camera: cameraOn } : undefined, others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
     const instance = createCallStateClient({
       ...snapshot,
       media: {
@@ -33,10 +37,10 @@ function ShellCall({
             { deviceId: "mic-1", label: "Built-in Microphone" },
             { deviceId: "mic-2", label: "Headset Microphone" },
           ],
-          cameras: [{ deviceId: "cam-1", label: "Built-in Camera" }, ...(singleCamera ? [] : [{ deviceId: "cam-2", label: "External Camera" }])],
+          cameras: browserCameras ? [] : [{ deviceId: "cam-1", label: "Built-in Camera" }, ...(singleCamera ? [] : [{ deviceId: "cam-2", label: "External Camera" }])],
           speakers: [{ deviceId: "speaker-1", label: "Built-in Speakers" }],
         },
-        selection: { microphone: "mic-1", camera: "cam-1", speaker: "speaker-1" },
+        selection: { microphone: "mic-1", camera: browserCameras ? null : "cam-1", speaker: "speaker-1" },
         local: blocked ? { ...snapshot.media.local, microphone: { ...snapshot.media.local.microphone, state: "failed" }, camera: { ...snapshot.media.local.camera, state: "unavailable" } } : snapshot.media.local,
       },
     });
@@ -59,6 +63,35 @@ function ShellCall({
       },
     };
   });
+  useEffect(() => {
+    if (!browserCameras) return;
+    let cancelled = false;
+    let stream: MediaStream | undefined;
+    void navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(async (captured) => {
+      stream = captured;
+      if (cancelled) {
+        captured.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      const track = captured.getVideoTracks()[0];
+      if (track) track.enabled = cameraOn;
+      const cameras = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput").map(({ deviceId, label, groupId, kind }) => ({ deviceId, label, groupId, kind }));
+      if (cancelled) return;
+      client.updateSnapshot((snapshot) => ({
+        ...snapshot,
+        media: {
+          ...snapshot.media,
+          devices: { ...snapshot.media.devices, cameras },
+          selection: { ...snapshot.media.selection, camera: cameras[0]?.deviceId ?? null },
+          local: { ...snapshot.media.local, camera: { ...snapshot.media.local.camera, track: track ?? null } },
+        },
+      }));
+    });
+    return () => {
+      cancelled = true;
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [browserCameras, cameraOn, client]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Chalk
@@ -124,6 +157,8 @@ function ShellSeams() {
   );
 }
 export const SHELL_STATES: readonly CallState[] = [
+  { id: "shell-browser-camera-on", title: "Shell browser camera on", render: () => <ShellCall browserCameras cameraOn /> },
+  { id: "shell-browser-cameras", title: "Shell browser cameras", render: () => <ShellCall browserCameras /> },
   { id: "shell-seams", title: "Shell merge seams", render: () => <ShellSeams /> },
   { id: "shell-call", title: "Shell guest", render: () => <ShellCall /> },
   { id: "shell-light", title: "Shell guest in Light", render: () => <ShellCall initialColorScheme="light" /> },

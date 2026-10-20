@@ -82,7 +82,8 @@ try {
  await page.waitForFunction(()=>document.querySelector('output')?.textContent==='Left call');
  assert.equal(await page.getByRole('menu').count(),0);
  await load('shell-report');
- await page.getByRole('button',{name:'Call details',exact:true}).click();
+ await page.getByRole('button',{name:'Leave call',exact:true}).filter({visible:true}).click();
+ await page.getByRole('button',{name:'Rejoin',exact:true}).waitFor();
  await page.getByRole('button',{name:'Report a problem',exact:true}).click();
  await page.getByRole('textbox',{name:'What went wrong?',exact:true}).fill('Audio dropped during the call');
  await page.getByRole('button',{name:'Send',exact:true}).click();
