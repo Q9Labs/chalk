@@ -3,6 +3,7 @@ import { createRun } from "../prod-proof/runtime.mjs";
 import { launchGuests, stats } from "../prod-proof/media.mjs";
 import { save } from "../prod-proof/runtime.mjs";
 import { playIncomingAudio } from "./media.mjs";
+import { boardDraw, boardElements, boardOpen, boardView } from "./board.mjs";
 import { guestConfig } from "./environment.mjs";
 
 export async function prepareGuest(directory) {
@@ -54,6 +55,13 @@ export async function prepareGuest(directory) {
       });
       await guest.pages[0].waitForFunction(() => [...document.querySelectorAll("video")].some((video) => video.readyState >= 2));
       await guest.pages[0].screenshot({ path: `${directory}/participant-b.png` });
+    },
+    /** The guest is an owner, so it can open the board and bring everyone to its view. */
+    board: {
+      open: async () => (await ready).pages[0].evaluate(boardOpen),
+      draw: async () => (await ready).pages[0].evaluate(boardDraw),
+      elements: async () => (await ready).pages[0].evaluate(boardElements),
+      view: async (view) => (await ready).pages[0].evaluate(boardView, view),
     },
     async leave() {
       const guest = await ready;
