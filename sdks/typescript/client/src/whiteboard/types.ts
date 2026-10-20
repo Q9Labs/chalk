@@ -119,7 +119,8 @@ export type ChalkWhiteboardV1ClientOptions = {
   readonly webSocket: SyncWebSocketFactory;
   readonly files: ChalkWhiteboardV1FileTransport;
   readonly lifecycle?: SyncLifecycle;
-  readonly clock?: SyncClock;
+  /** Wall time orders persisted operations; monotonicNow returns elapsed milliseconds on the setTimeout scheduler's timeline. */
+  readonly clock?: SyncClock & { readonly monotonicNow: () => number };
   readonly ids?: SyncIdGenerator;
   readonly pendingStore?: ChalkWhiteboardV1PendingOperationStore;
   readonly cursor?: { readonly sceneId: string; readonly revision: string };

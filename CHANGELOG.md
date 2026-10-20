@@ -2,6 +2,8 @@
 
 ## 5.0.0 (unreleased)
 
+- Keep the whiteboard reconnect watchdog running when an injected wall clock moves backward. Persisted operation timestamps still use wall time.
+- Add package-local release notes for all eight public packages. Seven packages use 5.0.0; `@q9labsai/recording-presentation` advances independently to 0.1.1 for the 24-reaction validator.
 - React participant tiles accept a normalized `audioLevel` for voice-responsive speaking rings and generated avatars.
 
 - Align quick reactions with the call design: 👍 ❤️ 😂 😮 🎉 👏.
@@ -65,7 +67,7 @@
 - BREAKING: removes RealtimeKit, public status, Tenant invitations, audit-log and Users API operations and the regions catalog.
 - BREAKING: leaving a call is instant. A guest leaves with no dialog and a host gets a menu with Leave call and End call for everyone, so the preview `LeaveDialog` and `JoinFailedScreen` are removed, along with `PreviewStatus` and `PreviewEpisodeEnded`.
 - The pages shown before and after a call are one dark page with round icon actions. `Chalk` takes `onRejoin` and `onHome`; the page no longer shows the Episode id, timing or a "Leaving" screen.
-- No packages published. Existing integrations pinned to 4.1.15 remain pinned.
+- This release is not yet published. Existing v4 integrations stay on v4 until their applications upgrade.
 
 All notable public changes to this project will be documented in this file.
 

@@ -114,6 +114,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   constructor(options: ChalkWhiteboardV1ClientOptions) {
     assertWhiteboardV1Url(options.url);
+    if (options.clock && typeof options.clock.monotonicNow !== "function") {
+      throw new TypeError("whiteboard clock.monotonicNow must use the same timeline as clock.setTimeout");
+    }
     this.#options = options;
     this.files = options.files;
     this.#store = options.pendingStore ?? new InMemoryChalkWhiteboardV1PendingOperationStore();
@@ -935,13 +938,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #elapsedNow(): number {
     // Wall-clock timestamps remain on #now() for persisted operation ordering.
-    return this.#options.clock?.now() ?? globalThis.performance.now();
+    return this.#clock().monotonicNow();
   }
 
   #clock(): NonNullable<ChalkWhiteboardV1ClientOptions["clock"]> {
     return (
       this.#options.clock ?? {
         now: Date.now,
+        monotonicNow: () => globalThis.performance.now(),
         setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
         clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
       }

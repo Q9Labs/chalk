@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/recording-presentation",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deterministic shared-only recording presentation contracts and projection.",
   "license": "MIT",
   "repository": {
