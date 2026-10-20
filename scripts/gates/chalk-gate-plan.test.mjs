@@ -16,6 +16,13 @@ test("application and SDK source changes select the package boundary check", () 
   }
 });
 
+test("Kotlin-only native module changes select the compatibility lint", () => {
+  const file = "sdks/typescript/react-native/android/src/main/kotlin/ai/q9labs/chalk/reactnative/ChalkAudioRouteModule.kt";
+  const semgrep = createGatePlan([file]).tasks.find((task) => task.id === "semgrep");
+  assert.equal(semgrep?.selected, true);
+  assert.deepEqual(semgrep?.command, ["bash", "scripts/gates/semgrep.sh", file]);
+});
+
 test("documentation-only changes do not select the package boundary check", () => {
   assert.equal(boundaryTask(["docs/contract-codegen.md"])?.selected, false);
 });
