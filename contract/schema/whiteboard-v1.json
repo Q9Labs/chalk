@@ -10,6 +10,10 @@
     "presentation": {
       "name": "presentation_v1",
       "exactFields": ["name"]
+    },
+    "view": {
+      "name": "view_v1",
+      "exactFields": ["name"]
     }
   },
   "identity": {
@@ -26,7 +30,7 @@
     },
     {
       "id": "live",
-      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"],
+      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"],
       "heartbeatIntervalMs": 20000,
       "missedDeadlinesBeforeClose": 2
     }
@@ -106,6 +110,10 @@
       "clientExactFields": ["type", "x", "y"],
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
     },
+    "view": {
+      "clientExactFields": ["type", "x", "y", "width", "height", "bring"],
+      "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"]
+    },
     "welcome": {
       "exactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"],
       "extendedExactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"]
@@ -135,8 +143,8 @@
       "exactFields": ["type", "correlation_id", "operation", "code", "recoverable", "message"]
     }
   },
-  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"],
-  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"],
+  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"],
+  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"],
   "receiptOperations": ["submit_update", "clear", "set_draw_permission", "set_presentation"],
   "receiptOutcomes": ["committed", "duplicate"],
   "resetReasons": ["scene_changed", "cursor_expired", "gap"],

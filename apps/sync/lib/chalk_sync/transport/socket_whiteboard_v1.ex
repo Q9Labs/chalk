@@ -37,6 +37,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        identity: nil,
        display_name: nil,
        presentation_negotiated: false,
+       view_negotiated: false,
        scene_id: nil,
        revision: 0,
        snapshot: nil,
@@ -87,8 +88,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "cursor", "participant_id" => participant_id}},
+        {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
         %{identity: %Identity{participant_id: participant_id}} = state
+      )
+      when type in ["cursor", "view"] do
+    {:ok, state}
+  end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view"}},
+        %{view_negotiated: false} = state
       ) do
     {:ok, state}
   end
@@ -277,6 +286,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          %{phase: :awaiting_hello} = state
        ) do
     presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
+    view_negotiated = Enum.any?(extensions, &(&1["name"] == "view_v1"))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
@@ -299,6 +309,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             identity: identity,
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
+            view_negotiated: view_negotiated,
             scene_id: welcome["scene_id"],
             revision: String.to_integer(welcome["revision"])
         }
@@ -423,7 +434,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp handle_frame({:cursor, _cursor}, %{phase: :recovering} = state) do
+  defp handle_frame({type, _frame}, %{phase: :recovering} = state)
+       when type in [:cursor, :view] do
     {:ok, state}
   end
 
@@ -536,6 +548,36 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
       :rate_limited ->
         {:ok, state}
+    end
+  end
+
+  defp handle_frame({:view, _view}, %{phase: :live, view_negotiated: false} = state) do
+    {:ok, state}
+  end
+
+  defp handle_frame(
+         {:view, view},
+         %{phase: :live, identity: identity, display_name: display_name} = state
+       ) do
+    with true <- not view.bring or "manageWhiteboard" in identity.capabilities,
+         {:ok, next} <- admit_cursor(state) do
+      frame = %{
+        "type" => "view",
+        "participant_id" => identity.participant_id,
+        "display_name" => display_name,
+        "x" => view.x,
+        "y" => view.y,
+        "width" => view.width,
+        "height" => view.height,
+        "bring" => view.bring,
+        "occurred_at" =>
+          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      }
+
+      Fanout.publish_transient(identity.episode, frame)
+      {:ok, next}
+    else
+      _dropped -> {:ok, state}
     end
   end
 

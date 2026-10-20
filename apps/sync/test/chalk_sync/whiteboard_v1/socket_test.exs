@@ -431,6 +431,47 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                      }}
   end
 
+  test "shares views only over view_v1 and lets only board managers bring everyone" do
+    host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
+    guest = %{identity() | capabilities: ["drawWhiteboard"]}
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+    live = %{initial | phase: :live, scene_id: @scene_id, revision: 4, display_name: "Ada"}
+    ChalkSync.WhiteboardV1.Fanout.subscribe(host.episode)
+
+    view = %{
+      "type" => "view",
+      "x" => 10,
+      "y" => 20,
+      "width" => 800,
+      "height" => 600,
+      "bring" => true
+    }
+
+    assert {:ok, _state} = receive_frame(view, %{live | identity: guest, view_negotiated: true})
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+
+    assert {:ok, _state} = receive_frame(view, %{live | identity: host, view_negotiated: false})
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+
+    assert {:ok, _state} = receive_frame(view, %{live | identity: host, view_negotiated: true})
+
+    assert_received {:whiteboard_v1_frame,
+                     %{"type" => "view", "bring" => true, "width" => 800} = frame}
+
+    other = %{live | identity: %{guest | participant_id: "60000000-0000-4000-8000-000000000006"}}
+    assert {:ok, ^other} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, other)
+
+    assert {:push, {:text, pushed}, _state} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, %{
+               other
+               | view_negotiated: true
+             })
+
+    assert JSON.decode!(pushed)["display_name"] == "Ada"
+  after
+    ChalkSync.WhiteboardV1.Fanout.unsubscribe(identity().episode)
+  end
+
   test "does not echo a participant cursor or replay an applied update" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 

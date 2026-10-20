@@ -42,6 +42,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       "set_draw_permission" -> decode_set_draw_permission(frame)
       "set_presentation" -> decode_set_presentation(frame)
       "cursor" -> decode_cursor(frame)
+      "view" -> decode_view(frame)
       "ping" -> if(exact?(frame, ["type"]), do: {:ok, {:ping, %{}}}, else: {:error, :invalid_frame})
       _ -> {:error, :unknown_type}
     end
@@ -57,6 +58,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       "update_part" -> valid_update_part?(frame)
       "commit" -> valid_commit?(frame)
       "cursor" -> valid_server_cursor?(frame)
+      "view" -> valid_server_view?(frame)
       "permission_updated" -> valid_permission_updated?(frame)
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
@@ -86,7 +88,10 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
         {:ok, []}
 
       exact?(frame, ${render(contract.frames.hello.extendedExactFields)}) and
-          frame["extensions"] == [%{"name" => ${render(contract.extensions.presentation.name)}}] ->
+          frame["extensions"] in [
+            [%{"name" => ${render(contract.extensions.presentation.name)}}],
+            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}]
+          ] ->
         {:ok, frame["extensions"]}
 
       true ->
@@ -170,6 +175,28 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
     end
   end
 
+  defp decode_view(frame) do
+    if exact?(frame, ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
+         is_boolean(frame["bring"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
+      {:ok,
+       {:view,
+        %{
+          x: frame["x"],
+          y: frame["y"],
+          width: frame["width"],
+          height: frame["height"],
+          bring: frame["bring"]
+        }}}
+    else
+      {:error, :invalid_payload}
+    end
+  end
+
+  defp view_rect?(frame) do
+    finite_number?(frame["x"]) and finite_number?(frame["y"]) and finite_number?(frame["width"]) and
+      finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0
+  end
+
   defp valid_welcome?(frame) do
     (exact?(frame, ${render(contract.frames.welcome.exactFields)}) or
        (exact?(frame, ${render(contract.frames.welcome.extendedExactFields)}) and
@@ -213,6 +240,13 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
     exact?(frame, ${render(contract.frames.cursor.serverExactFields)}) and
       uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1, @limits["displayNameMaxBytes"]) and
       finite_number?(frame["x"]) and finite_number?(frame["y"]) and is_binary(frame["occurred_at"]) and
+      encoded_bytes(frame) <= @limits["cursorFrameBytes"]
+  end
+
+  defp valid_server_view?(frame) do
+    exact?(frame, ${render(contract.frames.view.serverExactFields)}) and
+      uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1, @limits["displayNameMaxBytes"]) and
+      view_rect?(frame) and is_boolean(frame["bring"]) and is_binary(frame["occurred_at"]) and
       encoded_bytes(frame) <= @limits["cursorFrameBytes"]
   end
 

@@ -3,6 +3,7 @@ import { CaptureUpdateAction, reconcileElements, restoreElements } from "@excali
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
+import { CANONICAL_INK, withInk } from "./ink";
 import { compareElementOrder } from "./order";
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements, remoteImageFileIds, retainStoredImages } from "./syncable";
@@ -54,6 +55,17 @@ export type WhiteboardCollaborationEvent =
       readonly occurredAt: string;
     }
   | {
+      readonly type: "view";
+      readonly participantId: string;
+      readonly displayName: string;
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly bring: boolean;
+      readonly occurredAt: string;
+    }
+  | {
       readonly type: "reset_required";
       readonly sceneId: string;
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
@@ -69,12 +81,17 @@ export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOpt
   subscribe: (listener: (event: WhiteboardCollaborationEvent) => void) => () => void;
   onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
   onSubmissionError?: (error: unknown) => void;
+  /** False when the host draws its own remote cursors. */
+  renderCursors?: boolean;
+  /** The colour this viewer sees for Ink, which travels as one canonical colour. */
+  inkColor?: string;
 }
 
 export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
   private sceneGeneration: string | null = null;
   private canDraw = true;
+  private inkColor: string;
   private storedImageFileIds = new Set<string>();
 
   private broadcastedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
@@ -96,6 +113,7 @@ export class ExcalidrawCollabEngine {
 
   constructor(private readonly opts: ExcalidrawCollabEngineOptions) {
     this.canDraw = opts.canDraw;
+    this.inkColor = opts.inkColor ?? CANONICAL_INK;
 
     this.filesSync = new WhiteboardFilesSync({
       excalidrawAPI: opts.excalidrawAPI,
@@ -108,6 +126,7 @@ export class ExcalidrawCollabEngine {
     this.presence = new WhiteboardPresence({
       excalidrawAPI: opts.excalidrawAPI,
       sendCursor: opts.sendCursor,
+      renderCursors: opts.renderCursors ?? true,
       throttleMs: CURSOR_THROTTLE_MS,
       staleMs: CURSOR_STALE_MS,
     });
@@ -118,6 +137,15 @@ export class ExcalidrawCollabEngine {
 
   setCanDraw(next: boolean): void {
     this.canDraw = next;
+  }
+
+  /** Repaints Ink for a new surface without a new version, so nothing is sent. */
+  setInkColor(next: string): void {
+    const previous = this.inkColor;
+    if (next === previous) return;
+    this.inkColor = next;
+    const api = this.opts.excalidrawAPI;
+    api.updateScene({ elements: api.getSceneElementsIncludingDeleted().map((element) => withInk(element, previous, next)), captureUpdate: CaptureUpdateAction.NEVER });
   }
 
   async clear(): Promise<WhiteboardCommit> {
@@ -215,6 +243,8 @@ export class ExcalidrawCollabEngine {
           timestamp: new Date(event.occurredAt),
         });
         return;
+      case "view":
+        return;
       case "reset_required":
         this.requestSnapshot();
     }
@@ -225,7 +255,7 @@ export class ExcalidrawCollabEngine {
       sceneId: payload.sceneId,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: payload.syncAll,
-      remoteElements: payload.elements.map(fromWireElement),
+      remoteElements: payload.elements.map((element) => withInk(fromWireElement(element), CANONICAL_INK, this.inkColor)),
       isSnapshot: false,
     });
   }
@@ -235,7 +265,7 @@ export class ExcalidrawCollabEngine {
       sceneId: payload.sceneId,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: true,
-      remoteElements: payload.elements.map(fromWireElement),
+      remoteElements: payload.elements.map((element) => withInk(fromWireElement(element), CANONICAL_INK, this.inkColor)),
       appState: payload.appState,
       isSnapshot: true,
     });
@@ -408,7 +438,7 @@ export class ExcalidrawCollabEngine {
     const submitted: WhiteboardWireElement[] = [];
     for (const element of elements) {
       try {
-        submitted.push(toFittedWireElement(element));
+        submitted.push(toFittedWireElement(withInk(element, this.inkColor, CANONICAL_INK)));
         this.rejectedElementVersions.delete(element.id);
       } catch (cause) {
         const reported = this.rejectedElementVersions.has(element.id);

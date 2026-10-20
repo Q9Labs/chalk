@@ -30,14 +30,20 @@ function validateWhiteboardContract(contract) {
     throw new Error("Invalid whiteboard contract: presentation_v1 extension is required");
   }
   requireExactStrings(contract.extensions.presentation.exactFields, ["name"], "extensions.presentation.exactFields");
+  if (contract.extensions?.view?.name !== "view_v1") {
+    throw new Error("Invalid whiteboard contract: view_v1 extension is required");
+  }
+  requireExactStrings(contract.extensions.view.exactFields, ["name"], "extensions.view.exactFields");
+  requireExactStrings(contract.frames?.view?.clientExactFields, ["type", "x", "y", "width", "height", "bring"], "frames.view.clientExactFields");
+  requireExactStrings(contract.frames?.view?.serverExactFields, ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"], "frames.view.serverExactFields");
   requireExactStrings(contract.frames?.hello?.exactFields, ["type", "protocol", "token", "cursor"], "frames.hello.exactFields");
   requireExactStrings(contract.frames?.hello?.extendedExactFields, ["type", "protocol", "token", "cursor", "extensions"], "frames.hello.extendedExactFields");
   requireExactStrings(contract.frames?.welcome?.exactFields, ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"], "frames.welcome.exactFields");
   requireExactStrings(contract.frames?.welcome?.extendedExactFields, ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"], "frames.welcome.extendedExactFields");
 
   requireExactStrings(contract.capabilities, ["drawWhiteboard", "manageWhiteboard"], "capabilities");
-  requireExactStrings(contract.clientFrames, ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"], "clientFrames");
-  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"], "serverFrames");
+  requireExactStrings(contract.clientFrames, ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"], "clientFrames");
+  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"], "serverFrames");
   requireExactStrings(contract.receiptOperations, ["submit_update", "clear", "set_draw_permission", "set_presentation"], "receiptOperations");
   requireExactStrings(contract.receiptOutcomes, ["committed", "duplicate"], "receiptOutcomes");
   requireExactStrings(contract.resetReasons, ["scene_changed", "cursor_expired", "gap"], "resetReasons");
@@ -92,7 +98,7 @@ function validateWhiteboardContract(contract) {
   }
 
   const frameEntries = Object.values(contract.frames ?? {});
-  if (frameEntries.length !== 18 || frameEntries.some((entry) => typeof entry !== "object" || entry === null)) {
+  if (frameEntries.length !== 19 || frameEntries.some((entry) => typeof entry !== "object" || entry === null)) {
     throw new Error("Invalid whiteboard contract: all strict frame definitions are required");
   }
 }

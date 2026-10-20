@@ -14,6 +14,7 @@ import {
   type ChalkWhiteboardSummary,
   type ChalkWhiteboardV1Transport,
   type ChalkWhiteboardV1UpdateInput,
+  type ChalkWhiteboardView,
 } from "./types";
 import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
 import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, whiteboardV1PendingOperationBytes } from "./v1-multipart";
@@ -80,7 +81,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #canDraw = false;
   #presentationSupported = false;
   #presenting = false;
-  #useLegacyHello = false;
+  #hello: "view" | "presentation" | "legacy" = "view";
+  #viewSupported = false;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
   #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
@@ -129,7 +131,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#useLegacyHello = false;
+    this.#hello = "view";
     this.#phase = "connecting";
     this.#publishSummary("loading", null);
     const generation = ++this.#startupGeneration;
@@ -220,6 +222,15 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     encodeWhiteboardV1ClientFrame(frame);
     this.#lastCursorAt = now;
     this.#send(frame);
+  }
+
+  sendView(view: ChalkWhiteboardView): boolean {
+    if (!this.#viewSupported) return false;
+    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) return true;
+    const frame = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
+    encodeWhiteboardV1ClientFrame(frame);
+    this.#send(frame);
+    return true;
   }
 
   requestSnapshot(): Promise<void> {
@@ -332,7 +343,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#phase = "authenticating";
       this.#presentationSupported = false;
       const cursor = this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null;
-      this.#send(this.#useLegacyHello ? { type: "hello", protocol: "whiteboard-v1", token, cursor } : { type: "hello", protocol: "whiteboard-v1", token, cursor, extensions: [{ name: "presentation_v1" }] });
+      this.#viewSupported = false;
+      this.#send(helloFrame(this.#hello, token, cursor));
     } catch {
       socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard authentication failed");
     }
@@ -384,6 +396,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
           y: frame.y,
           occurredAt: frame.occurred_at,
         });
+        return;
+      case "view":
+        this.#requireLive();
+        this.#emit({ type: "view", participantId: frame.participant_id, displayName: frame.display_name, x: frame.x, y: frame.y, width: frame.width, height: frame.height, bring: frame.bring, occurredAt: frame.occurred_at });
         return;
       case "permission_updated":
         this.#requireLive();
@@ -465,6 +481,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#capabilities = [...frame.capabilities];
     this.#canDraw = frame.can_draw;
     this.#presentationSupported = "presenting" in frame;
+    this.#viewSupported = this.#hello === "view";
     this.#presenting = "presenting" in frame ? frame.presenting : false;
     this.#publishSummary("loading", null);
     this.#clearHeartbeat();
@@ -664,7 +681,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#resetDisconnectedState();
     if (!this.#started || !this.#transportAvailable) return;
     if (rejectedPresentationHello) {
-      this.#useLegacyHello = true;
+      this.#hello = this.#hello === "view" ? "presentation" : "legacy";
       this.#scheduleReconnect();
       return;
     }
@@ -676,7 +693,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #rejectedPresentationHello(closeCode: number): boolean {
-    return this.#phase === "authenticating" && !this.#useLegacyHello && terminalCloseCode(closeCode);
+    return this.#phase === "authenticating" && this.#hello !== "legacy" && terminalCloseCode(closeCode);
   }
 
   #resetDisconnectedState(): void {
@@ -1012,6 +1029,13 @@ function operationName(frame: Extract<WhiteboardV1ClientFrame, { readonly type: 
 
 function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>["code"]): boolean {
   return code === "unavailable" || code === "overloaded" || code === "rate_limited" || code === "storage_unavailable";
+}
+
+function helloFrame(level: "view" | "presentation" | "legacy", token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
+  const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
+  if (level === "legacy") return hello;
+  if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
+  return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
 }
 
 function terminalCloseCode(closeCode: number): boolean {

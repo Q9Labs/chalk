@@ -13,8 +13,10 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "route" => "/v1/whiteboard",
       "transport" => "websocket-json-text"
     },
-    "extensions" => %{"presentation" => %{"name" => "presentation_v1",
-        "exactFields" => ["name"]}},
+    "extensions" => %{
+      "presentation" => %{"name" => "presentation_v1", "exactFields" => ["name"]},
+      "view" => %{"name" => "view_v1", "exactFields" => ["name"]}
+    },
     "identity" => %{
       "credential" => "participant-access-token",
       "authorityKey" => ["tenant_id", "space_id", "episode_id"],
@@ -34,6 +36,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           "set_draw_permission",
           "set_presentation",
           "cursor",
+          "view",
           "ping"
         ],
         "heartbeatIntervalMs" => 20_000,
@@ -119,6 +122,20 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         "clientExactFields" => ["type", "x", "y"],
         "serverExactFields" => ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
       },
+      "view" => %{
+        "clientExactFields" => ["type", "x", "y", "width", "height", "bring"],
+        "serverExactFields" => [
+          "type",
+          "participant_id",
+          "display_name",
+          "x",
+          "y",
+          "width",
+          "height",
+          "bring",
+          "occurred_at"
+        ]
+      },
       "welcome" => %{
         "exactFields" => [
           "type",
@@ -188,6 +205,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "set_draw_permission",
       "set_presentation",
       "cursor",
+      "view",
       "ping"
     ],
     "serverFrames" => [
@@ -197,6 +215,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "update_part",
       "commit",
       "cursor",
+      "view",
       "permission_updated",
       "presentation_updated",
       "reset_required",
@@ -306,6 +325,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "set_draw_permission" -> decode_set_draw_permission(frame)
       "set_presentation" -> decode_set_presentation(frame)
       "cursor" -> decode_cursor(frame)
+      "view" -> decode_view(frame)
       "ping" -> if(exact?(frame, ["type"]), do: {:ok, {:ping, %{}}}, else: {:error,
           :invalid_frame})
       _ -> {:error, :unknown_type}
@@ -322,6 +342,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "update_part" -> valid_update_part?(frame)
       "commit" -> valid_commit?(frame)
       "cursor" -> valid_server_cursor?(frame)
+      "view" -> valid_server_view?(frame)
       "permission_updated" -> valid_permission_updated?(frame)
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
@@ -362,7 +383,10 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   "cursor",
   "extensions"
 ]) and
-          frame["extensions"] == [%{"name" => "presentation_v1"}] ->
+          frame["extensions"] in [
+            [%{"name" => "presentation_v1"}],
+            [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}]
+          ] ->
         {:ok, frame["extensions"]}
 
       true ->
@@ -494,6 +518,36 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     end
   end
 
+  defp decode_view(frame) do
+    if exact?(frame, [
+  "type",
+  "x",
+  "y",
+  "width",
+  "height",
+  "bring"
+]) and view_rect?(frame) and
+         is_boolean(frame["bring"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
+      {:ok,
+       {:view,
+        %{
+          x: frame["x"],
+          y: frame["y"],
+          width: frame["width"],
+          height: frame["height"],
+          bring: frame["bring"]
+        }}}
+    else
+      {:error, :invalid_payload}
+    end
+  end
+
+  defp view_rect?(frame) do
+    finite_number?(frame["x"]) and finite_number?(frame["y"]) and
+        finite_number?(frame["width"]) and
+      finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0
+  end
+
   defp valid_welcome?(frame) do
     (exact?(frame, [
   "type",
@@ -603,6 +657,24 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           @limits["displayNameMaxBytes"]) and
       finite_number?(frame["x"]) and finite_number?(frame["y"]) and
           is_binary(frame["occurred_at"]) and
+      encoded_bytes(frame) <= @limits["cursorFrameBytes"]
+  end
+
+  defp valid_server_view?(frame) do
+    exact?(frame, [
+  "type",
+  "participant_id",
+  "display_name",
+  "x",
+  "y",
+  "width",
+  "height",
+  "bring",
+  "occurred_at"
+]) and
+      uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1,
+          @limits["displayNameMaxBytes"]) and
+      view_rect?(frame) and is_boolean(frame["bring"]) and is_binary(frame["occurred_at"]) and
       encoded_bytes(frame) <= @limits["cursorFrameBytes"]
   end
 

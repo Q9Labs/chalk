@@ -101,6 +101,33 @@ it("submits a local version that wins an equal-version reconciliation without ec
   }
 });
 
+it("paints canonical Ink in the viewer's surface ink and sends it back canonical", async () => {
+  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
+  const { ExcalidrawCollabEngine } = await import("./engine");
+  const { toWireElement } = await import("./wire");
+  vi.useFakeTimers();
+  const api = createCanvas(restoreElements, restoreAppState);
+  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
+  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, inkColor: "#f1f0ea", submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  const stroke = (id: string, strokeColor: string, version = 1) => restoreElements([{ type: "rectangle", id, index: id === "remote" ? "a0" : "a1", x: 0, y: 0, width: 10, height: 10, strokeColor, version, versionNonce: 1, isDeleted: false }], null);
+  const colors = () => api.getSceneElementsIncludingDeleted().map((element) => element.strokeColor);
+  try {
+    engine.handleRemoteSnapshot({ sceneId: "scene", elements: stroke("remote", "#1b1c1f").map(toWireElement) });
+    expect(colors()).toEqual(["#f1f0ea"]);
+    api.updateScene({ elements: [...api.getSceneElementsIncludingDeleted(), ...stroke("local", "#f1f0ea")] });
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(submitUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ elements: [expect.objectContaining({ id: "local", payload: expect.objectContaining({ strokeColor: "#1b1c1f" }) })] }));
+    engine.setInkColor("#1b1c1f");
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
+    await vi.advanceTimersByTimeAsync(150);
+    expect(colors()).toEqual(["#1b1c1f", "#1b1c1f"]);
+    expect(submitUpdate).toHaveBeenCalledOnce();
+  } finally {
+    engine.dispose();
+  }
+});
+
 async function createReconciliationFixture() {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
   const { ExcalidrawCollabEngine } = await import("./engine");
