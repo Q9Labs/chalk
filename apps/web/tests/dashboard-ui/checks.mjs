@@ -10,7 +10,7 @@ const results = [];
 const errors = [];
 const check = (name, ok, detail = "") => results.push(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `: ${detail}` : ""}`);
 
-async function open(route, { account = "hasan", set = "", signedOut = false, theme = "dark", width = 1440 } = {}) {
+async function open(route, { account = "hasan", set = "", signedOut = false, theme = "dark", width = 1440, clock = false } = {}) {
   await fixture("reset");
   await fixture(`set?account=${account}${set ? `&${set}` : ""}`);
   const context = await browser.newContext({ viewport: { width, height: 900 } });
@@ -18,6 +18,10 @@ async function open(route, { account = "hasan", set = "", signedOut = false, the
   if (!signedOut) cookies.push({ name: "fx_session", value: account, url: origin });
   await context.addCookies(cookies);
   const tab = await context.newPage();
+  if (clock) {
+    await tab.clock.install();
+    await tab.clock.pauseAt(new Date(Date.now() + 1000));
+  }
   tab.on("console", (message) => message.type() === "error" && errors.push(`${route}: ${message.text()}`));
   tab.on("pageerror", (error) => errors.push(`${route}: ${error.message}`));
   await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });

@@ -14,7 +14,13 @@ export const homeStatusQuery = z.strictObject({
   spaceIds: z
     .string()
     .transform((value) => value.split(","))
-    .pipe(z.array(id).min(1).max(100)),
+    .pipe(z.array(id).min(1).max(30)),
+});
+export const homeMetadataQuery = z.strictObject({
+  spaceIds: z
+    .string()
+    .transform((value) => value.split(","))
+    .pipe(z.array(id).min(1).max(5)),
 });
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
@@ -135,5 +141,6 @@ export type OwnerAccessDTO = { access: AccessGrant };
 
 export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
 export type HomeStatusDTO = { live: LiveDTO[] };
+export type HomeMetadataDTO = { calls: Pick<HomeCallDTO, "id" | "lastActiveAt" | "recentPeople">[] };
 
 export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };

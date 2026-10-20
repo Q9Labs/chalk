@@ -19,9 +19,11 @@ async function inviteLink(call: HomeCallDTO): Promise<string> {
 /** A mutation returns the bare call; keep the row's link, activity and people. */
 const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...call });
 
+type HomeData = HomeDTO & { pendingMetadata: string[] };
+
 export function HomePage() {
   const pages = useRef(1);
-  const { state, reload, update } = useLoad(
+  const { state, reload, update } = useLoad<HomeData>(
     async () => {
       let data = await readPage("home", {});
       // Keep expanded rows when a live call changes.
@@ -29,16 +31,38 @@ export function HomePage() {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
       }
-      return data;
+      return { ...data, pendingMetadata: [] };
     },
     "home",
     {
-      interval: (data) => (data.live.some((call) => call.episode) ? 5000 : undefined),
+      // Each batch costs one tenant read. Scale cadence to 12 steady-state reads/minute,
+      // regardless of how many live Spaces the person has loaded.
+      interval: (data) => {
+        const count = data.live.filter((call) => call.episode).length;
+        return count ? 5000 * Math.ceil(count / 30) : data.pendingMetadata.length ? 5000 : undefined;
+      },
       read: async (data) => {
         const active = data.live.filter((call) => call.episode);
-        const status = await readPage("home-status", { spaceIds: active.map((call) => call.spaceId).join(",") });
-        if (active.some((call) => status.live.find((item) => item.spaceId === call.spaceId)?.episode?.id !== call.episode?.id)) return null;
-        return { ...data, live: data.live.map((call) => status.live.find((item) => item.spaceId === call.spaceId) ?? call) };
+        const live: LiveDTO[] = [];
+        for (let start = 0; start < active.length; start += 30) {
+          const status = await readPage("home-status", {
+            spaceIds: active
+              .slice(start, start + 30)
+              .map((call) => call.spaceId)
+              .join(","),
+          });
+          live.push(...status.live);
+        }
+        // A failed batch rejects this tick; retained data retries all batches next tick.
+        const pending = new Set(data.pendingMetadata);
+        for (const call of active) if (live.find((item) => item.spaceId === call.spaceId)?.episode?.id !== call.episode?.id) pending.add(call.spaceId);
+        for (const id of pending) if (!data.calls.some((call) => call.id === id)) pending.delete(id);
+        // Drain at most five changed rows per tick: <=10 additional tenant reads,
+        // <=120/minute even after all live badges clear. Never reload all Home pages.
+        const ids = [...pending].slice(0, 5);
+        const metadata = ids.length ? await readPage("home-metadata", { spaceIds: ids.join(",") }) : { calls: [] };
+        for (const id of ids) pending.delete(id);
+        return { ...data, pendingMetadata: [...pending], calls: data.calls.map((call) => ({ ...call, ...metadata.calls.find((item) => item.id === call.id) })), live: data.live.map((call) => live.find((item) => item.spaceId === call.spaceId) ?? call) };
       },
     },
   );

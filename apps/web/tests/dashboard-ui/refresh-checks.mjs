@@ -26,11 +26,12 @@ export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
 }
 
 export async function refreshChecks({ open, fixture, check, CALL }) {
+  await budgetChecks({ open, fixture, check, CALL });
   await pendingMetadataChecks({ open, fixture, check, CALL });
-  const visible = (tab, selector) =>
+  const visible = (tab, selector, timeout = 8000) =>
     tab
       .locator(selector)
-      .waitFor({ state: "visible", timeout: 8000 })
+      .waitFor({ state: "visible", timeout })
       .then(
         () => true,
         () => false,
@@ -76,7 +77,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await fixture("set?ending=1&knocks=0");
     check("Call shows the ending session during engine shutdown", await visible(tab, '.srow a[aria-label^="Session"]'));
     await fixture("set?end=1");
-    const ended = await visible(tab, '.srow a[aria-label*=", 7 min,"]');
+    const ended = await visible(tab, '.srow a[aria-label*=", 7 min,"]', 40000);
     await screenshot(tab, "ended");
     check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.orow").count()) === 0 && (await tab.locator(".srow").getByText("Recording", { exact: true }).count()) === 1);
     await context.close();
@@ -238,5 +239,111 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
     check(`stale refresh cannot undo ${action}`, raced && kept);
     await context.close();
+  }
+}
+
+// Accelerate browser time, not network replies: these drive the mounted pages and real hook.
+async function budgetChecks({ open, fixture, check, CALL }) {
+  const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=0", clock: true });
+    try {
+      const initial = await reads("call");
+      for (let tick = 0; tick < 12; tick++) {
+        await fixture(`set?knocks=${tick % 2 ? 0 : 1}`);
+        const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+        await tab.clock.runFor(5000);
+        await response;
+        await tab.locator(".orow").waitFor({ state: tick % 2 ? "hidden" : "visible" });
+      }
+      check("twelve knock changes apply without a full Call read", (await reads("call")) === initial);
+      await tab.route("**/dashboard-api/call-status?*", async (route) => {
+        const response = await route.fetch();
+        const status = await response.json();
+        await route.fulfill({ response, json: { ...status, latestEpisodeId: "00000000-0000-4000-8000-000000009999" } });
+      });
+      const refreshes = [];
+      tab.on("request", (request) => {
+        if (new URL(request.url()).pathname === "/dashboard-api/call") refreshes.push(request.url());
+      });
+      for (let tick = 0; tick < 7; tick++) {
+        const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+        const full = tick === 0 || tick === 6 ? tab.waitForResponse((response) => new URL(response.url()).pathname === "/dashboard-api/call") : undefined;
+        await tab.clock.runFor(5000);
+        await response;
+        await full;
+        // Let React apply the HTTP response before advancing the next interval.
+        await tab.waitForTimeout(50);
+        check(`Episode churn tick ${tick + 1} respects the 30-second bound`, refreshes.length === (tick < 6 ? 1 : 2));
+      }
+      await tab.unroute("**/dashboard-api/call-status?*");
+      await fixture("set?end=1&knocks=0");
+      for (let tick = 0; tick < 6; tick++) {
+        await tab.clock.runFor(5000);
+        await tab.waitForTimeout(50);
+      }
+      check("coalesced Episode refresh fetches the final ended state", (await tab.locator(".liveb").count()) === 0 && refreshes.length === 3);
+    } finally {
+      await context.close();
+    }
+  }
+  for (const count of [31, 100]) {
+    const { tab, context } = await open("/dashboard", { set: "live=1", clock: true });
+    try {
+      let full = 0;
+      let fail = true;
+      const batches = [];
+      const metadataBatches = [];
+      const uuid = (n) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+      await tab.route("**/dashboard-api/home", async (route) => {
+        full++;
+        const response = await route.fetch();
+        const data = await response.json();
+        const calls = Array.from({ length: count }, (_, index) => ({ ...data.calls[0], id: uuid(0x8000 + index), name: `Live call ${index}` }));
+        await route.fulfill({ response, json: { ...data, calls, live: calls.map((call) => ({ spaceId: call.id, episode: { ...data.live[0].episode, id: uuid(0x9000 + Number.parseInt(call.id.slice(-4), 16)) } })) } });
+      });
+      await tab.route("**/dashboard-api/home-status?*", async (route) => {
+        const ids = new URL(route.request().url()).searchParams.get("spaceIds").split(",");
+        batches.push(ids);
+        if (fail && batches.length === 2) {
+          fail = false;
+          await route.fulfill({ status: 503, json: { error: "service_unavailable" } });
+        } else await route.fulfill({ json: { live: ids.map((spaceId) => ({ spaceId, episode: null })) } });
+      });
+      await tab.route("**/dashboard-api/home-metadata?*", async (route) => {
+        const ids = new URL(route.request().url()).searchParams.get("spaceIds").split(",");
+        metadataBatches.push(ids);
+        await route.fulfill({ json: { calls: ids.map((id) => ({ id, lastActiveAt: "2026-01-01T12:00:00Z", recentPeople: [{ id: uuid(0x700), name: "Final guest" }] })) } });
+      });
+      await tab.reload();
+      await tab.locator(".live").first().waitFor({ state: "visible" });
+      await tab.waitForLoadState("networkidle");
+      const initialFull = full;
+      const interval = 5000 * Math.ceil(count / 30);
+      await tab.clock.runFor(interval);
+      await tab.waitForTimeout(200);
+      check(`Home ${count} retains live data after a failed batch`, batches.length === 2 && (await tab.locator(".live").count()) === count);
+      await tab.clock.runFor(interval);
+      await tab.locator(".live").first().waitFor({ state: "hidden" });
+      const recovered = batches.slice(2).flat();
+      check(
+        `Home ${count} batches at most 30 ids and recovers next tick`,
+        batches.every((ids) => ids.length <= 30) && recovered.length === count && new Set(recovered).size === count && initialFull >= 1 && full === initialFull,
+        JSON.stringify({ batches: batches.map((ids) => ids.length), recovered: recovered.length, distinct: new Set(recovered).size, initialFull, full }),
+      );
+      const stopped = batches.length;
+      for (let tick = 1; tick < Math.ceil(count / 5); tick++) {
+        const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/home-metadata"));
+        await tab.clock.runFor(5000);
+        await response;
+        await tab.waitForTimeout(50);
+      }
+      check(`Home ${count} refreshes ended timestamps in bounded metadata batches`, metadataBatches.every((ids) => ids.length <= 5) && new Set(metadataBatches.flat()).size === count && (await tab.locator('.ra[aria-label*="1 Jan"]').count()) === count);
+      const finished = metadataBatches.length;
+      await tab.clock.runFor(interval * 2);
+      check(`Home ${count} stops polling after ended metadata drains`, batches.length === stopped && metadataBatches.length === finished);
+    } finally {
+      await context.close();
+    }
   }
 }

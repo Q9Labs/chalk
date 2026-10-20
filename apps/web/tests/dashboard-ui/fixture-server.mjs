@@ -218,6 +218,9 @@ async function dashboard(request, response, page, url, entry) {
     if (state.limit.has(page)) return fail(response, 429, "engine_rate_limited", { retryable: true, retryAfterSeconds: 60 });
     if (state.fail.has(page)) return fail(response, 503, "service_unavailable");
     const query = Object.fromEntries(url.searchParams);
+    if (page === "home-metadata") {
+      return send(response, 200, { calls: query.spaceIds.split(",").map((id) => ({ ...homeCallDTO(data.calls.find((call) => call.id === id)), id })) });
+    }
     if (page === "home-status") {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
       const live = query.spaceIds.split(",").map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));

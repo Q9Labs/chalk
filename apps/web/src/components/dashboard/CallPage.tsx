@@ -23,6 +23,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const pages = useRef(1);
   const metadata = useRef({ ticks: 0, next: 0 });
+  const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
   const { state, reload, update } = useLoad(
     async () => {
       let data = await readPage("call", { spaceId });
@@ -36,6 +37,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
     `call:${spaceId}`,
     {
       interval: (data) =>
+        lifecycleRefresh.current.pending ||
         (!data.call.archived && data.call.admission === "knock") ||
         data.live ||
         data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => pendingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
@@ -45,7 +47,19 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       read: async (data) => {
         const status = await readPage("call-status", { spaceId });
         const episode = data.episodes.find((item) => item.status !== "ended");
-        if ((data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status || JSON.stringify(data.knocks) !== JSON.stringify(status.knocks)) return null;
+        const changed = (data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status;
+        if (lifecycleRefresh.current.spaceId !== spaceId) lifecycleRefresh.current = { spaceId, after: 0, pending: false };
+        lifecycleRefresh.current.pending = changed;
+        if (changed && Date.now() >= lifecycleRefresh.current.after) {
+          // Charge failed attempts too. Recheck on later ticks so the final state is fetched.
+          lifecycleRefresh.current.after = Date.now() + 30000;
+          const fresh = await readPage("call", { spaceId });
+          // Refresh only the newest page (at most 40 engine reads), not expanded history.
+          // Older ended sessions remain snapshots until an explicit page refresh.
+          const older = pages.current > 1 ? data.episodes.filter((item) => item.status === "ended" && !fresh.episodes.some((current) => current.id === item.id)) : [];
+          lifecycleRefresh.current.pending = false;
+          return { ...fresh, episodes: [...fresh.episodes, ...older], nextCursor: pages.current > 1 ? data.nextCursor : fresh.nextCursor };
+        }
         let next = { ...data, knocks: status.knocks };
         // Share one additional engine read per ten seconds across live and pending metadata.
         if (++metadata.current.ticks % 2 !== 0) return next;
@@ -61,7 +75,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         if (target.kind === "live") {
           const roster = await readPage("home-status", { spaceIds: spaceId });
           const current = roster.live[0]?.episode ?? null;
-          if (current?.id !== data.live?.id) return null;
+          if (current?.id !== data.live?.id) return next;
           return { ...next, live: current };
         }
         const result = await readPage("call-metadata", target);
