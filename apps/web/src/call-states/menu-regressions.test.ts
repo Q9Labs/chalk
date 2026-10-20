@@ -110,6 +110,34 @@ it("does not stop the call's camera when closing its borrowed preview", async ()
   await track.dispose();
 });
 
+it("keeps an active preview on the published camera when another device is selected", async () => {
+  await load("shell-browser-camera-on");
+  await page.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
+  await expect.poll(() => page.getByRole("menuitemradio").count()).toBeGreaterThanOrEqual(2);
+  const preview = page.locator(".chalk-shell-preview video");
+  const published = await preview.evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));
+  expect(await published.evaluate((track) => track?.enabled && track.readyState === "live")).toBe(true);
+  const captures = await page.evaluateHandle(() => {
+    const calls: MediaStreamConstraints[] = [];
+    const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) => {
+      calls.push(constraints ?? {});
+      return capture(constraints);
+    };
+    return calls;
+  });
+  await page.getByRole("menuitemradio").nth(1).click();
+  await expect.poll(() => page.getByLabel("Last shell command").textContent()).toContain("Selected camera:");
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  // Selection alone does not replace the SDK's published track.
+  expect(await captures.evaluate((calls) => calls.length)).toBe(0);
+  expect(await preview.evaluate((video: HTMLVideoElement, track) => video.srcObject instanceof MediaStream && video.srcObject.getVideoTracks()[0] === track, published)).toBe(true);
+  await page.keyboard.press("Escape");
+  expect(await published.evaluate((track) => track?.enabled && track.readyState === "live")).toBe(true);
+  await captures.dispose();
+  await published.dispose();
+});
+
 it("keeps shortcuts content throughout close without rendering a report dialog", async () => {
   await load("shell-call");
   await page.getByRole("button", { name: "Call details", exact: true }).click();

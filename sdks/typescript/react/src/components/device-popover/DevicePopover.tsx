@@ -72,8 +72,7 @@ function CameraPreview({ track, mirrored, open, isActive, selectedDeviceId }: { 
     let cancelled = false;
     let ownedStream: MediaStream | undefined;
     setUnavailable(false);
-    const deviceId = track?.getSettings().deviceId;
-    if (isActive && track?.enabled && track.readyState === "live" && (!selectedDeviceId || !deviceId || deviceId === selectedDeviceId)) {
+    if (isActive && track?.enabled && track.readyState === "live") {
       element.srcObject = new MediaStream([track]);
     } else if (!navigator.mediaDevices?.getUserMedia) {
       setUnavailable(true);
