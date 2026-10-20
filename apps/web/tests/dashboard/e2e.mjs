@@ -380,7 +380,7 @@ try {
     assert.equal((await raw.json()).requests.length, 0, "Engine excludes expired pending knocks before its list limit");
     const expired = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
     assert.deepEqual((await expired.json()).knocks, [], "Dashboard filters expired knocks at the server boundary");
-    sql(`update space_public_admission_requests set expires_at=now()+interval '5 minutes' where space_id='${knockingSpace}'`);
+    sql(`update space_public_admission_requests set expires_at=now()+interval '5 minutes' where request_handle='${pending[0].handle}'`);
     const decisionKey = crypto.randomUUID();
     const decided = await post(ada, "/dashboard-api/call", { action: "deny-knock", spaceId: knockingSpace, requestHandle: pending[0].handle, idempotencyKey: decisionKey }, session.csrfToken);
     assert.equal(decided.status, 200, await decided.clone().text());
