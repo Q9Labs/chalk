@@ -92,7 +92,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version-file: .tool-versions
-          cache: pnpm
+          # This job may exit before installing; there may be no store to save.
+          package-manager-cache: false
 
       - name: Compare native fingerprints
         id: compare
