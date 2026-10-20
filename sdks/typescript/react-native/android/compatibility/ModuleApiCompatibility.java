@@ -192,6 +192,12 @@ public final class ModuleApiCompatibility {
             }
             var errors = check(fixture, runtime, compileTypes, supportedTypes);
             String missing = expected.get(simpleName);
+            if (supportedTypes.contains("android/media/" + missing)) {
+              if (!errors.isEmpty()) throw new AssertionError("Supported fixture failed: " + simpleName + ": " + errors);
+              rejected++;
+              System.out.println("EXPECTED PASS " + platform.getParent().getFileName() + " " + simpleName);
+              continue;
+            }
             if (errors.stream().noneMatch(e -> e.contains("missing android/media/" + missing))
                 || errors.stream().noneMatch(e -> e.contains("getDeclaredMethods: java.lang.NoClassDefFoundError"))) {
               throw new AssertionError("Unsafe fixture escaped: " + simpleName + ": " + errors);
