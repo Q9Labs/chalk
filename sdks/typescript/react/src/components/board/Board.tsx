@@ -210,6 +210,8 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
           onZoom(key === "-" ? 1 / ZOOM_STEP : ZOOM_STEP);
           return;
         }
+        // Escape drops the engine back to selection, so the island moves there too; the engine still gets the key.
+        if (key === "escape" && canDraw) onTool("selection");
         if (EDITING_KEYS.has(key)) return;
       }
       event.stopPropagation();
@@ -276,6 +278,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const canDraw = primary && (board.collab?.canDraw ?? board.canDraw ?? true);
   const compact = phone || narrow;
   const history = useHistoryCounts();
+  // Once this person draws or places a note, the camera is theirs: the board never fits under their hand.
+  const touched = useRef(false);
   const views = useRef(new Map<string, ChalkWhiteboardView>());
   const cursors = useRef(new Map<string, RemoteCursor>());
   const pen: PenChoice = useMemo(() => ({ color, width, surface, theme: colorScheme }), [color, width, surface, colorScheme]);
@@ -375,12 +379,13 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     let wasEditing = false;
     setElementCount(engine.api.getSceneElements().length);
     // The first drawing to arrive from others is fitted into view once, as the mockup opens the board.
-    let fitted = hasContent(engine);
-    if (fitted && !followingRef.current) fitContent(engine, false);
+    if (hasContent(engine)) {
+      touched.current = true;
+      if (!followingRef.current) fitContent(engine, false);
+    }
     const offDown = engine.api.onPointerDown(() => {
       before = sceneSignature(engine);
-      // Once this person draws, the camera is theirs: never fit underneath a stroke in progress.
-      fitted = true;
+      touched.current = true;
     });
     // The engine commits a stroke after it reports the pointer up, so look on the next frame.
     let settle = 0;
@@ -392,8 +397,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     const offChange = engine.api.onChange((elements, appState) => {
       const count = elements.filter((element) => !element.isDeleted).length;
       setElementCount(count);
-      if (!fitted && count > 0) {
-        fitted = true;
+      if (!touched.current && count > 0) {
+        touched.current = true;
         if (!followingRef.current) requestAnimationFrame(() => fitContent(engine, false));
       }
       const editing = appState.editingTextElement !== null;
@@ -503,6 +508,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     if (!engine || !container || !root.current) return;
     const rect = root.current.getBoundingClientRect();
     const { scrollX, scrollY, zoom } = camera.cameraRef.current;
+    touched.current = true;
     placeNote(engine, container, { x: (event.clientX - rect.left) / zoom - scrollX, y: (event.clientY - rect.top) / zoom - scrollY }, color);
     history.changed();
     setTool("selection");
