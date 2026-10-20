@@ -1,6 +1,6 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
-import { prepareGuest } from "../scripts/web-proof/guest.mjs";
+import { withProofCall } from "../scripts/web-proof/guest.mjs";
 
 const boardBox = () => {
   const box = document.querySelector(".chalk-board")?.getBoundingClientRect();
@@ -11,14 +11,7 @@ const zoomLabel = () => document.querySelector(".chalk-board-zoom-value")?.textC
 // The web app joins by invite, so it can draw but not manage the board. The SDK guest is an
 // owner: it opens the board, draws, and brings everyone to its view.
 test("the board syncs strokes, sticky notes, follow and bring everyone between two browsers", async ({ app, browser, screen }) => {
-  const invite = process.env.CHALK_E2E_INVITE;
-  const directory = process.env.CHALK_E2E_DIRECTORY;
-  if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
-  const guest = await prepareGuest(directory);
-  try {
-    await app.open(invite);
-    await screen.getByLabel("Your name").fill("Web proof A");
-    await screen.getByRole("button", "Join", { exact: true }).click();
+  await withProofCall({ app, screen }, async (guest) => {
     await guest.ready;
     await guest.board.open();
     await expect(screen.getByRole("toolbar", "Drawing tools", { exact: true })).toBeVisible();
@@ -61,7 +54,5 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
 
     await screen.getByRole("button", "Leave call", { exact: true }).click();
     await guest.leave();
-  } finally {
-    await guest.dispose();
-  }
+  });
 });

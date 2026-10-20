@@ -6,7 +6,23 @@ import { playIncomingAudio } from "./media.mjs";
 import { boardDraw, boardElements, boardOpen, boardView } from "./board.mjs";
 import { guestConfig } from "./environment.mjs";
 
-export async function prepareGuest(directory) {
+/** Joins the web app to the proof Space as "Web proof A" beside one SDK guest, then disposes the guest. */
+export async function withProofCall({ app, screen }, run) {
+  const invite = process.env.CHALK_E2E_INVITE;
+  const directory = process.env.CHALK_E2E_DIRECTORY;
+  if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
+  const guest = await prepareGuest(directory);
+  try {
+    await app.open(invite);
+    await screen.getByLabel("Your name").fill("Web proof A");
+    await screen.getByRole("button", "Join", { exact: true }).click();
+    await run(guest);
+  } finally {
+    await guest.dispose();
+  }
+}
+
+async function prepareGuest(directory) {
   const run = await createRun(guestConfig(process.env), directory, undefined, process.env.CHALK_E2E_RUN_ID);
   run.apiKey = process.env.CHALK_E2E_API_KEY;
   const space = JSON.parse(await readFile(`${directory}/space.json`, "utf8"));

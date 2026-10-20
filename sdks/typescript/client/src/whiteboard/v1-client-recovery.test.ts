@@ -394,11 +394,7 @@ describe("whiteboard slow-connection watchdog", () => {
     oldSocket.onclose?.({ code: 1000 });
     await settle();
     expect(snapshots.at(-1)).toMatchObject({ revision: "2" });
-    for (let sample = 0; sample < 20; sample += 1) {
-      clock.advance(sample === 0 ? 5_000 : 4_000);
-      sockets[1]?.receive({ type: "pong" });
-      await settle();
-    }
+    await answerProbes(clock, sockets[1], 20);
     expect(sockets[1]?.closeCalls).toEqual([]);
     await client.stopSceneSubscription();
   });
@@ -527,11 +523,7 @@ describe("whiteboard slow-connection watchdog", () => {
     await settle();
     clock.advance(2_000);
     await acceptSnapshot(sockets, 1);
-    for (let index = 0; index < 5; index += 1) {
-      clock.advance(index === 0 ? 5_000 : 4_000);
-      sockets[1]?.receive({ type: "pong" });
-      await settle();
-    }
+    await answerProbes(clock, sockets[1], 5);
     expect(sockets[1]?.closeCalls).toEqual([]);
     await client.stopSceneSubscription();
   });
@@ -641,6 +633,15 @@ function snapshotPage(requestId: string | undefined): Record<string, unknown> {
     elements: [],
     app_state: null,
   };
+}
+
+/** Answers each keepalive probe on time, starting with the first one five seconds in. */
+async function answerProbes(clock: TestClock, socket: TestSocket | undefined, probes: number) {
+  for (let probe = 0; probe < probes; probe += 1) {
+    clock.advance(probe === 0 ? 5_000 : 4_000);
+    socket?.receive({ type: "pong" });
+    await settle();
+  }
 }
 
 async function settle(): Promise<void> {

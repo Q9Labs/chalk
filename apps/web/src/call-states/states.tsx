@@ -182,7 +182,7 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
 }
 
 /** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
-export function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void; readonly board?: BoardFixture }) {
+function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void; readonly board?: BoardFixture }) {
   const [client] = useState(() => createCallStateClient(snapshot, board));
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [transition] = useState(() => then);

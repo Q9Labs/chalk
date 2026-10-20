@@ -5,12 +5,15 @@ export async function boardOpen() {
   const board = { sceneId: null, elements: new Map() };
   window.proofBoard = board;
   transport.subscribe((event) => {
-    if (event.type !== "snapshot" && event.type !== "update") return;
-    if (event.sceneId) board.sceneId = event.sceneId;
-    for (const element of event.elements) board.elements.set(element.id, element);
+    if (event.type === "snapshot" || event.type === "update") record(board, event);
   });
   await transport.startSceneSubscription();
   await transport.setPresentation(true);
+}
+
+function record(board, scene) {
+  board.sceneId = scene.sceneId ?? board.sceneId;
+  for (const element of scene.elements) board.elements.set(element.id, element);
 }
 
 /** One freehand stroke, shaped as the web board submits it. */

@@ -5,6 +5,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.WhiteboardV1.Episode
+  alias ChalkSync.WhiteboardV1.Fanout
 
   @participant_id "20000000-0000-4000-8000-000000000002"
   @scene_id "10000000-0000-4000-8000-000000000001"
@@ -436,7 +437,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     guest = %{identity() | capabilities: ["drawWhiteboard"]}
     {:ok, initial} = SocketWhiteboardV1.init(%{})
     live = %{initial | phase: :live, scene_id: @scene_id, revision: 4, display_name: "Ada"}
-    ChalkSync.WhiteboardV1.Fanout.subscribe(host.episode)
+    Fanout.subscribe(host.episode)
 
     view = %{
       "type" => "view",
@@ -469,7 +470,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert JSON.decode!(pushed)["display_name"] == "Ada"
   after
-    ChalkSync.WhiteboardV1.Fanout.unsubscribe(identity().episode)
+    Fanout.unsubscribe(identity().episode)
   end
 
   test "does not echo a participant cursor or replay an applied update" do

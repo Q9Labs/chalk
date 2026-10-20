@@ -102,13 +102,7 @@ it("submits a local version that wins an equal-version reconciliation without ec
 });
 
 it("paints canonical Ink in the viewer's surface ink and sends it back canonical", async () => {
-  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
-  const { ExcalidrawCollabEngine } = await import("./engine");
-  const { toWireElement } = await import("./wire");
-  vi.useFakeTimers();
-  const api = createCanvas(restoreElements, restoreAppState);
-  const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
-  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, inkColor: "#f1f0ea", submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture({ inkColor: "#f1f0ea" });
   const stroke = (id: string, strokeColor: string, version = 1) => restoreElements([{ type: "rectangle", id, index: id === "remote" ? "a0" : "a1", x: 0, y: 0, width: 10, height: 10, strokeColor, version, versionNonce: 1, isDeleted: false }], null);
   const colors = () => api.getSceneElementsIncludingDeleted().map((element) => element.strokeColor);
   try {
@@ -128,14 +122,14 @@ it("paints canonical Ink in the viewer's surface ink and sends it back canonical
   }
 });
 
-async function createReconciliationFixture() {
+async function createReconciliationFixture(options: { readonly inkColor?: string } = {}) {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
   const { ExcalidrawCollabEngine } = await import("./engine");
   const { toWireElement } = await import("./wire");
   vi.useFakeTimers();
   const api = createCanvas(restoreElements, restoreAppState);
   const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
-  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  const engine = new ExcalidrawCollabEngine({ ...options, excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
   return { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement };
 }
 
