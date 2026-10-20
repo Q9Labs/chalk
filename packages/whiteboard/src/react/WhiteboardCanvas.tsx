@@ -516,6 +516,8 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
 
 function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => void) | undefined, excalidraw: ExcalidrawModule | null, collaboration: WhiteboardCollaboration, placeMath: (latex: string) => Promise<void>, headless: boolean) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  // Excalidraw hands over its API before it loads initialData, and that load resets the tool and view.
+  const [loaded, setLoaded] = useState(false);
   const { handleApiReady, handleChange } = collaboration;
   const onApiReady = useCallback(
     (next: ExcalidrawImperativeAPI) => {
@@ -527,6 +529,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
   const onChange = useCallback(
     (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
       handleChange(elements, appState, files);
+      if (!appState.isLoading) setLoaded(true);
       // A shared background from an older board must not cover the surface its host paints.
       if (headless && appState.viewBackgroundColor !== TRANSPARENT) api?.updateScene({ appState: { viewBackgroundColor: TRANSPARENT } });
     },
@@ -536,7 +539,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
   placeMathRef.current = placeMath;
   const { engineRef } = collaboration;
   useEffect(() => {
-    if (!api || !excalidraw || !onEngineReady) return;
+    if (!api || !excalidraw || !loaded || !onEngineReady) return;
     onEngineReady({
       api,
       excalidraw,
@@ -547,7 +550,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
       },
       placeMath: (latex) => placeMathRef.current(latex),
     });
-  }, [api, engineRef, excalidraw, onEngineReady]);
+  }, [api, engineRef, excalidraw, loaded, onEngineReady]);
   return { onApiReady, onChange };
 }
 

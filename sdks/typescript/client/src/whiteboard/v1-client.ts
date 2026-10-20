@@ -82,7 +82,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #presentationSupported = false;
   #presenting = false;
   #hello: "view" | "presentation" | "legacy" = "view";
-  #viewSupported = false;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
   #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
@@ -225,7 +224,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   sendView(view: ChalkWhiteboardView): boolean {
-    if (!this.#viewSupported) return false;
+    // Views are shared until an older server refuses view_v1; a reconnect's hello in flight does not change that.
+    if (this.#hello !== "view") return false;
     if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) return true;
     const frame = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
     encodeWhiteboardV1ClientFrame(frame);
@@ -343,7 +343,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#phase = "authenticating";
       this.#presentationSupported = false;
       const cursor = this.#sceneId && this.#revision ? { scene_id: this.#sceneId, revision: this.#revision } : null;
-      this.#viewSupported = false;
       this.#send(helloFrame(this.#hello, token, cursor));
     } catch {
       socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard authentication failed");
@@ -481,7 +480,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#capabilities = [...frame.capabilities];
     this.#canDraw = frame.can_draw;
     this.#presentationSupported = "presenting" in frame;
-    this.#viewSupported = this.#hello === "view";
     this.#presenting = "presenting" in frame ? frame.presenting : false;
     this.#publishSummary("loading", null);
     this.#clearHeartbeat();

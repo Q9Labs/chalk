@@ -37,8 +37,10 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await expect.poll(async () => (await guest.board.elements()).some((element) => element.text === "Ship Friday"), { timeout: 15_000 }).toBe(true);
 
     // A stroke from the guest reaches the web board.
+    const elementCount = () => Number(document.querySelector(".chalk-board")?.getAttribute("data-elements") ?? 0);
+    const before = await browser.evaluate(elementCount);
     await guest.board.draw();
-    await expect.poll(() => browser.evaluate(() => document.querySelector(".chalk-board-hint") === null), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => browser.evaluate(elementCount), { timeout: 15_000 }).toBe(before + 1);
 
     // Following the guest by its tile moves the web view with the guest's view.
     await screen.getByLabel("Video tile for Proof guest 1").click();

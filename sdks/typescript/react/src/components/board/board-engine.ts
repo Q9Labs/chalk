@@ -7,14 +7,17 @@ export type PenChoice = { readonly color: PenColor; readonly width: PenWidth; re
 // Nunito is the engine's clean sans; the call's own Figtree is not one of its fonts.
 const TEXT_FONT = 6;
 const NOTE_FONT_SIZE = 18;
+// Excalidraw's BOUND_TEXT_PADDING, which it does not export.
+const BOUND_TEXT_PADDING = 5;
 
 type EngineTool = Parameters<WhiteboardEngineHandle["api"]["setActiveTool"]>[0];
 
 function engineTool(tool: BoardTool): EngineTool {
-  if (tool === "pen" || tool === "highlighter") return { type: "freedraw" };
+  // A drawing tool stays chosen after each shape, as the island shows; the engine would otherwise drop back to selection.
+  if (tool === "pen" || tool === "highlighter") return { type: "freedraw", locked: true };
   // The sticky note is placed by the board itself, so the engine just selects meanwhile.
-  if (tool === "note") return { type: "selection" };
-  return { type: tool };
+  if (tool === "note" || tool === "selection") return { type: "selection" };
+  return { type: tool, locked: true };
 }
 
 function penStyle(tool: BoardTool, pen: PenChoice) {
@@ -73,13 +76,18 @@ export function placeNote(engine: WhiteboardEngineHandle, container: HTMLElement
 export function settleNoteText(engine: WhiteboardEngineHandle): void {
   const { api, excalidraw } = engine;
   const elements = api.getSceneElementsIncludingDeleted();
-  const notes = new Set(elements.filter((element) => element.type === "rectangle" && element.customData?.chalkNote).map((element) => element.id));
+  const notes = new Map(elements.filter((element) => element.type === "rectangle" && element.customData?.chalkNote).map((element) => [element.id, element]));
   let changed = false;
   const next = elements.map((element) => {
-    if (element.type !== "text" || !element.containerId || !notes.has(element.containerId) || element.isDeleted) return element;
-    if (element.verticalAlign === "top" && element.textAlign === "left" && element.strokeColor === NOTE_TEXT) return element;
+    if (element.type !== "text" || !element.containerId || element.isDeleted) return element;
+    const note = notes.get(element.containerId);
+    if (!note) return element;
+    // updateScene does not lay bound text out again, so place it where the engine's top-left layout would.
+    const x = note.x + BOUND_TEXT_PADDING;
+    const y = note.y + BOUND_TEXT_PADDING;
+    if (element.verticalAlign === "top" && element.textAlign === "left" && element.strokeColor === NOTE_TEXT && element.x === x && element.y === y) return element;
     changed = true;
-    return excalidraw.newElementWith(element, { verticalAlign: "top", textAlign: "left", strokeColor: NOTE_TEXT });
+    return excalidraw.newElementWith(element, { verticalAlign: "top", textAlign: "left", strokeColor: NOTE_TEXT, x, y });
   });
   if (changed) api.updateScene({ elements: next, captureUpdate: excalidraw.CaptureUpdateAction.NEVER });
 }

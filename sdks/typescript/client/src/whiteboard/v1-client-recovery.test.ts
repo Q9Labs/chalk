@@ -74,10 +74,19 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await client.stopSceneSubscription();
     }
 
-    const current = await startedRecoveryClient(new TestClock());
+    const currentClock = new TestClock();
+    const current = await startedRecoveryClient(currentClock);
     try {
       expect(current.client.sendView(view)).toBe(true);
       expect(JSON.parse(current.sockets[0]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      // A dropped connection is not a refusal: views stay available while the client reconnects.
+      current.sockets[0]?.close(1006);
+      currentClock.advance(5_000);
+      await settle();
+      current.sockets[1]?.open();
+      await settle();
+      expect(JSON.parse(current.sockets[1]?.sent[0] ?? "{}").type).toBe("hello");
+      expect(current.client.sendView(view)).toBe(true);
     } finally {
       await current.client.stopSceneSubscription();
     }

@@ -1,6 +1,6 @@
 import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useCan, useConnection } from "../../bindings/hooks";
 import { useMediaQuery, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import type { Participant } from "../participant-grid/ParticipantGrid";
@@ -61,6 +61,7 @@ const VIEW_SEND_MS = 150;
 const VIEW_HEARTBEAT_MS = 2000;
 const GLIDE_MS = 300;
 const ZOOM_STEP = 1.25;
+const NOTE_FONT_PX = 18;
 const EDITING_KEYS = new Set(["delete", "backspace", "arrowup", "arrowdown", "arrowleft", "arrowright", "escape", " ", "enter", "shift", "alt", "control", "meta", "tab"]);
 const MODIFIED_ENGINE_KEYS = new Set(["c", "v", "x", "a", "d", "=", "+", "-", "0"]);
 
@@ -268,7 +269,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const [shape, setShape] = useState<ShapeTool>("rectangle");
   const [color, setColor] = useState<PenColor>("ink");
   const [width, setWidth] = useState<PenWidth>("medium");
-  const [empty, setEmpty] = useState(true);
+  const [elementCount, setElementCount] = useState(0);
+  const empty = elementCount === 0;
   const [narrow, setNarrow] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const canDraw = primary && (board.collab?.canDraw ?? board.canDraw ?? true);
@@ -362,22 +364,35 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     if (engine && canDraw) applyTool(engine, tool, pen);
   }, [canDraw, engine, pen, tool]);
 
+  // Text wraps by measuring the font, so load the board's one text font before anyone types.
+  useEffect(() => {
+    if (engine) void document.fonts.load(`${NOTE_FONT_PX}px Nunito`);
+  }, [engine]);
+
   useEffect(() => {
     if (!engine) return;
     let before = sceneSignature(engine);
     let wasEditing = false;
-    setEmpty(!hasContent(engine));
-    const offDown = engine.api.onPointerDown(() => (before = sceneSignature(engine)));
-    const offUp = engine.api.onPointerUp(() => {
-      if (sceneSignature(engine) !== before) history.changed();
-    });
-    // The first drawing to arrive is fitted into view once, as the mockup opens the board.
+    setElementCount(engine.api.getSceneElements().length);
+    // The first drawing to arrive from others is fitted into view once, as the mockup opens the board.
     let fitted = hasContent(engine);
     if (fitted && !followingRef.current) fitContent(engine, false);
+    const offDown = engine.api.onPointerDown(() => {
+      before = sceneSignature(engine);
+      // Once this person draws, the camera is theirs: never fit underneath a stroke in progress.
+      fitted = true;
+    });
+    // The engine commits a stroke after it reports the pointer up, so look on the next frame.
+    let settle = 0;
+    const offUp = engine.api.onPointerUp(() => {
+      settle = requestAnimationFrame(() => {
+        if (sceneSignature(engine) !== before) history.changed();
+      });
+    });
     const offChange = engine.api.onChange((elements, appState) => {
-      const nothing = elements.every((element) => element.isDeleted);
-      setEmpty(nothing);
-      if (!fitted && !nothing) {
+      const count = elements.filter((element) => !element.isDeleted).length;
+      setElementCount(count);
+      if (!fitted && count > 0) {
         fitted = true;
         if (!followingRef.current) requestAnimationFrame(() => fitContent(engine, false));
       }
@@ -389,6 +404,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       wasEditing = editing;
     });
     return () => {
+      cancelAnimationFrame(settle);
       offDown();
       offUp();
       offChange();
@@ -408,15 +424,14 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     setTool(next);
   }, []);
   const undo = useCallback(() => {
+    // The keydown reaches the board's own key listener, which counts it.
     const container = root.current?.querySelector<HTMLElement>(".excalidraw");
     if (container) pressHistory(container, false);
-    history.undone();
-  }, [history]);
+  }, []);
   const redo = useCallback(() => {
     const container = root.current?.querySelector<HTMLElement>(".excalidraw");
     if (container) pressHistory(container, true);
-    history.redone();
-  }, [history]);
+  }, []);
   const zoomBy = useCallback(
     (factor: number) => {
       stopFollowing();
@@ -473,6 +488,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     }
   };
   const bring = () => {
+    // Following someone while bringing them here would make each follow the other.
+    if (followingRef.current) onFollow(null);
     shareView.current(true);
     toast({ message: "Everyone is following your view" });
   };
@@ -492,10 +509,11 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   };
 
   const ink = surfaceInk(surface, colorScheme);
+  const surfaceVars: CSSProperties & { readonly "--board-selection": string } = { "--board-selection": selectionColor(surface, colorScheme) };
   const followed = following ? nameOf(following) : null;
   const ready = engine !== null;
   return (
-    <div ref={root} className="chalk-board" data-surface={surface} data-theme={colorScheme} data-ready={ready || undefined} data-compact={compact || undefined} data-primary={primary || undefined} style={{ ["--board-selection" as string]: selectionColor(surface, colorScheme) }} hidden={!visible}>
+    <div ref={root} className="chalk-board" data-surface={surface} data-theme={colorScheme} data-ready={ready || undefined} data-compact={compact || undefined} data-primary={primary || undefined} data-elements={elementCount} style={surfaceVars} hidden={!visible}>
       <BoardStyles />
       <WhiteboardCanvas {...board} headless canDraw={canDraw} collab={board.collab ? { ...board.collab, canDraw } : undefined} inkColor={ink} theme="light" isVisible={visible} className="chalk-board-engine" onEngineReady={setEngine} />
       {!ready ? (
