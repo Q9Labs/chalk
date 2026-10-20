@@ -1,7 +1,11 @@
 import copy
 import hashlib
 import importlib.util
+import http.client
+import io
+import urllib.request
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -40,6 +44,343 @@ class BootCheckTests(unittest.TestCase):
         self.assertEqual(diagnosis['archive_downloads'][0]['bytes_received'], 42)
         self.assertNotIn('SECRET', json.dumps(diagnosis))
         self.assertEqual(boot.boot_diagnosis(None, evidence)['issuer_archive_failure'], 'archive_download_failed')
+
+    def test_script_messages_survive_and_http_payloads_do_not(self):
+        import urllib.error
+
+        secret = 'fake-private-data-sentinel'
+        self.assertEqual(boot.safe_error(boot.DiagnosticError('audited message')), 'audited message')
+        self.assertEqual(boot.safe_error(urllib.error.URLError(secret)), 'URLError')
+        self.assertEqual(boot.safe_error(urllib.error.HTTPError('https://example.test/' + secret, 403, secret, None, None)),
+                         'HTTP request failed HTTP 403; payload suppressed')
+
+    def test_untrusted_errors_expose_only_their_class(self):
+        import ipaddress
+        import urllib.parse
+        from datetime import datetime
+
+        secret = 'fake-private-value-sentinel'
+
+        class OpaqueError(Exception):
+            def __str__(self):
+                raise AssertionError('untrusted error text must not be read')
+
+        self.assertEqual(boot.safe_error(OpaqueError(secret)), 'OpaqueError')
+        self.assertEqual(boot.safe_error(RuntimeError(secret)), 'RuntimeError')
+        cases = [
+            (lambda: datetime.fromisoformat(secret), 'ValueError'),
+            (lambda: int(secret), 'ValueError'),
+            (lambda: urllib.parse.urlsplit('https://example.test:' + secret).port,
+             'ValueError'),
+            (lambda: ipaddress.ip_address(secret), 'ValueError'),
+        ]
+        for parse, expected in cases:
+            with self.subTest(expected=expected), self.assertRaises(ValueError) as caught:
+                parse()
+            self.assertEqual(boot.safe_error(caught.exception), expected)
+            self.assertNotIn(secret, boot.safe_error(caught.exception))
+        self.assertEqual(boot.safe_error(FileNotFoundError(2, 'No such file or directory', secret)),
+                         'FileNotFoundError')
+        self.assertEqual(boot.safe_error(UnicodeDecodeError('utf-8', secret.encode(), 0, 1, secret)),
+                         'UnicodeDecodeError')
+        with self.assertRaises(json.JSONDecodeError) as caught:
+            json.loads(secret)
+        self.assertEqual(boot.safe_error(caught.exception), 'JSONDecodeError')
+
+    def run_parser_failure(self, directory, issuer_url, cleanup_services=None):
+        import os
+        from unittest.mock import Mock
+
+        request_path, receipt_path = directory / 'request.json', directory / 'receipt.json'
+        request_path.write_text(json.dumps(dict(
+            schema_version=1, role='capture', source_commit='a' * 40, release_id='candidate',
+            image_id=1, image_digest='sha256:' + 'a' * 64, region='region', size='size',
+            archive=dict(bucket='example-artifacts', key='recorder/capture/' + 'a' * 64 + '.tar.gz',
+                         sha256='a' * 64, region='region'))))
+        services = Mock(profile='', region='region')
+        services.host.return_value = dict(
+            env=dict(REGION='region', SIZE='size', ENVIRONMENT='test', OWNER_TAG='test',
+                     FIREWALL_ID='fake-firewall', BOOTSTRAP_ENDPOINT='https://example.test:443'),
+            issuer_control_plane_url=issuer_url, journal=dict(journal=dict(nodes={})))
+        services.do.side_effect = [dict(sizes=[dict(slug='size', regions=['region'], price_hourly=0.01)]),
+                                   dict(droplets=[]), dict(ssh_key=dict(id=1)), None,
+                                   dict(firewall=dict(outbound_rules=[]))]
+        services.aws.return_value = dict(PublicAccessBlockConfiguration={
+            key: not cleanup_services for key in
+            ('BlockPublicAcls', 'IgnorePublicAcls', 'BlockPublicPolicy', 'RestrictPublicBuckets')})
+
+        def start_guard(*args, **kwargs):
+            work = next(directory.glob('boot-check-*'))
+            boot.private_json(work / 'watchdog-started.json', {})
+            if cleanup_services:
+                def wait(**kwargs):
+                    (work / 'watchdog-started.json').unlink()
+                    boot.append(work, dict(deadline=0, tag_intent=True))
+                    with patch.object(boot, 'Services', return_value=cleanup_services):
+                        with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                            boot.watchdog(work)
+                return Mock(pid=123, returncode=1, wait=Mock(side_effect=wait))
+            boot.private_json(work / 'cleanup.json', dict(result='PASS'))
+            return Mock(pid=123, returncode=0)
+
+        def command(args, **kwargs):
+            if args[0] == 'aws':
+                return json.dumps(dict(AccessKeyId='fake-id', SecretAccessKey='fake-key'))
+            if args[0] == 'ssh-keygen':
+                Path(args[-1] + '.pub').write_text('fake-public-key')
+                return ''
+            self.assertEqual(args[0], 'curl')
+            return '192.0.2.1'
+
+        stdout = io.StringIO()
+        with patch.object(boot, 'Services', return_value=services), \
+                patch.object(boot.subprocess, 'Popen', side_effect=start_guard), \
+                patch.object(boot, 'command', side_effect=command), \
+                patch.dict(os.environ, dict(CHALK_BOOT_CHECK_EVIDENCE_BUCKET='example-evidence'), clear=True), \
+                patch('sys.stdout', stdout):
+            self.assertEqual(boot.run(request_path, receipt_path), 1)
+        receipt = json.loads(receipt_path.read_text())
+        work = next(directory.glob('boot-check-*'))
+        history = [json.loads(line)['cleanup_error'] for line in (work / 'ledger.jsonl').read_text().splitlines()
+                   if 'cleanup_error' in json.loads(line)]
+        return receipt, history, stdout.getvalue()
+
+    def test_bad_http_status_line_never_reaches_receipt_watchdog_or_stdout(self):
+        sentinel = 'fake-private-status-line-sentinel'
+
+        class FakeSocket:
+            def makefile(self, *args):
+                return io.BytesIO((sentinel + '\r\n\r\n').encode())
+
+            def sendall(self, data):
+                pass
+
+            def close(self):
+                pass
+
+        class OfflineHTTPSConnection(http.client.HTTPSConnection):
+            def connect(self):
+                self.sock = FakeSocket()
+
+        class OfflineHTTPSHandler(urllib.request.HTTPSHandler):
+            def https_open(self, request):
+                return self.do_open(OfflineHTTPSConnection, request)
+
+        services = object.__new__(boot.Services)
+        services.token, services.mutation_deadline = 'fake-token', None
+        services.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), OfflineHTTPSHandler())
+        with tempfile.TemporaryDirectory() as temp:
+            receipt, history, stdout = self.run_parser_failure(Path(temp), 'https://example.test:8443', services)
+        self.assertFalse(receipt['cleanup_confirmed'])
+        self.assertEqual(len(history), 3)
+        self.assertEqual(receipt['cleanup_errors'], history)
+        self.assertTrue(all('BadStatusLine' in error for error in history))
+        for value in (json.dumps(receipt), json.dumps(history), stdout):
+            self.assertNotIn(sentinel, value)
+
+    def test_url_normalization_error_never_reaches_receipt_watchdog_or_stdout(self):
+        sentinel = 'fake-private-url-sentinel'
+        hostname = sentinel + '\uff1aexample.test'
+        with tempfile.TemporaryDirectory() as temp:
+            receipt, history, stdout = self.run_parser_failure(Path(temp), 'https://' + hostname + ':8443')
+        self.assertEqual(receipt['reason'], 'ValueError')
+        self.assertTrue(receipt['cleanup_confirmed'])
+        for value in (json.dumps(receipt), json.dumps(history), stdout):
+            self.assertNotIn(sentinel, value)
+            self.assertNotIn(hostname, value)
+
+    def test_run_receipt_preserves_trusted_failure_even_when_cleanup_times_out(self):
+        import os
+        from unittest.mock import Mock
+
+        request = dict(schema_version=1, role='capture', source_commit='a' * 40, release_id='candidate',
+                       image_id=1, image_digest='sha256:' + 'a' * 64, region='region', size='size',
+                       archive=dict(bucket='example-artifacts', key='recorder/capture/' + 'a' * 64 + '.tar.gz',
+                                    sha256='a' * 64, region='region'))
+        for timeout in (False, True):
+            with self.subTest(cleanup_timeout=timeout), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp)
+                request_path, receipt_path = directory / 'request.json', directory / 'receipt.json'
+                request_path.write_text(json.dumps(request))
+                services = Mock()
+                services.host.return_value = dict(
+                    env=dict(REGION='region', SIZE='size', ENVIRONMENT='test', OWNER_TAG='test'),
+                    issuer_control_plane_url='https://example.test:8443', journal=dict(journal=dict(nodes={})))
+                services.do.side_effect = [dict(sizes=[dict(slug='size', regions=['region'], price_hourly=0.01)]),
+                                           dict(droplets=[])]
+                services.aws.return_value = dict(PublicAccessBlockConfiguration={})
+
+                def start_guard(*args, **kwargs):
+                    work = next(directory.glob('boot-check-*'))
+                    boot.private_json(work / 'watchdog-started.json', {})
+                    guard = Mock(pid=123, returncode=None if timeout else 0)
+                    if timeout:
+                        guard.wait.side_effect = subprocess.TimeoutExpired('fake-watchdog', 150)
+                    else:
+                        boot.private_json(work / 'cleanup.json', dict(result='PASS'))
+                    return guard
+
+                with patch.object(boot, 'Services', return_value=services), \
+                        patch.object(boot.subprocess, 'Popen', side_effect=start_guard), \
+                        patch.dict(os.environ, dict(CHALK_BOOT_CHECK_EVIDENCE_BUCKET='example-evidence'), clear=True), \
+                        patch('builtins.print'):
+                    self.assertEqual(boot.run(request_path, receipt_path), 1)
+                receipt = json.loads(receipt_path.read_text())
+                self.assertEqual(receipt['reason'], 'guest evidence bucket must block public access')
+                self.assertEqual(receipt['cleanup_confirmed'], not timeout)
+                self.assertEqual(receipt['result'], 'FAIL')
+                self.assertNotIn('archive', receipt)
+                self.assertNotIn('evidence_directory', receipt)
+                self.assertNotIn(request['archive']['bucket'], json.dumps(receipt))
+                self.assertNotIn(request['archive']['key'], json.dumps(receipt))
+
+    def test_s3_cleanup_explanations_survive_watchdog_and_public_receipt(self):
+        from unittest.mock import Mock
+
+        key = 'bootdiag/owned/guest.json'
+        cases = [
+            ('wrong-key', [], 'guest evidence object ownership mismatch'),
+            (key, [dict(Versions=[dict(Key=key + '-extra')])], 'ambiguous guest evidence object prefix'),
+            (key, [{}, {}, dict(DeleteMarkers=[dict(Key=key + '-extra')])],
+             'ambiguous guest evidence deletion marker'),
+            (key, [{}, {}, {}, dict(Versions=[dict(Key=key)])], 'guest evidence object cleanup unproved'),
+        ]
+        for evidence_key, responses, message in cases:
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp)
+                boot.append(directory, dict(name='owned', deadline=0, evidence_bucket='fake-private-bucket',
+                                            evidence_key=evidence_key))
+                services = Mock()
+                services.aws.side_effect = responses * 3
+                with patch.object(boot, 'Services', return_value=services):
+                    with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                        boot.watchdog(directory)
+                history = [json.loads(line)['cleanup_error']
+                           for line in (directory / 'ledger.jsonl').read_text().splitlines()
+                           if 'cleanup_error' in json.loads(line)]
+                self.assertEqual(history, [message] * 3)
+                self.assertEqual(json.loads((directory / 'cleanup-failed.json').read_text())['errors'], history)
+                receipt = boot.cleanup_receipt(directory, 1)
+                self.assertEqual(receipt['cleanup_errors'], history)
+                self.assertFalse(receipt['cleanup_confirmed'])
+                self.assertNotIn('fake-private-bucket', json.dumps(receipt))
+                self.assertNotIn(evidence_key, json.dumps(receipt))
+
+    def test_http_and_managed_host_failures_keep_safe_status_distinctions(self):
+        import io
+        import urllib.error
+        from unittest.mock import Mock
+
+        secret = 'fake-private-payload-sentinel'
+        for method in ('GET', 'POST', 'DELETE'):
+            for code in (401, 429, 500):
+                with self.subTest(method=method, code=code):
+                    services = object.__new__(boot.Services)
+                    services.token, services.mutation_deadline = secret, None
+                    services.http = Mock()
+                    services.http.open.side_effect = urllib.error.HTTPError(
+                        'https://example.test/' + secret, code, secret, None, io.BytesIO(secret.encode()))
+                    with self.assertRaises(RuntimeError) as caught:
+                        services.do(method, '/private-resource')
+                    message = boot.safe_error(caught.exception)
+                    self.assertEqual(message, f'DigitalOcean {method} failed HTTP {code}; payload suppressed')
+                    self.assertNotIn(secret, message)
+                    self.assertNotIn('https://', message)
+        for status in ('Pending', 'InProgress', 'Delayed', 'Failed', 'TimedOut', 'Cancelled', 'Cancelling', secret):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temp:
+                services = object.__new__(boot.Services)
+                services.instance, services.user_id = 'fake-instance', 1000
+                responses = [dict(Command=dict(CommandId='fake-command'))]
+                if status in ('Pending', 'InProgress', 'Delayed'):
+                    responses += [dict(Status=status), dict(Status='Failed')]
+                    expected = 'Failed'
+                else:
+                    responses += [dict(Status=status, StandardErrorContent=secret, StandardOutputContent=secret)]
+                    expected = 'Unknown' if status == secret else status
+                services.aws = Mock(side_effect=responses)
+                with patch.object(boot.time, 'sleep'), self.assertRaises(RuntimeError) as caught:
+                    services.host(dict(action='abandon'), Path(temp))
+                self.assertEqual(boot.safe_error(caught.exception), 'managed host action failed: ' + expected)
+                self.assertNotIn(secret, str(caught.exception))
+
+    def test_cleanup_denial_survives_watchdog_in_public_receipt(self):
+        import sys
+
+        class Provider:
+            def aws(self, *args):
+                return boot.command([sys.executable, '-c',
+                    'import sys; sys.stderr.write("An error occurred (AccessDenied) when calling the ListObjectVersions operation: PRIVATE\\n"); sys.exit(1)'])
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(boot, 'Services', return_value=Provider()):
+            directory = Path(directory)
+            boot.append(directory, dict(name='owned', deadline=0, evidence_bucket='private',
+                                        evidence_key='bootdiag/owned/guest.json'))
+            with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                boot.watchdog(directory)
+            failure = json.loads((directory / 'cleanup-failed.json').read_text())
+            self.assertEqual(len(failure['errors']), 3)
+            self.assertIn('failed with exit 1; payload suppressed', failure['errors'][0])
+            self.assertNotIn('PRIVATE', json.dumps(failure))
+            receipt = boot.cleanup_receipt(directory, 1)
+            self.assertFalse(receipt['cleanup_confirmed'])
+            self.assertEqual(receipt['cleanup_errors'], failure['errors'])
+            self.assertIn('cleanup failed', receipt['reason'])
+
+    def test_subprocess_errors_never_leak_into_receipt_or_watchdog_history(self):
+        from unittest.mock import Mock
+
+        private_bucket = 'fake-private-bucket-sentinel'
+        private_args = 'fake-private-aws-args-sentinel'
+        command = ['aws', 's3api', 'list-object-versions', '--bucket', private_bucket, private_args]
+        failures = [subprocess.TimeoutExpired(command, 60, output=private_bucket, stderr=private_args),
+                    subprocess.CalledProcessError(23, command, output=private_bucket, stderr=private_args)]
+        for error in failures:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as directory:
+                directory = Path(directory)
+                boot.append(directory, dict(name='owned', deadline=0, evidence_bucket=private_bucket,
+                                            evidence_key='bootdiag/owned/guest.json'))
+                provider = Mock()
+                provider.aws.side_effect = error
+                with patch.object(boot, 'Services', return_value=provider):
+                    with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                        boot.watchdog(directory)
+                receipt = boot.cleanup_receipt(directory, 1)
+                serialized = json.dumps(receipt)
+                history = [json.loads(line)['cleanup_error']
+                           for line in (directory / 'ledger.jsonl').read_text().splitlines()
+                           if 'cleanup_error' in json.loads(line)]
+                for value in (serialized, json.dumps(history), (directory / 'cleanup-failed.json').read_text()):
+                    self.assertNotIn(private_bucket, value)
+                    self.assertNotIn(private_args, value)
+                    self.assertNotIn(str(command), value)
+                self.assertIn('evidence objects', serialized)
+                self.assertIn('evidence objects timed out after 60 s' if isinstance(error, subprocess.TimeoutExpired)
+                              else 'evidence objects failed with exit 23; payload suppressed', serialized)
+
+    def test_watchdog_timeout_preserves_original_boot_reason(self):
+        from unittest.mock import Mock
+
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            guard = Mock(returncode=None)
+            guard.wait.side_effect = subprocess.TimeoutExpired(['private-watchdog-command'], 150)
+            for original in ({'reason': 'original boot failure'}, {}):
+                with self.subTest(original=original):
+                    result = dict(original)
+                    boot.finish_cleanup(directory, guard, result)
+                    self.assertFalse(result['cleanup_confirmed'])
+                    self.assertEqual(result['cleanup_errors'], [])
+                    self.assertEqual(result['reason'], original.get('reason',
+                        'cleanup watchdog has not completed; retains resource ownership'))
+
+    def test_cleanup_receipt_never_confirms_missing_or_failed_watchdog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            self.assertFalse(boot.cleanup_receipt(directory, 0)['cleanup_confirmed'])
+            boot.private_json(directory / 'cleanup.json', {'result': 'PASS'})
+            self.assertFalse(boot.cleanup_receipt(directory, None)['cleanup_confirmed'])
+            self.assertFalse(boot.cleanup_receipt(directory, 1)['cleanup_confirmed'])
+            self.assertEqual(boot.cleanup_receipt(directory, 0), {'cleanup_confirmed': True})
 
     def test_host_actions_run_as_the_configured_runtime_user(self):
         import base64
@@ -247,7 +588,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, {'bootstrap': {'provider_id': '1'}})
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'issuer unavailable'):
+            with self.assertRaisesRegex(RuntimeError, '^RuntimeError$'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
@@ -281,7 +622,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, dict(node_id=1, name='owned', tags=['owned'], started_at=0, firewall_intent=True))
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'firewall listing unavailable'):
+            with self.assertRaisesRegex(RuntimeError, 'recover firewall_id: RuntimeError'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())

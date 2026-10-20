@@ -22,21 +22,35 @@ IDENTITIES = ("schema_version", "role", "source_commit", "release_id", "image_id
 _upload_spec = importlib.util.spec_from_file_location("boot_check_upload", SCRIPTS / "boot-check-upload.py")
 upload = importlib.util.module_from_spec(_upload_spec)
 _upload_spec.loader.exec_module(upload)
+DiagnosticError = upload.DiagnosticError
 
 
 def require(condition, message):
     if not condition:
-        raise RuntimeError(message)
+        raise DiagnosticError(message)
 
 
-class GuestEvidenceUnavailable(RuntimeError):
+class GuestEvidenceUnavailable(DiagnosticError):
     pass
+
+
+def safe_error(error, operation="command"):
+    if isinstance(error, DiagnosticError):
+        return str(error)
+    if isinstance(error, subprocess.TimeoutExpired):
+        return f"{operation} timed out after {error.timeout} s"
+    if isinstance(error, subprocess.CalledProcessError):
+        return f"{operation} failed with exit {error.returncode}; payload suppressed"
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP request failed HTTP {error.code}; payload suppressed"
+    return type(error).__name__
 
 
 def command(args, *, text=None, timeout=60, env=None):
     result = subprocess.run(args, input=text, text=True, capture_output=True, timeout=timeout,
                             env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(env or {})})
-    require(result.returncode == 0, f"{Path(args[0]).name} failed with exit {result.returncode}; payload suppressed")
+    operation = Path(args[0]).name if args[0] in ("aws", "doctl", "curl", "ssh-keygen") else "command"
+    require(result.returncode == 0, f"{operation} failed with exit {result.returncode}; payload suppressed")
     return result.stdout
 
 
@@ -135,7 +149,7 @@ class Services:
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 return None
-            raise RuntimeError(f"DigitalOcean {method} failed HTTP {error.code}; payload suppressed") from None
+            raise DiagnosticError(f"DigitalOcean {method} failed HTTP {error.code}; payload suppressed") from None
 
     def aws(self, service, operation, *args, timeout=60):
         raw = command(["aws", *(["--profile", self.profile] if self.profile else []), "--region", self.region, service, operation,
@@ -169,13 +183,16 @@ class Services:
             if result["Status"] in ("Pending", "InProgress", "Delayed"):
                 time.sleep(2)
                 continue
-            require(result["Status"] == "Success", "managed host action failed: " + result["Status"])
+            status = result["Status"]
+            if status not in ("Success", "Cancelled", "TimedOut", "Failed", "Cancelling"):
+                status = "Unknown"
+            require(status == "Success", "managed host action failed: " + status)
             value = json.loads(result["StandardOutputContent"])
             if output_name:
                 private_json(directory / output_name, value)
             return value
         self.aws("ssm", "cancel-command", "--command-id", identifier, "--instance-ids", self.instance)
-        raise RuntimeError("managed host action exceeded its bounded deadline")
+        raise DiagnosticError("managed host action exceeded its bounded deadline")
 
     def provider(self, task):
         helper = os.environ.get("CHALK_BOOT_CHECK_PROVIDER")
@@ -186,7 +203,7 @@ class Services:
             if task.get("evidence_path"):
                 with (Path(task["evidence_path"]).parent / "provider-errors.log").open("a") as file:
                     file.write(result.stderr)
-            raise RuntimeError("fleet provider adapter failed; see private provider response evidence")
+            raise DiagnosticError("fleet provider adapter failed; see private provider response evidence")
         return json.loads(result.stdout)
 
 
@@ -197,9 +214,9 @@ def ensure_node(services, base, directory, deadline):
         try:
             return services.provider({**base, "operation": "create"})
         except RuntimeError as error:
-            append(directory, {"create_retry": str(error)})
+            append(directory, {"create_retry": safe_error(error)})
             time.sleep(5)
-    raise RuntimeError("fleet create intent did not converge before the cleanup deadline")
+    raise DiagnosticError("fleet create intent did not converge before the cleanup deadline")
 
 
 def expected_tags(environment, owner, request, generation, unique):
@@ -220,7 +237,7 @@ def owned_resource(services, state, path, collection):
         if not response.get("links", {}).get("pages", {}).get("next"):
             require(len(matches) <= 1, "diagnostic resource name is ambiguous")
             return matches[0]["id"] if matches else None
-    raise RuntimeError("diagnostic inventory recovery exceeded its page bound")
+    raise DiagnosticError("diagnostic inventory recovery exceeded its page bound")
 
 
 def recover_resources(services, state, directory):
@@ -248,7 +265,7 @@ def recover_resources(services, state, directory):
             if identifier:
                 state[key] = identifier
         except Exception as error:
-            errors.append("recover " + key + ": " + str(error))
+            errors.append("recover " + key + ": " + safe_error(error))
     return state, errors
 
 
@@ -266,7 +283,7 @@ def delete_node(services, state):
         if services.do("GET", path) is None:
             return
         time.sleep(2)
-    raise RuntimeError("diagnostic Droplet deletion has not reached 404")
+    raise DiagnosticError("diagnostic Droplet deletion has not reached 404")
 
 
 def confirm_absent(services, resource):
@@ -274,7 +291,7 @@ def confirm_absent(services, resource):
         if services.do("GET", resource) is None:
             return
         time.sleep(2)
-    raise RuntimeError("diagnostic resource deletion not confirmed")
+    raise DiagnosticError("diagnostic resource deletion not confirmed")
 
 
 def cleanup(services, directory):
@@ -288,12 +305,12 @@ def cleanup(services, directory):
             if not (directory / "revocation.json").exists():
                 private_json(directory / "revocation.json", revoked)
         except Exception as error:
-            errors.append(str(error))
+            errors.append(safe_error(error, "registration revocation"))
     # Revocation failure must not prevent compute deletion or key cleanup.
     try:
         delete_node(services, state)
     except Exception as error:
-        errors.append(str(error))
+        errors.append(safe_error(error, "Droplet deletion"))
     for kind, path in (("firewall_id", "/firewalls/"), ("key_id", "/account/keys/")):
         try:
             if state.get(kind):
@@ -307,20 +324,20 @@ def cleanup(services, directory):
                     services.do("DELETE", resource)
                 confirm_absent(services, resource)
         except Exception as error:
-            errors.append(str(error))
+            errors.append(safe_error(error, kind + " deletion"))
     try:
         if state.get("tag_intent") or state.get("tag_created"):
             services.do("DELETE", "/tags/" + state["unique_tag"])
             confirm_absent(services, "/tags/" + state["unique_tag"])
     except Exception as error:
-        errors.append(str(error))
+        errors.append(safe_error(error, "unique tag deletion"))
     for name in ("ssh-key", "ssh-key.pub", "known-hosts"):
         (directory / name).unlink(missing_ok=True)
     if state.get("evidence_bucket"):
         try:
             upload.clean_objects(services, state)
         except Exception as error:
-            errors.append(str(error))
+            errors.append(safe_error(error, "evidence objects"))
     require(not errors, "; ".join(errors))
     private_json(directory / "cleanup.json", {"result": "PASS", "cleaned_at": time.time(), "node_id": state.get("node_id")})
 
@@ -333,14 +350,36 @@ def watchdog(directory):
         time.sleep(1)
     (directory / "cleanup-requested").touch()
     # No dependency on the main process, SSH connection, or successful boot.
+    errors = []
     for attempt in range(3):
         try:
             cleanup(services, directory)
             return
         except Exception as error:
-            append(directory, {"cleanup_error": str(error), "cleanup_attempt": attempt + 1})
-    private_json(directory / "cleanup-failed.json", {"result": "FAIL", "pid": os.getpid()})
-    raise RuntimeError("cleanup unproved; see private watchdog ledger")
+            errors.append(safe_error(error))
+            append(directory, {"cleanup_error": errors[-1], "cleanup_attempt": attempt + 1})
+    private_json(directory / "cleanup-failed.json", {"result": "FAIL", "pid": os.getpid(), "errors": errors})
+    raise DiagnosticError("cleanup unproved; see private watchdog ledger")
+
+
+def cleanup_receipt(directory, returncode):
+    if (directory / "cleanup.json").exists() and returncode == 0:
+        return {"cleanup_confirmed": True}
+    failed = directory / "cleanup-failed.json"
+    errors = json.loads(failed.read_text())["errors"] if failed.exists() else []
+    reason = "cleanup failed" if errors else "cleanup watchdog did not confirm completion"
+    return {"cleanup_confirmed": False, "cleanup_errors": errors, "reason": reason}
+
+
+def finish_cleanup(directory, guard, result):
+    try:
+        guard.wait(timeout=150)
+    except subprocess.TimeoutExpired:
+        result.setdefault("reason", "cleanup watchdog has not completed; retains resource ownership")
+    cleanup_status = cleanup_receipt(directory, guard.returncode)
+    if "reason" in result:
+        cleanup_status.pop("reason", None)
+    result.update(cleanup_status)
 
 
 def certificate_der(pem):
@@ -455,9 +494,9 @@ def wait_guest_boot(services, directory, until):
         try:
             installed = guest_evidence(services, directory)
         except GuestEvidenceUnavailable as error:
-            append(directory, {"guest_evidence_retry": str(error)})
+            append(directory, {"guest_evidence_retry": safe_error(error)})
             if time.time() >= until:
-                raise RuntimeError("guest evidence did not arrive before the boot deadline") from error
+                raise DiagnosticError("guest evidence did not arrive before the boot deadline") from error
         else:
             if installed_boot(installed) or time.time() >= until or installed.get("commands", {}).get("cloud_init", {}).get("status") not in (0, 2):
                 return installed
@@ -502,8 +541,9 @@ def run(request_path, receipt_path):
         require(guard.poll() is None, "cleanup watchdog died before provisioning")
         time.sleep(0.1)
     else:
-        raise RuntimeError("cleanup watchdog did not confirm liveness")
-    result = {**request, "result": "FAIL", "fleet_equivalent_signed_boot": False, "evidence_directory": str(directory)}
+        raise DiagnosticError("cleanup watchdog did not confirm liveness")
+    result = {**{key: request[key] for key in IDENTITIES if key != "archive"},
+              "result": "FAIL", "fleet_equivalent_signed_boot": False}
     installed = evidence = None
     try:
         evidence_command = None
@@ -610,20 +650,15 @@ def run(request_path, receipt_path):
             except RuntimeError:
                 continue
         require(verified is not None, "installed certificate does not match signed issuer receipt")
-        result.update(provider_id=node_id, boot_generation=generation, inventory_digest=bootstrap["inventory_digest"],
-                      certificate_sha256=verified["certificate_sha256"], certificate_serial=verified["certificate_serial"], identity=identity,
-                      certificate_issued_at=records[verified["certificate_serial"]]["issued_at"], **provisioning)
+        result.update(boot_generation=generation, inventory_digest=bootstrap["inventory_digest"],
+                      certificate_sha256=verified["certificate_sha256"],
+                      **{key: value for key, value in provisioning.items() if key != "vpc_uuid"})
     except Exception as error:
-        result["reason"] = str(error)
+        result["reason"] = safe_error(error)
     finally:
         result["boot_diagnosis"] = boot_diagnosis(installed, evidence)
         (directory / "cleanup-requested").touch()
-        try:
-            guard.wait(timeout=150)
-        except subprocess.TimeoutExpired:
-            result["reason"] = "cleanup watchdog has not completed; retains resource ownership"
-        cleaned = (directory / "cleanup.json").exists()
-        result["cleanup_confirmed"] = cleaned and guard.returncode == 0
+        finish_cleanup(directory, guard, result)
         if result["cleanup_confirmed"] and "reason" not in result and result.get("certificate_sha256"):
             result.update(result="PASS", fleet_equivalent_signed_boot=True)
         private_json(receipt_path, result)
