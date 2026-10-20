@@ -21,6 +21,7 @@ const sandbox = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-join-"));
 const children = [];
 const ownerFile = resolve(sandbox, "groups.json");
 let browser;
+let context;
 let watchdog;
 const deadline = setTimeout(() => {
   void cleanup().finally(() => process.exit(1));
@@ -56,6 +57,7 @@ async function ready(url, child, log) {
 }
 async function cleanup() {
   clearTimeout(deadline);
+  await context?.close();
   await browser?.close();
   for (const child of children.toReversed()) {
     if (child.exitCode === null && child.signalCode === null) {
@@ -158,7 +160,11 @@ Process.sleep(:infinity)
     return `${Buffer.from(iv).toString("base64url")}.${Buffer.from(ciphertext).toString("base64url")}`;
   }
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"], viewport: { width: 1440, height: 960 } });
+  context = await browser.newContext({
+    recordVideo: process.argv.some((argument) => argument.startsWith("--admission")) ? { dir: resolve(repository, `artifacts/fix-admit/${process.argv.includes("--admission-before") ? "before" : "after"}-host-video`), size: { width: 1440, height: 960 } } : undefined,
+    permissions: ["clipboard-read", "clipboard-write"],
+    viewport: { width: 1440, height: 960 },
+  });
   await context.addCookies(
     await Promise.all(
       [
@@ -218,7 +224,7 @@ Process.sleep(:infinity)
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(copied, call.inviteUrl, "In-call copy must preserve the exact engine canonical invite URL");
     assert(!copied.includes("/dashboard/call/"));
-    if (process.argv.includes("--admission")) {
+    if (process.argv.some((argument) => argument.startsWith("--admission"))) {
       await provePublicAdmission({ browser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl: call.inviteUrl, repository });
       await leaveCall(page);
       await liveParticipants(0);

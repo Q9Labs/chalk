@@ -6,20 +6,22 @@ import { resolve } from "node:path";
 
 // Real dashboard Start a call, isolated guest, real API/Sync and real SDK UI.
 // Only the remote media vendor is replaced by real-engine.sh's local fixture.
-export async function provePublicAdmission({ browser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl, repository }) {
+export async function provePublicAdmission({ browser, page, origin, tenantId, spaceId, inviteUrl, repository }) {
+  const before = process.argv.includes("--admission-before");
   const out = resolve(repository, "artifacts/fix-admit");
   await mkdir(out, { recursive: true });
   await page.getByRole("button", { name: "Close call link", exact: true }).click();
   const invite = new URL(inviteUrl);
   const guestUrl = `${origin}${invite.pathname}${invite.search}${invite.hash}`;
   async function knock(name) {
-    const context = await browser.newContext({ viewport: { width: 1200, height: 850 } });
+    const context = await browser.newContext({ viewport: { width: 1200, height: 850 }, recordVideo: { dir: resolve(out, `${before ? "before" : "after"}-${name.toLowerCase().replaceAll(" ", "-")}-video`), size: { width: 1200, height: 850 } } });
     const guest = await context.newPage();
     try {
       await guest.goto(guestUrl);
       await guest.getByLabel("Your name").fill(name);
       await guest.getByRole("button", { name: "Join", exact: true }).click();
       await guest.getByText(/Asking to join/).waitFor();
+      if (before) return { context, guest };
       await page.getByRole("button", { name: `Admit ${name}`, exact: true }).waitFor({ timeout: 15000 });
       const badge = page.getByLabel("1 waiting to join", { exact: true });
       await badge.waitFor();
@@ -32,12 +34,28 @@ export async function provePublicAdmission({ browser, page, origin, apiOrigin, t
       throw error;
     }
   }
+  if (before) {
+    const pending = await knock("Approve guest");
+    try {
+      await page.getByRole("button", { name: /^People,/ }).click();
+      await page.getByRole("region", { name: "People", exact: true }).waitFor();
+      await assert.rejects(page.getByRole("button", { name: "Admit Approve guest", exact: true }).waitFor({ timeout: 5000 }), { name: "TimeoutError" });
+      assert.equal(await page.getByLabel("1 waiting to join", { exact: true }).count(), 0);
+      await page.screenshot({ path: resolve(out, "before-host-pending.png") });
+      await pending.guest.screenshot({ path: resolve(out, "before-guest-pending.png") });
+      console.log("REPRODUCED: signed-in dashboard call → isolated guest waiting → no host admission prompt or People badge");
+    } finally {
+      await pending.context.close();
+    }
+    return;
+  }
   const approved = await knock("Approve guest");
   try {
     await page.screenshot({ path: resolve(out, "after-host-pending.png") });
     await approved.guest.screenshot({ path: resolve(out, "after-guest-pending.png") });
     await page.getByRole("button", { name: "Admit Approve guest", exact: true }).click();
     await approved.guest.getByTestId("stage").waitFor({ timeout: 15000 });
+    await approved.guest.getByRole("group", { name: "Stage with 2 participants", exact: true }).waitFor({ timeout: 15000 });
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
     await approved.guest.screenshot({ path: resolve(out, "after-guest-admitted.png") });
     await approved.guest.getByRole("button", { name: "Leave call", exact: true }).click();
