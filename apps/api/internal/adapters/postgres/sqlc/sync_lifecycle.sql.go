@@ -1076,7 +1076,12 @@ func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubje
 }
 
 const listDueAdmissionRequests = `-- name: ListDueAdmissionRequests :many
-select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at, arrivals.arrival_handle as public_arrival_handle from sync_admission_requests requests
+select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at, arrivals.arrival_handle as public_arrival_handle,
+       intent.journey_id, intent.producing_trace_id, intent.producing_span_id
+from sync_admission_requests requests
+left join sync_lifecycle_intents intent on intent.tenant_id = requests.tenant_id
+  and intent.episode_id = requests.episode_id and intent.request_key = requests.request_key
+  and intent.intent_name = 'admission_requested'
 left join space_public_admission_requests public on public.tenant_id = requests.tenant_id
   and public.space_id = requests.space_id and public.request_handle = requests.admission_request_id
 left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_id
@@ -1106,6 +1111,9 @@ type ListDueAdmissionRequestsRow struct {
 	ExpiresAt                   pgtype.Timestamptz `json:"expires_at"`
 	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
 	PublicArrivalHandle         pgtype.UUID        `json:"public_arrival_handle"`
+	JourneyID                   pgtype.UUID        `json:"journey_id"`
+	ProducingTraceID            pgtype.Text        `json:"producing_trace_id"`
+	ProducingSpanID             pgtype.Text        `json:"producing_span_id"`
 }
 
 func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error) {
@@ -1133,6 +1141,9 @@ func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) 
 			&i.ExpiresAt,
 			&i.CompletedAt,
 			&i.PublicArrivalHandle,
+			&i.JourneyID,
+			&i.ProducingTraceID,
+			&i.ProducingSpanID,
 		); err != nil {
 			return nil, err
 		}

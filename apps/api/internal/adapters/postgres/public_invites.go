@@ -327,6 +327,9 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		if utilities.IDFromBytes(current.TenantID.Bytes) != input.TenantID {
 			return publicinvites.ErrArrivalNotFound
 		}
+		if input.RequirePending && current.State != string(publicinvites.ArrivalPending) {
+			return publicinvites.ErrArrivalUnavailable
+		}
 		if !matchesExpectedProviderBinding(current, input) {
 			return publicinvites.ErrMediaProofRejected
 		}

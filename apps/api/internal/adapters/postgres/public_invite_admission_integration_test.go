@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
@@ -81,7 +82,9 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: "Isolated guest"})
+	journeyID := accountTenantIntegrationID(t)
+	knockCtx := observability.ContextWithJourneyID(ctx, journeyID)
+	request, err := service.CreateAdmissionRequest(knockCtx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: "Isolated guest"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +126,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if _, err := episodeRepository.EnqueueDueEpisodeDeadlines(ctx, 50); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations operations join sync_admission_requests requests on requests.tenant_id=operations.tenant_id and requests.episode_id=operations.episode_id and requests.decision_external_operation_id=operations.external_operation_id where requests.tenant_id=$1 and requests.admission_request_id=$2 and operations.operation_name='admission_request_expired'`, uuid(tenantID), uuid(request.RequestHandle)).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations operations join sync_admission_requests requests on requests.tenant_id=operations.tenant_id and requests.episode_id=operations.episode_id and requests.decision_external_operation_id=operations.external_operation_id where requests.tenant_id=$1 and requests.admission_request_id=$2 and operations.operation_name='admission_request_expired' and operations.journey_id=$3`, uuid(tenantID), uuid(request.RequestHandle), uuid(journeyID)).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {

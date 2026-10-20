@@ -241,6 +241,7 @@ type CreateArrivalResult struct {
 }
 
 type UpdateArrivalStateInput struct {
+	RequirePending          bool
 	TenantID                utilities.ID
 	ArrivalHandle           utilities.ID
 	State                   ArrivalState

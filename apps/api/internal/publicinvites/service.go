@@ -1131,16 +1131,25 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 			return PublicSpaceArrival{}, false, err
 		}
 		if err := validateAccessGrant(grant, arrival); err != nil {
+			_ = r.access.DiscardPublicAccess(ctx, grant)
 			return PublicSpaceArrival{}, false, err
 		}
 		admitted, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
-			TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: ArrivalAdmitted,
+			TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: ArrivalAdmitted, RequirePending: true,
 			EpisodeID: grant.EpisodeID, ParticipantID: grant.ParticipantID, ParticipantGeneration: grant.ParticipantGeneration,
 			Provider: grant.Provider, ProviderSubject: grant.ProviderSubject,
 		})
 		if err != nil {
+			current, readErr := r.service.GetArrival(ctx, arrival.ArrivalHandle)
+			if readErr != nil || current.State != ArrivalAdmitted || current.Provider != grant.Provider || current.ProviderSubject != grant.ProviderSubject {
+				_ = r.access.DiscardPublicAccess(ctx, grant)
+			}
+			if readErr == nil && current.State != ArrivalPending {
+				return r.arrivalResult(space, current), true, nil
+			}
 			return PublicSpaceArrival{}, false, err
 		}
+		recordAdmissionOutcome(ctx, admitted, "approved")
 		result := r.arrivalResult(space, admitted)
 		result.Access = &grant
 		return result, true, nil
@@ -1158,6 +1167,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	if err != nil {
 		return PublicSpaceArrival{}, false, err
 	}
+	recordAdmissionOutcome(ctx, terminal, reason)
 	return r.arrivalResult(space, terminal), true, nil
 }
 

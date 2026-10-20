@@ -10,7 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Expiry uses the same operation and reservation as a host's denial. The
@@ -61,11 +64,26 @@ func enqueueDueAdmissionRequests(ctx context.Context, queries *sqlc.Queries, tx 
 		if err != nil {
 			return count, err
 		}
-		operation, err := createTenantExternalOperation(ctx, queries, tx, tenantExternalOperationInput{
+		expiryCtx := ctx
+		if candidate.JourneyID.Valid {
+			expiryCtx = observability.ContextWithJourneyID(expiryCtx, utilities.IDFromBytes(candidate.JourneyID.Bytes))
+		}
+		options := []trace.SpanStartOption{trace.WithNewRoot()}
+		traceID, traceErr := trace.TraceIDFromHex(candidate.ProducingTraceID.String)
+		spanID, spanErr := trace.SpanIDFromHex(candidate.ProducingSpanID.String)
+		if traceErr == nil && spanErr == nil {
+			options = append(options, trace.WithLinks(trace.Link{SpanContext: trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID})}))
+		}
+		expiryCtx, span := otel.Tracer("chalk.public_invite").Start(expiryCtx, "admission.expire", options...)
+		operation, err := createTenantExternalOperation(expiryCtx, queries, tx, tenantExternalOperationInput{
 			TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, OperationName: "admission_request_expired",
 			Request: episodes.Request{Key: "expired_" + requestID.String(), Fingerprint: sha256.Sum256(payload)},
 			Payload: payload, JourneyName: "participant.admission_expired",
 		})
+		if err != nil {
+			span.RecordError(err)
+		}
+		span.End()
 		if err != nil {
 			return count, err
 		}

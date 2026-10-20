@@ -720,7 +720,12 @@ cross join lateral (
 where episodes.tenant_id = sqlc.arg(tenant_id) and episodes.space_id = sqlc.arg(space_id) and episodes.id = sqlc.arg(episode_id);
 
 -- name: ListDueAdmissionRequests :many
-select requests.*, arrivals.arrival_handle as public_arrival_handle from sync_admission_requests requests
+select requests.*, arrivals.arrival_handle as public_arrival_handle,
+       intent.journey_id, intent.producing_trace_id, intent.producing_span_id
+from sync_admission_requests requests
+left join sync_lifecycle_intents intent on intent.tenant_id = requests.tenant_id
+  and intent.episode_id = requests.episode_id and intent.request_key = requests.request_key
+  and intent.intent_name = 'admission_requested'
 left join space_public_admission_requests public on public.tenant_id = requests.tenant_id
   and public.space_id = requests.space_id and public.request_handle = requests.admission_request_id
 left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_id

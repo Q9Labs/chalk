@@ -183,6 +183,7 @@ left join sync_admission_requests live
   on live.tenant_id = public.tenant_id and live.space_id = public.space_id
   and live.admission_request_id = public.request_handle
 where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
+  and (not sqlc.arg(state_set)::boolean or public.state = 'pending')
   and (not sqlc.arg(state_set)::boolean or (case when live.status = 'admitted' then 'approved'
              when live.status = 'denied' then 'denied'
              when live.status = 'expired' then 'expired'

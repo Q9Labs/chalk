@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 // Real dashboard Start a call, isolated guest, real API/Sync and real SDK UI.
@@ -13,8 +13,17 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   await page.getByRole("button", { name: "Close call link", exact: true }).click();
   const invite = new URL(inviteUrl);
   const guestUrl = `${origin}${invite.pathname}${invite.search}${invite.hash}`;
+  async function sql(query) {
+    const { stdout } = await promisify(execFile)("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-At", "-c", query]);
+    return stdout.trim();
+  }
+  async function terminalProjection(name, state) {
+    assert.equal(await sql(`select public.state from space_public_admission_requests public join sync_admission_requests live on live.admission_request_id=public.request_handle where public.tenant_id='${tenantId}' and public.space_id='${spaceId}' and public.display_name='${name}'`), state, "Sync commits the public terminal projection, removing it from the pending index");
+  }
   async function knock(name) {
-    const context = await browser.newContext({ viewport: { width: 1200, height: 850 }, recordVideo: { dir: resolve(out, `${before ? "before" : "after"}-${name.toLowerCase().replaceAll(" ", "-")}-video`), size: { width: 1200, height: 850 } } });
+    const journeyId = crypto.randomUUID();
+    const traceId = crypto.randomUUID().replaceAll("-", "");
+    const context = await browser.newContext({ extraHTTPHeaders: { "x-chalk-journey-id": journeyId, traceparent: `00-${traceId}-0123456789abcdef-01` }, viewport: { width: 1200, height: 850 }, recordVideo: { dir: resolve(out, `${before ? "before" : "after"}-${name.toLowerCase().replaceAll(" ", "-")}-video`), size: { width: 1200, height: 850 } } });
     const guest = await context.newPage();
     try {
       await guest.goto(guestUrl);
@@ -26,6 +35,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       const badge = page.getByLabel("1 waiting to join", { exact: true });
       await badge.waitFor();
       assert.equal(await page.getByRole("tab", { name: /^People/ }).getAttribute("aria-selected"), "true", "A public knock opens People automatically");
+      assert.equal(await sql(`select count(*) from sync_admission_requests admission join sync_lifecycle_intents intent on intent.tenant_id=admission.tenant_id and intent.episode_id=admission.episode_id and intent.intent_name='admission_requested' and intent.payload->>'admission_request_id'=admission.admission_request_id::text join observability_journey_events root on root.event_id=intent.parent_journey_event_id where admission.tenant_id='${tenantId}' and admission.space_id='${spaceId}' and admission.display_name='${name}' and intent.journey_id='${journeyId}' and intent.producing_trace_id='${traceId}' and intent.status='applied' and root.journey_id=intent.journey_id`), "1", "The HTTP journey and W3C trace reach the durable admission intent and ledger root");
       return { context, guest };
     } catch (error) {
       await page.screenshot({ path: resolve(out, "failure-host.png") });
@@ -57,6 +67,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     await approved.guest.getByTestId("stage").waitFor({ timeout: 15000 });
     await approved.guest.getByRole("group", { name: "Stage with 2 participants", exact: true }).waitFor({ timeout: 15000 });
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
+    await terminalProjection("Approve guest", "approved");
     await approved.guest.screenshot({ path: resolve(out, "after-guest-admitted.png") });
     await approved.guest.getByRole("button", { name: "Leave call", exact: true }).click();
     await approved.guest.getByRole("menuitem", { name: "Leave call", exact: true }).click();
@@ -69,6 +80,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   try {
     await page.getByRole("button", { name: "Deny Deny guest", exact: true }).click();
     await denied.guest.getByText("The host declined your request to join.", { exact: true }).waitFor({ timeout: 15000 });
+    await terminalProjection("Deny guest", "denied");
     await denied.guest.screenshot({ path: resolve(out, "after-guest-denied.png") });
   } finally {
     await denied.context.close();
@@ -82,6 +94,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     await expired.guest.getByText("Your request to join expired or is no longer available.", { exact: true }).waitFor({ timeout: 20000 });
     await page.getByRole("button", { name: "Admit Expired guest", exact: true }).waitFor({ state: "hidden", timeout: 20000 });
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
+    await terminalProjection("Expired guest", "expired");
     await expired.guest.screenshot({ path: resolve(out, "after-guest-expired.png") });
     assert.equal(await expired.guest.getByText(/Chalk could not connect/).count(), 0);
   } finally {
@@ -112,6 +125,10 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     } finally {
       await pending.context.close();
     }
+  }
+  const apiLog = await readFile(resolve(repository, "artifacts/dashboard-api.log"), "utf8");
+  for (const reason of ["approved", "admission_denied", "admission_request_expired"]) {
+    assert(apiLog.split("\n").some((line) => line.includes("public_invite.admission") && line.includes(reason)), `Missing structured admission outcome: ${reason}`);
   }
   console.log("PASS: signed-in dashboard Start a call → isolated public guest → host prompt and People badge → live approve/deny → terminal expiry → dashboard approve/deny share Sync admission");
 }
