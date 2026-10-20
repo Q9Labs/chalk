@@ -217,6 +217,12 @@ class CutTests(unittest.TestCase):
         self.assertTrue(cut_decision(SHA, [recent], NOW, manual=True)[0])
         self.assertTrue(cut_decision('b' * 40, [held(date='2026-10-16T18:00:00Z')], NOW)[0])
 
+    def test_completion_does_not_restart_the_reservation_cooldown(self):
+        attempt = dict(created_at='2026-10-16T18:00:00Z', payload=dict(channel='nightly-attempt'))
+        completed = held(date='2026-10-16T22:00:00Z')
+        self.assertTrue(cut_decision('b' * 40, [completed, attempt], NOW)[0])
+        self.assertFalse(cut_decision('b' * 40, [completed], NOW)[0])
+
     def test_failed_cut_never_advances_baseline_and_next_day_retries(self):
         records = [held(2, 'b' * 40, '2026-10-16T02:00:00Z', status='failure', proof='failed'), held()]
         self.assertTrue(cut_decision('b' * 40, records, NOW)[0])

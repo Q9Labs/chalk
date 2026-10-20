@@ -134,6 +134,10 @@ def complete_production(github, args):
 
 def plan(github, args):
     target = github.request('git/ref/heads/master')['object']['sha']
+    if target != env('GITHUB_SHA'):
+        print('Nightly: workflow revision is not the current master tip; retry on the next check')
+        outputs(dict(should_cut=False, target_sha=target))
+        return
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')

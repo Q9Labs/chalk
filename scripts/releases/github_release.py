@@ -46,9 +46,10 @@ def held_candidates(deployments, held=True):
 def cut_decision(target, deployments, now, manual=False):
     if manual:
         return True, 'explicit manual cut'
+    cooldown_records = [item for item in deployments if payload(item).get('channel') == 'nightly-attempt'] or deployments
     if any(payload(item).get('channel') in ('nightly-attempt', 'nightly-cut')
            and now - datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) < CUT_GAP
-           for item in deployments):
+           for item in cooldown_records):
         return False, 'cut attempted in the last 6 hours'
     completed = held_candidates(deployments, held=False)
     if not completed:
