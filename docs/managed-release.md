@@ -19,10 +19,12 @@ requires one for a selected nightly.
 
 ## Nightly cut
 
-`Cut nightly` runs on master whenever a master push Gate run passes.
-Gate-started cuts use that Gate's commit, require new commits since the last
-completed cut, and wait at least 6 hours since the last cut attempt, reserved
-before builds. Failures do not advance the baseline.
+`Cut nightly` checks master's current tip hourly, at 17 minutes past the hour.
+Automatic cuts require a successful push Gate for that exact tip, new commits
+since the last completed cut, and at least 6 hours since the last cut attempt.
+Each check reads the current tip; it never selects an older Gate commit.
+A tip skipped during the cooldown is retried without another push.
+Attempts are reserved before builds. Failures do not advance the baseline.
 An expired or unavailable build baseline triggers a full build of the saved enabled
 component set instead of forwarding dead artifact IDs. Passed cut records preserve
 recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
