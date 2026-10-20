@@ -56,6 +56,17 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
       readonly type: "reset_required";
       readonly sceneId: string;
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
+    }
+  | {
+      readonly type: "view";
+      readonly participantId: string;
+      readonly displayName: string;
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly bring: boolean;
+      readonly occurredAt: string;
     };
 
 export interface ChalkEmbeddedWhiteboardFileTransport {
@@ -374,6 +385,9 @@ export class ChalkWhiteboardController {
       }
       case "cursor":
         this.#send({ type: "apply_cursor", payload: event });
+        return;
+      case "view":
+        // The mobile board does not follow views yet.
         return;
       case "reset_required":
         this.#sceneGeneration = null;
