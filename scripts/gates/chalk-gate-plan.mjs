@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
-const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
+const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
 const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);

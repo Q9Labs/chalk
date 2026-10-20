@@ -18,7 +18,6 @@ const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/sty
 
 // The release set is discovered below; only this version-bump policy is fixed.
 const synchronizedPackageNames = new Set(["@q9labsai/chalk-assets", "@q9labsai/facehash", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native"]);
-const clientReleaseSource = "sdks/typescript/client/src/space-client/core.ts";
 
 export function deriveReleasePackages(workspaces) {
   const byName = new Map(workspaces.map((workspace) => [workspace.manifest.name, workspace]));
@@ -46,7 +45,7 @@ export function usage() {
   return `Usage:
   pnpm run package:release                 Build, validate, and pack only (default)
   pnpm run package:release -- --publish   Build, validate, and publish after confirmation
-  pnpm run package:release -- --bump 4.2.0 Rewrite versions, workspace ranges, the client release id, and the lockfile
+  pnpm run package:release -- --bump 4.2.0 Rewrite versions, workspace ranges, and the lockfile
 
 Options:
   --dry-run              Keep the default no-publish mode explicit; with --bump, list the files without writing
@@ -288,11 +287,6 @@ function assertPackageManifest(releasePackage, packageManifest) {
   if (errors.length > 0) throw new Error(`${releasePackage.directory}/package.json: ${errors.join("; ")}`);
 }
 
-function assertClientReleaseId() {
-  const expected = `chalk-client@${chalkReleaseVersion}`;
-  if (!readFileSync(path.join(repositoryRoot, clientReleaseSource), "utf8").includes(`"${expected}"`)) throw new Error(`${clientReleaseSource}: release id must be "${expected}"`);
-}
-
 export function loadReleaseManifests() {
   const manifests = new Map();
   for (const releasePackage of releasePackages) {
@@ -302,7 +296,6 @@ export function loadReleaseManifests() {
     assertPackageManifest(releasePackage, packageManifest);
     manifests.set(releasePackage.name, packageManifest);
   }
-  assertClientReleaseId();
   return manifests;
 }
 
@@ -574,7 +567,6 @@ async function dispatchRelease() {
   dispatchPublishWorkflow(head);
 }
 
-const versionSourceFiles = [clientReleaseSource];
 const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 function replaceAllText(text, from, to) {
@@ -598,22 +590,17 @@ function bumpManifestText(text, fromVersion, toVersion) {
   return next;
 }
 
-// Takes a map of relative path to file text for every workspace package.json and version source.
+// Takes a map of relative path to file text for every workspace package.json.
 function assertBumpTarget(fromVersion, toVersion) {
   if (!semverPattern.test(toVersion)) throw new Error(`--bump requires a version like 4.2.0, got ${toVersion}`);
   if (toVersion === fromVersion) throw new Error(`Release version is already ${fromVersion}`);
-}
-
-function bumpFileText(relativePath, text, fromVersion, toVersion) {
-  if (versionSourceFiles.includes(relativePath)) return replaceAllText(text, fromVersion, toVersion);
-  return bumpManifestText(text, fromVersion, toVersion);
 }
 
 export function planVersionBump(files, fromVersion, toVersion) {
   assertBumpTarget(fromVersion, toVersion);
   const changes = new Map();
   for (const [relativePath, text] of files) {
-    const next = bumpFileText(relativePath, text, fromVersion, toVersion);
+    const next = bumpManifestText(text, fromVersion, toVersion);
     if (next !== text) changes.set(relativePath, next);
   }
   return changes;
@@ -621,7 +608,7 @@ export function planVersionBump(files, fromVersion, toVersion) {
 
 function readVersionBumpFiles() {
   const manifests = gitLines(["ls-files", "--", "package.json", "**/package.json"]);
-  return new Map([...manifests, ...versionSourceFiles].map((relativePath) => [relativePath, readFileSync(path.join(repositoryRoot, relativePath), "utf8")]));
+  return new Map(manifests.map((relativePath) => [relativePath, readFileSync(path.join(repositoryRoot, relativePath), "utf8")]));
 }
 
 function applyVersionBump(changes) {

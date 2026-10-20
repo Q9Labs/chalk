@@ -92,7 +92,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version-file: .tool-versions
-          cache: pnpm
+          # This job may exit before installing; there may be no store to save.
+          package-manager-cache: false
 
       - name: Compare native fingerprints
         id: compare
@@ -181,7 +182,9 @@ jobs:
 
       - name: Build unsigned Android release
         working-directory: apps/mobile/android
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-24" "platforms;android-30"
+          ./gradlew --no-daemon :q9labsai_chalk-react-native:checkModuleApiCompatibility :app:testDebugUnitTest :app:assembleRelease
 
       - name: Preserve unsigned Android evidence
         if: always()

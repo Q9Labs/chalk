@@ -41,3 +41,38 @@ dependencies {
   implementation("com.facebook.react:react-android")
   implementation("androidx.core:core:1.16.0")
 }
+
+def compatibilityClasses = layout.buildDirectory.dir("compatibility/classes")
+def compileCompatibility = tasks.register("compileModuleApiCompatibility", JavaCompile) {
+  source fileTree("compatibility") { include "*.java" }
+  classpath = files()
+  destinationDirectory = compatibilityClasses
+  sourceCompatibility = "17"
+  targetCompatibility = "17"
+}
+
+// Check the bytecode RN actually reflects, including inferred/private/synthetic getters.
+tasks.register("checkModuleApiCompatibility", JavaExec) {
+  dependsOn compileCompatibility, "compileDebugKotlin", "compileDebugJavaWithJavac",
+      "compileDebugUnitTestKotlin"
+  classpath = files(compatibilityClasses)
+  mainClass = "ModuleApiCompatibility"
+  doFirst {
+    def manifest = layout.buildDirectory.file("compatibility/classpath.txt").get().asFile
+    def paths = [android.bootClasspath.first(),
+        tasks.named("compileDebugUnitTestKotlin").get().destinationDirectory.get().asFile,
+        tasks.named("compileDebugKotlin").get().destinationDirectory.get().asFile,
+        tasks.named("compileDebugJavaWithJavac").get().destinationDirectory.get().asFile]
+    paths.addAll(configurations.debugCompileClasspath.files)
+    manifest.text = paths.collect { it.absolutePath }.join("\n")
+    def platforms = [android.defaultConfig.minSdkVersion.apiLevel, 30].unique().collect {
+      new File(android.sdkDirectory, "platforms/android-${it}/android.jar")
+    }
+    platforms.each {
+      if (!it.isFile()) throw new GradleException("Install compatibility platform: sdkmanager 'platforms;${it.parentFile.name}'")
+    }
+    args = [manifest.absolutePath, layout.buildDirectory.dir("compatibility/dependencies").get().asFile.absolutePath] + platforms*.absolutePath
+  }
+}
+
+tasks.named("check").configure { dependsOn "checkModuleApiCompatibility" }
