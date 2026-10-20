@@ -89,7 +89,7 @@
     "@q9labsai/chalk-ui": "workspace:^5.0.0",
     "@q9labsai/chalk-whiteboard": "workspace:^5.0.0",
     "@q9labsai/facehash": "workspace:^5.0.0",
-    "@q9labsai/recording-presentation": "workspace:^0.1.0",
+    "@q9labsai/recording-presentation": "workspace:^0.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.6.0"

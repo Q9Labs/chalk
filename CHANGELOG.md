@@ -3,7 +3,7 @@
 ## 5.0.0 (unreleased)
 
 - Keep the whiteboard reconnect watchdog running when an injected wall clock moves backward. Persisted operation timestamps still use wall time.
-- Add package-local release notes for all eight public packages. Seven packages use 5.0.0; `@q9labsai/recording-presentation` stays at its independent 0.1.0 version.
+- Add package-local release notes for all eight public packages. Seven packages use 5.0.0; `@q9labsai/recording-presentation` advances independently to 0.1.1 for the 24-reaction validator.
 - React participant tiles accept a normalized `audioLevel` for voice-responsive speaking rings and generated avatars.
 
 - Align quick reactions with the call design: 👍 ❤️ 😂 😮 🎉 👏.

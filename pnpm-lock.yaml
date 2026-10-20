@@ -419,7 +419,7 @@ importers:
         specifier: workspace:^5.0.0
         version: link:../../sdks/typescript/react
       '@q9labsai/recording-presentation':
-        specifier: workspace:^0.1.0
+        specifier: workspace:^0.1.1
         version: link:../../packages/recording-presentation
       happy-dom:
         specifier: ^20.11.2
@@ -741,7 +741,7 @@ importers:
         specifier: workspace:^5.0.0
         version: link:../../../packages/facehash
       '@q9labsai/recording-presentation':
-        specifier: workspace:^0.1.0
+        specifier: workspace:^0.1.1
         version: link:../../../packages/recording-presentation
       class-variance-authority:
         specifier: ^0.7.1

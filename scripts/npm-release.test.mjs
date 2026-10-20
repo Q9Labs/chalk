@@ -18,7 +18,7 @@ test("the release set contains seven synchronized Chalk packages and independent
 
 test("the React runtime contract is validated and ordered before React", () => {
   const manifests = loadReleaseManifests();
-  assert.equal(releasePackages.find(({ name }) => name === "@q9labsai/recording-presentation")?.version, "0.1.0");
+  assert.equal(releasePackages.find(({ name }) => name === "@q9labsai/recording-presentation")?.version, "0.1.1");
   const order = topologicalOrder(releasePackages, manifests).map(({ name }) => name);
   assert.ok(order.indexOf("@q9labsai/recording-presentation") < order.indexOf("@q9labsai/chalk-react"));
 });
