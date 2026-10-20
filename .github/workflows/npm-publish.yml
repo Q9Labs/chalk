@@ -13,12 +13,18 @@ on:
         required: false
         default: ""
 
+      client_version:
+        description: Required exact client version for a release/client-X.Y dispatch
+        type: string
+        required: false
+        default: ""
+
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: npm-publish-${{ github.ref }}
+  group: npm-publish
   cancel-in-progress: false
 
 jobs:
@@ -28,6 +34,7 @@ jobs:
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       NPM_CONFIG_PROVENANCE: true
+      CLIENT_VERSION: ${{ inputs.client_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +42,7 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
 
       - name: Verify publish ref
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !startsWith(github.ref, 'refs/heads/release/client-') }}
         shell: bash
         run: |
           checked_out_sha="$(git rev-parse HEAD)"
@@ -50,6 +57,22 @@ jobs:
           fi
           echo "Publish ref verified: $checked_out_sha"
 
+      - name: Verify maintenance checkout before running release code
+        if: startsWith(github.ref, 'refs/heads/release/client-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_REF" =~ ^refs/heads/release/client-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid client maintenance branch: $GITHUB_REF" >&2
+            exit 1
+          fi
+          checked_out_sha="$(git rev-parse HEAD)"
+          live_release_sha="$(git ls-remote origin "$GITHUB_REF" | awk 'NR == 1 { print $1 }')"
+          if [[ ! "$live_release_sha" =~ ^[0-9a-f]{40}$ || "$checked_out_sha" != "$live_release_sha" || "$GITHUB_SHA" != "$live_release_sha" ]]; then
+            echo "Dispatch and checkout must both equal the live release branch head" >&2
+            exit 1
+          fi
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -62,17 +85,26 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org/
 
+      - name: Verify client maintenance release
+        if: startsWith(github.ref, 'refs/heads/release/client-')
+        run: node scripts/npm-client-maintenance.mjs --plan
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
       - name: Select release packages
         run: |
+          if [[ "$GITHUB_REF" == refs/heads/release/client-* ]]; then
+            echo "RELEASE_FILTERS=--filter @q9labsai/chalk-client" >> "$GITHUB_ENV"
+            echo "BUILD_FILTERS=--filter @q9labsai/chalk-client..." >> "$GITHUB_ENV"
+            exit 0
+          fi
           filters="$(node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; console.log(releasePackages.map(({ name }) => "--filter " + name).join(" "));')"
           echo "RELEASE_FILTERS=$filters" >> "$GITHUB_ENV"
 
       - name: Build packages
         run: |
-          read -ra release_filters <<< "$RELEASE_FILTERS"
+          read -ra release_filters <<< "${BUILD_FILTERS:-$RELEASE_FILTERS}"
           pnpm --sort --workspace-concurrency=1 "${release_filters[@]}" build
 
       - name: Check packages
@@ -88,8 +120,12 @@ jobs:
           read -ra release_filters <<< "$RELEASE_FILTERS"
           pnpm --workspace-concurrency=1 "${release_filters[@]}" --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
 
+      - name: Publish client maintenance release
+        if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/heads/release/client-') }}
+        run: node scripts/npm-client-maintenance.mjs --publish
+
       - name: Publish packages
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !startsWith(github.ref, 'refs/heads/release/client-') }}
         shell: bash
         run: |
           set -euo pipefail

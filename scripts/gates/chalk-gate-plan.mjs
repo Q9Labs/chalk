@@ -359,6 +359,7 @@ export function createGatePlan(files, options = {}) {
       "--test",
       "scripts/gates/chalk-gate-plan.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
+      "scripts/npm-client-maintenance.test.mjs",
       "apps/sync/scripts/reliability_harness.test.mjs",
       "scripts/gates/call-performance-metrics.test.mjs",
       "scripts/prod-proof/*.test.mjs",
