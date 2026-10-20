@@ -19,12 +19,14 @@ export const CALL_SHORTCUTS = [
 
 export function CallDialog({
   kind,
+  open,
   onClose,
   onReportProblem,
   diagnostics,
   returnFocus,
 }: {
-  readonly kind: "shortcuts" | "report" | null;
+  readonly kind: "shortcuts" | "report";
+  readonly open: boolean;
   readonly onClose: () => void;
   readonly onReportProblem?: SpaceHeaderProps["onReportProblem"];
   readonly diagnostics: string;
@@ -37,12 +39,12 @@ export function CallDialog({
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
   useEffect(() => {
-    if (kind === "report") {
+    if (open && kind === "report") {
       setText("");
       setError("");
       setStatus("idle");
     }
-  }, [kind]);
+  }, [kind, open]);
   return (
     <span
       ref={(element) => {
@@ -51,7 +53,7 @@ export function CallDialog({
       style={{ display: "contents" }}
     >
       <Dialog.Root
-        open={kind !== null}
+        open={open}
         onOpenChange={(open) => {
           if (!open) onClose();
         }}
@@ -149,12 +151,11 @@ export function CallDetails({
   sounds,
   onSoundsChange,
   onDialog,
-  onReportProblem,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange"> & {
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
-  readonly onDialog: (kind: "shortcuts" | "report") => void;
+  readonly onDialog: () => void;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = shareQr(link);
@@ -234,16 +235,10 @@ export function CallDetails({
             <span />
           </span>
         </button>
-        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
+        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={onDialog}>
           Keyboard shortcuts
           <ShellIcon name="right" size={18} />
         </button>
-        {onReportProblem ? (
-          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
-            Report a problem
-            <ShellIcon name="right" size={18} />
-          </button>
-        ) : null}
       </section>
     </div>
   );

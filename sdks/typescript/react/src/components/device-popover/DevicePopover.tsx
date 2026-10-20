@@ -63,20 +63,45 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   );
 }
 
-function CameraPreview({ track, mirrored }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean }) {
+function CameraPreview({ track, mirrored, open, isActive, selectedDeviceId }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean; readonly open: boolean; readonly isActive: boolean; readonly selectedDeviceId?: string }) {
   const video = useRef<HTMLVideoElement>(null);
+  const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
     const element = video.current;
-    if (!element || !track) return;
-    element.srcObject = new MediaStream([track]);
+    if (!element || !open) return;
+    let cancelled = false;
+    let ownedStream: MediaStream | undefined;
+    setUnavailable(false);
+    const deviceId = track?.getSettings().deviceId;
+    if (isActive && track?.enabled && track.readyState === "live" && (!selectedDeviceId || !deviceId || deviceId === selectedDeviceId)) {
+      element.srcObject = new MediaStream([track]);
+    } else if (!navigator.mediaDevices?.getUserMedia) {
+      setUnavailable(true);
+    } else {
+      void navigator.mediaDevices.getUserMedia({ audio: false, video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true }).then(
+        (stream) => {
+          if (cancelled) {
+            stream.getTracks().forEach((previewTrack) => previewTrack.stop());
+            return;
+          }
+          ownedStream = stream;
+          element.srcObject = stream;
+        },
+        () => {
+          if (!cancelled) setUnavailable(true);
+        },
+      );
+    }
     return () => {
+      cancelled = true;
       element.srcObject = null;
+      ownedStream?.getTracks().forEach((previewTrack) => previewTrack.stop());
     };
-  }, [track]);
+  }, [track, open, isActive, selectedDeviceId]);
   return (
     <div className="chalk-shell-preview">
       <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
-      <small>{track ? "Only you see this preview" : "Camera is off"}</small>
+      <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
     </div>
   );
 }
@@ -117,6 +142,7 @@ export function DevicePopover({
   disabled,
   busy,
 }: DevicePopoverProps) {
+  const [open, setOpen] = useState(false);
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
@@ -134,13 +160,14 @@ export function DevicePopover({
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
         className="chalk-device-menu"
+        onOpenChange={setOpen}
         trigger={
           <button type="button" className="chalk-shell-caret" aria-label={`Select ${mic ? "microphone" : "camera"}`} disabled={disabled}>
             <ShellIcon name="down" />
           </button>
         }
       >
-        {!mic ? <CameraPreview track={track} mirrored={mirrored} /> : null}
+        {!mic ? <CameraPreview track={track} mirrored={mirrored} open={open} isActive={isActive} selectedDeviceId={selectedDeviceId} /> : null}
         <ChalkMenuLabel>{mic ? "Microphone" : "Camera"}</ChalkMenuLabel>
         {devices.length ? (
           devices.map((device) => (

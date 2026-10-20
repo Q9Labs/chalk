@@ -120,7 +120,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
           {props.onReportProblem ? (
             <>
               <ShellStyles />
-              <CallDialog kind={reportOpen ? "report" : null} onClose={() => setReportOpen(false)} onReportProblem={props.onReportProblem} diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`} returnFocus={reportTrigger} />
+              <CallDialog kind="report" open={reportOpen} onClose={() => setReportOpen(false)} onReportProblem={props.onReportProblem} diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`} returnFocus={reportTrigger} />
             </>
           ) : null}
         </ChalkProvider>
