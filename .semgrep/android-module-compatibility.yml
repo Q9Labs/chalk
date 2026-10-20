@@ -1,0 +1,9 @@
+rules:
+  - id: chalk.android-module-api31-listener
+    message: Keep the API 31 communication listener in a separate class loaded behind an SDK check. React Native reflects even private module methods, including inferred Kotlin getters.
+    severity: ERROR
+    languages: [generic]
+    pattern-regex: '\bOnCommunicationDeviceChangedListener\b'
+    paths:
+      include:
+        - "**/*Module.kt"

@@ -31,8 +31,8 @@ class ChalkAudioRouteModule(
     override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = emit()
     override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = emit()
   }
-  // Created only on Android 12 and later, where the listener type exists.
-  private val communicationListener by lazy { AudioManager.OnCommunicationDeviceChangedListener { emit() } }
+  // React Native reflects private methods too, so their types must exist on every supported API.
+  private var communicationListener: AutoCloseable? = null
 
   override fun getName(): String = "ChalkAudioRouteModule"
 
@@ -44,7 +44,7 @@ class ChalkAudioRouteModule(
     listening = true
     audioManager.registerAudioDeviceCallback(deviceCallback, handler)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      audioManager.addOnCommunicationDeviceChangedListener(reactContext.mainExecutor, communicationListener)
+      communicationListener = CommunicationDeviceListener(audioManager, reactContext.mainExecutor) { emit() }
     }
   }
 
@@ -56,9 +56,8 @@ class ChalkAudioRouteModule(
   override fun invalidate() {
     if (listening) {
       audioManager.unregisterAudioDeviceCallback(deviceCallback)
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        audioManager.removeOnCommunicationDeviceChangedListener(communicationListener)
-      }
+      communicationListener?.close()
+      communicationListener = null
     }
     super.invalidate()
   }
