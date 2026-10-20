@@ -16,12 +16,12 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   },
   {
     heading: "Recording notice",
-    content: "The person who runs an Episode controls recording and transcription. Chalk shows participants when an Episode is being recorded. If you record, you are responsible for having the agreement of your participants under the laws that apply to you.",
+    content: "Recording and transcription depend on the Space settings and can start automatically or on request. Chalk shows participants when an Episode is being recorded. If you record, you are responsible for having the agreement of your participants under the laws that apply to you.",
   },
   {
     heading: "Retention and deletion",
     content:
-      "We keep your data while your account or tenant is active. Chat attachments and temporary transcription files expire automatically. To delete your account or specific content, contact us at the address below and we will delete or anonymize the data within 30 days. Copies can persist in encrypted backups for a limited period after deletion before they are overwritten.",
+      "Account and collaboration records remain stored until deleted, subject to the retention settings described above. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data within 30 days.",
   },
   {
     heading: "Your rights",
@@ -30,7 +30,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   },
   {
     heading: "International transfers",
-    content: "Our providers operate globally, so your data can be processed outside your country. Where data leaves the EEA we rely on the European Commission's Standard Contractual Clauses or an adequacy decision.",
+    content: "Our providers operate globally, so your data can be processed outside your country. Contact us for information about the safeguards that apply to your data.",
   },
   {
     heading: "Children",
@@ -113,27 +113,34 @@ function PrivacyPolicy() {
   return (
     <>
       <h1>Privacy Policy</h1>
-      <p className="legal-effective-date">Effective 7 August 2026</p>
+      <p className="legal-effective-date">Effective 20 October 2026</p>
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
       <p>
-        <strong>Account data.</strong> Account creation and sign-in are currently unavailable. Existing account records, including names, email addresses, password hashes or Google identity details, tenant memberships, and roles, remain stored.
+        <strong>Account data.</strong> The web dashboard offers Google and Apple sign-in through Chalk's own server. We receive your provider user ID, name, email address, and, from Google when available, profile picture URL. We keep these details in an encrypted sign-in cookie for up to 30 days and
+        store a tenant record tied to your provider user ID and display name. Older account records, including password hashes, tenant memberships, and roles, remain stored. The mobile app does not offer accounts or sign-in; you join as a guest with a display name.
       </p>
       <p>
-        <strong>Sign-in and security data.</strong> We retain previously recorded sign-in security data, including IP addresses, browser user agents, and device names. We record the same details for API keys to secure access and rate-limit abusive traffic.
+        <strong>Sign-in and security data.</strong> We use guest arrival credentials, participant IDs, and web session IDs to keep access working. We process IP addresses to rate-limit abusive traffic. Older sign-in records can include IP addresses, browser user agents, and device names.
       </p>
       <p>
-        <strong>Spaces, Episodes, and participation.</strong> Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: display name, role, capabilities, and join and leave times.
+        <strong>Spaces, Episodes, and participation.</strong> Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: participant ID, display name, role, capabilities, and join and
+        leave times. We also process in-app actions such as reactions and read receipts to keep participants in sync.
       </p>
       <p>
-        <strong>Chat and files.</strong> Messages you send in an Episode are stored with your display name and timestamps. Files you attach are stored as private objects with their filename, type, and size, and expire on a schedule.
+        <strong>Chat and files.</strong> Messages you send in an Episode are stored with your display name and timestamps. Photos and documents you attach are stored as private objects with their filename, type, and size. Chat attachments are scheduled for deletion seven days after the Episode ends.
       </p>
       <p>
-        <strong>Audio and video.</strong> Your microphone, camera, and screen-share streams are processed in real time to deliver them to other participants. We do not store media streams unless recording is turned on for the Episode, and the product shows when that is the case.
+        <strong>Audio and video.</strong> Your microphone, camera, and screen-share streams are processed in real time to deliver them to other participants. Media travels over encrypted connections. We do not store media streams unless recording is turned on for the Episode, and the product shows
+        when that is the case.
       </p>
       <p>
-        <strong>Recordings and transcripts.</strong> Where recording or transcription is enabled, we store the recording files, transcript text, and processing metadata as private objects. Temporary audio chunks used for transcription are deleted automatically within 24 hours.
+        <strong>Recordings and transcripts.</strong> Where recording or transcription is enabled, we store the recording files, transcript text, and processing metadata as private objects. Audio retained as a source for transcription follows the Episode's configured source window, which can be up to
+        30 days. Temporary transcription chunks and orphan files have a 24-hour expiration rule.
+      </p>
+      <p>
+        <strong>Whiteboards.</strong> We store whiteboard scenes and changes, including text, drawings, and images, so participants can collaborate. Whiteboard image files are scheduled for deletion seven days after the Episode ends.
       </p>
       <p>
         <strong>Integrations and webhooks.</strong> If your tenant connects an external integration or configures webhooks, we store the connection metadata and deliver event payloads to the endpoints your tenant chose. Webhook target URLs, signing secrets, and payloads are encrypted at rest.
@@ -155,6 +162,27 @@ function PrivacyPolicy() {
         <tbody>
           <tr>
             <td>
+              <code>__Host-chalk_session</code>, <code>__Host-chalk_binding</code>
+            </td>
+            <td>Keeps your dashboard sign-in and binds requests to your session (HttpOnly, Secure)</td>
+            <td>Up to 30 days, or until sign-out</td>
+          </tr>
+          <tr>
+            <td>
+              <code>__Host-chalk_login_google</code>, <code>__Host-chalk_login_apple</code>
+            </td>
+            <td>Protects the sign-in exchange (HttpOnly, Secure)</td>
+            <td>10 minutes, cleared after the callback</td>
+          </tr>
+          <tr>
+            <td>
+              <code>{"__Host-chalk_seat_{spaceId}"}</code>
+            </td>
+            <td>Keeps your dashboard Space access (HttpOnly, Secure)</td>
+            <td>24 hours; access also requires your signed-in session</td>
+          </tr>
+          <tr>
+            <td>
               <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>
             </td>
             <td>Keeps your public Space arrival available in this browser (HttpOnly, Secure)</td>
@@ -164,22 +192,25 @@ function PrivacyPolicy() {
       </table>
 
       <h2>Who processes your data</h2>
-      <p>We use a small set of infrastructure providers, each bound by a data processing agreement:</p>
+      <p>We use infrastructure providers to process data on our behalf to run Chalk:</p>
       <ul>
         <li>
-          <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI performs speech-to-text when transcription is enabled.
+          <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI can perform speech-to-text when enabled in the transcription configuration.
         </li>
         <li>
-          <strong>Amazon Web Services</strong> runs the transcription pipeline (job scheduling and secret storage) when transcription is enabled.
+          <strong>Amazon Web Services</strong> runs the transcription pipeline (processing, job scheduling, secret storage, and logs) and provides recording encryption key management.
         </li>
         <li>
-          <strong>DeepInfra</strong> may perform speech-to-text as an alternative provider when transcription is enabled.
+          <strong>DeepInfra</strong> performs speech-to-text when enabled in the transcription configuration.
         </li>
         <li>
           <strong>DigitalOcean</strong> runs recording workers when recording is enabled.
         </li>
+        <li>
+          <strong>Axiom</strong> receives API request logs and Sync diagnostic traces to help us run and secure the service.
+        </li>
       </ul>
-      <p>We do not sell personal data, and we do not share it with anyone else except when the law requires it.</p>
+      <p>We do not sell personal data or share it for advertising or tracking. Apart from service providers processing data on our behalf, content you send to other participants, and integrations your tenant chooses, we disclose data only when the law requires it.</p>
 
       <LegalSections sections={PRIVACY_SECTIONS} />
     </>
