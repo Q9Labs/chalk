@@ -27,7 +27,8 @@ A queued older workflow waits for the next check; it never cuts an older Gate co
 A tip skipped during the cooldown is retried without another push.
 The 6-hour interval starts at reservation, not at completion. Completed cuts
 supply the timestamp only when no reservation exists from older workflows.
-Failures do not advance the baseline.
+Failures do not advance the baseline. The shared nightly lock retains queued
+checks, including manual dispatches, instead of replacing the pending request.
 An expired or unavailable build baseline triggers a full build of the saved enabled
 component set instead of forwarding dead artifact IDs. Passed cut records preserve
 recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
