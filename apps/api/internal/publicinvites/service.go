@@ -1069,7 +1069,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			return PublicSpaceArrival{}, requestErr
 		}
 		result := r.arrivalResult(space, arrivalResult.Arrival)
-		result.RetryAfter = 1
+		result.RetryAfter = 2
 		result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
 		return result, nil
 	}
@@ -1339,7 +1339,7 @@ func (r Runtime) arrivalResult(space PublicSpace, arrival Arrival) PublicSpaceAr
 		ArrivalHandle: arrival.ArrivalHandle.String(),
 	}
 	if arrival.State == ArrivalPending {
-		result.RetryAfter = 1
+		result.RetryAfter = 2
 	}
 	presentation := publicSpacePresentation(space)
 	result.Presentation = &presentation
