@@ -6,7 +6,7 @@ import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageLayout, type StageTileRenderContext } from "./Stage";
 import { buildStageItems, type StageItem } from "./stage-items";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
-import { WhiteboardView } from "../whiteboard-view/WhiteboardView";
+import { Board } from "../board/Board";
 import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
 
 export interface SpaceStageProps {
@@ -19,13 +19,21 @@ export interface SpaceStageProps {
   readonly shareCapture?: ScreenShareCapture;
   readonly onStopSharing?: () => Promise<void>;
   readonly onChangeShare?: (options: ScreenShareOptions) => Promise<void>;
+  readonly colorScheme?: "light" | "dark";
+  readonly onCloseBoard?: () => void;
   readonly className?: string;
 }
 /** One keyed renderer for people, the live board and each screen, in both layouts. */
-export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, onStopSharing, onChangeShare, className }: SpaceStageProps): React.JSX.Element {
+export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
   const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true), [tiles, whiteboard?.isOpen]);
   const [selectedShare, setSelectedShare] = useState<string | null>(null);
   const [pin, setPin] = useState<string | null>(null);
+  const [following, setFollowing] = useState<string | null>(null);
+  const [viewsShared, setViewsShared] = useState(true);
+  const boardOpen = whiteboard?.isOpen === true && Boolean(whiteboard.props);
+  const canFollow = boardOpen && viewsShared && Boolean(whiteboard?.sendView);
+  const followed = canFollow && tiles.some((tile) => tile.id === following) ? following : null;
+  const stopSharingViews = useCallback(() => setViewsShared(false), []);
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
   const renderContentTile = useCallback(
@@ -69,20 +77,14 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
           media={
             boardProps ? (
               <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <WhiteboardView
-                  {...boardProps}
-                  canDraw={context.primary ? boardProps.canDraw : false}
-                  collab={boardProps.collab ? { ...boardProps.collab, canDraw: context.primary && boardProps.collab.canDraw } : undefined}
-                  isVisible={context.active}
-                  className={cn("h-full !min-h-0", boardProps.className)}
-                />
+                <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={setFollowing} sendView={canFollow ? whiteboard?.sendView : undefined} onViewsUnavailable={stopSharingViews} onClose={onCloseBoard} />
               </div>
             ) : null
           }
         />
       );
     },
-    [whiteboard, shares, shareCapture, onStopSharing, onChangeShare],
+    [whiteboard, shares, shareCapture, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, stopSharingViews, onCloseBoard],
   );
   const focusContent = useCallback(
     (item: StageItem) => {
@@ -90,6 +92,28 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
     },
     [onLayoutChange],
   );
-  return <Stage items={items} layout={layout} pinnedId={pin ?? activeShare} onPinnedChange={setPin} renderContentTile={renderContentTile} onItemClick={focusContent} onOverflowClick={onOverflowClick} generatedAvatars={generatedAvatars} emptyState={<QuietSpace />} className={className} />;
+  const pinOrFollow = useCallback(
+    (id: string | null) => {
+      if (!canFollow || !id || !tiles.some((tile) => tile.id === id && !tile.isLocal)) return setPin(id);
+      setFollowing((current) => (current === id ? null : id));
+    },
+    [canFollow, tiles],
+  );
+  return (
+    <Stage
+      items={items}
+      layout={layout}
+      pinnedId={pin ?? activeShare}
+      onPinnedChange={pinOrFollow}
+      followingId={followed}
+      clickAction={canFollow ? "follow" : "pin"}
+      renderContentTile={renderContentTile}
+      onItemClick={focusContent}
+      onOverflowClick={onOverflowClick}
+      generatedAvatars={generatedAvatars}
+      emptyState={<QuietSpace />}
+      className={className}
+    />
+  );
 }
 SpaceStage.displayName = "SpaceStage";

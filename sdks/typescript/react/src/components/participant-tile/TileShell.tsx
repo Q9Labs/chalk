@@ -5,6 +5,8 @@ export interface TileShellProps {
   readonly label: string;
   readonly accentColor: string;
   readonly pinned?: boolean;
+  /** The 2px ring that marks the person whose view this board follows. */
+  readonly ring?: boolean;
   readonly speaking?: boolean;
   readonly audioLevel?: number;
   readonly lift?: boolean;
@@ -24,7 +26,7 @@ interface TileVars extends CSSProperties {
 }
 
 /** One shared frame and bottom-left name tag for camera, screen and board tiles. */
-export function TileShell({ label, accentColor, pinned = false, speaking = false, audioLevel = 0.5, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
+export function TileShell({ label, accentColor, pinned = false, ring = false, speaking = false, audioLevel = 0.5, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
   const vars: TileVars = { ...style, containerType: "size", "--chalk-participant-color": accentColor, "--chalk-voice-level": audioLevel };
   return (
     <div
@@ -59,6 +61,7 @@ export function TileShell({ label, accentColor, pinned = false, speaking = false
         className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] motion-safe:transition-opacity motion-safe:duration-[90ms] motion-safe:ease-linear"
         style={{ opacity: speaking ? 0.3 + 0.7 * audioLevel : 0, boxShadow: "inset 0 0 0 3px rgba(255,255,255,.9), inset 0 0 0 4px rgba(0,0,0,.35)" }}
       />
+      {ring ? <div aria-hidden="true" data-part="follow-ring" className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] shadow-[inset_0_0_0_2px_var(--chalk-text)]" /> : null}
       {corner}
       {chip ? (
         <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[rgba(12,14,18,.75)] px-2 text-[12px] leading-[1.4] font-medium text-white">

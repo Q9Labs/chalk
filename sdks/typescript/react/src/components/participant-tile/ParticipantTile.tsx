@@ -37,6 +37,9 @@ export interface ParticipantTileProps {
   onClick?: () => void;
   onDoubleClick?: () => void;
   pinned?: boolean;
+  /** While the board is open, a click follows this person's view instead of pinning the tile. */
+  clickAction?: "pin" | "follow";
+  following?: boolean;
   primary?: boolean;
   className?: string;
   style?: React.CSSProperties;
@@ -80,6 +83,8 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   onClick,
   onDoubleClick,
   pinned,
+  clickAction = "pin",
+  following = false,
   primary,
   className,
   style,
@@ -106,17 +111,20 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
+  const first = participant.displayName.split(" ")[0] ?? participant.displayName;
+  const actionLabel = clickAction === "follow" ? `${following ? "Stop following" : "Follow"} ${first}` : `${pinned ? "Unpin" : "Pin"} ${participant.displayName}`;
   const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
 
   return (
     <TileShell
       label={`Video tile for ${participant.displayName}`}
       accentColor={colors.primary}
-      pinned={pinned}
+      pinned={clickAction === "follow" ? following : pinned}
+      ring={following}
       lift={!primary}
       speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
       audioLevel={participant.audioLevel}
-      onClick={onClick && phone ? openOptions : onClick}
+      onClick={onClick && phone && clickAction === "pin" ? openOptions : onClick}
       onDoubleClick={onDoubleClick}
       className={cn(aspectRatioClasses[aspectRatio], className)}
       style={style}
@@ -138,9 +146,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                   </button>
                 }
               >
-                <ChalkMenuItem onClick={onClick}>
-                  {pinned ? "Unpin" : "Pin"} {participant.displayName}
-                </ChalkMenuItem>
+                <ChalkMenuItem onClick={onClick}>{actionLabel}</ChalkMenuItem>
               </ChalkMenu>
             </span>
           ) : null}
@@ -156,6 +162,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
               </span>
             )}
+            {following ? <span className="shrink-0 font-semibold opacity-80">following</span> : null}
             {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
             {showStatus && participant.isHandRaised && (
               <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
@@ -196,7 +203,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           </div>
         </div>
       )}
-      {phone && onClick ? (
+      {phone && onClick && clickAction === "pin" ? (
         <ChalkSheet
           open={optionsOpen}
           onOpenChange={(open) => {

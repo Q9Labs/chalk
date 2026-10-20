@@ -53,6 +53,36 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("shares views only after the server accepts view_v1, and steps down for an older server", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    const view = { x: 1, y: 2, width: 300, height: 200, bring: false };
+    const hello = (index: number) => JSON.parse(sockets[index]?.sent[0] ?? "{}").extensions;
+    try {
+      await settle();
+      sockets[0]?.open();
+      await settle();
+      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
+      sockets[0]?.close(1008);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 1);
+      await startup;
+      expect(hello(1)).toEqual([{ name: "presentation_v1" }]);
+      expect(client.sendView(view)).toBe(false);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+
+    const current = await startedRecoveryClient(new TestClock());
+    try {
+      expect(current.client.sendView(view)).toBe(true);
+      expect(JSON.parse(current.sockets[0]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+    } finally {
+      await current.client.stopSceneSubscription();
+    }
+  });
+
   it("rejects shared snapshot callers together and permits a fresh request", async () => {
     const { client, sockets } = recoveryClient();
     const startup = client.startSceneSubscription();

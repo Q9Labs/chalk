@@ -1,6 +1,6 @@
 "use client";
 import { CallLimbo } from "../call-limbo/CallLimbo";
-import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
@@ -265,6 +265,7 @@ function SpaceSurface(
               presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },
+          sendView: (view: ChalkWhiteboardView) => whiteboardSubscription.transport.sendView?.(view) ?? false,
         }
       : undefined;
   return (

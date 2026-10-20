@@ -10,7 +10,7 @@ import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
-import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
+import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type BoardFixture, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
 export type Action = { readonly click: string; readonly role?: "button" | "menuitemradio" } | { readonly wait: number };
@@ -29,6 +29,7 @@ export type CallState = CallStateMeta & { readonly render: () => ReactNode };
 const nora: Person = PEOPLE[0]!;
 const akash: Person = PEOPLE[1]!;
 const sofia: Person = PEOPLE[2]!;
+const malik: Person = PEOPLE[3]!;
 const crowd = (count: number): Person[] => Array.from({ length: count }, (_, index) => ({ ...PEOPLE[index % PEOPLE.length]!, id: `p${index}`, name: index < PEOPLE.length ? PEOPLE[index]!.name : `${PEOPLE[index % PEOPLE.length]!.name.split(" ")[0]} ${index}` }));
 
 const openChat: Action = { click: "Chat" };
@@ -110,6 +111,17 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "board", title: "Board open", render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
   { id: "board-grid", title: "Board open, grid picked", actions: [openLayout, { click: "Grid", role: "menuitemradio" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
   { id: "board-spotlight", title: "Board open, spotlight picked", actions: [openLayout, { click: "Spotlight", role: "menuitemradio" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
+  ...(["dark", "light"] as const).flatMap((scheme) => [
+    { id: `board-empty-${scheme}`, title: `Board empty, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} /> },
+    { id: `board-people-${scheme}`, title: `Board with two people drawing, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
+    {
+      id: `board-follow-${scheme}`,
+      title: `Board following Nora, ${scheme}`,
+      actions: [{ click: "Video tile for Nora Patel" }],
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
+    },
+    { id: `board-notes-${scheme}`, title: `Board sticky notes, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
+  ]),
   { id: "board-loading", title: "Board loading", stallBoard: true, render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
   { id: "share-remote", title: "Someone else shares a screen", render: () => <Live snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }] })} /> },
   { id: "share-local", title: "You share your screen", render: () => <Live snapshot={liveSnapshot({ self: { sharing: true }, others: [nora] })} /> },
@@ -170,8 +182,8 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
 }
 
 /** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
-function Live({ snapshot, layout, then, initialColorScheme }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void }) {
-  const [client] = useState(() => createCallStateClient(snapshot));
+export function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void; readonly board?: BoardFixture }) {
+  const [client] = useState(() => createCallStateClient(snapshot, board));
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [transition] = useState(() => then);
   useEffect(() => {
