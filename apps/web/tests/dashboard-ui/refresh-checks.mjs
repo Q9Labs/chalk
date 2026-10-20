@@ -48,7 +48,8 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     check(
       "Call updates the roster during a stable Episode without reloading history",
       (await tab
-        .getByText("Nora is in the call.", { exact: true })
+        .locator(".liveb .mu")
+        .filter({ hasText: "Nora is in the call." })
         .waitFor({ state: "visible", timeout: 15000 })
         .then(
           () => true,
