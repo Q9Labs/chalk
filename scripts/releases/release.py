@@ -132,11 +132,18 @@ def complete_production(github, args):
     github.request(f"deployments/{env('DEPLOYMENT_ID')}/statuses", {'state': 'success', 'auto_inactive': False})
 
 
+def defer_cut(github, target, reason, *, manual):
+    print(f'Nightly: {reason}')
+    if manual:
+        github.dispatch_nightly()
+        print('Nightly: manual request requeued on master with fresh orchestration')
+    outputs(dict(should_cut=False, target_sha=target))
+
+
 def plan(github, args):
     target = github.request('git/ref/heads/master')['object']['sha']
     if target != env('GITHUB_SHA'):
-        print('Nightly: workflow revision is not the current master tip; retry on the next check')
-        outputs(dict(should_cut=False, target_sha=target))
+        defer_cut(github, target, 'workflow revision is not the current master tip', manual=args.manual)
         return
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
@@ -162,8 +169,7 @@ def plan(github, args):
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
         if github.request('git/ref/heads/master')['object']['sha'] != target:
-            print('Nightly: master moved during planning; retry on the next check')
-            outputs(dict(should_cut=False, target_sha=target))
+            defer_cut(github, target, 'master moved during planning', manual=args.manual)
             return
         github.reserve_cut(target)
     outputs(result)

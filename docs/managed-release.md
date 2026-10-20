@@ -23,7 +23,9 @@ requires one for a selected nightly.
 Automatic cuts require a successful push Gate for that exact tip, new commits
 since the last completed cut, and at least 6 hours since the last cut attempt.
 Each check reads the current tip and requires its workflow revision to match.
-A queued older workflow waits for the next check; it never cuts an older Gate commit.
+A queued older scheduled workflow waits for the next check. A stale manual
+request queues a fresh manual run on master, retaining its deliberate override.
+Neither path cuts an older Gate commit.
 A tip skipped during the cooldown is retried without another push.
 The 6-hour interval starts at reservation, not at completion. Completed cuts
 supply the timestamp only when no reservation exists from older workflows.

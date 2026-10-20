@@ -35,9 +35,13 @@ class MemoryGitHub(GitHub):
         self.items = []
         self.archives = {}
         self.tip = SHA
+        self.dispatches = 0
         self.created_at = '2026-10-17T02:00:00Z'
         self.gates = [dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master',
                            event='push', conclusion='success')]
+
+    def dispatch_nightly(self):
+        self.dispatches += 1
 
     def info(self, run, identity):
         data = json.dumps(dict(release_id=identity, source_revision=SHA)).encode()

@@ -163,6 +163,11 @@ class GitHub:
             page += 1
         return []
 
+    def dispatch_nightly(self):
+        route = f'repos/{self.repository}/actions/workflows/nightly.yml/dispatches'
+        self._call(['gh', 'api', route, '--method', 'POST', '--input', '-'],
+                   route, json.dumps(dict(ref='master')).encode())
+
     def reserve_cut(self, sha):
         self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-attempt', 'auto_merge': False,
                      'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
