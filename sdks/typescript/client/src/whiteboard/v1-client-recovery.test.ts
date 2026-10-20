@@ -211,6 +211,18 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 });
 
 describe("whiteboard slow-connection watchdog", () => {
+  it("rejects a legacy three-method clock instead of silently disabling recovery", () => {
+    const scheduler = new TestClock();
+    const clock = {
+      now: () => scheduler.now(),
+      setTimeout: (callback: () => void, milliseconds: number) => scheduler.setTimeout(callback, milliseconds),
+      clearTimeout: (handle: unknown) => scheduler.clearTimeout(handle),
+    };
+
+    // @ts-expect-error JavaScript callers can still pass the v4 three-method clock at runtime.
+    expect(() => recoveryClient(scheduler, 100, { clock })).toThrow("whiteboard clock.monotonicNow must use the same timeline as clock.setTimeout");
+  });
+
   it("replaces a silent socket within eight seconds without waiting for its close event", async () => {
     const clock = new TestClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
@@ -357,6 +369,7 @@ describe("whiteboard slow-connection watchdog", () => {
     const clock = injected
       ? {
           now: () => Date.now(),
+          monotonicNow: () => performance.now(),
           setTimeout: (callback: () => void, milliseconds: number) => globalThis.setTimeout(callback, milliseconds),
           clearTimeout: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
         }
