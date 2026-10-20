@@ -10,7 +10,7 @@ export function episodeDTO(episode: Episode): EpisodeDTO {
   return { id: episode.id, status: episode.status, startedAt: episode.started_at, endedAt: episode.ended_at ?? null };
 }
 export function recordingDTO(recording: Recording): RecordingDTO {
-  return { id: recording.id, status: recording.status, exportStatus: recording.export.status, createdAt: recording.created_at };
+  return { id: recording.id, status: recording.status, exportStatus: recording.export.status, transcriptionPending: recording.transcription_preparation.status === "pending", createdAt: recording.created_at };
 }
 export function transcriptDTO(transcript: Transcript): TranscriptDTO {
   return { id: transcript.id, status: transcript.status, languages: transcript.languages, createdAt: transcript.created_at };

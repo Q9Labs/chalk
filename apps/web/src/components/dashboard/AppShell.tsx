@@ -27,6 +27,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
   const toSignIn = useSignInRedirect();
   const latest = useRef({ load, polling });
   const ready = useRef<T | undefined>(undefined);
+  const invalidate = useRef(() => {});
   const refresh = useRef<(options?: { force?: boolean; background?: boolean; status?: boolean }) => void>(() => {});
   latest.current = { load, polling };
   if (state.kind === "ready") ready.current = state.data;
@@ -34,6 +35,10 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
     let current = true;
     let revision = 0;
     let pending = false;
+    invalidate.current = () => {
+      revision++;
+      pending = false;
+    };
     ready.current = undefined;
     setState({ kind: "loading" });
     refresh.current = ({ force = false, background = true, status = false } = {}) => {
@@ -66,6 +71,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
     refresh.current();
     return () => {
       current = false;
+      invalidate.current = () => {};
       refresh.current = () => {};
     };
   }, [key, toSignIn]);
@@ -87,10 +93,11 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
     };
   }, [interval, observes]);
   const reload = useCallback(() => refresh.current({ force: true, background: false }), []);
-  const update = useCallback((change: (data: T) => T) => {
+  const update = useCallback((change: (data: T) => T, options: { refresh?: boolean } = {}) => {
+    invalidate.current();
     setState((value) => (value.kind === "ready" ? { kind: "ready", data: change(value.data) } : value));
-    // Writes call update after success. Discard older reads and prefer a new server read.
-    if (latest.current.polling) refresh.current({ force: true });
+    // Discard stale reads for every update; only writes need a fresh server read.
+    if (options.refresh !== false && latest.current.polling) refresh.current({ force: true });
   }, []);
   return { state, reload, update };
 }

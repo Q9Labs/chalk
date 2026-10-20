@@ -9,9 +9,9 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
   return {
     calls: await Promise.all(
       result.spaces.map(async (space) => {
-        const params = { tenant_id: engine.tenantId, space_id: space.id };
-        const [invite, metadata] = await Promise.all([run(engine.api.spaces.getSpacePublicInvite({ params })), homeCallMetadata(engine, space.id)]);
-        return { ...callDTO(space), inviteUrl: invite.canonical_url, ...metadata };
+        const metadata = await homeCallMetadata(engine, space.id);
+        // Invite reads mint tokens and consume the engine write budget. Fetch only on share/join.
+        return { ...callDTO(space), inviteUrl: null, ...metadata };
       }),
     ),
     live: await live(

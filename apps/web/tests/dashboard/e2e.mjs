@@ -269,7 +269,7 @@ try {
     const unicodeLink = (await rawInvite.json()).canonical_url;
     const unicodeHome = await ada.request("/dashboard-api/home");
     assert.equal(unicodeHome.status, 200, await unicodeHome.clone().text());
-    assert.equal((await unicodeHome.json()).calls.find((call) => call.id === unicodeId).inviteUrl, unicodeLink);
+    assert.equal((await unicodeHome.json()).calls.find((call) => call.id === unicodeId).inviteUrl, null);
     const unicodeCall = await ada.request(`/dashboard-api/call?spaceId=${unicodeId}`);
     assert.equal(unicodeCall.status, 200, await unicodeCall.clone().text());
     assert.equal((await unicodeCall.json()).inviteUrl, unicodeLink);
@@ -484,7 +484,11 @@ try {
       const result = await metadata.json();
       assert.equal(result.kind, kind);
       assert.equal(result[kind].id, id);
-      assert.equal(engineReads.slice(offset).filter((read) => read.path.startsWith(`/v1/tenants/${firstTenant}/`)).length, 1, "Metadata reads cost one tenant read");
+      if (kind === "recording") {
+        assert.equal(typeof result.recording.transcriptionPending, "boolean");
+        assert.equal(result.recording.transcripts[0].id, foreign.transcriptId);
+      }
+      assert.equal(engineReads.slice(offset).filter((read) => read.path.startsWith(`/v1/tenants/${firstTenant}/`)).length, kind === "recording" ? 2 : 1, "Recording discovery costs two tenant reads; transcript refresh costs one");
     }
     const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", languages: ["en"], spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(retry.status, 409, await retry.clone().text());
@@ -616,7 +620,9 @@ try {
     assert(requests.length - homeOffset <= 18, "Home enrichment stays within its request bound");
     assert.equal(homeDTO.live.find((row) => row.spaceId === spaceId).episode, null);
     const homeCall = homeDTO.calls.find((row) => row.id === spaceId);
-    assert(homeCall.inviteUrl && homeCall.slug && homeCall.lastActiveAt);
+    assert.equal(homeCall.inviteUrl, null);
+    assert(homeCall.slug && homeCall.lastActiveAt);
+    assert(!requests.slice(homeOffset).some((path) => new URL(path, apiOrigin).pathname.endsWith("/public-invite")), "Home never mints per-space invites in the engine write bucket");
     assert.equal(homeCall.recentPeople.length, 2);
     console.log("PASS: bounded enriched Home/Call/Developer DTOs, live people, authenticated isYou, optional call name, provider-safe callback redirects, and transcript request ownership");
     rateLimitPath = "/v1/tenants/by-external-id";

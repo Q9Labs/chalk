@@ -17,7 +17,7 @@ export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
         () => true,
         () => false,
       );
-    check(`ended Anyone Call updates pending transcript metadata to ${final} without reloading history`, finished && (await reads("call-metadata")) >= 2 && (await reads("call")) === full);
+    check(`ended Anyone Call updates pending transcript metadata to ${final} without reloading history`, finished && (await reads("call-metadata")) >= 1 && (await reads("call")) === full);
     const status = await reads("call-status");
     await tab.waitForTimeout(5500);
     check(`ended Anyone Call stops polling after artifacts reach ${final}`, finished && (await reads("call-status")) === status);
@@ -25,8 +25,52 @@ export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
   }
 }
 
+export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
+  const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
+  const metadataTick = async (tab) => {
+    const metadata = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-metadata"));
+    for (let tick = 0; tick < 2; tick++) {
+      const status = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+      await tab.clock.runFor(5000);
+      await status;
+      await tab.waitForLoadState("networkidle");
+    }
+    await metadata;
+  };
+  {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=pending", clock: true });
+    try {
+      const full = await reads("call");
+      check("completed recording waits for pending automatic transcription", (await tab.getByText("Transcript", { exact: true }).count()) === 0);
+      await fixture("set?metadataDiscovery=ready");
+      await metadataTick(tab);
+      await tab.getByText("Transcript", { exact: true }).waitFor();
+      const status = await reads("call-status");
+      await tab.clock.runFor(15000);
+      check("Call discovers a new automatic transcript and stops polling without a full reload", (await reads("call")) === full && (await reads("call-status")) === status);
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure", clock: true });
+    try {
+      const full = await reads("call");
+      await tab.getByText("Transcript processing", { exact: true }).waitFor();
+      await fixture("set?metadataComplete=complete");
+      await metadataTick(tab);
+      await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden" });
+      await tab.getByText("Transcript", { exact: true }).waitFor();
+      check("retryable transcripts keep polling until automatic recovery completes", (await reads("call")) === full);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 export async function refreshChecks({ open, fixture, check, CALL }) {
   await budgetChecks({ open, fixture, check, CALL });
+  await artifactRecoveryChecks({ open, fixture, check, CALL });
   await pendingMetadataChecks({ open, fixture, check, CALL });
   const visible = (tab, selector, timeout = 8000) =>
     tab
@@ -63,8 +107,11 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(page === "call" ? CALL : "/dashboard", { set: "freshLive=1&knocks=0" });
     const full = await reads(page);
     const status = await reads(`${page}-status`);
-    await tab.waitForTimeout(10500);
-    check(`${page} ticks read status, not the full page`, (await reads(`${page}-status`)) >= status + 2 && (await reads(page)) === full);
+    for (let tick = 0; tick < 2; tick++) {
+      await tab.waitForResponse((response) => new URL(response.url()).pathname === `/dashboard-api/${page}-status` && response.ok(), { timeout: 20000 });
+    }
+    const observed = await reads(`${page}-status`);
+    check(`${page} ticks read status, not the full page`, observed >= status + 2 && (await reads(page)) === full, `status reads=${observed - status}, page reads=${full}->${await reads(page)}`);
     await context.close();
   }
   {
@@ -180,8 +227,10 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
   }
   {
     const { tab, context } = await open(CALL, { set: "live=1" });
+    const full = await reads("call");
     await tab.getByRole("button", { name: "Show older sessions" }).click();
     await tab.waitForTimeout(500);
+    check("Call pagination reads only the appended page", (await reads("call")) === full + 1);
     const rows = await tab.locator(".srow").count();
     await tab.waitForTimeout(5500);
     check("Call refresh keeps previously opened history pages", rows === 9 && (await tab.locator(".srow").count()) === rows);
@@ -243,7 +292,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
 }
 
 // Accelerate browser time, not network replies: these drive the mounted pages and real hook.
-async function budgetChecks({ open, fixture, check, CALL }) {
+export async function budgetChecks({ open, fixture, check, CALL }) {
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   {
     const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=0", clock: true });
@@ -279,10 +328,15 @@ async function budgetChecks({ open, fixture, check, CALL }) {
       await tab.unroute("**/dashboard-api/call-status?*");
       await fixture("set?end=1&knocks=0");
       for (let tick = 0; tick < 6; tick++) {
+        const status = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+        const full = tick === 5 ? tab.waitForResponse((response) => new URL(response.url()).pathname === "/dashboard-api/call") : undefined;
         await tab.clock.runFor(5000);
-        await tab.waitForTimeout(50);
+        await status;
+        await full;
+        await tab.waitForLoadState("networkidle");
       }
-      check("coalesced Episode refresh fetches the final ended state", (await tab.locator(".liveb").count()) === 0 && refreshes.length === 3);
+      await tab.locator(".liveb").waitFor({ state: "hidden" });
+      check("coalesced Episode refresh fetches the final ended state", refreshes.length === 3);
     } finally {
       await context.close();
     }

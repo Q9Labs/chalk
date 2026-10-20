@@ -10,8 +10,8 @@ import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
-const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying"]);
-const pendingRecording = (recording: RecordingDTO) => ["pending", "processing"].includes(recording.status) || ["pending", "processing"].includes(recording.exportStatus);
+const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
+const pendingRecording = (recording: RecordingDTO) => recording.transcriptionPending || ["pending", "processing"].includes(recording.status) || ["pending", "processing"].includes(recording.exportStatus);
 
 type Admission = CallPageDTO["call"]["admission"];
 type Session = CallPageDTO["episodes"][number];
@@ -61,7 +61,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           return { ...fresh, episodes: [...fresh.episodes, ...older], nextCursor: pages.current > 1 ? data.nextCursor : fresh.nextCursor };
         }
         let next = { ...data, knocks: status.knocks };
-        // Share one additional engine read per ten seconds across live and pending metadata.
+        // Share one metadata request per ten seconds; recording discovery uses two reads.
         if (++metadata.current.ticks % 2 !== 0) return next;
         const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
         for (const session of data.episodes)
@@ -265,7 +265,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
               load={(cursor) => readPage("call", { spaceId, cursor })}
               onLoaded={(page) => {
                 pages.current++;
-                update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }));
+                update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }), { refresh: false });
               }}
             />
           ) : null}

@@ -150,7 +150,7 @@ export function HomePage() {
               load={(cursor) => readPage("home", { cursor })}
               onLoaded={(page) => {
                 pages.current++;
-                update((data) => ({ ...data, calls: [...data.calls, ...page.calls], live: [...data.live, ...page.live], nextCursor: page.nextCursor }));
+                update((data) => ({ ...data, calls: [...data.calls, ...page.calls], live: [...data.live, ...page.live], nextCursor: page.nextCursor }), { refresh: false });
               }}
             />
           ) : null}

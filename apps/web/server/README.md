@@ -43,14 +43,16 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   cookies; clear this account's local bookmarks when `clearLocalBookmarks` is true.
   This is local sign-out, not Google/Apple account logout or token revocation.
 - `GET /dashboard-api/home?cursor=...`: owned, unarchived Spaces and one batch
-  live read. `POST`: `HomeAction`.
+  live read. Invite links are fetched only on copy/share, not per row: invite reads
+  mint tokens and consume the engine write bucket. `POST`: `HomeAction`.
 - `GET /dashboard-api/call?spaceId=...&cursor=...`: call, signed invite and Episode
   history. `POST`: `CallAction` (settings, rotate link, knocks, end for everyone).
 - `GET /dashboard-api/call-status?spaceId=...`: current Episode ID/state and
   unexpired pending knocks. Two tenant reads, independent of expanded history.
 - `GET /dashboard-api/call-metadata?kind=recording|transcript&spaceId=...&id=...`:
-  one tenant read for an already displayed, nonterminal artifact. Call pages share
-  one extra read per ten seconds between the live roster and pending artifacts.
+  one tenant read for a transcript, or two for a recording and its latest transcripts.
+  Recording polling includes pending audio preparation, so new automatic transcripts appear.
+  Call pages share one metadata request per ten seconds between the live roster and pending artifacts.
 - `GET /dashboard-api/home-status?spaceIds=...`: one batch live read for the
   visible live Spaces only. The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
