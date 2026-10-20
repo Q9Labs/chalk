@@ -396,3 +396,11 @@ join space_public_admission_requests public
   and public.request_handle = live.admission_request_id
 where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
   and public.request_handle = sqlc.arg(request_handle);
+
+-- name: GetPublicAdmissionBinding :one
+select live.episode_id, live.participant_id, participants.generation
+from sync_admission_requests live
+join participants on participants.tenant_id = live.tenant_id and participants.space_id = live.space_id
+  and participants.episode_id = live.episode_id and participants.id = live.participant_id
+where live.tenant_id = sqlc.arg(tenant_id) and live.space_id = sqlc.arg(space_id)
+  and live.admission_request_id = sqlc.arg(request_handle);

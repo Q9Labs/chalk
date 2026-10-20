@@ -118,12 +118,25 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 	if arrival.State == publicinvites.ArrivalAdmitted {
 		return a.resumePublicAccess(ctx, arrival, false)
 	}
-	result, err := a.episodes.JoinPublic(ctx, episodes.PublicJoinInput{
-		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
-		IdentityMode: string(arrival.IdentityMode), DisplayName: arrival.DisplayName,
-		Role:    publicinvites.PublicRoleCollaborator,
-		Request: episodes.Request{Key: arrival.IdempotencyKey, Fingerprint: arrival.IdempotencyFingerprint},
-	})
+	var result episodes.PublicJoinResult
+	var err error
+	if input.Admission != nil {
+		result, err = a.episodes.FindPublic(ctx, episodes.PublicAccessInput{
+			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
+			IdentityMode: string(arrival.IdentityMode), EpisodeID: input.Admission.EpisodeID,
+			ParticipantID: input.Admission.ParticipantID, ParticipantGeneration: input.Admission.ParticipantGeneration,
+		})
+		if errors.Is(err, episodes.ErrEpisodeNotActive) || errors.Is(err, episodes.ErrEpisodeNotFound) || errors.Is(err, episodes.ErrParticipantNotActive) {
+			return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
+		}
+	} else {
+		result, err = a.episodes.JoinPublic(ctx, episodes.PublicJoinInput{
+			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
+			IdentityMode: string(arrival.IdentityMode), DisplayName: arrival.DisplayName,
+			Role:    publicinvites.PublicRoleCollaborator,
+			Request: episodes.Request{Key: arrival.IdempotencyKey, Fingerprint: arrival.IdempotencyFingerprint},
+		})
+	}
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}

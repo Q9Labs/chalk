@@ -130,6 +130,8 @@ type Querier interface {
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
+	GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEpisodeForPublicJoinParams) (Episode, error)
+	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)
 	GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
 	GetReadyWhiteboardFile(ctx context.Context, arg GetReadyWhiteboardFileParams) (GetReadyWhiteboardFileRow, error)
 	GetRecordingArtifact(ctx context.Context, arg GetRecordingArtifactParams) (RecordingArtifact, error)
@@ -221,7 +223,7 @@ type Querier interface {
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
-	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]SyncAdmissionRequest, error)
+	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]ListPendingSpacePublicAdmissionRequestsRow, error)

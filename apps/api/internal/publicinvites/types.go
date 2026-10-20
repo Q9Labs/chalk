@@ -160,7 +160,14 @@ const (
 	AdmissionRequestInvalidated AdmissionRequestState = "invalidated"
 )
 
+type AdmissionBinding struct {
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+}
+
 type AdmissionRequest struct {
+	Binding       *AdmissionBinding
 	RequestHandle utilities.ID
 	ArrivalHandle utilities.ID
 	TenantID      utilities.ID
@@ -303,6 +310,7 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
+	Admission              *AdmissionBinding
 	Arrival                Arrival
 	MediaProof             string
 	ReplaceMediaConnection bool

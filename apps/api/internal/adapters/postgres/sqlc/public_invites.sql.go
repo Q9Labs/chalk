@@ -307,6 +307,34 @@ func (q *Queries) GetAutoSpaceLifecycle(ctx context.Context, arg GetAutoSpaceLif
 	return i, err
 }
 
+const getPublicAdmissionBinding = `-- name: GetPublicAdmissionBinding :one
+select live.episode_id, live.participant_id, participants.generation
+from sync_admission_requests live
+join participants on participants.tenant_id = live.tenant_id and participants.space_id = live.space_id
+  and participants.episode_id = live.episode_id and participants.id = live.participant_id
+where live.tenant_id = $1 and live.space_id = $2
+  and live.admission_request_id = $3
+`
+
+type GetPublicAdmissionBindingParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	RequestHandle pgtype.UUID `json:"request_handle"`
+}
+
+type GetPublicAdmissionBindingRow struct {
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+	Generation    int64       `json:"generation"`
+}
+
+func (q *Queries) GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error) {
+	row := q.db.QueryRow(ctx, getPublicAdmissionBinding, arg.TenantID, arg.SpaceID, arg.RequestHandle)
+	var i GetPublicAdmissionBindingRow
+	err := row.Scan(&i.EpisodeID, &i.ParticipantID, &i.Generation)
+	return i, err
+}
+
 const getPublicEpisodeAdmission = `-- name: GetPublicEpisodeAdmission :one
 select live.tenant_id, live.space_id, live.episode_id, live.admission_request_id, live.request_key, live.request_fingerprint, live.participant_id, live.display_name, live.role, live.status, live.decision_external_operation_id, live.requested_at, live.expires_at, live.completed_at
 from sync_admission_requests live

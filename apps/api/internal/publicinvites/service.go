@@ -699,7 +699,7 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 	if err != nil {
 		return AdmissionRequest{}, err
 	}
-	if request.State == AdmissionRequestPending {
+	if request.Binding != nil || request.State == AdmissionRequestPending {
 		// New requests use Sync's durable decision operation. The guest collects
 		// access only after that operation commits the canonical admission.
 		return request, nil
@@ -1122,7 +1122,11 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	state, reason := ArrivalPending, ""
 	switch request.State {
 	case AdmissionRequestApproved:
-		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding})
+		if errors.Is(err, ErrArrivalUnavailable) {
+			state, reason = ArrivalUnavailable, "admission_episode_ended"
+			break
+		}
 		if err != nil {
 			return PublicSpaceArrival{}, false, err
 		}

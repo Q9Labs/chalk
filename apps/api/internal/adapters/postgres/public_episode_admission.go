@@ -45,9 +45,6 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if episode.Status != episodes.EpisodeStatusActive {
 			return episodes.ErrEpisodeNotActive
 		}
-		if _, err := lockLifecycleControlRow(ctx, queries, arrival.TenantID, arrival.SpaceID, utilities.IDFromBytes(episode.ID.Bytes)); err != nil {
-			return err
-		}
 		current, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
 		if err != nil {
 			return fmt.Errorf("lock public admission arrival: %w", err)
@@ -116,8 +113,19 @@ func (r PublicInviteRepository) GetAdmissionRequestForArrival(ctx context.Contex
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public arrival admission: %w", err)
 	}
-	result := mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row))
-	return result, nil
+	return r.withAdmissionBinding(ctx, mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)))
+}
+
+func (r PublicInviteRepository) withAdmissionBinding(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
+	binding, err := r.queries.GetPublicAdmissionBinding(ctx, sqlc.GetPublicAdmissionBindingParams{TenantID: uuid(request.TenantID), SpaceID: uuid(request.SpaceID), RequestHandle: uuid(request.RequestHandle)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return request, nil // A request created before canonical admission was wired.
+	}
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public admission binding: %w", err)
+	}
+	request.Binding = &publicinvites.AdmissionBinding{EpisodeID: utilities.IDFromBytes(binding.EpisodeID.Bytes), ParticipantID: utilities.IDFromBytes(binding.ParticipantID.Bytes), ParticipantGeneration: binding.Generation}
+	return request, nil
 }
 
 func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, input publicinvites.DecideAdmissionRequestInput) (publicinvites.AdmissionRequest, publicinvites.Arrival, error) {
@@ -159,6 +167,13 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 			if (live.Status == "admitted" && input.Decision == publicinvites.DecisionApprove) || (live.Status == "denied" && input.Decision == publicinvites.DecisionDeny) {
 				return nil
 			}
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+		currentArrival, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
+		if err != nil {
+			return err
+		}
+		if publicinvites.ArrivalState(currentArrival.State) != publicinvites.ArrivalPending || !currentArrival.ExpiresAt.Time.After(time.Now()) {
 			return publicinvites.ErrAdmissionRequestTerminal
 		}
 		operationName := "admit_participant"

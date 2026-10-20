@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -127,6 +128,34 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("canonical expiry operations = %d, want 1", count)
+	}
+
+	invalidated, err := service.CreateArrival(ctx, publicinvites.CreateArrivalInput{
+		TenantID: tenantID, SpaceID: space.ID,
+		Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch,
+		IdentityMode: publicinvites.IdentityGuest, DisplayName: "Invalidated guest", GuestCredential: []byte("invalidated-test-guest-credential"), IdempotencyKey: accountTenantIntegrationID(t).String(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidRequest, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: invalidated.Arrival.ArrivalHandle, DisplayName: "Invalidated guest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.UpdateArrivalState(ctx, publicinvites.UpdateArrivalStateInput{TenantID: tenantID, ArrivalHandle: invalidated.Arrival.ArrivalHandle, State: publicinvites.ArrivalUnavailable, Reason: "public_arrival_invalidated"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: invalidRequest.RequestHandle, ActorID: accountID, Decision: publicinvites.DecisionApprove}); !errors.Is(err, publicinvites.ErrAdmissionRequestTerminal) {
+		t.Fatalf("approval of an invalidated arrival = %v", err)
+	}
+	if _, err := episodeRepository.EnqueueDueEpisodeDeadlines(ctx, 50); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations operations join sync_admission_requests requests on requests.tenant_id=operations.tenant_id and requests.episode_id=operations.episode_id and requests.decision_external_operation_id=operations.external_operation_id where requests.tenant_id=$1 and requests.admission_request_id=$2 and operations.operation_name='admission_request_expired'`, uuid(tenantID), uuid(invalidRequest.RequestHandle)).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("invalidated arrival expiry operations = %d, want 1", count)
 	}
 
 }

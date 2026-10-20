@@ -40,7 +40,18 @@ func enqueueDueAdmissionRequests(ctx context.Context, queries *sqlc.Queries, tx 
 		if err != nil {
 			return count, err
 		}
-		if request.Status != "pending" || request.DecisionExternalOperationID.Valid || request.ExpiresAt.Time.After(time.Now()) {
+		if request.Status != "pending" || request.DecisionExternalOperationID.Valid {
+			continue
+		}
+		invalidated := false
+		if candidate.PublicArrivalHandle.Valid {
+			arrival, err := queries.LockSpacePublicArrival(ctx, candidate.PublicArrivalHandle)
+			if err != nil {
+				return count, err
+			}
+			invalidated = arrival.State == "unavailable" || arrival.State == "rejected" || arrival.State == "left"
+		}
+		if request.ExpiresAt.Time.After(time.Now()) && !invalidated {
 			continue
 		}
 		requestID := utilities.IDFromBytes(request.AdmissionRequestID.Bytes)

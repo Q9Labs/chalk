@@ -218,3 +218,56 @@ func mustID(t *testing.T, raw string) utilities.ID {
 	}
 	return id
 }
+
+func TestKnockApprovalCollectsOnlyItsOriginalEpisode(t *testing.T) {
+	for _, ended := range []bool{false, true} {
+		t.Run(map[bool]string{false: "active", true: "ended"}[ended], func(t *testing.T) {
+			fixture := newAccessFixture(t)
+			pending := fixture.arrival
+			pending.State = publicinvites.ArrivalPending
+			pending.EpisodeID, pending.ParticipantID = utilities.ID{}, utilities.ID{}
+			pending.ParticipantGeneration = 0
+			pending.Provider, pending.ProviderSubject = "", ""
+			lookup := &approvedAdmissionLookup{publicJoinStub: publicJoinStub{result: fixture.result}}
+			if ended {
+				lookup.findErr = episodes.ErrEpisodeNotActive
+			}
+			configuration := fixture.config()
+			configuration.Episodes = lookup
+			access, err := publicinviteapp.NewAccessPort(configuration)
+			if err != nil {
+				t.Fatal(err)
+			}
+			grant, err := access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: pending, Admission: &publicinvites.AdmissionBinding{EpisodeID: fixture.episode, ParticipantID: fixture.participant, ParticipantGeneration: 7}})
+			if lookup.joinCalls != 0 || lookup.input.EpisodeID != fixture.episode || lookup.input.ParticipantID != fixture.participant || lookup.input.ParticipantGeneration != 7 {
+				t.Fatalf("approval escaped its binding: join calls=%d, lookup=%+v", lookup.joinCalls, lookup.input)
+			}
+			if ended {
+				if !errors.Is(err, publicinvites.ErrArrivalUnavailable) {
+					t.Fatalf("ended approval error = %v", err)
+				}
+				if fixture.plane.createCalls != 0 {
+					t.Fatal("ended approval reached media provider")
+				}
+			} else if err != nil || grant.EpisodeID != fixture.episode || grant.ParticipantID != fixture.participant {
+				t.Fatalf("approved grant = %+v, %v", grant, err)
+			}
+		})
+	}
+}
+
+type approvedAdmissionLookup struct {
+	publicJoinStub
+	input     episodes.PublicAccessInput
+	findErr   error
+	joinCalls int
+}
+
+func (s *approvedAdmissionLookup) FindPublic(_ context.Context, input episodes.PublicAccessInput) (episodes.PublicJoinResult, error) {
+	s.input = input
+	return s.result, s.findErr
+}
+func (s *approvedAdmissionLookup) JoinPublic(context.Context, episodes.PublicJoinInput) (episodes.PublicJoinResult, error) {
+	s.joinCalls++
+	return s.result, nil
+}

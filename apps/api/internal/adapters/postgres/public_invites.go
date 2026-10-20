@@ -16,6 +16,7 @@ import (
 )
 
 type publicInviteQuerier interface {
+	GetPublicAdmissionBinding(context.Context, sqlc.GetPublicAdmissionBindingParams) (sqlc.GetPublicAdmissionBindingRow, error)
 	CreateAutoSpaceLifecycle(context.Context, sqlc.CreateAutoSpaceLifecycleParams) (sqlc.AutoSpaceLifecycle, error)
 	CreateSpacePublicAdmissionRequest(context.Context, sqlc.CreateSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
 	CreateSpacePublicArrival(context.Context, sqlc.CreateSpacePublicArrivalParams) (sqlc.SpacePublicArrival, error)
@@ -364,7 +365,7 @@ func (r PublicInviteRepository) GetAdmissionRequest(ctx context.Context, tenantI
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public admission request: %w", err)
 	}
-	return mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)), nil
+	return r.withAdmissionBinding(ctx, mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)))
 }
 
 func (r PublicInviteRepository) ListAdmissionRequests(ctx context.Context, tenantID, spaceID utilities.ID, state publicinvites.AdmissionRequestState, pageSize int32) ([]publicinvites.AdmissionRequest, error) {

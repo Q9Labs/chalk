@@ -1076,24 +1076,47 @@ func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubje
 }
 
 const listDueAdmissionRequests = `-- name: ListDueAdmissionRequests :many
-select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from sync_admission_requests requests
+select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at, arrivals.arrival_handle as public_arrival_handle from sync_admission_requests requests
+left join space_public_admission_requests public on public.tenant_id = requests.tenant_id
+  and public.space_id = requests.space_id and public.request_handle = requests.admission_request_id
+left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_id
+  and arrivals.arrival_handle = public.arrival_handle
 join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id = requests.space_id
   and episodes.id = requests.episode_id
 where requests.status = 'pending' and requests.decision_external_operation_id is null
-  and requests.expires_at <= now() and episodes.status = 'active'
+  and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left'))
+  and episodes.status = 'active'
 order by requests.expires_at, requests.admission_request_id
 limit $1::integer
 `
 
-func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]SyncAdmissionRequest, error) {
+type ListDueAdmissionRequestsRow struct {
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	SpaceID                     pgtype.UUID        `json:"space_id"`
+	EpisodeID                   pgtype.UUID        `json:"episode_id"`
+	AdmissionRequestID          pgtype.UUID        `json:"admission_request_id"`
+	RequestKey                  string             `json:"request_key"`
+	RequestFingerprint          []byte             `json:"request_fingerprint"`
+	ParticipantID               pgtype.UUID        `json:"participant_id"`
+	DisplayName                 string             `json:"display_name"`
+	Role                        string             `json:"role"`
+	Status                      string             `json:"status"`
+	DecisionExternalOperationID pgtype.UUID        `json:"decision_external_operation_id"`
+	RequestedAt                 pgtype.Timestamptz `json:"requested_at"`
+	ExpiresAt                   pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
+	PublicArrivalHandle         pgtype.UUID        `json:"public_arrival_handle"`
+}
+
+func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error) {
 	rows, err := q.db.Query(ctx, listDueAdmissionRequests, pageSize)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SyncAdmissionRequest
+	var items []ListDueAdmissionRequestsRow
 	for rows.Next() {
-		var i SyncAdmissionRequest
+		var i ListDueAdmissionRequestsRow
 		if err := rows.Scan(
 			&i.TenantID,
 			&i.SpaceID,
@@ -1109,6 +1132,7 @@ func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) 
 			&i.RequestedAt,
 			&i.ExpiresAt,
 			&i.CompletedAt,
+			&i.PublicArrivalHandle,
 		); err != nil {
 			return nil, err
 		}

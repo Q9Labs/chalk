@@ -45,9 +45,6 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 		if episode.Status != episodes.EpisodeStatusActive {
 			return episodes.ErrEpisodeNotActive
 		}
-		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, utilities.IDFromBytes(episode.ID.Bytes)); err != nil {
-			return err
-		}
 
 		intent, err := queries.LockLifecycleIntentForRequestForUpdate(ctx, sqlc.LockLifecycleIntentForRequestForUpdateParams{
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: episode.ID,
@@ -300,6 +297,16 @@ func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episo
 }
 
 func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space) (sqlc.Episode, bool, webhookCommitMetric, error) {
+	// Read the ID without locking the Episode, then follow Sync's order:
+	// control before Episode. The caller's Space lock serializes creation.
+	candidate, err := queries.GetLiveEpisodeForPublicJoin(ctx, sqlc.GetLiveEpisodeForPublicJoinParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
+	if err == nil {
+		if _, err := lockLifecycleControlRow(ctx, queries, tenantID, spaceID, utilities.IDFromBytes(candidate.ID.Bytes)); err != nil {
+			return sqlc.Episode{}, false, webhookCommitMetric{}, err
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.Episode{}, false, webhookCommitMetric{}, err
+	}
 	episode, err := queries.LockLiveEpisodeForUpdate(ctx, sqlc.LockLiveEpisodeForUpdateParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
 	if err == nil {
 		return episode, false, webhookCommitMetric{}, nil
