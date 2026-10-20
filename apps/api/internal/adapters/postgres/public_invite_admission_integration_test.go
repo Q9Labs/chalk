@@ -111,7 +111,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	}
 	// The deadline worker reserves the canonical expiry operation exactly once.
 	// A pending request remains pending until Sync commits its terminal result.
-	exec(`update sync_admission_requests set expires_at=now()-interval '1 second' where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle))
+	exec(`update sync_admission_requests set requested_at=now()-interval '6 minutes', expires_at=now()-interval '1 second' where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle))
 	pending, err := repository.GetAdmissionRequest(ctx, tenantID, space.ID, request.RequestHandle)
 	if err != nil || pending.State != publicinvites.AdmissionRequestPending {
 		t.Fatalf("uncommitted expiry must not race a host decision: %+v, %v", pending, err)
