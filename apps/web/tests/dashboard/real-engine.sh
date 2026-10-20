@@ -56,6 +56,9 @@ export AWS_SECRET_ACCESS_KEY=fixture-aws-not-a-secret
 export AWS_EC2_METADATA_DISABLED=true
 export AWS_ENDPOINT_URL=http://127.0.0.1:18081
 export GOFLAGS=-buildvcs=false
+if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
+  pnpm exec turbo run build --filter=web...
+fi
 (cd apps/api && go build -o ../../artifacts/dashboard-api ./cmd)
 final_pid=""
 api_pid=""

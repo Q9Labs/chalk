@@ -1,7 +1,5 @@
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 
 // Run with DASHBOARD_REFRESH_COST=1 through real-engine.sh. Every dashboard
@@ -16,24 +14,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
   const episodeId = (await joined.json()).access.subject.episode_id;
   const require = createRequire(new URL("../../package.json", import.meta.url));
   const { chromium } = require("playwright");
-  const vite = spawn("pnpm", ["exec", "vite", "--host", "127.0.0.1", "--port", "3072", "--strictPort"], { cwd: new URL("../..", import.meta.url), detached: true, stdio: "ignore" });
-  const watchdog = spawn(process.execPath, ["-e", `const owner=${process.pid},group=${vite.pid};setInterval(()=>{try{process.kill(owner,0)}catch{try{process.kill(-group,'SIGTERM')}catch{}process.exit()}},1000);setTimeout(()=>{try{process.kill(-group,'SIGTERM')}catch{}process.exit()},240000)`], {
-    stdio: "ignore",
-  });
   let browser;
   try {
-    let ready = false;
-    for (let attempt = 0; attempt < 120; attempt++) {
-      assert.equal(vite.exitCode, null, "Task preview must own its port");
-      try {
-        ready = (await fetch("http://127.0.0.1:3072/dashboard", { signal: AbortSignal.timeout(1000) })).ok;
-      } catch {}
-      if (ready) break;
-      await delay(250);
-    }
-    assert(ready, "Task preview started");
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
+    const context = await browser.newContext({ serviceWorkers: "block" });
     const dashboardReads = [];
     const activeEpisodes = [];
     await context.route(/\/(?:dashboard-api\/|auth\/session)/, async (route) => {
@@ -47,7 +31,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const callPage = await context.newPage();
     const homePage = await context.newPage();
     const start = Date.now();
-    await Promise.all([callPage.goto(`http://127.0.0.1:3072/dashboard/call/${call.id}`), homePage.goto("http://127.0.0.1:3072/dashboard")]);
+    await Promise.all([callPage.goto(`${origin}/dashboard/call/${call.id}`), homePage.goto(`${origin}/dashboard`)]);
     await callPage.locator(".liveb").waitFor({ state: "visible" });
     await homePage.locator(".live").waitFor({ state: "visible" });
     await delay(500);
@@ -94,12 +78,5 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     );
   } finally {
     await browser?.close();
-    watchdog.kill("SIGTERM");
-    try {
-      process.kill(-vite.pid, "SIGTERM");
-    } catch (error) {
-      if (error.code !== "ESRCH") throw error;
-    }
-    if (vite.exitCode === null) await once(vite, "exit");
   }
 }

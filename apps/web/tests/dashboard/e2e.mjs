@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, relative } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -71,6 +71,9 @@ try {
   await mkdir(resolve(sandbox, "functions"));
   await mkdir(resolve(sandbox, "public"));
   await writeFile(resolve(sandbox, "public/index.html"), "fixture boundary");
+  if (process.env.DASHBOARD_REFRESH_COST === "1") {
+    await cp(resolve(web, "dist/client"), resolve(sandbox, "public"), { recursive: true, filter: (source) => !source.includes("/_worker.js") && !source.endsWith("/_routes.json") });
+  }
   // Run the real named Pages route graph with a test-only composition root.
   for (const group of ["auth", "dashboard-api"]) {
     const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-status", "call-metadata", "home-status", "past-session", "developer"];
