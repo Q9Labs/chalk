@@ -1,6 +1,11 @@
 # Changelog
 
-## 5.0.0 (unreleased)
+## 5.0.1 (unreleased)
+
+- React Native: fix the Android 11 crash when joining a call by keeping API 31 audio listener types out of React Native module signatures.
+- Advance the seven coordinated Chalk SDK packages to 5.0.1. `@q9labsai/recording-presentation` remains at 0.1.1.
+
+## 5.0.0
 
 - Keep the whiteboard reconnect watchdog running when an injected wall clock moves backward. Persisted operation timestamps still use wall time.
 - Add package-local release notes for all eight public packages. Seven packages use 5.0.0; `@q9labsai/recording-presentation` advances independently to 0.1.1 for the 24-reaction validator.

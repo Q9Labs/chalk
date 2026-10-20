@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.0.1
+
+- Fix the Android 11 crash when joining a call by isolating API 31 audio listeners from React Native module signatures.
+
 ## 5.0.0
 
 - Rebuild `Chalk` with a call header, Spotlight and Grid layouts, a dock, People and Chat sheets, and status pages.

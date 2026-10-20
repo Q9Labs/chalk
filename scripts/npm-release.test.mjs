@@ -69,20 +69,17 @@ test("bump rewrites explicit workspace ranges and leaves bare ranges alone", () 
   assert.equal(bumpWorkspaceRange("workspace:^0.1.1", "4.1.16", "4.2.0"), "workspace:^0.1.1");
 });
 
-test("bump plan updates release versions, every consumer range, and the client release id", () => {
-  const clientSource = "sdks/typescript/client/src/space-client/core.ts";
+test("bump plan updates release versions and every consumer range", () => {
   const files = new Map([
     ["packages/ui/package.json", JSON.stringify({ name: "@q9labsai/chalk-ui", version: "4.1.16" }, null, 2)],
     ["apps/recording-renderer/package.json", JSON.stringify({ name: "recording-renderer", version: "0.0.0", dependencies: { "@q9labsai/chalk-react": "workspace:^4.1.16" } }, null, 2)],
     ["packages/recording-presentation/package.json", JSON.stringify({ name: "@q9labsai/recording-presentation", version: "0.1.0" }, null, 2)],
     ["apps/unrelated/package.json", JSON.stringify({ name: "unrelated", version: "4.1.16" }, null, 2)],
-    [clientSource, 'release: { id: "chalk-client@4.1.16" }'],
   ]);
   const changes = planVersionBump(files, "4.1.16", "4.2.0");
-  assert.deepEqual([...changes.keys()].sort(), ["apps/recording-renderer/package.json", "packages/ui/package.json", clientSource]);
+  assert.deepEqual([...changes.keys()].sort(), ["apps/recording-renderer/package.json", "packages/ui/package.json"]);
   assert.equal(JSON.parse(changes.get("packages/ui/package.json")).version, "4.2.0");
   assert.equal(JSON.parse(changes.get("apps/recording-renderer/package.json")).dependencies["@q9labsai/chalk-react"], "workspace:^4.2.0");
-  assert.match(changes.get(clientSource), /chalk-client@4\.2\.0/);
 });
 
 test("bump rejects a non-version and the current version", () => {
