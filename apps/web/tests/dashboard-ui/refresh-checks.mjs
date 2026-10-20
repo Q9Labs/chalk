@@ -32,6 +32,14 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await context.close();
   }
   {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
+    await fixture("set?knocks=1");
+    const arrived = await visible(tab, ".orow");
+    await screenshot(tab, "first-knock");
+    check("idle Ask to join Call discovers its first knock without navigation or visibility changes", arrived);
+    await context.close();
+  }
+  {
     // A pending request alone must keep refreshing, even without a live Episode.
     const { tab, context } = await open(CALL, { set: "live=0&knocks=1" });
     await fixture("set?knocks=0");
@@ -43,6 +51,24 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
         () => false,
       );
     check("Call drops a pending knock when the server stops returning it", removed);
+    await fixture("set?knocks=1");
+    const next = await visible(tab, ".orow");
+    check("Call keeps observing new knocks after the last one disappears", next);
+    if (next) {
+      await tab.getByRole("button", { name: "Deny", exact: true }).click();
+      await tab.locator(".orow").waitFor({ state: "hidden" });
+      await fixture("set?knocks=1");
+      check("Call keeps observing new knocks after denying the last one", await visible(tab, ".orow"));
+    }
+    await context.close();
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
+    await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
+    await tab.waitForTimeout(500);
+    const before = await reads("call");
+    await tab.waitForTimeout(5500);
+    check("idle Anyone with the link Call does not poll", (await reads("call")) === before);
     await context.close();
   }
   {

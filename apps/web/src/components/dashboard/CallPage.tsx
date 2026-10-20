@@ -30,7 +30,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       return data;
     },
     `call:${spaceId}`,
-    (data) => (data.live || data.episodes.some((episode) => episode.status !== "ended") || data.knocks.length ? 5000 : undefined),
+    (data) => ((!data.call.archived && data.call.admission === "knock") || data.live || data.episodes.some((episode) => episode.status !== "ended") || data.knocks.length ? 5000 : undefined),
   );
   const [renaming, setRenaming] = useState(false);
   const toast = useToast();
