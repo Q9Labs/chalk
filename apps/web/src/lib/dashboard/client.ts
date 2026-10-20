@@ -1,4 +1,26 @@
-import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageDTO, CueDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, HomeAction, HomeDTO, OwnerAccessDTO, PastSessionAction, PastSessionDTO, RecordingDTO, SecretDTO, SessionDTO, TranscriptDTO, WebhookDTO } from "./contracts";
+import type {
+  AllowedWebsitesDTO,
+  ArtifactURLDTO,
+  CallAction,
+  CallDTO,
+  CallPageDTO,
+  CallStatusDTO,
+  HomeStatusDTO,
+  CueDTO,
+  DeliveryDTO,
+  DeveloperAction,
+  DeveloperDTO,
+  HomeAction,
+  HomeDTO,
+  OwnerAccessDTO,
+  PastSessionAction,
+  PastSessionDTO,
+  RecordingDTO,
+  SecretDTO,
+  SessionDTO,
+  TranscriptDTO,
+  WebhookDTO,
+} from "./contracts";
 
 // The browser half of the dashboard. It holds only the session-bound CSRF token, never a secret:
 // the sealed session and every engine credential stay in HttpOnly cookies and the Pages Functions.
@@ -6,6 +28,8 @@ import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageD
 export type Provider = "google" | "apple";
 
 type Pages = {
+  "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
+  "home-status": { query: { spaceIds: string }; data: HomeStatusDTO; action: never };
   home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
   call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };

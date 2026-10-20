@@ -22,7 +22,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const { state, reload, update } = useLoad(
     async () => {
       let data = await readPage("call", { spaceId });
-      // Refresh the pages already opened, so polling does not collapse older rows.
+      // Keep expanded history when a status change requires a page refresh.
       for (let page = 1; page < pages.current && data.nextCursor; page++) {
         const older = await readPage("call", { spaceId, cursor: data.nextCursor });
         data = { ...data, episodes: [...data.episodes, ...older.episodes], nextCursor: older.nextCursor };
@@ -30,7 +30,15 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       return data;
     },
     `call:${spaceId}`,
-    (data) => ((!data.call.archived && data.call.admission === "knock") || data.live || data.episodes.some((episode) => episode.status !== "ended") || data.knocks.length ? 5000 : undefined),
+    {
+      interval: (data) => ((!data.call.archived && data.call.admission === "knock") || data.live || data.episodes.some((episode) => episode.status !== "ended") || data.knocks.length ? 5000 : undefined),
+      read: async (data) => {
+        const status = await readPage("call-status", { spaceId });
+        const episode = data.episodes.find((item) => item.status !== "ended");
+        if ((data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status || JSON.stringify(data.knocks) !== JSON.stringify(status.knocks)) return null;
+        return { ...data, knocks: status.knocks };
+      },
+    },
   );
   const [renaming, setRenaming] = useState(false);
   const toast = useToast();

@@ -218,6 +218,14 @@ async function dashboard(request, response, page, url, entry) {
     if (state.limit.has(page)) return fail(response, 429, "engine_rate_limited", { retryable: true, retryAfterSeconds: 60 });
     if (state.fail.has(page)) return fail(response, 503, "service_unavailable");
     const query = Object.fromEntries(url.searchParams);
+    if (page === "home-status") {
+      const live = query.spaceIds.split(",").map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: 0, participants: [] } : null }));
+      return send(response, 200, { live });
+    }
+    if (page === "call-status") {
+      const episode = data.live ? { id: uuid(0x2ff), status: "active" } : data.sessions.find((item) => item.status !== "ended");
+      return send(response, 200, { latestEpisodeId: data.live ? uuid(0x2ff) : (data.sessions[0]?.id ?? null), episode: episode ? { id: episode.id, status: episode.status } : null, knocks: data.knocks ?? [] });
+    }
     if (page === "home") {
       const calls = data.calls.filter((call) => !call.archived);
       const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));

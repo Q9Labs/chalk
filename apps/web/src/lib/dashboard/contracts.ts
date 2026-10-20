@@ -7,6 +7,13 @@ const idempotencyKey = z.uuid();
 const admission = z.enum(["anyone", "knock"]);
 export const pageQuery = z.strictObject({ cursor: z.string().max(1024).optional() });
 export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(1024).optional() });
+export const callStatusQuery = z.strictObject({ spaceId: id });
+export const homeStatusQuery = z.strictObject({
+  spaceIds: z
+    .string()
+    .transform((value) => value.split(","))
+    .pipe(z.array(id).min(1).max(100)),
+});
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 export const homeAction = z.discriminatedUnion("action", [
@@ -123,3 +130,6 @@ export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; h
 export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };
 
 export type OwnerAccessDTO = { access: AccessGrant };
+
+export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
+export type HomeStatusDTO = { live: LiveDTO[] };

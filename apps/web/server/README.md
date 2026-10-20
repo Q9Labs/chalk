@@ -46,6 +46,10 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   live read. `POST`: `HomeAction`.
 - `GET /dashboard-api/call?spaceId=...&cursor=...`: call, signed invite and Episode
   history. `POST`: `CallAction` (settings, rotate link, knocks, end for everyone).
+- `GET /dashboard-api/call-status?spaceId=...`: current Episode ID/state and
+  unexpired pending knocks. Two tenant reads, independent of expanded history.
+- `GET /dashboard-api/home-status?spaceIds=...`: one batch live read for the
+  visible live Spaces only. The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
   recordings and attendance. `POST`: `PastSessionAction` (artifact URLs,
   transcripts, export, deletion). Artifact URLs expire; request again on expiry.
@@ -61,6 +65,11 @@ generation come from a session-bound, purpose-sealed HttpOnly seat cookie.
 Nothing accepts arbitrary Participant IDs or promotes joined-only calls.
 The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
+
+Visible Call pages check status every five seconds; visible Home pages check only
+while they show live calls. Stable status never reloads page history. A changed
+Episode or knock set reloads the expanded page once. Hidden pages pause checks
+and refresh once on return; failed background reads retain ready content.
 
 ## Identity and session
 

@@ -24,7 +24,7 @@ export function HomePage() {
   const { state, reload, update } = useLoad(
     async () => {
       let data = await readPage("home", {});
-      // Refresh the pages already opened, so polling does not collapse older rows.
+      // Keep expanded rows when a live call changes.
       for (let page = 1; page < pages.current && data.nextCursor; page++) {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
@@ -32,7 +32,15 @@ export function HomePage() {
       return data;
     },
     "home",
-    (data) => (data.live.some((call) => call.episode) ? 5000 : undefined),
+    {
+      interval: (data) => (data.live.some((call) => call.episode) ? 5000 : undefined),
+      read: async (data) => {
+        const active = data.live.filter((call) => call.episode);
+        const status = await readPage("home-status", { spaceIds: active.map((call) => call.spaceId).join(",") });
+        if (active.some((call) => status.live.find((item) => item.spaceId === call.spaceId)?.episode?.id !== call.episode?.id)) return null;
+        return { ...data, live: data.live.map((call) => status.live.find((item) => item.spaceId === call.spaceId) ?? call) };
+      },
+    },
   );
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);

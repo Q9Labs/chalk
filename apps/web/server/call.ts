@@ -1,10 +1,19 @@
 import { Schema } from "effect";
-import { EpisodeIdSchema, SpaceIdSchema } from "@q9labsai/chalk-client/effect";
+import { EpisodeIdSchema, SpaceIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, live, run } from "./engine";
 import { callDTO, episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
-import type { CallAction, CallPageDTO } from "../src/lib/dashboard/contracts";
+import type { CallAction, CallPageDTO, CallStatusDTO } from "../src/lib/dashboard/contracts";
+function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"]): CallPageDTO["knocks"] {
+  return requests.filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now()).map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state }));
+}
+export async function callStatus(engine: Engine, spaceId: string): Promise<CallStatusDTO> {
+  const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId) };
+  const [episodes, knocks] = await Promise.all([run(engine.api.episodes.listEpisodes({ params, query: { page_size: 1 } })), run(engine.api.spaces.listSpacePublicAdmissionRequests({ params, query: { state: "pending" } }))]);
+  const latest = episodes.episodes[0];
+  return { latestEpisodeId: latest?.id ?? null, episode: latest && latest.status !== "ended" ? { id: latest.id, status: latest.status } : null, knocks: mapKnocks(knocks.requests) };
+}
 export async function callPage(engine: Engine, spaceId: string, cursor?: string): Promise<CallPageDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId) };
   const space = await run(engine.api.spaces.getSpace({ params }));
@@ -35,7 +44,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
       }),
     ),
     nextCursor: episodes.pagination.next_cursor,
-    knocks: knocks.requests.filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now()).map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state })),
+    knocks: mapKnocks(knocks.requests),
   };
 }
 export async function callMutation(engine: Engine, action: Exclude<CallAction, { action: "join" | "refresh-access" }>) {

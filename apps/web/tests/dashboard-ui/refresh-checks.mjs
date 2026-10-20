@@ -16,6 +16,14 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await mkdir(process.env.DASHBOARD_REFRESH_ARTIFACTS, { recursive: true });
     await tab.screenshot({ path: resolve(process.env.DASHBOARD_REFRESH_ARTIFACTS, `${name}.png`), fullPage: true });
   };
+  for (const page of ["call", "home"]) {
+    const { tab, context } = await open(page === "call" ? CALL : "/dashboard", { set: "freshLive=1&knocks=0" });
+    const full = await reads(page);
+    const status = await reads(`${page}-status`);
+    await tab.waitForTimeout(10500);
+    check(`${page} ticks read status, not the full page`, (await reads(`${page}-status`)) >= status + 2 && (await reads(page)) === full);
+    await context.close();
+  }
   {
     const { tab, context } = await open(CALL, { set: "freshLive=1&liveParticipants=0&knocks=1" });
     let navigations = 0;
@@ -29,6 +37,12 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     const ended = await visible(tab, '.srow a[aria-label*=", 7 min,"]');
     await screenshot(tab, "ended");
     check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.orow").count()) === 0 && (await tab.locator(".srow").getByText("Recording", { exact: true }).count()) === 1);
+    await context.close();
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
+    await fixture("set?freshLive=1&end=1");
+    check("Call discovers a session that started and ended between polls", await visible(tab, '.srow a[aria-label*=", 7 min,"]'));
     await context.close();
   }
   {
@@ -66,9 +80,9 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
     await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
     await tab.waitForTimeout(500);
-    const before = await reads("call");
+    const before = await reads("call-status");
     await tab.waitForTimeout(5500);
-    check("idle Anyone with the link Call does not poll", (await reads("call")) === before);
+    check("idle Anyone with the link Call does not poll", (await reads("call-status")) === before);
     await context.close();
   }
   {
@@ -81,9 +95,9 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
         () => true,
         () => false,
       );
-    const stopped = await reads("home");
+    const stopped = await reads("home-status");
     await tab.waitForTimeout(5500);
-    check("Home clears Live without a reload and stops polling when idle", ended && (await reads("home")) === stopped);
+    check("Home clears Live without a reload and stops polling when idle", ended && (await reads("home-status")) === stopped);
     await context.close();
   }
   {
@@ -93,10 +107,10 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    const before = await reads("call");
+    const before = await reads("call-status");
     await fixture("set?end=1");
     await tab.waitForTimeout(5500);
-    check("hidden tab does not poll", (await reads("call")) === before);
+    check("hidden tab does not poll", (await reads("call-status")) === before);
     await tab.evaluate(() => {
       Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
       document.dispatchEvent(new Event("visibilitychange"));
@@ -106,10 +120,10 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
   }
   {
     const { tab, context } = await open(CALL, { set: "freshLive=1" });
-    await fixture("set?fail=call");
-    const before = await reads("call");
+    await fixture("set?fail=call-status");
+    const before = await reads("call-status");
     await tab.waitForTimeout(5500);
-    check("failed background refresh keeps ready content without a skeleton or error", (await reads("call")) > before && (await tab.locator(".liveb").count()) === 1 && (await tab.locator('[aria-busy="true"],.errp').count()) === 0);
+    check("failed background refresh keeps ready content without a skeleton or error", (await reads("call-status")) > before && (await tab.locator(".liveb").count()) === 1 && (await tab.locator('[aria-busy="true"],.errp').count()) === 0);
     await fixture("set?fail=&end=1");
     check("background refresh retries after failure", await visible(tab, '.srow a[aria-label^="Session"]'));
     await context.close();
