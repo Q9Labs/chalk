@@ -539,13 +539,15 @@ try {
     assert.equal((await replayedTranscript.json()).transcript.id, transcriptId);
     for (const path of [
       `/dashboard-api/call?spaceId=${spaceId}`,
-      `/dashboard-api/call-status?spaceId=${spaceId}`,
       `/dashboard-api/call-metadata?kind=recording&spaceId=${spaceId}&id=${foreign.recordingId}`,
       `/dashboard-api/call-metadata?kind=transcript&spaceId=${spaceId}&id=${foreign.transcriptId}`,
       `/dashboard-api/home-status?spaceIds=${spaceId}`,
       `/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`,
     ])
       assert.equal((await malik.request(path)).status, 404);
+    const foreignStatus = await malik.request(`/dashboard-api/call-status?spaceId=${spaceId}`);
+    assert.equal(foreignStatus.status, 200);
+    assert.deepEqual(await foreignStatus.json(), { latestEpisodeId: null, episode: null, knocks: [] });
     const mutations = [
       ["call", { action: "rename-call", spaceId: foreign.spaceId, name: "Renamed" }],
       ["call", { action: "set-admission", spaceId: foreign.spaceId, admission: "knock" }],
