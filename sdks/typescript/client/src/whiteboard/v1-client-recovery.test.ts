@@ -352,9 +352,16 @@ describe("whiteboard slow-connection watchdog", () => {
     await client.stopSceneSubscription();
   });
 
-  it("ages default probes monotonically across a backward wall-clock correction", async () => {
+  it.each([false, true])("ages probes monotonically across a backward wall-clock correction (injected clock: %s)", async (injected) => {
     vi.useFakeTimers({ toFake: ["Date", "performance", "setTimeout", "clearTimeout"] });
-    const { client, sockets } = recoveryClient(new TestClock(), 100, { clock: undefined });
+    const clock = injected
+      ? {
+          now: () => Date.now(),
+          setTimeout: (callback: () => void, milliseconds: number) => globalThis.setTimeout(callback, milliseconds),
+          clearTimeout: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+        }
+      : undefined;
+    const { client, sockets } = recoveryClient(new TestClock(), 100, { clock });
     try {
       const startup = client.startSceneSubscription();
       await acceptSnapshot(sockets);
@@ -363,6 +370,8 @@ describe("whiteboard slow-connection watchdog", () => {
       vi.setSystemTime(new Date(Date.now() - 3_600_000));
       vi.advanceTimersByTime(4_000);
       expect(sockets[0]?.closeCalls).toHaveLength(1);
+      vi.advanceTimersByTime(100);
+      expect(sockets).toHaveLength(2);
     } finally {
       await client.stopSceneSubscription();
       vi.useRealTimers();
@@ -624,6 +633,10 @@ class TestClock {
   readonly #timers = new Map<number, { readonly at: number; readonly callback: () => void }>();
 
   now(): number {
+    return this.#now;
+  }
+
+  monotonicNow(): number {
     return this.#now;
   }
 

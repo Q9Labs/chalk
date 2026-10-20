@@ -935,7 +935,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #elapsedNow(): number {
     // Wall-clock timestamps remain on #now() for persisted operation ordering.
-    return this.#options.clock?.now() ?? globalThis.performance.now();
+    return this.#options.clock?.monotonicNow?.() ?? globalThis.performance.now();
   }
 
   #clock(): NonNullable<ChalkWhiteboardV1ClientOptions["clock"]> {
