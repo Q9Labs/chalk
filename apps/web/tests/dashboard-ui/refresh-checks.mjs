@@ -1,7 +1,32 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
+export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
+  const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
+  for (const final of ["complete", "terminal_failure"]) {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
+    await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
+    await tab.waitForTimeout(500);
+    const full = await reads("call");
+    await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "visible" });
+    await fixture(`set?metadataComplete=${final}`);
+    const finished = await tab
+      .getByText("Transcript processing", { exact: true })
+      .waitFor({ state: "hidden", timeout: 25000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    check(`ended Anyone Call updates pending transcript metadata to ${final} without reloading history`, finished && (await reads("call-metadata")) >= 2 && (await reads("call")) === full);
+    const status = await reads("call-status");
+    await tab.waitForTimeout(5500);
+    check(`ended Anyone Call stops polling after artifacts reach ${final}`, finished && (await reads("call-status")) === status);
+    await context.close();
+  }
+}
+
 export async function refreshChecks({ open, fixture, check, CALL }) {
+  await pendingMetadataChecks({ open, fixture, check, CALL });
   const visible = (tab, selector) =>
     tab
       .locator(selector)
@@ -30,21 +55,6 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
           () => false,
         )) && (await reads("call")) === full,
     );
-    await context.close();
-  }
-  for (const final of ["complete", "terminal_failure"]) {
-    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
-    const full = await reads("call");
-    await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "visible" });
-    await fixture(`set?metadataComplete=${final}`);
-    const finished = await tab
-      .getByText("Transcript processing", { exact: true })
-      .waitFor({ state: "hidden", timeout: 25000 })
-      .then(
-        () => true,
-        () => false,
-      );
-    check(`Call updates pending transcript metadata to ${final} without reloading history`, finished && (await reads("call-metadata")) >= 2 && (await reads("call")) === full);
     await context.close();
   }
   for (const page of ["call", "home"]) {
@@ -108,7 +118,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await context.close();
   }
   {
-    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataComplete=complete" });
     await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
     await tab.waitForTimeout(500);
     const before = await reads("call-status");

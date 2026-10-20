@@ -11,6 +11,7 @@ import { RenameDialog } from "./HomePage";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying"]);
+const pendingRecording = (recording: RecordingDTO) => ["pending", "processing"].includes(recording.status) || ["pending", "processing"].includes(recording.exportStatus);
 
 type Admission = CallPageDTO["call"]["admission"];
 type Session = CallPageDTO["episodes"][number];
@@ -34,7 +35,13 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
     },
     `call:${spaceId}`,
     {
-      interval: (data) => ((!data.call.archived && data.call.admission === "knock") || data.live || data.episodes.some((episode) => episode.status !== "ended") || data.knocks.length ? 5000 : undefined),
+      interval: (data) =>
+        (!data.call.archived && data.call.admission === "knock") ||
+        data.live ||
+        data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => pendingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
+        data.knocks.length
+          ? 5000
+          : undefined,
       read: async (data) => {
         const status = await readPage("call-status", { spaceId });
         const episode = data.episodes.find((item) => item.status !== "ended");
@@ -45,7 +52,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
         for (const session of data.episodes)
           for (const recording of session.recordings) {
-            if (["pending", "processing"].includes(recording.status) || recording.exportStatus === "pending") targets.push({ kind: "recording", spaceId, id: recording.id });
+            if (pendingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
             for (const transcript of recording.transcripts ?? []) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
           }
         if (!targets.length) return next;

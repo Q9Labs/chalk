@@ -224,7 +224,7 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, { live });
     }
     if (page === "call-metadata") {
-      const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));
+      const recordings = data.sessions.flatMap((session) => recordingsFor(session, query.kind === "transcript"));
       if (query.kind === "recording") return send(response, 200, { kind: "recording", recording: recordings.find((item) => item.id === query.id && item.status === "processing") ?? recordings.find((item) => item.id === query.id) });
       return send(response, 200, { kind: "transcript", transcript: recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id && item.status === "processing") ?? recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id) });
     }
