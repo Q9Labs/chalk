@@ -39,7 +39,7 @@ def manifest_bytes(github, info, trusted=True):
         run = github.request(f"actions/runs/{info['run_id']}")
         require(not trusted or (run['head_branch'] == 'master' and run['head_repository']['full_name'] == github.repository
                 and run['path'].split('@')[0] in ('.github/workflows/ci.yml', '.github/workflows/nightly.yml', '.github/workflows/promote.yml')
-                and run['event'] in ('schedule', 'workflow_dispatch', 'workflow_run')), 'untrusted artifact-producing run')
+                and run['event'] in ('schedule', 'workflow_dispatch')), 'untrusted artifact-producing run')
         data = github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.json', info.get('manifest_sha256') or None)
     value = json.loads(data)
     require(value['release_id'] == info['release_id'] and value['source_revision'] == info['target_sha'], 'manifest identity mismatch')
@@ -133,26 +133,18 @@ def complete_production(github, args):
 
 
 def plan(github, args):
-    target = (subprocess.check_output(['git', 'rev-parse', 'origin/master'], text=True).strip()
-              if args.manual else env('GATE_SHA'))
-    ancestor(target)
+    target = github.request('git/ref/heads/master')['object']['sha']
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')
+    if cut and not github.has_green_gate(target, push_only=not args.manual):
+        require(not args.manual, f'latest master Gate for {target} is not successful')
+        cut = False
+        print('Nightly: current master tip has no successful push Gate; skipping')
     result = dict(should_cut=cut, target_sha=target)
     if cut:
-        github.gate(target)
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
-        if not args.manual:
-            try:
-                ancestor(baseline['target_sha'], target)
-            except subprocess.CalledProcessError as error:
-                if error.returncode != 1:
-                    raise
-                print('Nightly: Gate commit predates or diverges from the release baseline; skipping')
-                outputs(dict(should_cut=False, target_sha=target))
-                return
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
         recorder_control = baseline['recorder_control']
@@ -165,6 +157,10 @@ def plan(github, args):
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
+        if github.request('git/ref/heads/master')['object']['sha'] != target:
+            print('Nightly: master moved during planning; retry on the next check')
+            outputs(dict(should_cut=False, target_sha=target))
+            return
         github.reserve_cut(target)
     outputs(result)
 
@@ -174,7 +170,7 @@ def validate_choice(github, item):
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
     manifest_bytes(github, info)
     require(media_bytes(github, info), 'held nightly has no immutable media members')
-    github.gate(info['target_sha'])
+    require(github.has_green_gate(info['target_sha']), f"latest master Gate for {info['target_sha']} is not successful")
     for target in ('nightly', 'production'):
         member = info['web'][target]
         require(re.fullmatch('[0-9a-f]{64}', member['sha256']), 'missing web hash')

@@ -166,12 +166,12 @@ class GitHub:
         self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-attempt', 'auto_merge': False,
                      'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
 
-    def gate(self, sha):
+    def has_green_gate(self, sha, *, push_only=False):
         runs = self.pages(f'actions/workflows/gate.yml/runs?head_sha={sha}&branch=master', 'workflow_runs')
         runs = [run for run in runs if run['head_sha'] == sha and run['head_branch'] == 'master'
-                and run['event'] in ('push', 'schedule', 'workflow_dispatch')]
+                and run['event'] in (('push',) if push_only else ('push', 'schedule', 'workflow_dispatch'))]
         latest = max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
-        require(latest and latest['conclusion'] == 'success', f'latest master Gate for {sha} is not successful')
+        return bool(latest and latest['conclusion'] == 'success')
 
     def artifact(self, run_id, artifact_id, filename, expected=None):
         require(str(run_id).isdigit() and str(artifact_id).isdigit(), 'invalid artifact reference')
