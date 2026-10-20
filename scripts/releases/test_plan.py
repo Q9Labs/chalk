@@ -114,7 +114,7 @@ class ReleasePlan(unittest.TestCase):
         self.assertIn('  workflow_dispatch:', workflow)
         self.assertNotIn('workflow_run:', workflow)
         self.assertNotIn('GATE_SHA', workflow)
-        self.assertIn('  group: chalk-environment-nightly\n  cancel-in-progress: false', workflow)
+        self.assertIn('  group: chalk-environment-nightly\n  cancel-in-progress: false\n  queue: max', workflow)
 
     def test_first_install_builds_both_components_and_follows_recording_input(self):
         for enabled in (False, True):

@@ -11,6 +11,7 @@ permissions:
 concurrency:
   group: chalk-environment-nightly
   cancel-in-progress: false
+  queue: max
 jobs:
   plan:
     runs-on: ubuntu-24.04
