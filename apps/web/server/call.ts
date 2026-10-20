@@ -1,12 +1,23 @@
 import { Schema } from "effect";
-import { EpisodeIdSchema, SpaceIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
+import { EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, live, run } from "./engine";
 import { callDTO, episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
-import type { CallAction, CallPageDTO, CallStatusDTO } from "../src/lib/dashboard/contracts";
+import { DashboardError } from "./http";
+import type { CallAction, CallPageDTO, CallStatusDTO, CallMetadataQuery, CallMetadataDTO } from "../src/lib/dashboard/contracts";
 function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"]): CallPageDTO["knocks"] {
   return requests.filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now()).map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state }));
+}
+export async function callMetadata(engine: Engine, input: CallMetadataQuery): Promise<CallMetadataDTO> {
+  if (input.kind === "recording") {
+    const recording = await run(engine.api.recordings.getRecording({ params: { tenant_id: engine.tenantId, recording_id: Schema.decodeUnknownSync(RecordingIdSchema)(input.id) } }));
+    if (recording.space_id !== input.spaceId) throw new DashboardError(404, "recording_not_found");
+    return { kind: "recording", recording: recordingDTO(recording) };
+  }
+  const transcript = await run(engine.api.transcripts.getTranscript({ params: { tenant_id: engine.tenantId, transcript_id: Schema.decodeUnknownSync(TranscriptIdSchema)(input.id) } }));
+  if (transcript.space_id !== input.spaceId) throw new DashboardError(404, "transcript_not_found");
+  return { kind: "transcript", transcript: transcriptDTO(transcript) };
 }
 export async function callStatus(engine: Engine, spaceId: string): Promise<CallStatusDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId) };

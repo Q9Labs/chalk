@@ -8,6 +8,8 @@ const admission = z.enum(["anyone", "knock"]);
 export const pageQuery = z.strictObject({ cursor: z.string().max(1024).optional() });
 export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(1024).optional() });
 export const callStatusQuery = z.strictObject({ spaceId: id });
+export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
+export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
 export const homeStatusQuery = z.strictObject({
   spaceIds: z
     .string()
@@ -133,3 +135,5 @@ export type OwnerAccessDTO = { access: AccessGrant };
 
 export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
 export type HomeStatusDTO = { live: LiveDTO[] };
+
+export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };

@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type ReactNode } from "react";
 
-import type { CallPageDTO, RecordingDTO } from "../../lib/dashboard/contracts";
+import type { CallPageDTO, RecordingDTO, CallMetadataQuery } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
@@ -9,6 +9,8 @@ import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
+
+const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying"]);
 
 type Admission = CallPageDTO["call"]["admission"];
 type Session = CallPageDTO["episodes"][number];
@@ -19,6 +21,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const pages = useRef(1);
+  const metadata = useRef({ ticks: 0, next: 0 });
   const { state, reload, update } = useLoad(
     async () => {
       let data = await readPage("call", { spaceId });
@@ -36,7 +39,39 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         const status = await readPage("call-status", { spaceId });
         const episode = data.episodes.find((item) => item.status !== "ended");
         if ((data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status || JSON.stringify(data.knocks) !== JSON.stringify(status.knocks)) return null;
-        return { ...data, knocks: status.knocks };
+        let next = { ...data, knocks: status.knocks };
+        // Share one additional engine read per ten seconds across live and pending metadata.
+        if (++metadata.current.ticks % 2 !== 0) return next;
+        const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
+        for (const session of data.episodes)
+          for (const recording of session.recordings) {
+            if (["pending", "processing"].includes(recording.status) || recording.exportStatus === "pending") targets.push({ kind: "recording", spaceId, id: recording.id });
+            for (const transcript of recording.transcripts ?? []) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
+          }
+        if (!targets.length) return next;
+        const target = targets[metadata.current.next++ % targets.length];
+        if (!target) return next;
+        if (target.kind === "live") {
+          const roster = await readPage("home-status", { spaceIds: spaceId });
+          const current = roster.live[0]?.episode ?? null;
+          if (current?.id !== data.live?.id) return null;
+          return { ...next, live: current };
+        }
+        const result = await readPage("call-metadata", target);
+        next = {
+          ...next,
+          episodes: next.episodes.map((session) => ({
+            ...session,
+            recordings: session.recordings.map((recording) =>
+              result.kind === "recording" && recording.id === result.recording.id
+                ? { ...recording, ...result.recording }
+                : result.kind === "transcript"
+                  ? { ...recording, transcripts: recording.transcripts?.map((transcript) => (transcript.id === result.transcript.id ? result.transcript : transcript)) }
+                  : recording,
+            ),
+          })),
+        };
+        return next;
       },
     },
   );
@@ -236,8 +271,8 @@ function kept(recordings: readonly RecordingDTO[]): Kept {
   const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
   if (!recording) return { recording: false, transcript: "none" };
   const transcripts = recording.transcripts ?? [];
-  if (transcripts.some((item) => item.status === "completed")) return { recording: true, transcript: "ready" };
-  if (transcripts.some((item) => item.status !== "failed" && item.status !== "deleted")) return { recording: true, transcript: "processing" };
+  if (transcripts.some((item) => item.status === "completed" || item.status === "complete")) return { recording: true, transcript: "ready" };
+  if (transcripts.some((item) => PENDING_TRANSCRIPTS.has(item.status))) return { recording: true, transcript: "processing" };
   return { recording: true, transcript: "none" };
 }
 

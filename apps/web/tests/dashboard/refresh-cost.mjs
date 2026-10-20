@@ -35,11 +35,14 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
     const dashboardReads = [];
+    const activeEpisodes = [];
     await context.route(/\/(?:dashboard-api\/|auth\/session)/, async (route) => {
       const url = new URL(route.request().url());
       dashboardReads.push(url.pathname);
       const response = await client.request(url.pathname + url.search);
-      await route.fulfill({ status: response.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }, body: await response.text() });
+      const body = await response.text();
+      if (url.pathname === "/dashboard-api/call-status") activeEpisodes.push(JSON.parse(body).episode?.id ?? null);
+      await route.fulfill({ status: response.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }, body });
     });
     const callPage = await context.newPage();
     const homePage = await context.newPage();
@@ -74,6 +77,12 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/home").length, initialHomeReads);
     assert(dashboardReads.filter((path) => path === "/dashboard-api/call-status").length >= 23);
     assert(dashboardReads.filter((path) => path === "/dashboard-api/home-status").length >= 23);
+    assert(
+      activeEpisodes.every((id) => id === episodeId),
+      "The sample stayed live for the whole measurement",
+    );
+    assert.equal(await callPage.locator(".liveb").count(), 1);
+    assert.equal(await homePage.locator(".live").count(), 1);
     const ended = await post(client, "/dashboard-api/call", { action: "end-for-everyone", spaceId: call.id, episodeId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(ended.status, 200, await ended.clone().text());
     await callPage.locator(".liveb").waitFor({ state: "hidden", timeout: 12000 });

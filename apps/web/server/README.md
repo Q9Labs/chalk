@@ -48,6 +48,9 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   history. `POST`: `CallAction` (settings, rotate link, knocks, end for everyone).
 - `GET /dashboard-api/call-status?spaceId=...`: current Episode ID/state and
   unexpired pending knocks. Two tenant reads, independent of expanded history.
+- `GET /dashboard-api/call-metadata?kind=recording|transcript&spaceId=...&id=...`:
+  one tenant read for an already displayed, nonterminal artifact. Call pages share
+  one extra read per ten seconds between the live roster and pending artifacts.
 - `GET /dashboard-api/home-status?spaceIds=...`: one batch live read for the
   visible live Spaces only. The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,

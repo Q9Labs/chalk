@@ -16,6 +16,37 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await mkdir(process.env.DASHBOARD_REFRESH_ARTIFACTS, { recursive: true });
     await tab.screenshot({ path: resolve(process.env.DASHBOARD_REFRESH_ARTIFACTS, `${name}.png`), fullPage: true });
   };
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=0&liveParticipants=0" });
+    const full = await reads("call");
+    await fixture("set?liveParticipants=1");
+    check(
+      "Call updates the roster during a stable Episode without reloading history",
+      (await tab
+        .getByText("Nora is in the call.", { exact: true })
+        .waitFor({ state: "visible", timeout: 15000 })
+        .then(
+          () => true,
+          () => false,
+        )) && (await reads("call")) === full,
+    );
+    await context.close();
+  }
+  for (const final of ["complete", "terminal_failure"]) {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
+    const full = await reads("call");
+    await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "visible" });
+    await fixture(`set?metadataComplete=${final}`);
+    const finished = await tab
+      .getByText("Transcript processing", { exact: true })
+      .waitFor({ state: "hidden", timeout: 25000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    check(`Call updates pending transcript metadata to ${final} without reloading history`, finished && (await reads("call-metadata")) >= 2 && (await reads("call")) === full);
+    await context.close();
+  }
   for (const page of ["call", "home"]) {
     const { tab, context } = await open(page === "call" ? CALL : "/dashboard", { set: "freshLive=1&knocks=0" });
     const full = await reads(page);

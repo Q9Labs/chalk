@@ -27,7 +27,20 @@ assert(
   routes.include.every((path) => /^\/(auth|dashboard-api)\//.test(path)),
   "Static site/docs must not invoke the dashboard worker",
 );
-for (const path of ["/auth/start", "/auth/callback/google", "/auth/callback/apple", "/auth/session", "/auth/sign-out", "/dashboard-api/home", "/dashboard-api/call", "/dashboard-api/call-status", "/dashboard-api/home-status", "/dashboard-api/past-session", "/dashboard-api/developer"]) {
+for (const path of [
+  "/auth/start",
+  "/auth/callback/google",
+  "/auth/callback/apple",
+  "/auth/session",
+  "/auth/sign-out",
+  "/dashboard-api/home",
+  "/dashboard-api/call",
+  "/dashboard-api/call-status",
+  "/dashboard-api/call-metadata",
+  "/dashboard-api/home-status",
+  "/dashboard-api/past-session",
+  "/dashboard-api/developer",
+]) {
   assert(
     routes.include.some((pattern) => (pattern.endsWith("*") ? path.startsWith(pattern.slice(0, -1)) : path === pattern)),
     `Missing worker route ${path}`,

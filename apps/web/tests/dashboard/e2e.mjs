@@ -73,7 +73,7 @@ try {
   await writeFile(resolve(sandbox, "public/index.html"), "fixture boundary");
   // Run the real named Pages route graph with a test-only composition root.
   for (const group of ["auth", "dashboard-api"]) {
-    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-status", "home-status", "past-session", "developer"];
+    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-status", "call-metadata", "home-status", "past-session", "developer"];
     await mkdir(resolve(sandbox, "functions", group));
     for (const name of names) {
       await mkdir(resolve(sandbox, "functions", group, name, ".."), { recursive: true });
@@ -471,6 +471,18 @@ try {
     assert.equal(historical.participantCount, 2);
     assert.equal(historical.recordings[0].status, "failed");
     assert.equal(historical.recordings[0].transcripts[0].status, "terminal_failure");
+    for (const [kind, id] of [
+      ["recording", foreign.recordingId],
+      ["transcript", foreign.transcriptId],
+    ]) {
+      const offset = engineReads.length;
+      const metadata = await ada.request(`/dashboard-api/call-metadata?kind=${kind}&spaceId=${spaceId}&id=${id}`);
+      assert.equal(metadata.status, 200, await metadata.clone().text());
+      const result = await metadata.json();
+      assert.equal(result.kind, kind);
+      assert.equal(result[kind].id, id);
+      assert.equal(engineReads.slice(offset).filter((read) => read.path.startsWith(`/v1/tenants/${firstTenant}/`)).length, 1, "Metadata reads cost one tenant read");
+    }
     const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", languages: ["en"], spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(retry.status, 409, await retry.clone().text());
     assert(unsupportedBodies.some((r) => r.method === "POST" && r.path.endsWith(`/recordings/${foreign.recordingId}/transcripts`)));
@@ -522,7 +534,14 @@ try {
     const replayedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
     assert.equal(replayedTranscript.status, 200, await replayedTranscript.clone().text());
     assert.equal((await replayedTranscript.json()).transcript.id, transcriptId);
-    for (const path of [`/dashboard-api/call?spaceId=${spaceId}`, `/dashboard-api/call-status?spaceId=${spaceId}`, `/dashboard-api/home-status?spaceIds=${spaceId}`, `/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`])
+    for (const path of [
+      `/dashboard-api/call?spaceId=${spaceId}`,
+      `/dashboard-api/call-status?spaceId=${spaceId}`,
+      `/dashboard-api/call-metadata?kind=recording&spaceId=${spaceId}&id=${foreign.recordingId}`,
+      `/dashboard-api/call-metadata?kind=transcript&spaceId=${spaceId}&id=${foreign.transcriptId}`,
+      `/dashboard-api/home-status?spaceIds=${spaceId}`,
+      `/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`,
+    ])
       assert.equal((await malik.request(path)).status, 404);
     const mutations = [
       ["call", { action: "rename-call", spaceId: foreign.spaceId, name: "Renamed" }],

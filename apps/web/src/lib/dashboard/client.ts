@@ -5,6 +5,8 @@ import type {
   CallDTO,
   CallPageDTO,
   CallStatusDTO,
+  CallMetadataDTO,
+  CallMetadataQuery,
   HomeStatusDTO,
   CueDTO,
   DeliveryDTO,
@@ -28,6 +30,7 @@ import type {
 export type Provider = "google" | "apple";
 
 type Pages = {
+  "call-metadata": { query: CallMetadataQuery; data: CallMetadataDTO; action: never };
   "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
   "home-status": { query: { spaceIds: string }; data: HomeStatusDTO; action: never };
   home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };

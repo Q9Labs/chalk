@@ -171,7 +171,7 @@ const recordingsFor = (episode, withTranscripts) =>
           status: episode.kept === "processing" ? "processing" : "completed",
           exportStatus: "not_requested",
           createdAt: episode.startedAt,
-          ...(withTranscripts ? { transcripts: [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : "completed", languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
+          ...(withTranscripts ? { transcripts: [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
         },
       ];
 
@@ -219,8 +219,14 @@ async function dashboard(request, response, page, url, entry) {
     if (state.fail.has(page)) return fail(response, 503, "service_unavailable");
     const query = Object.fromEntries(url.searchParams);
     if (page === "home-status") {
-      const live = query.spaceIds.split(",").map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: 0, participants: [] } : null }));
+      const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
+      const live = query.spaceIds.split(",").map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));
       return send(response, 200, { live });
+    }
+    if (page === "call-metadata") {
+      const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));
+      if (query.kind === "recording") return send(response, 200, { kind: "recording", recording: recordings.find((item) => item.id === query.id && item.status === "processing") ?? recordings.find((item) => item.id === query.id) });
+      return send(response, 200, { kind: "transcript", transcript: recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id && item.status === "processing") ?? recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id) });
     }
     if (page === "call-status") {
       const episode = data.live ? { id: uuid(0x2ff), status: "active" } : data.sessions.find((item) => item.status !== "ended");
@@ -420,6 +426,9 @@ const server = createServer(async (request, response) => {
           else if (key === "liveParticipants") {
             if (!["0", "1", "3"].includes(value)) return fail(response, 400, "invalid_participant_count");
             state.liveParticipantCount = Number(value);
+          } else if (key === "metadataComplete") {
+            for (const session of accounts.hasan.sessions) if (session.kept === "processing") session.kept = "done";
+            state.finishedTranscript = value;
           } else if (key === "transcript") state.transcript = value;
           else if (key === "signInError") state.signInError = value === "1";
         }
