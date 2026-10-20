@@ -345,8 +345,33 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const semgrepCommand = explicitFull || (full && scope !== "staged") ? ["bash", "scripts/gates/semgrep.sh"] : sourceFiles.length > 0 ? ["bash", "scripts/gates/semgrep.sh", ...sourceFiles] : null;
   const tasks = [
+<<<<<<< HEAD
     task("self-test", "Gate routing and Sync reliability self-tests", true, "always required", ["node", "--test", "scripts/gates/chalk-gate-plan.test.mjs", "apps/sync/scripts/reliability_harness.test.mjs"]),
     task("language-ratchet", "Language vocabulary ratchet", true, "always required", ["pnpm", "run", "language:ratchet"]),
+||||||| parent of 495e8ed51 (ci: allow guarded client maintenance releases)
+    task("self-test", "Gate routing, Sync reliability and production-proof self-tests", true, "always required", [
+      "node",
+      "--test",
+      "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/new-vulnerabilities.test.mjs",
+      "apps/sync/scripts/reliability_harness.test.mjs",
+      "scripts/gates/call-performance-metrics.test.mjs",
+      "scripts/prod-proof/*.test.mjs",
+      "scripts/web-proof/*.test.mjs",
+    ]),
+=======
+    task("self-test", "Gate routing, Sync reliability and production-proof self-tests", true, "always required", [
+      "node",
+      "--test",
+      "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/new-vulnerabilities.test.mjs",
+      "scripts/npm-client-maintenance.test.mjs",
+      "apps/sync/scripts/reliability_harness.test.mjs",
+      "scripts/gates/call-performance-metrics.test.mjs",
+      "scripts/prod-proof/*.test.mjs",
+      "scripts/web-proof/*.test.mjs",
+    ]),
+>>>>>>> 495e8ed51 (ci: allow guarded client maintenance releases)
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
