@@ -65,6 +65,18 @@ class ReleasePlan(unittest.TestCase):
         api.gates[0]['head_sha'] = api.tip
         self.assertEqual(self.cut(api, 2, workflow_sha=SHA)['should_cut'], 'false')
         self.assertEqual(api.items, [])
+        self.assertEqual(api.dispatches, 0)
+
+    def test_stale_manual_request_hands_off_with_its_override(self):
+        api = MemoryGitHub()
+        api.tip = 'b' * 40
+        api.gates[0].update(head_sha=api.tip, event='workflow_dispatch')
+        api.reserve_cut(SHA)
+        self.assertEqual(self.cut(api, 2, manual=True, workflow_sha=SHA)['should_cut'], 'false')
+        self.assertEqual(api.dispatches, 1)
+        self.assertEqual(len(api.items), 1)
+        self.assertEqual(self.cut(api, 2, manual=True)['should_cut'], 'true')
+        self.assertEqual(len(api.items), 2)
 
     def test_two_serial_checks_reserve_only_one_cut(self):
         api = MemoryGitHub()
@@ -97,9 +109,12 @@ class ReleasePlan(unittest.TestCase):
         def moved(*args, **kwargs):
             api.tip = 'b' * 40
             return artifact(*args, **kwargs)
-        with patch.object(api, 'artifact', side_effect=moved):
-            self.assertEqual(self.cut(api, 2)['should_cut'], 'false')
-        self.assertEqual(api.items, [])
+        for manual in (False, True):
+            api.tip = SHA
+            with patch.object(api, 'artifact', side_effect=moved):
+                self.assertEqual(self.cut(api, 2, manual=manual)['should_cut'], 'false')
+            self.assertEqual(api.items, [])
+        self.assertEqual(api.dispatches, 1)
 
     def test_manual_cut_keeps_its_cooldown_and_gate_event_override(self):
         api = MemoryGitHub()
@@ -112,6 +127,7 @@ class ReleasePlan(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/nightly.yml').read_text()
         self.assertIn('cron: "17 * * * *"', workflow)
         self.assertIn('  workflow_dispatch:', workflow)
+        self.assertIn('  plan:\n    permissions:\n      contents: read\n      actions: write', workflow)
         self.assertNotIn('workflow_run:', workflow)
         self.assertNotIn('GATE_SHA', workflow)
         self.assertIn('  group: chalk-environment-nightly\n  cancel-in-progress: false\n  queue: max', workflow)

@@ -59,6 +59,9 @@ if attempt <= int(os.environ['GH_FAKE_FAILURES']):
         print(json.dumps([{'jobs': [{'id': 99}]}]))
     print(os.environ['GH_FAKE_ERROR'], file=sys.stderr)
     sys.exit(1)
+if sys.argv[2].endswith('/nightly.yml/dispatches'):
+    assert json.load(sys.stdin) == {'ref': 'master'}
+    sys.exit(0)
 pages = [[{'id': 1}], [{'id': 2}]]
 if os.environ.get('GH_FAKE_PARTIAL') == '1':
     pages = [{'jobs': page} for page in pages]
@@ -77,6 +80,15 @@ print(json.dumps(pages if '--paginate' in sys.argv else {'id': 1}))
         environment.start()
         self.addCleanup(environment.stop)
         self.github = GitHub()
+
+    def test_manual_handoff_accepts_no_content_and_never_retries_a_post(self):
+        with patch.dict(os.environ, GH_FAKE_FAILURES='0'):
+            self.github.dispatch_nightly()
+        self.assertEqual(self.count.read_text(), '1')
+        self.count.unlink()
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.github.dispatch_nightly()
+        self.assertEqual(self.count.read_text(), '1')
 
     def test_hanging_calls_terminate_the_process_tree(self):
         self.github = GitHub(timeout=0.3)
