@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 
 
+class DiagnosticError(RuntimeError):
+    """Audited script explanation without external payloads."""
+
+
 def presigned_put(bucket, key, region, credentials, expires, now=None):
     now = now or datetime.now(timezone.utc)
     stamp = now.strftime("%Y%m%dT%H%M%SZ")
@@ -56,20 +60,20 @@ while time.time() < DEADLINE:
 def clean_objects(services, state):
     bucket, key = state["evidence_bucket"], state["evidence_key"]
     if key != "bootdiag/" + state["name"] + "/guest.json":
-        raise RuntimeError("guest evidence object ownership mismatch")
+        raise DiagnosticError("guest evidence object ownership mismatch")
     # This bucket can be versioned: delete versions and markers, not just the current object.
     versions = services.aws("s3api", "list-object-versions", "--bucket", bucket, "--prefix", key)
     for entry in versions.get("Versions", []) + versions.get("DeleteMarkers", []):
         if entry["Key"] != key:
-            raise RuntimeError("ambiguous guest evidence object prefix")
+            raise DiagnosticError("ambiguous guest evidence object prefix")
         services.aws("s3api", "delete-object", "--bucket", bucket, "--key", key, "--version-id", entry["VersionId"])
     services.aws("s3api", "delete-object", "--bucket", bucket, "--key", key)
     # The last DELETE may itself create a marker. Remove it too.
     remaining = services.aws("s3api", "list-object-versions", "--bucket", bucket, "--prefix", key)
     for entry in remaining.get("DeleteMarkers", []):
         if entry["Key"] != key:
-            raise RuntimeError("ambiguous guest evidence deletion marker")
+            raise DiagnosticError("ambiguous guest evidence deletion marker")
         services.aws("s3api", "delete-object", "--bucket", bucket, "--key", key, "--version-id", entry["VersionId"])
     final = services.aws("s3api", "list-object-versions", "--bucket", bucket, "--prefix", key)
     if final.get("Versions") or final.get("DeleteMarkers"):
-        raise RuntimeError("guest evidence object cleanup unproved")
+        raise DiagnosticError("guest evidence object cleanup unproved")

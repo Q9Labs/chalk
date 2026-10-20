@@ -1,6 +1,9 @@
 import copy
 import hashlib
 import importlib.util
+import http.client
+import io
+import urllib.request
 import json
 import subprocess
 from pathlib import Path
@@ -46,23 +49,30 @@ class BootCheckTests(unittest.TestCase):
         import urllib.error
 
         secret = 'fake-private-data-sentinel'
-        self.assertEqual(boot.safe_error(RuntimeError('audited message')), 'audited message')
-        self.assertEqual(boot.safe_error(urllib.error.URLError(secret)), 'HTTP transport failed; payload suppressed')
+        self.assertEqual(boot.safe_error(boot.DiagnosticError('audited message')), 'audited message')
+        self.assertEqual(boot.safe_error(urllib.error.URLError(secret)), 'URLError')
         self.assertEqual(boot.safe_error(urllib.error.HTTPError('https://example.test/' + secret, 403, secret, None, None)),
                          'HTTP request failed HTTP 403; payload suppressed')
 
-    def test_external_value_errors_redact_only_the_input(self):
+    def test_untrusted_errors_expose_only_their_class(self):
         import ipaddress
         import urllib.parse
         from datetime import datetime
 
         secret = 'fake-private-value-sentinel'
+
+        class OpaqueError(Exception):
+            def __str__(self):
+                raise AssertionError('untrusted error text must not be read')
+
+        self.assertEqual(boot.safe_error(OpaqueError(secret)), 'OpaqueError')
+        self.assertEqual(boot.safe_error(RuntimeError(secret)), 'RuntimeError')
         cases = [
-            (lambda: datetime.fromisoformat(secret), "Invalid isoformat string: [redacted]"),
-            (lambda: int(secret), 'invalid literal for int() with base 10: [redacted]'),
+            (lambda: datetime.fromisoformat(secret), 'ValueError'),
+            (lambda: int(secret), 'ValueError'),
             (lambda: urllib.parse.urlsplit('https://example.test:' + secret).port,
-             'Port could not be cast to integer value as [redacted]'),
-            (lambda: ipaddress.ip_address(secret), '[redacted] does not appear to be an IPv4 or IPv6 address'),
+             'ValueError'),
+            (lambda: ipaddress.ip_address(secret), 'ValueError'),
         ]
         for parse, expected in cases:
             with self.subTest(expected=expected), self.assertRaises(ValueError) as caught:
@@ -70,13 +80,114 @@ class BootCheckTests(unittest.TestCase):
             self.assertEqual(boot.safe_error(caught.exception), expected)
             self.assertNotIn(secret, boot.safe_error(caught.exception))
         self.assertEqual(boot.safe_error(FileNotFoundError(2, 'No such file or directory', secret)),
-                         '[Errno 2] No such file or directory; path suppressed')
+                         'FileNotFoundError')
         self.assertEqual(boot.safe_error(UnicodeDecodeError('utf-8', secret.encode(), 0, 1, secret)),
-                         'text decoding failed; payload suppressed')
-        # JSONDecodeError's text contains location and category, never its doc.
+                         'UnicodeDecodeError')
         with self.assertRaises(json.JSONDecodeError) as caught:
             json.loads(secret)
-        self.assertEqual(boot.safe_error(caught.exception), str(caught.exception))
+        self.assertEqual(boot.safe_error(caught.exception), 'JSONDecodeError')
+
+    def run_parser_failure(self, directory, issuer_url, cleanup_services=None):
+        import os
+        from unittest.mock import Mock
+
+        request_path, receipt_path = directory / 'request.json', directory / 'receipt.json'
+        request_path.write_text(json.dumps(dict(
+            schema_version=1, role='capture', source_commit='a' * 40, release_id='candidate',
+            image_id=1, image_digest='sha256:' + 'a' * 64, region='region', size='size',
+            archive=dict(bucket='example-artifacts', key='recorder/capture/' + 'a' * 64 + '.tar.gz',
+                         sha256='a' * 64, region='region'))))
+        services = Mock(profile='', region='region')
+        services.host.return_value = dict(
+            env=dict(REGION='region', SIZE='size', ENVIRONMENT='test', OWNER_TAG='test',
+                     FIREWALL_ID='fake-firewall', BOOTSTRAP_ENDPOINT='https://example.test:443'),
+            issuer_control_plane_url=issuer_url, journal=dict(journal=dict(nodes={})))
+        services.do.side_effect = [dict(sizes=[dict(slug='size', regions=['region'], price_hourly=0.01)]),
+                                   dict(droplets=[]), dict(ssh_key=dict(id=1)), None,
+                                   dict(firewall=dict(outbound_rules=[]))]
+        services.aws.return_value = dict(PublicAccessBlockConfiguration={
+            key: not cleanup_services for key in
+            ('BlockPublicAcls', 'IgnorePublicAcls', 'BlockPublicPolicy', 'RestrictPublicBuckets')})
+
+        def start_guard(*args, **kwargs):
+            work = next(directory.glob('boot-check-*'))
+            boot.private_json(work / 'watchdog-started.json', {})
+            if cleanup_services:
+                def wait(**kwargs):
+                    (work / 'watchdog-started.json').unlink()
+                    boot.append(work, dict(deadline=0, tag_intent=True))
+                    with patch.object(boot, 'Services', return_value=cleanup_services):
+                        with self.assertRaisesRegex(RuntimeError, 'cleanup unproved'):
+                            boot.watchdog(work)
+                return Mock(pid=123, returncode=1, wait=Mock(side_effect=wait))
+            boot.private_json(work / 'cleanup.json', dict(result='PASS'))
+            return Mock(pid=123, returncode=0)
+
+        def command(args, **kwargs):
+            if args[0] == 'aws':
+                return json.dumps(dict(AccessKeyId='fake-id', SecretAccessKey='fake-key'))
+            if args[0] == 'ssh-keygen':
+                Path(args[-1] + '.pub').write_text('fake-public-key')
+                return ''
+            self.assertEqual(args[0], 'curl')
+            return '192.0.2.1'
+
+        stdout = io.StringIO()
+        with patch.object(boot, 'Services', return_value=services), \
+                patch.object(boot.subprocess, 'Popen', side_effect=start_guard), \
+                patch.object(boot, 'command', side_effect=command), \
+                patch.dict(os.environ, dict(CHALK_BOOT_CHECK_EVIDENCE_BUCKET='example-evidence'), clear=True), \
+                patch('sys.stdout', stdout):
+            self.assertEqual(boot.run(request_path, receipt_path), 1)
+        receipt = json.loads(receipt_path.read_text())
+        work = next(directory.glob('boot-check-*'))
+        history = [json.loads(line)['cleanup_error'] for line in (work / 'ledger.jsonl').read_text().splitlines()
+                   if 'cleanup_error' in json.loads(line)]
+        return receipt, history, stdout.getvalue()
+
+    def test_bad_http_status_line_never_reaches_receipt_watchdog_or_stdout(self):
+        sentinel = 'fake-private-status-line-sentinel'
+
+        class FakeSocket:
+            def makefile(self, *args):
+                return io.BytesIO((sentinel + '\r\n\r\n').encode())
+
+            def sendall(self, data):
+                pass
+
+            def close(self):
+                pass
+
+        class OfflineHTTPSConnection(http.client.HTTPSConnection):
+            def connect(self):
+                self.sock = FakeSocket()
+
+        class OfflineHTTPSHandler(urllib.request.HTTPSHandler):
+            def https_open(self, request):
+                return self.do_open(OfflineHTTPSConnection, request)
+
+        services = object.__new__(boot.Services)
+        services.token, services.mutation_deadline = 'fake-token', None
+        services.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), OfflineHTTPSHandler())
+        with tempfile.TemporaryDirectory() as temp:
+            receipt, history, stdout = self.run_parser_failure(Path(temp), 'https://example.test:8443', services)
+        self.assertFalse(receipt['cleanup_confirmed'])
+        self.assertEqual(len(history), 3)
+        self.assertEqual(receipt['cleanup_errors'], history)
+        self.assertTrue(all('BadStatusLine' in error for error in history))
+        for value in (json.dumps(receipt), json.dumps(history), stdout):
+            self.assertNotIn(sentinel, value)
+
+    def test_url_normalization_error_never_reaches_receipt_watchdog_or_stdout(self):
+        sentinel = 'fake-private-url-sentinel'
+        hostname = sentinel + '\uff1aexample.test'
+        with tempfile.TemporaryDirectory() as temp:
+            receipt, history, stdout = self.run_parser_failure(Path(temp), 'https://' + hostname + ':8443')
+        self.assertEqual(receipt['reason'], 'ValueError')
+        self.assertTrue(receipt['cleanup_confirmed'])
+        for value in (json.dumps(receipt), json.dumps(history), stdout):
+            self.assertNotIn(sentinel, value)
+            self.assertNotIn(hostname, value)
 
     def test_run_receipt_preserves_trusted_failure_even_when_cleanup_times_out(self):
         import os
@@ -477,7 +588,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, {'bootstrap': {'provider_id': '1'}})
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'issuer unavailable'):
+            with self.assertRaisesRegex(RuntimeError, '^RuntimeError$'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
@@ -511,7 +622,7 @@ class BootCheckTests(unittest.TestCase):
             boot.append(directory, dict(node_id=1, name='owned', tags=['owned'], started_at=0, firewall_intent=True))
             (directory / 'ssh-key').write_text('task secret')
             provider = Provider()
-            with self.assertRaisesRegex(RuntimeError, 'recover firewall_id: firewall listing unavailable'):
+            with self.assertRaisesRegex(RuntimeError, 'recover firewall_id: RuntimeError'):
                 boot.cleanup(provider, directory)
             self.assertTrue(provider.deleted)
             self.assertFalse((directory / 'ssh-key').exists())
