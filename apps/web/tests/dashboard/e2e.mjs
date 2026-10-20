@@ -196,7 +196,7 @@ try {
     const { refreshCost } = await import("./refresh-cost.mjs");
     const client = browser();
     const session = await signIn(client, "ada");
-    await refreshCost({ client, session, post, origin, engineReads, tenantId: (await tenantFor("ada")).id });
+    await refreshCost({ client, session, post, origin, engineReads, tenantId: (await tenantFor("ada")).id, sql });
   } else {
     for (const provider of ["google", "apple"]) {
       for (const mismatch of provider === "google" ? ["state", "nonce", "challenge"] : ["state", "nonce"]) {

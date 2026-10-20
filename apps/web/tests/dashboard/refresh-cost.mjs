@@ -4,7 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Run with DASHBOARD_REFRESH_COST=1 through real-engine.sh. Every dashboard
 // success comes from the real Pages worker, HTTP API and PostgreSQL repositories.
-export async function refreshCost({ client, session, post, origin, engineReads, tenantId }) {
+export async function refreshCost({ client, session, post, origin, engineReads, tenantId, sql }) {
   assert.equal(process.env.CHALK_API_RATE_LIMITS, "on");
   const created = await post(client, "/dashboard-api/home", { action: "create-call", name: "Refresh proof", admission: "knock", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(created.status, 200, await created.clone().text());
@@ -69,6 +69,9 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     assert.equal(await homePage.locator(".live").count(), 1);
     const ended = await post(client, "/dashboard-api/call", { action: "end-for-everyone", spaceId: call.id, episodeId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(ended.status, 200, await ended.clone().text());
+    // This API/Postgres fixture has no Sync lifecycle consumer. Complete its
+    // shutdown acknowledgement in storage; browser responses still use the API.
+    assert.equal(sql(`update episodes set status='ended', ended_at=now() where id='${episodeId}' and tenant_id='${tenantId}' and status='ending' returning id`), episodeId);
     await callPage.locator(".liveb").waitFor({ state: "hidden", timeout: 12000 });
     await callPage.locator('.srow a[aria-label^="Session"]').waitFor({ state: "visible", timeout: 12000 });
     await homePage.locator(".live").waitFor({ state: "hidden", timeout: 12000 });
