@@ -560,11 +560,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = live_view_state()
     Fanout.subscribe(state.identity.episode)
 
-    saturated =
-      Enum.reduce(1..60, state, fn _, state ->
-        assert {:ok, next} = receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
-        next
-      end)
+    saturated = saturate_cursor_window(state)
 
     assert {:ok, brought} = receive_frame(view_frame(true), saturated)
     assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
@@ -574,6 +570,31 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     refute_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
   after
     Fanout.unsubscribe(identity().episode)
+  end
+
+  test "ordinary views have bounded capacity independent of continuous cursor traffic" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+    saturated = saturate_cursor_window(state)
+
+    limited =
+      Enum.reduce(1..10, saturated, fn _, state ->
+        assert {:ok, next} = receive_frame(view_frame(false), state)
+        assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => false}}
+        next
+      end)
+
+    assert {:ok, _} = receive_frame(view_frame(false), limited)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  defp saturate_cursor_window(state) do
+    Enum.reduce(1..60, state, fn _, state ->
+      assert {:ok, next} = receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
+      next
+    end)
   end
 
   defp live_view_state do

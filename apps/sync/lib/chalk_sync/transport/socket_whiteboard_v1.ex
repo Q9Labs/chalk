@@ -587,7 +587,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:view, view},
          %{phase: :live, identity: identity, display_name: display_name} = state
        ) do
-    {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :cursor))
+    {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :view))
 
     with :ok <- admit_view(view, identity, admission) do
       frame = %{
@@ -841,7 +841,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp admit_presence(state, kind) do
     now_ms = System.monotonic_time(:millisecond)
-    limit = if kind == :bring, do: 2, else: 60
+    limit = Map.fetch!(%{bring: 2, cursor: 60, view: 10}, kind)
     {started, count} = Map.get(state.presence_windows, kind, {now_ms, 0})
     {started, count} = if now_ms - started >= 1000, do: {now_ms, 0}, else: {started, count}
 
