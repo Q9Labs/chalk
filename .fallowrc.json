@@ -3,6 +3,7 @@
     "gate.config.ts",
     "scripts/dev/share-audio-proof.mjs",
     "apps/web/src/call-states/main.tsx",
+    "apps/web/src/call-states/camera-enable-fixture.tsx",
     "apps/web/src/call-states/web-space-journey.tsx",
     "apps/web/src/call-states/web-space-boundary.ts",
     "apps/web/src/call-states/performance.tsx",

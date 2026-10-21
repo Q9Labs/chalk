@@ -294,15 +294,169 @@ it("stops a private preview on leave even after handing it to its caller", async
   }
 });
 
+it("revokes pending preview leases on leave before browser capture resolves", async () => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  let release = (_stream: MediaStream) => {};
+  let outcome = "pending";
+  const getUserMedia = vi.fn(
+    () =>
+      new Promise<MediaStream>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia, enumerateDevices: async () => [] } } });
+  try {
+    await client.join({ microphone: false, camera: false });
+    const request = client.media.captureCameraPreview().then(
+      () => {
+        outcome = "resolved";
+      },
+      () => {
+        outcome = "rejected";
+      },
+    );
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+    await client.leave();
+    await vi.waitFor(() => expect(outcome).toBe("rejected"));
+    release(stream([video]));
+    await request;
+    await vi.waitFor(() => expect(video.stop).toHaveBeenCalled());
+  } finally {
+    release(stream([video]));
+    client.dispose();
+  }
+});
+
+it.each(["enable", "join"] as const)("recaptures on %s after a borrowed camera ends externally", async (operation) => {
+  const platform = createCoreTestPlatform();
+  const first = track("video");
+  const second = track("video");
+  const capture = vi
+    .fn()
+    .mockResolvedValueOnce(stream([first]))
+    .mockResolvedValueOnce(stream([second]));
+  const prepared: MediaStreamTrack[] = [];
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: async () => ({ operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
+        mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] },
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          prepareLocalTrack: (_source, value) => {
+            prepared.push(value);
+          },
+        }),
+      },
+    },
+  );
+  try {
+    if (operation === "enable") await client.join({ microphone: false, camera: false });
+    const preview = await client.media.captureCameraPreview();
+    first.stop();
+    first.dispatchEvent(new Event("ended"));
+    if (operation === "enable") await client.media.setCameraEnabled(true);
+    else await client.join({ microphone: false, camera: true });
+    expect(capture).toHaveBeenCalledTimes(2);
+    if (operation === "enable") expect(prepared).toEqual([second]);
+    expect(client.getSnapshot().media.local.camera.track).toBe(second);
+    preview.release();
+    expect(second.readyState).toBe("live");
+  } finally {
+    client.dispose();
+  }
+});
+
+it("publishes removal when selecting a camera while disabled", async () => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: async () => ({ operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
+        mediaDevices: { getUserMedia: async () => stream([video]), enumerateDevices: async () => [] },
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: true });
+    await client.media.setCameraEnabled(false);
+    expect(client.getSnapshot().media.local.camera.track).toBe(video);
+    const snapshots: (MediaStreamTrack | null)[] = [];
+    const unsubscribe = client.subscribe(() => snapshots.push(client.getSnapshot().media.local.camera.track));
+    await client.media.selectCamera("another-camera");
+    unsubscribe();
+    expect(video.readyState).toBe("ended");
+    expect(client.getSnapshot().media.local.camera.track).toBeNull();
+    expect(snapshots.at(-1)).toBeNull();
+  } finally {
+    client.dispose();
+  }
+});
+
+it("keeps a borrowed preview live across a rejected enable and retry", async () => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  const capture = vi.fn(async () => stream([video]));
+  const prepared: MediaStreamTrackState[] = [];
+  let attempts = 0;
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] },
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          prepareLocalTrack: (_source, value) => {
+            prepared.push(value.readyState);
+          },
+        }),
+        createSyncClient: (input) => ({
+          ...platform.dependencies.createSyncClient(input),
+          setCameraEnabled: async () => {
+            if (++attempts === 1) throw new Error("Enable rejected");
+            return { operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
+          },
+        }),
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    const preview = await client.media.captureCameraPreview();
+    await expect(client.media.setCameraEnabled(true)).rejects.toBeDefined();
+    expect(preview.track.readyState).toBe("live");
+    await client.media.setCameraEnabled(true);
+    expect(capture).toHaveBeenCalledOnce();
+    expect(prepared).toEqual(["live", "live"]);
+    preview.release();
+    expect(video.readyState).toBe("live");
+  } finally {
+    client.dispose();
+  }
+});
+
 function track(kind: "audio" | "video"): MediaStreamTrack {
-  return Object.assign(new EventTarget(), {
+  let readyState: MediaStreamTrackState = "live";
+  const result = Object.assign(new EventTarget(), {
     contentHint: "",
     enabled: true,
     id: kind,
     kind,
     label: "",
     muted: false,
-    readyState: "live" as const,
+    get readyState() {
+      return readyState;
+    },
     onended: null,
     onmute: null,
     onunmute: null,
@@ -311,8 +465,12 @@ function track(kind: "audio" | "video"): MediaStreamTrack {
     getCapabilities: () => ({}),
     getConstraints: () => ({}),
     getSettings: () => ({}),
-    stop: vi.fn(),
+    stop: vi.fn(() => {
+      readyState = "ended";
+    }),
   });
+  Object.defineProperty(result, "readyState", { get: () => readyState });
+  return result;
 }
 
 function stream(tracks: readonly MediaStreamTrack[]): MediaStream {

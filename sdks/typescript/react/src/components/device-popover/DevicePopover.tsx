@@ -68,6 +68,7 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
 function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraPreview }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean; readonly open: boolean; readonly selectedDeviceId?: string; readonly captureCameraPreview?: () => Promise<CameraPreviewHandle> }) {
   const video = useRef<HTMLVideoElement>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const trackEnabled = track?.enabled;
   useEffect(() => {
     const element = video.current;
     if (!element || !open) return;
@@ -98,7 +99,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
       element.srcObject = null;
       preview?.release();
     };
-  }, [track, open, selectedDeviceId, captureCameraPreview]);
+  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview]);
   return (
     <div className="chalk-shell-preview">
       <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
