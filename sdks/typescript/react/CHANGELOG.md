@@ -1,9 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Preview the chosen camera privately when the call camera is off; while it is active, preview the published call track rather than an unpublished device selection.
+- Keep keyboard-shortcut dialog content fixed while opening and closing, and retain Report a problem in call details when `onReportProblem` is supplied.
+
 ## 5.0.0
 
-- Remove Report a problem from the call-name menu, including for SDK consumers that supply `onReportProblem`. The callback remains available from terminal call screens.
-- Preview the chosen camera privately when the call camera is off; while it is active, preview the published call track rather than an unpublished device selection.
 - Keep chat history available to observers and custom read-only roles; gate the composer, attachments, and message reactions on `sendChat`.
 - Use `endEpisode` authority for Host badges and host-transfer notices, including `owner` and custom roles. Add `ParticipantListParticipant.isHost` for presentation-only lists.
 - Play a short, quiet synthesized reaction sound while Sounds is enabled.

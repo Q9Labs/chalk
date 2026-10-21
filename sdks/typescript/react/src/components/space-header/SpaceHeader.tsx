@@ -16,8 +16,8 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const showShortcuts = useCallback(() => setShortcutsOpen(true), []);
+  const [dialog, setDialog] = useState<{ kind: "shortcuts" | "report"; open: boolean }>({ kind: "shortcuts", open: false });
+  const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
   useCallShortcuts(props.shortcuts, showShortcuts);
   const phone = useMediaQuery("(max-width: 640px)");
   const chevron = (
@@ -40,9 +40,9 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       onClose={() => setOpen(false)}
       sounds={sounds}
       onSoundsChange={setSounds}
-      onDialog={() => {
+      onDialog={(kind) => {
         setOpen(false);
-        setShortcutsOpen(true);
+        setDialog({ kind, open: true });
       }}
     />
   );
@@ -110,7 +110,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
         ) : null}
         {onLayoutChange ? <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} /> : null}
       </div>
-      <CallDialog returnFocus={triggerRef} kind="shortcuts" open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} diagnostics="" />
+      <CallDialog returnFocus={triggerRef} kind={dialog.kind} open={dialog.open} onClose={() => setDialog((current) => ({ ...current, open: false }))} onReportProblem={props.onReportProblem} diagnostics={props.diagnostics?.map(({ label, value }) => `${label}: ${value}`).join("\n") ?? ""} />
     </header>
   );
 });

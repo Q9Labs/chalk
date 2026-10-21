@@ -151,11 +151,12 @@ export function CallDetails({
   sounds,
   onSoundsChange,
   onDialog,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange"> & {
+  onReportProblem,
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
-  readonly onDialog: () => void;
+  readonly onDialog: (kind: "shortcuts" | "report") => void;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = shareQr(link);
@@ -235,10 +236,16 @@ export function CallDetails({
             <span />
           </span>
         </button>
-        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={onDialog}>
+        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
           Keyboard shortcuts
           <ShellIcon name="right" size={18} />
         </button>
+        {onReportProblem ? (
+          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
+            Report a problem
+            <ShellIcon name="right" size={18} />
+          </button>
+        ) : null}
       </section>
     </div>
   );

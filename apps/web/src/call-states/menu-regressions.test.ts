@@ -139,10 +139,7 @@ it("keeps an active preview on the published camera when another device is selec
 });
 
 it("keeps shortcuts content throughout close without rendering a report dialog", async () => {
-  await load("shell-call");
-  await page.getByRole("button", { name: "Call details", exact: true }).click();
-  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
-  await page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true }).waitFor();
+  await load("shell-report");
   await page.evaluate(() => {
     document.documentElement.dataset.reportFlashed = "false";
     const observer = new MutationObserver(() => {
@@ -150,6 +147,9 @@ it("keeps shortcuts content throughout close without rendering a report dialog",
     });
     observer.observe(document.body, { childList: true, subtree: true });
   });
+  await page.getByRole("button", { name: "Call details", exact: true }).click();
+  await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click();
+  await page.getByRole("dialog", { name: "Keyboard shortcuts", exact: true }).waitFor();
   // Slow the real exit animation so a one-frame title/content swap is observable.
   await page.addStyleTag({ content: ".chalk-shell-modal { transition-duration: 3s !important; animation-duration: 1s !important; }" });
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
@@ -161,7 +161,7 @@ it("keeps shortcuts content throughout close without rendering a report dialog",
   );
   if (artifacts) await page.screenshot({ path: resolve(artifacts, "shortcuts.png") });
   expect(await page.locator("html").getAttribute("data-report-flashed")).toBe("false");
-  expect(await page.getByText("Report a problem", { exact: true }).count()).toBe(0);
+  expect(await page.getByRole("dialog", { name: "Report a problem", exact: true }).count()).toBe(0);
   expect(await page.getByLabel("What went wrong?", { exact: true }).count()).toBe(0);
   await page.evaluate(() =>
     document
@@ -170,6 +170,25 @@ it("keeps shortcuts content throughout close without rendering a report dialog",
       .forEach((animation) => animation.finish()),
   );
   await page.getByRole("dialog").waitFor({ state: "detached" });
+}, 30_000);
+
+it("opens Report a problem from call details and sends the supplied callback", async () => {
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await load("shell-report");
+    await page.getByRole("button", { name: "Call details", exact: true }).click();
+    await page.getByRole("button", { name: "Report a problem", exact: true }).click();
+    const report = page.getByRole("dialog", { name: "Report a problem", exact: true });
+    await report.getByLabel("What went wrong?", { exact: true }).fill("Camera preview needs help");
+    if (artifacts) await page.screenshot({ path: resolve(artifacts, `report-menu-${width}.png`) });
+    await report.getByRole("button", { name: "Send", exact: true }).click();
+    const sent = page.getByRole("dialog", { name: "Sent", exact: true });
+    await sent.getByRole("heading", { name: "Sent", exact: true }).waitFor();
+    await expect.poll(() => page.getByLabel("Last shell command").textContent()).toBe("Reported: Camera preview needs help");
+    await sent.getByRole("button", { name: "Done", exact: true }).click();
+    await sent.waitFor({ state: "detached" });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
 }, 30_000);
 
 it("keeps the call usable when browser camera capture is unavailable", async () => {
