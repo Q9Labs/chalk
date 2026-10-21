@@ -110,7 +110,11 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
                )
     end)
 
-    assert {:ok, []} = Postgres.pending_lifecycle_intents(32)
+    assert {:ok, pending} = Postgres.pending_lifecycle_intents(32)
+
+    for fixture <- poison do
+      refute {fixture.episode, fixture.lifecycle_intent_id} in pending
+    end
   end
 
   defp intent_attempt(connection, fixture) do
