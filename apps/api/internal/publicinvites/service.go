@@ -600,9 +600,12 @@ func (r Runtime) deriveGuestCredential(token Token, requestKey string) ([]byte, 
 	return mac.Sum(nil), nil
 }
 
-func (r Runtime) GetInvite(ctx context.Context, tenantID, spaceID utilities.ID) (ManagedInvite, error) {
+func (r Runtime) GetInvite(ctx context.Context, tenantID, spaceID utilities.ID, beforeCreate func() error) (ManagedInvite, error) {
 	invite, err := r.service.GetInvite(ctx, tenantID, spaceID)
 	if errors.Is(err, ErrInviteNotFound) {
+		if err := beforeCreate(); err != nil {
+			return ManagedInvite{}, err
+		}
 		invite, err = r.ensureInviteForSpace(ctx, tenantID, spaceID)
 	}
 	if err != nil {

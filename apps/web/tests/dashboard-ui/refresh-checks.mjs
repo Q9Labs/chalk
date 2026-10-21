@@ -316,6 +316,7 @@ export async function archivedPollingChecks({ open, fixture, check }) {
 
 // Accelerate browser time, not network replies: these drive the mounted pages and real hook.
 export async function budgetChecks({ open, fixture, check, CALL }) {
+  await reviewPollChecks({ open, fixture, check, CALL });
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   {
     const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=0", clock: true });
@@ -526,6 +527,47 @@ export async function pollingBackoffChecks({ open, fixture, check, CALL }) {
       await tab.clock.runFor(3000);
       await tab.waitForLoadState("networkidle");
       check("pending knocks share the three-second status poll without full-page reads", (await reads("call-status")) === before + 1 && (await reads("call")) === initial);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+export async function reviewPollChecks({ open, fixture, check, CALL }) {
+  const reads = async () => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === "/dashboard-api/call").length;
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=0", clock: true });
+    try {
+      let missing = true;
+      await tab.route("**/dashboard-api/call?*", async (route) => {
+        const response = await route.fetch();
+        const data = await response.json();
+        await route.fulfill({ response, json: missing ? { ...data, live: null } : data });
+        missing = false;
+      });
+      await tab.reload({ waitUntil: "networkidle" });
+      const initial = await reads();
+      await tab.clock.runFor(5000);
+      await tab.waitForTimeout(150);
+      await tab.waitForLoadState("networkidle");
+      check("Call repairs a missing live snapshot despite matching Episode history", (await tab.locator(".liveb").count()) === 1 && (await reads()) === initial + 1);
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=1", clock: true });
+    try {
+      const initial = await reads();
+      await tab.getByRole("button", { name: "Deny", exact: true }).click();
+      await tab.locator(".orow").waitFor({ state: "hidden" });
+      await tab.waitForTimeout(150);
+      await tab.waitForLoadState("networkidle");
+      check("Call knock decisions do not reload full history", (await reads()) === initial);
+      await fixture("set?knocks=1");
+      await tab.clock.runFor(5000);
+      await tab.locator(".orow").waitFor({ state: "visible" });
+      check("shared status polling resumes after a knock decision", (await reads()) === initial);
     } finally {
       await context.close();
     }

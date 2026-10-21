@@ -50,7 +50,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       read: async (data) => {
         const status = await readPage("call-status", { spaceId });
         const episode = data.episodes.find((item) => item.status !== "ended");
-        const changed = (data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status;
+        const changed =
+          (status.episode?.status === "active" && data.live?.id !== status.episode.id) || (data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status;
         if (lifecycleRefresh.current.spaceId !== spaceId) lifecycleRefresh.current = { spaceId, after: 0, pending: false };
         lifecycleRefresh.current.pending = changed;
         if (changed && Date.now() >= lifecycleRefresh.current.after) {
@@ -152,7 +153,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       const intent = `${allow ? "approve" : "deny"}:${handle}`;
       await act("call", { action: allow ? "approve-knock" : "deny-knock", spaceId, requestHandle: handle, idempotencyKey: intents.key(intent) });
       intents.done(intent);
-      update((data) => ({ ...data, knocks: data.knocks.filter((knock) => knock.handle !== handle) }));
+      update((data) => ({ ...data, knocks: data.knocks.filter((knock) => knock.handle !== handle) }), { refresh: false });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     }

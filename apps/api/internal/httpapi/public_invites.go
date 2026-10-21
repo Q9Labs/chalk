@@ -47,7 +47,7 @@ const (
 )
 
 type PublicInviteService interface {
-	GetInvite(context.Context, utilities.ID, utilities.ID) (publicinvites.ManagedInvite, error)
+	GetInvite(context.Context, utilities.ID, utilities.ID, func() error) (publicinvites.ManagedInvite, error)
 	UpdateInvite(context.Context, publicinvites.UpdateSpacePublicInviteInput) (publicinvites.ManagedInvite, error)
 	RotateInvite(context.Context, publicinvites.RotateSpacePublicInviteInput) (publicinvites.ManagedInvite, error)
 	ListAdmissionRequests(context.Context, publicinvites.ListPublicAdmissionRequestsInput) (publicinvites.AdmissionRequestPage, error)
@@ -237,7 +237,7 @@ func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer Tenant
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
 			return publicInviteResponse{}, err
 		}
-		invite, err := service.GetInvite(ctx, request.TenantID, request.SpaceID)
+		invite, err := service.GetInvite(ctx, request.TenantID, request.SpaceID, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicInviteResponse{}, err
 		}
