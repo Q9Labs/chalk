@@ -499,14 +499,15 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
   });
   const initialData = useWhiteboardInitialData(configuration.theme, configuration.headless, props.localParticipantColor, props.inkColor);
   const resolvedLoadError = loadError ?? stylesheet.error;
-  const engine = useEngineHandle(props.onEngineReady, excalidraw, collaboration, math.handleSubmitMath, configuration.headless);
+  const isReady = Boolean(excalidraw && stylesheet.loaded && !resolvedLoadError);
+  const engine = useEngineHandle(props.onEngineReady, excalidraw, collaboration, math.handleSubmitMath, configuration.headless, isReady);
 
   return {
     collaboration,
     configuration,
     excalidraw,
     initialData,
-    isReady: Boolean(excalidraw && stylesheet.loaded && !resolvedLoadError),
+    isReady,
     math,
     resolvedLoadError,
     uiOptions: UI_OPTIONS,
@@ -514,7 +515,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
   };
 }
 
-function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => void) | undefined, excalidraw: ExcalidrawModule | null, collaboration: WhiteboardCollaboration, placeMath: (latex: string) => Promise<void>, headless: boolean) {
+function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => void) | undefined, excalidraw: ExcalidrawModule | null, collaboration: WhiteboardCollaboration, placeMath: (latex: string) => Promise<void>, headless: boolean, isReady: boolean) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   // Excalidraw hands over its API before it loads initialData, and that load resets the tool and view.
   const [loaded, setLoaded] = useState(false);
@@ -539,7 +540,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
   placeMathRef.current = placeMath;
   const { engineRef } = collaboration;
   useEffect(() => {
-    if (!api || !excalidraw || !loaded || !onEngineReady) return;
+    if (!api || !excalidraw || !loaded || !isReady || !onEngineReady) return;
     onEngineReady({
       api,
       excalidraw,
@@ -550,7 +551,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
       },
       placeMath: (latex) => placeMathRef.current(latex),
     });
-  }, [api, engineRef, excalidraw, loaded, onEngineReady]);
+  }, [api, engineRef, excalidraw, isReady, loaded, onEngineReady]);
   return { onApiReady, onChange };
 }
 
