@@ -218,7 +218,7 @@ it.each(["dark", "light"])("the board follow proof action follows Nora in %s", a
   const action = await page.evaluate((id) => window.__CALL_STATES__?.find((entry) => entry.id === id)?.actions?.[0], state);
   if (!action || !("click" in action)) throw new Error("Board follow proof has no click action");
   await page.getByRole(action.role ?? "button", { name: action.click, exact: true }).click({ timeout: 5000 });
-  await page.getByText("Following Nora", { exact: true }).waitFor();
+  await page.locator(".chalk-board-chip").filter({ hasText: "Following Nora" }).waitFor();
   expect(await page.getByRole("button", { name: "Stop following Nora", exact: true }).isVisible()).toBe(true);
 });
 

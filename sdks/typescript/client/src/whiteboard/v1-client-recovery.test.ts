@@ -312,6 +312,29 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("preserves a queued Bring when origin negotiation falls back to plain views", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      sockets[0]?.close(1006);
+      expect(client.sendView(bring)).toBe(true);
+      clock.advance(5_000);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      sockets[1]?.close(1008);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 2);
+      expect(client.supportsViews).toBe(true);
+      const frames = sockets[2]?.sent.map((wire) => JSON.parse(wire));
+      expect(frames?.find((frame) => frame.type === "hello").extensions).toContainEqual({ name: "view_v1" });
+      expect(frames?.filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("does not carry an accepted bring into a restarted subscription", async () => {
     const { client, sockets } = await startedRecoveryClient(new TestClock());
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };

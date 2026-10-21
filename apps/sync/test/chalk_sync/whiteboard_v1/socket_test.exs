@@ -1,6 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.SocketTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
@@ -42,7 +43,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
          %{
            scene_id: "10000000-0000-4000-8000-000000000001",
            revision: 4,
-           elements: [],
+           elements: Process.get(:whiteboard_snapshot_elements, []),
            app_state: nil
          }}
     end
@@ -60,6 +61,50 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
            }
          ]}
     end
+  end
+
+  test "coalesces recovering Bring commands and delivers the latest after the final snapshot ACK" do
+    count = GeneratedWhiteboardV1.limits()["snapshotPageMaxItems"] + 1
+    elements = Enum.map(1..count, fn index -> Map.put(element(), "id", "element-#{index}") end)
+    Process.put(:whiteboard_snapshot_elements, elements)
+    state = %{recovering_state() | view_negotiated: true}
+    Process.delete(:whiteboard_snapshot_elements)
+    assert length(state.snapshot.remaining) == 1
+
+    bring = %{
+      "type" => "view",
+      "participant_id" => "20000000-0000-4000-8000-000000000003",
+      "display_name" => "Host",
+      "x" => 10,
+      "y" => 20,
+      "width" => 300,
+      "height" => 200,
+      "bring" => true,
+      "occurred_at" => "2026-10-21T11:00:00.000Z"
+    }
+
+    assert {:ok, first} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, bring}, state)
+    latest = %{bring | "x" => 40}
+    assert {:ok, queued} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, latest}, first)
+
+    assert {:ok, queued} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_frame, %{bring | "bring" => false}},
+               queued
+             )
+
+    assert {:push, {:text, _page}, recovering} = receive_frame(snapshot_ack(queued), queued)
+    refute_received {:whiteboard_v1_frame, _}
+    assert {:ok, live} = receive_frame(snapshot_ack(recovering), recovering)
+    assert live.phase == :live
+    assert_receive {:whiteboard_v1_frame, ^latest}
+
+    assert {:push, {:text, encoded}, delivered} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, latest}, live)
+
+    assert JSON.decode!(encoded) == latest
+    assert delivered.pending_bring == nil
+    refute_received {:whiteboard_v1_frame, _}
   end
 
   test "serializes overlapping snapshot requests without interrupting recovery" do

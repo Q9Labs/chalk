@@ -745,8 +745,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#resetDisconnectedState();
     if (!this.#started || !this.#transportAvailable) return;
     if (rejectedPresentationHello) {
-      this.#pendingBring = null;
-      this.#hello = this.#hello === "versioned-view" ? "view" : this.#hello === "view" ? "presentation" : "legacy";
+      this.#fallbackHello();
       this.#scheduleReconnect();
       return;
     }
@@ -760,6 +759,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #rejectedPresentationHello(closeCode: number): boolean {
     return this.#phase === "authenticating" && this.#hello !== "legacy" && terminalCloseCode(closeCode);
+  }
+
+  #fallbackHello(): void {
+    this.#hello = this.#hello === "versioned-view" ? "view" : this.#hello === "view" ? "presentation" : "legacy";
+    if (this.#hello !== "view") this.#pendingBring = null;
   }
 
   #resetDisconnectedState(): void {

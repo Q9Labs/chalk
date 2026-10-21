@@ -43,6 +43,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        revision: 0,
        snapshot: nil,
        pending_snapshot_requests: [],
+       pending_bring: nil,
        awaiting_snapshot: false,
        missed_head: nil,
        multipart: nil,
@@ -149,6 +150,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view", "bring" => true} = frame},
+        %{phase: :recovering} = state
+      ) do
+    {:ok, %{state | pending_bring: frame}}
+  end
+
+  def handle_info(
         {:whiteboard_v1_frame, %{"scene_id" => scene_id, "revision" => revision}},
         %{phase: :recovering} = state
       )
@@ -236,6 +244,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp note_missed_head(state, scene_id, revision) do
     %{state | missed_head: {scene_id, revision}}
+  end
+
+  defp resume_pending_bring(%{pending_bring: nil} = state), do: state
+
+  defp resume_pending_bring(%{pending_bring: frame} = state) do
+    send(self(), {:whiteboard_v1_frame, frame})
+    %{state | pending_bring: nil}
   end
 
   defp catch_up_after_snapshot(state, nil) do
@@ -532,7 +547,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               missed_head: nil
           }
 
-          nil
+          next = resume_pending_bring(next)
           resume_snapshot_requests(next)
           catch_up_after_snapshot(next, state.missed_head)
       end
