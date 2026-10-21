@@ -139,6 +139,7 @@ function roveFocus(event: KeyboardEvent<HTMLElement>, vertical: boolean) {
   const index = buttons.findIndex((button) => button === document.activeElement);
   if (index < 0) return;
   event.preventDefault();
+  event.stopPropagation();
   const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === forward ? 1 : -1) + buttons.length) % buttons.length;
   buttons[next]?.focus();
 }
@@ -185,12 +186,20 @@ function nearestPlace(board: DOMRect, x: number, y: number): IslandPlace {
 export function BoardIsland(props: IslandProps) {
   const { place, onPlace, compact } = props;
   const island = useRef<HTMLDivElement>(null);
+  const tabStop = useRef<HTMLButtonElement | null>(null);
   const reduced = usePrefersReducedMotion();
   const [drag, setDrag] = useState<{ readonly x: number; readonly y: number; readonly near: IslandPlace } | null>(null);
   const dropRect = useRef<DOMRect | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [colorsOpen, setColorsOpen] = useState(false);
   const press = useRef<{ timer?: ReturnType<typeof setTimeout>; long: boolean }>({ long: false });
+
+  useLayoutEffect(() => {
+    const buttons = [...(island.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const stop = buttons.find((button) => button === tabStop.current && !button.disabled) ?? buttons.find((button) => !button.disabled);
+    tabStop.current = stop ?? null;
+    for (const button of buttons) button.tabIndex = button === stop ? 0 : -1;
+  });
 
   useLayoutEffect(() => {
     const element = island.current;
@@ -237,6 +246,7 @@ export function BoardIsland(props: IslandProps) {
   };
 
   const gripKeys = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!event.altKey) return;
     const target: Partial<Record<string, IslandPlace>> = { ArrowLeft: "left", ArrowDown: "bottom", ArrowUp: "top" };
     const next = target[event.key];
     if (!next) return;
@@ -301,7 +311,14 @@ export function BoardIsland(props: IslandProps) {
         data-place={compact ? "expanded" : place}
         data-dragging={drag ? true : undefined}
         style={drag ? { transform: `translate(${drag.x}px, ${drag.y}px)` } : undefined}
-        onKeyDown={(event) => roveFocus(event, vertical)}
+        onKeyDownCapture={(event) => {
+          if (!event.altKey) roveFocus(event, vertical);
+        }}
+        onFocusCapture={(event) => {
+          if (!(event.target instanceof HTMLButtonElement) || !event.currentTarget.contains(event.target)) return;
+          tabStop.current = event.target;
+          for (const button of event.currentTarget.querySelectorAll<HTMLButtonElement>("button")) button.tabIndex = button === event.target ? 0 : -1;
+        }}
       >
         {compact ? (
           <>
@@ -312,7 +329,7 @@ export function BoardIsland(props: IslandProps) {
           </>
         ) : (
           <Tip label="Move the tools">
-            <button type="button" className="chalk-board-grip" aria-label="Move the tools. Use the arrow keys to dock them left, bottom or top." onPointerDown={startDrag} onKeyDown={gripKeys}>
+            <button type="button" className="chalk-board-grip" aria-label="Move the tools. Use Alt and the arrow keys to dock them left, bottom or top." onPointerDown={startDrag} onKeyDown={gripKeys}>
               <GripIcon />
             </button>
           </Tip>

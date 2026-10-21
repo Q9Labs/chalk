@@ -61,6 +61,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #options: ChalkWhiteboardV1ClientOptions;
   readonly #store;
   readonly #listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
+  readonly #latestViews = new Map<string, Extract<ChalkWhiteboardV1Event, { readonly type: "view" }>>();
   readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
   readonly #reservedOperationIds = new Set<string>();
@@ -80,8 +81,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #capabilities: readonly ChalkWhiteboardV1Capability[] = [];
   #canDraw = false;
   #presentationSupported = false;
+  #viewsSupported = false;
   #presenting = false;
-  #hello: "view" | "presentation" | "legacy" = "view";
+  #hello: "versioned-view" | "view" | "presentation" | "legacy" = "versioned-view";
+  #viewSequence = 0;
   #pendingBring: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView } | null = null;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
@@ -131,7 +134,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = "view";
+    this.#hello = "versioned-view";
+    this.#viewsSupported = false;
     this.#phase = "connecting";
     this.#publishSummary("loading", null);
     const generation = ++this.#startupGeneration;
@@ -158,7 +162,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #stopNow(): void {
     this.#started = false;
+    this.#viewsSupported = false;
     this.#pendingBring = null;
+    this.#latestViews.clear();
     this.#removeVisibilityListener();
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
@@ -187,11 +193,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   subscribe(listener: (event: ChalkWhiteboardV1Event) => void): () => void {
     this.#listeners.add(listener);
     if (this.#phase !== "live") return () => this.#listeners.delete(listener);
-    if (this.#latestSnapshot && this.#latestSnapshot.sceneId === this.#sceneId && this.#latestSnapshot.revision === this.#revision) {
-      listener(this.#latestSnapshot);
-      return () => this.#listeners.delete(listener);
-    }
-    if (this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
+    const currentSnapshot = this.#latestSnapshot && this.#latestSnapshot.sceneId === this.#sceneId && this.#latestSnapshot.revision === this.#revision ? this.#latestSnapshot : null;
+    if (currentSnapshot) listener(currentSnapshot);
+    for (const view of this.#latestViews.values()) listener({ ...view, bring: false });
+    if (!currentSnapshot && this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
     return () => this.#listeners.delete(listener);
   }
 
@@ -226,9 +231,15 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#send(frame);
   }
 
+  get supportsViews(): boolean {
+    return this.#started && this.#viewsSupported && (this.#hello === "view" || this.#hello === "versioned-view");
+  }
+
   sendView(view: ChalkWhiteboardView): boolean {
-    if (!this.#started || this.#hello !== "view") return false;
-    const frame = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
+    if (!this.#started || (this.#hello !== "view" && this.#hello !== "versioned-view")) return false;
+    const origin = view.originParticipantId !== undefined ? { origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence } : this.#participantId ? { origin_participant_id: this.#participantId, origin_sequence: ++this.#viewSequence } : undefined;
+    const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
+    const frame: Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> = this.#hello === "versioned-view" && origin ? { ...rectangle, ...origin } : rectangle;
     encodeWhiteboardV1ClientFrame(frame);
     if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) {
       if (view.bring) this.#pendingBring = { sceneId: this.#sceneId, view: { ...view } };
@@ -409,10 +420,22 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
           occurredAt: frame.occurred_at,
         });
         return;
-      case "view":
+      case "view": {
         this.#requireLive();
-        this.#emit({ type: "view", participantId: frame.participant_id, displayName: frame.display_name, x: frame.x, y: frame.y, width: frame.width, height: frame.height, bring: frame.bring, occurredAt: frame.occurred_at });
+        const event = {
+          type: "view" as const,
+          participantId: frame.participant_id,
+          displayName: frame.display_name,
+          x: frame.x,
+          y: frame.y,
+          width: frame.width,
+          height: frame.height,
+          bring: frame.bring,
+          occurredAt: frame.occurred_at,
+        };
+        this.#emit(frame.origin_participant_id ? { ...event, originParticipantId: frame.origin_participant_id, originSequence: frame.origin_sequence } : event);
         return;
+      }
       case "permission_updated":
         this.#requireLive();
         if (frame.participant_id === this.#participantId) this.#canDraw = frame.can_draw;
@@ -420,6 +443,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       case "presentation_updated":
         this.#requireLive();
+        if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
         this.#sceneId = frame.scene_id;
         this.#revision = frame.revision;
         this.#presenting = frame.presenting;
@@ -427,6 +451,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       case "reset_required":
         this.#requireLive();
+        if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
         this.#sceneId = frame.scene_id;
         this.#revision = null;
         this.#publishSummary("recovering", failure("request_snapshot", "cursor_reset_required", true, "Whiteboard snapshot recovery is required."));
@@ -448,6 +473,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #update(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "update" }>): void {
     this.#requireLive();
+    if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#publishSummary("ready", null);
@@ -486,8 +512,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
+    this.#viewsSupported = this.#hello === "view" || this.#hello === "versioned-view";
     this.#reconnectAttempt = 0;
     this.#participantId = frame.participant_id;
+    if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#capabilities = [...frame.capabilities];
@@ -555,6 +583,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #completeSnapshot(frame: SnapshotPageFrame, assembly: SnapshotAssembly, elements: readonly ChalkWhiteboardV1Element[]): void {
     this.#snapshots.delete(frame.request_id);
+    if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#publishSummary("ready", null);
@@ -622,6 +651,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (!entry) return;
     this.#operations.delete(frame.operation_id);
     this.#clearOperationRetryTimer(frame.operation_id);
+    if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#awaitingOperationIds.delete(frame.operation_id);
@@ -693,7 +723,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (!this.#started || !this.#transportAvailable) return;
     if (rejectedPresentationHello) {
       this.#pendingBring = null;
-      this.#hello = this.#hello === "view" ? "presentation" : "legacy";
+      this.#hello = this.#hello === "versioned-view" ? "view" : this.#hello === "view" ? "presentation" : "legacy";
       this.#scheduleReconnect();
       return;
     }
@@ -779,6 +809,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #emit(event: ChalkWhiteboardV1Event): void {
     if (event.type === "snapshot") this.#latestSnapshot = event;
+    if (event.type === "view") this.#latestViews.set(event.participantId, event);
     for (const listener of this.#listeners) listener(event);
   }
 
@@ -1045,11 +1076,11 @@ function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonl
   return code === "unavailable" || code === "overloaded" || code === "rate_limited" || code === "storage_unavailable";
 }
 
-function helloFrame(level: "view" | "presentation" | "legacy", token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
+function helloFrame(level: "versioned-view" | "view" | "presentation" | "legacy", token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
   const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
   if (level === "legacy") return hello;
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
-  return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
+  return { ...hello, extensions: [{ name: "presentation_v1" }, level === "versioned-view" ? { name: "view_v1", origins: true } : { name: "view_v1" }] };
 }
 
 function terminalCloseCode(closeCode: number): boolean {

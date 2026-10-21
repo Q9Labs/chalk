@@ -63,12 +63,19 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await settle();
       sockets[0]?.open();
       await settle();
-      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
+      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
       sockets[0]?.close(1008);
       clock.advance(5_000);
-      await acceptSnapshot(sockets, 1);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
+      sockets[1]?.close(1008);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 2);
       await startup;
-      expect(hello(1)).toEqual([{ name: "presentation_v1" }]);
+      expect(hello(2)).toEqual([{ name: "presentation_v1" }]);
+      expect(client.supportsViews).toBe(false);
       expect(client.sendView(view)).toBe(false);
     } finally {
       await client.stopSceneSubscription();
@@ -77,8 +84,9 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     const currentClock = new TestClock();
     const current = await startedRecoveryClient(currentClock);
     try {
+      expect(current.client.supportsViews).toBe(true);
       expect(current.client.sendView(view)).toBe(true);
-      expect(JSON.parse(current.sockets[0]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      expect(JSON.parse(current.sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view });
       // A dropped connection is not a refusal: views stay available while the client reconnects.
       current.sockets[0]?.close(1006);
       currentClock.advance(5_000);
@@ -86,9 +94,64 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       current.sockets[1]?.open();
       await settle();
       expect(JSON.parse(current.sockets[1]?.sent[0] ?? "{}").type).toBe("hello");
+      expect(current.client.supportsViews).toBe(true);
       expect(current.client.sendView(view)).toBe(true);
     } finally {
       await current.client.stopSceneSubscription();
+    }
+  });
+
+  it("originates monotonic versions, preserves relayed versions, and interoperates with an older view server", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
+    const sent = () => JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+    try {
+      client.sendView(view);
+      const first = sent();
+      expect(first).toMatchObject({ origin_participant_id: welcome().participant_id, origin_sequence: 1 });
+      client.sendView(view);
+      expect(sent().origin_sequence).toBe(2); // An intentional return to the same view is still a new local move.
+      client.sendView({ ...view, x: 11 });
+      expect(sent().origin_sequence).toBe(3);
+      client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
+      expect(sent()).toMatchObject({ origin_participant_id: sceneId, origin_sequence: 42 });
+      client.sendView({ ...view, x: 12 });
+      expect(sent().origin_sequence).toBe(4);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+    const older = recoveryClient(clock);
+    const startup = older.client.startSceneSubscription();
+    try {
+      await settle();
+      older.sockets[0]?.open();
+      await settle();
+      older.sockets[0]?.close(1008);
+      clock.advance(5000);
+      await acceptSnapshot(older.sockets, 1);
+      await startup;
+      expect(older.client.supportsViews).toBe(true);
+      older.client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
+      expect(JSON.parse(older.sockets[1]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+    } finally {
+      await older.client.stopSceneSubscription();
+    }
+  });
+
+  it("replays the latest ordinary peer view to a later board consumer", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const events: ChalkWhiteboardV1Event[] = [];
+    const view = { type: "view", participant_id: "20000000-0000-4000-8000-000000000001", display_name: "Omar", x: 10, y: 20, width: 300, height: 200, bring: true, occurred_at: "2026-10-21T04:00:00.000Z" };
+    let unsubscribe: () => void = () => undefined;
+    try {
+      sockets[0]?.receive(view);
+      await settle();
+      unsubscribe = client.subscribe((event) => events.push(event));
+      expect(events).toContainEqual(expect.objectContaining({ type: "view", participantId: view.participant_id, x: 10, bring: false }));
+    } finally {
+      unsubscribe();
+      await client.stopSceneSubscription();
     }
   });
 
@@ -104,7 +167,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
         unsubscribe = client.subscribe((event) => events.push(event));
         expect(events.at(-1)).toMatchObject({ type: "snapshot", sceneId });
         expect(client.sendView({ ...view, x: index })).toBe(true);
-        expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view, x: index });
+        expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view, x: index });
       }
       expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "request_snapshot")).toHaveLength(1);
     } finally {
@@ -130,10 +193,10 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       expect(client.sendView(bring)).toBe(true);
       socket?.receive(snapshotPage(socket.requestId()));
       await snapshot;
-      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring }]);
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
       const view = { ...bring, x: 40, bring: false };
       expect(client.sendView(view)).toBe(true);
-      expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view });
     } finally {
       unsubscribe();
       stopObserving();
@@ -148,11 +211,11 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     try {
       const snapshot = client.requestSnapshot();
       expect(client.sendView(bring)).toBe(true);
-      client.sendView({ ...bring, x: 99, bring: false });
+      expect(client.sendView({ ...bring, x: 99, bring: false })).toBe(true);
       expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
       socket?.receive(snapshotPage(socket.requestId()));
       await snapshot;
-      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring }]);
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -166,7 +229,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       expect(client.sendView(bring)).toBe(true);
       await acceptSnapshot(sockets);
       await startup;
-      expect(sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring }]);
+      expect(sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -183,7 +246,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       clock.advance(5_000);
       await acceptSnapshot(sockets, 1);
       await settle();
-      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring, x: 40 }]);
+      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
     } finally {
       await client.stopSceneSubscription();
     }

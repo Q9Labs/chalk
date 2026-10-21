@@ -1,7 +1,7 @@
 import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
-import { useCan, useConnection } from "../../bindings/hooks";
+import { useCan, useConnection, useSelf, useWhiteboard } from "../../bindings/hooks";
 import { useMediaQuery, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
@@ -50,7 +50,6 @@ export type BoardProps = {
   readonly onFollow: (participantId: string | null) => void;
   /** Absent, or answering false, when the board service does not share views. */
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
-  readonly onViewsUnavailable?: () => void;
   readonly onClose?: () => void;
 };
 
@@ -87,13 +86,11 @@ function useHistoryCounts() {
   };
 }
 
-type CameraMoveOrigin = "local" | "follow";
-
 type CameraControl = {
   readonly cameraRef: MutableRefObject<Camera>;
   readonly viewportRef: MutableRefObject<Viewport>;
   readonly zoom: number;
-  readonly move: (target: Camera, animate: boolean, origin: CameraMoveOrigin) => void;
+  readonly move: (target: Camera, animate: boolean) => void;
 };
 
 /** Owns the camera: glides to a new view, and tells a move by hand from one the board made. */
@@ -155,7 +152,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
   useEffect(() => () => cancelAnimationFrame(glide.current), []);
 
   const move = useCallback(
-    (target: Camera, animate: boolean, origin: CameraMoveOrigin) => {
+    (target: Camera, animate: boolean) => {
       if (!engine) return;
       cancelAnimationFrame(glide.current);
       const set = (camera: Camera) => {
@@ -164,7 +161,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
       };
       if (!animate || reduced) {
         set(target);
-        if (origin === "local") moved.current();
+        moved.current();
         return;
       }
       const from = cameraRef.current;
@@ -173,7 +170,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
         const progress = Math.min(1, (now - started) / GLIDE_MS);
         set(mixCamera(from, target, 1 - (1 - progress) ** 3));
         if (progress < 1) glide.current = requestAnimationFrame(step);
-        else if (origin === "local") moved.current();
+        else moved.current();
       };
       glide.current = requestAnimationFrame(step);
     },
@@ -193,6 +190,7 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
     const keydown = (event: KeyboardEvent) => {
       if (isTyping(event.target)) return;
       const key = event.key.toLowerCase();
+      if (event.altKey && key.startsWith("arrow") && event.target instanceof Element && event.target.closest(".chalk-board-grip")) return;
       const modified = event.metaKey || event.ctrlKey;
       const { onTool, onZoom, onUndo, onRedo, canDraw } = latest.current;
       if (modified && !event.altKey && key === "z") return event.shiftKey ? onRedo() : onUndo();
@@ -259,11 +257,12 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
  * Chalk's board: Excalidraw draws, and every control around it is the call's own. Each person picks their own
  * surface and island place; the drawing, the cursors and the views are shared.
  */
-export function Board({ board, primary, visible, colorScheme, people, following, onFollow, sendView, onViewsUnavailable, onClose }: BoardProps) {
+export function Board({ board, primary, visible, colorScheme, people, following, onFollow, sendView, onClose }: BoardProps) {
   const root = useRef<HTMLDivElement | null>(null);
   const toast = useBoardToast();
   const isHost = useCan("manageWhiteboard");
   const connection = useConnection();
+  const boardSession = useWhiteboard().engine;
   const offline = connection.status === "reconnecting";
   const phone = useMediaQuery("(max-width: 640px)");
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
@@ -302,27 +301,32 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const stopFollowing = useCallback(() => {
     const current = followingRef.current;
     if (!current) return;
+    followingRef.current = null;
     onFollow(null);
     toast({ message: `Stopped following ${nameOf(current)}` });
   }, [nameOf, onFollow, toast]);
 
   const shareView = useRef<(bring: boolean) => boolean>(() => false);
-  const viewSender = useRef({ sendView, onViewsUnavailable });
-  viewSender.current = { sendView, onViewsUnavailable };
+  const viewSender = useRef(sendView);
+  viewSender.current = sendView;
+  const ownParticipantId = useSelf().participantId;
+  const appliedVersions = useRef(new Map<string, number>());
   const viewsAvailable = sendView !== undefined;
   const camera = useCamera(engine, root, stopFollowing, () => shareView.current(false));
 
-  // My own view, shortly after it changes and every two seconds, so others can follow me at once.
+  // A relay preserves the original participant/version; receiving that version again never moves the camera.
   useEffect(() => {
     if (!primary || !viewsAvailable || !engine) return;
     let last = 0;
     let pending: ReturnType<typeof setTimeout> | undefined;
     const send = (bring: boolean) => {
-      if (!bring && followingRef.current) return false;
+      const followedView = followingRef.current ? views.current.get(followingRef.current) : undefined;
+      // Relay the logical view, not the letterboxing added to fit my screen.
+      const view = followedView ?? visibleView(camera.cameraRef.current, camera.viewportRef.current);
       last = performance.now();
-      const accepted = viewSender.current.sendView?.({ ...visibleView(camera.cameraRef.current, camera.viewportRef.current), bring }) ?? false;
-      if (!accepted) viewSender.current.onViewsUnavailable?.();
-      return accepted;
+      const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring };
+      const outgoing: ChalkWhiteboardView = followedView?.originParticipantId ? { ...rectangle, originParticipantId: followedView.originParticipantId, originSequence: followedView.originSequence } : rectangle;
+      return viewSender.current?.(outgoing) ?? false;
     };
     shareView.current = (bring) => {
       if (bring) return send(true);
@@ -330,20 +334,27 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       pending = setTimeout(() => send(false), Math.max(0, VIEW_SEND_MS - (performance.now() - last)));
       return true;
     };
-    const heartbeat = setInterval(() => send(false), VIEW_HEARTBEAT_MS);
+    const heartbeat = setInterval(() => {
+      if (!followingRef.current) send(false);
+    }, VIEW_HEARTBEAT_MS);
     send(false);
     return () => {
       clearInterval(heartbeat);
       clearTimeout(pending);
       shareView.current = () => false;
     };
-  }, [camera.cameraRef, camera.viewportRef, engine, primary, viewsAvailable]);
+  }, [boardSession.sceneId, boardSession.status, camera.cameraRef, camera.viewportRef, connection.status, engine, primary, viewsAvailable]);
 
   const { move, viewportRef } = camera;
   const goTo = useCallback(
-    (participantId: string, animate: boolean) => {
+    (participantId: string, animate: boolean, selected = false) => {
       const view = views.current.get(participantId);
-      if (view) move(cameraForView(view, viewportRef.current), animate, "follow");
+      if (!view) return;
+      if (view.originParticipantId && view.originSequence !== undefined) {
+        if (!selected && view.originSequence <= (appliedVersions.current.get(view.originParticipantId) ?? 0)) return;
+        appliedVersions.current.set(view.originParticipantId, Math.max(view.originSequence, appliedVersions.current.get(view.originParticipantId) ?? 0));
+      }
+      move(cameraForView(view, viewportRef.current), animate);
     },
     [move, viewportRef],
   );
@@ -352,7 +363,16 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const subscribe = board.collab?.subscribe;
   const latestView = useRef<(event: ChalkWhiteboardView & { readonly participantId: string }) => void>(() => undefined);
   latestView.current = (event) => {
+    if (event.originParticipantId === ownParticipantId && ownParticipantId) return;
+    if (event.originParticipantId && event.originSequence !== undefined && event.originSequence <= (appliedVersions.current.get(event.originParticipantId) ?? 0)) return;
+    const previous = views.current.get(event.participantId);
+    if (event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originSequence !== undefined && previous.originSequence !== undefined && event.originSequence <= previous.originSequence) return;
+    const newPeer = !previous;
     views.current.set(event.participantId, event);
+    // A new peer has now subscribed: announce my current view once for discovery.
+    if (newPeer) {
+      shareView.current(false);
+    }
     if (event.bring && followingRef.current !== event.participantId) {
       onFollow(event.participantId);
       toast({ message: `${nameOf(event.participantId)} brought everyone to this view` });
@@ -369,7 +389,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   }, [primary, subscribe]);
 
   useEffect(() => {
-    if (following) goTo(following, true);
+    if (following) goTo(following, true, true);
   }, [following, goTo]);
 
   // The engine: tools, styles, history counts, emptiness and note text.
@@ -452,7 +472,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const zoomBy = useCallback(
     (factor: number) => {
       stopFollowing();
-      camera.move(zoomAroundCentre(camera.cameraRef.current, camera.viewportRef.current, camera.cameraRef.current.zoom * factor), true, "local");
+      camera.move(zoomAroundCentre(camera.cameraRef.current, camera.viewportRef.current, camera.cameraRef.current.zoom * factor), true);
     },
     [camera, stopFollowing],
   );
@@ -506,7 +526,10 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   };
   const bring = () => {
     // Following someone while bringing them here would make each follow the other.
-    if (followingRef.current) onFollow(null);
+    if (followingRef.current) {
+      followingRef.current = null;
+      onFollow(null);
+    }
     if (shareView.current(true)) toast({ message: "Sharing your view with everyone" });
     else toast({ type: "error", message: "Could not share your view. Try again." });
   };

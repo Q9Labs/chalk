@@ -13,7 +13,8 @@
     },
     "view": {
       "name": "view_v1",
-      "exactFields": ["name"]
+      "exactFields": ["name"],
+      "extendedExactFields": ["name", "origins"]
     }
   },
   "identity": {
@@ -111,6 +112,7 @@
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
     },
     "view": {
+      "originFields": ["origin_participant_id", "origin_sequence"],
       "clientExactFields": ["type", "x", "y", "width", "height", "bring"],
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"]
     },

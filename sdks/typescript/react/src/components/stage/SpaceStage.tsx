@@ -29,14 +29,12 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   const [selectedShare, setSelectedShare] = useState<string | null>(null);
   const [pin, setPin] = useState<string | null>(null);
   const [following, setFollowing] = useState<string | null>(null);
-  const [viewsShared, setViewsShared] = useState(true);
   const boardOpen = whiteboard?.isOpen === true && Boolean(whiteboard.props);
   useEffect(() => {
     if (!boardOpen) setFollowing(null);
   }, [boardOpen]);
-  const canFollow = boardOpen && viewsShared && Boolean(whiteboard?.sendView);
+  const canFollow = boardOpen && Boolean(whiteboard?.sendView);
   const followed = canFollow && tiles.some((tile) => tile.id === following) ? following : null;
-  const stopSharingViews = useCallback(() => setViewsShared(false), []);
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
   const renderContentTile = useCallback(
@@ -80,14 +78,14 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
           media={
             boardProps ? (
               <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={setFollowing} sendView={canFollow ? whiteboard?.sendView : undefined} onViewsUnavailable={stopSharingViews} onClose={onCloseBoard} />
+                <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={setFollowing} sendView={canFollow ? whiteboard?.sendView : undefined} onClose={onCloseBoard} />
               </div>
             ) : null
           }
         />
       );
     },
-    [whiteboard, shares, shareCapture, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, stopSharingViews, onCloseBoard],
+    [whiteboard, shares, shareCapture, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, onCloseBoard],
   );
   const focusContent = useCallback(
     (item: StageItem) => {

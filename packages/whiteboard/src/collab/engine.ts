@@ -54,7 +54,7 @@ export type WhiteboardCollaborationEvent =
       readonly y: number;
       readonly occurredAt: string;
     }
-  | {
+  | ({
       readonly type: "view";
       readonly participantId: string;
       readonly displayName: string;
@@ -64,7 +64,7 @@ export type WhiteboardCollaborationEvent =
       readonly height: number;
       readonly bring: boolean;
       readonly occurredAt: string;
-    }
+    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }))
   | {
       readonly type: "reset_required";
       readonly sceneId: string;

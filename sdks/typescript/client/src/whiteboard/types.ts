@@ -61,7 +61,7 @@ export type ChalkWhiteboardView = {
   readonly width: number;
   readonly height: number;
   readonly bring: boolean;
-};
+} & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never });
 
 export type ChalkWhiteboardV1Commit = {
   readonly operationId: string;
@@ -108,6 +108,8 @@ export type ChalkWhiteboardV1Transport = {
   readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
   readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
+  /** Whether the active subscription negotiated view_v1; remains stable during recovery. */
+  readonly supportsViews?: boolean;
   /** Accepts views while subscribed; keeps the latest bring through recovery. False means views are unavailable. */
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
   readonly requestSnapshot: () => Promise<void>;

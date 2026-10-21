@@ -35,6 +35,18 @@ describe("whiteboard-v1 codec", () => {
     expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...welcome, presenting: true }))).toEqual({ ...welcome, presenting: true });
   });
 
+  it("accepts optional paired relay versions without changing legacy view frames", () => {
+    const view = { type: "view", x: 1, y: 2, width: 300, height: 200, bring: false } as const;
+    const version = { origin_participant_id: sceneId, origin_sequence: 7 };
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame(view))).toEqual(view);
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame({ ...view, ...version }))).toEqual({ ...view, ...version });
+    const remote = { ...view, participant_id: sceneId, display_name: "Ada", occurred_at: "2026-10-21T00:00:00Z" };
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify(remote))).toEqual(remote);
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...remote, ...version }))).toEqual({ ...remote, ...version });
+    expect(() => encodeWhiteboardV1ClientFrame({ ...view, origin_participant_id: sceneId })).toThrow();
+    expect(() => encodeWhiteboardV1ClientFrame({ ...view, ...version, origin_sequence: 0 })).toThrow();
+  });
+
   it("rejects unknown server fields", () => {
     expect(() =>
       decodeWhiteboardV1ServerFrame(

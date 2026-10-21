@@ -265,7 +265,7 @@ function SpaceSurface(
               presignDownload: (fileId: string) => whiteboardSubscription.transport.files.getDownloadUrl(fileId),
             },
           },
-          sendView: (view: ChalkWhiteboardView) => whiteboardSubscription.transport.sendView?.(view) ?? false,
+          sendView: (whiteboardSubscription.transport.supportsViews ?? Boolean(whiteboardSubscription.transport.sendView)) ? (view: ChalkWhiteboardView) => whiteboardSubscription.transport.sendView?.(view) ?? false : undefined,
         }
       : undefined;
   return (

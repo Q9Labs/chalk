@@ -38,6 +38,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        display_name: nil,
        presentation_negotiated: false,
        view_negotiated: false,
+       view_origins_negotiated: false,
        scene_id: nil,
        revision: 0,
        snapshot: nil,
@@ -132,6 +133,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       )
       when type in ["update", "update_part"] and is_binary(revision) do
     deliver_in_order(state, frame, scene_id, String.to_integer(revision))
+  end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view"} = frame},
+        %{phase: :live, view_origins_negotiated: false} = state
+      ) do
+    deliver_frame(state, Map.drop(frame, ["origin_participant_id", "origin_sequence"]))
   end
 
   def handle_info({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
@@ -288,6 +296,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
     view_negotiated = Enum.any?(extensions, &(&1["name"] == "view_v1"))
 
+    view_origins_negotiated =
+      Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
+
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, welcome} <- Episode.connect(identity) do
@@ -310,6 +321,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
             view_negotiated: view_negotiated,
+            view_origins_negotiated: view_origins_negotiated,
             scene_id: welcome["scene_id"],
             revision: String.to_integer(welcome["revision"])
         }
@@ -573,6 +585,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         "occurred_at" =>
           DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
       }
+
+      frame =
+        case view do
+          %{origin_participant_id: origin, origin_sequence: sequence} ->
+            Map.merge(frame, %{"origin_participant_id" => origin, "origin_sequence" => sequence})
+
+          _ ->
+            frame
+        end
 
       Fanout.publish_transient(identity.episode, frame)
       {:ok, next}

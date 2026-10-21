@@ -57,7 +57,7 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
       readonly sceneId: string;
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
     }
-  | {
+  | ({
       readonly type: "view";
       readonly participantId: string;
       readonly displayName: string;
@@ -67,7 +67,7 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
       readonly height: number;
       readonly bring: boolean;
       readonly occurredAt: string;
-    };
+    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }));
 
 export interface ChalkEmbeddedWhiteboardFileTransport {
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string }>;

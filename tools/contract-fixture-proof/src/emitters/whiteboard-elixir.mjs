@@ -90,7 +90,8 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       exact?(frame, ${render(contract.frames.hello.extendedExactFields)}) and
           frame["extensions"] in [
             [%{"name" => ${render(contract.extensions.presentation.name)}}],
-            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}]
+            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],
+            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}]
           ] ->
         {:ok, frame["extensions"]}
 
@@ -176,7 +177,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp decode_view(frame) do
-    if exact?(frame, ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
+    if view_fields?(frame, ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
          is_boolean(frame["bring"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
       {:ok,
        {:view,
@@ -186,11 +187,22 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
           width: frame["width"],
           height: frame["height"],
           bring: frame["bring"]
-        }}}
+        } |> Map.merge(view_origin(frame))}}
     else
       {:error, :invalid_payload}
     end
   end
+
+  defp view_fields?(frame, fields) do
+    exact?(frame, fields) or
+      (exact?(frame, fields ++ ${render(contract.frames.view.originFields)}) and
+         uuid?(frame["origin_participant_id"]) and is_integer(frame["origin_sequence"]) and
+         frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991)
+  end
+
+  defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
+    do: %{origin_participant_id: participant, origin_sequence: sequence}
+  defp view_origin(_frame), do: %{}
 
   defp view_rect?(frame) do
     finite_number?(frame["x"]) and finite_number?(frame["y"]) and finite_number?(frame["width"]) and
@@ -244,7 +256,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp valid_server_view?(frame) do
-    exact?(frame, ${render(contract.frames.view.serverExactFields)}) and
+    view_fields?(frame, ${render(contract.frames.view.serverExactFields)}) and
       uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1, @limits["displayNameMaxBytes"]) and
       view_rect?(frame) and is_boolean(frame["bring"]) and is_binary(frame["occurred_at"]) and
       encoded_bytes(frame) <= @limits["cursorFrameBytes"]

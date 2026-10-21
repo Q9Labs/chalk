@@ -473,6 +473,62 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     Fanout.unsubscribe(identity().episode)
   end
 
+  test "preserves relay versions for negotiated peers and strips them for older view clients" do
+    host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    live = %{
+      initial
+      | phase: :live,
+        scene_id: @scene_id,
+        revision: 4,
+        display_name: "Ada",
+        identity: host,
+        view_negotiated: true,
+        view_origins_negotiated: true
+    }
+
+    Fanout.subscribe(host.episode)
+
+    view = %{
+      "type" => "view",
+      "x" => 10,
+      "y" => 20,
+      "width" => 800,
+      "height" => 600,
+      "bring" => false,
+      "origin_participant_id" => @scene_id,
+      "origin_sequence" => 42
+    }
+
+    assert {:ok, _} = receive_frame(view, live)
+
+    assert_received {:whiteboard_v1_frame,
+                     %{
+                       "type" => "view",
+                       "origin_participant_id" => @scene_id,
+                       "origin_sequence" => 42
+                     } = frame}
+
+    peer = %{live | identity: %{host | participant_id: "60000000-0000-4000-8000-000000000006"}}
+
+    assert {:push, {:text, versioned}, _} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, peer)
+
+    assert JSON.decode!(versioned)["origin_sequence"] == 42
+
+    assert {:push, {:text, legacy}, _} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, %{
+               peer
+               | view_origins_negotiated: false
+             })
+
+    refute Map.has_key?(JSON.decode!(legacy), "origin_sequence")
+    refute Map.has_key?(JSON.decode!(legacy), "origin_participant_id")
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
   test "does not echo a participant cursor or replay an applied update" do
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
 

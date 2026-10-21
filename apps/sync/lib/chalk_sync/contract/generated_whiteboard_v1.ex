@@ -15,7 +15,11 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     },
     "extensions" => %{
       "presentation" => %{"name" => "presentation_v1", "exactFields" => ["name"]},
-      "view" => %{"name" => "view_v1", "exactFields" => ["name"]}
+      "view" => %{
+        "name" => "view_v1",
+        "exactFields" => ["name"],
+        "extendedExactFields" => ["name", "origins"]
+      }
     },
     "identity" => %{
       "credential" => "participant-access-token",
@@ -123,6 +127,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         "serverExactFields" => ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
       },
       "view" => %{
+        "originFields" => ["origin_participant_id", "origin_sequence"],
         "clientExactFields" => ["type", "x", "y", "width", "height", "bring"],
         "serverExactFields" => [
           "type",
@@ -385,7 +390,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 ]) and
           frame["extensions"] in [
             [%{"name" => "presentation_v1"}],
-            [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}]
+            [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],
+            [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
           ] ->
         {:ok, frame["extensions"]}
 
@@ -519,7 +525,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp decode_view(frame) do
-    if exact?(frame, [
+    if view_fields?(frame, [
   "type",
   "x",
   "y",
@@ -536,11 +542,25 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           width: frame["width"],
           height: frame["height"],
           bring: frame["bring"]
-        }}}
+        } |> Map.merge(view_origin(frame))}}
     else
       {:error, :invalid_payload}
     end
   end
+
+  defp view_fields?(frame, fields) do
+    exact?(frame, fields) or
+      (exact?(frame, fields ++ [
+  "origin_participant_id",
+  "origin_sequence"
+]) and
+         uuid?(frame["origin_participant_id"]) and is_integer(frame["origin_sequence"]) and
+         frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991)
+  end
+
+  defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
+    do: %{origin_participant_id: participant, origin_sequence: sequence}
+  defp view_origin(_frame), do: %{}
 
   defp view_rect?(frame) do
     finite_number?(frame["x"]) and finite_number?(frame["y"]) and
@@ -661,7 +681,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp valid_server_view?(frame) do
-    exact?(frame, [
+    view_fields?(frame, [
   "type",
   "participant_id",
   "display_name",
