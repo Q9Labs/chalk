@@ -63,6 +63,7 @@ export type ErrorCode =
   | "connection.media_start_failed"
   | "connection.sync_recovery_exhausted"
   | "connection.sync_start_failed"
+  | "connection.sync_hello_timeout"
   | "environment.unsupported"
   | "episode.ended"
   | "media.permission_denied"

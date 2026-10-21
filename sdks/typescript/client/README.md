@@ -175,6 +175,34 @@ Events are `participantJoined`, `participantLeft`, `episodeEnded`,
 stable codes such as `access.invalid`, `episode.ended`, and
 `chat.payload_invalid`.
 
+### Connection failures
+
+`join()` rejections, `connection.lastError`, and `client.on("error")` use the
+same public codes and preserve `recoverable`. Recoverable does not mean joined:
+a failed startup needs another `join()`, while interrupted live connections keep
+recovering in the background. Device warnings below do not fail entry.
+
+| Stage                                                                        | Public error code                     |
+| ---------------------------------------------------------------------------- | ------------------------------------- |
+| Rejected or invalid access grant                                             | `access.invalid`                      |
+| Access provider unavailable                                                  | `access.unavailable`                  |
+| Sync could not start                                                         | `connection.sync_start_failed`        |
+| Sync did not finish its hello/recovery handshake before the startup deadline | `connection.sync_hello_timeout`       |
+| SFU/ICE media startup                                                        | `connection.media_start_failed`       |
+| Sync recovery budget exhausted                                               | `connection.sync_recovery_exhausted`  |
+| Media recovery budget exhausted                                              | `connection.media_recovery_exhausted` |
+| Unsupported capture environment                                              | `environment.unsupported`             |
+| Unexpected, unclassified exception                                           | `client.internal_error`               |
+
+`connection.sync_hello_timeout` is an additive public code. Integrations that
+show guidance for `connection.sync_start_failed` should use the same fallback
+for this new timeout code. Keep a default branch for future codes. No existing
+code is renamed or removed; snapshots and error events now retain the
+stage instead of incorrectly reporting `client.internal_error`. Rejected access
+and unsupported-environment rejections also retain their nonrecoverable flag.
+The React failed screen shows safe stage guidance and a public code reference;
+it does not display provider responses or tokens.
+
 ### Join capture errors
 
 `join()` requests the microphone and camera by default. If both work, capture

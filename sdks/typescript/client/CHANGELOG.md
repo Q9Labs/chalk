@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Add `media.captureCameraPreview()` to capture an unpublished camera track with the selected device and refresh the inventory after permission is granted. It shares live or pending camera capture; callers release a preview handle.
+- Preserve access, Sync, SFU, and recovery failure codes and recoverability in join rejections, snapshots, and error events.
+- Add `connection.sync_hello_timeout` for the Sync startup handshake deadline. Handle it alongside `connection.sync_start_failed` and retain a fallback for future codes.
 
 ## 5.0.0
 

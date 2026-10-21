@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
 import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
@@ -14,6 +15,7 @@ const CONNECTION_ERROR_CODE_MAP = {
   device_constraint_invalid: "media.device_constraint_invalid",
   media_capture_failed: "media.capture_failed",
   sync_start_failed: "connection.sync_start_failed",
+  sync_hello_timeout: "connection.sync_hello_timeout",
   media_start_failed: "connection.media_start_failed",
   join_cleanup_unconfirmed: "connection.join_cleanup_unconfirmed",
   sync_recovery_exhausted: "connection.sync_recovery_exhausted",
@@ -40,9 +42,9 @@ const INVALID_PAYLOAD_CODE_BY_ACTION: ReadonlyMap<ConnectionError["action"], Err
 
 export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
-  if (isConnectionError(cause)) {
+  if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
     return new SpaceClientError({
-      code: connectionErrorCode(cause.code, cause.action),
+      code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
       recoverable: cause.recoverable,
       message: cause.message,
     });
@@ -70,7 +72,7 @@ function isConnectionError(cause: unknown): cause is ConnectionError {
   return cause instanceof Error && "code" in cause && "action" in cause && "recoverable" in cause;
 }
 
-function connectionErrorCode(code: ConnectionError["code"], action: ConnectionError["action"]): ErrorCode {
+export function connectionErrorCode(code: ConnectionError["code"], action: ConnectionError["action"]): ErrorCode {
   if (code === "invalid_payload") return INVALID_PAYLOAD_CODE_BY_ACTION.get(action) ?? "participant.invalid";
   return CONNECTION_ERROR_CODE_MAP[code];
 }

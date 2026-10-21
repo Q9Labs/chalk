@@ -97,6 +97,7 @@ export const CONNECTION_ERROR_CODES = [
   "device_constraint_invalid",
   "media_capture_failed",
   "sync_start_failed",
+  "sync_hello_timeout",
   "media_start_failed",
   "join_cleanup_unconfirmed",
   "sync_recovery_exhausted",
