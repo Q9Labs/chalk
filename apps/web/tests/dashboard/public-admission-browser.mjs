@@ -53,6 +53,9 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     guest.on("console", (message) => {
       if (message.type() === "error" && failures.length < 100) failures.push({ error: message.text() });
     });
+    guest.on("pageerror", (error) => {
+      if (failures.length < 100) failures.push({ error: error.message });
+    });
     try {
       await guest.goto(guestUrl);
       await guest.getByLabel("Your name").fill(name);
