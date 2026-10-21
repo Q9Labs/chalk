@@ -1,8 +1,9 @@
 import type { AccessGrant } from "./index";
-import type { ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
+import type { ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
 import type { SpaceClientPlatform } from "./core";
 export type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
 export type CoreTestPlatform = SpaceClientPlatform & {
+  readonly dependencies: Pick<ConnectionDependencies, "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient">;
   readonly media: {
     readonly getSnapshot: () => CoreTestMediaSnapshot;
     readonly emit: (snapshot: CoreTestMediaSnapshot) => void;
@@ -70,7 +71,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
   return {
     whiteboardUrl: null,
     dependencies: {
-      clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout, clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
+      clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
       mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [] },
       createMediaClient: () => media,
       createSyncClient: () => sync,

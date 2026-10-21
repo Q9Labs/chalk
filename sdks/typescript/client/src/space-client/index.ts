@@ -8,6 +8,7 @@ export type {
   ActiveReaction,
   AdmissionRequest,
   Capability,
+  CameraPreview,
   ChatAttachment,
   ChatController,
   ChatFilesController,

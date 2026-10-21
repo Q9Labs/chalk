@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Route private camera previews through the SDK so granting permission refreshes the camera menu. Standalone `DevicePopover` and `ControlBarSurface` consumers can supply `captureCameraPreview`.
+- Preview the chosen camera privately when the call camera is off; while it is active, preview the published call track rather than an unpublished device selection.
+- Keep keyboard-shortcut dialog content fixed while opening and closing. Report a problem remains unchanged and appears only when a host supplies `onReportProblem`.
+- Add optional `ChalkMenu.onOpenChange` for hosts that need to coordinate menu and dialog visibility.
+
 ## 5.0.0
 
 - Keep chat history available to observers and custom read-only roles; gate the composer, attachments, and message reactions on `sendChat`.

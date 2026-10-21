@@ -19,12 +19,14 @@ export const CALL_SHORTCUTS = [
 
 export function CallDialog({
   kind,
+  open,
   onClose,
   onReportProblem,
   diagnostics,
   returnFocus,
 }: {
-  readonly kind: "shortcuts" | "report" | null;
+  readonly kind: "shortcuts" | "report";
+  readonly open: boolean;
   readonly onClose: () => void;
   readonly onReportProblem?: SpaceHeaderProps["onReportProblem"];
   readonly diagnostics: string;
@@ -37,12 +39,12 @@ export function CallDialog({
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
   useEffect(() => {
-    if (kind === "report") {
+    if (open && kind === "report") {
       setText("");
       setError("");
       setStatus("idle");
     }
-  }, [kind]);
+  }, [kind, open]);
   return (
     <span
       ref={(element) => {
@@ -51,7 +53,7 @@ export function CallDialog({
       style={{ display: "contents" }}
     >
       <Dialog.Root
-        open={kind !== null}
+        open={open}
         onOpenChange={(open) => {
           if (!open) onClose();
         }}

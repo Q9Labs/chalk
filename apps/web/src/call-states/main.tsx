@@ -1,3 +1,4 @@
+import "./camera-enable-fixture";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import { installFakeDevices } from "./media";
@@ -10,9 +11,10 @@ declare global {
 }
 
 window.__CALL_STATES__ = CALL_STATES.map(({ render: _render, ...meta }) => meta);
-const id = new URLSearchParams(location.search).get("state");
+const params = new URLSearchParams(location.search);
+const id = params.get("state");
 const state = CALL_STATES.find((candidate) => candidate.id === id);
-installFakeDevices({ blocked: state?.cameraBlocked === true });
+if (!params.has("browserMedia")) installFakeDevices({ blocked: state?.cameraBlocked === true });
 
 const root = document.getElementById("root");
 if (!root) throw new Error("call-states.html has no #root element.");

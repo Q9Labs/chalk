@@ -255,6 +255,10 @@ export type ChatUploadFile =
       readonly mimeType: string;
       readonly bytes: ArrayBuffer;
     };
+export type CameraPreview = {
+  readonly track: MediaStreamTrack;
+  readonly release: () => void;
+};
 export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "dispose">>;
 export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url" | "resolveUrl">>;
 export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "resolveUrl" | "dispose">> & {

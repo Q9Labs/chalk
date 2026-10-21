@@ -3,11 +3,12 @@ import { useRef, type ReactElement, type ReactNode } from "react";
 import { cn } from "../../utils/cn";
 export interface ChalkMenuProps {
   readonly trigger: ReactElement;
+  readonly onOpenChange?: (open: boolean) => void;
   readonly children: ReactNode;
   readonly side?: "top" | "bottom";
   readonly className?: string;
 }
-export function ChalkMenu({ trigger, children, side = "bottom", className }: ChalkMenuProps) {
+export function ChalkMenu({ trigger, children, side = "bottom", className, onOpenChange }: ChalkMenuProps) {
   const container = useRef<HTMLElement>(null);
   return (
     <span
@@ -16,7 +17,7 @@ export function ChalkMenu({ trigger, children, side = "bottom", className }: Cha
       }}
       style={{ display: "contents" }}
     >
-      <Menu.Root>
+      <Menu.Root onOpenChange={onOpenChange}>
         <Menu.Trigger render={trigger} />
         <Menu.Portal container={container}>
           <Menu.Positioner side={side} align={side === "top" ? "center" : "end"} sideOffset={side === "top" ? 10 : 6} collisionPadding={8} className="chalk-menu-positioner">

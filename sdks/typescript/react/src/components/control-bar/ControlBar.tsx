@@ -84,6 +84,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           selectedDeviceId={props.selectedVideoInput}
           onDeviceChange={props.onVideoInputChange ?? (() => {})}
           track={props.cameraTrack}
+          captureCameraPreview={props.captureCameraPreview}
           warning={props.cameraWarning}
           mirrored={props.mirrored}
           onMirrorChange={props.onMirrorChange}

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add `media.captureCameraPreview()` to capture an unpublished camera track with the selected device and refresh the inventory after permission is granted. It shares live or pending camera capture; callers release a preview handle.
+
 ## 5.0.0
 
 - BREAKING: remove Episode diagnostics, client telemetry, feedback submission, RealtimeKit, public status, Tenant invitations, audit-log and Users API operations, and the regions catalog.

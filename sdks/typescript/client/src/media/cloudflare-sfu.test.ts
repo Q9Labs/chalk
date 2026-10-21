@@ -1,6 +1,54 @@
 import { describe, expect, it, vi } from "vitest";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+it("detaches a prepared camera without stopping a controller-owned preview", async () => {
+  const harness = createHarness();
+  const camera = new FakeTrack("camera", "video");
+  try {
+    harness.client.prepareLocalTrack("camera", camera as unknown as MediaStreamTrack);
+    await harness.client.clearPreparedLocalTrack("camera", { stopTrack: false });
+    expect(camera.stopCalls).toBe(0);
+    expect(camera.readyState).toBe("live");
+    expect(harness.client.getSnapshot().localTracks).toEqual([]);
+    harness.client.stop();
+    expect(camera.stopCalls).toBe(0);
+  } finally {
+    harness.client.stop();
+    camera.stop();
+  }
+});
+
+it("serializes concurrent camera clears before preparing a replacement", async () => {
+  const { harness, transceiver } = await startedCameraHarness();
+  const replacement = new FakeTrack("replacement", "video");
+  let finishDetach = () => {};
+  vi.spyOn(transceiver.sender, "replaceTrack").mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishDetach = resolve;
+      }),
+  );
+  const first = harness.client.clearPreparedLocalTrack("camera", { stopTrack: false });
+  const prepared = vi.fn();
+  const second = harness.client.clearPreparedLocalTrack("camera", { stopTrack: false }).then(() => {
+    harness.client.prepareLocalTrack("camera", fakeStream(replacement).getTracks()[0]!);
+    prepared();
+  });
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(prepared).not.toHaveBeenCalled();
+    finishDetach();
+    await Promise.all([first, second]);
+    expect(harness.client.getSnapshot().localTracks).toHaveLength(1);
+    expect(harness.client.getSnapshot().localTracks[0]?.track).toBe(replacement);
+  } finally {
+    finishDetach();
+    await Promise.allSettled([first, second]);
+    harness.client.stop();
+    replacement.stop();
+  }
+});
+
 async function expectStalledRequestRecovers(transport: CloudflareSFUSignalingTransport, timeoutMs: number, wasAborted: () => boolean): Promise<void> {
   const stalled = transport.listPublications();
   const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });
