@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
-import type { CallPageDTO, RecordingDTO } from "../../lib/dashboard/contracts";
+import type { CallPageDTO, RecordingDTO, CallMetadataQuery } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
@@ -9,6 +9,9 @@ import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
+
+const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
+const pendingRecording = (recording: RecordingDTO) => recording.transcriptionPending || ["pending", "processing"].includes(recording.status) || ["pending", "processing"].includes(recording.exportStatus);
 
 type Admission = CallPageDTO["call"]["admission"];
 type Session = CallPageDTO["episodes"][number];
@@ -18,7 +21,86 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 ];
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
-  const { state, reload, update } = useLoad(() => readPage("call", { spaceId }), `call:${spaceId}`);
+  const pages = useRef(1);
+  const metadata = useRef({ after: Date.now() + 10000, next: 0 });
+  const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
+  const { state, reload, update } = useLoad(
+    async () => {
+      let data = await readPage("call", { spaceId });
+      // Keep expanded history when a status change requires a page refresh.
+      for (let page = 1; page < pages.current && data.nextCursor; page++) {
+        const older = await readPage("call", { spaceId, cursor: data.nextCursor });
+        data = { ...data, episodes: [...data.episodes, ...older.episodes], nextCursor: older.nextCursor };
+      }
+      return data;
+    },
+    `call:${spaceId}`,
+    {
+      visibility: "status",
+      interval: (data) =>
+        lifecycleRefresh.current.pending ||
+        (!data.call.archived && data.call.admission === "knock") ||
+        data.live ||
+        data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => pendingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
+        data.knocks.length
+          ? data.knocks.length
+            ? 3000
+            : 5000
+          : undefined,
+      read: async (data) => {
+        const status = await readPage("call-status", { spaceId });
+        const episode = data.episodes.find((item) => item.status !== "ended");
+        const changed =
+          (status.episode?.status === "active" && data.live?.id !== status.episode.id) || (data.episodes[0]?.id ?? null) !== status.latestEpisodeId || (episode?.id ?? data.live?.id) !== status.episode?.id || (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status;
+        if (lifecycleRefresh.current.spaceId !== spaceId) lifecycleRefresh.current = { spaceId, after: 0, pending: false };
+        lifecycleRefresh.current.pending = changed;
+        if (changed && Date.now() >= lifecycleRefresh.current.after) {
+          // Charge failed attempts too. Recheck on later ticks so the final state is fetched.
+          lifecycleRefresh.current.after = Date.now() + 30000;
+          const fresh = await readPage("call", { spaceId });
+          // Refresh only the newest page (at most 40 engine reads), not expanded history.
+          // Older ended sessions remain snapshots until an explicit page refresh.
+          const older = pages.current > 1 ? data.episodes.filter((item) => item.status === "ended" && !fresh.episodes.some((current) => current.id === item.id)) : [];
+          lifecycleRefresh.current.pending = false;
+          return { ...fresh, episodes: [...fresh.episodes, ...older], nextCursor: pages.current > 1 ? data.nextCursor : fresh.nextCursor };
+        }
+        let next = { ...data, knocks: status.knocks };
+        // Share one metadata request per ten seconds; recording discovery uses two reads.
+        if (Date.now() < metadata.current.after) return next;
+        metadata.current.after = Date.now() + 10000;
+        const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
+        for (const session of data.episodes)
+          for (const recording of session.recordings) {
+            if (pendingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
+            for (const transcript of recording.transcripts ?? []) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
+          }
+        if (!targets.length) return next;
+        const target = targets[metadata.current.next++ % targets.length];
+        if (!target) return next;
+        if (target.kind === "live") {
+          const roster = await readPage("home-status", { spaceIds: spaceId });
+          const current = roster.live[0]?.episode ?? null;
+          if (current?.id !== data.live?.id) return next;
+          return { ...next, live: current };
+        }
+        const result = await readPage("call-metadata", target);
+        next = {
+          ...next,
+          episodes: next.episodes.map((session) => ({
+            ...session,
+            recordings: session.recordings.map((recording) =>
+              result.kind === "recording" && recording.id === result.recording.id
+                ? { ...recording, ...result.recording }
+                : result.kind === "transcript"
+                  ? { ...recording, transcripts: recording.transcripts?.map((transcript) => (transcript.id === result.transcript.id ? result.transcript : transcript)) }
+                  : recording,
+            ),
+          })),
+        };
+        return next;
+      },
+    },
+  );
   const [renaming, setRenaming] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
@@ -71,7 +153,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       const intent = `${allow ? "approve" : "deny"}:${handle}`;
       await act("call", { action: allow ? "approve-knock" : "deny-knock", spaceId, requestHandle: handle, idempotencyKey: intents.key(intent) });
       intents.done(intent);
-      update((data) => ({ ...data, knocks: data.knocks.filter((knock) => knock.handle !== handle) }));
+      update((data) => ({ ...data, knocks: data.knocks.filter((knock) => knock.handle !== handle) }), { refresh: false });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     }
@@ -181,7 +263,17 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
               <SessionRow key={episode.id} spaceId={spaceId} episode={episode} />
             ))}
           </div>
-          {nextCursor ? <MoreButton label="Show older sessions" cursor={nextCursor} load={(cursor) => readPage("call", { spaceId, cursor })} onLoaded={(page) => update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }))} /> : null}
+          {nextCursor ? (
+            <MoreButton
+              label="Show older sessions"
+              cursor={nextCursor}
+              load={(cursor) => readPage("call", { spaceId, cursor })}
+              onLoaded={(page) => {
+                pages.current++;
+                update((data) => ({ ...data, episodes: [...data.episodes, ...page.episodes], nextCursor: page.nextCursor }), { refresh: false });
+              }}
+            />
+          ) : null}
         </>
       )}
       {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
@@ -205,8 +297,8 @@ function kept(recordings: readonly RecordingDTO[]): Kept {
   const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
   if (!recording) return { recording: false, transcript: "none" };
   const transcripts = recording.transcripts ?? [];
-  if (transcripts.some((item) => item.status === "completed")) return { recording: true, transcript: "ready" };
-  if (transcripts.some((item) => item.status !== "failed" && item.status !== "deleted")) return { recording: true, transcript: "processing" };
+  if (transcripts.some((item) => item.status === "completed" || item.status === "complete")) return { recording: true, transcript: "ready" };
+  if (transcripts.some((item) => PENDING_TRANSCRIPTS.has(item.status))) return { recording: true, transcript: "processing" };
   return { recording: true, transcript: "none" };
 }
 

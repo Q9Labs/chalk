@@ -12,7 +12,11 @@ fi
 mkdir -p artifacts
 export CHALK_API_ENV=local
 # The suite drives one service principal far past the per-account production budget.
-export CHALK_API_RATE_LIMITS=off
+if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
+  export CHALK_API_RATE_LIMITS=on
+else
+  export CHALK_API_RATE_LIMITS="${CHALK_API_RATE_LIMITS:-off}"
+fi
 export CHALK_API_ADDR=127.0.0.1:18080
 export CHALK_API_LOCAL_SYSTEM_TOKEN=fixture-local-system-not-a-secret
 export CHALK_API_SERVICE_ID=dashboard-runtime-proof
@@ -52,6 +56,9 @@ export AWS_SECRET_ACCESS_KEY=fixture-aws-not-a-secret
 export AWS_EC2_METADATA_DISABLED=true
 export AWS_ENDPOINT_URL=http://127.0.0.1:18081
 export GOFLAGS=-buildvcs=false
+if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
+  pnpm exec turbo run build --filter=web...
+fi
 (cd apps/api && go build -o ../../artifacts/dashboard-api ./cmd)
 final_pid=""
 api_pid=""

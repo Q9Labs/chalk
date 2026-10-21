@@ -7,6 +7,21 @@ const idempotencyKey = z.uuid();
 const admission = z.enum(["anyone", "knock"]);
 export const pageQuery = z.strictObject({ cursor: z.string().max(1024).optional() });
 export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(1024).optional() });
+export const callStatusQuery = z.strictObject({ spaceId: id });
+export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
+export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
+export const homeStatusQuery = z.strictObject({
+  spaceIds: z
+    .string()
+    .transform((value) => value.split(","))
+    .pipe(z.array(id).min(1).max(30)),
+});
+export const homeMetadataQuery = z.strictObject({
+  spaceIds: z
+    .string()
+    .transform((value) => value.split(","))
+    .pipe(z.array(id).min(1).max(5)),
+});
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 export const homeAction = z.discriminatedUnion("action", [
@@ -98,7 +113,7 @@ export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
 export type CallDTO = { id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
 export type LiveDTO = { spaceId: string; episode: null | { id: string; count: number; participants: { id: string; name: string }[] } };
 export type EpisodeDTO = { id: string; status: "active" | "ending" | "ended"; startedAt: string; endedAt: string | null };
-export type RecordingDTO = { id: string; status: string; exportStatus: string; createdAt: string; transcripts?: TranscriptDTO[]; transcriptsNextCursor?: string | null };
+export type RecordingDTO = { id: string; status: string; exportStatus: string; transcriptionPending: boolean; createdAt: string; transcripts?: TranscriptDTO[]; transcriptsNextCursor?: string | null };
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
@@ -123,3 +138,9 @@ export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; h
 export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };
 
 export type OwnerAccessDTO = { access: AccessGrant };
+
+export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
+export type HomeStatusDTO = { live: LiveDTO[] };
+export type HomeMetadataDTO = { calls: Pick<HomeCallDTO, "id" | "lastActiveAt" | "recentPeople">[] };
+
+export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO & Required<Pick<RecordingDTO, "transcripts" | "transcriptsNextCursor">> } | { kind: "transcript"; transcript: TranscriptDTO };

@@ -3,28 +3,15 @@ import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, live, run } from "./engine";
 import { callDTO } from "./dto";
-import type { HomeAction, HomeDTO } from "../src/lib/dashboard/contracts";
+import type { HomeAction, HomeDTO, HomeMetadataDTO } from "../src/lib/dashboard/contracts";
 export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO> {
   const result = await run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, cursor, archived: false } }));
   return {
     calls: await Promise.all(
       result.spaces.map(async (space) => {
-        const params = { tenant_id: engine.tenantId, space_id: space.id };
-        const [invite, episodes] = await Promise.all([run(engine.api.spaces.getSpacePublicInvite({ params })), run(engine.api.episodes.listEpisodes({ params, query: { page_size: 1 } }))]);
-        const latest = episodes.episodes[0];
-        const people = latest ? await attendance(engine, { ...params, episode_id: latest.id }) : null;
-        return {
-          ...callDTO(space),
-          inviteUrl: invite.canonical_url,
-          lastActiveAt: latest ? (latest.ended_at ?? latest.started_at) : null,
-          recentPeople: people
-            ? people.participants
-                .slice()
-                .sort((a, b) => b.firstJoinedAt.localeCompare(a.firstJoinedAt))
-                .slice(0, 5)
-                .map(({ id, name }) => ({ id, name }))
-            : [],
-        };
+        const metadata = await homeCallMetadata(engine, space.id);
+        // Fetch invite links only on share/join, not for every Home row.
+        return { ...callDTO(space), inviteUrl: null, ...metadata };
       }),
     ),
     live: await live(
@@ -32,6 +19,27 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
       result.spaces.map((s) => s.id),
     ),
     nextCursor: result.pagination.next_cursor,
+  };
+}
+// At most two tenant reads per Space. The route accepts at most five Spaces.
+export async function homeMetadata(engine: Engine, spaceIds: readonly string[]): Promise<HomeMetadataDTO> {
+  return { calls: await Promise.all(spaceIds.map((id) => homeCallMetadata(engine, id))) };
+}
+async function homeCallMetadata(engine: Engine, id: string): Promise<HomeMetadataDTO["calls"][number]> {
+  const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(id) };
+  const episodes = await run(engine.api.episodes.listEpisodes({ params, query: { page_size: 1 } }));
+  const latest = episodes.episodes[0];
+  const people = latest ? await attendance(engine, { ...params, episode_id: latest.id }) : null;
+  return {
+    id,
+    lastActiveAt: latest ? (latest.ended_at ?? latest.started_at) : null,
+    recentPeople: people
+      ? people.participants
+          .slice()
+          .sort((a, b) => b.firstJoinedAt.localeCompare(a.firstJoinedAt))
+          .slice(0, 5)
+          .map(({ id, name }) => ({ id, name }))
+      : [],
   };
 }
 export async function homeMutation(engine: Engine, action: HomeAction) {

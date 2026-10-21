@@ -158,7 +158,7 @@ async function readBody(request) {
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 
 const callDTO = ({ lastActiveAt: _last, recentPeople: _people, ...call }) => call;
-const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: inviteURL(call), lastActiveAt: call.lastActiveAt ?? null, recentPeople: call.recentPeople ?? [] });
+const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: null, lastActiveAt: call.lastActiveAt ?? null, recentPeople: call.recentPeople ?? [] });
 const episodeDTO = ({ people: _people, kept: _kept, ...episode }) => episode;
 const inviteURL = (call) => `https://chalkmeet.com/space/${call.slug}#invite=fx${call.id.slice(-6)}`;
 const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
@@ -170,8 +170,9 @@ const recordingsFor = (episode, withTranscripts) =>
           id: uuid(0x800),
           status: episode.kept === "processing" ? "processing" : "completed",
           exportStatus: "not_requested",
+          transcriptionPending: state.transcriptionPending ?? false,
           createdAt: episode.startedAt,
-          ...(withTranscripts ? { transcripts: [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : "completed", languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
+          ...(withTranscripts ? { transcripts: state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
         },
       ];
 
@@ -218,6 +219,23 @@ async function dashboard(request, response, page, url, entry) {
     if (state.limit.has(page)) return fail(response, 429, "engine_rate_limited", { retryable: true, retryAfterSeconds: 60 });
     if (state.fail.has(page)) return fail(response, 503, "service_unavailable");
     const query = Object.fromEntries(url.searchParams);
+    if (page === "home-metadata") {
+      return send(response, 200, { calls: query.spaceIds.split(",").map((id) => ({ ...homeCallDTO(data.calls.find((call) => call.id === id)), id })) });
+    }
+    if (page === "home-status") {
+      const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
+      const live = query.spaceIds.split(",").map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));
+      return send(response, 200, { live });
+    }
+    if (page === "call-metadata") {
+      const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));
+      if (query.kind === "recording") return send(response, 200, { kind: "recording", recording: recordings.find((item) => item.id === query.id && item.status === "processing") ?? recordings.find((item) => item.id === query.id) });
+      return send(response, 200, { kind: "transcript", transcript: recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id && item.status === "processing") ?? recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id) });
+    }
+    if (page === "call-status") {
+      const episode = data.live ? { id: uuid(0x2ff), status: "active" } : data.sessions.find((item) => item.status !== "ended");
+      return send(response, 200, { latestEpisodeId: data.live ? uuid(0x2ff) : (data.sessions[0]?.id ?? null), episode: episode ? { id: episode.id, status: episode.status } : null, knocks: data.knocks ?? [] });
+    }
     if (page === "home") {
       const calls = data.calls.filter((call) => !call.archived);
       const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
@@ -233,7 +251,7 @@ async function dashboard(request, response, page, url, entry) {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
       if (isLive && !query.cursor) episodes.unshift({ id: uuid(0x2ff), status: "active", startedAt: at(0, 10, 2), endedAt: null, participantCount: participants.length, recordings: [], recordingsNextCursor: null });
       const live = isLive ? { id: uuid(0x2ff), count: participants.length, participants } : null;
-      return send(response, 200, { call: callDTO(call), inviteUrl: inviteURL(call), episodes, live, nextCursor: start + 7 < own.length ? String(start + 7) : null, knocks: [] });
+      return send(response, 200, { call: callDTO(call), inviteUrl: inviteURL(call), episodes, live, nextCursor: start + 7 < own.length ? String(start + 7) : null, knocks: data.knocks ?? [] });
     }
     if (page === "past-session") {
       const episode = data.sessions.find((item) => item.id === query.episodeId);
@@ -276,6 +294,10 @@ async function dashboard(request, response, page, url, entry) {
     case "set-admission":
       call.admission = action.admission;
       return send(response, 200, { call: callDTO(call) });
+    case "approve-knock":
+    case "deny-knock":
+      data.knocks = data.knocks.filter((knock) => knock.handle !== action.requestHandle);
+      return send(response, 200, { ok: true });
     case "archive-call":
     case "restore-call":
       call.archived = action.action === "archive-call";
@@ -286,7 +308,7 @@ async function dashboard(request, response, page, url, entry) {
     case "recording-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/video.mp4`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
     case "export-recording":
-      return send(response, 200, { recording: { id: action.recordingId, status: "completed", exportStatus: "processing", createdAt: new Date().toISOString() } });
+      return send(response, 200, { recording: { id: action.recordingId, status: "completed", exportStatus: "processing", transcriptionPending: false, createdAt: new Date().toISOString() } });
     case "transcripts":
       return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()), nextCursor: null });
     case "create-transcript":
@@ -394,9 +416,30 @@ const server = createServer(async (request, response) => {
           } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
+          else if (key === "freshLive") {
+            accounts.hasan.live = true;
+            accounts.hasan.sessions = [];
+          } else if (key === "ending") {
+            accounts.hasan.live = false;
+            accounts.hasan.sessions = [{ id: uuid(0x2ff), status: "ending", startedAt: at(0, 10, 2), endedAt: null, people: ["Nora Patel"], kept: "none" }];
+          } else if (key === "end") {
+            accounts.hasan.live = false;
+            accounts.hasan.sessions = accounts.hasan.sessions.filter((episode) => episode.id !== uuid(0x2ff));
+            accounts.hasan.sessions.unshift({ id: uuid(0x2ff), status: "ended", startedAt: at(0, 10, 2), endedAt: at(0, 10, 9), people: ["Nora Patel"], kept: "recording" });
+          } else if (key === "knocks") accounts.hasan.knocks = value === "1" ? [{ handle: "sample-knock", name: "Sample guest", state: "pending", requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() }] : [];
           else if (key === "liveParticipants") {
             if (!["0", "1", "3"].includes(value)) return fail(response, 400, "invalid_participant_count");
             state.liveParticipantCount = Number(value);
+          } else if (key === "metadataDiscovery") {
+            accounts.hasan.live = false;
+            accounts.hasan.calls[0].admission = "anyone";
+            accounts.hasan.sessions = [{ ...accounts.hasan.sessions[0], kept: "done" }];
+            state.hideTranscripts = value === "pending";
+            state.transcriptionPending = value === "pending";
+            state.finishedTranscript = "complete";
+          } else if (key === "metadataComplete") {
+            for (const session of accounts.hasan.sessions) if (session.kept === "processing") session.kept = "done";
+            state.finishedTranscript = value;
           } else if (key === "transcript") state.transcript = value;
           else if (key === "signInError") state.signInError = value === "1";
         }

@@ -600,9 +600,12 @@ func (r Runtime) deriveGuestCredential(token Token, requestKey string) ([]byte, 
 	return mac.Sum(nil), nil
 }
 
-func (r Runtime) GetInvite(ctx context.Context, tenantID, spaceID utilities.ID) (ManagedInvite, error) {
+func (r Runtime) GetInvite(ctx context.Context, tenantID, spaceID utilities.ID, beforeCreate func() error) (ManagedInvite, error) {
 	invite, err := r.service.GetInvite(ctx, tenantID, spaceID)
 	if errors.Is(err, ErrInviteNotFound) {
+		if err := beforeCreate(); err != nil {
+			return ManagedInvite{}, err
+		}
 		invite, err = r.ensureInviteForSpace(ctx, tenantID, spaceID)
 	}
 	if err != nil {
@@ -1067,7 +1070,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	return PublicSpaceArrival{}, ErrInviteUnavailable
 }
 
-func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalStatusInput) (PublicSpaceArrival, error) {
+func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalStatusInput, beforeInvalidate func() error) (PublicSpaceArrival, error) {
 	arrival, err := r.authenticateArrival(ctx, input.ArrivalHandle, input.GuestCredential, input.AccountID)
 	if err != nil {
 		return PublicSpaceArrival{}, err
@@ -1085,6 +1088,9 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 			return PublicSpaceArrival{}, validationErr
 		}
 		if !valid {
+			if err := beforeInvalidate(); err != nil {
+				return PublicSpaceArrival{}, err
+			}
 			arrival, validationErr = r.invalidatePendingArrival(ctx, arrival)
 			if validationErr != nil {
 				return PublicSpaceArrival{}, validationErr
@@ -1125,8 +1131,8 @@ func (r Runtime) invalidatePendingArrival(ctx context.Context, arrival Arrival) 
 	return updated, nil
 }
 
-func (r Runtime) Status(ctx context.Context, input PublicInviteArrivalStatusInput) (PublicSpaceArrival, error) {
-	return r.ArrivalStatus(ctx, input)
+func (r Runtime) Status(ctx context.Context, input PublicInviteArrivalStatusInput, beforeInvalidate func() error) (PublicSpaceArrival, error) {
+	return r.ArrivalStatus(ctx, input, beforeInvalidate)
 }
 
 func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInput) (PublicAccessGrant, error) {

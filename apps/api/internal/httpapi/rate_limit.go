@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"math"
 	"net"
 	"net/http"
@@ -64,63 +65,80 @@ func DefaultRateLimitOptions() RateLimitOptions {
 	}
 }
 
+type writeBudgetContextKey struct{}
+
+func chargeWriteBudget(ctx context.Context) error {
+	charge, ok := ctx.Value(writeBudgetContextKey{}).(func() error)
+	if !ok {
+		return nil
+	}
+	return charge()
+}
+
 func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := checkRateLimit(options, policy, w, r); err != nil {
+				writeAPIError(w, apiErrorRateLimited)
+				return
+			}
+			ctx := context.WithValue(r.Context(), writeBudgetContextKey{}, func() error {
+				return checkRateLimit(options, authenticatedWriteRateLimit, w, r)
+			})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.ResponseWriter, r *http.Request) error {
 	if options.DisableAuthenticated && (policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
 		policy.Limit = 0
 	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if options.Limiter == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalSystem {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			now := time.Now
-			if options.Now != nil {
-				now = options.Now
-			}
-
-			key := rateLimitKey(r, options.ClientIP)
-			principal, _ := authentication.PrincipalFromContext(r.Context())
-			_, participant := accessgrants.SubjectFromContext(r.Context())
-			tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
-			if !participant && principal.Kind == authentication.PrincipalService && err == nil &&
-				(policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
-				ceiling := policy
-				ceiling.Name += ".service_ceiling"
-				ceiling.Limit = options.ServiceReadCeiling
-				if ceiling.Limit <= 0 {
-					ceiling.Limit = serviceReadCeiling
-				}
-				if policy.Name == ratelimit.PolicyNameAuthenticatedWrite {
-					ceiling.Limit = options.ServiceWriteCeiling
-					if ceiling.Limit <= 0 {
-						ceiling.Limit = serviceWriteCeiling
-					}
-				}
-				if policy.Limit > 0 {
-					decision := options.Limiter.Allow(r.Context(), key, ceiling, now())
-					if !decision.Allowed {
-						writeRateLimitHeaders(w, ceiling, decision)
-						writeRateLimited(w, decision)
-						return
-					}
-				}
-				key += ":tenant:" + tenantID.String()
-			}
-			decision := options.Limiter.Allow(r.Context(), key, policy, now())
-			writeRateLimitHeaders(w, policy, decision)
-			if !decision.Allowed {
-				writeRateLimited(w, decision)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
+	if options.Limiter == nil {
+		return nil
 	}
+	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalSystem {
+		return nil
+	}
+
+	now := time.Now
+	if options.Now != nil {
+		now = options.Now
+	}
+
+	key := rateLimitKey(r, options.ClientIP)
+	principal, _ := authentication.PrincipalFromContext(r.Context())
+	_, participant := accessgrants.SubjectFromContext(r.Context())
+	tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+	if !participant && principal.Kind == authentication.PrincipalService && err == nil &&
+		(policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
+		ceiling := policy
+		ceiling.Name += ".service_ceiling"
+		ceiling.Limit = options.ServiceReadCeiling
+		if ceiling.Limit <= 0 {
+			ceiling.Limit = serviceReadCeiling
+		}
+		if policy.Name == ratelimit.PolicyNameAuthenticatedWrite {
+			ceiling.Limit = options.ServiceWriteCeiling
+			if ceiling.Limit <= 0 {
+				ceiling.Limit = serviceWriteCeiling
+			}
+		}
+		if policy.Limit > 0 {
+			decision := options.Limiter.Allow(r.Context(), key, ceiling, now())
+			if !decision.Allowed {
+				writeRateLimitHeaders(w, ceiling, decision)
+				return rateLimitFailure(w, decision)
+			}
+		}
+		key += ":tenant:" + tenantID.String()
+	}
+	decision := options.Limiter.Allow(r.Context(), key, policy, now())
+	writeRateLimitHeaders(w, policy, decision)
+	if !decision.Allowed {
+		return rateLimitFailure(w, decision)
+	}
+	return nil
 }
 
 func writeRateLimitHeaders(w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) {
@@ -219,12 +237,12 @@ func remoteIP(remoteAddr string) string {
 	return remoteAddr
 }
 
-func writeRateLimited(w http.ResponseWriter, decision ratelimit.Decision) {
+func rateLimitFailure(w http.ResponseWriter, decision ratelimit.Decision) error {
 	retryAfter := int(math.Ceil(decision.RetryAfter.Seconds()))
 	if retryAfter < 1 {
 		retryAfter = 1
 	}
 
 	w.Header().Set(ratelimit.HeaderRetryAfter, strconv.Itoa(retryAfter))
-	writeAPIError(w, apiErrorRateLimited)
+	return apiErrorRateLimited
 }

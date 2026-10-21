@@ -1,4 +1,29 @@
-import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageDTO, CueDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, HomeAction, HomeDTO, OwnerAccessDTO, PastSessionAction, PastSessionDTO, RecordingDTO, SecretDTO, SessionDTO, TranscriptDTO, WebhookDTO } from "./contracts";
+import type {
+  AllowedWebsitesDTO,
+  ArtifactURLDTO,
+  CallAction,
+  CallDTO,
+  CallPageDTO,
+  CallStatusDTO,
+  CallMetadataDTO,
+  CallMetadataQuery,
+  HomeStatusDTO,
+  HomeMetadataDTO,
+  CueDTO,
+  DeliveryDTO,
+  DeveloperAction,
+  DeveloperDTO,
+  HomeAction,
+  HomeDTO,
+  OwnerAccessDTO,
+  PastSessionAction,
+  PastSessionDTO,
+  RecordingDTO,
+  SecretDTO,
+  SessionDTO,
+  TranscriptDTO,
+  WebhookDTO,
+} from "./contracts";
 
 // The browser half of the dashboard. It holds only the session-bound CSRF token, never a secret:
 // the sealed session and every engine credential stay in HttpOnly cookies and the Pages Functions.
@@ -6,6 +31,10 @@ import type { AllowedWebsitesDTO, ArtifactURLDTO, CallAction, CallDTO, CallPageD
 export type Provider = "google" | "apple";
 
 type Pages = {
+  "call-metadata": { query: CallMetadataQuery; data: CallMetadataDTO; action: never };
+  "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
+  "home-metadata": { query: { spaceIds: string }; data: HomeMetadataDTO; action: never };
+  "home-status": { query: { spaceIds: string }; data: HomeStatusDTO; action: never };
   home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
   call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
@@ -52,7 +81,7 @@ type Results = {
 };
 
 /** A failed dashboard request, with the server's error code. */
-class DashboardRequestError extends Error {
+export class DashboardRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
@@ -129,8 +158,11 @@ async function readJSON(response: Response): Promise<unknown> {
 function toError(response: Response, body: unknown): DashboardRequestError {
   const code = errorCode(body) ?? (response.status >= 500 ? "service_unavailable" : "request_failed");
   const retryAfter = body && typeof body === "object" && "error" in body && body.error && typeof body.error === "object" && "retryAfterSeconds" in body.error && typeof body.error.retryAfterSeconds === "number" ? body.error.retryAfterSeconds : undefined;
-  const header = Number(response.headers.get("Retry-After"));
-  return new DashboardRequestError(response.status, code, retryAfter ?? (Number.isFinite(header) && header > 0 ? header : undefined));
+  const header = response.headers.get("Retry-After");
+  const seconds = header === null ? NaN : Number(header);
+  const date = header === null ? NaN : Date.parse(header);
+  const headerDelay = Number.isFinite(seconds) && seconds >= 0 ? seconds : Number.isFinite(date) ? Math.max(0, (date - Date.now()) / 1000) : undefined;
+  return new DashboardRequestError(response.status, code, headerDelay ?? (retryAfter !== undefined && Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter : undefined));
 }
 
 function errorCode(body: unknown): string | undefined {

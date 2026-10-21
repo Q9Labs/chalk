@@ -173,6 +173,7 @@ from space_public_admission_requests
 where tenant_id = sqlc.arg(tenant_id)
   and space_id = sqlc.arg(space_id)
   and (not sqlc.arg(state_set)::boolean or state = sqlc.arg(state)::text)
+  and (not sqlc.arg(state_set)::boolean or state <> 'pending' or expires_at > now())
 order by requested_at, request_handle
 limit sqlc.arg(page_size)::integer;
 

@@ -47,7 +47,7 @@ const (
 )
 
 type PublicInviteService interface {
-	GetInvite(context.Context, utilities.ID, utilities.ID) (publicinvites.ManagedInvite, error)
+	GetInvite(context.Context, utilities.ID, utilities.ID, func() error) (publicinvites.ManagedInvite, error)
 	UpdateInvite(context.Context, publicinvites.UpdateSpacePublicInviteInput) (publicinvites.ManagedInvite, error)
 	RotateInvite(context.Context, publicinvites.RotateSpacePublicInviteInput) (publicinvites.ManagedInvite, error)
 	ListAdmissionRequests(context.Context, publicinvites.ListPublicAdmissionRequestsInput) (publicinvites.AdmissionRequestPage, error)
@@ -55,7 +55,7 @@ type PublicInviteService interface {
 	DenyAdmissionRequest(context.Context, publicinvites.DecidePublicAdmissionRequestInput) (publicinvites.AdmissionRequest, error)
 	CreatePublicSpace(context.Context, publicinvites.CreatePublicSpaceInput) (publicinvites.PublicSpaceCreated, error)
 	Arrive(context.Context, publicinvites.PublicInviteArrivalInput) (publicinvites.PublicSpaceArrival, error)
-	Status(context.Context, publicinvites.PublicInviteArrivalStatusInput) (publicinvites.PublicSpaceArrival, error)
+	Status(context.Context, publicinvites.PublicInviteArrivalStatusInput, func() error) (publicinvites.PublicSpaceArrival, error)
 	RefreshAccess(context.Context, publicinvites.PublicInviteRefreshInput) (publicinvites.PublicAccessGrant, error)
 	Leave(context.Context, publicinvites.PublicInviteLeaveInput) error
 }
@@ -237,12 +237,12 @@ func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer Tenant
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
 			return publicInviteResponse{}, err
 		}
-		invite, err := service.GetInvite(ctx, request.TenantID, request.SpaceID)
+		invite, err := service.GetInvite(ctx, request.TenantID, request.SpaceID, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicInviteResponse{}, err
 		}
 		return newPublicInviteResponse(invite), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).UserAuth().RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "SpacePublicInvite", publicInviteResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.get"))
 }
@@ -312,7 +312,7 @@ func listPublicAdmissionRequestsEndpoint(service PublicInviteService, authorizer
 			return publicAdmissionRequestPageResponse{}, err
 		}
 		return newPublicAdmissionRequestPageResponse(page), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).UserAuth().RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), APIParameterContract{Name: "state", In: "query", Type: "string", Required: false, Enum: []string{"pending"}}).
 		Responds(http.StatusOK, "PublicAdmissionRequestPage", publicAdmissionRequestPageResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.admission_list"))
@@ -408,12 +408,12 @@ func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[pub
 		if service == nil {
 			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
 		}
-		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native})
+		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native}, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
-	}).RateLimit(authenticatedWriteRateLimit).
+	}).RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.status"))
 }

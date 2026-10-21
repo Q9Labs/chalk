@@ -10,7 +10,7 @@ const results = [];
 const errors = [];
 const check = (name, ok, detail = "") => results.push(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `: ${detail}` : ""}`);
 
-async function open(route, { account = "hasan", set = "", signedOut = false, theme = "dark", width = 1440 } = {}) {
+async function open(route, { account = "hasan", set = "", signedOut = false, theme = "dark", width = 1440, clock = false } = {}) {
   await fixture("reset");
   await fixture(`set?account=${account}${set ? `&${set}` : ""}`);
   const context = await browser.newContext({ viewport: { width, height: 900 } });
@@ -18,6 +18,10 @@ async function open(route, { account = "hasan", set = "", signedOut = false, the
   if (!signedOut) cookies.push({ name: "fx_session", value: account, url: origin });
   await context.addCookies(cookies);
   const tab = await context.newPage();
+  if (clock) {
+    await tab.clock.install();
+    await tab.clock.pauseAt(new Date(Date.now() + 1000));
+  }
   tab.on("console", (message) => message.type() === "error" && errors.push(`${route}: ${message.text()}`));
   tab.on("pageerror", (error) => errors.push(`${route}: ${error.message}`));
   await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });
@@ -49,6 +53,18 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
+  {
+    const { tab, context } = await open("/dashboard");
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const reads = () => fixture("log").then((log) => log.filter((entry) => entry.method === "GET" && entry.path === "/dashboard-api/call"));
+    check("Home loads without fetching any invite links", (await reads()).length === 0);
+    await tab.getByRole("button", { name: "Copy link", exact: true }).first().click();
+    await tab.getByRole("button", { name: "Copied", exact: true }).waitFor();
+    const link = await tab.evaluate(() => navigator.clipboard.readText());
+    check("Home fetches one invite on demand and copies it", (await reads()).length === 1 && link.startsWith("https://chalkmeet.com/space/"));
+    await context.close();
+  }
   for (const value of ["0", "1000", "-1", "1.5", "NaN", "Infinity", "", "1001", "2000000000"]) {
     const response = await fetch(`${origin}/__fixture/set?delay=${encodeURIComponent(value)}`);
     await response.arrayBuffer();
