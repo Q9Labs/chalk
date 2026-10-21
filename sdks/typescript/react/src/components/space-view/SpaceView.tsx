@@ -241,8 +241,8 @@ export function SpaceView({
             diagnostics: callDiagnostics(connection, media),
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",
-              onToggleMute: () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled")),
-              onToggleVideo: () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled")),
+              onToggleMute: connection.status === "live" || media.local.microphone.state === "enabled" ? () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled")) : undefined,
+              onToggleVideo: connection.status === "live" || media.local.camera.state === "enabled" ? () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled")) : undefined,
               onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
               onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
@@ -295,7 +295,7 @@ export function SpaceView({
           stageOverlay={
             <>
               {feature("reactions") ? <ReactionsOverlay /> : null}
-              {feature("reactions") && canSendReaction ? (
+              {feature("reactions") && canSendReaction && connection.status === "live" ? (
                 <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
                   <ReactionPicker
                     isHandRaised={self.handRaised}

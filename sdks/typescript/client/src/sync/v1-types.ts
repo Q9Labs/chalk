@@ -97,6 +97,7 @@ export type V1EpisodeSnapshot = {
     readonly phase: V1ConnectionPhase;
     readonly terminalReason?: string;
     readonly noticeUnresponsive?: boolean;
+    readonly health?: import("./v1-health").SyncHealth;
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;

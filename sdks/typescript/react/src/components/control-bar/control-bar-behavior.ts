@@ -4,7 +4,7 @@ import type React from "react";
 import { commandFailure } from "./command-failure";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
-import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MediaDevice {
@@ -42,6 +42,8 @@ export interface ControlBarSurfaceProps {
   knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
+  mediaEnableDisabled?: boolean;
+  reactionsDisabled?: boolean;
   cameraPending?: boolean;
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
@@ -239,6 +241,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCan("drawWhiteboard");
   const canManageRecording = useCan("manageRecording");
+  const live = useConnection().status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";
   const cameraEnabled = media.local.camera.state === "enabled";
   const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
@@ -311,6 +314,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
+    mediaEnableDisabled: !live,
+    reactionsDisabled: !live,
     cameraPending: media.local.camera.state === "requesting",
     isVideoEnabled: cameraEnabled,
     isScreenSharing: screenSharing,

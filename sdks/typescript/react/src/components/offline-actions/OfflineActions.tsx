@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { useConnection, useOffline, useSpaceClient } from "../../bindings/hooks";
 import { ToastStack } from "../toast-stack/ToastStack";
-import { CallLimbo } from "../call-limbo/CallLimbo";
 /** Most drops recover within a second or two, so the notice waits this long before it appears. */
 export const RECONNECTING_GRACE_MS = 2_000;
 
@@ -28,8 +27,13 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false }: 
   const count = offline.pending.length;
   const messagesOnly = offline.pending.every((action) => action.kind === "chat_message");
   const pendingDetail = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"} will send when you’re back` : undefined;
-  // Keep the layer mounted so recovery lifts the blur rather than removing it abruptly.
-  if (reconnecting || (!offline.decisionNeeded && !offline.notice)) return <CallLimbo overlay blocking={false} active={reconnectingNoticeDue} message={offlineNoticeText(0, online)} detail={pendingDetail} />;
+  const notice = reconnecting ? (reconnectingNoticeDue ? `${offlineNoticeText(0, online)}${pendingDetail ? ` ${pendingDetail}` : ""}` : null) : connection.syncHealth === "degraded" ? "Connection is slow" : null;
+  if (notice)
+    return (
+      <div role="status" data-part="connection-notice" className="pointer-events-none absolute inset-x-4 top-16 z-50 mx-auto w-fit max-w-[calc(100%_-_2rem)] rounded-full bg-[var(--chalk-surface)] px-3 py-1 text-center text-sm text-[var(--chalk-text)]">
+        {notice}
+      </div>
+    );
   if (offline.notice && offline.notice !== dismissedNotice) return <ToastStack toasts={[{ id: "offline-notice", message: offline.notice }]} onDismiss={() => setDismissedNotice(offline.notice ?? null)} />;
   return null;
 }

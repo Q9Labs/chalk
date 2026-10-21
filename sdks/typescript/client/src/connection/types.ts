@@ -185,6 +185,7 @@ export type ConnectionSnapshot = {
   readonly episode: { readonly id: string; readonly startedAt: string | null; readonly deadline: string | null } | null;
   readonly connection: {
     readonly sync: ConnectionConnectionPhase;
+    readonly syncHealth?: import("../sync/v1-health").SyncHealth;
     readonly media: ConnectionConnectionPhase;
   };
   readonly admissionPolicy: ChalkAdmissionPolicy | null;

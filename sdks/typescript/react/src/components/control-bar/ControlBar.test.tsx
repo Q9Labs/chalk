@@ -4,9 +4,14 @@ import { SpaceClientError } from "@q9labsai/chalk-client";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
-import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
+import { createPreviewClient, createSnapshot as createIdleSnapshot } from "../../test-support/preview-client";
 import { ControlBar } from "./ControlBar";
 import { useConnectedControlBarBehavior } from "./control-bar-behavior";
+
+function createSnapshot(...args: Parameters<typeof createIdleSnapshot>) {
+  const snapshot = createIdleSnapshot(...args);
+  return { ...snapshot, connection: { ...snapshot.connection, status: "live" as const } };
+}
 
 describe("compact screen sharing", () => {
   it("starts and stops screen sharing", async () => {
@@ -119,4 +124,36 @@ it("requests a replacement without first disabling an active screen share", asyn
     client.dispose();
     container.remove();
   }
+});
+
+describe("Sync availability", () => {
+  it("disables media enable and reactions during recovery, preserves mute and chat, and restores on live", async () => {
+    const snapshot = createSnapshot(["publishAudio", "publishVideo", "publishScreen", "sendReaction"]);
+    const client = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting" } });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    try {
+      await act(async () =>
+        root.render(
+          <ChalkProvider client={client}>
+            <ControlBar onToggleChat={() => {}} onOpenReactions={() => {}} />
+          </ChalkProvider>,
+        ),
+      );
+      expect(button("Unmute microphone")?.disabled).toBe(true);
+      expect(button("Turn on camera")?.disabled).toBe(true);
+      expect(button("Share screen")?.disabled).toBe(true);
+      expect(button("Reactions")?.disabled).toBe(true);
+      expect(button("Chat")?.disabled).toBe(false);
+      await act(async () => client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, microphone: { ...current.media.local.microphone, state: "enabled" } } } })));
+      expect(button("Mute microphone")?.disabled).toBe(false);
+      await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "live", syncHealth: "degraded" } })));
+      expect(button("Turn on camera")?.disabled).toBe(false);
+      expect(button("Reactions")?.disabled).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+      client.dispose();
+    }
+  });
 });

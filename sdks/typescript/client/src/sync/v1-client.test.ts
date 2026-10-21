@@ -180,17 +180,61 @@ describe("V1SyncClient", () => {
     lifecycle?.("inactive");
     expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
   });
+  it("keeps one-in-four pong loss non-blocking and clears degradation only after stable pongs", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    try {
+      for (let tick = 1; tick <= 16; tick++) {
+        clock.advance(500);
+        if (tick % 4 === 0) {
+          socket.receive({ type: "pong" });
+          await settle();
+        }
+        expect(client.getSnapshot().connection.noticeUnresponsive).toBe(false);
+      }
+      expect(client.getSnapshot().connection).toMatchObject({ health: "degraded" });
+      for (let tick = 0; tick < 5; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy" });
+    } finally {
+      client.stop();
+    }
+  });
+  it("requires sustained silence to recover and stable pongs to return healthy", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    try {
+      clock.advance(750);
+      expect(client.getSnapshot().connection).toMatchObject({ health: "degraded", noticeUnresponsive: false });
+      clock.advance(3250);
+      expect(client.getSnapshot().connection).toMatchObject({ health: "recovering", noticeUnresponsive: true });
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(client.getSnapshot().connection.noticeUnresponsive).toBe(true);
+      for (let tick = 0; tick < 4; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy", noticeUnresponsive: false });
+    } finally {
+      client.stop();
+    }
+  });
   it("signals a silent live socket for presentation without restarting it or changing its phase", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });
-    clock.advance(750);
+    clock.advance(4000);
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     expect(socket.closeCalls).toEqual([]);
     clock.advance(250);
-    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(2);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(8);
     socket.receive({ type: "pong" });
     await settle();
-    expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     client.stop();
   });
   it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
@@ -1128,6 +1172,40 @@ describe("V1SyncClient", () => {
   });
 });
 describe("V1SyncClient collaboration_v1", () => {
+  it("bounds dropped reaction acknowledgements despite healthy pongs, and never replays", async () => {
+    const clock = new TestClock();
+    const { client, socket, recover } = await liveCollaborationClient({ clock, reconnectDelayMs: 0 });
+    let outcome = "pending";
+    try {
+      void client.sendReaction("🎉").then(
+        () => {
+          outcome = "accepted";
+        },
+        (error: unknown) => {
+          outcome = error instanceof V1SyncError ? error.code : "unexpected";
+        },
+      );
+      for (let tick = 0; tick < 10; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      expect(outcome).toBe("reaction_ack_timeout");
+      expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1);
+      socket.close(1006, "cut");
+      clock.advance(0);
+      await settle();
+      clock.advance(0);
+      await settle();
+      socket.open();
+      await settle();
+      await recover();
+      expect(client.getSnapshot().connection.phase).toBe("live");
+      expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveCollaborationClient();
     expect(socket.frames()[0]).toMatchObject({
@@ -1457,47 +1535,50 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   await client.start();
   socket.open();
   await settle();
-  socket.receive({
-    type: "welcome",
-    protocol: 1,
-    participant_id: ownerId,
-    participant_generation: 1,
-    recovery_id: recoveryId,
-    head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
-    mode: "snapshot",
-    snapshot,
-    extensions: [
-      {
-        name: "collaboration_v1",
-        capabilities: ["sendReaction", "sendChat"],
-        participant_capabilities: {
-          [ownerId]: ["sendReaction", "sendChat"],
-          [peerId]: ["sendReaction"],
-        },
-        chat_head_sequence: "8",
-        retained_floor_sequence: "2",
-        read_receipts: [
-          {
-            participant_id: peerId,
-            participant_generation: 1,
-            sequence: "7",
-            read_at: "2026-07-29T12:00:00.000Z",
+  const recover = async () => {
+    socket.receive({
+      type: "welcome",
+      protocol: 1,
+      participant_id: ownerId,
+      participant_generation: 1,
+      recovery_id: recoveryId,
+      head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
+      mode: "snapshot",
+      snapshot,
+      extensions: [
+        {
+          name: "collaboration_v1",
+          capabilities: ["sendReaction", "sendChat"],
+          participant_capabilities: {
+            [ownerId]: ["sendReaction", "sendChat"],
+            [peerId]: ["sendReaction"],
           },
-        ],
-      },
-    ],
-  });
-  socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
-  socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
-  socket.receive({
-    type: "recovery_complete",
-    recovery_id: recoveryId,
-    head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
-  });
-  for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
+          chat_head_sequence: "8",
+          retained_floor_sequence: "2",
+          read_receipts: [
+            {
+              participant_id: peerId,
+              participant_generation: 1,
+              sequence: "7",
+              read_at: "2026-07-29T12:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+    socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
+    socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
+    socket.receive({
+      type: "recovery_complete",
+      recovery_id: recoveryId,
+      head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
+    });
+    for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
+    expect(client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, media: { sequence: 0 }, presence: { sequence: 0 } });
+  };
+  await recover();
   expect(socket.closeCalls).toEqual([]);
-  expect(client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, media: { sequence: 0 }, presence: { sequence: 0 } });
-  return { client, socket, state };
+  return { client, socket, state, recover };
 }
 async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date"): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;

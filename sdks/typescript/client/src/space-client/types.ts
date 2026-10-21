@@ -89,6 +89,8 @@ export type EpisodeSummary = {
 };
 export type ConnectionSlice = {
   readonly status: ConnectionStatus;
+  /** Pong health; degradation keeps the public status live and controls usable. */
+  readonly syncHealth?: import("../sync/v1-health").SyncHealth;
   readonly episode: EpisodeSummary | null;
   readonly lastError: ClientFailure | null;
   /** The Episode ended while this person was in it. */

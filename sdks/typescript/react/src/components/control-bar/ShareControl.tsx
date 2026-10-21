@@ -27,7 +27,7 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   );
 }
 
-export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing: boolean; readonly onToggle?: () => void; readonly onStart?: (options: ScreenShareOptions) => void }) {
+export function ShareControl({ sharing, onToggle, onStart, disabled = false }: { readonly disabled?: boolean; readonly sharing: boolean; readonly onToggle?: () => void; readonly onStart?: (options: ScreenShareOptions) => void }) {
   const [surface, setSurface] = useState<ScreenShareSurface>("window");
   const [audio, setAudio] = useState(true);
   const [replace, setReplace] = useState(false);
@@ -40,7 +40,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
     <div data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing}>
       <ChalkTooltip
         trigger={
-          <button type="button" className="chalk-shell-main" aria-label={sharing ? "Stop sharing" : "Share screen"} aria-pressed={sharing} onClick={() => (sharing || !onStart ? onToggle?.() : start(surface))}>
+          <button type="button" className="chalk-shell-main" disabled={disabled} aria-label={sharing ? "Stop sharing" : "Share screen"} aria-pressed={sharing} onClick={() => (sharing || !onStart ? onToggle?.() : start(surface))}>
             <ShellIcon name={sharing ? "shareOff" : "share"} />
           </button>
         }
@@ -51,7 +51,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
         side="top"
         className="chalk-device-menu"
         trigger={
-          <button type="button" className="chalk-shell-caret" aria-label="Share options">
+          <button type="button" className="chalk-shell-caret" disabled={disabled} aria-label="Share options">
             <ShellIcon name="down" />
           </button>
         }
