@@ -270,8 +270,8 @@ func TestPublicAdmissionObservabilityE2E(t *testing.T) {
 	if err := json.Unmarshal(terminal, &decisions); err != nil {
 		t.Fatal(err)
 	}
-	if len(decisions) != 3 {
-		t.Fatalf("missing approve/deny/expire ledger evidence: %d", len(decisions))
+	if len(decisions) != 4 {
+		t.Fatalf("missing approve/deny/expire/hostless-dashboard ledger evidence: %d", len(decisions))
 	}
 	sink.Lock()
 	evidence := append([]admissionSignal(nil), sink.signals...)

@@ -96,7 +96,8 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   }
   async function proveDashboardWithoutHost() {
     await page.getByRole("button", { name: "Leave call", exact: true }).click();
-    await page.getByRole("heading", { name: /You left/ }).waitFor();
+    await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+    await page.waitForURL(`${origin}/dashboard/call/${spaceId}`);
     const activeSeats = `select count(*) from participants p join episodes e on e.tenant_id=p.tenant_id and e.id=p.episode_id where e.tenant_id='${tenantId}' and e.space_id='${spaceId}' and p.status='active'`;
     await waitForSql(activeSeats, "0");
     await page.goto(`${origin}/dashboard/call/${spaceId}`);
