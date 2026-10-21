@@ -1,4 +1,4 @@
-import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { ChalkWhiteboardViewBounds, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
 
 /** design.md, "The board": every colour, size and key the board's own controls use. */
 export type BoardSurface = "chalkboard" | "paper" | "dots";
@@ -121,7 +121,13 @@ export type Viewport = { readonly width: number; readonly height: number };
 
 /** The part of the board this camera shows, in board coordinates. */
 export function visibleView(camera: Camera, viewport: Viewport): Omit<ChalkWhiteboardView, "bring"> {
-  return { x: -camera.scrollX, y: -camera.scrollY, width: viewport.width / camera.zoom, height: viewport.height / camera.zoom };
+  const { maxCoordinate, maxExtent } = ChalkWhiteboardViewBounds;
+  return {
+    x: Math.max(-maxCoordinate, Math.min(maxCoordinate, -camera.scrollX)),
+    y: Math.max(-maxCoordinate, Math.min(maxCoordinate, -camera.scrollY)),
+    width: Math.min(maxExtent, viewport.width / camera.zoom),
+    height: Math.min(maxExtent, viewport.height / camera.zoom),
+  };
 }
 
 /** The camera that fits someone else's view into this viewport, centred. */

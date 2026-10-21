@@ -13,6 +13,18 @@ const NAME_HOLD_MS = 700;
 const MOVING_PX_PER_SECOND = 25;
 const HOVER_PX = 26;
 
+/** Pruning belongs to receipt too: grid boards do not mount the cursor layer. */
+export function rememberCursor(cursors: Map<string, RemoteCursor>, cursor: RemoteCursor): void {
+  const now = Date.now();
+  for (const [id, previous] of cursors) if (now - Date.parse(previous.occurredAt) > STALE_MS) cursors.delete(id);
+  cursors.delete(cursor.participantId);
+  if (now - Date.parse(cursor.occurredAt) <= STALE_MS) cursors.set(cursor.participantId, cursor);
+  if (cursors.size > 256) {
+    const oldest = cursors.keys().next().value;
+    if (oldest !== undefined) cursors.delete(oldest);
+  }
+}
+
 /**
  * Remote people's cursors over the board: a rounded arrow, the Facehash and the name, in the person's colour.
  * Updates arrive about 15 times a second and unevenly, so each shown cursor is a spring chasing the newest one.

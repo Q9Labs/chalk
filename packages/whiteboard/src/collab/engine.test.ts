@@ -122,14 +122,14 @@ it("paints canonical Ink in the viewer's surface ink and sends it back canonical
   }
 });
 
-async function createReconciliationFixture(options: { readonly inkColor?: string } = {}) {
+async function createReconciliationFixture(options: { readonly inkColor?: string; readonly canDraw?: boolean; readonly canManage?: boolean } = {}) {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
   const { ExcalidrawCollabEngine } = await import("./engine");
   const { toWireElement } = await import("./wire");
   vi.useFakeTimers();
   const api = createCanvas(restoreElements, restoreAppState);
   const submitUpdate = vi.fn(async (input: { sceneId: string }) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }));
-  const engine = new ExcalidrawCollabEngine({ ...options, excalidrawAPI: api, canDraw: true, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: vi.fn(), subscribe: () => () => undefined });
+  const engine = new ExcalidrawCollabEngine({ canDraw: true, ...options, excalidrawAPI: api, submitUpdate, sendCursor: vi.fn(), requestSnapshot: async () => undefined, clear: async () => ({ operationId: "clear", sceneId: "cleared", revision: "3" }), subscribe: () => () => undefined });
   return { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement };
 }
 
@@ -771,6 +771,28 @@ it("clears engine history only after a local shared clear commits", async () => 
     await expect(engine.clear()).rejects.toThrow("clear failed");
     expect(api.history.clear).not.toHaveBeenCalled();
     await engine.clear();
+    expect(api.history.clear).toHaveBeenCalledOnce();
+  } finally {
+    engine.dispose();
+  }
+});
+
+it.each([false, true])("uses explicit management authority %s independently of drawing", async (canManage) => {
+  const { engine } = await createReconciliationFixture({ canDraw: !canManage, canManage });
+  try {
+    if (canManage) await expect(engine.clear()).resolves.toEqual(expect.objectContaining({ sceneId: "cleared" }));
+    else await expect(engine.clear()).rejects.toThrow("management");
+  } finally {
+    engine.dispose();
+  }
+});
+
+it("retires surface-coloured undo and redo history when ink changes", async () => {
+  const { api, engine } = await createReconciliationFixture({ inkColor: "#f1f0ea" });
+  try {
+    engine.setInkColor("#1b1c1f");
+    expect(api.history.clear).toHaveBeenCalledOnce();
+    engine.setInkColor("#1b1c1f");
     expect(api.history.clear).toHaveBeenCalledOnce();
   } finally {
     engine.dispose();

@@ -74,6 +74,8 @@ export type WhiteboardCollaborationEvent =
 export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOptions {
   excalidrawAPI: ExcalidrawImperativeAPI;
   canDraw: boolean;
+  /** Explicit management authority; omitted hosts keep the original draw-based behavior. */
+  canManage?: boolean;
   submitUpdate: (payload: { sceneId: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }) => Promise<WhiteboardCommit>;
   sendCursor: (payload: { x: number; y: number }) => void;
   requestSnapshot: () => Promise<void>;
@@ -91,6 +93,7 @@ export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
   private sceneGeneration: string | null = null;
   private canDraw = true;
+  private canManage: boolean | undefined;
   private inkColor: string;
   private storedImageFileIds = new Set<string>();
 
@@ -113,6 +116,7 @@ export class ExcalidrawCollabEngine {
 
   constructor(private readonly opts: ExcalidrawCollabEngineOptions) {
     this.canDraw = opts.canDraw;
+    this.canManage = opts.canManage;
     this.inkColor = opts.inkColor ?? CANONICAL_INK;
 
     this.filesSync = new WhiteboardFilesSync({
@@ -139,6 +143,10 @@ export class ExcalidrawCollabEngine {
     this.canDraw = next;
   }
 
+  setCanManage(next: boolean | undefined): void {
+    this.canManage = next;
+  }
+
   /** Repaints Ink for a new surface without a new version, so nothing is sent. */
   setInkColor(next: string): void {
     const previous = this.inkColor;
@@ -146,10 +154,12 @@ export class ExcalidrawCollabEngine {
     this.inkColor = next;
     const api = this.opts.excalidrawAPI;
     api.updateScene({ elements: api.getSceneElementsIncludingDeleted().map((element) => withInk(element, previous, next)), captureUpdate: CaptureUpdateAction.NEVER });
+    // Native history stores the rendered colour; it must not restore ink from the old surface.
+    api.history.clear();
   }
 
   async clear(): Promise<WhiteboardCommit> {
-    if (!this.canDraw) throw new Error("whiteboard drawing is not permitted");
+    if (!(this.canManage ?? this.canDraw)) throw new Error("whiteboard management is not permitted");
     const commit = await this.opts.clear();
     this.storedImageFileIds.clear();
     this.sceneId = commit.sceneId;

@@ -296,7 +296,7 @@ function useWhiteboardCollaboration(options: {
   const handleApiReady = useExcalidrawApiReady(apiRef, initializeEngine, options.onExcalidrawApiReady);
   const handlers = useExcalidrawSceneHandlers(apiRef, refs.engineRef, options.onSelectedLatexChange);
 
-  useCollaborationCanDraw(refs.engineRef, options.canDraw);
+  useCollaborationPermissions(refs.engineRef, options.canDraw, options.collab?.canManage);
   useCollaborationInk(refs.engineRef, options.inkColor);
   useCollaborationDisposal(refs.engineRef, refs.isMountedRef);
   useCollaborationInitialization(options.collab, apiRef, refs.engineRef, initializeEngine);
@@ -332,6 +332,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRe
         refs.engineRef.current = new ExcalidrawCollabEngine({
           excalidrawAPI: api,
           canDraw: refs.canDrawRef.current,
+          canManage: collab.canManage,
           renderCursors: !headless,
           ...(refs.inkColorRef.current ? { inkColor: refs.inkColorRef.current } : {}),
           submitUpdate: collab.submitUpdate,
@@ -410,10 +411,11 @@ function selectedMathLatex(api: ExcalidrawImperativeAPI | null): string | null {
   return math ? math.latex : null;
 }
 
-function useCollaborationCanDraw(engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, canDraw: boolean) {
+function useCollaborationPermissions(engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, canDraw: boolean, canManage: boolean | undefined) {
   useEffect(() => {
     engineRef.current?.setCanDraw(canDraw);
-  }, [canDraw, engineRef]);
+    engineRef.current?.setCanManage(canManage);
+  }, [canDraw, canManage, engineRef]);
 }
 
 function useCollaborationInk(engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, inkColor: string | undefined) {

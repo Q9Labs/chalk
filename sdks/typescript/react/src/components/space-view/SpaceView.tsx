@@ -204,7 +204,14 @@ export function SpaceView({
       : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);
-  const showBoardToast = useCallback((toast: BoardToast) => {
+  useEffect(() => {
+    if (!whiteboard?.isOpen) setBoardToasts([]);
+  }, [whiteboard?.isOpen]);
+  const showBoardToast = useCallback((toast: BoardToast | null) => {
+    if (!toast) {
+      setBoardToasts([]);
+      return;
+    }
     boardToastCount.current += 1;
     const id = `board-${boardToastCount.current}`;
     setBoardToasts((current) => [...current.slice(-2), { ...toast, id }]);
@@ -312,7 +319,7 @@ export function SpaceView({
           }
           toasts={
             <ToastStack
-              toasts={[...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...boardToasts, ...commandToasts]}
+              toasts={[...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...(whiteboard?.isOpen ? boardToasts : []), ...commandToasts]}
               onDismiss={(id) => {
                 if (id === "space-command-error") dismissCommandError();
                 else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));

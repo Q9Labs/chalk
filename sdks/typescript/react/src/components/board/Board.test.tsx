@@ -4,12 +4,13 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
-import { Board } from "./Board";
+import { Board, type BoardProps } from "./Board";
+import * as CursorModule from "./BoardCursors";
 import { SpaceStage } from "../stage/SpaceStage";
 import * as BoardMenuModule from "./BoardMenu";
 import { BoardToastContext } from "./board-toasts";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import type { Capability, ChalkWhiteboardView } from "@q9labsai/chalk-client";
 
 type TestEngine = {
   pan: (x: number, y: number) => void;
@@ -95,7 +96,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
         notify();
       },
       setActiveTool: () => undefined,
-      scrollToContent: () => undefined,
+      scrollToContent: () => api.updateScene({ appState: { scrollX: 2_000_000, scrollY: -2_000_000 } }),
       onScrollChange: (listener: (x: number, y: number, zoom: { value: number }) => void) => {
         scrolls.add(listener);
         return () => {
@@ -191,6 +192,9 @@ function createPeer() {
   return {
     board: { collab },
     clear,
+    cursor: (participantId: string, occurredAt = new Date().toISOString()) => {
+      for (const listener of listeners) listener({ type: "cursor", participantId, displayName: participantId, x: 0, y: 0, occurredAt });
+    },
     receive: (participantId: string, view: ChalkWhiteboardView) => {
       for (const listener of listeners) listener({ type: "view", participantId, ...view });
     },
@@ -612,27 +616,35 @@ it.each(["load", "error"])("keeps Opening board while the engine is initialized 
   }
 });
 
-async function withOpenBoard(check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>) => Promise<void>, primary = true) {
-  const client = createPreviewClient(createSnapshot(["drawWhiteboard", "manageWhiteboard"]));
+async function withOpenBoard(
+  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible">>) => Promise<void>) => Promise<void>,
+  primary = true,
+  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean } = {},
+) {
+  const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
   const peer = createPeer();
+  const board = { ...peer.board, collab: { ...peer.board.collab, canDraw: options.canDraw ?? true } };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   const toast = vi.fn();
-  try {
+  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible">> = {}) => {
     await act(async () =>
       root.render(
         <ChalkProvider client={client}>
           <BoardToastContext value={toast}>
-            <Board board={peer.board} primary={primary} visible colorScheme="dark" people={[]} following="remote" onFollow={() => undefined} sendView={() => true} />
+            <Board board={board} primary={primary} visible colorScheme="dark" people={[]} following="remote" onFollow={() => undefined} sendView={options.sendView ?? (() => true)} {...props} />
           </BoardToastContext>
         </ChalkProvider>,
       ),
     );
+  };
+  try {
+    await render();
     await finishOpening(container);
     const engine = loadedEngines()[0];
     if (!engine) throw new Error("Missing board engine");
-    await check(container, engine, peer, toast);
+    await check(container, engine, peer, toast, render);
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -711,17 +723,22 @@ it.each([1, 2])("does not place notes for pointer button %s", async (button) => 
   });
 });
 
-it("reports a shared clear failure instead of claiming that the board cleared", async () => {
+function observeBoardMenu() {
+  const menu: { clear?: () => void } = {};
   const original = BoardMenuModule.BoardMenu;
-  let clearAction: (() => void) | undefined;
   vi.spyOn(BoardMenuModule, "BoardMenu").mockImplementation((props) => {
-    clearAction = props.onClear;
+    menu.clear = props.onClear;
     return original(props);
   });
+  return menu;
+}
+
+it("reports a shared clear failure instead of claiming that the board cleared", async () => {
+  const menu = observeBoardMenu();
   await withOpenBoard(async (_container, _engine, peer, toast) => {
     peer.clear.mockRejectedValueOnce(new Error("stale scene"));
-    expect(clearAction).toBeTypeOf("function");
-    await act(async () => clearAction?.());
+    expect(menu.clear).toBeTypeOf("function");
+    await act(async () => menu.clear?.());
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ type: "error", message: "Could not clear the board. Try again." }));
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
   });
@@ -788,21 +805,120 @@ it("keeps overflowed people followable when the host supplies a Participants pan
 });
 
 it("clears engine Undo and Redo after clear, and records only the guarded restore", async () => {
-  const original = BoardMenuModule.BoardMenu;
-  let clearAction: (() => void) | undefined;
-  vi.spyOn(BoardMenuModule, "BoardMenu").mockImplementation((props) => {
-    clearAction = props.onClear;
-    return original(props);
-  });
+  const menu = observeBoardMenu();
   await withOpenBoard(async (container, engine, _peer, toast) => {
     await act(async () => engine.draw());
     await clickControl(container, "Undo");
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(false);
-    await act(async () => clearAction?.());
+    await act(async () => menu.clear?.());
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(true);
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(true);
-    const cleared = toast.mock.calls.find(([value]) => value.message === "Board cleared")?.[0];
+    const cleared = toast.mock.calls.find(([value]) => value?.message === "Board cleared")?.[0];
     await act(async () => cleared?.action?.onClick());
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(false);
+  });
+});
+
+it("sends bounded views after remote pans and fitting distant content", async () => {
+  vi.useFakeTimers();
+  const send = vi.fn((view: ChalkWhiteboardView) => {
+    if (Math.abs(view.x) > 1_000_000 || Math.abs(view.y) > 1_000_000) throw new Error("invalid view frame");
+    return true;
+  });
+  await withOpenBoard(
+    async (container, engine) => {
+      for (const coordinate of [-2_000_000, 2_000_000]) {
+        await act(async () => {
+          engine.pan(coordinate, -coordinate);
+          await vi.advanceTimersByTimeAsync(200);
+        });
+        expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ x: -Math.sign(coordinate) * 1_000_000, y: Math.sign(coordinate) * 1_000_000 }));
+      }
+      await clickControl(container, "Fit to content");
+      await act(async () => vi.advanceTimersByTimeAsync(200));
+      expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ x: -1_000_000, y: 1_000_000 }));
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it("drops and reports a rejected scheduled view instead of throwing", async () => {
+  vi.useFakeTimers();
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (_container, engine) => {
+      send.mockImplementationOnce(() => {
+        throw new Error("invalid view frame");
+      });
+      await act(async () => {
+        engine.pan(100, 100);
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(warning).toHaveBeenCalledWith("Board view dropped.", expect.objectContaining({ operation: "sendView" }));
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it.each(["capacity", "expiry"])("prunes the cursor cache by %s without a mounted cursor layer", async (kind) => {
+  vi.useFakeTimers();
+  const layer = vi.spyOn(CursorModule, "BoardCursors").mockImplementation(() => null);
+  await withOpenBoard(async (_container, _engine, peer, _toast, render) => {
+    await act(async () => {
+      if (kind === "capacity") for (let index = 0; index < 300; index++) peer.cursor(String(index));
+      else {
+        peer.cursor("expired");
+        await vi.advanceTimersByTimeAsync(11_000);
+        peer.cursor("fresh");
+      }
+    });
+    expect(layer).not.toHaveBeenCalled();
+    await render({ primary: true });
+    const cache = layer.mock.lastCall?.[0].cursorsRef.current;
+    expect(cache?.size).toBe(kind === "capacity" ? 256 : 1);
+    expect(cache?.has(kind === "capacity" ? "0" : "expired")).toBe(false);
+  }, false);
+});
+
+it("allows a manage-only custom role to clear without drawing", async () => {
+  const menu = observeBoardMenu();
+  await withOpenBoard(
+    async (_container, _engine, peer, toast) => {
+      expect(menu.clear).toBeTypeOf("function");
+      await act(async () => menu.clear?.());
+      expect(peer.clear).toHaveBeenCalledOnce();
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
+    },
+    true,
+    { capabilities: ["manageWhiteboard"], canDraw: false },
+  );
+});
+
+it("drops board action toasts when the board closes", async () => {
+  await withOpenBoard(async (_container, _engine, _peer, toast, render) => {
+    toast.mockClear();
+    await render({ visible: false });
+    expect(toast).toHaveBeenCalledWith(null);
+  });
+});
+
+it("ignores a clear completion after the board lifetime ends", async () => {
+  const menu = observeBoardMenu();
+  await withOpenBoard(async (_container, _engine, peer, toast, render) => {
+    let resolve: ((commit: { sceneId: string; revision: string }) => void) | undefined;
+    peer.clear.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    await act(async () => menu.clear?.());
+    await render({ visible: false });
+    toast.mockClear();
+    await act(async () => resolve?.({ sceneId: "cleared", revision: "2" }));
+    expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
   });
 });

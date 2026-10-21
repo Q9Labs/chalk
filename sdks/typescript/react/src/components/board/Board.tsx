@@ -34,7 +34,7 @@ import {
   type ShapeTool,
   type Viewport,
 } from "./board-model";
-import { BoardCursors, type RemoteCursor } from "./BoardCursors";
+import { BoardCursors, rememberCursor, type RemoteCursor } from "./BoardCursors";
 import { BoardIcon } from "./BoardIcon";
 import { BoardIsland } from "./BoardIsland";
 import { BoardMenu } from "./BoardMenu";
@@ -249,13 +249,13 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
  */
 export function Board({ board, primary, visible, colorScheme, people, following, onFollow, sendView, onClose }: BoardProps) {
   const root = useRef<HTMLDivElement | null>(null);
-  const toast = useBoardToast();
   const isHost = useCan("manageWhiteboard");
   const connection = useConnection();
   const boardSession = useWhiteboard().engine;
   const offline = connection.status === "reconnecting";
   const phone = useMediaQuery("(max-width: 640px)");
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
+  const toast = useBoardToast(engine, visible);
   const [surface, setSurface] = useState<BoardSurface>(() => readStored(SURFACE_KEY, SURFACES, "chalkboard"));
   const [place, setPlace] = useState<IslandPlace>(() => readStored(ISLAND_KEY, ISLAND_PLACES, "bottom"));
   const [tool, setTool] = useState<BoardTool>("pen");
@@ -318,7 +318,12 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       last = performance.now();
       const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring };
       const outgoing: ChalkWhiteboardView = followedView?.originParticipantId ? { ...rectangle, originParticipantId: followedView.originParticipantId, originSequence: followedView.originSequence, ...(followedView.originEpoch ? { originEpoch: followedView.originEpoch } : {}) } : rectangle;
-      return viewSender.current?.(outgoing) ?? false;
+      try {
+        return viewSender.current?.(outgoing) ?? false;
+      } catch (error) {
+        console.warn("Board view dropped.", { operation: "sendView", error });
+        return false;
+      }
     };
     shareView.current = (bring) => {
       if (bring) return send(true);
@@ -382,7 +387,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   useEffect(() => {
     if (!subscribe || !visible) return;
     return subscribe((event) => {
-      if (event.type === "cursor") cursors.current.set(event.participantId, { participantId: event.participantId, displayName: event.displayName, x: event.x, y: event.y, occurredAt: event.occurredAt });
+      if (event.type === "cursor") rememberCursor(cursors.current, event);
       else if (event.type === "view") latestView.current(event);
     });
   }, [visible, subscribe]);
@@ -543,7 +548,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   return (
     <div ref={root} className="chalk-board" data-surface={surface} data-theme={colorScheme} data-ready={ready || undefined} data-compact={compact || undefined} data-primary={primary || undefined} data-elements={elementCount} style={surfaceVars} hidden={!visible}>
       <BoardStyles />
-      <WhiteboardCanvas {...board} headless canDraw={canDraw} collab={board.collab ? { ...board.collab, canDraw } : undefined} inkColor={ink} theme="light" isVisible={visible} className="chalk-board-engine" onEngineReady={setEngine} />
+      <WhiteboardCanvas {...board} headless canDraw={canDraw} collab={board.collab ? { ...board.collab, canDraw, canManage: isHost } : undefined} inkColor={ink} theme="light" isVisible={visible} className="chalk-board-engine" onEngineReady={setEngine} />
       {!ready ? (
         <div className="chalk-board-loading" role="status">
           <span className="chalk-board-spinner" aria-hidden="true" />
@@ -587,7 +592,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
               onDownload={() => void download()}
               onCopy={() => void copy()}
               onBring={isHost && sendView ? bring : undefined}
-              onClear={isHost && canDraw ? () => void clear() : undefined}
+              onClear={isHost ? () => void clear() : undefined}
               onClose={onClose}
             />
           </div>
