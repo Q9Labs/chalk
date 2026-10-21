@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import type { ProfileDTO } from "../../lib/dashboard/contracts";
 import { DashboardRequestError, errorMessage, loadSession, needsSignIn, signOut } from "../../lib/dashboard/client";
+import { PrivacyNotice } from "./PrivacyNotice";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { Lockup } from "../site/Lockup";
@@ -146,7 +147,10 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
       <TopBar profile={profile} />
       <main className="main">
         {profile ? (
-          children
+          <>
+            <PrivacyNotice />
+            {children}
+          </>
         ) : failure ? (
           <div className="wrap">
             <ErrorPanel title="Couldn’t open your dashboard" detail={errorMessage(failure)} onRetry={retry} />

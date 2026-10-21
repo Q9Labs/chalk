@@ -1,7 +1,9 @@
 import { Fragment } from "react";
+import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
+import { PRIVACY_EFFECTIVE_DATE_LABEL, usePrivacyUpdatePending } from "./privacy-update";
 import { Logo } from "@q9labsai/chalk-react";
 
-type LegalPageKind = "privacy" | "terms";
+type LegalPageKind = "privacy" | "privacy-previous" | "terms";
 
 type LegalSection = {
   heading: string;
@@ -21,7 +23,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "Retention and deletion",
     content:
-      "Account records remain stored until deleted. Chat messages, read receipts, whiteboard scenes and changes, and their attached files are scheduled for cleanup seven days after an Episode ends. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data in active systems within 30 days. Backup copies may remain longer; tenant-deletion archives are retained for at least 14 days.",
+      "Account records remain stored until deleted. Space, Episode, and participant records (including participant ID, display name, role, and join and leave times) are kept while the host's Chalk account (tenant) exists and are deleted from active systems when that tenant is purged. This includes web and mobile guests, even after they leave an Episode; the seven-day collaboration cleanup does not delete these records. Chat messages, read receipts, whiteboard scenes and changes, and their attached files are scheduled for cleanup seven days after an Episode ends. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data in active systems within 30 days. Backup copies may remain longer; tenant-deletion archives are retained for at least 14 days.",
   },
   {
     heading: "Your rights",
@@ -30,7 +32,8 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   },
   {
     heading: "International transfers",
-    content: "Our providers operate globally, so your data can be processed outside your country. Contact us for information about the safeguards that apply to your data.",
+    content:
+      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
   },
   {
     heading: "Children",
@@ -38,7 +41,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   },
   {
     heading: "Changes",
-    content: "If we change this policy in a way that matters, we will announce it in the product before the change takes effect. The effective date above always reflects the current version.",
+    content: "If we change this policy in a way that matters, we will announce it in the product before the change takes effect. The effective date above identifies when this version takes effect. Earlier versions remain available at /privacy/previous.",
   },
   {
     heading: "Contact",
@@ -93,7 +96,7 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
           <Logo accessibilityLabel={null} color="currentColor" height={30} variant="wordmark" />
         </a>
         <nav className="legal-nav" aria-label="Legal navigation">
-          <a href="/privacy" className={kind === "privacy" ? "is-active" : ""}>
+          <a href="/privacy" className={kind !== "terms" ? "is-active" : ""}>
             Privacy
           </a>
           <a href="/terms" className={kind === "terms" ? "is-active" : ""}>
@@ -103,17 +106,27 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
       </header>
 
       <main className="legal-main">
-        <article className="legal-document">{kind === "privacy" ? <PrivacyPolicy /> : <TermsOfService />}</article>
+        <article className="legal-document">{kind === "privacy" ? <PrivacyPolicy /> : kind === "privacy-previous" ? <PreviousPrivacyPolicy /> : <TermsOfService />}</article>
       </main>
     </div>
   );
 }
 
 function PrivacyPolicy() {
+  const pending = usePrivacyUpdatePending();
   return (
     <>
       <h1>Privacy Policy</h1>
-      <p className="legal-effective-date">Effective 21 October 2026</p>
+      <p className="legal-effective-date">Effective {PRIVACY_EFFECTIVE_DATE_LABEL}</p>
+      {pending ? (
+        <section id="whats-changing" aria-labelledby="privacy-changes-heading">
+          <h2 id="privacy-changes-heading">What's changing</h2>
+          <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, and our providers and international transfer safeguards. This version takes effect on {PRIVACY_EFFECTIVE_DATE_LABEL}.</p>
+          <p>
+            Until then, the <a href="/privacy/previous">current Privacy Policy</a> applies.
+          </p>
+        </section>
+      ) : null}
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
@@ -147,7 +160,8 @@ function PrivacyPolicy() {
         <strong>Integrations and webhooks.</strong> If your tenant connects an external integration or configures webhooks, we store the connection metadata and deliver event payloads to the endpoints your tenant chose. Webhook target URLs, signing secrets, and payloads are encrypted at rest.
       </p>
       <p>
-        <strong>Operational data.</strong> We keep audit logs of administrative actions, structured request logs, and bounded diagnostic events (route, outcome, duration, trace IDs). We use these to run and secure the service, and we do not use them for advertising.
+        <strong>Operational data.</strong> We keep audit logs of administrative actions, structured request logs, and bounded diagnostic events (request path, route, outcome, duration, journey and trace IDs). These diagnostics can be linked to participation records through identifiers in request
+        paths and trace context. We use these to run and secure the service, and we do not use them for advertising.
       </p>
 
       <h2>Cookies</h2>

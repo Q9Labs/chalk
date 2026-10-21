@@ -2020,3 +2020,22 @@
     padding-left: 10px;
   }
 }
+
+.site .dash .privacy-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-block: 20px;
+  padding: 16px;
+  border: 1px solid var(--chalk-line-strong);
+  border-radius: 12px;
+  background: var(--chalk-surface);
+  font-size: 14px;
+}
+
+.site .dash .privacy-notice a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
