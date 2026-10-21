@@ -1,5 +1,5 @@
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
@@ -31,6 +31,9 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   const [following, setFollowing] = useState<string | null>(null);
   const [viewsShared, setViewsShared] = useState(true);
   const boardOpen = whiteboard?.isOpen === true && Boolean(whiteboard.props);
+  useEffect(() => {
+    if (!boardOpen) setFollowing(null);
+  }, [boardOpen]);
   const canFollow = boardOpen && viewsShared && Boolean(whiteboard?.sendView);
   const followed = canFollow && tiles.some((tile) => tile.id === following) ? following : null;
   const stopSharingViews = useCallback(() => setViewsShared(false), []);

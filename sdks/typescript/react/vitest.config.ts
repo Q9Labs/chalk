@@ -15,6 +15,7 @@ const sources = [
   ["@q9labsai/facehash", "../../../packages/facehash/src/index.ts"],
 ] as const;
 export default defineConfig({
+  test: { server: { deps: { inline: true } } },
   resolve: {
     alias: [...sources.map(([find, source]) => ({ find, replacement: fileURLToPath(new URL(source, import.meta.url)) })), { find: "@excalidraw/excalidraw", replacement: createRequire(new URL("../../../packages/whiteboard/package.json", import.meta.url)).resolve("@excalidraw/excalidraw") }],
   },

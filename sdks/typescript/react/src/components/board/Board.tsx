@@ -87,11 +87,13 @@ function useHistoryCounts() {
   };
 }
 
+type CameraMoveOrigin = "local" | "follow";
+
 type CameraControl = {
   readonly cameraRef: MutableRefObject<Camera>;
   readonly viewportRef: MutableRefObject<Viewport>;
   readonly zoom: number;
-  readonly move: (target: Camera, animate: boolean) => void;
+  readonly move: (target: Camera, animate: boolean, origin: CameraMoveOrigin) => void;
 };
 
 /** Owns the camera: glides to a new view, and tells a move by hand from one the board made. */
@@ -153,7 +155,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
   useEffect(() => () => cancelAnimationFrame(glide.current), []);
 
   const move = useCallback(
-    (target: Camera, animate: boolean) => {
+    (target: Camera, animate: boolean, origin: CameraMoveOrigin) => {
       if (!engine) return;
       cancelAnimationFrame(glide.current);
       const set = (camera: Camera) => {
@@ -162,7 +164,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
       };
       if (!animate || reduced) {
         set(target);
-        moved.current();
+        if (origin === "local") moved.current();
         return;
       }
       const from = cameraRef.current;
@@ -171,7 +173,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
         const progress = Math.min(1, (now - started) / GLIDE_MS);
         set(mixCamera(from, target, 1 - (1 - progress) ** 3));
         if (progress < 1) glide.current = requestAnimationFrame(step);
-        else moved.current();
+        else if (origin === "local") moved.current();
       };
       glide.current = requestAnimationFrame(step);
     },
@@ -316,6 +318,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     let last = 0;
     let pending: ReturnType<typeof setTimeout> | undefined;
     const send = (bring: boolean) => {
+      if (!bring && followingRef.current) return false;
       last = performance.now();
       const accepted = viewSender.current.sendView?.({ ...visibleView(camera.cameraRef.current, camera.viewportRef.current), bring }) ?? false;
       if (!accepted) viewSender.current.onViewsUnavailable?.();
@@ -340,7 +343,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const goTo = useCallback(
     (participantId: string, animate: boolean) => {
       const view = views.current.get(participantId);
-      if (view) move(cameraForView(view, viewportRef.current), animate);
+      if (view) move(cameraForView(view, viewportRef.current), animate, "follow");
     },
     [move, viewportRef],
   );
@@ -382,6 +385,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   useEffect(() => {
     if (!engine) return;
     let before = sceneSignature(engine);
+    let beforeEditing = before;
     let wasEditing = false;
     setElementCount(engine.api.getSceneElements().length);
     // The first drawing to arrive from others is fitted into view once, as the mockup opens the board.
@@ -408,11 +412,13 @@ export function Board({ board, primary, visible, colorScheme, people, following,
         if (!followingRef.current) requestAnimationFrame(() => fitContent(engine, false));
       }
       const editing = appState.editingTextElement !== null;
-      if (wasEditing && !editing) {
+      if (!wasEditing && editing) beforeEditing = sceneSignature(engine);
+      const finishedEditing = wasEditing && !editing;
+      wasEditing = editing;
+      if (finishedEditing && sceneSignature(engine) !== beforeEditing) {
         settleNoteText(engine);
         history.changed();
       }
-      wasEditing = editing;
     });
     return () => {
       cancelAnimationFrame(settle);
@@ -446,7 +452,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const zoomBy = useCallback(
     (factor: number) => {
       stopFollowing();
-      camera.move(zoomAroundCentre(camera.cameraRef.current, camera.viewportRef.current, camera.cameraRef.current.zoom * factor), true);
+      camera.move(zoomAroundCentre(camera.cameraRef.current, camera.viewportRef.current, camera.cameraRef.current.zoom * factor), true, "local");
     },
     [camera, stopFollowing],
   );
