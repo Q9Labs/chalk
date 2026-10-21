@@ -92,6 +92,72 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("sends an accepted bring after snapshot recovery without replacing it with ordinary views", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const socket = sockets[0];
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      const snapshot = client.requestSnapshot();
+      expect(client.sendView(bring)).toBe(true);
+      client.sendView({ ...bring, x: 99, bring: false });
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
+      socket?.receive(snapshotPage(socket.requestId()));
+      await snapshot;
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring }]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends an accepted bring after the first snapshot establishes the scene", async () => {
+    const { client, sockets } = recoveryClient();
+    const startup = client.startSceneSubscription();
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      expect(client.sendView(bring)).toBe(true);
+      await acceptSnapshot(sockets);
+      await startup;
+      expect(sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring }]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("keeps only the latest accepted bring across a reconnect", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      sockets[0]?.close(1006);
+      expect(client.sendView(bring)).toBe(true);
+      expect(client.sendView({ ...bring, x: 40 })).toBe(true);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 1);
+      await settle();
+      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring, x: 40 }]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("does not carry an accepted bring into a restarted subscription", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    const snapshot = client.requestSnapshot();
+    void snapshot.catch(() => undefined);
+    expect(client.sendView(bring)).toBe(true);
+    await client.stopSceneSubscription();
+    expect(client.sendView(bring)).toBe(false);
+    const restart = client.startSceneSubscription();
+    try {
+      await acceptSnapshot(sockets, 1);
+      await restart;
+      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("rejects shared snapshot callers together and permits a fresh request", async () => {
     const { client, sockets } = recoveryClient();
     const startup = client.startSceneSubscription();

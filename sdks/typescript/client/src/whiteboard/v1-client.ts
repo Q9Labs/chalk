@@ -82,6 +82,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #presentationSupported = false;
   #presenting = false;
   #hello: "view" | "presentation" | "legacy" = "view";
+  #pendingBring: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView } | null = null;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
   #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
@@ -157,6 +158,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #stopNow(): void {
     this.#started = false;
+    this.#pendingBring = null;
     this.#removeVisibilityListener();
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
@@ -224,13 +226,23 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   sendView(view: ChalkWhiteboardView): boolean {
-    // Views are shared until an older server refuses view_v1; a reconnect's hello in flight does not change that.
-    if (this.#hello !== "view") return false;
-    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) return true;
+    if (!this.#started || this.#hello !== "view") return false;
     const frame = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
     encodeWhiteboardV1ClientFrame(frame);
+    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) {
+      if (view.bring) this.#pendingBring = { sceneId: this.#sceneId, view: { ...view } };
+      return true;
+    }
+    if (view.bring) this.#pendingBring = null;
     this.#send(frame);
     return true;
+  }
+
+  #flushPendingBring(): void {
+    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) return;
+    const pending = this.#pendingBring;
+    this.#pendingBring = null;
+    if (pending && (pending.sceneId === null || pending.sceneId === this.#sceneId)) this.sendView(pending.view);
   }
 
   requestSnapshot(): Promise<void> {
@@ -679,6 +691,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#resetDisconnectedState();
     if (!this.#started || !this.#transportAvailable) return;
     if (rejectedPresentationHello) {
+      this.#pendingBring = null;
       this.#hello = this.#hello === "view" ? "presentation" : "legacy";
       this.#scheduleReconnect();
       return;
@@ -771,6 +784,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {
     this.#summaryStatus = status;
     this.#summaryError = summaryError;
+    if (status === "failed") this.#pendingBring = null;
+    if (status === "ready") this.#flushPendingBring();
     const summary = this.#summary();
     try {
       this.#options.onSummary?.(summary);

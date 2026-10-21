@@ -108,7 +108,7 @@ export type ChalkWhiteboardV1Transport = {
   readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
   readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
-  /** Returns false when the server does not share views, so follow and bring are unavailable. */
+  /** Accepts views while subscribed; keeps the latest bring through recovery. False means views are unavailable. */
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;

@@ -304,31 +304,37 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     toast({ message: `Stopped following ${nameOf(current)}` });
   }, [nameOf, onFollow, toast]);
 
-  const shareView = useRef<(bring: boolean) => void>(() => undefined);
+  const shareView = useRef<(bring: boolean) => boolean>(() => false);
+  const viewSender = useRef({ sendView, onViewsUnavailable });
+  viewSender.current = { sendView, onViewsUnavailable };
+  const viewsAvailable = sendView !== undefined;
   const camera = useCamera(engine, root, stopFollowing, () => shareView.current(false));
 
   // My own view, shortly after it changes and every two seconds, so others can follow me at once.
   useEffect(() => {
-    if (!primary || !sendView || !engine) return;
+    if (!primary || !viewsAvailable || !engine) return;
     let last = 0;
     let pending: ReturnType<typeof setTimeout> | undefined;
     const send = (bring: boolean) => {
       last = performance.now();
-      if (!sendView({ ...visibleView(camera.cameraRef.current, camera.viewportRef.current), bring })) onViewsUnavailable?.();
+      const accepted = viewSender.current.sendView?.({ ...visibleView(camera.cameraRef.current, camera.viewportRef.current), bring }) ?? false;
+      if (!accepted) viewSender.current.onViewsUnavailable?.();
+      return accepted;
     };
     shareView.current = (bring) => {
       if (bring) return send(true);
       clearTimeout(pending);
       pending = setTimeout(() => send(false), Math.max(0, VIEW_SEND_MS - (performance.now() - last)));
+      return true;
     };
     const heartbeat = setInterval(() => send(false), VIEW_HEARTBEAT_MS);
     send(false);
     return () => {
       clearInterval(heartbeat);
       clearTimeout(pending);
-      shareView.current = () => undefined;
+      shareView.current = () => false;
     };
-  }, [camera.cameraRef, camera.viewportRef, engine, onViewsUnavailable, primary, sendView]);
+  }, [camera.cameraRef, camera.viewportRef, engine, primary, viewsAvailable]);
 
   const { move, viewportRef } = camera;
   const goTo = useCallback(
@@ -495,8 +501,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const bring = () => {
     // Following someone while bringing them here would make each follow the other.
     if (followingRef.current) onFollow(null);
-    shareView.current(true);
-    toast({ message: "Everyone is following your view" });
+    if (shareView.current(true)) toast({ message: "Sharing your view with everyone" });
+    else toast({ type: "error", message: "Could not share your view. Try again." });
   };
   const clear = async () => {
     if (!engine) return;
