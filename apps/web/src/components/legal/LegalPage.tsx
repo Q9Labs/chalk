@@ -113,7 +113,7 @@ function PrivacyPolicy() {
   return (
     <>
       <h1>Privacy Policy</h1>
-      <p className="legal-effective-date">Effective 20 October 2026</p>
+      <p className="legal-effective-date">Effective 21 October 2026</p>
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
