@@ -450,6 +450,44 @@ it("keeps a borrowed preview live across a rejected enable and retry", async () 
   }
 });
 
+it("keeps an ended shared acquisition in the typed error channel", async () => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  let resolveCapture = (_stream: MediaStream) => {};
+  const capture = vi.fn(
+    () =>
+      new Promise<MediaStream>((resolve) => {
+        resolveCapture = resolve;
+      }),
+  );
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const client = yield* createEffectSpaceClient({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] } } });
+        yield* client.join({ microphone: false, camera: false });
+        const first = yield* Effect.forkScoped(
+          client.media.captureCameraPreview().pipe(
+            Effect.tap((preview) =>
+              Effect.sync(() => {
+                preview.track.stop();
+                preview.track.dispatchEvent(new Event("ended"));
+                preview.release();
+              }),
+            ),
+          ),
+        );
+        yield* Effect.promise(() => vi.waitFor(() => expect(capture).toHaveBeenCalledOnce()));
+        const second = yield* Effect.forkScoped(client.media.captureCameraPreview().pipe(Effect.catch((error) => Effect.succeed({ handled: error.code }))));
+        yield* Effect.yieldNow;
+        resolveCapture(stream([video]));
+        yield* Fiber.join(first);
+        const result = yield* Effect.exit(Fiber.join(second));
+        expect(result).toMatchObject({ _tag: "Success", value: { handled: "connection.invalid_state" } });
+      }),
+    ),
+  );
+});
+
 function track(kind: "audio" | "video"): MediaStreamTrack {
   let readyState: MediaStreamTrackState = "live";
   const result = Object.assign(new EventTarget(), {

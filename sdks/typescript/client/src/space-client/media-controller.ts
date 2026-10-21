@@ -626,20 +626,23 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#fork(
           acquire(abort.signal).pipe(
             Effect.tap((track) =>
-              Effect.sync(() => {
-                const state = this.#camera;
-                if (abort.signal.aborted || !("owner" in state) || state.owner !== owner) {
-                  track.stop();
-                  throw cancelledCaptureError();
-                }
-                const onEnded = () => {
-                  if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
-                };
-                this.#transitionCamera({ status: "live", owner, track, published: state.status === "live" && state.published, onEnded });
-                if (track.readyState !== "live") {
-                  this.#transitionCamera({ status: "ended" });
-                  throw cancelledCaptureError();
-                }
+              Effect.try({
+                try: () => {
+                  const state = this.#camera;
+                  if (abort.signal.aborted || !("owner" in state) || state.owner !== owner) {
+                    track.stop();
+                    throw cancelledCaptureError();
+                  }
+                  const onEnded = () => {
+                    if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
+                  };
+                  this.#transitionCamera({ status: "live", owner, track, published: state.status === "live" && state.published, onEnded });
+                  if (track.readyState !== "live") {
+                    this.#transitionCamera({ status: "ended" });
+                    throw cancelledCaptureError();
+                  }
+                },
+                catch: (cause) => cause,
               }),
             ),
             Effect.onExit((exit) => Deferred.done(owner.result, exit)),
@@ -660,10 +663,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || !current.published)) this.#transitionCamera({ status: "ended" });
       };
       return Deferred.await(owner.result).pipe(
-        Effect.map((track) => {
-          if (track.readyState !== "live") throw cancelledCaptureError();
-          return { track, release };
-        }),
+        Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(cancelledCaptureError()))),
         Effect.onExit((exit) =>
           Effect.sync(() => {
             if (Exit.isFailure(exit)) release();
