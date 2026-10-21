@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,6 +42,13 @@ func newTenantLimitFixture(t *testing.T, pool *pgxpool.Pool) tenantLimitFixture 
 	if _, err := pool.Exec(t.Context(), `insert into tenants(id,name) values($1,'Tenant limits test')`, uuid(f.tenant)); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := pool.Exec(ctx, `delete from sync_lifecycle_intents where tenant_id=$1`, uuid(f.tenant)); err != nil {
+			t.Errorf("delete fixture lifecycle intents for tenant %s: %v", f.tenant, err)
+		}
+	})
 	if _, err := pool.Exec(t.Context(), `insert into tenant_artifact_policies(tenant_id) values($1)`, uuid(f.tenant)); err != nil {
 		t.Fatal(err)
 	}
