@@ -132,14 +132,28 @@ def complete_production(github, args):
     github.request(f"deployments/{env('DEPLOYMENT_ID')}/statuses", {'state': 'success', 'auto_inactive': False})
 
 
+def defer_cut(github, target, reason, *, manual):
+    print(f'Nightly: {reason}')
+    if manual:
+        github.dispatch_nightly()
+        print('Nightly: manual request requeued on master with fresh orchestration')
+    outputs(dict(should_cut=False, target_sha=target))
+
+
 def plan(github, args):
-    target = subprocess.check_output(['git', 'rev-parse', 'origin/master'], text=True).strip()
+    target = github.request('git/ref/heads/master')['object']['sha']
+    if target != env('GITHUB_SHA'):
+        defer_cut(github, target, 'workflow revision is not the current master tip', manual=args.manual)
+        return
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
-    print(f'Nightly: {reason}; master {target}')
+    print(f'Nightly: {reason}; target {target}')
+    if cut and not github.has_green_gate(target, push_only=not args.manual):
+        require(not args.manual, f'latest master Gate for {target} is not successful')
+        cut = False
+        print('Nightly: current master tip has no successful push Gate; skipping')
     result = dict(should_cut=cut, target_sha=target)
     if cut:
-        github.gate(target)
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
         # Rebuilding all components is safe when an old baseline cannot be read;
@@ -154,6 +168,9 @@ def plan(github, args):
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
+        if github.request('git/ref/heads/master')['object']['sha'] != target:
+            defer_cut(github, target, 'master moved during planning', manual=args.manual)
+            return
         github.reserve_cut(target)
     outputs(result)
 
@@ -163,7 +180,7 @@ def validate_choice(github, item):
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
     manifest_bytes(github, info)
     require(media_bytes(github, info), 'held nightly has no immutable media members')
-    github.gate(info['target_sha'])
+    require(github.has_green_gate(info['target_sha']), f"latest master Gate for {info['target_sha']} is not successful")
     for target in ('nightly', 'production'):
         member = info['web'][target]
         require(re.fullmatch('[0-9a-f]{64}', member['sha256']), 'missing web hash')

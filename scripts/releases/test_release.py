@@ -34,6 +34,14 @@ class MemoryGitHub(GitHub):
         self.repository = 'Q9Labs/chalk'
         self.items = []
         self.archives = {}
+        self.tip = SHA
+        self.dispatches = 0
+        self.created_at = '2026-10-17T02:00:00Z'
+        self.gates = [dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master',
+                           event='push', conclusion='success')]
+
+    def dispatch_nightly(self):
+        self.dispatches += 1
 
     def info(self, run, identity):
         data = json.dumps(dict(release_id=identity, source_revision=SHA)).encode()
@@ -55,8 +63,10 @@ class MemoryGitHub(GitHub):
         return self.archives[target]
 
     def request(self, route, data=None):
+        if route == 'git/ref/heads/master':
+            return dict(object=dict(sha=self.tip))
         if route == 'deployments':
-            item = dict(data, id=len(self.items) + 1, created_at='2026-10-17T02:00:00Z', latest_status='pending')
+            item = dict(data, id=len(self.items) + 1, created_at=self.created_at, latest_status='pending')
             self.items.append(item)
             return item
         if '/statuses' in route:
@@ -73,6 +83,8 @@ class MemoryGitHub(GitHub):
                 and (not manifest_sha256 or item['payload'].get('manifest_sha256') == manifest_sha256)]
 
     def pages(self, route, key):
+        if '/workflows/gate.yml/' in route:
+            return self.gates
         if '/workflows/ci.yml/' in route:
             return [dict(id=10)]
         if '/jobs?' in route:
@@ -93,9 +105,6 @@ class MemoryGitHub(GitHub):
         if expected is not None and digest(data) != expected:
             raise ValueError('checksum mismatch')
         return data
-
-    def gate(self, sha):
-        return None
 
 
 class CutTests(unittest.TestCase):
@@ -203,13 +212,20 @@ class CutTests(unittest.TestCase):
             release.record(api, None)
         self.assertEqual([item['payload']['release_id'] for item in held_candidates(api.items)], ['A'])
 
-    def test_daily_and_no_change_rules(self):
+    def test_gap_gate_and_no_change_rules(self):
         self.assertTrue(cut_decision(SHA, [], NOW)[0])
         self.assertFalse(cut_decision(SHA, [held()], NOW)[0])
         self.assertTrue(cut_decision('b' * 40, [held()], NOW)[0])
-        today = held(date='2026-10-17T02:00:00Z')
-        self.assertFalse(cut_decision('b' * 40, [today], NOW)[0])
-        self.assertTrue(cut_decision(SHA, [today], NOW, manual=True)[0])
+        recent = held(date='2026-10-16T18:00:01Z')
+        self.assertFalse(cut_decision('b' * 40, [recent], NOW)[0])
+        self.assertTrue(cut_decision(SHA, [recent], NOW, manual=True)[0])
+        self.assertTrue(cut_decision('b' * 40, [held(date='2026-10-16T18:00:00Z')], NOW)[0])
+
+    def test_completion_does_not_restart_the_reservation_cooldown(self):
+        attempt = dict(created_at='2026-10-16T18:00:00Z', payload=dict(channel='nightly-attempt'))
+        completed = held(date='2026-10-16T22:00:00Z')
+        self.assertTrue(cut_decision('b' * 40, [completed, attempt], NOW)[0])
+        self.assertFalse(cut_decision('b' * 40, [completed], NOW)[0])
 
     def test_failed_cut_never_advances_baseline_and_next_day_retries(self):
         records = [held(2, 'b' * 40, '2026-10-16T02:00:00Z', status='failure', proof='failed'), held()]
@@ -253,11 +269,9 @@ class CutTests(unittest.TestCase):
         old = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master', event='push', conclusion='success')
         new = {**old, 'run_number': 2, 'conclusion': 'failure'}
         with patch.object(api, 'pages', return_value=[old, new]):
-            with self.assertRaisesRegex(ValueError, 'latest master Gate'):
-                api.gate(SHA)
+            self.assertFalse(api.has_green_gate(SHA))
         with patch.object(api, 'pages', return_value=[old, {**old, 'run_attempt': 2, 'conclusion': None}]):
-            with self.assertRaises(ValueError):
-                api.gate(SHA)
+            self.assertFalse(api.has_green_gate(SHA))
 
     @patch.dict(os.environ, TARGET_SHA=SHA, GITHUB_RUN_ID='1')
     def test_shared_invalidation_never_loses_the_completed_cut_baseline(self):

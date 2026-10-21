@@ -1,7 +1,7 @@
 name: Cut nightly
 on:
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,8 +11,13 @@ permissions:
 concurrency:
   group: chalk-environment-nightly
   cancel-in-progress: false
+  queue: max
 jobs:
   plan:
+    permissions:
+      contents: read
+      actions: write
+      deployments: write
     runs-on: ubuntu-24.04
     outputs:
       should_cut: ${{ steps.plan.outputs.should_cut }}

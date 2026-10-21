@@ -19,16 +19,25 @@ requires one for a selected nightly.
 
 ## Nightly cut
 
-`Cut nightly` runs daily at 02:17 UTC on master.
-Scheduled cuts require new commits since the last completed cut and at most
-one cut attempt per UTC day, reserved before builds. Failures do not advance the baseline.
+`Cut nightly` checks master's current tip hourly, at 17 minutes past the hour.
+Automatic cuts require a successful push Gate for that exact tip, new commits
+since the last completed cut, and at least 6 hours since the last cut attempt.
+Each check reads the current tip and requires its workflow revision to match.
+A queued older scheduled workflow waits for the next check. A stale manual
+request queues a fresh manual run on master, retaining its deliberate override.
+Neither path cuts an older Gate commit.
+A tip skipped during the cooldown is retried without another push.
+The 6-hour interval starts at reservation, not at completion. Completed cuts
+supply the timestamp only when no reservation exists from older workflows.
+Failures do not advance the baseline. The shared nightly lock retains queued
+checks, including manual dispatches, instead of replacing the pending request.
 An expired or unavailable build baseline triggers a full build of the saved enabled
 component set instead of forwarding dead artifact IDs. Passed cut records preserve
 recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
 or saved component metadata fails closed rather than silently disabling recording;
 a new explicit Release baseline is required.
 A manual dispatch always attempts a cut, including an unchanged source.
-Both paths require the latest master Gate run/attempt for the pinned SHA to pass.
+Manual cuts still require the latest master Gate run/attempt for the pinned SHA to pass.
 
 The path-filtered Release contracts PR workflow runs the pre-deploy checks without
 cloud credentials. Release's planning job uses the same `check-contracts.sh --plan`
