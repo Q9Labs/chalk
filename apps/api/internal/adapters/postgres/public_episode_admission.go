@@ -30,6 +30,13 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 				return fmt.Errorf("lock public admission tenant limits: %w", err)
 			}
 		}
+		invite, err := queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: uuid(arrival.TenantID), SpaceID: uuid(arrival.SpaceID)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return publicinvites.ErrArrivalUnavailable
+		}
+		if err != nil {
+			return fmt.Errorf("lock public admission invite: %w", err)
+		}
 		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(arrival.TenantID), ID: uuid(arrival.SpaceID)})
 		if err != nil {
 			return fmt.Errorf("lock public admission Space: %w", err)
@@ -59,19 +66,16 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if err != nil {
 			return fmt.Errorf("lock public admission arrival: %w", err)
 		}
-		if publicinvites.ArrivalState(current.State) != publicinvites.ArrivalPending {
-			return publicinvites.ErrAdmissionRequestTerminal
+		valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return publicinvites.ErrArrivalUnavailable
 		}
 		config, err := episodeConfig(episode.ConfigSnapshot)
 		if err != nil {
 			return err
-		}
-		mode, err := configAdmissionMode(space.AdmissionPolicy)
-		if err != nil {
-			return err
-		}
-		if mode != "knock" {
-			return publicinvites.ErrInviteUnavailable
 		}
 		capabilities, ok := config.Roles[publicinvites.PublicRoleCollaborator]
 		if !ok {
@@ -192,15 +196,11 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 			}
 			return nil
 		}
-		if episode.Status != episodes.EpisodeStatusActive {
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-
 		currentArrival, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
 		if err != nil {
 			return err
 		}
-		valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, time.Now())
+		valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, episode, time.Now())
 		if err != nil {
 			return err
 		}

@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
@@ -146,5 +148,61 @@ func proveAdmissionProvenanceCollection(t *testing.T, ctx context.Context, pool 
 				t.Fatalf("invalidated provenance persisted a grant: %+v err=%v", stored, err)
 			}
 		})
+	}
+}
+
+func proveExpiredPendingArrivalRetry(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repository PublicInviteRepository, invite publicinvites.Invite, tenantID, spaceID utilities.ID) {
+	t.Helper()
+	private := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+	signer, err := publicinvites.NewSigner(publicinvites.Keyring{CurrentKeyID: "expired-retry", Signer: private, Verifiers: map[string]ed25519.PublicKey{"expired-retry": ed25519.PublicKey(private[ed25519.SeedSize:])}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := publicinvites.NewService(repository, signer)
+	key := accountTenantIntegrationID(t).String()
+	credential := []byte("isolated-test-guest-credential")
+	arrival, err := service.CreateArrival(ctx, publicinvites.CreateArrivalInput{TenantID: tenantID, SpaceID: spaceID, Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch, IdentityMode: publicinvites.IdentityGuest, DisplayName: "Expired pending retry", GuestCredential: credential, IdempotencyKey: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a crash after the arrival commit and before knock creation, then
+	// advance this disposable row past its deadline. No wall-clock sleep.
+	if _, err := pool.Exec(ctx, `update space_public_arrivals set expires_at=now()-interval '1 second' where arrival_handle=$1`, uuid(arrival.Arrival.ArrivalHandle)); err != nil {
+		t.Fatal(err)
+	}
+	token, err := service.IssueInviteToken(invite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	access := &terminalAdmissionAccess{grant: func(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+		t.Error("expired retry attempted a grant")
+		return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
+	}}
+	runtime, err := publicinvites.NewRuntime(service, admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, admissionProofAccounts{}, admissionProofLinks{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, retryErr := runtime.Arrive(ctx, publicinvites.PublicInviteArrivalInput{Token: token, DisplayName: "Expired pending retry", RequestKey: key, GuestCredential: base64.RawURLEncoding.EncodeToString(credential)})
+	var knocks, reservations int
+	if err := pool.QueryRow(ctx, `select (select count(*) from space_public_admission_requests where tenant_id=$1 and space_id=$2 and arrival_handle=$3), (select count(*) from participants where tenant_id=$1 and episode_id in (select id from episodes where tenant_id=$1 and space_id=$2) and name='Expired pending retry')`, uuid(tenantID), uuid(spaceID), uuid(arrival.Arrival.ArrivalHandle)).Scan(&knocks, &reservations); err != nil {
+		t.Fatal(err)
+	}
+	if retryErr != nil || result.State != publicinvites.ArrivalUnavailable || result.Access != nil || knocks != 0 || reservations != 0 {
+		t.Fatalf("expired pending retry: state=%s access=%v knocks=%d reservations=%d err=%v", result.State, result.Access != nil, knocks, reservations, retryErr)
+	}
+	stored, err := repository.GetArrival(ctx, arrival.Arrival.ArrivalHandle)
+	if err != nil || stored.State != publicinvites.ArrivalUnavailable {
+		t.Fatalf("expired arrival not tombstoned: %+v err=%v", stored, err)
+	}
+	// The legacy allocator must reject expiry itself, not only a tombstone.
+	if _, err := pool.Exec(ctx, `update space_public_arrivals set state='pending',terminal_reason=null where arrival_handle=$1`, uuid(arrival.Arrival.ArrivalHandle)); err != nil {
+		t.Fatal(err)
+	}
+	_, legacyErr := NewEpisodeLifecycleRepository(pool).JoinPublic(ctx, episodes.PublicJoinInput{TenantID: tenantID, SpaceID: spaceID, KnockArrivalID: arrival.Arrival.ArrivalHandle, IdentityMode: "guest", DisplayName: "Expired legacy retry", Role: publicinvites.PublicRoleCollaborator, Request: episodes.Request{Key: accountTenantIntegrationID(t).String()}})
+	if !errors.Is(legacyErr, publicinvites.ErrArrivalUnavailable) {
+		t.Fatalf("expired legacy allocation = %v", legacyErr)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from participants where tenant_id=$1 and space_id=$2 and name='Expired legacy retry'`, uuid(tenantID), uuid(spaceID)).Scan(&reservations); err != nil || reservations != 0 {
+		t.Fatalf("expired legacy reservation count=%d err=%v", reservations, err)
 	}
 }

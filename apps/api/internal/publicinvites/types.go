@@ -311,6 +311,7 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
+	RequireKnock           bool
 	Admission              *AdmissionBinding
 	Arrival                Arrival
 	MediaProof             string

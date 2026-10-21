@@ -21,13 +21,14 @@ type PublicJoinRepository interface {
 }
 
 type PublicJoinInput struct {
-	TenantID     utilities.ID
-	SpaceID      utilities.ID
-	AccountID    utilities.ID
-	IdentityMode string
-	DisplayName  string
-	Role         string
-	Request      Request
+	KnockArrivalID utilities.ID
+	TenantID       utilities.ID
+	SpaceID        utilities.ID
+	AccountID      utilities.ID
+	IdentityMode   string
+	DisplayName    string
+	Role           string
+	Request        Request
 }
 
 type PublicAccessInput struct {

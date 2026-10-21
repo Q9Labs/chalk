@@ -90,6 +90,9 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Run("expired pending arrival retry", func(t *testing.T) {
+		proveExpiredPendingArrivalRetry(t, ctx, pool, repository, invite, tenantID, space.ID)
+	})
 	t.Run("control before Episode", func(t *testing.T) {
 		proveAdmissionControlLockOrder(t, ctx, pool, tenantID, host.Episode.ID, arrival.Arrival.ArrivalHandle)
 	})

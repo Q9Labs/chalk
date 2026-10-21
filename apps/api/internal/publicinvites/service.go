@@ -735,7 +735,7 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 		}
 		return AdmissionRequest{}, ErrInviteUnavailable
 	}
-	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, RequireKnock: true})
 	if err != nil {
 		return AdmissionRequest{}, err
 	}
@@ -1068,7 +1068,21 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		return result, nil
 	}
 	if space.AdmissionMode == AdmissionKnock {
+		if arrivalResult.Arrival.State != ArrivalPending {
+			result := r.arrivalResult(space, arrivalResult.Arrival)
+			result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
+			return result, nil
+		}
 		_, requestErr := r.service.CreateAdmissionRequest(ctx, CreateAdmissionRequestInput{ArrivalHandle: arrivalResult.Arrival.ArrivalHandle, DisplayName: name})
+		if errors.Is(requestErr, ErrArrivalUnavailable) {
+			terminal, terminalErr := r.invalidatePendingArrival(ctx, arrivalResult.Arrival)
+			if terminalErr != nil {
+				return PublicSpaceArrival{}, terminalErr
+			}
+			result := r.arrivalResult(space, terminal)
+			result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
+			return result, nil
+		}
 		if requestErr != nil {
 			return PublicSpaceArrival{}, requestErr
 		}
@@ -1124,7 +1138,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	state, reason := ArrivalPending, ""
 	switch request.State {
 	case AdmissionRequestApproved:
-		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding})
+		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding, RequireKnock: true})
 		if errors.Is(err, ErrArrivalUnavailable) {
 			state, reason = ArrivalUnavailable, "admission_episode_ended"
 			break
@@ -1169,11 +1183,10 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	if state == ArrivalPending {
 		return PublicSpaceArrival{}, false, nil
 	}
-	terminal, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: state, Reason: reason})
+	terminal, err := r.finishPendingArrival(ctx, arrival, state, reason)
 	if err != nil {
 		return PublicSpaceArrival{}, false, err
 	}
-	RecordAdmissionOutcome(ctx, terminal, reason)
 	return r.arrivalResult(space, terminal), true, nil
 }
 
@@ -1198,14 +1211,28 @@ func (r Runtime) pendingGuestArrivalValid(ctx context.Context, arrival Arrival, 
 }
 
 func (r Runtime) invalidatePendingArrival(ctx context.Context, arrival Arrival) (Arrival, error) {
-	updated, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
-		TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle,
-		State: ArrivalUnavailable, Reason: "public_arrival_invalidated",
-	})
-	if err != nil {
-		return Arrival{}, err
+	reason := "public_arrival_invalidated"
+	if !arrival.ExpiresAt.IsZero() && !arrival.ExpiresAt.After(r.service.now()) {
+		reason = "admission_request_expired"
 	}
-	return updated, nil
+	return r.finishPendingArrival(ctx, arrival, ArrivalUnavailable, reason)
+}
+
+func (r Runtime) finishPendingArrival(ctx context.Context, arrival Arrival, state ArrivalState, reason string) (Arrival, error) {
+	updated, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: state, Reason: reason, RequirePending: true})
+	if errors.Is(err, ErrArrivalUnavailable) {
+		current, readErr := r.service.GetArrival(ctx, arrival.ArrivalHandle)
+		if readErr != nil {
+			return Arrival{}, readErr
+		}
+		if current.State != ArrivalPending {
+			return current, nil
+		}
+	}
+	if err == nil {
+		RecordAdmissionOutcome(ctx, updated, reason)
+	}
+	return updated, err
 }
 
 func (r Runtime) Status(ctx context.Context, input PublicInviteArrivalStatusInput, beforeInvalidate func() error) (PublicSpaceArrival, error) {

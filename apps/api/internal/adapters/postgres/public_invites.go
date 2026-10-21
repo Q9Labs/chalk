@@ -324,6 +324,7 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		collecting := input.RequirePending && input.State == publicinvites.ArrivalAdmitted
 		var invite sqlc.SpacePublicInvite
 		var space sqlc.Space
+		var episode sqlc.Episode
 		if collecting {
 			// The immutable binding locates the rows. Match admission decisions:
 			// invite, Space, Episode, arrival, participant.
@@ -351,15 +352,12 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			if err != nil {
 				return fmt.Errorf("lock public collection Space: %w", err)
 			}
-			episode, err := queries.LockLifecycleEpisodeForUpdate(ctx, sqlc.LockLifecycleEpisodeForUpdateParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID, EpisodeID: uuid(input.EpisodeID)})
+			episode, err = queries.LockLifecycleEpisodeForUpdate(ctx, sqlc.LockLifecycleEpisodeForUpdateParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID, EpisodeID: uuid(input.EpisodeID)})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return publicinvites.ErrArrivalUnavailable
 			}
 			if err != nil {
 				return fmt.Errorf("lock public collection Episode: %w", err)
-			}
-			if episode.Status != episodes.EpisodeStatusActive {
-				return publicinvites.ErrArrivalUnavailable
 			}
 		}
 		current, err := queries.LockSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
@@ -376,7 +374,7 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			return publicinvites.ErrArrivalUnavailable
 		}
 		if collecting {
-			valid, err := publicAdmissionProvenanceValid(space, invite, current, time.Now())
+			valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
 			if err != nil {
 				return err
 			}
@@ -418,12 +416,17 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 	return result, err
 }
 
-func publicAdmissionProvenanceValid(space sqlc.Space, invite sqlc.SpacePublicInvite, arrival sqlc.SpacePublicArrival, now time.Time) (bool, error) {
+func publicAdmissionProvenanceValid(space sqlc.Space, invite sqlc.SpacePublicInvite, arrival sqlc.SpacePublicArrival, episode sqlc.Episode, now time.Time) (bool, error) {
 	mode, err := configAdmissionMode(space.AdmissionPolicy)
 	if err != nil {
 		return false, err
 	}
-	return !space.ArchivedAt.Valid && mode == "knock" && invite.Enabled &&
+	if space.TenantID != arrival.TenantID || space.ID != arrival.SpaceID ||
+		invite.TenantID != arrival.TenantID || invite.SpaceID != arrival.SpaceID ||
+		episode.TenantID != arrival.TenantID || episode.SpaceID != arrival.SpaceID {
+		return false, nil
+	}
+	return episode.Status == episodes.EpisodeStatusActive && !space.ArchivedAt.Valid && mode == "knock" && invite.Enabled &&
 		arrival.State == string(publicinvites.ArrivalPending) && arrival.ExpiresAt.Time.After(now) &&
 		bytes.Equal(invite.Handle, arrival.InviteHandle) && invite.Generation == arrival.InviteGeneration &&
 		invite.StateEpoch == arrival.InviteStateEpoch, nil

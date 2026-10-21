@@ -2,6 +2,7 @@ package publicinvites
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -130,4 +131,63 @@ func (a *collectionAccess) DiscardPublicAccess(_ context.Context, grant PublicAc
 	defer a.mu.Unlock()
 	a.discarded = append(a.discarded, grant.ProviderSubject)
 	return nil
+}
+
+func TestPendingInvalidationPreservesAConcurrentTerminalArrival(t *testing.T) {
+	for _, state := range []ArrivalState{ArrivalAdmitted, ArrivalRejected, ArrivalLeft, ArrivalUnavailable} {
+		t.Run(string(state), func(t *testing.T) {
+			id := func() utilities.ID {
+				v, err := utilities.NewID()
+				if err != nil {
+					t.Fatal(err)
+				}
+				return v
+			}
+			current := Arrival{TenantID: id(), SpaceID: id(), ArrivalHandle: id(), State: state, Provider: PublicProviderCloudflareSFU, ProviderSubject: "winning-binding"}
+			repository := &collectionRepository{arrival: current}
+			runtime := Runtime{service: NewService(repository)}
+			stale := current
+			stale.State = ArrivalPending
+			got, err := runtime.invalidatePendingArrival(context.Background(), stale)
+			if err != nil || got.State != state || got.ProviderSubject != current.ProviderSubject {
+				t.Fatalf("invalidation clobbered concurrent terminal state: %+v err=%v", got, err)
+			}
+		})
+	}
+}
+
+type legacyCollectionRepository struct{ *collectionRepository }
+
+func (r legacyCollectionRepository) GetAdmissionRequestForArrival(context.Context, Arrival) (AdmissionRequest, error) {
+	return AdmissionRequest{State: AdmissionRequestApproved}, nil
+}
+
+type guardedLegacyAccess struct {
+	Access
+	allocated bool
+}
+
+func (a *guardedLegacyAccess) GrantPublicAccess(_ context.Context, input PublicAccessInput) (PublicAccessGrant, error) {
+	if input.RequireKnock {
+		return PublicAccessGrant{}, ErrArrivalUnavailable
+	}
+	a.allocated = true
+	return PublicAccessGrant{}, errors.New("unguarded legacy allocation")
+}
+func TestLegacyApprovedCollectionCannotBypassTheKnockGuard(t *testing.T) {
+	id := func() utilities.ID {
+		v, err := utilities.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	arrival := Arrival{TenantID: id(), SpaceID: id(), ArrivalHandle: id(), State: ArrivalPending}
+	repository := legacyCollectionRepository{&collectionRepository{arrival: arrival}}
+	access := &guardedLegacyAccess{}
+	runtime := Runtime{service: NewService(repository), access: access}
+	result, resolved, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival)
+	if err != nil || !resolved || result.State != ArrivalUnavailable || result.Access != nil || access.allocated {
+		t.Fatalf("legacy collection: state=%s resolved=%v allocated=%v err=%v", result.State, resolved, access.allocated, err)
+	}
 }

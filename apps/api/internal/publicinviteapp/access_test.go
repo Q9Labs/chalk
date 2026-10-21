@@ -271,3 +271,30 @@ func (s *approvedAdmissionLookup) JoinPublic(context.Context, episodes.PublicJoi
 	s.joinCalls++
 	return s.result, nil
 }
+
+type guardedKnockJoin struct {
+	publicJoinStub
+	arrival utilities.ID
+}
+
+func (s *guardedKnockJoin) JoinPublic(_ context.Context, input episodes.PublicJoinInput) (episodes.PublicJoinResult, error) {
+	s.arrival = input.KnockArrivalID
+	return episodes.PublicJoinResult{}, publicinvites.ErrArrivalUnavailable
+}
+func TestLegacyKnockAllocationCarriesArrivalProvenance(t *testing.T) {
+	fixture := newAccessFixture(t)
+	pending := fixture.arrival
+	pending.State = publicinvites.ArrivalPending
+	pending.ArrivalHandle = mustID(t, "55555555-5555-4555-8555-555555555555")
+	lookup := &guardedKnockJoin{}
+	config := fixture.config()
+	config.Episodes = lookup
+	access, err := publicinviteapp.NewAccessPort(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: pending, RequireKnock: true})
+	if !errors.Is(err, publicinvites.ErrArrivalUnavailable) || lookup.arrival != pending.ArrivalHandle || fixture.plane.createCalls != 0 {
+		t.Fatalf("legacy allocation bypassed provenance: arrival=%s media_creates=%d err=%v", lookup.arrival, fixture.plane.createCalls, err)
+	}
+}
