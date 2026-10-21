@@ -600,77 +600,86 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #cameraSource(purpose: "preview" | "publication", acquire: (signal: AbortSignal) => Effect.Effect<MediaStreamTrack, unknown> = (signal) => this.#captureSource("camera", signal)): Effect.Effect<CameraPreview, unknown> {
     return Effect.suspend(() => {
-      if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" });
+      this.#discardEndedCamera();
       const current = this.#camera;
-      if (current.status === "live" && current.published && !current.track.enabled && purpose === "preview") {
-        const track = current.track.clone();
-        track.enabled = true;
-        const release = () => {
-          this.#pendingCaptures.delete(release);
-          track.stop();
-        };
-        this.#pendingCaptures.add(release);
-        return Effect.succeed({ track, release });
-      }
-      if (this.#camera.status === "idle" || this.#camera.status === "ended") {
-        const abort = new AbortController();
-        const owner: CameraOwner = {
-          result: Deferred.makeUnsafe<MediaStreamTrack, unknown>(),
-          references: 0,
-          cancel: () => {
-            abort.abort();
-            Deferred.doneUnsafe(owner.result, Effect.fail(cancelledCaptureError()));
-          },
-        };
-        this.#transitionCamera({ status: "capturing", owner });
-        this.#fork(
-          acquire(abort.signal).pipe(
-            Effect.tap((track) =>
-              Effect.try({
-                try: () => {
-                  const state = this.#camera;
-                  if (abort.signal.aborted || !("owner" in state) || state.owner !== owner) {
-                    track.stop();
-                    throw cancelledCaptureError();
-                  }
-                  const onEnded = () => {
-                    if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
-                  };
-                  this.#transitionCamera({ status: "live", owner, track, published: state.status === "live" && state.published, onEnded });
-                  if (track.readyState !== "live") {
-                    this.#transitionCamera({ status: "ended" });
-                    throw cancelledCaptureError();
-                  }
-                },
-                catch: (cause) => cause,
-              }),
-            ),
-            Effect.onExit((exit) => Deferred.done(owner.result, exit)),
-            Effect.ignore,
-          ),
-        );
-      }
-      const state = this.#camera;
-      if (!("owner" in state)) return Effect.fail(cancelledCaptureError());
-      const owner = state.owner;
-      owner.references++;
-      let released = false;
+      if (current.status === "live") return this.#liveCameraSource(current, purpose);
+      if (current.status === "capturing") return this.#borrowCamera(current.owner);
+      return this.#borrowCamera(this.#beginCameraCapture(acquire));
+    });
+  }
+  #discardEndedCamera(): void {
+    if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" });
+  }
+  #liveCameraSource(current: CameraState & { readonly status: "live" }, purpose: "preview" | "publication"): Effect.Effect<CameraPreview, unknown> {
+    if (current.published && !current.track.enabled && purpose === "preview") {
+      const track = current.track.clone();
+      track.enabled = true;
       const release = () => {
-        if (released) return;
-        released = true;
-        owner.references--;
-        const current = this.#camera;
-        if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || !current.published)) this.#transitionCamera({ status: "ended" });
+        this.#pendingCaptures.delete(release);
+        track.stop();
       };
-      return Deferred.await(owner.result).pipe(
-        Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(cancelledCaptureError()))),
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            if (Exit.isFailure(exit)) release();
+      this.#pendingCaptures.add(release);
+      return Effect.succeed({ track, release });
+    }
+    return this.#borrowCamera(current.owner);
+  }
+  #beginCameraCapture(acquire: (signal: AbortSignal) => Effect.Effect<MediaStreamTrack, unknown>): CameraOwner {
+    const abort = new AbortController();
+    const owner: CameraOwner = {
+      result: Deferred.makeUnsafe<MediaStreamTrack, unknown>(),
+      references: 0,
+      cancel: () => {
+        abort.abort();
+        Deferred.doneUnsafe(owner.result, Effect.fail(cancelledCaptureError()));
+      },
+    };
+    this.#transitionCamera({ status: "capturing", owner });
+    this.#fork(
+      acquire(abort.signal).pipe(
+        Effect.tap((track) =>
+          Effect.try({
+            try: () => {
+              const state = this.#camera;
+              if (abort.signal.aborted || !("owner" in state) || state.owner !== owner) {
+                track.stop();
+                throw cancelledCaptureError();
+              }
+              const onEnded = () => {
+                if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
+              };
+              this.#transitionCamera({ status: "live", owner, track, published: state.status === "live" && state.published, onEnded });
+              if (track.readyState !== "live") {
+                this.#transitionCamera({ status: "ended" });
+                throw cancelledCaptureError();
+              }
+            },
+            catch: (cause) => cause,
           }),
         ),
-      );
-    });
+        Effect.onExit((exit) => Deferred.done(owner.result, exit)),
+        Effect.ignore,
+      ),
+    );
+    return owner;
+  }
+  #borrowCamera(owner: CameraOwner): Effect.Effect<CameraPreview, unknown> {
+    owner.references++;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      owner.references--;
+      const current = this.#camera;
+      if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || !current.published)) this.#transitionCamera({ status: "ended" });
+    };
+    return Deferred.await(owner.result).pipe(
+      Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(cancelledCaptureError()))),
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          if (Exit.isFailure(exit)) release();
+        }),
+      ),
+    );
   }
   #useCamera<A>(use: (track: MediaStreamTrack) => Effect.Effect<A, unknown>, acquire?: (signal: AbortSignal) => Effect.Effect<MediaStreamTrack, unknown>): Effect.Effect<A, unknown> {
     return Effect.suspend(() => {

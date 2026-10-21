@@ -1,3 +1,4 @@
+import { noCaptureDevices, stream, track } from "./capture.test.helpers";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserMediaDevices } from "../connection/media-devices";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
@@ -162,40 +163,3 @@ describe("join with unavailable capture devices", () => {
     }
   });
 });
-
-function track(kind: "audio" | "video"): MediaStreamTrack {
-  return Object.assign(new EventTarget(), {
-    contentHint: "",
-    enabled: true,
-    id: kind,
-    kind,
-    label: "",
-    muted: false,
-    readyState: "live" as const,
-    onended: null,
-    onmute: null,
-    onunmute: null,
-    applyConstraints: async () => undefined,
-    clone: () => track(kind),
-    getCapabilities: () => ({}),
-    getConstraints: () => ({}),
-    getSettings: () => ({}),
-    stop: vi.fn(),
-  });
-}
-
-function stream(tracks: readonly MediaStreamTrack[]): MediaStream {
-  return Object.assign(new EventTarget(), {
-    active: true,
-    id: "capture",
-    onaddtrack: null,
-    onremovetrack: null,
-    addTrack: () => undefined,
-    removeTrack: () => undefined,
-    clone: () => stream(tracks),
-    getTracks: () => [...tracks],
-    getAudioTracks: () => tracks.filter((input) => input.kind === "audio"),
-    getVideoTracks: () => tracks.filter((input) => input.kind === "video"),
-    getTrackById: (id: string) => tracks.find((input) => input.id === id) ?? null,
-  });
-}

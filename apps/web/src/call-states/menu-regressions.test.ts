@@ -1,4 +1,3 @@
-import type * as CameraEnableFixture from "./camera-enable-fixture";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { JSHandle } from "playwright";
@@ -55,7 +54,6 @@ it("borrows the enabling camera when its menu opens before capture finishes", as
       async ({ sdkSource }) => {
         const { createCoreTestPlatform, opaqueAccessGrant } = await import(`${"/@fs"}${sdkSource}/space-client/core.test.helpers.ts`);
         const { createSpaceClientForPlatform } = await import(`${"/@fs"}${sdkSource}/effect.ts`);
-        const { mountCameraEnableMenu }: typeof CameraEnableFixture = await import(new URL("/src/call-states/camera-enable-fixture.tsx", location.href).href);
         const platform = createCoreTestPlatform();
         const tracks: MediaStreamTrack[] = [];
         let calls = 0;
@@ -94,7 +92,7 @@ it("borrows the enabling camera when its menu opens before capture finishes", as
           },
         );
         await client.join({ microphone: false, camera: false });
-        const unmount = mountCameraEnableMenu(client);
+        const unmount = document.createElement("chalk-camera-enable-fixture").mount(client);
         return {
           calls: () => calls,
           tracks,
@@ -259,10 +257,14 @@ it("releases a preview that finishes opening after its menu closes", async () =>
   await pending.dispose();
 }, 30_000);
 
-it("does not stop the call's camera when closing its borrowed preview", async () => {
+async function openPublishedCamera() {
   await load("shell-browser-camera-on");
   await page.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
   await expect.poll(() => page.getByRole("menuitemradio").count()).toBeGreaterThanOrEqual(2);
+}
+
+it("does not stop the call's camera when closing its borrowed preview", async () => {
+  await openPublishedCamera();
   const track = await page.locator(".chalk-shell-preview video").evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));
   expect(await track.evaluate((value) => value?.readyState)).toBe("live");
   await page.keyboard.press("Escape");
@@ -271,9 +273,7 @@ it("does not stop the call's camera when closing its borrowed preview", async ()
 });
 
 it("keeps an active preview on the published camera when another device is selected", async () => {
-  await load("shell-browser-camera-on");
-  await page.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
-  await expect.poll(() => page.getByRole("menuitemradio").count()).toBeGreaterThanOrEqual(2);
+  await openPublishedCamera();
   const preview = page.locator(".chalk-shell-preview video");
   const published = await preview.evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));
   expect(await published.evaluate((track) => track?.enabled && track.readyState === "live")).toBe(true);

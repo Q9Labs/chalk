@@ -1,3 +1,4 @@
+import "./camera-enable-fixture";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import { installFakeDevices } from "./media";
