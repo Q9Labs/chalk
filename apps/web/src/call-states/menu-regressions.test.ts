@@ -49,65 +49,7 @@ it("borrows the enabling camera when its menu opens before capture finishes", as
     | undefined;
   try {
     await racePage.goto(`${origin}/call-states.html?state=shell-browser-permission&browserMedia`);
-    const sdkSource = resolve("../../sdks/typescript/client/src");
-    race = await racePage.evaluateHandle(
-      async ({ sdkSource }) => {
-        const { createCoreTestPlatform, opaqueAccessGrant } = await import(`${"/@fs"}${sdkSource}/space-client/core.test.helpers.ts`);
-        const { createSpaceClientForPlatform } = await import(`${"/@fs"}${sdkSource}/effect.ts`);
-        const platform = createCoreTestPlatform();
-        const tracks: MediaStreamTrack[] = [];
-        let calls = 0;
-        let allowCapture = () => {};
-        let allowPublish = () => {};
-        const captureReady = new Promise<void>((resolve) => {
-          allowCapture = resolve;
-        });
-        const publishReady = new Promise<void>((resolve) => {
-          allowPublish = resolve;
-        });
-        const client = createSpaceClientForPlatform(
-          { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-          {
-            ...platform,
-            dependencies: {
-              ...platform.dependencies,
-              mediaDevices: {
-                getUserMedia: async (constraints: MediaStreamConstraints) => {
-                  calls++;
-                  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                  tracks.push(...stream.getTracks());
-                  await captureReady;
-                  return stream;
-                },
-                enumerateDevices: () => navigator.mediaDevices.enumerateDevices(),
-              },
-              createSyncClient: () => ({
-                ...platform.sync,
-                setCameraEnabled: async () => {
-                  await publishReady;
-                  return { operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
-                },
-              }),
-            },
-          },
-        );
-        await client.join({ microphone: false, camera: false });
-        const unmount = document.createElement("chalk-camera-enable-fixture").mount(client);
-        return {
-          calls: () => calls,
-          tracks,
-          allowCapture,
-          allowPublish,
-          dispose: () => {
-            allowCapture();
-            allowPublish();
-            unmount();
-            client.dispose();
-          },
-        };
-      },
-      { sdkSource },
-    );
+    race = await racePage.evaluateHandle(async () => document.createElement("chalk-camera-enable-fixture").mountPendingCamera());
     await racePage.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).click();
     await expect.poll(() => race?.evaluate((value) => value.calls())).toBe(1);
     await racePage.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
