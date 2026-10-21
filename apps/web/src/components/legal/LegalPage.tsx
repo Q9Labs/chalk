@@ -21,7 +21,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "Retention and deletion",
     content:
-      "Account and collaboration records remain stored until deleted, subject to the retention settings described above. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data within 30 days.",
+      "Account records remain stored until deleted. Chat messages, read receipts, whiteboard scenes and changes, and their attached files are scheduled for cleanup seven days after an Episode ends. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data in active systems within 30 days. Backup copies may remain longer; tenant-deletion archives are retained for at least 14 days.",
   },
   {
     heading: "Your rights",
@@ -122,7 +122,8 @@ function PrivacyPolicy() {
         store a tenant record tied to your provider user ID and display name. Older account records, including password hashes, tenant memberships, and roles, remain stored. The mobile app does not offer accounts or sign-in; you join as a guest with a display name.
       </p>
       <p>
-        <strong>Sign-in and security data.</strong> We use guest arrival credentials, participant IDs, and web session IDs to keep access working. We process IP addresses to rate-limit abusive traffic. Older sign-in records can include IP addresses, browser user agents, and device names.
+        <strong>Sign-in and security data.</strong> We use guest arrival credentials, participant IDs, and web session IDs to keep access working. We process IP addresses to rate-limit abusive traffic. For tenant API keys, we retain the most recent use's IP address and timestamp for security and
+        audit purposes. Older sign-in records can include IP addresses, browser user agents, and device names.
       </p>
       <p>
         <strong>Spaces, Episodes, and participation.</strong> Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: participant ID, display name, role, capabilities, and join and
@@ -198,7 +199,10 @@ function PrivacyPolicy() {
           <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI can perform speech-to-text when enabled in the transcription configuration.
         </li>
         <li>
-          <strong>Amazon Web Services</strong> runs the transcription pipeline (processing, job scheduling, secret storage, and logs) and provides recording encryption key management.
+          <strong>Amazon Web Services</strong> hosts our API and real-time application services, runs the transcription pipeline (processing, job scheduling, secret storage, and logs) and provides recording encryption key management.
+        </li>
+        <li>
+          <strong>PlanetScale</strong> stores account and collaboration records in PostgreSQL.
         </li>
         <li>
           <strong>DeepInfra</strong> performs speech-to-text when enabled in the transcription configuration.
