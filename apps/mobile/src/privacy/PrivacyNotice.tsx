@@ -2,10 +2,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ChalkText, IconButton, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
-import { PRIVACY_NOTICE_DISMISSAL_KEY, PRIVACY_NOTICE_LINK_TEXT, PRIVACY_NOTICE_TEXT, usePrivacyUpdatePending } from "../../../shared/privacy-update";
+import { PRIVACY_EFFECTIVE_DATE, PRIVACY_NOTICE_DISMISSAL_KEY, PRIVACY_NOTICE_LINK_TEXT, PRIVACY_NOTICE_TEXT } from "./privacy-policy";
 
 export function PrivacyNotice(): React.JSX.Element | null {
-  const pending = usePrivacyUpdatePending();
+  const [revision, setRevision] = useState(0);
+  const pending = Date.now() < Date.parse(PRIVACY_EFFECTIVE_DATE);
+  useEffect(() => {
+    if (!pending) return;
+    const remaining = Date.parse(PRIVACY_EFFECTIVE_DATE) - Date.now();
+    const timer = setTimeout(() => setRevision((current) => current + 1), Math.min(Math.max(remaining, 0), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [pending, revision]);
   const [dismissed, setDismissed] = useState(false);
   const { colors } = useTheme();
   const toasts = useToasts();

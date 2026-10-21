@@ -13,7 +13,7 @@ const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
 
 // Keep Metro focused on the app and the workspace packages it imports.
 // Watching the entire monorepo makes cold iOS development bundles unnecessarily slow.
-config.watchFolders = [path.resolve(__dirname, "../shared"), workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardRoot];
+config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardRoot];
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 // Native modules must load once. pnpm links the SDK its own copies of its peers, so Metro skips
 // those and resolves every one from the app.

@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { PRIVACY_ARCHIVE_TITLE, PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL } from "../../../../shared/privacy-update";
+import { PRIVACY_ARCHIVE_TITLE, PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
 
 // Policy body archived verbatim from master at 2de92e3c178cf3c86f92b1c33146f66495816c8a.
 const PRIVACY_SECTIONS = [

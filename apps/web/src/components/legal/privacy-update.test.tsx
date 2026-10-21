@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LegalPage } from "./LegalPage";
-import { PRIVACY_EFFECTIVE_DATE } from "../../../../shared/privacy-update";
+import { PRIVACY_EFFECTIVE_DATE } from "../../lib/privacy-policy";
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 
 beforeEach(() => {

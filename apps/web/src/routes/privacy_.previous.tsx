@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LegalPage } from "../components/legal/LegalPage";
 import { buildPublicSiteHead } from "../lib/site-head";
-import { PRIVACY_ARCHIVE_TITLE } from "../../../shared/privacy-update";
+import { PRIVACY_ARCHIVE_TITLE } from "../lib/privacy-policy";
 
 export const Route = createFileRoute("/privacy_/previous")({
   head: () =>

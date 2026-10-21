@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
-import { PRIVACY_NOTICE_TEXT, PRIVACY_NOTICE_LINK_TEXT, PRIVACY_NOTICE_DISMISSAL_KEY, usePrivacyUpdatePending } from "../../../../shared/privacy-update";
+import { PRIVACY_EFFECTIVE_DATE, PRIVACY_NOTICE_TEXT, PRIVACY_NOTICE_LINK_TEXT, PRIVACY_NOTICE_DISMISSAL_KEY } from "../../lib/privacy-policy";
 
 export function PrivacyNotice() {
-  const pending = usePrivacyUpdatePending();
+  const [revision, setRevision] = useState(0);
+  const pending = Date.now() < Date.parse(PRIVACY_EFFECTIVE_DATE);
+  useEffect(() => {
+    if (!pending) return;
+    const remaining = Date.parse(PRIVACY_EFFECTIVE_DATE) - Date.now();
+    const timer = setTimeout(() => setRevision((current) => current + 1), Math.min(Math.max(remaining, 0), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [pending, revision]);
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     try {
