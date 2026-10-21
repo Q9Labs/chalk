@@ -49,7 +49,7 @@ it("cleans up preview capture that resolves after the client is disposed", async
     await client.join({ microphone: false, camera: false });
     const result = client.media.captureCameraPreview().then(
       (captured) => {
-        captured.stop();
+        captured.release();
         return "resolved";
       },
       () => "rejected",
@@ -175,6 +175,122 @@ it.each(["preview", "camera", "microphone", "screen"] as const)("stops late %s c
     );
   } finally {
     release(stream([audio, video]));
+  }
+});
+
+it.each(["enable first", "preview first", "prepared"] as const)("shares one camera source when %s", async (order) => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  let release = (_stream: MediaStream) => {};
+  let publish = () => {};
+  const captured = new Promise<MediaStream>((resolve) => {
+    release = resolve;
+  });
+  const publishing = new Promise<void>((resolve) => {
+    publish = resolve;
+  });
+  const getUserMedia = vi.fn(() => captured);
+  const requests: Promise<unknown>[] = [];
+  const prepareLocalTrack = vi.fn();
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: { getUserMedia, enumerateDevices: async () => [] },
+        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), prepareLocalTrack }),
+        createSyncClient: (input) => ({
+          ...platform.dependencies.createSyncClient(input),
+          setCameraEnabled: async () => {
+            await publishing;
+            return { operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
+          },
+        }),
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    const previewFirst = order === "preview first" ? client.media.captureCameraPreview() : undefined;
+    const enabling = client.media.setCameraEnabled(true);
+    requests.push(enabling);
+    if (previewFirst) requests.push(previewFirst);
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+    if (order === "prepared") {
+      release(stream([video]));
+      await vi.waitFor(() => expect(prepareLocalTrack).toHaveBeenCalledWith("camera", video));
+    }
+    const preview = previewFirst ?? client.media.captureCameraPreview();
+    requests.push(preview);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    release(stream([video]));
+    const lease = await preview;
+    expect(lease.track).toBe(video);
+    expect(client.getSnapshot().media.local.camera.track).toBe(video);
+    lease.release();
+    lease.release();
+    expect(video.stop).not.toHaveBeenCalled();
+    publish();
+    await enabling;
+    await client.leave();
+    expect(video.stop).toHaveBeenCalled();
+  } finally {
+    release(stream([video]));
+    publish();
+    client.dispose();
+    await Promise.allSettled(requests);
+  }
+});
+
+it("shares the camera acquisition already pending during join", async () => {
+  const platform = createCoreTestPlatform();
+  const audio = track("audio");
+  const video = track("video");
+  let release = (_stream: MediaStream) => {};
+  const getUserMedia = vi.fn(
+    () =>
+      new Promise<MediaStream>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia, enumerateDevices: async () => [] } } });
+  try {
+    const joining = client.join();
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+    const preview = client.media.captureCameraPreview();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    release(stream([audio, video]));
+    const lease = await preview;
+    await joining;
+    expect(lease.track).toBe(video);
+    lease.release();
+    expect(video.stop).not.toHaveBeenCalled();
+    await client.leave();
+    expect(audio.stop).toHaveBeenCalled();
+    expect(video.stop).toHaveBeenCalled();
+  } finally {
+    release(stream([audio, video]));
+    client.dispose();
+  }
+});
+
+it("stops a private preview on leave even after handing it to its caller", async () => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([video]), enumerateDevices: async () => [] } } });
+  try {
+    await client.join({ microphone: false, camera: false });
+    const lease = await client.media.captureCameraPreview();
+    expect(lease.track).toBe(video);
+    expect(video.stop).not.toHaveBeenCalled();
+    await client.leave();
+    expect(video.stop).toHaveBeenCalled();
+    lease.release();
+  } finally {
+    client.dispose();
   }
 });
 

@@ -31,12 +31,12 @@ describe("join with unavailable capture devices", () => {
       await vi.waitFor(() => expect(client.getSnapshot().media.devices.cameras).toHaveLength(1));
       start.mockClear();
       const captured = await client.media.captureCameraPreview();
-      expect(captured).toBe(preview);
+      expect(captured.track).toBe(preview);
       expect(client.getSnapshot().media.devices.cameras.map(({ label }) => label)).toEqual(["Front camera", "Back camera"]);
       expect(client.getSnapshot().media.local.camera).toMatchObject({ state: "disabled", track: null });
       expect(start).not.toHaveBeenCalled();
       expect(preview.stop).not.toHaveBeenCalled();
-      captured.stop();
+      captured.release();
     } finally {
       client.dispose();
     }

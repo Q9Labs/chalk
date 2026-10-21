@@ -3,7 +3,7 @@ import type React from "react";
 
 import { commandFailure } from "./command-failure";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
-import type { ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
+import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
@@ -27,7 +27,7 @@ export interface ControlBarSurfaceProps {
 
   microphoneTrack?: MediaStreamTrack | null;
   cameraTrack?: MediaStreamTrack | null;
-  captureCameraPreview?: () => Promise<MediaStreamTrack>;
+  captureCameraPreview?: () => Promise<CameraPreview>;
   microphoneWarning?: boolean;
   cameraWarning?: boolean;
   speakingWhileMuted?: boolean;

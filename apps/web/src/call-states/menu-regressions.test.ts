@@ -1,5 +1,7 @@
+import type * as CameraEnableFixture from "./camera-enable-fixture";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { JSHandle } from "playwright";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
@@ -33,6 +35,101 @@ async function load(state: string) {
   await page.goto(`${origin}/call-states.html?state=${state}${state.startsWith("shell-browser") ? "&browserMedia" : ""}`);
   await page.locator('[data-part="call-frame"]').waitFor();
 }
+
+it("borrows the enabling camera when its menu opens before capture finishes", async () => {
+  const racePage = await browser.newPage({ permissions: ["camera"], viewport: { width: 1440, height: 900 } });
+  racePage.on("pageerror", (error) => errors.push(error.message));
+  let race:
+    | JSHandle<{
+        calls: () => number;
+        tracks: MediaStreamTrack[];
+        allowCapture: () => void;
+        allowPublish: () => void;
+        dispose: () => void;
+      }>
+    | undefined;
+  try {
+    await racePage.goto(`${origin}/call-states.html?state=shell-browser-permission&browserMedia`);
+    const sdkSource = resolve("../../sdks/typescript/client/src");
+    race = await racePage.evaluateHandle(
+      async ({ sdkSource }) => {
+        const { createCoreTestPlatform, opaqueAccessGrant } = await import(`${"/@fs"}${sdkSource}/space-client/core.test.helpers.ts`);
+        const { createSpaceClientForPlatform } = await import(`${"/@fs"}${sdkSource}/effect.ts`);
+        const { mountCameraEnableMenu }: typeof CameraEnableFixture = await import(new URL("/src/call-states/camera-enable-fixture.tsx", location.href).href);
+        const platform = createCoreTestPlatform();
+        const tracks: MediaStreamTrack[] = [];
+        let calls = 0;
+        let allowCapture = () => {};
+        let allowPublish = () => {};
+        const captureReady = new Promise<void>((resolve) => {
+          allowCapture = resolve;
+        });
+        const publishReady = new Promise<void>((resolve) => {
+          allowPublish = resolve;
+        });
+        const client = createSpaceClientForPlatform(
+          { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+          {
+            ...platform,
+            dependencies: {
+              ...platform.dependencies,
+              mediaDevices: {
+                getUserMedia: async (constraints: MediaStreamConstraints) => {
+                  calls++;
+                  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                  tracks.push(...stream.getTracks());
+                  await captureReady;
+                  return stream;
+                },
+                enumerateDevices: () => navigator.mediaDevices.enumerateDevices(),
+              },
+              createSyncClient: () => ({
+                ...platform.sync,
+                setCameraEnabled: async () => {
+                  await publishReady;
+                  return { operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
+                },
+              }),
+            },
+          },
+        );
+        await client.join({ microphone: false, camera: false });
+        const unmount = mountCameraEnableMenu(client);
+        return {
+          calls: () => calls,
+          tracks,
+          allowCapture,
+          allowPublish,
+          dispose: () => {
+            allowCapture();
+            allowPublish();
+            unmount();
+            client.dispose();
+          },
+        };
+      },
+      { sdkSource },
+    );
+    await racePage.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).click();
+    await expect.poll(() => race?.evaluate((value) => value.calls())).toBe(1);
+    await racePage.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
+    await racePage.locator(".chalk-shell-preview video").waitFor();
+    await race?.evaluate((value) => value.allowCapture());
+    const preview = racePage.locator(".chalk-shell-preview video");
+    await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+    if (artifacts) await racePage.screenshot({ path: resolve(artifacts, "enable-pending.png") });
+    expect(await race?.evaluate((value) => value.calls())).toBe(1);
+    const enablingTrackId = await race?.evaluate((value) => value.tracks[0]?.id);
+    expect(await preview.evaluate((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0]?.id : null))).toBe(enablingTrackId);
+    await racePage.keyboard.press("Escape");
+    expect(await race?.evaluate((value) => value.tracks[0]?.readyState)).toBe("live");
+    await race?.evaluate((value) => value.allowPublish());
+  } finally {
+    await race?.evaluate((value) => value.dispose());
+    await race?.dispose();
+    await racePage.close();
+  }
+}, 30_000);
 
 it("discovers both cameras when private preview reveals the permission-restricted inventory", async () => {
   const privatePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });

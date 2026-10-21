@@ -2,7 +2,7 @@
 
 ## 5.1.0 (unreleased)
 
-- Client: add `media.captureCameraPreview()` for unpublished camera capture with post-permission device refresh. The caller must stop the returned track.
+- Client: add `media.captureCameraPreview()` for unpublished camera capture with post-permission device refresh. It shares live or pending camera capture; callers release a preview handle.
 - React: add optional `captureCameraPreview` to `DevicePopover` and `ControlBarSurface`, and optional `ChalkMenu.onOpenChange`. Fix camera-menu previews and the keyboard-shortcut dialog flash.
 - These additive SDK APIs require the next synchronized minor release. Before publishing, use `pnpm run package:release -- --bump 5.1.0` to advance the coordinated package versions, workspace ranges, and lockfile. This PR does not bump versions or publish packages.
 

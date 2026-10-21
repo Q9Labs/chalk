@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add `media.captureCameraPreview()` to capture an unpublished camera track with the selected device and refresh the inventory after permission is granted. The caller owns and must stop the returned track.
+- Add `media.captureCameraPreview()` to capture an unpublished camera track with the selected device and refresh the inventory after permission is granted. It shares live or pending camera capture; callers release a preview handle.
 
 ## 5.0.0
 

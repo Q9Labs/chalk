@@ -76,6 +76,8 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   const client = {
     media: {
       captureCameraPreview: async () => {
+        const current = snapshot.media.local.camera.track;
+        if (current?.enabled && current.readyState === "live") return { track: current, release: () => {} };
         cameraPreviewClient ??= createSpaceClient({
           space: "camera-preview",
           getAccess: async () => {

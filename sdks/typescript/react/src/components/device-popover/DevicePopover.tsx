@@ -1,3 +1,4 @@
+import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { Menu } from "@base-ui/react/menu";
 import { useEffect, useRef, useState } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
@@ -19,7 +20,7 @@ export interface DevicePopoverProps {
   selectedSecondaryDeviceId?: string;
   onSecondaryDeviceChange?: (deviceId: string) => void;
   track?: MediaStreamTrack | null;
-  captureCameraPreview?: () => Promise<MediaStreamTrack>;
+  captureCameraPreview?: () => Promise<CameraPreviewHandle>;
   warning?: boolean;
   speakingWhileMuted?: boolean;
   noiseSuppression?: boolean;
@@ -64,54 +65,40 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   );
 }
 
-function CameraPreview({
-  track,
-  mirrored,
-  open,
-  isActive,
-  selectedDeviceId,
-  captureCameraPreview,
-}: {
-  readonly track?: MediaStreamTrack | null;
-  readonly mirrored: boolean;
-  readonly open: boolean;
-  readonly isActive: boolean;
-  readonly selectedDeviceId?: string;
-  readonly captureCameraPreview?: () => Promise<MediaStreamTrack>;
-}) {
+function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraPreview }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean; readonly open: boolean; readonly selectedDeviceId?: string; readonly captureCameraPreview?: () => Promise<CameraPreviewHandle> }) {
   const video = useRef<HTMLVideoElement>(null);
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
     const element = video.current;
     if (!element || !open) return;
     let cancelled = false;
-    let ownedTrack: MediaStreamTrack | undefined;
+    let preview: CameraPreviewHandle | undefined;
     setUnavailable(false);
-    if (isActive && track?.enabled && track.readyState === "live") {
-      element.srcObject = new MediaStream([track]);
-    } else if (!captureCameraPreview) {
-      setUnavailable(true);
-    } else {
+    if (captureCameraPreview) {
       void captureCameraPreview().then(
-        (previewTrack) => {
+        (captured) => {
           if (cancelled) {
-            previewTrack.stop();
+            captured.release();
             return;
           }
-          ownedTrack = previewTrack;
-          element.srcObject = new MediaStream([previewTrack]);
+          preview = captured;
+          element.srcObject = new MediaStream([captured.track]);
         },
         () => {
           if (!cancelled) setUnavailable(true);
         },
       );
+    } else if (track?.enabled && track.readyState === "live") {
+      element.srcObject = new MediaStream([track]);
+    } else {
+      setUnavailable(true);
     }
     return () => {
       cancelled = true;
       element.srcObject = null;
-      ownedTrack?.stop();
+      preview?.release();
     };
-  }, [track, open, isActive, selectedDeviceId, captureCameraPreview]);
+  }, [track, open, selectedDeviceId, captureCameraPreview]);
   return (
     <div className="chalk-shell-preview">
       <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
@@ -182,7 +169,7 @@ export function DevicePopover({
           </button>
         }
       >
-        {!mic ? <CameraPreview track={track} mirrored={mirrored} open={open} isActive={isActive} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
+        {!mic ? <CameraPreview track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
         <ChalkMenuLabel>{mic ? "Microphone" : "Camera"}</ChalkMenuLabel>
         {devices.length ? (
           devices.map((device) => (
