@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import type { CallLimboProps, ChalkButtonProps, StatusSurfaceProps } from "@q9labsai/chalk-react";
+import type { CallLimboProps, ChalkButtonProps } from "@q9labsai/chalk-react";
 import { vi } from "vitest";
 const spacePageTestMocks = vi.hoisted(() => {
   const holder: {
@@ -45,16 +45,9 @@ const spacePageTestMocks = vi.hoisted(() => {
     resumePublicSpace: vi.fn(),
   };
 });
-vi.mock("@q9labsai/chalk-react", () => ({
+vi.mock("@q9labsai/chalk-react", async () => ({
   Chalk: getSpacePageTestMocks().Chalk,
-  StatusSurface: ({ phase, callName, onRejoin, onHome, rejoinDisabled }: StatusSurfaceProps) =>
-    createElement(
-      "section",
-      null,
-      createElement("h1", null, phase === "left" ? `You left ${callName}` : phase),
-      onRejoin ? createElement("button", { type: "button", onClick: onRejoin, disabled: rejoinDisabled }, "Rejoin") : null,
-      onHome ? createElement("button", { type: "button", onClick: onHome }, "Home") : null,
-    ),
+  StatusSurface: (await import("../../../../sdks/typescript/react/src/components/chalk/StatusSurface")).StatusSurface,
   CallLimbo: ({ message, detail, children, action }: CallLimboProps) =>
     createElement("section", null, createElement("p", { role: "status" }, message), detail ? createElement("p", null, detail) : null, children, action ? createElement("button", { type: "button", onClick: action.onClick, disabled: action.disabled }, action.label) : null),
   ChalkButton: ({ children, type, disabled, onClick }: ChalkButtonProps) => createElement("button", { type, disabled, onClick }, children),

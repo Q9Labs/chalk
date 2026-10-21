@@ -10,6 +10,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 import { playSound, type SoundName } from "../sounds/sounds";
 import { useTheme } from "../theme/theme";
 import type { Palette } from "../theme/tokens";
+import { mediaFailureMessage } from "./media-failure-copy";
 import { callNotices, firstName, type Notice } from "./notices";
 
 /** A device the call asks the OS for. */
@@ -117,7 +118,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
         });
         return;
       }
-      toasts.show({ kind: "error", leading, dismissible: true, wrap: true, message: cause instanceof Error ? `Couldn’t turn on your ${permission}. ${cause.message}` : `Couldn’t turn on your ${permission}.` });
+      toasts.show({ kind: "error", leading, dismissible: true, wrap: true, message: mediaFailureMessage(permission, code) });
     },
     [onOpenSettings, toasts],
   );

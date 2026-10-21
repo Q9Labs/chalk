@@ -1,5 +1,5 @@
 import { useTheme } from "../../lib/theme-context";
-import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type ErrorCode, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
@@ -19,7 +19,7 @@ export function SpacePage({
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
 } = {}) {
   const { mode } = useTheme();
-  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly reason: string | undefined; readonly cleanup: () => Promise<void> } | null>(null);
+  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly errorCode: ErrorCode | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -233,7 +233,7 @@ export function SpacePage({
         <StatusSurface
           phase={terminal.phase}
           callName={terminal.callName}
-          reason={terminal.reason}
+          errorCode={terminal.errorCode}
           theme={{ colorScheme: mode }}
           rejoinDisabled={Boolean(spaceAccess) || preparing}
           onRejoin={() => {
@@ -267,8 +267,8 @@ export function SpacePage({
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
         inviteLink={spaceAccess.inviteLink}
-        onTerminal={(phase, cleanup, reason) => {
-          setTerminal({ phase, cleanup, reason, callName: spaceAccess.spaceName });
+        onTerminal={(phase, cleanup, errorCode) => {
+          setTerminal({ phase, cleanup, errorCode, callName: spaceAccess.spaceName });
           void cleanup().catch(() => setError("Couldn’t leave the call. Try Home again."));
         }}
       />
@@ -397,7 +397,7 @@ function LocalSpace({
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
-  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, reason?: string) => void;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, errorCode?: ErrorCode) => void;
 }) {
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
@@ -408,7 +408,7 @@ function LocalSpace({
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
   const releaseFromLifecycle = useCallback(
-    (phase: ExitPhase, reason?: string) => {
+    (phase: ExitPhase, errorCode?: ErrorCode) => {
       if (endObserved.current) return;
       endObserved.current = true;
       intentionallyLeft.current = true;
@@ -417,14 +417,14 @@ function LocalSpace({
       } catch {
         /* Storage may be disabled. */
       }
-      onTerminal(phase, release, reason);
+      onTerminal(phase, release, errorCode);
     },
     [onTerminal, release],
   );
   useEffect(() => {
     if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
     else if (connection.removedByHost) releaseFromLifecycle("removed");
-    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.message);
+    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.code);
   }, [connection, releaseFromLifecycle]);
 
   useEffect(() => {

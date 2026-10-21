@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Show plain connection-not-ready and confirmation-timeout media feedback without exposing raw internal exception messages.
+
 ## 5.0.1
 
 - Fix the Android 11 crash when joining a call by isolating API 31 audio listeners from React Native module signatures.

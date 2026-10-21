@@ -33,12 +33,12 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
 };
 
 /** All terminal call states share the same quiet page and host-owned navigation. */
-export function StatusSurface({ phase, callName = "the call", reason, errorCode = "client.internal_error", theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
+export function StatusSurface({ phase, callName = "the call", reason, errorCode, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
     "episode-ended": { title: "The call ended", detail: "" },
-    failed: { title: `Couldn’t connect to ${callName}`, detail: FAILURE_DETAILS[errorCode] ?? DEFAULT_FAILURE_DETAIL },
+    failed: { title: `Couldn’t connect to ${callName}`, detail: (errorCode && FAILURE_DETAILS[errorCode]) ?? DEFAULT_FAILURE_DETAIL },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
     full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },
     elsewhere: { title: "You joined from another tab", detail: `${callName} is open in another tab or window. Use it here instead?` },
@@ -57,7 +57,7 @@ export function StatusSurface({ phase, callName = "the call", reason, errorCode 
         {copy.title}
       </h1>
       {reason || copy.detail ? <p className="text-[14px] text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
-      {phase === "failed" ? (
+      {phase === "failed" && errorCode ? (
         <p className="text-[13px] text-[var(--chalk-muted-text)]">
           Reference:{" "}
           <code dir="ltr" className="break-all">

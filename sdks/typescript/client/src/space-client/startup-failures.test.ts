@@ -241,6 +241,22 @@ describe("public client capture warnings", () => {
 });
 
 describe("public client exhausted recovery", () => {
+  it("keeps an exhausted media confirmation recoverable without exposing target internals", async () => {
+    await liveBrowser();
+    const client = makeClient(async () => accessGrant());
+    try {
+      await client.join({ microphone: false, camera: false });
+      vi.useFakeTimers();
+      const send = vi.spyOn(WebSocket.prototype, "send");
+      const rejected = client.media.setMicrophoneEnabled(false).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(send.mock.calls.some(([data]) => JSON.parse(String(data)).type === "live_target")).toBe(true));
+      await vi.advanceTimersByTimeAsync(15_001);
+      expect(await rejected).toMatchObject({ code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." });
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
   it.each(["sync", "media"] as const)("keeps the %s recovery stage", async (stage) => {
     const sockets = await liveBrowser();
     const client = makeClient(async () => accessGrant());

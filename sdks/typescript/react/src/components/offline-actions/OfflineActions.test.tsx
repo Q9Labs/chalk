@@ -130,7 +130,7 @@ it.each(["left", "failed"] as const)("keeps the %s screen to one calm status mes
   expect(html).not.toContain("Your offline actions were not sent");
   if (status === "failed") {
     expect(html).toContain("Something went wrong while joining. Try again.");
-    expect(html).toContain("client.internal_error");
+    expect(html).not.toContain("Reference:");
     expect(html).not.toContain("Check your internet connection");
   }
 });

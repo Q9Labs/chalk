@@ -8,6 +8,19 @@ import { StatusSurface } from "./StatusSurface";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("failed call guidance", () => {
+  it("does not invent a reference when the failure code is unknown", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<StatusSurface phase="failed" />));
+      expect(container.textContent).toContain("Something went wrong while joining");
+      expect(container.textContent).not.toContain("Reference:");
+      expect(container.textContent).not.toContain("client.internal_error");
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it.each([
     ["access.invalid", "Refresh the page"],
     ["access.unavailable", "get access to the call"],

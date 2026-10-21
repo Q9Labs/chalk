@@ -40,7 +40,21 @@ const INVALID_PAYLOAD_CODE_BY_ACTION: ReadonlyMap<ConnectionError["action"], Err
   ["declineMediaRequest", "media.request_invalid"],
 ]);
 
-export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error"): SpaceClientError {
+const MEDIA_TIMEOUT_FAILURE = { code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." } as const;
+const SYNC_FAILURES: ReadonlyMap<string, { readonly failure: ClientFailure; readonly scope?: "media" }> = new Map([
+  ["not_live", { failure: { code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." } }],
+  ["signaling_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
+  ["negotiation_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
+  ["media_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
+  ["retry_exhausted", { failure: MEDIA_TIMEOUT_FAILURE, scope: "media" }],
+  ["reaction_ack_timeout", { failure: { code: "collaboration.unavailable", recoverable: true, message: "Couldn’t confirm your reaction. Try again." } }],
+]);
+
+export function normalizeMediaError(cause: unknown): SpaceClientError {
+  return normalizeClientError(cause, "client.internal_error", "media");
+}
+
+export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error", scope?: "media"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
   if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
     return new SpaceClientError({
@@ -49,8 +63,9 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
       message: cause.message,
     });
   }
-  if (cause instanceof V1SyncError && ["signaling_timeout", "negotiation_timeout", "media_timeout"].includes(cause.code)) {
-    return new SpaceClientError({ code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." });
+  if (cause instanceof V1SyncError) {
+    const policy = SYNC_FAILURES.get(cause.code);
+    if (policy && (!policy.scope || policy.scope === scope)) return new SpaceClientError(policy.failure);
   }
   if (isAccessInvalid(cause)) {
     return new SpaceClientError({ code: "access.invalid", recoverable: true, message: "The access grant was rejected" });

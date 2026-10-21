@@ -7,6 +7,7 @@
 - Keep keyboard-shortcut dialog content fixed while opening and closing. Report a problem remains unchanged and appears only when a host supplies `onReportProblem`.
 - Add optional `ChalkMenu.onOpenChange` for hosts that need to coordinate menu and dialog visibility.
 - Show stage-specific failed-entry guidance with a public error-code reference. Keep recoverable device capture warnings in the live call.
+- Omit the reference when the host has no known error code instead of inventing an internal-error reference.
 
 ## 5.0.0
 

@@ -203,6 +203,10 @@ and unsupported-environment rejections also retain their nonrecoverable flag.
 The React failed screen shows safe stage guidance and a public code reference;
 it does not display provider responses or tokens.
 
+Media changes that race Sync joining or reconnecting reject with the existing
+`connection.invalid_state` code, `recoverable: true`, and plain connection
+guidance. Wait for the call to connect before retrying the media change.
+
 ### Join capture errors
 
 `join()` requests the microphone and camera by default. If both work, capture
@@ -310,3 +314,10 @@ SpaceClient negotiates `collaboration_v2` for the 24-emoji set and per-message r
 The sharer keeps local playback (`suppressLocalAudioPlayback: false`). Display audio disables echo cancellation, noise suppression and automatic gain control to preserve music; microphone capture and its processing are unchanged. System audio is excluded to avoid sending the call back to itself. Headphones avoid acoustic doubling through the microphone; local playback cannot be preserved while guaranteeing that loudspeakers never leak into it. Chrome documents [local playback control](https://developer.chrome.com/blog/screen-sharing-improvements-in-chrome-109) and [system-audio feedback](https://developer.chrome.com/docs/web-platform/screen-sharing-controls). [Meet documents the same “Also share tab audio” picker control](https://support.google.com/meet/answer/9308856?hl=en). No public X documentation establishing its echo default was found.
 
 Shared tab audio is excluded from recordings until the recording format supports it. React Native display capture behavior is unchanged.
+
+Media-command confirmation deadlines and exhausted retries use existing
+`media.timeout` with `recoverable: true`. This classification applies only to
+media commands, not other operations with exhausted retries. Reaction
+acknowledgement deadlines use existing `collaboration.unavailable`, recoverable,
+with “Couldn’t confirm your reaction. Try again.” A missing acknowledgement does
+not establish whether anyone received the reaction.
