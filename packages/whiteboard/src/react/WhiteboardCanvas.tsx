@@ -550,7 +550,10 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
       clear: async () => {
         const engine = engineRef.current;
         if (engine) await engine.clear();
-        else api.updateScene({ elements: [] });
+        else {
+          api.updateScene({ elements: [], captureUpdate: excalidraw.CaptureUpdateAction.NEVER });
+          api.history.clear();
+        }
       },
       placeMath: (latex) => placeMathRef.current(latex),
     });

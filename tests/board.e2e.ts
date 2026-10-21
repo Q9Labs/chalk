@@ -36,7 +36,7 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await expect.poll(() => browser.evaluate(elementCount), { timeout: 15_000 }).toBe(before + 1);
 
     // Following the guest by its tile moves the web view with the guest's view.
-    await screen.getByLabel("Video tile for Proof guest 1").click();
+    await screen.getByLabel("Follow Proof").click();
     await expect(screen.getByText("Following Proof")).toBeVisible();
     expect(await guest.board.view({ x: 0, y: 0, width: 4000, height: 2500, bring: false })).toBe(true);
     await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).not.toBe("100%");

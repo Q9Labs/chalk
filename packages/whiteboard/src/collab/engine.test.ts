@@ -760,3 +760,19 @@ it("strips imported image bytes while retaining stored images and new drawings",
     engine.dispose();
   }
 });
+
+it("clears engine history only after a local shared clear commits", async () => {
+  const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
+  const { ExcalidrawCollabEngine } = await import("./engine");
+  const api = createCanvas(restoreElements, restoreAppState);
+  const clear = vi.fn().mockRejectedValueOnce(new Error("clear failed")).mockResolvedValueOnce({ sceneId: "new-scene", revision: "1" });
+  const engine = new ExcalidrawCollabEngine({ excalidrawAPI: api, canDraw: true, submitUpdate: vi.fn(), sendCursor: vi.fn(), requestSnapshot: vi.fn(), clear, subscribe: () => () => undefined });
+  try {
+    await expect(engine.clear()).rejects.toThrow("clear failed");
+    expect(api.history.clear).not.toHaveBeenCalled();
+    await engine.clear();
+    expect(api.history.clear).toHaveBeenCalledOnce();
+  } finally {
+    engine.dispose();
+  }
+});

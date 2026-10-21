@@ -266,7 +266,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #viewFrame(view: ChalkWhiteboardView): Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> {
     const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
-    if (this.#hello !== "versioned-view") return rectangle;
+    if (view.bring || this.#hello !== "versioned-view") return rectangle;
     if (view.originParticipantId !== undefined) return { ...rectangle, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence, ...(view.originEpoch !== undefined ? { origin_epoch: view.originEpoch } : {}) };
     if (!this.#participantId) return rectangle;
     return { ...rectangle, origin_participant_id: this.#participantId, origin_sequence: ++this.#viewSequence, origin_epoch: this.#viewEpoch };

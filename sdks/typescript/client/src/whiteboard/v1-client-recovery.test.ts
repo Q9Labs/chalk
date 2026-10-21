@@ -139,6 +139,19 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("sends Bring as an unversioned command without consuming a view sequence", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
+      expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      client.sendView({ ...view, bring: false });
+      expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}").origin_sequence).toBe(1);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("starts a fresh transport epoch when the same participant reconnects", async () => {
     const epochs = [];
     for (const _ of [0, 1]) {

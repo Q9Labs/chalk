@@ -1,4 +1,5 @@
 import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { useEngineHistory } from "./board-history";
 import { ViewVersions } from "./board-view-versions";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
@@ -73,18 +74,6 @@ function fitContent(engine: WhiteboardEngineHandle, animate: boolean) {
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || target.tagName === "TEXTAREA" || target.tagName === "INPUT");
-}
-
-/** Counts this person's own changes, because the engine does not say whether it can undo. */
-function useHistoryCounts() {
-  const [depth, setDepth] = useState({ undo: 0, redo: 0 });
-  return {
-    canUndo: depth.undo > 0,
-    canRedo: depth.redo > 0,
-    changed: useCallback(() => setDepth((current) => ({ undo: current.undo + 1, redo: 0 })), []),
-    undone: useCallback(() => setDepth((current) => (current.undo > 0 ? { undo: current.undo - 1, redo: current.redo + 1 } : current)), []),
-    redone: useCallback(() => setDepth((current) => (current.redo > 0 ? { undo: current.undo + 1, redo: current.redo - 1 } : current)), []),
-  };
 }
 
 type CameraControl = {
@@ -182,7 +171,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
 }
 
 /** Engine keys the board does not offer never reach the engine: no help, library, menus or theme switch. */
-function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: { readonly onTool: (tool: BoardTool) => void; readonly onZoom: (factor: number) => void; readonly onUndo: () => void; readonly onRedo: () => void; readonly canDraw: boolean }) {
+function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: { readonly onTool: (tool: BoardTool) => void; readonly onZoom: (factor: number) => void; readonly canDraw: boolean }) {
   const latest = useRef(handlers);
   latest.current = handlers;
   useEffect(() => {
@@ -193,9 +182,9 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
       const key = event.key.toLowerCase();
       if (event.altKey && key.startsWith("arrow") && event.target instanceof Element && event.target.closest(".chalk-board-grip")) return;
       const modified = event.metaKey || event.ctrlKey;
-      const { onTool, onZoom, onUndo, onRedo, canDraw } = latest.current;
-      if (modified && !event.altKey && key === "z") return event.shiftKey ? onRedo() : onUndo();
-      if (modified && !event.altKey && key === "y") return onRedo();
+      const { onTool, onZoom, canDraw } = latest.current;
+      if (modified && !event.altKey && key === "z") return;
+      if (modified && !event.altKey && key === "y") return;
       if (modified && !event.altKey && !event.shiftKey && MODIFIED_ENGINE_KEYS.has(key)) return;
       if (!modified && !event.altKey) {
         const tool = TOOL_KEYS[key];
@@ -279,7 +268,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const [announcement, setAnnouncement] = useState("");
   const canDraw = primary && (board.collab?.canDraw ?? board.canDraw ?? true);
   const compact = phone || narrow;
-  const history = useHistoryCounts();
+  const history = useEngineHistory(root, engine);
   // Once this person draws or places a note, the camera is theirs: the board never fits under their hand.
   const touched = useRef(false);
   const views = useRef(new Map<string, ChalkWhiteboardView>());
@@ -364,13 +353,15 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const subscribe = board.collab?.subscribe;
   const latestView = useRef<(event: ChalkWhiteboardView & { readonly participantId: string }) => void>(() => undefined);
   latestView.current = (event) => {
-    if (event.originParticipantId === ownParticipantId && ownParticipantId) return;
-    if (!appliedVersions.current.isNew(event)) return;
     const previous = views.current.get(event.participantId);
-    if (event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originEpoch === previous.originEpoch && event.originSequence <= previous.originSequence) return;
+    if (!event.bring) {
+      if (event.originParticipantId === ownParticipantId && ownParticipantId) return;
+      if (!appliedVersions.current.isNew(event)) return;
+      if (event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originEpoch === previous.originEpoch && event.originSequence <= previous.originSequence) return;
+    }
     const newPeer = !previous;
     views.current.delete(event.participantId);
-    views.current.set(event.participantId, event);
+    views.current.set(event.participantId, event.bring ? { x: event.x, y: event.y, width: event.width, height: event.height, bring: false } : event);
     if (views.current.size > 256) {
       const oldest = views.current.keys().next().value;
       if (oldest !== undefined) views.current.delete(oldest);
@@ -379,9 +370,11 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     if (newPeer) {
       shareView.current(false);
     }
-    if (event.bring && followingRef.current !== event.participantId) {
+    if (event.bring) {
+      followingRef.current = event.participantId;
       onFollow(event.participantId);
       toast({ message: `${nameOf(event.participantId)} brought everyone to this view` });
+      move(cameraForView(event, viewportRef.current), true);
       return;
     }
     if (followingRef.current === event.participantId) goTo(event.participantId, true);
@@ -398,7 +391,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     if (following) goTo(following, true, true);
   }, [following, goTo]);
 
-  // The engine: tools, styles, history counts, emptiness and note text.
+  // The engine: tools, styles, emptiness and note text.
   useEffect(() => {
     if (engine && canDraw) applyTool(engine, tool, pen);
   }, [canDraw, engine, pen, tool]);
@@ -410,8 +403,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
 
   useEffect(() => {
     if (!engine) return;
-    let before = sceneSignature(engine);
-    let beforeEditing = before;
+    let beforeEditing = sceneSignature(engine);
     let wasEditing = false;
     setElementCount(engine.api.getSceneElements().length);
     // The first drawing to arrive from others is fitted into view once, as the mockup opens the board.
@@ -420,25 +412,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       if (!followingRef.current) fitContent(engine, false);
     }
     const offDown = engine.api.onPointerDown(() => {
-      before = sceneSignature(engine);
       touched.current = true;
     });
-    // The engine commits a stroke after it reports the pointer up, so look on the next frame.
-    let settle = 0;
-    const offUp = engine.api.onPointerUp(() => {
-      settle = requestAnimationFrame(() => {
-        if (sceneSignature(engine) !== before) history.changed();
-      });
-    });
-    const deletion = (event: KeyboardEvent) => {
-      if (!canDraw || isTyping(event.target) || (event.key !== "Delete" && event.key !== "Backspace")) return;
-      const previous = sceneSignature(engine);
-      settle = requestAnimationFrame(() => {
-        if (sceneSignature(engine) !== previous) history.changed();
-      });
-    };
-    const element = root.current;
-    element?.addEventListener("keydown", deletion, true);
     const offChange = engine.api.onChange((elements, appState) => {
       const count = elements.filter((element) => !element.isDeleted).length;
       setElementCount(count);
@@ -452,17 +427,13 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       wasEditing = editing;
       if (finishedEditing && sceneSignature(engine) !== beforeEditing) {
         settleNoteText(engine);
-        history.changed();
       }
     });
     return () => {
-      cancelAnimationFrame(settle);
       offDown();
-      offUp();
       offChange();
-      element?.removeEventListener("keydown", deletion, true);
     };
-  }, [canDraw, engine, history.changed]);
+  }, [engine]);
 
   useEffect(() => {
     const element = root.current;
@@ -477,7 +448,6 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     setTool(next);
   }, []);
   const undo = useCallback(() => {
-    // The keydown reaches the board's own key listener, which counts it.
     const container = root.current?.querySelector<HTMLElement>(".excalidraw");
     if (container) pressHistory(container, false);
   }, []);
@@ -492,13 +462,13 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     },
     [camera, stopFollowing],
   );
-  useBoardKeys(root, { onTool: chooseTool, onZoom: zoomBy, onUndo: history.undone, onRedo: history.redone, canDraw });
+  useBoardKeys(root, { onTool: chooseTool, onZoom: zoomBy, canDraw });
   useImageRefusal(root, toast);
 
   const restyle = (next: { readonly color?: PenColor; readonly width?: PenWidth }) => {
     if (next.color) setColor(next.color);
     if (next.width) setWidth(next.width);
-    if (engine && restyleSelection(engine, { ...pen, ...next }, next)) history.changed();
+    if (engine) restyleSelection(engine, { ...pen, ...next }, next);
   };
   const choosePlace = (next: IslandPlace, announce: boolean) => {
     setPlace(next);
@@ -563,7 +533,6 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     const { scrollX, scrollY, zoom } = camera.cameraRef.current;
     touched.current = true;
     placeNote(engine, container, { x: (event.clientX - rect.left) / zoom - scrollX, y: (event.clientY - rect.top) / zoom - scrollY }, color);
-    history.changed();
     setTool("selection");
   };
 

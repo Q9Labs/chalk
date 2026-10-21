@@ -27,6 +27,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
     getFiles: () => ({}),
     updateScene: () => {},
     setActiveTool: () => {},
+    registerAction: () => {},
     onScrollChange: () => () => {},
     onPointerDown: () => () => {},
     onPointerUp: () => () => {},

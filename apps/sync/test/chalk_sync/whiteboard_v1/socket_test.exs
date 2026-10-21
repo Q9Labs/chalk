@@ -498,6 +498,19 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     Fanout.unsubscribe(identity().episode)
   end
 
+  test "denied bring attempts still consume their rate-limit capacity" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+    Process.put(:current_capabilities, ["drawWhiteboard"])
+    assert {:ok, once} = receive_frame(view_frame(true), state)
+    assert {:ok, twice} = receive_frame(view_frame(true), once)
+    Process.put(:current_capabilities, ["drawWhiteboard", "manageWhiteboard"])
+    assert {:ok, _} = receive_frame(view_frame(true), twice)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
   test "bring has bounded capacity independent of continuous cursor traffic" do
     state = live_view_state()
     Fanout.subscribe(state.identity.episode)

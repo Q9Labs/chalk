@@ -6,3 +6,5 @@ export { getRenderedSvgSize, renderLatexToSvg } from "./mathjax-renderer";
 export type { RenderedMathSvg } from "./mathjax-renderer";
 export type { AppState, BinaryFileData, BinaryFiles, Collaborator, CollaboratorPointer, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "../collab/index";
 export { CANONICAL_INK } from "../collab/ink";
+
+export { observeEngineHistory, type EngineHistoryState } from "./engine-history";

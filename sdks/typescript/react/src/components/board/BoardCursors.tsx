@@ -5,7 +5,7 @@ import { springStep, type Camera } from "./board-model";
 
 export type RemoteCursor = { readonly participantId: string; readonly displayName: string; readonly x: number; readonly y: number; readonly occurredAt: string };
 
-type Tracked = { x: number; y: number; vx: number; vy: number; tx: number; ty: number; movingUntil: number; lastX: number; lastY: number };
+type Tracked = { name: string; x: number; y: number; vx: number; vy: number; tx: number; ty: number; movingUntil: number; lastX: number; lastY: number };
 
 const REST_RATE = 16;
 const STALE_MS = 10_000;
@@ -39,8 +39,12 @@ export function BoardCursors({ cursorsRef, cameraRef, colorFor, hidden }: { read
         }
         let state = tracked.current.get(id);
         if (!state) {
-          state = { x: cursor.x, y: cursor.y, vx: 0, vy: 0, tx: cursor.x, ty: cursor.y, movingUntil: 0, lastX: cursor.x, lastY: cursor.y };
+          state = { name: cursor.displayName, x: cursor.x, y: cursor.y, vx: 0, vy: 0, tx: cursor.x, ty: cursor.y, movingUntil: 0, lastX: cursor.x, lastY: cursor.y };
           tracked.current.set(id, state);
+          rosterChanged = true;
+        }
+        if (state.name !== cursor.displayName) {
+          state.name = cursor.displayName;
           rosterChanged = true;
         }
         if (cursor.x !== state.tx || cursor.y !== state.ty) {

@@ -18,6 +18,8 @@ type TestEngine = {
   select: (kind: "note" | "highlighter") => void;
   elements: () => readonly { strokeColor?: string; strokeWidth?: number; backgroundColor?: string; opacity?: number; isDeleted: boolean }[];
   deleteSelection: () => void;
+  draw: () => void;
+  nudge: () => void;
 };
 
 const { engineLoaded } = vi.hoisted(() => ({ engineLoaded: vi.fn<(engine: TestEngine) => void>() }));
@@ -32,17 +34,58 @@ vi.mock("@excalidraw/excalidraw", async () => {
   const createEngine = () => {
     let appState: State = { isLoading: false, viewBackgroundColor: "transparent", scrollX: 0, scrollY: 0, zoom: { value: 1 }, selectedElementIds: {}, editingTextElement: null };
     let elements: readonly TextElement[] = [];
+    const undoButton = document.createElement("button");
+    const redoButton = document.createElement("button");
+    undoButton.dataset.testid = "button-undo";
+    redoButton.dataset.testid = "button-redo";
+    undoButton.disabled = redoButton.disabled = true;
+    const historyListeners = new Set<() => void>();
+    const emitHistory = () => {
+      for (const listener of historyListeners) listener();
+    };
+    const nativeHistory = {
+      get isUndoStackEmpty() {
+        return undoButton.disabled;
+      },
+      get isRedoStackEmpty() {
+        return redoButton.disabled;
+      },
+      clear: () => {
+        undoButton.disabled = redoButton.disabled = true;
+      },
+      onHistoryChangedEmitter: {
+        on: (listener: () => void) => {
+          historyListeners.add(listener);
+          return () => {
+            historyListeners.delete(listener);
+          };
+        },
+        trigger: emitHistory,
+      },
+    };
+    const actions = new Set<{ keyTest?: (event: KeyboardEvent, state: State, elements: readonly TextElement[], app: { history: typeof nativeHistory }) => boolean }>();
+    const record = () => {
+      undoButton.disabled = false;
+      redoButton.disabled = true;
+      emitHistory();
+    };
+    const clearHistory = () => nativeHistory.clear();
     const changes = new Set<Change>();
     const scrolls = new Set<(x: number, y: number, zoom: { value: number }) => void>();
     const notify = () => {
       for (const listener of changes) listener(elements, appState, {});
     };
     const api = {
+      history: { clear: clearHistory },
+      registerAction: (action: Parameters<typeof actions.add>[0]) => {
+        actions.add(action);
+      },
       getAppState: () => appState,
       getSceneElements: () => elements,
       getSceneElementsIncludingDeleted: () => elements,
       getFiles: () => ({}),
-      updateScene: (input: { appState?: Partial<State>; elements?: readonly TextElement[] }) => {
+      updateScene: (input: { appState?: Partial<State>; elements?: readonly TextElement[]; captureUpdate?: string }) => {
+        if (input.captureUpdate === "IMMEDIATELY") record();
         const before = appState;
         appState = { ...appState, ...input.appState };
         if (input.elements) elements = input.elements;
@@ -78,16 +121,36 @@ vi.mock("@excalidraw/excalidraw", async () => {
       },
       deleteSelection: () => {
         elements = elements.map((element) => ({ ...element, isDeleted: true, version: element.version + 1 }));
+        record();
         notify();
       },
+      draw: record,
+      nudge: record,
       pan: (x, y) => api.updateScene({ appState: { scrollX: x, scrollY: y } }),
       camera: () => ({ x: appState.scrollX, y: appState.scrollY }),
       editText: (editing, changed = false) => {
+        if (changed) record();
         if (changed) elements = [{ id: "text", type: "text", version: (elements[0]?.version ?? 0) + 1, isDeleted: false }];
         api.updateScene({ appState: { editingTextElement: editing ? { id: "text" } : null } });
       },
     };
-    return { api, controls };
+    const attach = (element: HTMLDivElement | null) => {
+      if (!element) return;
+      element.append(undoButton, redoButton);
+      element.onkeydown = (event) => {
+        for (const action of actions) action.keyTest?.(event, appState, elements, { history: nativeHistory });
+        if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
+        if (event.shiftKey && !redoButton.disabled) {
+          undoButton.disabled = false;
+          redoButton.disabled = true;
+        } else if (!event.shiftKey && !undoButton.disabled) {
+          undoButton.disabled = true;
+          redoButton.disabled = false;
+        }
+        emitHistory();
+      };
+    };
+    return { api, controls, attach };
   };
   return {
     getSceneVersion: (elements: readonly TextElement[]) => elements.reduce((sum, element) => sum + element.version, 0),
@@ -102,7 +165,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
         engineLoaded(engine.controls);
         return engine.api.onChange(onChange);
       }, [engine, excalidrawAPI, onChange]);
-      return createElement("div", { className: "excalidraw" });
+      return createElement("div", { className: "excalidraw", ref: engine.attach });
     },
   };
 });
@@ -608,7 +671,7 @@ it("keeps redo when colour changes without a selected scene element", async () =
   });
 });
 
-it("counts an actual keyboard deletion of existing scene content", async () => {
+it("reflects an actual keyboard deletion of existing scene content", async () => {
   vi.useFakeTimers();
   await withOpenBoard(async (container, engine) => {
     await act(async () => engine.select("note"));
@@ -661,5 +724,85 @@ it("reports a shared clear failure instead of claiming that the board cleared", 
     await act(async () => clearAction?.());
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ type: "error", message: "Could not clear the board. Try again." }));
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
+  });
+});
+
+it.each(["draw", "nudge", "delete", "restyle"])("reads engine history after %s, including edits to remote content", async (kind) => {
+  await withOpenBoard(async (container, engine) => {
+    if (kind === "draw") await act(async () => engine.draw());
+    if (kind === "nudge") await act(async () => engine.nudge());
+    if (kind === "delete") await act(async () => engine.deleteSelection());
+    if (kind === "restyle") {
+      await act(async () => engine.select("highlighter"));
+      await clickControl(container, "Colour: Ink");
+      await clickControl(document, "Red");
+    }
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(false);
+    await clickControl(container, "Undo");
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(true);
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(false);
+  });
+});
+
+it("processes Bring even after the same origin version was applied through a relay", async () => {
+  vi.useFakeTimers();
+  await withOpenBoard(async (_container, _engine, peer, toast) => {
+    const view = { x: 25, y: 25, width: 1, height: 1, bring: false, originParticipantId: "presenter", originEpoch: "epoch", originSequence: 1 };
+    await act(async () => {
+      peer.receive("remote", view);
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    await act(async () => peer.receive("presenter", { ...view, bring: true }));
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Someone brought everyone to this view" }));
+  });
+});
+
+it("keeps overflowed people followable when the host supplies a Participants panel", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const openParticipants = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage tiles={Array.from({ length: 30 }, (_, index) => ({ id: `person-${index}`, displayName: `Person ${index}`, isLocal: index === 0 }))} layout="focus" generatedAvatars={false} whiteboard={{ isOpen: true, props: {}, sendView: () => true }} onOverflowClick={openParticipants} />
+        </ChalkProvider>,
+      ),
+    );
+    await finishOpening(container);
+    const overflow = container.querySelector<HTMLButtonElement>('button[aria-label^="Show "][aria-label$="more participants"]');
+    expect(overflow).not.toBeNull();
+    await act(async () => overflow?.click());
+    expect(openParticipants).not.toHaveBeenCalled();
+    const follow = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Follow Person 29");
+    expect(follow).toBeDefined();
+    await act(async () => follow?.click());
+    expect(container.textContent).toContain("Following Person");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it("clears engine Undo and Redo after clear, and records only the guarded restore", async () => {
+  const original = BoardMenuModule.BoardMenu;
+  let clearAction: (() => void) | undefined;
+  vi.spyOn(BoardMenuModule, "BoardMenu").mockImplementation((props) => {
+    clearAction = props.onClear;
+    return original(props);
+  });
+  await withOpenBoard(async (container, engine, _peer, toast) => {
+    await act(async () => engine.draw());
+    await clickControl(container, "Undo");
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(false);
+    await act(async () => clearAction?.());
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(true);
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(true);
+    const cleared = toast.mock.calls.find(([value]) => value.message === "Board cleared")?.[0];
+    await act(async () => cleared?.action?.onClick());
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(false);
   });
 });

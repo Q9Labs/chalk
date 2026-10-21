@@ -162,6 +162,7 @@ export class ExcalidrawCollabEngine {
       elements: [],
       captureUpdate: CaptureUpdateAction.NEVER,
     });
+    this.opts.excalidrawAPI.history.clear();
     return commit;
   }
 

@@ -545,24 +545,23 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:cursor, cursor},
          %{phase: :live, identity: identity, display_name: display_name} = state
        ) do
-    case admit_presence(state, :cursor) do
-      {:ok, next} ->
-        frame = %{
-          "type" => "cursor",
-          "participant_id" => identity.participant_id,
-          "display_name" => display_name,
-          "x" => cursor.x,
-          "y" => cursor.y,
-          "occurred_at" =>
-            DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-        }
+    {admission, next} = admit_presence(state, :cursor)
 
-        Fanout.publish_cursor(identity.episode, frame)
-        {:ok, next}
+    with :ok <- admission do
+      frame = %{
+        "type" => "cursor",
+        "participant_id" => identity.participant_id,
+        "display_name" => display_name,
+        "x" => cursor.x,
+        "y" => cursor.y,
+        "occurred_at" =>
+          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      }
 
-      :rate_limited ->
-        {:ok, state}
+      Fanout.publish_cursor(identity.episode, frame)
     end
+
+    {:ok, next}
   end
 
   defp handle_frame({:view, _view}, %{phase: :live, view_negotiated: false} = state) do
@@ -573,47 +572,43 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:view, view},
          %{phase: :live, identity: identity, display_name: display_name} = state
        ) do
-    case admit_presence(state, if(view.bring, do: :bring, else: :cursor)) do
-      {:ok, next} ->
-        if authorized_view?(view, identity) do
-          frame = %{
-            "type" => "view",
-            "participant_id" => identity.participant_id,
-            "display_name" => display_name,
-            "x" => view.x,
-            "y" => view.y,
-            "width" => view.width,
-            "height" => view.height,
-            "bring" => view.bring,
-            "occurred_at" =>
-              DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-          }
+    {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :cursor))
 
-          frame =
-            case view do
-              %{origin_participant_id: origin, origin_sequence: sequence} ->
-                Map.merge(frame, %{
-                  "origin_participant_id" => origin,
-                  "origin_sequence" => sequence
-                })
+    with :ok <- admit_view(view, identity, admission) do
+      frame = %{
+        "type" => "view",
+        "participant_id" => identity.participant_id,
+        "display_name" => display_name,
+        "x" => view.x,
+        "y" => view.y,
+        "width" => view.width,
+        "height" => view.height,
+        "bring" => view.bring,
+        "occurred_at" =>
+          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      }
 
-              _ ->
-                frame
-            end
+      frame =
+        case view do
+          %{origin_participant_id: origin, origin_sequence: sequence} ->
+            Map.merge(frame, %{
+              "origin_participant_id" => origin,
+              "origin_sequence" => sequence
+            })
 
-          frame =
-            if Map.has_key?(view, :origin_epoch),
-              do: Map.put(frame, "origin_epoch", view.origin_epoch),
-              else: frame
-
-          Fanout.publish_transient(identity.episode, frame)
+          _ ->
+            frame
         end
 
-        {:ok, next}
+      frame =
+        if Map.has_key?(view, :origin_epoch),
+          do: Map.put(frame, "origin_epoch", view.origin_epoch),
+          else: frame
 
-      :rate_limited ->
-        {:ok, state}
+      Fanout.publish_transient(identity.episode, frame)
     end
+
+    {:ok, next}
   end
 
   defp handle_frame({:ping, _ping}, state) do
@@ -622,6 +617,12 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(_frame, state) do
     stop(state, 1008, "operation not available in this phase", :protocol_error)
+  end
+
+  defp admit_view(_view, _identity, {:error, reason}), do: {:error, reason}
+
+  defp admit_view(view, identity, :ok) do
+    if authorized_view?(view, identity), do: :ok, else: {:error, :unauthorized}
   end
 
   defp authorized_view?(%{bring: false}, _identity), do: true
@@ -833,7 +834,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       {:ok,
        %{state | presence_windows: Map.put(state.presence_windows, kind, {started, count + 1})}}
     else
-      :rate_limited
+      {{:error, :rate_limited}, state}
     end
   end
 

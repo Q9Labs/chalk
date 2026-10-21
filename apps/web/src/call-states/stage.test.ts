@@ -211,3 +211,34 @@ it("labels audio only on a remote share that includes it", async () => {
   await open("stage-share-local");
   expect(await page.getByLabel("With share audio", { exact: true }).count()).toBe(0);
 });
+
+it.each(["dark", "light"])("the board follow proof action follows Nora in %s", async (scheme) => {
+  const state = `board-follow-${scheme}`;
+  await open(state);
+  const action = await page.evaluate((id) => window.__CALL_STATES__?.find((entry) => entry.id === id)?.actions?.[0], state);
+  if (!action || !("click" in action)) throw new Error("Board follow proof has no click action");
+  await page.getByRole(action.role ?? "button", { name: action.click, exact: true }).click({ timeout: 5000 });
+  await page.getByText("Following Nora", { exact: true }).waitFor();
+  expect(await page.getByRole("button", { name: "Stop following Nora", exact: true }).isVisible()).toBe(true);
+});
+
+it("reads the real engine history for keyboard edits and resets it after shared clear", async () => {
+  await open("board-people-dark");
+  await page.locator('.chalk-board[data-ready="true"]').waitFor();
+  const undo = page.locator(".chalk-board").getByRole("button", { name: "Undo", exact: true });
+  const redo = page.locator(".chalk-board").getByRole("button", { name: "Redo", exact: true });
+  expect(await undo.isEnabled()).toBe(false);
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const canvas = page.locator(".excalidraw canvas.interactive");
+  await canvas.click({ position: { x: 200, y: 200 } });
+  await page.keyboard.press("Meta+a");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => undo.isEnabled()).toBe(true);
+  await undo.click();
+  await expect.poll(() => redo.isEnabled()).toBe(true);
+  await page.getByRole("button", { name: "Board menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Clear board", exact: true }).click();
+  await page.getByText("Board cleared", { exact: true }).waitFor();
+  expect(await undo.isEnabled()).toBe(false);
+  expect(await redo.isEnabled()).toBe(false);
+});
