@@ -3,9 +3,9 @@ import { Avatar } from "../atomic/Avatar";
 import { CursorArrow } from "./BoardIcon";
 import { springStep, type Camera } from "./board-model";
 
-export type RemoteCursor = { readonly participantId: string; readonly displayName: string; readonly x: number; readonly y: number };
+export type RemoteCursor = { readonly participantId: string; readonly displayName: string; readonly x: number; readonly y: number; readonly occurredAt: string };
 
-type Tracked = { x: number; y: number; vx: number; vy: number; tx: number; ty: number; seenAt: number; movingUntil: number; lastX: number; lastY: number };
+type Tracked = { x: number; y: number; vx: number; vy: number; tx: number; ty: number; movingUntil: number; lastX: number; lastY: number };
 
 const REST_RATE = 16;
 const STALE_MS = 10_000;
@@ -33,20 +33,23 @@ export function BoardCursors({ cursorsRef, cameraRef, colorFor, hidden }: { read
       const roster = cursorsRef.current;
       let rosterChanged = false;
       for (const [id, cursor] of roster) {
+        if (Date.now() - Date.parse(cursor.occurredAt) > STALE_MS) {
+          roster.delete(id);
+          continue;
+        }
         let state = tracked.current.get(id);
         if (!state) {
-          state = { x: cursor.x, y: cursor.y, vx: 0, vy: 0, tx: cursor.x, ty: cursor.y, seenAt: now, movingUntil: 0, lastX: cursor.x, lastY: cursor.y };
+          state = { x: cursor.x, y: cursor.y, vx: 0, vy: 0, tx: cursor.x, ty: cursor.y, movingUntil: 0, lastX: cursor.x, lastY: cursor.y };
           tracked.current.set(id, state);
           rosterChanged = true;
         }
         if (cursor.x !== state.tx || cursor.y !== state.ty) {
           state.tx = cursor.x;
           state.ty = cursor.y;
-          state.seenAt = now;
         }
       }
       for (const [id, state] of tracked.current) {
-        if (!roster.has(id) || now - state.seenAt > STALE_MS) {
+        if (!roster.has(id)) {
           tracked.current.delete(id);
           roster.delete(id);
           rosterChanged = true;

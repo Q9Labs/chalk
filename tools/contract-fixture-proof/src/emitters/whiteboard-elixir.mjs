@@ -194,19 +194,26 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp view_fields?(frame, fields) do
-    exact?(frame, fields) or
-      (exact?(frame, fields ++ ${render(contract.frames.view.originFields)}) and
+    epoch = frame["origin_epoch"]
+    origin_frame = Map.delete(frame, "origin_epoch")
+    (not Map.has_key?(frame, "origin_epoch") or uuid?(epoch)) and
+    (exact?(frame, fields) or
+      (exact?(origin_frame, fields ++ ${render(contract.frames.view.originFields)}) and
          uuid?(frame["origin_participant_id"]) and is_integer(frame["origin_sequence"]) and
-         frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991)
+         frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991))
   end
 
+  defp view_origin(%{"origin_epoch" => epoch} = frame),
+    do: Map.put(view_origin(Map.delete(frame, "origin_epoch")), :origin_epoch, epoch)
   defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
     do: %{origin_participant_id: participant, origin_sequence: sequence}
   defp view_origin(_frame), do: %{}
 
   defp view_rect?(frame) do
     finite_number?(frame["x"]) and finite_number?(frame["y"]) and finite_number?(frame["width"]) and
-      finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0
+      finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0 and
+      abs(frame["x"]) <= ${contract.frames.view.maxCoordinate} and abs(frame["y"]) <= ${contract.frames.view.maxCoordinate} and
+      frame["width"] <= ${contract.frames.view.maxExtent} and frame["height"] <= ${contract.frames.view.maxExtent}
   end
 
   defp valid_welcome?(frame) do

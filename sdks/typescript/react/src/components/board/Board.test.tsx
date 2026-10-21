@@ -3,9 +3,11 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
-import { createPreviewClient } from "../../test-support/preview-client";
+import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { Board } from "./Board";
 import { SpaceStage } from "../stage/SpaceStage";
+import * as BoardMenuModule from "./BoardMenu";
+import { BoardToastContext } from "./board-toasts";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
 
@@ -13,6 +15,9 @@ type TestEngine = {
   pan: (x: number, y: number) => void;
   camera: () => { x: number; y: number };
   editText: (editing: boolean, changed?: boolean) => void;
+  select: (kind: "note" | "highlighter") => void;
+  elements: () => readonly { strokeColor?: string; strokeWidth?: number; backgroundColor?: string; opacity?: number; isDeleted: boolean }[];
+  deleteSelection: () => void;
 };
 
 const { engineLoaded } = vi.hoisted(() => ({ engineLoaded: vi.fn<(engine: TestEngine) => void>() }));
@@ -21,7 +26,7 @@ const { engineLoaded } = vi.hoisted(() => ({ engineLoaded: vi.fn<(engine: TestEn
 // engine; Board, WhiteboardCanvas and stylesheet ownership run unchanged.
 vi.mock("@excalidraw/excalidraw", async () => {
   const { createElement, useEffect, useState } = await import("react");
-  type TextElement = { id: string; type: "text"; version: number; isDeleted: boolean };
+  type TextElement = { id: string; type: string; version: number; isDeleted: boolean; strokeColor?: string; strokeWidth?: number; backgroundColor?: string; opacity?: number; customData?: object };
   type State = { isLoading: boolean; viewBackgroundColor: string; scrollX: number; scrollY: number; zoom: { value: number }; selectedElementIds: object; editingTextElement: { id: string } | null };
   type Change = (elements: readonly TextElement[], state: State, files: object) => void;
   const createEngine = () => {
@@ -64,6 +69,17 @@ vi.mock("@excalidraw/excalidraw", async () => {
       },
     };
     const controls: TestEngine = {
+      elements: () => elements,
+      select: (kind) => {
+        elements = [
+          { id: "selected", type: kind === "note" ? "rectangle" : "freedraw", version: 1, isDeleted: false, strokeColor: "#ff9b3d", backgroundColor: "#ff9b3d", strokeWidth: (4.5 * 4) / 4.25, opacity: kind === "highlighter" ? 40 : 100, customData: kind === "note" ? { chalkNote: true } : {} },
+        ];
+        api.updateScene({ appState: { selectedElementIds: { selected: true } } });
+      },
+      deleteSelection: () => {
+        elements = elements.map((element) => ({ ...element, isDeleted: true, version: element.version + 1 }));
+        notify();
+      },
       pan: (x, y) => api.updateScene({ appState: { scrollX: x, scrollY: y } }),
       camera: () => ({ x: appState.scrollX, y: appState.scrollY }),
       editText: (editing, changed = false) => {
@@ -76,6 +92,8 @@ vi.mock("@excalidraw/excalidraw", async () => {
   return {
     getSceneVersion: (elements: readonly TextElement[]) => elements.reduce((sum, element) => sum + element.version, 0),
     CaptureUpdateAction: { NEVER: "NEVER", IMMEDIATELY: "IMMEDIATELY" },
+    newElementWith: (element: TextElement, update: Partial<TextElement>) => ({ ...element, ...update, version: element.version + 1 }),
+    convertToExcalidrawElements: (elements: readonly object[]) => elements.map((element, index) => ({ ...element, id: `note-${index}`, version: 1, isDeleted: false })),
     Excalidraw({ excalidrawAPI, onChange }: { excalidrawAPI: (value: ReturnType<typeof createEngine>["api"]) => void; onChange: Change }) {
       const [engine] = useState(createEngine);
       useEffect(() => {
@@ -93,6 +111,7 @@ function createPeer() {
   type Listener = Parameters<NonNullable<WhiteboardViewProps["collab"]>["subscribe"]>[0];
   const listeners = new Set<Listener>();
   const commit = async () => ({ sceneId: "scene", revision: "1" });
+  const clear = vi.fn(commit);
   const collab: NonNullable<WhiteboardViewProps["collab"]> = {
     canDraw: true,
     subscribe: (listener) => {
@@ -102,12 +121,13 @@ function createPeer() {
       };
     },
     submitUpdate: commit,
-    clear: commit,
+    clear,
     sendCursor: () => undefined,
     requestSnapshot: async () => undefined,
   };
   return {
     board: { collab },
+    clear,
     receive: (participantId: string, view: ChalkWhiteboardView) => {
       for (const listener of listeners) listener({ type: "view", participantId, ...view });
     },
@@ -132,17 +152,18 @@ async function finishOpening(container: HTMLElement, count = 1) {
   const stylesheet = document.getElementById("chalk-excalidraw-styles");
   if (!stylesheet) throw new Error("Board stylesheet was not requested");
   await act(async () => stylesheet.dispatchEvent(new Event("load")));
-  expect(container.querySelectorAll('.chalk-board[data-ready="true"]')).toHaveLength(count);
+  await vi.waitFor(() => expect(container.querySelectorAll('.chalk-board[data-ready="true"]')).toHaveLength(count));
 }
 
 it.each([
-  [2, false, false],
-  [2, true, false],
-  [2, false, true],
-  [2, true, true],
-  [3, false, false],
-  [3, true, false],
-] as const)("%s cyclic followers settle after crossed 50 ms updates: reduced %s, different shapes %s", async (count, reduced, differentShapes) => {
+  [2, false, false, false],
+  [2, true, false, false],
+  [2, false, true, false],
+  [2, true, true, false],
+  [3, false, false, false],
+  [3, true, false, false],
+  [2, false, false, true],
+] as const)("%s cyclic followers settle after crossed 50 ms updates: reduced %s, different shapes %s, legacy %s", async (count, reduced, differentShapes, legacy) => {
   vi.useFakeTimers();
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduced && query.includes("prefers-reduced-motion"), addEventListener() {}, removeEventListener() {} }));
   if (differentShapes) {
@@ -157,7 +178,7 @@ it.each([
   const sequences = peers.map(() => 0);
   const sends = peers.map((_, index) =>
     vi.fn((view: ChalkWhiteboardView) => {
-      const frame = view.originParticipantId ? view : { ...view, originParticipantId: String(index), originSequence: (sequences[index] = (sequences[index] ?? 0) + 1) };
+      const frame = legacy ? { x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } : view.originParticipantId ? view : { ...view, originParticipantId: String(index), originSequence: (sequences[index] = (sequences[index] ?? 0) + 1) };
       for (const [other, peer] of peers.entries()) if (other !== index) setTimeout(() => peer.receive(String(index), frame), 50);
       return true;
     }),
@@ -271,6 +292,11 @@ it.each([false, true])("relays a leader through C → B → A, reduced motion %s
     });
     expect(follower.camera()).toEqual(settled);
     expect(sends[2]).not.toHaveBeenCalledWith(expect.objectContaining({ x: 999 }));
+    await act(async () => {
+      peers[2]?.receive("1", { ...latest, x: 432, originSequence: 1, originEpoch: "reconnected" });
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(follower.camera().x).toBeCloseTo(-432, 2);
   } finally {
     await act(async () => roots.forEach((root) => root.unmount()));
     container.remove();
@@ -379,7 +405,7 @@ it("does not permanently hide Follow after one rejected view send", async () => 
     );
     await finishOpening(container);
     expect(sendView).toHaveBeenCalled();
-    const follow = container.querySelector('[aria-label="Video tile for Omar"]');
+    const follow = container.querySelector('[aria-label="Follow Omar"]');
     if (!(follow instanceof HTMLElement)) throw new Error("Omar's tile is missing");
     await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
@@ -407,7 +433,7 @@ it("does not resume following when the board closes and reopens", async () => {
     );
   try {
     await act(async () => render(true));
-    const follow = container.querySelector('[aria-label="Video tile for Omar"]');
+    const follow = container.querySelector('[aria-label="Follow Omar"]');
     if (!(follow instanceof HTMLElement)) throw new Error("Omar's tile is missing");
     await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
@@ -521,4 +547,119 @@ it.each(["load", "error"])("keeps Opening board while the engine is initialized 
     container.remove();
     client.dispose();
   }
+});
+
+async function withOpenBoard(check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>) => Promise<void>, primary = true) {
+  const client = createPreviewClient(createSnapshot(["drawWhiteboard", "manageWhiteboard"]));
+  const peer = createPeer();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const toast = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <BoardToastContext value={toast}>
+            <Board board={peer.board} primary={primary} visible colorScheme="dark" people={[]} following="remote" onFollow={() => undefined} sendView={() => true} />
+          </BoardToastContext>
+        </ChalkProvider>,
+      ),
+    );
+    await finishOpening(container);
+    const engine = loadedEngines()[0];
+    if (!engine) throw new Error("Missing board engine");
+    await check(container, engine, peer, toast);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+}
+
+async function clickControl(container: ParentNode, label: string) {
+  const button = container.querySelector(`button[aria-label="${label}"]`);
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing ${label}`);
+  await act(async () => button.click());
+}
+
+it("receives followed views while the active board is a grid tile", async () => {
+  vi.useFakeTimers();
+  await withOpenBoard(async (_container, engine, peer) => {
+    await act(async () => {
+      peer.receive("remote", { x: 75, y: 25, width: 1, height: 1, bring: false });
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(engine.camera().x).toBeCloseTo(-75, 2);
+  }, false);
+});
+
+it("keeps redo when colour changes without a selected scene element", async () => {
+  await withOpenBoard(async (container, engine) => {
+    await act(async () => {
+      engine.editText(true);
+      engine.editText(false, true);
+    });
+    await clickControl(container, "Undo");
+    await clickControl(container, "Colour: Ink");
+    await clickControl(document, "Red");
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(false);
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(true);
+  });
+});
+
+it("counts an actual keyboard deletion of existing scene content", async () => {
+  vi.useFakeTimers();
+  await withOpenBoard(async (container, engine) => {
+    await act(async () => engine.select("note"));
+    const canvas = container.querySelector(".excalidraw");
+    canvas?.addEventListener("keydown", () => engine.deleteSelection(), { once: true });
+    await act(async () => {
+      canvas?.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+      await vi.advanceTimersByTimeAsync(30);
+    });
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(false);
+  });
+});
+
+it("preserves highlighter identity and only restyles the property the person changed", async () => {
+  await withOpenBoard(async (container, engine) => {
+    await clickControl(container, "Select");
+    await act(async () => engine.select("highlighter"));
+    const before = engine.elements()[0];
+    await clickControl(container, "Colour: Ink");
+    await clickControl(document, "Thick");
+    expect(engine.elements()[0]?.strokeWidth).toBeCloseTo((8 * 4) / 4.25);
+    expect(engine.elements()[0]?.strokeColor).toBe(before?.strokeColor);
+    expect(engine.elements()[0]?.opacity).toBe(40);
+    await act(async () => engine.select("note"));
+    const note = engine.elements()[0];
+    await clickControl(document, "Thin");
+    expect(engine.elements()[0]).toEqual(note);
+  });
+});
+
+it.each([1, 2])("does not place notes for pointer button %s", async (button) => {
+  await withOpenBoard(async (container) => {
+    await clickControl(container, "Sticky note");
+    await act(async () => container.querySelector(".chalk-board-note-layer")?.dispatchEvent(new MouseEvent("pointerdown", { button, bubbles: true })));
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Sticky note"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(true);
+  });
+});
+
+it("reports a shared clear failure instead of claiming that the board cleared", async () => {
+  const original = BoardMenuModule.BoardMenu;
+  let clearAction: (() => void) | undefined;
+  vi.spyOn(BoardMenuModule, "BoardMenu").mockImplementation((props) => {
+    clearAction = props.onClear;
+    return original(props);
+  });
+  await withOpenBoard(async (_container, _engine, peer, toast) => {
+    peer.clear.mockRejectedValueOnce(new Error("stale scene"));
+    expect(clearAction).toBeTypeOf("function");
+    await act(async () => clearAction?.());
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ type: "error", message: "Could not clear the board. Try again." }));
+    expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
+  });
 });

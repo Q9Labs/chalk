@@ -139,6 +139,67 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("starts a fresh transport epoch when the same participant reconnects", async () => {
+    const epochs = [];
+    for (const _ of [0, 1]) {
+      const { client, sockets } = await startedRecoveryClient(new TestClock());
+      try {
+        client.sendView({ x: 10, y: 20, width: 300, height: 200, bring: false });
+        const frame = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+        expect(frame.origin_sequence).toBe(1);
+        expect(frame.origin_epoch).toMatch(/^[0-9a-f-]{36}$/);
+        epochs.push(frame.origin_epoch);
+      } finally {
+        await client.stopSceneSubscription();
+      }
+    }
+    expect(epochs[0]).not.toBe(epochs[1]);
+  });
+
+  it("renegotiates view support on a later connection after a successful fallback", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    try {
+      for (const index of [0, 1]) {
+        await settle();
+        sockets[index]?.open();
+        await settle();
+        sockets[index]?.close(1008);
+        clock.advance(5000);
+      }
+      await acceptSnapshot(sockets, 2);
+      await startup;
+      expect(client.supportsViews).toBe(false);
+      sockets[2]?.close(1006);
+      clock.advance(5000);
+      await acceptSnapshot(sockets, 3);
+      expect(client.supportsViews).toBe(true);
+      expect(client.sendView({ x: 0, y: 0, width: 100, height: 100, bring: false })).toBe(true);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("bounds replay to the 256 most recently active peer views", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const events: ChalkWhiteboardV1Event[] = [];
+    try {
+      for (let index = 0; index < 300; index++) {
+        sockets[0]?.receive({ type: "view", participant_id: `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`, display_name: "Peer", x: index, y: 0, width: 100, height: 100, bring: false, occurred_at: "2026-10-21T00:00:00Z" });
+        await settle();
+      }
+      const unsubscribe = client.subscribe((event) => events.push(event));
+      const views = events.filter((event) => event.type === "view");
+      expect(views).toHaveLength(256);
+      expect(views[0]).toMatchObject({ x: 44 });
+      expect(views.at(-1)).toMatchObject({ x: 299 });
+      unsubscribe();
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("replays the latest ordinary peer view to a later board consumer", async () => {
     const { client, sockets } = await startedRecoveryClient(new TestClock());
     const events: ChalkWhiteboardV1Event[] = [];

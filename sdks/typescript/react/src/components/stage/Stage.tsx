@@ -270,7 +270,7 @@ export function Stage({
                   pinned={pinned}
                   clickAction={item.participant.isLocal ? "pin" : clickAction}
                   following={followingId === item.id}
-                  onClick={clickAction === "follow" && item.participant.isLocal ? undefined : click}
+                  onClick={click}
                   onDoubleClick={doubleClick}
                   style={style}
                   hidden={!frame}

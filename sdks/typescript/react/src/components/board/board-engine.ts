@@ -40,18 +40,40 @@ export function applyTool(engine: WhiteboardEngineHandle, tool: BoardTool, pen: 
   engine.api.setActiveTool(engineTool(tool));
 }
 
+type SceneElement = ReturnType<WhiteboardEngineHandle["api"]["getSceneElementsIncludingDeleted"]>[number];
+type SelectionStyle = Partial<Pick<SceneElement, "strokeColor" | "strokeWidth" | "backgroundColor">>;
+type PenChanges = { readonly color?: PenColor; readonly width?: PenWidth };
+
+function selectionStyle(element: SceneElement, pen: PenChoice, changes: PenChanges): SelectionStyle {
+  if (element.type === "rectangle" && element.customData?.chalkNote) {
+    if (!changes.color) return {};
+    return { strokeColor: NOTE_FILL[changes.color], backgroundColor: NOTE_FILL[changes.color] };
+  }
+  const style = penStyle(element.type === "freedraw" && element.opacity === 40 ? "highlighter" : "pen", pen);
+  return {
+    ...(changes.color ? { strokeColor: style.strokeColor } : {}),
+    ...(changes.width ? { strokeWidth: engineStrokeWidth(style.strokeWidth, element.type === "freedraw") } : {}),
+  };
+}
+
+function styleChanged(element: SceneElement, updates: SelectionStyle): boolean {
+  return (updates.strokeColor !== undefined && updates.strokeColor !== element.strokeColor) || (updates.strokeWidth !== undefined && updates.strokeWidth !== element.strokeWidth) || (updates.backgroundColor !== undefined && updates.backgroundColor !== element.backgroundColor);
+}
+
 /** A colour or width change applies to what is selected, as well as to the next stroke. */
-export function restyleSelection(engine: WhiteboardEngineHandle, tool: BoardTool, pen: PenChoice): void {
+export function restyleSelection(engine: WhiteboardEngineHandle, pen: PenChoice, changes: PenChanges): boolean {
   const { api, excalidraw } = engine;
   const selected = api.getAppState().selectedElementIds;
-  if (Object.keys(selected).length === 0) return;
-  const style = penStyle(tool === "highlighter" ? "highlighter" : "pen", pen);
+  let changed = false;
   const elements = api.getSceneElementsIncludingDeleted().map((element) => {
     if (!selected[element.id] || element.isDeleted) return element;
-    if (element.type === "rectangle" && element.customData?.chalkNote) return excalidraw.newElementWith(element, { backgroundColor: NOTE_FILL[pen.color], strokeColor: NOTE_FILL[pen.color] });
-    return excalidraw.newElementWith(element, { strokeColor: style.strokeColor, strokeWidth: engineStrokeWidth(style.strokeWidth, element.type === "freedraw") });
+    const updates = selectionStyle(element, pen, changes);
+    if (!styleChanged(element, updates)) return element;
+    changed = true;
+    return excalidraw.newElementWith(element, updates);
   });
-  api.updateScene({ elements, captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY });
+  if (changed) api.updateScene({ elements, captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY });
+  return changed;
 }
 
 /** Places a plain sticky note centred on the board point and opens its text at once. */

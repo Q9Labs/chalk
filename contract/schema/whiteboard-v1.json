@@ -112,6 +112,9 @@
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
     },
     "view": {
+      "maxCoordinate": 1000000,
+      "maxExtent": 2000000,
+      "epochField": "origin_epoch",
       "originFields": ["origin_participant_id", "origin_sequence"],
       "clientExactFields": ["type", "x", "y", "width", "height", "bring"],
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"]

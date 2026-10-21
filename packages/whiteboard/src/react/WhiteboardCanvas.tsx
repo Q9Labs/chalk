@@ -120,6 +120,7 @@ interface CollaborationRefs {
 }
 
 interface WhiteboardCollaboration {
+  ready: boolean;
   apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>;
   engineRef: MutableRefObject<ExcalidrawCollabEngine | null>;
   handleApiReady: (api: ExcalidrawImperativeAPI) => void;
@@ -290,7 +291,8 @@ function useWhiteboardCollaboration(options: {
 }): WhiteboardCollaboration {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const refs = useCollaborationRefs(options.collab, options.canDraw, options.inkColor);
-  const initializeEngine = useCollaborationEngineLoader(refs, apiRef, options.headless, options.onLoadError, options.setLoadError);
+  const [engineReady, setEngineReady] = useState(false);
+  const initializeEngine = useCollaborationEngineLoader(refs, apiRef, options.headless, options.onLoadError, options.setLoadError, setEngineReady);
   const handleApiReady = useExcalidrawApiReady(apiRef, initializeEngine, options.onExcalidrawApiReady);
   const handlers = useExcalidrawSceneHandlers(apiRef, refs.engineRef, options.onSelectedLatexChange);
 
@@ -299,7 +301,7 @@ function useWhiteboardCollaboration(options: {
   useCollaborationDisposal(refs.engineRef, refs.isMountedRef);
   useCollaborationInitialization(options.collab, apiRef, refs.engineRef, initializeEngine);
 
-  return { apiRef, engineRef: refs.engineRef, handleApiReady, ...handlers };
+  return { ready: !options.collab || engineReady, apiRef, engineRef: refs.engineRef, handleApiReady, ...handlers };
 }
 
 function useCollaborationRefs(collab: WhiteboardCollaborationOptions | undefined, canDraw: boolean, inkColor: string | undefined): CollaborationRefs {
@@ -317,7 +319,7 @@ function useCollaborationRefs(collab: WhiteboardCollaborationOptions | undefined
   return useMemo(() => ({ canDrawRef, inkColorRef, collabOptionsRef, enginePromiseRef, engineRef, isMountedRef }), [canDrawRef, inkColorRef, collabOptionsRef, enginePromiseRef, engineRef, isMountedRef]);
 }
 
-function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, headless: boolean, onLoadError: ((error: Error) => void) | undefined, setLoadError: (message: string) => void) {
+function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, headless: boolean, onLoadError: ((error: Error) => void) | undefined, setLoadError: (message: string) => void, setEngineReady: (ready: boolean) => void) {
   return useCallback(() => {
     if (!refs.collabOptionsRef.current || refs.engineRef.current || refs.enginePromiseRef.current) return;
 
@@ -342,6 +344,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRe
           onFileSyncStateChange: collab.onFileSyncStateChange,
           onSubmissionError: collab.onSubmissionError,
         });
+        setEngineReady(true);
       })
       .catch((reason: unknown) => {
         if (!refs.isMountedRef.current) return;
@@ -353,7 +356,7 @@ function useCollaborationEngineLoader(refs: CollaborationRefs, apiRef: MutableRe
       .finally(() => {
         refs.enginePromiseRef.current = null;
       });
-  }, [apiRef, headless, onLoadError, refs, setLoadError]);
+  }, [apiRef, headless, onLoadError, refs, setLoadError, setEngineReady]);
 }
 
 function useExcalidrawApiReady(apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, initializeEngine: () => void, onExcalidrawApiReady: ((api: ExcalidrawImperativeAPI) => void) | undefined) {
@@ -540,7 +543,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
   placeMathRef.current = placeMath;
   const { engineRef } = collaboration;
   useEffect(() => {
-    if (!api || !excalidraw || !loaded || !isReady || !onEngineReady) return;
+    if (!api || !excalidraw || !loaded || !isReady || !collaboration.ready || !onEngineReady) return;
     onEngineReady({
       api,
       excalidraw,
@@ -551,7 +554,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
       },
       placeMath: (latex) => placeMathRef.current(latex),
     });
-  }, [api, engineRef, excalidraw, isReady, loaded, onEngineReady]);
+  }, [api, engineRef, excalidraw, isReady, loaded, collaboration.ready, onEngineReady]);
   return { onApiReady, onChange };
 }
 

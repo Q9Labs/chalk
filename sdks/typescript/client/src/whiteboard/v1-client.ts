@@ -85,6 +85,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #presenting = false;
   #hello: "versioned-view" | "view" | "presentation" | "legacy" = "versioned-view";
   #viewSequence = 0;
+  readonly #viewEpoch = crypto.randomUUID();
   #pendingBring: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView } | null = null;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
@@ -266,9 +267,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #viewFrame(view: ChalkWhiteboardView): Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> {
     const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
     if (this.#hello !== "versioned-view") return rectangle;
-    if (view.originParticipantId !== undefined) return { ...rectangle, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence };
+    if (view.originParticipantId !== undefined) return { ...rectangle, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence, ...(view.originEpoch !== undefined ? { origin_epoch: view.originEpoch } : {}) };
     if (!this.#participantId) return rectangle;
-    return { ...rectangle, origin_participant_id: this.#participantId, origin_sequence: ++this.#viewSequence };
+    return { ...rectangle, origin_participant_id: this.#participantId, origin_sequence: ++this.#viewSequence, origin_epoch: this.#viewEpoch };
   }
 
   #flushPendingBring(): void {
@@ -454,7 +455,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
           bring: frame.bring,
           occurredAt: frame.occurred_at,
         };
-        this.#emit(frame.origin_participant_id ? { ...event, originParticipantId: frame.origin_participant_id, originSequence: frame.origin_sequence } : event);
+        this.#emit(frame.origin_participant_id ? { ...event, originParticipantId: frame.origin_participant_id, originSequence: frame.origin_sequence, ...(frame.origin_epoch ? { originEpoch: frame.origin_epoch } : {}) } : event);
         return;
       }
       case "permission_updated":
@@ -740,6 +741,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #disconnected(socket: SyncSocket, closeCode: number): void {
     if (socket !== this.#socket) return;
     const rejectedPresentationHello = this.#rejectedPresentationHello(closeCode);
+    const wasLive = this.#phase === "live";
     this.#resetDisconnectedState();
     if (!this.#started || !this.#transportAvailable) return;
     if (rejectedPresentationHello) {
@@ -752,6 +754,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#failRejectedConnection(closeCode);
       return;
     }
+    if (wasLive) this.#hello = "versioned-view";
     this.#scheduleReconnect();
   }
 
@@ -830,7 +833,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #emit(event: ChalkWhiteboardV1Event): void {
     if (event.type === "snapshot") this.#latestSnapshot = event;
-    if (event.type === "view") this.#latestViews.set(event.participantId, event);
+    if (event.type === "view") {
+      this.#latestViews.delete(event.participantId);
+      this.#latestViews.set(event.participantId, event);
+      if (this.#latestViews.size > 256) {
+        const oldest = this.#latestViews.keys().next().value;
+        if (oldest !== undefined) this.#latestViews.delete(oldest);
+      }
+    }
     for (const listener of this.#listeners) listener(event);
   }
 

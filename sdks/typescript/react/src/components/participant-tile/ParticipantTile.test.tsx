@@ -32,3 +32,14 @@ it("handles a double click when a focused tile has no single-click action", asyn
     await act(async () => root.unmount());
   }
 });
+
+it.each([false, true])("announces the actual follow action, following=%s", async (following) => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<ParticipantTileSurface participant={{ id: "nora", displayName: "Nora", isVideoEnabled: false }} mediaVisible={false} clickAction="follow" following={following} onClick={() => undefined} animatedAvatars={false} />));
+    expect(container.querySelector(`button[aria-label="${following ? "Stop following" : "Follow"} Nora"]`)).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

@@ -127,6 +127,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         "serverExactFields" => ["type", "participant_id", "display_name", "x", "y", "occurred_at"]
       },
       "view" => %{
+        "maxCoordinate" => 1_000_000,
+        "maxExtent" => 2_000_000,
+        "epochField" => "origin_epoch",
         "originFields" => ["origin_participant_id", "origin_sequence"],
         "clientExactFields" => ["type", "x", "y", "width", "height", "bring"],
         "serverExactFields" => [
@@ -549,15 +552,20 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp view_fields?(frame, fields) do
-    exact?(frame, fields) or
-      (exact?(frame, fields ++ [
+    epoch = frame["origin_epoch"]
+    origin_frame = Map.delete(frame, "origin_epoch")
+    (not Map.has_key?(frame, "origin_epoch") or uuid?(epoch)) and
+    (exact?(frame, fields) or
+      (exact?(origin_frame, fields ++ [
   "origin_participant_id",
   "origin_sequence"
 ]) and
          uuid?(frame["origin_participant_id"]) and is_integer(frame["origin_sequence"]) and
-         frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991)
+         frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991))
   end
 
+  defp view_origin(%{"origin_epoch" => epoch} = frame),
+    do: Map.put(view_origin(Map.delete(frame, "origin_epoch")), :origin_epoch, epoch)
   defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
     do: %{origin_participant_id: participant, origin_sequence: sequence}
   defp view_origin(_frame), do: %{}
@@ -565,7 +573,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp view_rect?(frame) do
     finite_number?(frame["x"]) and finite_number?(frame["y"]) and
         finite_number?(frame["width"]) and
-      finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0
+      finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0 and
+      abs(frame["x"]) <= 1000000 and abs(frame["y"]) <= 1000000 and
+      frame["width"] <= 2000000 and frame["height"] <= 2000000
   end
 
   defp valid_welcome?(frame) do

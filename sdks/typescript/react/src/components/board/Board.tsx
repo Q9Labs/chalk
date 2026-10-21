@@ -1,4 +1,5 @@
 import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { ViewVersions } from "./board-view-versions";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useCan, useConnection, useSelf, useWhiteboard } from "../../bindings/hooks";
@@ -310,22 +311,24 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const viewSender = useRef(sendView);
   viewSender.current = sendView;
   const ownParticipantId = useSelf().participantId;
-  const appliedVersions = useRef(new Map<string, number>());
+  const appliedVersions = useRef(new ViewVersions());
   const viewsAvailable = sendView !== undefined;
   const camera = useCamera(engine, root, stopFollowing, () => shareView.current(false));
 
   // A relay preserves the original participant/version; receiving that version again never moves the camera.
   useEffect(() => {
-    if (!primary || !viewsAvailable || !engine) return;
+    if (!visible || !viewsAvailable || !engine) return;
     let last = 0;
     let pending: ReturnType<typeof setTimeout> | undefined;
     const send = (bring: boolean) => {
       const followedView = followingRef.current ? views.current.get(followingRef.current) : undefined;
+      // Older view_v1 peers cannot mark a relay's origin, so never relay their inherited motion.
+      if (followedView && !followedView.originParticipantId && !bring) return true;
       // Relay the logical view, not the letterboxing added to fit my screen.
       const view = followedView ?? visibleView(camera.cameraRef.current, camera.viewportRef.current);
       last = performance.now();
       const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring };
-      const outgoing: ChalkWhiteboardView = followedView?.originParticipantId ? { ...rectangle, originParticipantId: followedView.originParticipantId, originSequence: followedView.originSequence } : rectangle;
+      const outgoing: ChalkWhiteboardView = followedView?.originParticipantId ? { ...rectangle, originParticipantId: followedView.originParticipantId, originSequence: followedView.originSequence, ...(followedView.originEpoch ? { originEpoch: followedView.originEpoch } : {}) } : rectangle;
       return viewSender.current?.(outgoing) ?? false;
     };
     shareView.current = (bring) => {
@@ -343,17 +346,15 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       clearTimeout(pending);
       shareView.current = () => false;
     };
-  }, [boardSession.sceneId, boardSession.status, camera.cameraRef, camera.viewportRef, connection.status, engine, primary, viewsAvailable]);
+  }, [boardSession.sceneId, boardSession.status, camera.cameraRef, camera.viewportRef, connection.status, engine, visible, viewsAvailable]);
 
   const { move, viewportRef } = camera;
   const goTo = useCallback(
     (participantId: string, animate: boolean, selected = false) => {
       const view = views.current.get(participantId);
       if (!view) return;
-      if (view.originParticipantId && view.originSequence !== undefined) {
-        if (!selected && view.originSequence <= (appliedVersions.current.get(view.originParticipantId) ?? 0)) return;
-        appliedVersions.current.set(view.originParticipantId, Math.max(view.originSequence, appliedVersions.current.get(view.originParticipantId) ?? 0));
-      }
+      if (!selected && !appliedVersions.current.isNew(view)) return;
+      appliedVersions.current.remember(view);
       move(cameraForView(view, viewportRef.current), animate);
     },
     [move, viewportRef],
@@ -364,11 +365,16 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const latestView = useRef<(event: ChalkWhiteboardView & { readonly participantId: string }) => void>(() => undefined);
   latestView.current = (event) => {
     if (event.originParticipantId === ownParticipantId && ownParticipantId) return;
-    if (event.originParticipantId && event.originSequence !== undefined && event.originSequence <= (appliedVersions.current.get(event.originParticipantId) ?? 0)) return;
+    if (!appliedVersions.current.isNew(event)) return;
     const previous = views.current.get(event.participantId);
-    if (event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originSequence !== undefined && previous.originSequence !== undefined && event.originSequence <= previous.originSequence) return;
+    if (event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originEpoch === previous.originEpoch && event.originSequence <= previous.originSequence) return;
     const newPeer = !previous;
+    views.current.delete(event.participantId);
     views.current.set(event.participantId, event);
+    if (views.current.size > 256) {
+      const oldest = views.current.keys().next().value;
+      if (oldest !== undefined) views.current.delete(oldest);
+    }
     // A new peer has now subscribed: announce my current view once for discovery.
     if (newPeer) {
       shareView.current(false);
@@ -381,12 +387,12 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     if (followingRef.current === event.participantId) goTo(event.participantId, true);
   };
   useEffect(() => {
-    if (!subscribe || !primary) return;
+    if (!subscribe || !visible) return;
     return subscribe((event) => {
-      if (event.type === "cursor") cursors.current.set(event.participantId, { participantId: event.participantId, displayName: event.displayName, x: event.x, y: event.y });
+      if (event.type === "cursor") cursors.current.set(event.participantId, { participantId: event.participantId, displayName: event.displayName, x: event.x, y: event.y, occurredAt: event.occurredAt });
       else if (event.type === "view") latestView.current(event);
     });
-  }, [primary, subscribe]);
+  }, [visible, subscribe]);
 
   useEffect(() => {
     if (following) goTo(following, true, true);
@@ -424,6 +430,15 @@ export function Board({ board, primary, visible, colorScheme, people, following,
         if (sceneSignature(engine) !== before) history.changed();
       });
     });
+    const deletion = (event: KeyboardEvent) => {
+      if (!canDraw || isTyping(event.target) || (event.key !== "Delete" && event.key !== "Backspace")) return;
+      const previous = sceneSignature(engine);
+      settle = requestAnimationFrame(() => {
+        if (sceneSignature(engine) !== previous) history.changed();
+      });
+    };
+    const element = root.current;
+    element?.addEventListener("keydown", deletion, true);
     const offChange = engine.api.onChange((elements, appState) => {
       const count = elements.filter((element) => !element.isDeleted).length;
       setElementCount(count);
@@ -445,8 +460,9 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       offDown();
       offUp();
       offChange();
+      element?.removeEventListener("keydown", deletion, true);
     };
-  }, [engine, history.changed]);
+  }, [canDraw, engine, history.changed]);
 
   useEffect(() => {
     const element = root.current;
@@ -482,10 +498,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const restyle = (next: { readonly color?: PenColor; readonly width?: PenWidth }) => {
     if (next.color) setColor(next.color);
     if (next.width) setWidth(next.width);
-    if (engine) {
-      restyleSelection(engine, tool, { ...pen, ...next });
-      history.changed();
-    }
+    if (engine && restyleSelection(engine, { ...pen, ...next }, next)) history.changed();
   };
   const choosePlace = (next: IslandPlace, announce: boolean) => {
     setPlace(next);
@@ -535,10 +548,15 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   };
   const clear = async () => {
     if (!engine) return;
-    const restore = await clearWithUndo(engine);
-    toast({ message: "Board cleared", action: { label: "Undo", onClick: () => void restore() } });
+    try {
+      const restore = await clearWithUndo(engine);
+      toast({ message: "Board cleared", action: { label: "Undo", onClick: () => void restore() } });
+    } catch {
+      toast({ type: "error", message: "Could not clear the board. Try again." });
+    }
   };
   const placeNoteAt = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
     const container = root.current?.querySelector<HTMLElement>(".excalidraw");
     if (!engine || !container || !root.current) return;
     const rect = root.current.getBoundingClientRect();

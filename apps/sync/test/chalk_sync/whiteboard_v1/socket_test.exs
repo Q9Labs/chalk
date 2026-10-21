@@ -11,6 +11,18 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   @scene_id "10000000-0000-4000-8000-000000000001"
 
   defmodule Repository do
+    def connect(identity) do
+      {:ok,
+       %{
+         capabilities: Process.get(:current_capabilities, identity.capabilities),
+         participant_capabilities: identity.capabilities,
+         scene_id: "10000000-0000-4000-8000-000000000001",
+         revision: 4,
+         can_draw: true,
+         is_presenting: false
+       }}
+    end
+
     def commit_update(_identity, operation) do
       send(self(), {:committed_update, operation})
 
@@ -473,6 +485,63 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     Fanout.unsubscribe(identity().episode)
   end
 
+  test "rechecks current management authority for bring after role changes" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+    Process.put(:current_capabilities, ["drawWhiteboard"])
+    assert {:ok, _} = receive_frame(view_frame(true), state)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+    Process.put(:current_capabilities, ["drawWhiteboard", "manageWhiteboard"])
+    assert {:ok, _} = receive_frame(view_frame(true), state)
+    assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  test "bring has bounded capacity independent of continuous cursor traffic" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+
+    saturated =
+      Enum.reduce(1..60, state, fn _, state ->
+        assert {:ok, next} = receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
+        next
+      end)
+
+    assert {:ok, brought} = receive_frame(view_frame(true), saturated)
+    assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+    assert {:ok, limited} = receive_frame(view_frame(true), brought)
+    assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+    assert {:ok, _} = receive_frame(view_frame(true), limited)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  defp live_view_state do
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    %{
+      initial
+      | phase: :live,
+        scene_id: @scene_id,
+        revision: 4,
+        display_name: "Ada",
+        identity: %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]},
+        view_negotiated: true
+    }
+  end
+
+  defp view_frame(bring),
+    do: %{
+      "type" => "view",
+      "x" => 10,
+      "y" => 20,
+      "width" => 800,
+      "height" => 600,
+      "bring" => bring
+    }
+
   test "preserves relay versions for negotiated peers and strips them for older view clients" do
     host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
     {:ok, initial} = SocketWhiteboardV1.init(%{})
@@ -498,6 +567,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       "height" => 600,
       "bring" => false,
       "origin_participant_id" => @scene_id,
+      "origin_epoch" => @participant_id,
       "origin_sequence" => 42
     }
 
@@ -507,6 +577,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                      %{
                        "type" => "view",
                        "origin_participant_id" => @scene_id,
+                       "origin_epoch" => @participant_id,
                        "origin_sequence" => 42
                      } = frame}
 
@@ -516,6 +587,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, peer)
 
     assert JSON.decode!(versioned)["origin_sequence"] == 42
+    assert JSON.decode!(versioned)["origin_epoch"] == @participant_id
 
     assert {:push, {:text, legacy}, _} =
              SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, %{
@@ -523,6 +595,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                | view_origins_negotiated: false
              })
 
+    refute Map.has_key?(JSON.decode!(legacy), "origin_epoch")
     refute Map.has_key?(JSON.decode!(legacy), "origin_sequence")
     refute Map.has_key?(JSON.decode!(legacy), "origin_participant_id")
   after

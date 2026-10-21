@@ -117,7 +117,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
 
   return (
     <TileShell
-      label={`Video tile for ${participant.displayName}`}
+      label={clickAction === "follow" ? actionLabel : `Video tile for ${participant.displayName}`}
       accentColor={colors.primary}
       pinned={clickAction === "follow" ? following : pinned}
       ring={following}

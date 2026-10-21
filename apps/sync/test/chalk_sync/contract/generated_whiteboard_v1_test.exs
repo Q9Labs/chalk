@@ -73,6 +73,29 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
              GeneratedWhiteboardV1.decode_client_frame(%{versioned | "origin_sequence" => 0})
   end
 
+  test "bounds view coordinates and extents before broadcasting" do
+    view = %{
+      "type" => "view",
+      "x" => 0,
+      "y" => 0,
+      "width" => 800,
+      "height" => 600,
+      "bring" => true
+    }
+
+    for field <- ["x", "y", "width", "height"] do
+      assert {:error, :invalid_payload} =
+               GeneratedWhiteboardV1.decode_client_frame(Map.put(view, field, 1.7e308))
+    end
+
+    assert {:ok, {:view, _}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               view
+               | "x" => -1_000_000,
+                 "width" => 2_000_000
+             })
+  end
+
   test "rejects unknown fields and oversized batches" do
     assert {:error, :invalid_payload} =
              GeneratedWhiteboardV1.decode_client_frame(%{

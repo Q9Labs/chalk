@@ -31,7 +31,7 @@ export type WhiteboardV1SharedAppState = { readonly view_background_color: strin
 export type WhiteboardV1PresentationExtension = { readonly name: "presentation_v1" };
 export type WhiteboardV1ViewExtension = { readonly name: "view_v1"; readonly origins?: true };
 export type WhiteboardV1Extensions = readonly [WhiteboardV1PresentationExtension] | readonly [WhiteboardV1PresentationExtension, WhiteboardV1ViewExtension];
-export type WhiteboardV1ViewOrigin = { readonly origin_participant_id: string; readonly origin_sequence: number } | { readonly origin_participant_id?: never; readonly origin_sequence?: never };
+export type WhiteboardV1ViewOrigin = { readonly origin_participant_id: string; readonly origin_sequence: number; readonly origin_epoch?: string } | { readonly origin_participant_id?: never; readonly origin_sequence?: never; readonly origin_epoch?: never };
 export type WhiteboardV1ClientFrame =
   | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null }
   | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly extensions: WhiteboardV1Extensions }
@@ -197,11 +197,14 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
 }
 
 function isViewFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
-  return hasExactRecordKeys(value, fields) || (hasExactRecordKeys(value, [...fields, ...WhiteboardV1ProtocolMetadata.frames.view.originFields]) && isUuid(value.origin_participant_id) && Number.isSafeInteger(value.origin_sequence) && Number(value.origin_sequence) > 0);
+  if (hasExactRecordKeys(value, fields)) return true;
+  const originFields = [...fields, ...WhiteboardV1ProtocolMetadata.frames.view.originFields];
+  const validFields = hasExactRecordKeys(value, originFields) || (hasExactRecordKeys(value, [...originFields, WhiteboardV1ProtocolMetadata.frames.view.epochField]) && isUuid(value.origin_epoch));
+  return validFields && isUuid(value.origin_participant_id) && Number.isSafeInteger(value.origin_sequence) && Number(value.origin_sequence) > 0;
 }
 
 function isViewRect(value: Record<string, unknown>): boolean {
-  return isFiniteNumber(value.x) && isFiniteNumber(value.y) && isFiniteNumber(value.width) && isFiniteNumber(value.height) && value.width > 0 && value.height > 0;
+  return isFiniteNumber(value.x) && isFiniteNumber(value.y) && isFiniteNumber(value.width) && isFiniteNumber(value.height) && value.width > 0 && value.height > 0 && Math.abs(value.x) <= WhiteboardV1ProtocolMetadata.frames.view.maxCoordinate && Math.abs(value.y) <= WhiteboardV1ProtocolMetadata.frames.view.maxCoordinate && value.width <= WhiteboardV1ProtocolMetadata.frames.view.maxExtent && value.height <= WhiteboardV1ProtocolMetadata.frames.view.maxExtent;
 }
 
 function isAppState(value: unknown): value is WhiteboardV1SharedAppState {
