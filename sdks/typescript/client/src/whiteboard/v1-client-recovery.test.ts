@@ -92,6 +92,55 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("sends views immediately after ready consumers subscribe and resubscribe", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const socket = sockets[0];
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
+    const events: ChalkWhiteboardV1Event[] = [];
+    let unsubscribe: () => void = () => undefined;
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        unsubscribe();
+        unsubscribe = client.subscribe((event) => events.push(event));
+        expect(events.at(-1)).toMatchObject({ type: "snapshot", sceneId });
+        expect(client.sendView({ ...view, x: index })).toBe(true);
+        expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view, x: index });
+      }
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "request_snapshot")).toHaveLength(1);
+    } finally {
+      unsubscribe();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("flushes a recovering bring when a snapshot consumer resubscribes on completion", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const socket = sockets[0];
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    let unsubscribe: () => void = () => undefined;
+    const observe = () => {
+      unsubscribe();
+      unsubscribe = client.subscribe(() => undefined);
+    };
+    const stopObserving = client.subscribe((event) => {
+      if (event.type === "snapshot") observe();
+    });
+    try {
+      const snapshot = client.requestSnapshot();
+      expect(client.sendView(bring)).toBe(true);
+      socket?.receive(snapshotPage(socket.requestId()));
+      await snapshot;
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([{ type: "view", ...bring }]);
+      const view = { ...bring, x: 40, bring: false };
+      expect(client.sendView(view)).toBe(true);
+      expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+    } finally {
+      unsubscribe();
+      stopObserving();
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("sends an accepted bring after snapshot recovery without replacing it with ordinary views", async () => {
     const { client, sockets } = await startedRecoveryClient(new TestClock());
     const socket = sockets[0];
