@@ -30,11 +30,10 @@ type CameraOwner = {
   readonly cancel: () => void;
   references: number;
 };
-type CameraPhase =
+type CameraState =
   | { readonly status: "idle" | "ended" }
   | { readonly status: "capturing"; readonly owner: CameraOwner }
   | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void };
-type CameraState = CameraPhase & { readonly ready: Promise<void> };
 export type MediaControllerEffects = {
   readonly configure: (
     intent: Readonly<{
@@ -100,7 +99,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #pendingSources = new Set<MediaSource>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #requestGenerations = new Map<string, number>();
-  #camera: CameraState = { status: "idle", ready: Promise.resolve() };
+  #camera: CameraState = { status: "idle" };
   #intent = { microphone: true, camera: true };
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
   #ports: ConnectionPorts | null = null;
@@ -148,7 +147,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#transitionCamera({ status: "ended" });
       }
       this.#store.select("camera", deviceId);
-    }).pipe(Effect.andThen(Effect.suspend(() => foreign(() => this.#camera.ready))), Effect.mapError(normalizeClientError));
+    }).pipe(Effect.mapError(normalizeClientError));
   selectSpeaker = (deviceId: string): ClientEffect<void> =>
     foreign(() => this.#selection.selectSpeaker(deviceId)).pipe(
       Effect.tap(() => Effect.sync(() => this.#store.select("speaker", deviceId))),
@@ -309,8 +308,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
                   );
                 }
                 const acquire =
-                  enabled && !this.#hasTrack(source)
-                    ? this.#captureForPublish(source, (track) =>
+                  enabled && (source === "camera" || !this.#hasTrack(source))
+                    ? this.#captureForPublish(source, ports.media, (track) =>
                         Effect.sync(() => {
                           captured = track;
                           try {
@@ -548,30 +547,27 @@ class MediaControllerRuntime implements MediaControllerEffects {
       ),
     );
   }
-  #transitionCamera(next: CameraPhase): void {
+  #transitionCamera(next: CameraState): void {
     const previous = this.#camera;
     const sameOwner = "owner" in previous && "owner" in next && previous.owner === next.owner;
     if (previous.status === "live") previous.track.removeEventListener("ended", previous.onEnded);
-    const retirement = this.#retireCameraPublication(previous, next);
-    const ready = next.status === "idle" ? Promise.resolve() : retirement;
-    this.#camera = { ...next, ready };
+    this.#camera = next;
     if (!sameOwner && "owner" in previous) {
       previous.owner.cancel();
       if (previous.status === "live") previous.track.stop();
     }
-    if (next.status === "live") {
-      next.track.addEventListener("ended", next.onEnded, { once: true });
-      void ready.then(() => this.#enablePrivateCamera(next.owner)).catch(() => undefined);
-    }
-    // Event/leave/dispose transitions have no awaiting caller; later acquisition still observes failures.
-    void retirement.catch(() => undefined);
+    if (next.status === "live") next.track.addEventListener("ended", next.onEnded, { once: true });
     this.#publish();
+    this.#retireCameraPublication(previous, next);
   }
-  #retireCameraPublication(previous: CameraState, next: CameraPhase): Promise<void> {
-    if (previous.status !== "live" || previous.publication === null || previous.publication === "initial") return previous.ready;
-    if (next.status === "live" && next.track === previous.track && next.publication !== null) return previous.ready;
+  #retireCameraPublication(previous: CameraState, next: CameraState): void {
+    if (previous.status !== "live" || previous.publication === null || previous.publication === "initial") return;
+    if (next.status === "live" && next.track === previous.track && next.publication !== null) return;
     const media = previous.publication;
-    return previous.ready.then(() => media.clearPreparedLocalTrack("camera", { stopTrack: false }));
+    void Promise.resolve()
+      .then(() => media.clearPreparedLocalTrack("camera", { stopTrack: false }))
+      .then(() => this.#enablePrivateCamera(previous.owner))
+      .catch((cause) => Effect.runSync(Effect.logWarning("Camera publication cleanup failed", cause)));
   }
   #enablePrivateCamera(owner: CameraOwner): void {
     const state = this.#camera;
@@ -620,27 +616,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #cameraSource(purpose: "preview" | "publication", acquire: (signal: AbortSignal) => Effect.Effect<MediaStreamTrack, unknown> = (signal) => this.#captureSource("camera", signal)): Effect.Effect<CameraPreview, unknown> {
     return Effect.suspend(() => {
-      const cancelled = Deferred.makeUnsafe<never, unknown>();
-      const cancel = () => Deferred.doneUnsafe(cancelled, Effect.fail(cancelledCaptureError()));
-      this.#pendingCaptures.add(cancel);
-      const source = Effect.sync(() => this.#discardEndedCamera()).pipe(
-        Effect.andThen(this.#cameraReady()),
-        Effect.andThen(
-          Effect.suspend(() => {
-            const current = this.#camera;
-            if (current.status === "live") return this.#liveCameraSource(current, purpose);
-            if (current.status === "capturing") return this.#borrowCamera(current.owner);
-            return this.#borrowCamera(this.#beginCameraCapture(acquire));
-          }),
-        ),
-      );
-      return Effect.raceFirst(source, Deferred.await(cancelled)).pipe(Effect.ensuring(Effect.sync(() => this.#pendingCaptures.delete(cancel))));
-    });
-  }
-  #cameraReady(): Effect.Effect<void, unknown> {
-    return Effect.suspend(() => {
-      const state = this.#camera;
-      return foreign(() => state.ready).pipe(Effect.andThen(Effect.suspend(() => (state === this.#camera ? Effect.void : this.#cameraReady()))));
+      this.#discardEndedCamera();
+      const current = this.#camera;
+      if (current.status === "live") return this.#liveCameraSource(current, purpose);
+      if (current.status === "capturing") return this.#borrowCamera(current.owner);
+      return this.#borrowCamera(this.#beginCameraCapture(acquire));
     });
   }
   #discardEndedCamera(): void {
@@ -731,8 +711,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
       );
     });
   }
-  #captureForPublish(source: "microphone" | "camera", prepare: (track: MediaStreamTrack) => Effect.Effect<void, unknown>): Effect.Effect<void, unknown> {
-    return source === "camera" ? this.#useCamera(prepare) : this.#captureSource(source).pipe(Effect.flatMap(prepare));
+  #captureForPublish(source: "microphone" | "camera", media: ConnectionPorts["media"], prepare: (track: MediaStreamTrack) => Effect.Effect<void, unknown>): Effect.Effect<void, unknown> {
+    return source === "camera" ? foreign(() => media.clearPreparedLocalTrack("camera", { stopTrack: false })).pipe(Effect.retry({ times: 1 }), Effect.andThen(this.#useCamera(prepare))) : this.#captureSource(source).pipe(Effect.flatMap(prepare));
   }
   #captureStream<A>(operation: () => Promise<MediaStream>, use: (stream: MediaStream) => Effect.Effect<A, unknown>, onCaptureError: (cause: unknown) => unknown = (cause) => cause, signal?: AbortSignal): Effect.Effect<A, unknown> {
     return Effect.suspend(() => {
@@ -812,7 +792,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (source === "camera")
       return Effect.sync(() => {
         if (this.#track(source) === track) this.#deleteTrack(source);
-      }).pipe(Effect.andThen(Effect.suspend(() => foreign(() => this.#camera.ready))));
+      });
     const clear = prepared ? foreign(() => media.clearPreparedLocalTrack(source)).pipe(Effect.ignore) : Effect.void;
     return clear.pipe(
       Effect.andThen(

@@ -30,6 +30,7 @@ type LocalTrackState = {
   desiredEnabled: boolean;
   enabled: boolean;
   endedListener: (() => void) | null;
+  clearing: Promise<void> | null;
 };
 type PendingLocalPublication = {
   readonly state: LocalTrackState;
@@ -143,6 +144,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       desiredEnabled: false,
       enabled: false,
       endedListener: null,
+      clearing: null,
     };
     this.#reusableLocalTransceivers.delete(source);
     this.#reusableLocalPublicationIds.delete(source);
@@ -159,21 +161,32 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async clearPreparedLocalTrack(source: MediaPublicationSource, options: { readonly stopTrack?: boolean } = {}): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
+    if (state.clearing) return state.clearing;
+    state.clearing = this.#clearPreparedTrack(state, options.stopTrack);
+    try {
+      await state.clearing;
+    } finally {
+      state.clearing = null;
+    }
+  }
+  async #clearPreparedTrack(state: LocalTrackState, stopTrack = true): Promise<void> {
+    const source = state.source;
     if (source === "screen_audio") {
       try {
         await this.#retireLocalPublication(source);
       } finally {
-        this.#removeOwnedLocalTrack(state, options.stopTrack);
-        this.#localTracks.delete(source);
+        this.#removeOwnedLocalTrack(state, stopTrack);
+        if (this.#localTracks.get(source) === state) this.#localTracks.delete(source);
         this.#publishSnapshot();
         this.#emitLocal();
       }
       return;
     }
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
+    if (this.#localTracks.get(source) !== state) return;
     if (state.transceiver) this.#reusableLocalTransceivers.set(source, state.transceiver);
     if (state.providerPublicationId) this.#reusableLocalPublicationIds.set(source, state.providerPublicationId);
-    this.#removeOwnedLocalTrack(state, options.stopTrack);
+    this.#removeOwnedLocalTrack(state, stopTrack);
     this.#localTracks.delete(source);
     this.#publishSnapshot();
     this.#emitLocal();
