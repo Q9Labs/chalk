@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"net/http"
 	"os"
@@ -116,6 +117,7 @@ func run() error {
 		Version:              cfg.Observability.Version,
 	}, os.Stdout)
 	logger := diagnostics.Logger()
+	slog.SetDefault(logger)
 	launchTelemetry := observability.NewLaunchTelemetry(logger)
 	logger.Info("api starting",
 		"event", "api.starting",

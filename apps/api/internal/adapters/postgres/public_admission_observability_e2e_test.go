@@ -149,7 +149,7 @@ type admissionJourney struct {
 	TraceID   string `json:"traceId"`
 }
 
-func (sink *admissionOTLP) evidence(journeys []admissionJourney) ([]admissionSignal, error) {
+func (sink *admissionOTLP) evidence(journeys, decisions []admissionJourney) ([]admissionSignal, error) {
 	sink.Lock()
 	defer sink.Unlock()
 	if sink.dropped {
@@ -178,17 +178,17 @@ func (sink *admissionOTLP) evidence(journeys []admissionJourney) ([]admissionSig
 			}
 		}
 	}
+	hasSpan := func(service, traceID string) bool {
+		for _, signal := range sink.signals {
+			if signal.Service == service && signal.Kind == "span" && signal.Trace == traceID {
+				return true
+			}
+		}
+		return false
+	}
 	for _, journey := range journeys {
-		for _, service := range []string{"chalk-api", "chalk-sync"} {
-			found := false
-			for _, signal := range sink.signals {
-				if signal.Service == service && signal.Kind == "span" && signal.Trace == journey.TraceID {
-					found = true
-				}
-			}
-			if !found {
-				return nil, fmt.Errorf("%s trace did not reach %s (%s)", journey.Name, service, journey.TraceID)
-			}
+		if !hasSpan("chalk-api", journey.TraceID) {
+			return nil, fmt.Errorf("%s request trace did not reach API (%s)", journey.Name, journey.TraceID)
 		}
 		if journey.Name == "Expired guest" || journey.Name == "Uncollected guest" {
 			linked := false
@@ -201,6 +201,16 @@ func (sink *admissionOTLP) evidence(journeys []admissionJourney) ([]admissionSig
 			}
 			if !linked {
 				return nil, fmt.Errorf("late %s outcome has no link to original request", journey.Name)
+			}
+		}
+	}
+	// A denial never activates the deferred join; expiry starts an independent,
+	// linked trace. Follow each persisted decision's producing trace across the
+	// worker boundary rather than expecting an original guest join in every case.
+	for _, decision := range decisions {
+		for _, service := range []string{"chalk-api", "chalk-sync"} {
+			if !hasSpan(service, decision.TraceID) {
+				return nil, fmt.Errorf("%s decision trace did not reach %s (%s)", decision.Name, service, decision.TraceID)
 			}
 		}
 	}
@@ -252,6 +262,17 @@ func TestPublicAdmissionObservabilityE2E(t *testing.T) {
 	if len(journeys) < 6 {
 		t.Fatalf("missing real admission journeys: %d", len(journeys))
 	}
+	terminal, err := os.ReadFile(filepath.Join(out, "admission-terminal-ledger.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decisions []admissionJourney
+	if err := json.Unmarshal(terminal, &decisions); err != nil {
+		t.Fatal(err)
+	}
+	if len(decisions) != 3 {
+		t.Fatalf("missing approve/deny/expire ledger evidence: %d", len(decisions))
+	}
 	sink.Lock()
 	evidence := append([]admissionSignal(nil), sink.signals...)
 	sink.Unlock()
@@ -262,7 +283,7 @@ func TestPublicAdmissionObservabilityE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(out, "admission-otlp-evidence.json"), encoded, 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sink.evidence(journeys); err != nil {
+	if _, err := sink.evidence(journeys, decisions); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -291,7 +312,7 @@ func TestAdmissionOTLPReceiver(t *testing.T) {
 	if len(sink.signals) != 1 || sink.signals[0].Service != "chalk-api" || sink.signals[0].Trace != "01010101010101010101010101010101" {
 		t.Fatalf("wire trace not decoded: %+v", sink.signals)
 	}
-	if _, err := sink.evidence(nil); err == nil {
+	if _, err := sink.evidence(nil, nil); err == nil {
 		t.Fatal("empty export passed operational proof")
 	}
 }

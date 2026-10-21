@@ -26,7 +26,8 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       ),
     );
     assert.equal(evidence.state, state);
-    assert(evidence.journeyId && evidence.traceId && evidence.ledgerEventId, "Terminal decision retains its durable journey ledger and producing trace");
+    assert(evidence.journeyId && evidence.ledgerEventId, "Terminal decision retains its durable journey ledger");
+    if (process.env.CHALK_API_OTLP_ENDPOINT) assert(evidence.traceId, "Instrumented terminal decision retains its producing trace");
     terminalLedger.push({ name, ...evidence });
     assert.equal(
       await sql(`select public.state from space_public_admission_requests public join sync_admission_requests live on live.admission_request_id=public.request_handle where public.tenant_id='${tenantId}' and public.space_id='${spaceId}' and public.display_name='${name}'`),
