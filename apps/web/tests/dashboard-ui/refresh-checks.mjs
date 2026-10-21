@@ -69,6 +69,7 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
 }
 
 export async function refreshChecks({ open, fixture, check, CALL }) {
+  await pollingBackoffChecks({ open, fixture, check, CALL });
   await budgetChecks({ open, fixture, check, CALL });
   await artifactRecoveryChecks({ open, fixture, check, CALL });
   await pendingMetadataChecks({ open, fixture, check, CALL });
@@ -215,7 +216,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await tab.waitForTimeout(5500);
     check("failed background refresh keeps ready content without a skeleton or error", (await reads("call-status")) > before && (await tab.locator(".liveb").count()) === 1 && (await tab.locator('[aria-busy="true"],.errp').count()) === 0);
     await fixture("set?fail=&end=1");
-    check("background refresh retries after failure", await visible(tab, '.srow a[aria-label^="Session"]'));
+    check("background refresh retries after failure", await visible(tab, '.srow a[aria-label^="Session"]', 15000));
     await context.close();
   }
   {
@@ -261,7 +262,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       captured = accept;
     });
     await tab.route(
-      "**/dashboard-api/call?*",
+      "**/dashboard-api/call-status?*",
       async (route) => {
         const response = await route.fetch();
         captured();
@@ -377,7 +378,7 @@ export async function budgetChecks({ open, fixture, check, CALL }) {
       await tab.clock.runFor(interval);
       await tab.waitForTimeout(200);
       check(`Home ${count} retains live data after a failed batch`, batches.length === 2 && (await tab.locator(".live").count()) === count);
-      await tab.clock.runFor(interval);
+      await tab.clock.runFor(Math.ceil(Math.min(interval * 2, 30000) / interval) * interval);
       await tab.locator(".live").first().waitFor({ state: "hidden" });
       const recovered = batches.slice(2).flat();
       check(
@@ -396,6 +397,113 @@ export async function budgetChecks({ open, fixture, check, CALL }) {
       const finished = metadataBatches.length;
       await tab.clock.runFor(interval * 2);
       check(`Home ${count} stops polling after ended metadata drains`, batches.length === stopped && metadataBatches.length === finished);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+export async function pollingBackoffChecks({ open, fixture, check, CALL }) {
+  {
+    const { tab, context } = await open("/dashboard", { set: "live=0", clock: true });
+    try {
+      await tab.route("**/dashboard-api/home", async (route) => {
+        const response = await route.fetch();
+        const page = await response.json();
+        await route.fulfill({ response, json: { ...page, calls: page.calls.map((call, index) => (index === 0 ? { ...call, name: "Renamed elsewhere" } : call)) } });
+      });
+      await tab.evaluate(() => {
+        for (const visibility of ["hidden", "visible"]) {
+          Object.defineProperty(document, "visibilityState", { configurable: true, value: visibility });
+          document.dispatchEvent(new Event("visibilitychange"));
+        }
+      });
+      await tab.getByText("Renamed elsewhere", { exact: true }).waitFor();
+      check("returning to idle Home revalidates the full list", true);
+    } finally {
+      await context.close();
+    }
+  }
+  for (const status of [403, 404, 410]) {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=1", clock: true });
+    try {
+      await tab.route("**/dashboard-api/call-status?*", (route) => route.fulfill({ status, json: { error: { code: "access_lost" } } }));
+      await tab.clock.runFor(3000);
+      await tab.locator(".errp").waitFor({ state: "visible" });
+      check(`terminal ${status} clears ready call and admission data`, (await tab.locator(".liveb,.orow").count()) === 0);
+    } finally {
+      await context.close();
+    }
+  }
+  for (const retryAfter of ["60", "date", undefined]) {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=0", clock: true });
+    try {
+      let attempts = 0;
+      let failing = true;
+      const fullReads = async () => (await fixture("log")).filter((entry) => entry.path === "/dashboard-api/call").length;
+      const initial = await fullReads();
+      await tab.route("**/dashboard-api/call-status?*", async (route) => {
+        attempts++;
+        if (!failing) return route.continue();
+        const headers = retryAfter === undefined ? {} : { "Retry-After": retryAfter === "date" ? await tab.evaluate(() => new Date(Date.now() + 60000).toUTCString()) : retryAfter };
+        await route.fulfill({ status: retryAfter === undefined ? 503 : 429, headers, json: { error: { code: "fixture_failure" } } });
+      });
+      const advance = async (ms) => {
+        await tab.clock.runFor(ms);
+        await tab.waitForTimeout(150);
+        await tab.waitForLoadState("networkidle");
+      };
+      await advance(5000);
+      check(`polling retains ready data after ${retryAfter ?? "503"}`, attempts === 1 && (await tab.locator(".liveb").count()) === 1 && (await tab.locator('[aria-busy="true"],.errp').count()) === 0);
+      if (retryAfter !== undefined) {
+        await advance(30000);
+        await tab.evaluate(() => {
+          for (const visibility of ["hidden", "visible"]) {
+            Object.defineProperty(document, "visibilityState", { configurable: true, value: visibility });
+            document.dispatchEvent(new Event("visibilitychange"));
+          }
+        });
+        await advance(25000);
+        check(`Retry-After ${retryAfter} suppresses polls and visibility bypass for 60 seconds`, attempts === 1);
+        failing = false;
+        await advance(5000);
+        check(`Retry-After ${retryAfter} resumes at expiry`, attempts === 2);
+      } else {
+        for (const delay of [10000, 20000, 30000, 30000]) {
+          const before = attempts;
+          await advance(delay - 5000);
+          check(`error backoff waits ${delay}ms at attempt ${before}`, attempts === before);
+          await advance(5000);
+          check(`error backoff retries after ${delay}ms at attempt ${before}`, attempts === before + 1);
+        }
+        failing = false;
+        await advance(30000);
+      }
+      const recovered = attempts;
+      await advance(5000);
+      check(`successful ${retryAfter ?? "503"} recovery resets normal polling without full reads`, attempts === recovered + 1 && (await fullReads()) === initial);
+      if (retryAfter === undefined) {
+        failing = true;
+        await advance(5000);
+        const before = attempts;
+        await advance(5000);
+        check("success resets exponential error delay", attempts === before);
+        await advance(5000);
+        check("new failure restarts at ten seconds", attempts === before + 1);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=1", clock: true });
+    try {
+      const reads = async (path) => (await fixture("log")).filter((entry) => entry.path === `/dashboard-api/${path}`).length;
+      const initial = await reads("call");
+      const before = await reads("call-status");
+      await tab.clock.runFor(3000);
+      await tab.waitForLoadState("networkidle");
+      check("pending knocks share the three-second status poll without full-page reads", (await reads("call-status")) === before + 1 && (await reads("call")) === initial);
     } finally {
       await context.close();
     }

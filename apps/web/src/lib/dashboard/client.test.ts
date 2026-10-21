@@ -61,6 +61,17 @@ describe("dashboard client", () => {
     expect(module.errorMessage(failure)).toBe("Chalk is getting a lot of requests. Try again in 60 seconds.");
   });
 
+  it("honours an HTTP-date Retry-After header ahead of a body hint", async () => {
+    const now = Date.parse("2026-10-21T12:00:00Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const { module } = await client([json(429, { error: { code: "engine_rate_limited", retryAfterSeconds: 5 } }, { "Retry-After": "Wed, 21 Oct 2026 12:01:00 GMT" })]);
+      await expect(module.readPage("developer", {})).rejects.toMatchObject({ retryAfterSeconds: 60 });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("asks for a fresh sign-in before a sensitive change", async () => {
     const { module } = await client([json(200, { profile, csrfToken: "t" }), json(401, { error: { code: "fresh_sign_in_required" } })]);
     const failure = await module.act("developer", { action: "revoke-key", keyId: "00000000-0000-4000-8000-000000000001" }).catch((error: unknown) => error);

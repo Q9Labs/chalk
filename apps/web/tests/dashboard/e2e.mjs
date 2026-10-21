@@ -14,11 +14,14 @@ assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through tests/dashboard/real-
 const apiOrigin = new URL(process.env.DASHBOARD_TEST_API_ORIGIN).origin;
 const requests = [];
 const engineReads = [];
+const engineRequests = [];
 const unsupportedBodies = [];
 let rateLimitPath;
 const engine = createServer(async (request, response) => {
   requests.push(request.url);
-  const read = request.method === "GET" ? { path: request.url, at: Date.now(), status: undefined } : undefined;
+  const observed = { method: request.method, path: request.url, at: Date.now(), status: undefined };
+  engineRequests.push(observed);
+  const read = request.method === "GET" ? observed : undefined;
   if (read) engineReads.push(read);
   let body = "";
   for await (const part of request) body += part;
@@ -39,7 +42,7 @@ const engine = createServer(async (request, response) => {
       await writeFile(resolve(import.meta.dirname, "../../../../artifacts/dashboard-engine-transcripts.json"), result);
     }
     if (upstream.status >= 400) console.error("Engine failure:", request.method, new URL(request.url, "http://localhost").pathname, upstream.status, result.toString().slice(0, 2048));
-    if (read) read.status = upstream.status;
+    observed.status = upstream.status;
     response.writeHead(upstream.status, Object.fromEntries(upstream.headers)).end(result);
   } catch {
     response.writeHead(503).end();
@@ -196,7 +199,7 @@ try {
     const { refreshCost } = await import("./refresh-cost.mjs");
     const client = browser();
     const session = await signIn(client, "ada");
-    await refreshCost({ client, session, post, origin, engineReads, tenantId: (await tenantFor("ada")).id, sql });
+    await refreshCost({ client, session, post, origin, engineReads, engineRequests, tenantId: (await tenantFor("ada")).id, sql });
   } else {
     for (const provider of ["google", "apple"]) {
       for (const mismatch of provider === "google" ? ["state", "nonce", "challenge"] : ["state", "nonce"]) {

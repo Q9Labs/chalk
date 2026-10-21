@@ -10,7 +10,7 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
     calls: await Promise.all(
       result.spaces.map(async (space) => {
         const metadata = await homeCallMetadata(engine, space.id);
-        // Invite reads mint tokens and consume the engine write budget. Fetch only on share/join.
+        // Fetch invite links only on share/join, not for every Home row.
         return { ...callDTO(space), inviteUrl: null, ...metadata };
       }),
     ),

@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-ro
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ProfileDTO } from "../../lib/dashboard/contracts";
-import { errorMessage, loadSession, needsSignIn, signOut } from "../../lib/dashboard/client";
+import { DashboardRequestError, errorMessage, loadSession, needsSignIn, signOut } from "../../lib/dashboard/client";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { Lockup } from "../site/Lockup";
@@ -22,7 +22,7 @@ function useSignInRedirect(): () => void {
 type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
 
 /** Loads a page; optional polling keeps ready data on screen, including after a failed refresh. */
-export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { interval: (data: T) => number | undefined; read: (data: T) => Promise<T | null> }) {
+export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { interval: (data: T) => number | undefined; read: (data: T) => Promise<T | null>; visibility?: "status" }) {
   const [state, setState] = useState<Load<T>>({ kind: "loading" });
   const toSignIn = useSignInRedirect();
   const latest = useRef({ load, polling });
@@ -35,6 +35,8 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
     let current = true;
     let revision = 0;
     let pending = false;
+    let failures = 0;
+    let retryAt = 0;
     invalidate.current = () => {
       revision++;
       pending = false;
@@ -42,6 +44,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
     ready.current = undefined;
     setState({ kind: "loading" });
     refresh.current = ({ force = false, background = true, status = false } = {}) => {
+      if (background && Date.now() < retryAt) return;
       if (pending && !force) return;
       pending = true;
       const request = ++revision;
@@ -57,14 +60,22 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
         (data) => {
           if (!current || request !== revision || data === undefined) return;
           pending = false;
+          failures = 0;
+          retryAt = 0;
           ready.current = data;
           setState({ kind: "ready", data });
         },
         (error: unknown) => {
           if (!current || request !== revision) return;
           pending = false;
+          failures = Math.min(failures + 1, 10);
+          const interval = ready.current === undefined ? 5000 : (latest.current.polling?.interval(ready.current) ?? 5000);
+          const delay = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : Math.min(interval * 2 ** failures, 30000);
+          retryAt = Date.now() + delay;
+          const terminal = error instanceof DashboardRequestError && [403, 404, 410].includes(error.status);
+          if (terminal) ready.current = undefined;
           if (needsSignIn(error)) toSignIn();
-          else setState((value) => (background && value.kind === "ready" ? value : { kind: "error", error }));
+          else setState((value) => (background && !terminal && value.kind === "ready" ? value : { kind: "error", error }));
         },
       );
     };
@@ -83,7 +94,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
       if (document.visibilityState === "visible") refresh.current({ status: true });
     };
     const becameVisible = () => {
-      if (document.visibilityState === "visible") refresh.current({ force: true });
+      if (document.visibilityState === "visible") refresh.current({ force: true, status: latest.current.polling?.visibility === "status" });
     };
     const timer = interval === undefined ? undefined : window.setInterval(visibleRefresh, interval);
     document.addEventListener("visibilitychange", becameVisible);

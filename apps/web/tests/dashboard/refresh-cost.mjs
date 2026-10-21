@@ -4,7 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Run with DASHBOARD_REFRESH_COST=1 through real-engine.sh. Every dashboard
 // success comes from the real Pages worker, HTTP API and PostgreSQL repositories.
-export async function refreshCost({ client, session, post, origin, engineReads, tenantId, sql }) {
+export async function refreshCost({ client, session, post, origin, engineReads, engineRequests, tenantId, sql }) {
   assert.equal(process.env.CHALK_API_RATE_LIMITS, "on");
   const created = await post(client, "/dashboard-api/home", { action: "create-call", name: "Refresh proof", admission: "knock", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(created.status, 200, await created.clone().text());
@@ -14,6 +14,28 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
   const episodeId = (await joined.json()).access.subject.episode_id;
   assert.equal((await client.request(`/dashboard-api/home-status?spaceIds=${Array(31).fill(call.id).join(",")}`)).status, 400);
   assert.equal((await client.request(`/dashboard-api/home-metadata?spaceIds=${Array(6).fill(call.id).join(",")}`)).status, 400);
+  const loadStart = engineRequests.length;
+  const loaded = await client.request(`/dashboard-api/call?spaceId=${call.id}`);
+  assert.equal(loaded.status, 200);
+  const initial = await loaded.json();
+  const pageLoad = engineRequests.slice(loadStart);
+  const lookupPath = "/v1/tenants/by-external-id?";
+  const scoped = (entry) => entry.path.startsWith(`/v1/tenants/${tenantId}/`);
+  assert(pageLoad.every((entry) => entry.method === "GET" && entry.status === 200));
+  assert.equal(pageLoad.filter((entry) => entry.path.startsWith(lookupPath)).length, 1);
+  // Five fixed scoped reads, two per Episode, one per recording (up to 5 x 5).
+  assert.equal(pageLoad.filter(scoped).length, 5 + 2 * initial.episodes.length + initial.episodes.reduce((sum, episode) => sum + episode.recordings.length, 0));
+  console.log(`PASS: call-page-fanout ${JSON.stringify({ total: pageLoad.length, scoped: pageLoad.filter(scoped).length, unscopedLookups: 1, writes: 0, maximumScoped: 40, maximumTotal: 41 })}`);
+  const traffic = (start, stop) => {
+    const requests = engineRequests.filter((entry) => entry.at >= start && entry.at < stop);
+    assert(
+      requests.every((entry) => entry.status === 200),
+      "No engine request failed or was throttled",
+    );
+    const writes = requests.filter((entry) => !["GET", "HEAD"].includes(entry.method));
+    assert.equal(writes.length, 0, "Dashboard polling must not write");
+    return { scoped: requests.filter(scoped).length, unscopedLookups: requests.filter((entry) => entry.path.startsWith(lookupPath)).length, total: requests.length, writes: writes.length };
+  };
   const require = createRequire(new URL("../../package.json", import.meta.url));
   const { chromium } = require("playwright");
   let browser;
@@ -42,14 +64,16 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     assert.equal(await callPage.evaluate(() => document.visibilityState), "visible");
     assert.equal(await homePage.evaluate(() => document.visibilityState), "visible");
     let navigations = 0;
+    let measuringNavigation = true;
     for (const page of [callPage, homePage])
       page.on("framenavigated", (frame) => {
-        if (frame === page.mainFrame()) navigations++;
+        if (measuringNavigation && frame === page.mainFrame()) navigations++;
       });
     // Both real browser pages stay open and visible for two complete minutes.
     // This includes page-load fan-out, rather than measuring only cheap ticks.
     await delay(120000);
     const stop = Date.now();
+    const normalTraffic = traffic(start, stop);
     const observed = engineReads.filter((read) => read.at >= start && read.at < stop && read.path.startsWith(`/v1/tenants/${tenantId}/`));
     assert(
       observed.every((read) => read.status === 200),
@@ -69,6 +93,34 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     );
     assert.equal(await callPage.locator(".liveb").count(), 1);
     assert.equal(await homePage.locator(".live").count(), 1);
+    // Measure the faster shared poll with a real pending admission, no second loop.
+    measuringNavigation = false;
+    await homePage.goto("about:blank");
+    const inviteToken = new URLSearchParams(new URL(initial.inviteUrl).hash.slice(1)).get("spaceInviteToken");
+    const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
+      method: "POST",
+      headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ space_invite_token: inviteToken, display_name: "Budget guest" }),
+    });
+    assert.equal(arrival.status, 201, await arrival.clone().text());
+    sql(`update space_public_admission_requests set expires_at=now()+interval '5 minutes' where space_id='${call.id}' and state='pending'`);
+    await callPage.locator(".orow").waitFor({ state: "visible", timeout: 12000 });
+    await delay(500);
+    const pendingStart = Date.now();
+    const pendingTicks = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length;
+    await delay(60000);
+    const pendingTraffic = traffic(pendingStart, Date.now());
+    const ticks = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length - pendingTicks;
+    assert(ticks >= 19 && ticks <= 21, `Expected three-second status cadence, got ${ticks}`);
+    assert(pendingTraffic.scoped <= 52 && pendingTraffic.unscopedLookups <= 26);
+    assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, initialCallReads);
+    console.log(
+      `PASS: refresh-cost-all-buckets ${JSON.stringify({ normalTwoPagesTwoMinutes: normalTraffic, pendingOnePageOneMinute: { ...pendingTraffic, ticks }, limitsPerMinute: { tenantRead: 300, tenantWrite: 60, serviceScopedRead: 6000, serviceUnscopedRead: 300 }, conservativeSinglePagePerMinute: { normal: { scoped: 36, unscoped: 18, total: 54, writes: 0 }, pending: { scoped: 52, unscoped: 26, total: 78, writes: 0 } } })}`,
+    );
+    // Let the end transition checks continue to observe both pages.
+    await homePage.goto(`${origin}/dashboard`);
+    await homePage.locator(".live").waitFor({ state: "visible" });
+    measuringNavigation = true;
     const ended = await post(client, "/dashboard-api/call", { action: "end-for-everyone", spaceId: call.id, episodeId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(ended.status, 200, await ended.clone().text());
     // This API/Postgres fixture has no Sync lifecycle consumer. Complete its

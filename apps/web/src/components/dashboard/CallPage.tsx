@@ -22,7 +22,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const pages = useRef(1);
-  const metadata = useRef({ ticks: 0, next: 0 });
+  const metadata = useRef({ after: Date.now() + 10000, next: 0 });
   const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
   const { state, reload, update } = useLoad(
     async () => {
@@ -36,13 +36,16 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
     },
     `call:${spaceId}`,
     {
+      visibility: "status",
       interval: (data) =>
         lifecycleRefresh.current.pending ||
         (!data.call.archived && data.call.admission === "knock") ||
         data.live ||
         data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => pendingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
         data.knocks.length
-          ? 5000
+          ? data.knocks.length
+            ? 3000
+            : 5000
           : undefined,
       read: async (data) => {
         const status = await readPage("call-status", { spaceId });
@@ -62,7 +65,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         }
         let next = { ...data, knocks: status.knocks };
         // Share one metadata request per ten seconds; recording discovery uses two reads.
-        if (++metadata.current.ticks % 2 !== 0) return next;
+        if (Date.now() < metadata.current.after) return next;
+        metadata.current.after = Date.now() + 10000;
         const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
         for (const session of data.episodes)
           for (const recording of session.recordings) {

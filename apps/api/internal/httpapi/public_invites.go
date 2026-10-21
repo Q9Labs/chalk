@@ -242,7 +242,7 @@ func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer Tenant
 			return publicInviteResponse{}, err
 		}
 		return newPublicInviteResponse(invite), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).UserAuth().RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "SpacePublicInvite", publicInviteResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.get"))
 }
@@ -312,7 +312,7 @@ func listPublicAdmissionRequestsEndpoint(service PublicInviteService, authorizer
 			return publicAdmissionRequestPageResponse{}, err
 		}
 		return newPublicAdmissionRequestPageResponse(page), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).UserAuth().RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), APIParameterContract{Name: "state", In: "query", Type: "string", Required: false, Enum: []string{"pending"}}).
 		Responds(http.StatusOK, "PublicAdmissionRequestPage", publicAdmissionRequestPageResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.admission_list"))
@@ -413,7 +413,7 @@ func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[pub
 			return publicSpaceArrivalResponse{}, err
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
-	}).RateLimit(authenticatedWriteRateLimit).
+	}).RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.status"))
 }

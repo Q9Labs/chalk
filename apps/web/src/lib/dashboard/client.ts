@@ -81,7 +81,7 @@ type Results = {
 };
 
 /** A failed dashboard request, with the server's error code. */
-class DashboardRequestError extends Error {
+export class DashboardRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
@@ -158,8 +158,11 @@ async function readJSON(response: Response): Promise<unknown> {
 function toError(response: Response, body: unknown): DashboardRequestError {
   const code = errorCode(body) ?? (response.status >= 500 ? "service_unavailable" : "request_failed");
   const retryAfter = body && typeof body === "object" && "error" in body && body.error && typeof body.error === "object" && "retryAfterSeconds" in body.error && typeof body.error.retryAfterSeconds === "number" ? body.error.retryAfterSeconds : undefined;
-  const header = Number(response.headers.get("Retry-After"));
-  return new DashboardRequestError(response.status, code, retryAfter ?? (Number.isFinite(header) && header > 0 ? header : undefined));
+  const header = response.headers.get("Retry-After");
+  const seconds = header === null ? NaN : Number(header);
+  const date = header === null ? NaN : Date.parse(header);
+  const headerDelay = Number.isFinite(seconds) && seconds >= 0 ? seconds : Number.isFinite(date) ? Math.max(0, (date - Date.now()) / 1000) : undefined;
+  return new DashboardRequestError(response.status, code, headerDelay ?? (retryAfter !== undefined && Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter : undefined));
 }
 
 function errorCode(body: unknown): string | undefined {
