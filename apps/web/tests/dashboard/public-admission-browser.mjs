@@ -178,8 +178,17 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   await abandoned.context.close();
   await page.getByRole("button", { name: "Admit Uncollected guest", exact: true }).click();
   await waitForSql(`select status from sync_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Uncollected guest'`, "admitted");
-  await promisify(execFile)("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-c", `update sync_admission_requests set requested_at=now()-interval '6 minutes', expires_at=now()-interval '2 minutes', completed_at=now()-interval '2 minutes' where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Uncollected guest'`]);
-  await waitForSql(`select participant.status from participants participant join sync_admission_requests request on request.tenant_id=participant.tenant_id and request.episode_id=participant.episode_id and request.participant_id=participant.id where request.tenant_id='${tenantId}' and request.space_id='${spaceId}' and request.display_name='Uncollected guest'`, "left");
+  await promisify(execFile)("psql", [
+    process.env.CHALK_DATABASE_URL,
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    `update sync_admission_requests set requested_at=now()-interval '6 minutes', expires_at=now()-interval '2 minutes', completed_at=now()-interval '2 minutes' where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Uncollected guest'`,
+  ]);
+  await waitForSql(
+    `select participant.status from participants participant join sync_admission_requests request on request.tenant_id=participant.tenant_id and request.episode_id=participant.episode_id and request.participant_id=participant.id where request.tenant_id='${tenantId}' and request.space_id='${spaceId}' and request.display_name='Uncollected guest'`,
+    "left",
+  );
   await page.screenshot({ path: resolve(out, "after-uncollected-seat-removed.png") });
 
   const apiLog = await readFile(resolve(repository, "artifacts/dashboard-api.log"), "utf8");
