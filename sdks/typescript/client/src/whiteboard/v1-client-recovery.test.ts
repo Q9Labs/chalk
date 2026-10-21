@@ -204,32 +204,18 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
-  it("sends an accepted bring after snapshot recovery without replacing it with ordinary views", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+  it.each(["initial", "requested"] as const)("sends an accepted bring after the %s snapshot without replacing it with ordinary views", async (phase) => {
+    const { client, sockets, recovery } = await recoveringViewClient(phase);
     const socket = sockets[0];
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     try {
-      const snapshot = client.requestSnapshot();
       expect(client.sendView(bring)).toBe(true);
       expect(client.sendView({ ...bring, x: 99, bring: false })).toBe(true);
       expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
-      socket?.receive(snapshotPage(socket.requestId()));
-      await snapshot;
+      if (phase === "initial") await acceptSnapshot(sockets);
+      else socket?.receive(snapshotPage(socket.requestId()));
+      await recovery;
       expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
-    } finally {
-      await client.stopSceneSubscription();
-    }
-  });
-
-  it("sends an accepted bring after the first snapshot establishes the scene", async () => {
-    const { client, sockets } = recoveryClient();
-    const startup = client.startSceneSubscription();
-    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
-    try {
-      expect(client.sendView(bring)).toBe(true);
-      await acceptSnapshot(sockets);
-      await startup;
-      expect(sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -773,6 +759,12 @@ async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number
   await acceptSnapshot(result.sockets);
   await startup;
   return result;
+}
+
+async function recoveringViewClient(phase: "initial" | "requested") {
+  const result = phase === "initial" ? recoveryClient() : await startedRecoveryClient(new TestClock());
+  const recovery = phase === "initial" ? result.client.startSceneSubscription() : result.client.requestSnapshot();
+  return { ...result, recovery };
 }
 
 async function acceptSnapshot(sockets: readonly TestSocket[], index = 0) {

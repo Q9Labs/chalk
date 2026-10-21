@@ -193,11 +193,18 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   subscribe(listener: (event: ChalkWhiteboardV1Event) => void): () => void {
     this.#listeners.add(listener);
     if (this.#phase !== "live") return () => this.#listeners.delete(listener);
-    const currentSnapshot = this.#latestSnapshot && this.#latestSnapshot.sceneId === this.#sceneId && this.#latestSnapshot.revision === this.#revision ? this.#latestSnapshot : null;
+    const currentSnapshot = this.#currentSnapshot();
     if (currentSnapshot) listener(currentSnapshot);
     for (const view of this.#latestViews.values()) listener({ ...view, bring: false });
     if (!currentSnapshot && this.#snapshots.size === 0 && !this.#waitingForOperations) void this.#requestSnapshot().catch(() => undefined);
     return () => this.#listeners.delete(listener);
+  }
+
+  #currentSnapshot() {
+    const snapshot = this.#latestSnapshot;
+    if (snapshot?.sceneId !== this.#sceneId) return null;
+    if (snapshot?.revision !== this.#revision) return null;
+    return snapshot;
   }
 
   subscribeSummary(listener: (summary: ChalkWhiteboardSummary) => void): () => void {
@@ -222,7 +229,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   sendCursor(input: { readonly x: number; readonly y: number }): void {
-    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0 || !this.#canDraw) return;
+    if (!this.#presenceReady || !this.#canDraw) return;
     const now = this.#now();
     if (now - this.#lastCursorAt < 1000 / WhiteboardV1ProtocolLimits.cursorRatePerSecond) return;
     const frame = { type: "cursor", x: input.x, y: input.y } as const;
@@ -232,16 +239,22 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   get supportsViews(): boolean {
-    return this.#started && this.#viewsSupported && (this.#hello === "view" || this.#hello === "versioned-view");
+    return this.#started && this.#viewsSupported && this.#viewExtensionEnabled;
+  }
+
+  get #viewExtensionEnabled(): boolean {
+    return this.#hello === "view" || this.#hello === "versioned-view";
+  }
+
+  get #presenceReady(): boolean {
+    return this.#phase === "live" && this.#summaryStatus === "ready" && this.#snapshots.size === 0;
   }
 
   sendView(view: ChalkWhiteboardView): boolean {
-    if (!this.#started || (this.#hello !== "view" && this.#hello !== "versioned-view")) return false;
-    const origin = view.originParticipantId !== undefined ? { origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence } : this.#participantId ? { origin_participant_id: this.#participantId, origin_sequence: ++this.#viewSequence } : undefined;
-    const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
-    const frame: Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> = this.#hello === "versioned-view" && origin ? { ...rectangle, ...origin } : rectangle;
+    if (!this.#started || !this.#viewExtensionEnabled) return false;
+    const frame = this.#viewFrame(view);
     encodeWhiteboardV1ClientFrame(frame);
-    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) {
+    if (!this.#presenceReady) {
       if (view.bring) this.#pendingBring = { sceneId: this.#sceneId, view: { ...view } };
       return true;
     }
@@ -250,8 +263,16 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     return true;
   }
 
+  #viewFrame(view: ChalkWhiteboardView): Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> {
+    const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
+    if (this.#hello !== "versioned-view") return rectangle;
+    if (view.originParticipantId !== undefined) return { ...rectangle, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence };
+    if (!this.#participantId) return rectangle;
+    return { ...rectangle, origin_participant_id: this.#participantId, origin_sequence: ++this.#viewSequence };
+  }
+
   #flushPendingBring(): void {
-    if (this.#phase !== "live" || this.#summaryStatus !== "ready" || this.#snapshots.size > 0) return;
+    if (!this.#presenceReady) return;
     const pending = this.#pendingBring;
     this.#pendingBring = null;
     if (pending && (pending.sceneId === null || pending.sceneId === this.#sceneId)) this.sendView(pending.view);
