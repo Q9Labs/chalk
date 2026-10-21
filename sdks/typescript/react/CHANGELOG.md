@@ -3,11 +3,9 @@
 ## Unreleased
 
 - Route private camera previews through the SDK so granting permission refreshes the camera menu. Standalone `DevicePopover` and `ControlBarSurface` consumers can supply `captureCameraPreview`.
-
-## Unreleased
-
 - Preview the chosen camera privately when the call camera is off; while it is active, preview the published call track rather than an unpublished device selection.
-- Keep keyboard-shortcut dialog content fixed while opening and closing, and retain Report a problem in call details when `onReportProblem` is supplied.
+- Keep keyboard-shortcut dialog content fixed while opening and closing. Report a problem remains unchanged and appears only when a host supplies `onReportProblem`.
+- Add optional `ChalkMenu.onOpenChange` for hosts that need to coordinate menu and dialog visibility.
 
 ## 5.0.0
 
