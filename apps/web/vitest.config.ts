@@ -7,6 +7,7 @@ export default mergeConfig(
     test: {
       exclude: configDefaults.exclude,
       maxWorkers: 2,
+      server: { deps: { inline: [/open-color/, /@excalidraw/, /packages\/whiteboard/] } },
     },
   }),
 );

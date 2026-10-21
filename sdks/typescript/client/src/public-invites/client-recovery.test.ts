@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ArrivalUnavailableError, SpacePublicInviteUnavailableError } from "./index";
 import { createChalkPublicClient } from "./client";
 
 describe("public Space invite media recovery", () => {
@@ -17,6 +18,15 @@ describe("public Space invite media recovery", () => {
     await client.prepareSpaceEntrance("valid-invite");
     expect(requests).toEqual(["https://api.chalk.test/v1/public/space-invite-entrance"]);
     expect(requestBody).toEqual({ space_invite_token: "valid-invite" });
+  });
+  it.each(["space_public_invite.unavailable", "arrival.unavailable"])("preserves the observed %s contract error through the Promise boundary", async (code) => {
+    const client = createChalkPublicClient({
+      baseUrl: "https://api.chalk.test",
+      fetch: async () => Response.json({ error: { code, message: "Public Space invite is unavailable" } }, { status: 404 }),
+    });
+    const cause = await client.arriveBySpacePublicInvite({ spaceInviteToken: "unavailable-fixture", displayName: "Ada" }).catch((error: unknown) => error);
+    expect(cause).toBeInstanceOf(code === "space_public_invite.unavailable" ? SpacePublicInviteUnavailableError : ArrivalUnavailableError);
+    expect(cause).toMatchObject({ error: { code, message: "Public Space invite is unavailable" } });
   });
   it("forwards a requested media connection replacement", async () => {
     let requestBody: unknown;
