@@ -1,10 +1,48 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { SpaceView } from "./SpaceView";
+
+it("blocks push-to-talk during recovery but still releases a live press after recovery starts", async () => {
+  const snapshot = createSnapshot(["publishAudio"]);
+  const onCommand = vi.fn();
+  const client = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting" } }, { onCommand });
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const key = (type: "keydown" | "keyup") => document.body.dispatchEvent(new KeyboardEvent(type, { key: " ", code: "Space", bubbles: true, cancelable: true }));
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => {
+      key("keydown");
+      key("keyup");
+    });
+    expect(onCommand).not.toHaveBeenCalledWith({ type: "setMicrophoneEnabled", enabled: true }, expect.anything());
+    await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "live" } })));
+    await act(async () => {
+      key("keydown");
+    });
+    expect(onCommand).toHaveBeenLastCalledWith({ type: "setMicrophoneEnabled", enabled: true }, expect.anything());
+    await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "reconnecting" } })));
+    await act(async () => {
+      key("keyup");
+    });
+    expect(onCommand).toHaveBeenLastCalledWith({ type: "setMicrophoneEnabled", enabled: false }, expect.anything());
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
 
 it.each(["observer", "custom-reader"])("keeps chat history available without write actions for %s", async (role) => {
   const base = createSnapshot([]);

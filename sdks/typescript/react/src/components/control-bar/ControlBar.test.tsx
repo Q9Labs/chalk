@@ -129,7 +129,8 @@ it("requests a replacement without first disabling an active screen share", asyn
 describe("Sync availability", () => {
   it("disables media enable and reactions during recovery, preserves mute and chat, and restores on live", async () => {
     const snapshot = createSnapshot(["publishAudio", "publishVideo", "publishScreen", "sendReaction"]);
-    const client = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting" } });
+    const onCommand = vi.fn();
+    const client = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting" } }, { onCommand });
     const container = document.createElement("div");
     const root = createRoot(container);
     const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
@@ -148,6 +149,13 @@ describe("Sync availability", () => {
       expect(button("Chat")?.disabled).toBe(false);
       await act(async () => client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, microphone: { ...current.media.local.microphone, state: "enabled" } } } })));
       expect(button("Mute microphone")?.disabled).toBe(false);
+      await act(async () => client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, screen: { ...current.media.local.screen, state: "enabled" } } } })));
+      expect(button("Stop sharing")?.disabled).toBe(false);
+      expect(button("Share options")?.disabled).toBe(true);
+      await act(async () => button("Share options")?.click());
+      expect(onCommand).not.toHaveBeenCalled();
+      await act(async () => button("Stop sharing")?.click());
+      expect(onCommand).toHaveBeenCalledWith({ type: "setScreenShareEnabled", enabled: false }, expect.anything());
       await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "live", syncHealth: "degraded" } })));
       expect(button("Turn on camera")?.disabled).toBe(false);
       expect(button("Reactions")?.disabled).toBe(false);

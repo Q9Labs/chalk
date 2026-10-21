@@ -248,7 +248,10 @@ export function SpaceView({
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
               onToggleLayout: () => updateLayout(layout === "grid" ? "focus" : "grid"),
               onClosePanel: () => setActivePanel(null),
-              onPushToTalk: (enabled) => void runCommand(() => client.media.setMicrophoneEnabled(enabled)),
+              onPushToTalk: (enabled) => {
+                if (enabled && connection.status !== "live") return;
+                void runCommand(() => client.media.setMicrophoneEnabled(enabled));
+              },
             },
             duration: episodeDuration,
             isRecording: recording.current?.status === "recording",

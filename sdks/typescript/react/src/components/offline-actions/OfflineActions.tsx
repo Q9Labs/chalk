@@ -30,7 +30,7 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false }: 
   const notice = reconnecting ? (reconnectingNoticeDue ? `${offlineNoticeText(0, online)}${pendingDetail ? ` ${pendingDetail}` : ""}` : null) : connection.syncHealth === "degraded" ? "Connection is slow" : null;
   if (notice)
     return (
-      <div role="status" data-part="connection-notice" className="pointer-events-none absolute inset-x-4 top-16 z-50 mx-auto w-fit max-w-[calc(100%_-_2rem)] rounded-full bg-[var(--chalk-surface)] px-3 py-1 text-center text-sm text-[var(--chalk-text)]">
+      <div role="status" data-part="connection-notice" style={{ pointerEvents: "none" }} className="absolute inset-x-4 top-16 z-50 mx-auto w-fit max-w-[calc(100%_-_2rem)] rounded-full bg-[var(--chalk-surface)] px-3 py-1 text-center text-sm text-[var(--chalk-text)]">
         {notice}
       </div>
     );
