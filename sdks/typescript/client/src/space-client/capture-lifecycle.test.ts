@@ -280,7 +280,7 @@ it("revokes pending preview leases on leave before browser capture resolves", as
   }
 });
 
-it.each(["enable", "join"] as const)("recaptures on %s after a borrowed camera ends externally", async (operation) => {
+it.each(["enable", "join", "selection"] as const)("recaptures on %s after a private camera becomes obsolete", async (operation) => {
   const platform = createCoreTestPlatform();
   const first = track("video");
   const second = track("video");
@@ -302,12 +302,20 @@ it.each(["enable", "join"] as const)("recaptures on %s after a borrowed camera e
   try {
     if (operation === "enable") await client.join({ microphone: false, camera: false });
     const preview = await client.media.captureCameraPreview();
-    first.stop();
-    first.dispatchEvent(new Event("ended"));
+    if (operation === "selection") await client.media.selectCamera("camera-b");
+    else {
+      first.stop();
+      first.dispatchEvent(new Event("ended"));
+    }
+    expect(first.readyState).toBe("ended");
     if (operation === "enable") await client.media.setCameraEnabled(true);
     else await client.join({ microphone: false, camera: true });
     expect(capture).toHaveBeenCalledTimes(2);
     if (operation === "enable") expect(prepared).toEqual([second]);
+    if (operation === "selection") {
+      expect(capture).toHaveBeenNthCalledWith(2, { audio: false, video: { deviceId: { exact: "camera-b" } } });
+      expect(client.getSnapshot().media.selection.camera).toBe("camera-b");
+    }
     expect(client.getSnapshot().media.local.camera.track).toBe(second);
     preview.release();
     expect(second.readyState).toBe("live");
@@ -417,6 +425,34 @@ it("keeps an ended shared acquisition in the typed error channel", async () => {
       }),
     ),
   );
+});
+
+it("leaves an already enabled camera publication untouched", async () => {
+  const platform = createCoreTestPlatform();
+  const video = track("video");
+  const capture = vi.fn(async () => stream([video]));
+  const clear = vi.fn(async () => undefined);
+  const prepare = vi.fn();
+  const enable = vi.fn(async () => ({ operationId: "enable", name: "set_camera_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const }));
+  const client = captureClient(platform, {
+    mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
+    createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), clearPreparedLocalTrack: clear, prepareLocalTrack: prepare }),
+    createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: enable }),
+  });
+  try {
+    await client.join({ microphone: false, camera: true });
+    clear.mockClear();
+    prepare.mockClear();
+    await client.media.setCameraEnabled(true);
+    expect(clear).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(enable).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(client.getSnapshot().media.local.camera.track).toBe(video);
+    expect(video.readyState).toBe("live");
+  } finally {
+    client.dispose();
+  }
 });
 
 it.each(["device selection", "ended event", "stopped track", "leave", "failed clear", "failed clear with preview"])("clears the SFU camera slot after %s before enabling a replacement", async (retirement) => {

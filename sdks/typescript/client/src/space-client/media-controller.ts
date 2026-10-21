@@ -142,8 +142,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }).pipe(Effect.mapError(normalizeClientError));
   selectCamera = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
+      const changed = this.#store.getSnapshot().media.selection.camera !== deviceId;
       this.#selection.selectCapture("camera", deviceId);
-      if (!this.#intent.camera) {
+      if (changed && (!this.#intent.camera || !this.#hasTrack("camera"))) {
         this.#transitionCamera({ status: "ended" });
       }
       this.#store.select("camera", deviceId);
@@ -280,6 +281,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
           this.#serialize(
             source,
             this.#connection.runCommand((ports) => {
+              if (source === "camera" && enabled && previousIntent && this.#track("camera")?.enabled) return Effect.void;
               let captured: MediaStreamTrack | null = null;
               let prepared = false;
               const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
