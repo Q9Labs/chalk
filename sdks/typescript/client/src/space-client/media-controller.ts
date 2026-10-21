@@ -88,6 +88,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #intentRevisions = new Map<MediaSource, number>();
   readonly #pendingEnables = new Map<MediaSource, number>();
   readonly #pendingSources = new Set<MediaSource>();
+  readonly #pendingCaptures = new Set<() => void>();
   readonly #requestGenerations = new Map<string, number>();
   #intent = { microphone: true, camera: true };
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
@@ -174,8 +175,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#publish();
       return Effect.succeed(streamFromTracks([...this.#tracks.values()]));
     }
-    return foreign(() => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera })).pipe(
-      Effect.flatMap((stream) =>
+    return this.#captureStream(
+      () => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera }),
+      (stream) =>
         Effect.try({ try: () => selectInitialTracks(stream, intent), catch: (cause) => cause }).pipe(
           Effect.tap((tracks) =>
             Effect.sync(() => {
@@ -193,14 +195,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
             }).pipe(Effect.andThen(Effect.fail(captureError(cause, "join", "Camera or microphone permission was denied")))),
           ),
         ),
-      ),
-      Effect.catch((cause) => Effect.fail(cause instanceof ConnectionError ? cause : captureError(cause, "join", "Camera or microphone permission was denied"))),
-    );
+    ).pipe(Effect.catch((cause) => Effect.fail(cause instanceof ConnectionError ? cause : captureError(cause, "join", "Camera or microphone permission was denied"))));
   }
   refreshDevicesInBackground(): void {
     this.#fork(this.#refreshDevices().pipe(Effect.ignore));
   }
   dispose(): void {
+    this.#cancelCaptures();
     this.#unsubscribeMedia?.();
     this.#unsubscribeRequests?.();
     this.#unsubscribeSync?.();
@@ -346,8 +347,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
                 if (this.#tracks.has("screen") && options === undefined) {
                   return Effect.void;
                 }
-                return Effect.acquireUseRelease(
-                  foreign(() => this.#selection.getDisplayMedia(displayMediaConstraints(options))).pipe(Effect.mapError((cause) => captureError(cause, "startScreenShare", "Screen sharing permission was denied"))),
+                return this.#captureStream(
+                  () => this.#selection.getDisplayMedia(displayMediaConstraints(options)),
                   (stream) =>
                     Effect.sync(() => {
                       this.#assertActivePorts(ports, "startScreenShare");
@@ -398,10 +399,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
                         ),
                       ),
                     ),
-                  (stream, exit) =>
-                    Effect.sync(() => {
-                      if (Exit.isFailure(exit)) stopStream(stream);
-                    }),
+                  (cause) => captureError(cause, "startScreenShare", "Screen sharing permission was denied"),
                 );
               });
             }),
@@ -513,24 +511,61 @@ class MediaControllerRuntime implements MediaControllerEffects {
       ),
     );
   }
+  #captureStream<A>(operation: () => Promise<MediaStream>, use: (stream: MediaStream) => Effect.Effect<A, unknown>, onCaptureError: (cause: unknown) => unknown = (cause) => cause): Effect.Effect<A, unknown> {
+    return Effect.suspend(() => {
+      let cancelled = false;
+      let captured: MediaStream | null = null;
+      const cancel = () => {
+        cancelled = true;
+        stopStream(captured);
+      };
+      const cancelledError = () => new ConnectionError({ code: "invalid_state", action: null, recoverable: false, message: "Media capture was cancelled before its result could be used" });
+      this.#pendingCaptures.add(cancel);
+      return foreign(async () => {
+        const stream = await operation();
+        captured = stream;
+        // Browser capture cannot be aborted; this owner must dispose its late result.
+        if (cancelled) {
+          stopStream(stream);
+          throw cancelledError();
+        }
+        return stream;
+      }).pipe(
+        Effect.mapError(onCaptureError),
+        Effect.flatMap(use),
+        Effect.tap(() => (cancelled ? Effect.fail(cancelledError()) : Effect.void)),
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            this.#pendingCaptures.delete(cancel);
+            if (Exit.isFailure(exit)) cancel();
+          }),
+        ),
+      );
+    });
+  }
+  #cancelCaptures(): void {
+    for (const cancel of this.#pendingCaptures) cancel();
+    this.#pendingCaptures.clear();
+  }
   #captureSource(source: "microphone" | "camera"): Effect.Effect<MediaStreamTrack, unknown> {
-    return foreign(() => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" })).pipe(
-      Effect.mapError((cause) => captureError(cause, source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled", `${source} permission was denied`)),
-      Effect.tap(() => this.#refreshDevices().pipe(Effect.ignore)),
-      Effect.flatMap((stream) =>
-        Effect.try({
-          try: () => {
-            const track = stream.getTracks().find((candidate) => candidate.kind === (source === "microphone" ? "audio" : "video"));
-            if (!track) {
-              stopStream(stream);
-              throw new TypeError(`Media capture did not return a ${source} track`);
-            }
-            for (const candidate of stream.getTracks()) if (candidate !== track) candidate.stop();
-            return track;
-          },
-          catch: (cause) => cause,
-        }),
-      ),
+    return this.#captureStream(
+      () => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }),
+      (stream) =>
+        this.#refreshDevices().pipe(
+          Effect.ignore,
+          Effect.andThen(
+            Effect.try({
+              try: () => {
+                const track = stream.getTracks().find((candidate) => candidate.kind === (source === "microphone" ? "audio" : "video"));
+                if (!track) throw new TypeError(`Media capture did not return a ${source} track`);
+                for (const candidate of stream.getTracks()) if (candidate !== track) candidate.stop();
+                return track;
+              },
+              catch: (cause) => cause,
+            }),
+          ),
+        ),
+      (cause) => captureError(cause, source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled", `${source} permission was denied`),
     );
   }
   #refreshDevices(): Effect.Effect<void, unknown> {
@@ -578,6 +613,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#ports?.media !== ports?.media) this.#observedPublicationIds.clear();
     this.#ports = ports;
     if (!ports) {
+      this.#cancelCaptures();
       this.#screenAudioTrack?.stop();
       this.#screenAudioTrack = null;
       for (const track of this.#tracks.values()) track.stop();
