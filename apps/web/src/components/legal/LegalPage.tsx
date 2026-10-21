@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
-import { PRIVACY_EFFECTIVE_DATE_LABEL, usePrivacyUpdatePending } from "../../../../shared/privacy-update";
+import { PRIVACY_EFFECTIVE_DATE_LABEL, PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL } from "../../../../shared/privacy-update";
 import { Logo } from "@q9labsai/chalk-react";
 
 type LegalPageKind = "privacy" | "privacy-previous" | "terms";
@@ -113,20 +113,17 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
 }
 
 function PrivacyPolicy() {
-  const pending = usePrivacyUpdatePending();
   return (
     <>
       <h1>Privacy Policy</h1>
       <p className="legal-effective-date">Effective {PRIVACY_EFFECTIVE_DATE_LABEL}</p>
-      {pending ? (
-        <section id="whats-changing" aria-labelledby="privacy-changes-heading">
-          <h2 id="privacy-changes-heading">What's changing</h2>
-          <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, and our providers and international transfer safeguards. This version takes effect on {PRIVACY_EFFECTIVE_DATE_LABEL}.</p>
-          <p>
-            Until then, the <a href="/privacy/previous">current Privacy Policy</a> applies.
-          </p>
-        </section>
-      ) : null}
+      <section id="whats-changing" aria-labelledby="privacy-changes-heading">
+        <h2 id="privacy-changes-heading">What's changing</h2>
+        <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, and our providers and international transfer safeguards.</p>
+        <p>
+          This version takes effect on {PRIVACY_EFFECTIVE_DATE_LABEL}. Until then, the <a href="/privacy/previous">Privacy Policy effective {PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL}</a> applies.
+        </p>
+      </section>
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>

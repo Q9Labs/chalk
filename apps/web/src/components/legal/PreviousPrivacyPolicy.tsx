@@ -1,6 +1,7 @@
 import { Fragment } from "react";
+import { PRIVACY_ARCHIVE_TITLE, PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL } from "../../../../shared/privacy-update";
 
-// Archived verbatim from master at 2de92e3c178cf3c86f92b1c33146f66495816c8a.
+// Policy body archived verbatim from master at 2de92e3c178cf3c86f92b1c33146f66495816c8a.
 const PRIVACY_SECTIONS = [
   {
     heading: "Legal bases",
@@ -42,8 +43,8 @@ const PRIVACY_SECTIONS = [
 export function PreviousPrivacyPolicy() {
   return (
     <>
-      <h1>Privacy Policy</h1>
-      <p className="legal-effective-date">Effective 7 August 2026</p>
+      <h1>{PRIVACY_ARCHIVE_TITLE}</h1>
+      <p className="legal-effective-date">Effective {PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL}</p>
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
