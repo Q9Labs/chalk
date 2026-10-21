@@ -225,8 +225,7 @@ function PrivacyPolicy() {
           <strong>Axiom</strong> receives API request logs and Sync diagnostic traces to help us run and secure the service.
         </li>
         <li>
-          <strong>Discord</strong> receives operational alerts that may include a tenant's display name, and user-submitted "Report a problem" reports. Reports include the description you write, your display name and role, and the call name and ID. Diagnostics are included only if you opt in. The
-          report payload excludes email addresses and tokens.
+          <strong>Discord</strong> receives operational alerts that may include a tenant's display name.
         </li>
       </ul>
       <p>We do not sell personal data or share it for advertising or tracking. Apart from service providers processing data on our behalf, content you send to other participants, and integrations your tenant chooses, we disclose data only when the law requires it.</p>
