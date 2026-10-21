@@ -156,14 +156,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  async clearPreparedLocalTrack(source: MediaPublicationSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaPublicationSource, options: { readonly stopTrack?: boolean } = {}): Promise<void> {
     const state = this.#localTracks.get(source);
     if (!state) return;
     if (source === "screen_audio") {
       try {
         await this.#retireLocalPublication(source);
       } finally {
-        this.#removeOwnedLocalTrack(state);
+        this.#removeOwnedLocalTrack(state, options.stopTrack);
         this.#localTracks.delete(source);
         this.#publishSnapshot();
         this.#emitLocal();
@@ -173,7 +173,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
     if (state.transceiver) this.#reusableLocalTransceivers.set(source, state.transceiver);
     if (state.providerPublicationId) this.#reusableLocalPublicationIds.set(source, state.providerPublicationId);
-    this.#removeOwnedLocalTrack(state);
+    this.#removeOwnedLocalTrack(state, options.stopTrack);
     this.#localTracks.delete(source);
     this.#publishSnapshot();
     this.#emitLocal();
@@ -1055,9 +1055,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(error);
     }
   }
-  #removeOwnedLocalTrack(state: LocalTrackState): void {
+  #removeOwnedLocalTrack(state: LocalTrackState, stopTrack = true): void {
     if (state.endedListener) state.track.removeEventListener("ended", state.endedListener);
-    safeStopTrack(state.track, this.#reportError.bind(this));
+    if (stopTrack) safeStopTrack(state.track, this.#reportError.bind(this));
     state.enabled = false;
     state.desiredEnabled = false;
     state.transceiver = null;

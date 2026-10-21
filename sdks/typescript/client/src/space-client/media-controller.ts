@@ -589,7 +589,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
     const state = this.#camera;
     if (state.status !== "live") return;
-    this.#transitionCamera(state.owner.references > 0 && state.track.readyState === "live" ? { ...state, published: false } : { status: "ended" });
+    if (state.owner.references > 0 && state.track.readyState === "live") {
+      state.track.enabled = true;
+      this.#transitionCamera({ ...state, published: false });
+    } else this.#transitionCamera({ status: "ended" });
   }
   #clearTracks(): void {
     this.#tracks.clear();
@@ -761,7 +764,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #discardCaptured(source: MediaSource, track: MediaStreamTrack, media: ConnectionPorts["media"], prepared: boolean): Effect.Effect<void, unknown> {
-    const clear = prepared ? foreign(() => media.clearPreparedLocalTrack(source)).pipe(Effect.ignore) : Effect.void;
+    const clear = prepared ? foreign(() => media.clearPreparedLocalTrack(source, { stopTrack: source !== "camera" })).pipe(Effect.ignore) : Effect.void;
     return clear.pipe(
       Effect.andThen(
         Effect.sync(() => {

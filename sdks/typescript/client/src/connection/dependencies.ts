@@ -66,7 +66,7 @@ export type ConnectionMediaClient = ClientMediaPlane & {
   readonly stop: () => void;
   readonly restart: (input: CloudflareSFUBootstrap | ParticipantMediaAccess) => Promise<void>;
   readonly prepareLocalTrack: (source: "microphone" | "camera" | "screen" | "screen_audio", track: MediaStreamTrack) => void;
-  readonly clearPreparedLocalTrack: (source: "microphone" | "camera" | "screen" | "screen_audio") => Promise<void>;
+  readonly clearPreparedLocalTrack: (source: "microphone" | "camera" | "screen" | "screen_audio", options?: { readonly stopTrack?: boolean }) => Promise<void>;
   readonly getSnapshot: () => ConnectionMediaSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
 };

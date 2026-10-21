@@ -1,6 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+it("detaches a prepared camera without stopping a controller-owned preview", async () => {
+  const harness = createHarness();
+  const camera = new FakeTrack("camera", "video");
+  try {
+    harness.client.prepareLocalTrack("camera", camera as unknown as MediaStreamTrack);
+    await harness.client.clearPreparedLocalTrack("camera", { stopTrack: false });
+    expect(camera.stopCalls).toBe(0);
+    expect(camera.readyState).toBe("live");
+    expect(harness.client.getSnapshot().localTracks).toEqual([]);
+    harness.client.stop();
+    expect(camera.stopCalls).toBe(0);
+  } finally {
+    harness.client.stop();
+    camera.stop();
+  }
+});
+
 async function expectStalledRequestRecovers(transport: CloudflareSFUSignalingTransport, timeoutMs: number, wasAborted: () => boolean): Promise<void> {
   const stalled = transport.listPublications();
   const rejected = expect(stalled).rejects.toMatchObject({ code: "signaling_timeout" });

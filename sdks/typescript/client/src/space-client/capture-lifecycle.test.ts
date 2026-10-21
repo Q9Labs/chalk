@@ -419,6 +419,10 @@ it("keeps a borrowed preview live across a rejected enable and retry", async () 
           prepareLocalTrack: (_source, value) => {
             prepared.push(value.readyState);
           },
+          clearPreparedLocalTrack: async (_source, options) => {
+            video.enabled = false;
+            if (options?.stopTrack !== false) video.stop();
+          },
         }),
         createSyncClient: (input) => ({
           ...platform.dependencies.createSyncClient(input),
@@ -435,6 +439,7 @@ it("keeps a borrowed preview live across a rejected enable and retry", async () 
     const preview = await client.media.captureCameraPreview();
     await expect(client.media.setCameraEnabled(true)).rejects.toBeDefined();
     expect(preview.track.readyState).toBe("live");
+    expect(preview.track.enabled).toBe(true);
     await client.media.setCameraEnabled(true);
     expect(capture).toHaveBeenCalledOnce();
     expect(prepared).toEqual(["live", "live"]);
