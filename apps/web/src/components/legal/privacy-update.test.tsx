@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+/* @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -6,14 +6,23 @@ import { LegalPage } from "./LegalPage";
 import { PRIVACY_EFFECTIVE_DATE } from "../../lib/privacy-policy";
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 
+vi.mock("@q9labsai/chalk-react", () => ({ Logo: () => <span>Chalk</span> }));
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-21T12:00:00Z"));
-  localStorage.clear();
+  const stored = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      stored.set(key, value);
+    },
+  });
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -57,10 +66,10 @@ describe("Privacy Policy advance notice", () => {
     expect(screen.queryByRole("complementary")).toBeNull();
   });
   it("still supports dismissal when browser storage is unavailable", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
       throw new DOMException("blocked");
     });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
       throw new DOMException("blocked");
     });
     render(<PrivacyNotice />);
