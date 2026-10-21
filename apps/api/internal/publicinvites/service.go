@@ -1147,9 +1147,13 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 			if readErr == nil && current.State != ArrivalPending {
 				return r.arrivalResult(space, current), true, nil
 			}
+			if readErr == nil && errors.Is(err, ErrArrivalUnavailable) {
+				state, reason = ArrivalUnavailable, "admission_episode_ended"
+				break
+			}
 			return PublicSpaceArrival{}, false, err
 		}
-		recordAdmissionOutcome(ctx, admitted, "approved")
+		RecordAdmissionOutcome(ctx, admitted, "approved")
 		result := r.arrivalResult(space, admitted)
 		result.Access = &grant
 		return result, true, nil
@@ -1167,7 +1171,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	if err != nil {
 		return PublicSpaceArrival{}, false, err
 	}
-	recordAdmissionOutcome(ctx, terminal, reason)
+	RecordAdmissionOutcome(ctx, terminal, reason)
 	return r.arrivalResult(space, terminal), true, nil
 }
 

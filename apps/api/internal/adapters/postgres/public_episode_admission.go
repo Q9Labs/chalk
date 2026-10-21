@@ -67,7 +67,7 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if err != nil {
 			return err
 		}
-		mode, err := configAdmissionMode(config.AdmissionPolicy)
+		mode, err := configAdmissionMode(space.AdmissionPolicy)
 		if err != nil {
 			return err
 		}

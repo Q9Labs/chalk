@@ -61,19 +61,19 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The invite retains its creation-time mode; decisions must follow the
-	// current Space policy, just as new public arrivals do.
-	if _, err := spaceService.UpdateSpace(ctx, tenantID, space.ID, spaces.UpdateSpaceInput{
-		AdmissionPolicy: utilities.OptionalJSON{Set: true, Value: json.RawMessage(`{"mode":"knock"}`)},
-	}); err != nil {
-		t.Fatal(err)
-	}
 	episodeRepository := NewEpisodeLifecycleRepository(pool)
 	host, err := episodes.NewService(episodeRepository).JoinPublic(ctx, episodes.PublicJoinInput{
 		TenantID: tenantID, SpaceID: space.ID, AccountID: accountID, IdentityMode: "account", DisplayName: "Dashboard host", Role: "owner",
 		Request: episodes.Request{Key: accountTenantIntegrationID(t).String()},
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// The Episode freezes open mode. Knocks and host decisions must follow
+	// the current Space policy after that Episode has already started.
+	if _, err := spaceService.UpdateSpace(ctx, tenantID, space.ID, spaces.UpdateSpaceInput{
+		AdmissionPolicy: utilities.OptionalJSON{Set: true, Value: json.RawMessage(`{"mode":"knock"}`)},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	repository := NewPublicInviteRepositoryWithPool(pool)
@@ -190,7 +190,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		request, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: name})
+		request, err := service.CreateAdmissionRequest(knockCtx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: name})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -226,6 +226,8 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 			}
 		}
 	}
+	proof := captureAdmissionOutcomeProof(t)
+	knockCtx = proof.start(ctx, journeyID)
 	uncollected, approved := newKnock("Uncollected guest")
 	key := accountTenantIntegrationID(t).String()
 	if _, _, err := service.DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: approved.RequestHandle, ActorID: accountID, RequestKey: key, Decision: publicinvites.DecisionApprove}); err != nil {
@@ -245,6 +247,15 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations operation join sync_admission_requests request on request.tenant_id=operation.tenant_id and request.episode_id=operation.episode_id and request.participant_id=operation.target_participant_id join space_public_arrivals arrival on arrival.tenant_id=request.tenant_id and arrival.arrival_handle=$3 where request.tenant_id=$1 and request.admission_request_id=$2 and operation.operation_name='remove_participant' and operation.status='pending' and arrival.state='unavailable'`, uuid(tenantID), uuid(approved.RequestHandle), uuid(uncollected.ArrivalHandle)).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("uncollected approval must reserve one canonical seat removal: count=%d, %v", count, err)
 	}
+
+	proof.assertNotCollected(t, ctx, tenantID, space.ID, uncollected.ArrivalHandle)
+	if err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where journey_id=$1 and name='participant.admission_not_collected'`, uuid(journeyID)).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("uncollected cleanup lost its journey outcome: count=%d err=%v", count, err)
+	}
+
+	t.Run("collection rejects a terminal seat", func(t *testing.T) {
+		proveTerminalAdmissionCollection(t, ctx, pool, service, repository, episodeRepository, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
+	})
 
 	_, disabled := newKnock("Disabled invite guest")
 	if _, err := service.SetInviteEnabled(ctx, tenantID, space.ID, false, accountID); err != nil {

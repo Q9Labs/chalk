@@ -42,9 +42,9 @@ func TestAdmissionOutcomesAreObservableWithoutIdentityMetricLabels(t *testing.T)
 	for _, outcome := range []struct {
 		state  ArrivalState
 		reason string
-	}{{ArrivalAdmitted, "approved"}, {ArrivalRejected, "admission_denied"}, {ArrivalUnavailable, "admission_request_expired"}} {
+	}{{ArrivalAdmitted, "approved"}, {ArrivalRejected, "admission_denied"}, {ArrivalUnavailable, "admission_request_expired"}, {ArrivalUnavailable, "admission_not_collected"}} {
 		spanCtx, span := traces.Tracer("test").Start(ctx, "collect")
-		recordAdmissionOutcome(spanCtx, Arrival{ArrivalHandle: id, State: outcome.state}, outcome.reason)
+		RecordAdmissionOutcome(spanCtx, Arrival{ArrivalHandle: id, State: outcome.state}, outcome.reason)
 		span.End()
 		if !strings.Contains(logs.String(), `"reason":"`+outcome.reason+`"`) {
 			t.Fatalf("missing structured outcome %s", outcome.reason)
@@ -58,8 +58,8 @@ func TestAdmissionOutcomesAreObservableWithoutIdentityMetricLabels(t *testing.T)
 	if !ok {
 		t.Fatal("missing admission outcome counter")
 	}
-	if len(sum.DataPoints) != 3 {
-		t.Fatalf("outcome series = %d, want 3", len(sum.DataPoints))
+	if len(sum.DataPoints) != 4 {
+		t.Fatalf("outcome series = %d, want 4", len(sum.DataPoints))
 	}
 	for _, point := range sum.DataPoints {
 		if point.Value != 1 || point.Attributes.Len() != 2 {
@@ -72,8 +72,8 @@ func TestAdmissionOutcomesAreObservableWithoutIdentityMetricLabels(t *testing.T)
 		}
 	}
 	spans := exporter.GetSpans()
-	if len(spans) != 3 {
-		t.Fatalf("outcome spans = %d, want 3", len(spans))
+	if len(spans) != 4 {
+		t.Fatalf("outcome spans = %d, want 4", len(spans))
 	}
 	for _, span := range spans {
 		if len(span.Attributes) != 2 {

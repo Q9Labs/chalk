@@ -11,11 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type publicInviteQuerier interface {
+	LockLifecycleEpisodeForUpdate(context.Context, sqlc.LockLifecycleEpisodeForUpdateParams) (sqlc.Episode, error)
+	LockLifecycleParticipantForUpdate(context.Context, sqlc.LockLifecycleParticipantForUpdateParams) (sqlc.Participant, error)
 	GetPublicAdmissionBinding(context.Context, sqlc.GetPublicAdmissionBindingParams) (sqlc.GetPublicAdmissionBindingRow, error)
 	CreateAutoSpaceLifecycle(context.Context, sqlc.CreateAutoSpaceLifecycleParams) (sqlc.AutoSpaceLifecycle, error)
 	CreateSpacePublicAdmissionRequest(context.Context, sqlc.CreateSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
@@ -317,6 +320,31 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 	}
 	var result publicinvites.Arrival
 	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
+		collecting := input.RequirePending && input.State == publicinvites.ArrivalAdmitted
+		if collecting {
+			// Space is immutable on an arrival. Read it without locking so collection
+			// takes Episode before arrival, matching finalization and expiry.
+			binding, err := queries.GetSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalNotFound
+			}
+			if err != nil {
+				return fmt.Errorf("read public collection binding: %w", err)
+			}
+			if utilities.IDFromBytes(binding.TenantID.Bytes) != input.TenantID {
+				return publicinvites.ErrArrivalNotFound
+			}
+			episode, err := queries.LockLifecycleEpisodeForUpdate(ctx, sqlc.LockLifecycleEpisodeForUpdateParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID, EpisodeID: uuid(input.EpisodeID)})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			if err != nil {
+				return fmt.Errorf("lock public collection Episode: %w", err)
+			}
+			if episode.Status != episodes.EpisodeStatusActive {
+				return publicinvites.ErrArrivalUnavailable
+			}
+		}
 		current, err := queries.LockSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return publicinvites.ErrArrivalNotFound
@@ -329,6 +357,18 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		}
 		if input.RequirePending && current.State != string(publicinvites.ArrivalPending) {
 			return publicinvites.ErrArrivalUnavailable
+		}
+		if collecting {
+			participant, err := queries.LockLifecycleParticipantForUpdate(ctx, sqlc.LockLifecycleParticipantForUpdateParams{TenantID: current.TenantID, SpaceID: current.SpaceID, EpisodeID: uuid(input.EpisodeID), ParticipantID: uuid(input.ParticipantID)})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			if err != nil {
+				return fmt.Errorf("lock public collection participant: %w", err)
+			}
+			if participant.Status != episodes.ParticipantStatusActive || participant.Generation != input.ParticipantGeneration {
+				return publicinvites.ErrArrivalUnavailable
+			}
 		}
 		if !matchesExpectedProviderBinding(current, input) {
 			return publicinvites.ErrMediaProofRejected

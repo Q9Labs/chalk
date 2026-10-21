@@ -12,7 +12,8 @@ import (
 
 var admissionOutcomes, _ = otel.Meter("chalk.public_invite").Int64Counter("chalk.public_invite.admission.outcomes")
 
-func recordAdmissionOutcome(ctx context.Context, arrival Arrival, reason string) {
+// RecordAdmissionOutcome records a committed terminal admission result.
+func RecordAdmissionOutcome(ctx context.Context, arrival Arrival, reason string) {
 	attributes := []attribute.KeyValue{attribute.String("state", string(arrival.State)), attribute.String("reason", reason)}
 	admissionOutcomes.Add(ctx, 1, metric.WithAttributes(attributes...))
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chalk.public_invite.admission.state", string(arrival.State)), attribute.String("chalk.public_invite.admission.reason", reason))
