@@ -70,7 +70,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
   return {
     whiteboardUrl: null,
     dependencies: {
-      clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout, clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
+      clock: { now: () => Date.now(), setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
       mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [] },
       createMediaClient: () => media,
       createSyncClient: () => sync,
