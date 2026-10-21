@@ -40,20 +40,20 @@ afterEach(() => {
 it("an accepted click becomes busy, then the next failed/retryable server list enables a successful host retry", async () => {
   render(<CallPage spaceId="space" />);
   await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Let in", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Let in" }));
   });
   expect(act).toHaveBeenCalledTimes(1);
   // Prove retryability before checking the busy label so the historical sticky
   // decided-set fails for its actual bug: hiding a failed request indefinitely.
   reactAct(() => publish([{ ...pending, decisionState: "retryable" }]));
-  const retry = screen.queryByRole<HTMLButtonElement>("button", { name: "Let in", exact: true });
+  const retry = screen.queryByRole<HTMLButtonElement>("button", { name: "Let in" });
   expect(retry, "failed server decision must become actionable again").not.toBeNull();
   expect(retry?.disabled).toBe(false);
   await reactAct(async () => {
     if (retry) fireEvent.click(retry);
   });
   expect(act).toHaveBeenCalledTimes(2);
-  const busy = screen.getByRole<HTMLButtonElement>("button", { name: "Letting in…", exact: true });
+  const busy = screen.getByRole<HTMLButtonElement>("button", { name: "Letting in…" });
   expect(busy.disabled).toBe(true);
   await reactAct(async () => {
     fireEvent.click(busy);
@@ -61,7 +61,7 @@ it("an accepted click becomes busy, then the next failed/retryable server list e
   expect(act).toHaveBeenCalledTimes(2);
   for (let poll = 0; poll < 4; poll++) {
     reactAct(() => publish([{ ...pending, decisionState: "in_flight", decisionAction: "approve" }]));
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Letting in…", exact: true }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Letting in…" }).disabled).toBe(true);
   }
   reactAct(() => publish([]));
   expect(screen.queryByText("June")).toBeNull();

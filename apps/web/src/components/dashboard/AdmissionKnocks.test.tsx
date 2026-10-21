@@ -12,16 +12,16 @@ describe("server-owned admission decisions", () => {
   it("makes an accepted decision busy, then restores retry after Sync fails it", () => {
     const decide = vi.fn(async () => {});
     const view = render(<AdmissionKnocks knocks={[pending]} onDecision={decide} />);
-    fireEvent.click(screen.getByRole("button", { name: "Let in", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Let in" }));
     expect(decide).toHaveBeenCalledTimes(1);
     view.rerender(<AdmissionKnocks knocks={[{ ...pending, decisionState: "in_flight", decisionAction: "approve" }]} onDecision={decide} />);
-    const busy = screen.getByRole<HTMLButtonElement>("button", { name: "Letting in…", exact: true });
+    const busy = screen.getByRole<HTMLButtonElement>("button", { name: "Letting in…" });
     expect(busy.disabled).toBe(true);
     fireEvent.click(busy);
     expect(decide).toHaveBeenCalledTimes(1);
     // The next authoritative list always wins, even after the click was accepted.
     view.rerender(<AdmissionKnocks knocks={[{ ...pending, decisionState: "retryable" }]} onDecision={decide} />);
-    const retry = screen.getByRole<HTMLButtonElement>("button", { name: "Let in", exact: true });
+    const retry = screen.getByRole<HTMLButtonElement>("button", { name: "Let in" });
     expect(retry.disabled).toBe(false);
     fireEvent.click(retry);
     expect(decide).toHaveBeenCalledTimes(2);
@@ -32,6 +32,6 @@ describe("server-owned admission decisions", () => {
   it("shows server-owned in-flight denials with both actions disabled", () => {
     render(<AdmissionKnocks knocks={[{ ...pending, decisionState: "in_flight", decisionAction: "deny" }]} onDecision={async () => {}} />);
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Denying…" }).disabled).toBe(true);
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Let in", exact: true }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Let in" }).disabled).toBe(true);
   });
 });
