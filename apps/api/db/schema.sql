@@ -4239,3 +4239,11 @@ create table sync_chat_message_reactions (
         references sync_chat_messages(tenant_id, space_id, message_id) on delete cascade,
     check (emoji in ('👍', '❤️', '😂', '😮', '🎉', '👏', '😀', '😅', '🙏', '🔥', '✅', '👀', '💯', '🤔', '😢', '🙌', '🚀', '👌', '😍', '🤝', '💡', '⭐', '😎', '🥳'))
 );
+
+create function sync_admission_expiry_due(request_expires_at timestamptz, arrival_state text, as_of timestamptz)
+returns boolean
+language sql immutable parallel safe
+as $$
+    select request_expires_at <= as_of
+        or coalesce(arrival_state in ('unavailable', 'rejected', 'left'), false);
+$$;

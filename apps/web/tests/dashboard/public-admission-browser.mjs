@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -94,6 +94,68 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       throw error;
     }
   }
+  async function holdParticipant(name) {
+    const child = spawn("psql", [process.env.CHALK_DATABASE_URL, "-X", "-qAt", "-v", "ON_ERROR_STOP=1"], { stdio: ["pipe", "pipe", "pipe"] });
+    let output = "";
+    let error = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      error += chunk;
+    });
+    child.stdin.write(`begin; select p.id from participants p join sync_admission_requests r on r.tenant_id=p.tenant_id and r.participant_id=p.id where r.tenant_id='${tenantId}' and r.space_id='${spaceId}' and r.display_name='${name}' for update of p;\n\\echo PARTICIPANT_BARRIER_READY\n`);
+    for (let attempt = 0; attempt < 100 && !output.includes("PARTICIPANT_BARRIER_READY"); attempt++) {
+      if (child.exitCode !== null) throw new Error(`participant barrier exited: ${error}`);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!output.includes("PARTICIPANT_BARRIER_READY")) {
+      child.kill("SIGTERM");
+      throw new Error("participant barrier did not become ready");
+    }
+    return async () => {
+      const done = new Promise((resolve, reject) => {
+        child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`participant barrier exit ${code}: ${error}`))));
+      });
+      child.stdin.end("commit;\n");
+      await done;
+    };
+  }
+  async function proveInvalidationTick() {
+    assert.equal(process.env.CHALK_DEADLINE_SCHEDULER_INTERVAL_MS, "3600000", "Automatic deadline ticks must be disabled for the one-tick witness");
+    const dashboard = await page.context().newPage();
+    await dashboard.goto(`${origin}/dashboard/call/${spaceId}`);
+    await dashboard.getByRole("link", { name: "Join call", exact: true }).waitFor();
+    const pending = await knock("Rotated invite guest", true);
+    try {
+      const row = dashboard.locator(".orow").filter({ hasText: "Rotated invite guest" });
+      await row.getByRole("button", { name: "Let in", exact: true }).waitFor();
+      const handle = await sql(`select request_handle from space_public_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Rotated invite guest'`);
+      const session = await (await dashboard.request.get(`${origin}/auth/session`)).json();
+      const rotated = await dashboard.request.post(`${origin}/dashboard-api/call`, { headers: { Origin: origin, "X-CSRF-Token": session.csrfToken }, data: { action: "rotate-link", spaceId, idempotencyKey: crypto.randomUUID() } });
+      assert.equal(rotated.status(), 200, await rotated.text());
+      await pending.guest.getByText("Your request to join expired or is no longer available.", { exact: true }).waitFor({ timeout: 15000 });
+      try {
+        const { stdout } = await promisify(execFile)("go", ["test", "-C", "apps/api", "-vet=off", "./internal/adapters/postgres", "-run", "^TestPublicAdmissionInvalidationOneSchedulerTick$", "-v", "-count=1"], {
+          cwd: repository,
+          env: { ...process.env, CHALK_PROOF_INVALIDATED_REQUEST: handle },
+          timeout: 60000,
+        });
+        await writeFile(resolve(out, "invalidation-one-tick.log"), stdout);
+      } catch (error) {
+        await writeFile(resolve(out, "invalidation-one-tick.log"), `${error.stdout ?? ""}\n${error.stderr ?? ""}`);
+        await dashboard.screenshot({ path: resolve(out, "before-invalidated-dashboard-knock.png") });
+        throw error;
+      }
+      await row.waitFor({ state: "hidden", timeout: 10000 });
+      await dashboard.screenshot({ path: resolve(out, "after-invalidated-dashboard-clear.png") });
+      await writeFile(resolve(out, "invalidation-one-tick.json"), JSON.stringify({ schedulerTicks: 1, deadlineStillMoreThanFourMinutesAway: true, dashboardKnockRemoved: true, reservationReleased: true, guestUnavailable: true }, null, 2));
+      console.log("PASS: rotate waiting invite → guest unavailable → one scheduler tick → dashboard knock removed and reservation released before deadline");
+    } finally {
+      await pending.context.close();
+      await dashboard.close();
+    }
+  }
   async function proveDashboardWithoutHost() {
     await page.getByRole("button", { name: "Leave call", exact: true }).click();
     await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
@@ -124,7 +186,34 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       assert.equal(await sql(activeSeats), "0", "Dashboard approval has no connected host or participant");
       assert.equal(await page.evaluate(() => window.admissionProofDocument), dashboardDocument, "Knock appeared without dashboard document reload");
       await page.screenshot({ path: resolve(out, "after-dashboard-live-knock.png") });
-      await row.getByRole("button", { name: "Let in", exact: true }).click();
+      const release = await holdParticipant("Hostless dashboard guest");
+      let polls = 0;
+      let decisions = 0;
+      const countPoll = (response) => {
+        if (new URL(response.url()).pathname === "/dashboard-api/call" && response.request().method() === "GET" && response.status() === 200) polls++;
+      };
+      const countDecision = (request) => {
+        if (new URL(request.url()).pathname === "/dashboard-api/call" && request.method() === "POST" && request.postDataJSON()?.action === "approve-knock") decisions++;
+      };
+      page.on("response", countPoll);
+      page.on("request", countDecision);
+      try {
+        await row.getByRole("button", { name: "Let in", exact: true }).click();
+        await row.waitFor({ state: "hidden" });
+        for (let attempt = 0; attempt < 200 && polls < 4; attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
+        assert(polls >= 4, "Delayed finalisation witness needs at least four successful list polls");
+        if (await row.count()) await page.screenshot({ path: resolve(out, "before-dashboard-readded-knock.png") });
+        assert.equal(await row.count(), 0, "Accepted dashboard knock reappeared before Sync finalisation");
+        assert.equal(decisions, 1, "A delayed accepted decision must not be submitted twice");
+        assert.equal(await sql(activeSeats), "0", "Participant lock must hold actual Sync finalisation, not just the browser response");
+        assert.equal(await sql(`select state from space_public_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Hostless dashboard guest'`), "pending", "The database finalisation is still delayed through all four polls");
+        await page.screenshot({ path: resolve(out, "after-dashboard-accepted-row-hidden.png") });
+        await writeFile(resolve(out, "dashboard-delayed-finalisation.json"), JSON.stringify({ successfulPollsBeforeRelease: polls, decisions, acceptedRowStayedHidden: true, activeSeatsBeforeRelease: 0 }, null, 2));
+      } finally {
+        page.off("response", countPoll);
+        page.off("request", countDecision);
+        await release();
+      }
       await pending.guest.getByTestId("stage").waitFor({ timeout: 20000 });
       await pending.guest.getByRole("group", { name: "Stage with 1 participant", exact: true }).waitFor({ timeout: 15000 });
       assert.equal(await pending.guest.evaluate(() => window.admissionProofDocument), guestDocument, "Guest entered automatically without document reload");
@@ -140,7 +229,11 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await pending.context.close();
     }
   }
-  if (process.argv.includes("--admission-dashboard-before")) {
+  if (process.argv.includes("--admission-invalidation")) {
+    await proveInvalidationTick();
+    return;
+  }
+  if (process.argv.includes("--admission-dashboard-before") || process.argv.includes("--admission-dashboard-readded-before")) {
     await proveDashboardWithoutHost();
     return;
   }

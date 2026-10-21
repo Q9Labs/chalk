@@ -66,15 +66,19 @@ func enqueueDueAdmissionRequests(ctx context.Context, queries *sqlc.Queries, tx 
 		if request.Status != "pending" || request.DecisionExternalOperationID.Valid {
 			continue
 		}
-		invalidated := false
+		var arrivalState pgtype.Text
 		if candidate.PublicArrivalHandle.Valid {
 			arrival, err := queries.LockSpacePublicArrival(ctx, candidate.PublicArrivalHandle)
 			if err != nil {
 				return count, nil, err
 			}
-			invalidated = arrival.State == "unavailable" || arrival.State == "rejected" || arrival.State == "left"
+			arrivalState = textValue(arrival.State)
 		}
-		if request.ExpiresAt.Time.After(time.Now()) && !invalidated {
+		due, err := queries.IsAdmissionRequestExpiryDue(ctx, sqlc.IsAdmissionRequestExpiryDueParams{ExpiresAt: request.ExpiresAt, ArrivalState: arrivalState})
+		if err != nil {
+			return count, nil, fmt.Errorf("validate admission expiry: %w", err)
+		}
+		if !due {
 			continue
 		}
 		requestID := utilities.IDFromBytes(request.AdmissionRequestID.Bytes)

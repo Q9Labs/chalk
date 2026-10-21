@@ -1093,6 +1093,22 @@ func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubje
 	return i, err
 }
 
+const isAdmissionRequestExpiryDue = `-- name: IsAdmissionRequestExpiryDue :one
+select sync_admission_expiry_due($1::timestamptz, $2::text, now())::boolean as due
+`
+
+type IsAdmissionRequestExpiryDueParams struct {
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	ArrivalState pgtype.Text        `json:"arrival_state"`
+}
+
+func (q *Queries) IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isAdmissionRequestExpiryDue, arg.ExpiresAt, arg.ArrivalState)
+	var due bool
+	err := row.Scan(&due)
+	return due, err
+}
+
 const listDueAdmissionRequests = `-- name: ListDueAdmissionRequests :many
 select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at, arrivals.arrival_handle as public_arrival_handle,
        intent.journey_id, intent.producing_trace_id, intent.producing_span_id
@@ -1110,7 +1126,7 @@ join participants on participants.tenant_id = requests.tenant_id and participant
   and participants.id = requests.participant_id
 where (
     (requests.status = 'pending' and requests.decision_external_operation_id is null
-      and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left')))
+      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now()))
     or (requests.status = 'admitted' and participants.status = 'active'
       and ((arrivals.state = 'pending'
         and greatest(requests.expires_at, requests.completed_at + interval '1 minute') <= now())

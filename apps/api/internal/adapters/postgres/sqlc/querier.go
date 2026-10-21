@@ -223,6 +223,7 @@ type Querier interface {
 	InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEndpointParams) (WebhookEndpoint, error)
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
+	IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
 	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)

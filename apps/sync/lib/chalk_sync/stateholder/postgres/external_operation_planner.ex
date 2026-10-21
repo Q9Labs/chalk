@@ -227,7 +227,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
        ) do
     case lock_pending_admission(connection, episode, op) do
       {:ok, admission} ->
-        if DateTime.compare(admission.expires_at, DateTime.utc_now()) in [:lt, :eq],
+        params = Scope.episode(episode) ++ [Scope.uuid(admission.id)]
+        due = Postgrex.query!(connection, SQL.admission_expiry_due(), params).rows == [[true]]
+
+        if due,
           do: {:ok, %{admission: admission, target: nil, sources: []}},
           else: {:error, :invalid_state}
 

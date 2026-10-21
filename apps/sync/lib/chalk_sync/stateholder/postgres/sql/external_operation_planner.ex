@@ -65,6 +65,19 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner do
     """
   end
 
+  def admission_expiry_due do
+    """
+    select sync_admission_expiry_due(requests.expires_at, arrivals.state, now())
+    from sync_admission_requests requests
+    left join space_public_admission_requests public on public.tenant_id = requests.tenant_id
+      and public.space_id = requests.space_id and public.request_handle = requests.admission_request_id
+    left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_id
+      and arrivals.arrival_handle = public.arrival_handle
+    where requests.tenant_id = $1 and requests.space_id = $2 and requests.episode_id = $3
+      and requests.admission_request_id = $4
+    """
+  end
+
   def reserve_admission_request do
     """
     update sync_admission_requests

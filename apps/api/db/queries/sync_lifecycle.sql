@@ -736,7 +736,7 @@ join participants on participants.tenant_id = requests.tenant_id and participant
   and participants.id = requests.participant_id
 where (
     (requests.status = 'pending' and requests.decision_external_operation_id is null
-      and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left')))
+      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now()))
     or (requests.status = 'admitted' and participants.status = 'active'
       and ((arrivals.state = 'pending'
         and greatest(requests.expires_at, requests.completed_at + interval '1 minute') <= now())
@@ -781,3 +781,6 @@ set state = 'unavailable', terminal_at = now(), updated_at = now(),
     terminal_reason = 'admission_not_collected'
 where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_handle)
   and state = 'pending';
+
+-- name: IsAdmissionRequestExpiryDue :one
+select sync_admission_expiry_due(sqlc.arg(expires_at)::timestamptz, sqlc.narg(arrival_state)::text, now())::boolean as due;
