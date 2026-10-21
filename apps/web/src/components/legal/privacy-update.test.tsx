@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { LegalPage } from "./LegalPage";
-import { PRIVACY_EFFECTIVE_DATE } from "./privacy-update";
-import { PrivacyNotice } from "../dashboard/PrivacyNotice";
+import { PRIVACY_EFFECTIVE_DATE } from "../../../../shared/privacy-update";
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -17,6 +18,14 @@ afterEach(() => {
 });
 
 describe("Privacy Policy advance notice", () => {
+  it("includes the pending summary and current-version link in HTML rendered without effects", () => {
+    const html = renderToStaticMarkup(<LegalPage kind="privacy" />);
+    expect(html).toContain("Effective 4 November 2026");
+    expect(html).toContain('id="whats-changing"');
+    expect(html).toContain('href="/privacy/previous"');
+    vi.setSystemTime(new Date(PRIVACY_EFFECTIVE_DATE));
+    expect(renderToStaticMarkup(<LegalPage kind="privacy" />)).not.toContain('id="whats-changing"');
+  });
   it("shows the future effective date, summary, and current-version link", () => {
     render(<LegalPage kind="privacy" />);
     expect(screen.getByText("Effective 4 November 2026")).toBeTruthy();

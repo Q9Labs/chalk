@@ -1,5 +1,6 @@
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { ChalkArrival } from "@q9labsai/chalk-react-native";
-import { Limbo, useTheme, type ColorScheme } from "@q9labsai/chalk-react-native/ui";
+import { Limbo, useDeviceLayout, useTheme, type ColorScheme } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { cleanupSpaceArrival, createPublicSpaceRoute, prepareSpaceArrival, waitForAdmission, type MobileSpaceArrival, type SpaceArrivalStep, type SpaceRoute, type StoredSpaceArrival } from "../lib/spaces";
@@ -80,14 +81,20 @@ export function JoiningScreen({ apiBaseURL, target, displayName, colorScheme, on
     };
   }, [apiBaseURL, attempt, displayName, target]);
 
-  if (waiting) {
-    const retry = () => {
-      setWaiting(null);
-      setAttempt((current) => current + 1);
-    };
-    return <ChalkArrival callName={waiting.spaceName} colorScheme={colorScheme} onCancel={onCancel} onRetry={retry} state={waiting.state} />;
-  }
-  return <Joining callName={joiningName(target, displayName)} />;
+  const { insets } = useDeviceLayout();
+  const { colors } = useTheme();
+  const retry = () => {
+    setWaiting(null);
+    setAttempt((current) => current + 1);
+  };
+  return (
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
+      <View style={{ paddingTop: insets.top, paddingHorizontal: 16 }}>
+        <PrivacyNotice />
+      </View>
+      <View style={styles.root}>{waiting ? <ChalkArrival callName={waiting.spaceName} colorScheme={colorScheme} onCancel={onCancel} onRetry={retry} state={waiting.state} /> : <Joining callName={joiningName(target, displayName)} />}</View>
+    </View>
+  );
 }
 
 /** T1 as drawn: the limbo on the call background. */

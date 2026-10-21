@@ -1,3 +1,4 @@
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ErrorCode, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
@@ -276,24 +277,29 @@ export function SpacePage({
     );
   }
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
-      {pending ? (
-        <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
-      ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-        <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
-      ) : error ? (
-        <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
-      ) : (
-        <NameNeeded
-          spaceName={callName}
-          displayName={displayName}
-          onDisplayNameChange={(name) => {
-            nameEdited.current = true;
-            setDisplayName(name);
-          }}
-          onJoin={() => start()}
-        />
-      )}
+    <main data-chalk data-chalk-theme={mode} className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
+      <div className="mx-auto w-full max-w-5xl shrink-0 px-4">
+        <PrivacyNotice />
+      </div>
+      <div className="min-h-0 flex-1">
+        {pending ? (
+          <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+        ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
+          <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
+        ) : error ? (
+          <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
+        ) : (
+          <NameNeeded
+            spaceName={callName}
+            displayName={displayName}
+            onDisplayNameChange={(name) => {
+              nameEdited.current = true;
+              setDisplayName(name);
+            }}
+            onJoin={() => start()}
+          />
+        )}
+      </div>
     </main>
   );
 }

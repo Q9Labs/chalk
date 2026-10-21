@@ -18,6 +18,18 @@ afterEach(async () => {
 });
 
 describe("public Space entry", () => {
+  it.each([undefined, "design-lab"])("shows the advance notice on public and guest name entry (%s)", (slug) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-21T12:00:00Z"));
+    try {
+      render(<SpacePage slug={slug} />);
+      expect(screen.getByRole("complementary", { name: "Privacy Policy update" })).toBeDefined();
+      expect(screen.getByRole("link", { name: "See what's changing." }).getAttribute("href")).toBe("/privacy#whats-changing");
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
   it("does not blame an invite link for a join conflict", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     mocks.publicClient.arriveBySpacePublicInvite.mockRejectedValue(Object.assign(new Error("Participant is not active"), { status: 409 }));

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
-import { PRIVACY_EFFECTIVE_DATE_LABEL, usePrivacyUpdatePending } from "./privacy-update";
+import { PRIVACY_EFFECTIVE_DATE_LABEL, usePrivacyUpdatePending } from "../../../../shared/privacy-update";
 import { Logo } from "@q9labsai/chalk-react";
 
 type LegalPageKind = "privacy" | "privacy-previous" | "terms";

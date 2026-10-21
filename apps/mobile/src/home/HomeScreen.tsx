@@ -1,3 +1,4 @@
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { announce, ChalkText, FaceAvatar, fixed, Icon, IconButton, Menu, MenuItem, PillButton, useDeviceLayout, usePressAnimation, useTheme, useToastClearance, useToasts } from "@q9labsai/chalk-react-native/ui";
 import { setStringAsync } from "expo-clipboard";
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
@@ -81,6 +82,7 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
         <YouButton name={name} onPress={() => setSheet("you")} pressableRef={youRef} />
       </View>
       <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} style={styles.body}>
+        {sheet !== "join" ? <PrivacyNotice /> : null}
         <ChalkText accessibilityRole="header" style={styles.section} tone="textMuted" variant="button">
           Recent calls
         </ChalkText>

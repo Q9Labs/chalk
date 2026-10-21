@@ -1,3 +1,4 @@
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { ChalkText, PillButton, useTheme } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useState } from "react";
 import { BackHandler, KeyboardAvoidingView, StyleSheet, View } from "react-native";
@@ -26,6 +27,9 @@ export function NameStep({ onSubmit, onCancel }: NameStepProps): React.JSX.Eleme
 
   return (
     <KeyboardAvoidingView behavior="padding" style={[styles.root, { backgroundColor: colors.canvas }]} testID="join.name-step">
+      <View style={styles.notice}>
+        <PrivacyNotice />
+      </View>
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
         <ChalkText variant="button">Your name</ChalkText>
         <TextField accessibilityLabel="Your name" autoComplete="name" autoFocus enterKeyHint="go" maxLength={40} onChangeText={setName} onSubmitEditing={submit} size="card" testID="join.name" textContentType="name" value={name} />
@@ -39,6 +43,7 @@ export function NameStep({ onSubmit, onCancel }: NameStepProps): React.JSX.Eleme
 
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center", justifyContent: "center" },
+  notice: { width: "100%", maxWidth: 440, paddingHorizontal: 16 },
   card: { width: 300, padding: 20, gap: 8, borderWidth: 1, borderRadius: 16 },
   submit: { marginTop: 6 },
 });
