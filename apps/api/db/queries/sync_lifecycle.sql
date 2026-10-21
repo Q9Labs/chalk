@@ -732,8 +732,16 @@ left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_i
   and arrivals.arrival_handle = public.arrival_handle
 join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id = requests.space_id
   and episodes.id = requests.episode_id
-where requests.status = 'pending' and requests.decision_external_operation_id is null
-  and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left'))
+join participants on participants.tenant_id = requests.tenant_id and participants.episode_id = requests.episode_id
+  and participants.id = requests.participant_id
+where (
+    (requests.status = 'pending' and requests.decision_external_operation_id is null
+      and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left')))
+    or (requests.status = 'admitted' and participants.status = 'active'
+      and ((arrivals.state = 'pending'
+        and greatest(requests.expires_at, requests.completed_at + interval '1 minute') <= now())
+        or arrivals.state in ('unavailable', 'rejected')))
+  )
   and episodes.status = 'active'
 order by requests.expires_at, requests.admission_request_id
 limit sqlc.arg(page_size)::integer;
@@ -756,3 +764,19 @@ where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
 select operation_name from sync_external_operations
 where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
   and external_operation_id = sqlc.arg(external_operation_id);
+
+-- name: RequeueFailedAdmissionExpiry :one
+update sync_external_operations
+set status = 'pending', completed_at = null, last_error_code = null,
+    next_attempt_at = now(), attempt_count = 0
+where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
+  and external_operation_id = sqlc.arg(external_operation_id)
+  and operation_name = 'admission_request_expired' and status = 'failed'
+returning *;
+
+-- name: ExpireUncollectedPublicArrival :exec
+update space_public_arrivals
+set state = 'unavailable', terminal_at = now(), updated_at = now(),
+    terminal_reason = 'admission_not_collected'
+where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_handle)
+  and state = 'pending';

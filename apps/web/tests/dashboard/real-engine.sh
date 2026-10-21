@@ -18,6 +18,7 @@ else
   export CHALK_API_RATE_LIMITS="${CHALK_API_RATE_LIMITS:-off}"
 fi
 export CHALK_API_ADDR=127.0.0.1:18080
+export CHALK_API_CORS_ALLOWED_ORIGINS=http://127.0.0.1:18797
 export CHALK_API_LOCAL_SYSTEM_TOKEN=fixture-local-system-not-a-secret
 export CHALK_API_SERVICE_ID=dashboard-runtime-proof
 export CHALK_API_SERVICE_SECRETS=fixture-dashboard-service-token-not-a-secret

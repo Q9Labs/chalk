@@ -1220,6 +1220,32 @@ func (q *Queries) MarkAutoSpaceLifecycleArchiving(ctx context.Context, arg MarkA
 	return i, err
 }
 
+const recordPublicAdmissionDecision = `-- name: RecordPublicAdmissionDecision :exec
+update space_public_admission_requests
+set decided_by = $1, decision_request_key = $2
+where tenant_id = $3 and space_id = $4
+  and request_handle = $5 and state = 'pending'
+`
+
+type RecordPublicAdmissionDecisionParams struct {
+	DecidedBy          pgtype.UUID `json:"decided_by"`
+	DecisionRequestKey pgtype.Text `json:"decision_request_key"`
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	RequestHandle      pgtype.UUID `json:"request_handle"`
+}
+
+func (q *Queries) RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error {
+	_, err := q.db.Exec(ctx, recordPublicAdmissionDecision,
+		arg.DecidedBy,
+		arg.DecisionRequestKey,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.RequestHandle,
+	)
+	return err
+}
+
 const retryAutoSpaceLifecycle = `-- name: RetryAutoSpaceLifecycle :one
 update auto_space_lifecycles
 set state = 'active', claim_expires_at = null, next_retry_at = $1,

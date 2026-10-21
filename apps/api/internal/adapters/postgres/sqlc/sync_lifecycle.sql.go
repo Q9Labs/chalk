@@ -909,6 +909,24 @@ func (q *Queries) EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerSt
 	return i, err
 }
 
+const expireUncollectedPublicArrival = `-- name: ExpireUncollectedPublicArrival :exec
+update space_public_arrivals
+set state = 'unavailable', terminal_at = now(), updated_at = now(),
+    terminal_reason = 'admission_not_collected'
+where tenant_id = $1 and arrival_handle = $2
+  and state = 'pending'
+`
+
+type ExpireUncollectedPublicArrivalParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	ArrivalHandle pgtype.UUID `json:"arrival_handle"`
+}
+
+func (q *Queries) ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error {
+	_, err := q.db.Exec(ctx, expireUncollectedPublicArrival, arg.TenantID, arg.ArrivalHandle)
+	return err
+}
+
 const failPendingTenantControlOperationsForEnd = `-- name: FailPendingTenantControlOperationsForEnd :execrows
 update sync_external_operations
 set
@@ -1088,8 +1106,16 @@ left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_i
   and arrivals.arrival_handle = public.arrival_handle
 join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id = requests.space_id
   and episodes.id = requests.episode_id
-where requests.status = 'pending' and requests.decision_external_operation_id is null
-  and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left'))
+join participants on participants.tenant_id = requests.tenant_id and participants.episode_id = requests.episode_id
+  and participants.id = requests.participant_id
+where (
+    (requests.status = 'pending' and requests.decision_external_operation_id is null
+      and (requests.expires_at <= now() or arrivals.state in ('unavailable', 'rejected', 'left')))
+    or (requests.status = 'admitted' and participants.status = 'active'
+      and ((arrivals.state = 'pending'
+        and greatest(requests.expires_at, requests.completed_at + interval '1 minute') <= now())
+        or arrivals.state in ('unavailable', 'rejected')))
+  )
   and episodes.status = 'active'
 order by requests.expires_at, requests.admission_request_id
 limit $1::integer
@@ -1965,6 +1991,61 @@ func (q *Queries) MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkT
 		&i.DeadlineGeneration,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const requeueFailedAdmissionExpiry = `-- name: RequeueFailedAdmissionExpiry :one
+update sync_external_operations
+set status = 'pending', completed_at = null, last_error_code = null,
+    next_attempt_at = now(), attempt_count = 0
+where tenant_id = $1 and episode_id = $2
+  and external_operation_id = $3
+  and operation_name = 'admission_request_expired' and status = 'failed'
+returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+`
+
+type RequeueFailedAdmissionExpiryParams struct {
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
+}
+
+func (q *Queries) RequeueFailedAdmissionExpiry(ctx context.Context, arg RequeueFailedAdmissionExpiryParams) (SyncExternalOperation, error) {
+	row := q.db.QueryRow(ctx, requeueFailedAdmissionExpiry, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
+	var i SyncExternalOperation
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.ExternalOperationID,
+		&i.ParentExternalOperationID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.OperationName,
+		&i.ActorParticipantID,
+		&i.ActorGeneration,
+		&i.TargetParticipantID,
+		&i.TargetParticipantGeneration,
+		&i.Source,
+		&i.RecordingID,
+		&i.DeadlineGeneration,
+		&i.JourneyID,
+		&i.ParentJourneyEventID,
+		&i.ProducingTraceID,
+		&i.ProducingSpanID,
+		&i.Payload,
+		&i.Status,
+		&i.FenceActive,
+		&i.AttemptCount,
+		&i.NextAttemptAt,
+		&i.LastErrorCode,
+		&i.AppliedEventID,
+		&i.AppliedRevision,
+		&i.CreatedAt,
+		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
 	)
 	return i, err
 }

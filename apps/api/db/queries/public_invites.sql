@@ -244,6 +244,12 @@ where tenant_id = sqlc.arg(tenant_id)
 returning request_handle, arrival_handle, tenant_id, space_id, display_name, state,
           requested_at, expires_at, decided_at, decided_by, decision_request_key;
 
+-- name: RecordPublicAdmissionDecision :exec
+update space_public_admission_requests
+set decided_by = sqlc.narg(decided_by), decision_request_key = sqlc.narg(decision_request_key)
+where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
+  and request_handle = sqlc.arg(request_handle) and state = 'pending';
+
 -- name: ListDueAutoSpaceLifecycles :many
 with reclaim_expired_claims as (
     update auto_space_lifecycles

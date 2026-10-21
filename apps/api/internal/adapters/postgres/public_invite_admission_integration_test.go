@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 // The signed-in dashboard's Start a call action creates this knock policy.
@@ -43,7 +44,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	exec(`insert into tenant_artifact_policies(tenant_id) values($1)`, uuid(tenantID))
 	// These pending lifecycle rows must never escape into another Sync test.
 	defer func() {
-		for _, table := range []string{"space_public_admission_requests", "space_public_arrivals", "sync_admission_requests", "sync_external_operations", "sync_lifecycle_intents"} {
+		for _, table := range []string{"space_public_admission_requests", "space_public_arrivals", "sync_admission_requests", "sync_publication_fences", "sync_external_operations", "sync_lifecycle_intents"} {
 			if _, err := pool.Exec(context.Background(), "delete from "+table+" where tenant_id=$1", uuid(tenantID)); err != nil {
 				t.Errorf("cleanup %s: %v", table, err)
 			}
@@ -53,11 +54,18 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	spaceService := spaces.NewService(NewSpaceRepository(queries, pool))
 	space, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
 		TenantID: tenantID, Name: "New call", Slug: "call-" + accountTenantIntegrationID(t).String(),
-		MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"knock"}`),
+		MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
 		DefaultEpisodeDurationSeconds: 3600, MaximumEpisodeDurationSeconds: 86400, LingerWindowSeconds: 60,
 		RequestKey: accountTenantIntegrationID(t).String(),
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// The invite retains its creation-time mode; decisions must follow the
+	// current Space policy, just as new public arrivals do.
+	if _, err := spaceService.UpdateSpace(ctx, tenantID, space.ID, spaces.UpdateSpaceInput{
+		AdmissionPolicy: utilities.OptionalJSON{Set: true, Value: json.RawMessage(`{"mode":"knock"}`)},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	episodeRepository := NewEpisodeLifecycleRepository(pool)
@@ -161,4 +169,68 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		t.Fatalf("invalidated arrival expiry operations = %d, want 1", count)
 	}
 
+	// A failed deterministic expiry must be reusable, not poison every sweep
+	// with the unique operation request key.
+	exec(`update sync_external_operations set status='failed', completed_at=now(), last_error_code='fixture_failure' where tenant_id=$1 and external_operation_id=(select decision_external_operation_id from sync_admission_requests where tenant_id=$1 and admission_request_id=$2)`, uuid(tenantID), uuid(request.RequestHandle))
+	exec(`update sync_admission_requests set decision_external_operation_id=null where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle))
+	if _, err := episodeRepository.EnqueueDueEpisodeDeadlines(ctx, 50); err != nil {
+		t.Fatalf("retry failed admission expiry: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations where tenant_id=$1 and request_key=$2 and status='pending' and last_error_code is null and completed_at is null`, uuid(tenantID), "expired_"+request.RequestHandle.String()).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("failed expiry was not requeued exactly once: count=%d, %v", count, err)
+	}
+
+	newKnock := func(name string) (publicinvites.Arrival, publicinvites.AdmissionRequest) {
+		t.Helper()
+		arrival, err := service.CreateArrival(ctx, publicinvites.CreateArrivalInput{
+			TenantID: tenantID, SpaceID: space.ID,
+			Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch,
+			IdentityMode: publicinvites.IdentityGuest, DisplayName: name, GuestCredential: []byte("isolated-test-guest-credential"), IdempotencyKey: accountTenantIntegrationID(t).String(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return arrival.Arrival, request
+	}
+	uncollected, approved := newKnock("Uncollected guest")
+	key := accountTenantIntegrationID(t).String()
+	if _, _, err := service.DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: approved.RequestHandle, ActorID: accountID, RequestKey: key, Decision: publicinvites.DecisionApprove}); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from space_public_admission_requests where tenant_id=$1 and request_handle=$2 and decided_by=$3 and decision_request_key=$4 and state='pending'`, uuid(tenantID), uuid(approved.RequestHandle), uuid(accountID), key).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("canonical decision lost host audit identity: count=%d, %v", count, err)
+	}
+	// Model the committed approval without a guest ever collecting its grant.
+	exec(`update participants set status='active', joined_at=now() where tenant_id=$1 and id=(select participant_id from sync_admission_requests where tenant_id=$1 and admission_request_id=$2)`, uuid(tenantID), uuid(approved.RequestHandle))
+	exec(`update sync_admission_requests set status='admitted', completed_at=now()-interval '2 minutes', requested_at=now()-interval '6 minutes', expires_at=now()-interval '2 minutes' where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(approved.RequestHandle))
+	for range 2 {
+		if _, err := episodeRepository.EnqueueDueEpisodeDeadlines(ctx, 50); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations operation join sync_admission_requests request on request.tenant_id=operation.tenant_id and request.episode_id=operation.episode_id and request.participant_id=operation.target_participant_id join space_public_arrivals arrival on arrival.tenant_id=request.tenant_id and arrival.arrival_handle=$3 where request.tenant_id=$1 and request.admission_request_id=$2 and operation.operation_name='remove_participant' and operation.status='pending' and arrival.state='unavailable'`, uuid(tenantID), uuid(approved.RequestHandle), uuid(uncollected.ArrivalHandle)).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("uncollected approval must reserve one canonical seat removal: count=%d, %v", count, err)
+	}
+
+	_, disabled := newKnock("Disabled invite guest")
+	if _, err := service.SetInviteEnabled(ctx, tenantID, space.ID, false, accountID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: disabled.RequestHandle, ActorID: accountID, Decision: publicinvites.DecisionApprove}); !errors.Is(err, publicinvites.ErrAdmissionRequestTerminal) {
+		t.Fatalf("approval with disabled invite before any guest poll = %v", err)
+	}
+
+	exec(`update sync_admission_requests set status='expired', completed_at=now() where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle))
+	exec(`update space_public_admission_requests set state='expired', decided_at=now() where tenant_id=$1 and request_handle=$2`, uuid(tenantID), uuid(request.RequestHandle))
+	exec(`update episodes set status='ended', ended_at=now() where tenant_id=$1 and id=$2`, uuid(tenantID), uuid(host.Episode.ID))
+	if _, err := service.CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: "Isolated guest"}); err != nil {
+		t.Fatalf("replay after original Episode ended: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from episodes where tenant_id=$1 and space_id=$2`, uuid(tenantID), uuid(space.ID)).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("retry created an empty replacement Episode: count=%d, %v", count, err)
+	}
 }

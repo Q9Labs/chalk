@@ -156,13 +156,19 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			}
 			count++
 		}
-		expired, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(count))
-		if err != nil {
-			return err
-		}
-		count += expired
-
 		return nil
+	})
+	if err != nil {
+		return count, err
+	}
+	// Deadline claims lock Episodes first. Release those locks before admission
+	// expiry takes Sync's canonical control-before-Episode lock order.
+	err = r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		expired, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(count))
+		if err == nil {
+			count += expired
+		}
+		return err
 	})
 	return count, err
 }

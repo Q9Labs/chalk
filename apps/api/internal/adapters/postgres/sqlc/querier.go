@@ -106,6 +106,7 @@ type Querier interface {
 	EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error)
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
+	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
 	ExtendRecordingReservation(ctx context.Context, arg ExtendRecordingReservationParams) (ExtendRecordingReservationRow, error)
 	FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error)
 	FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error)
@@ -309,6 +310,7 @@ type Querier interface {
 	MaterializeRecording(ctx context.Context, arg MaterializeRecordingParams) (Recording, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
+	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
 	RecordRecordingFleetWorkerObservation(ctx context.Context, arg RecordRecordingFleetWorkerObservationParams) (RecordRecordingFleetWorkerObservationRow, error)
 	RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExpiredArtifactJobsParams) ([]ArtifactJob, error)
 	RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error)
@@ -326,6 +328,7 @@ type Querier interface {
 	RequestRecordingCompletionRecovery(ctx context.Context, arg RequestRecordingCompletionRecoveryParams) (pgtype.UUID, error)
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)
+	RequeueFailedAdmissionExpiry(ctx context.Context, arg RequeueFailedAdmissionExpiryParams) (SyncExternalOperation, error)
 	ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	ReserveChatAttachmentUpload(ctx context.Context, arg ReserveChatAttachmentUploadParams) (ReserveChatAttachmentUploadRow, error)
 	ReserveEpisodeAdmissionDecision(ctx context.Context, arg ReserveEpisodeAdmissionDecisionParams) (int64, error)

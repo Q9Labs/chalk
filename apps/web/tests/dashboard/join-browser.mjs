@@ -21,6 +21,7 @@ const sandbox = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-join-"));
 const children = [];
 const ownerFile = resolve(sandbox, "groups.json");
 let browser;
+let admissionGuestBrowser;
 let context;
 let watchdog;
 const deadline = setTimeout(() => {
@@ -58,6 +59,7 @@ async function ready(url, child, log) {
 async function cleanup() {
   clearTimeout(deadline);
   await context?.close();
+  await admissionGuestBrowser?.close();
   await browser?.close();
   for (const child of children.toReversed()) {
     if (child.exitCode === null && child.signalCode === null) {
@@ -225,7 +227,8 @@ Process.sleep(:infinity)
     assert.equal(copied, call.inviteUrl, "In-call copy must preserve the exact engine canonical invite URL");
     assert(!copied.includes("/dashboard/call/"));
     if (process.argv.some((argument) => argument.startsWith("--admission"))) {
-      await provePublicAdmission({ browser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl: call.inviteUrl, repository });
+      admissionGuestBrowser = await chromium.launch({ headless: true });
+      await provePublicAdmission({ browser: admissionGuestBrowser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl: call.inviteUrl, repository });
       await leaveCall(page);
       await liveParticipants(0);
     } else {
