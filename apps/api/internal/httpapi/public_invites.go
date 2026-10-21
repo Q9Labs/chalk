@@ -55,7 +55,7 @@ type PublicInviteService interface {
 	DenyAdmissionRequest(context.Context, publicinvites.DecidePublicAdmissionRequestInput) (publicinvites.AdmissionRequest, error)
 	CreatePublicSpace(context.Context, publicinvites.CreatePublicSpaceInput) (publicinvites.PublicSpaceCreated, error)
 	Arrive(context.Context, publicinvites.PublicInviteArrivalInput) (publicinvites.PublicSpaceArrival, error)
-	Status(context.Context, publicinvites.PublicInviteArrivalStatusInput) (publicinvites.PublicSpaceArrival, error)
+	Status(context.Context, publicinvites.PublicInviteArrivalStatusInput, func() error) (publicinvites.PublicSpaceArrival, error)
 	RefreshAccess(context.Context, publicinvites.PublicInviteRefreshInput) (publicinvites.PublicAccessGrant, error)
 	Leave(context.Context, publicinvites.PublicInviteLeaveInput) error
 }
@@ -408,7 +408,7 @@ func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[pub
 		if service == nil {
 			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
 		}
-		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native})
+		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native}, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
