@@ -169,9 +169,6 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 		if err != nil {
 			return err
 		}
-		if episode.Status != episodes.EpisodeStatusActive {
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
 		live, err = queries.LockPublicEpisodeAdmission(ctx, sqlc.LockPublicEpisodeAdmissionParams{TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle)})
 		if err != nil {
 			return err
@@ -180,21 +177,6 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 			if (live.Status == "admitted" && input.Decision == publicinvites.DecisionApprove) || (live.Status == "denied" && input.Decision == publicinvites.DecisionDeny) {
 				return nil
 			}
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-		currentArrival, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
-		if err != nil {
-			return err
-		}
-		if publicinvites.ArrivalState(currentArrival.State) != publicinvites.ArrivalPending || !currentArrival.ExpiresAt.Time.After(time.Now()) {
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-		mode, err := configAdmissionMode(space.AdmissionPolicy)
-		if err != nil {
-			return err
-		}
-		if space.ArchivedAt.Valid || mode != "knock" || !invite.Enabled ||
-			!bytes.Equal(invite.Handle, currentArrival.InviteHandle) || invite.Generation != currentArrival.InviteGeneration || invite.StateEpoch != currentArrival.InviteStateEpoch {
 			return publicinvites.ErrAdmissionRequestTerminal
 		}
 		operationName := "admit_participant"
@@ -211,6 +193,26 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 			}
 			return nil
 		}
+		if episode.Status != episodes.EpisodeStatusActive {
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+
+		currentArrival, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
+		if err != nil {
+			return err
+		}
+		if publicinvites.ArrivalState(currentArrival.State) != publicinvites.ArrivalPending || !currentArrival.ExpiresAt.Time.After(time.Now()) {
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+		mode, err := configAdmissionMode(space.AdmissionPolicy)
+		if err != nil {
+			return err
+		}
+		if space.ArchivedAt.Valid || mode != "knock" || !invite.Enabled ||
+			!bytes.Equal(invite.Handle, currentArrival.InviteHandle) || invite.Generation != currentArrival.InviteGeneration || invite.StateEpoch != currentArrival.InviteStateEpoch {
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+
 		if !live.ExpiresAt.Time.After(time.Now()) {
 			return publicinvites.ErrAdmissionRequestTerminal
 		}

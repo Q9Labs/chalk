@@ -90,6 +90,17 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Run("control before Episode", func(t *testing.T) {
+		proveAdmissionControlLockOrder(t, ctx, pool, tenantID, host.Episode.ID, arrival.Arrival.ArrivalHandle)
+	})
+	arrival, err = service.CreateArrival(ctx, publicinvites.CreateArrivalInput{
+		TenantID: tenantID, SpaceID: space.ID,
+		Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch,
+		IdentityMode: publicinvites.IdentityGuest, DisplayName: "Isolated guest", GuestCredential: []byte("isolated-test-guest-credential"), IdempotencyKey: accountTenantIntegrationID(t).String(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	journeyID := accountTenantIntegrationID(t)
 	knockCtx := observability.ContextWithJourneyID(ctx, journeyID)
 	request, err := service.CreateAdmissionRequest(knockCtx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrival.Arrival.ArrivalHandle, DisplayName: "Isolated guest"})
@@ -104,7 +115,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		t.Fatal("public knock is missing from the live Episode admission queue")
 	}
 	var payload json.RawMessage
-	if err := pool.QueryRow(ctx, `select payload from sync_lifecycle_intents where tenant_id=$1 and episode_id=$2 and intent_name='admission_requested'`, uuid(tenantID), uuid(host.Episode.ID)).Scan(&payload); err != nil {
+	if err := pool.QueryRow(ctx, `select payload from sync_lifecycle_intents where tenant_id=$1 and episode_id=$2 and intent_name='admission_requested' and payload->>'admission_request_id'=$3`, uuid(tenantID), uuid(host.Episode.ID), request.RequestHandle.String()).Scan(&payload); err != nil {
 		t.Fatal(err)
 	}
 	var event struct {
@@ -209,6 +220,17 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 			if _, _, err := service.DecideAdmissionRequest(ctx, input); err != nil {
 				t.Fatal(err)
 			}
+			var auditedActor, auditedKey string
+			if err := pool.QueryRow(ctx, `select decided_by::text, decision_request_key from space_public_admission_requests where tenant_id=$1 and request_handle=$2`, uuid(tenantID), uuid(request.RequestHandle)).Scan(&auditedActor, &auditedKey); err != nil {
+				t.Fatal(err)
+			}
+			expectedKey := input.RequestKey
+			if expectedKey == "" {
+				expectedKey = request.RequestHandle.String()
+			}
+			if auditedActor != accountID.String() || auditedKey != expectedKey {
+				t.Fatalf("host audit = %s/%s, want %s/%s", auditedActor, auditedKey, accountID, expectedKey)
+			}
 			var originalOperationID string
 			if err := pool.QueryRow(ctx, `select decision_external_operation_id::text from sync_admission_requests where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle)).Scan(&originalOperationID); err != nil {
 				t.Fatal(err)
@@ -226,6 +248,10 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 			}
 		}
 	}
+	t.Run("reserved decision replay", func(t *testing.T) {
+		proveReservedAdmissionReplays(t, ctx, pool, service, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
+	})
+
 	proof := captureAdmissionOutcomeProof(t)
 	knockCtx = proof.start(ctx, journeyID)
 	uncollected, approved := newKnock("Uncollected guest")

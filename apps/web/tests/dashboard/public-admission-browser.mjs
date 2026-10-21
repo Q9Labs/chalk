@@ -13,11 +13,21 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   await page.getByRole("button", { name: "Close call link", exact: true }).click();
   const invite = new URL(inviteUrl);
   const guestUrl = `${origin}${invite.pathname}${invite.search}${invite.hash}`;
+  const journeys = [];
+  const terminalLedger = [];
   async function sql(query) {
     const { stdout } = await promisify(execFile)("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-At", "-c", query]);
     return stdout.trim();
   }
   async function terminalProjection(name, state) {
+    const evidence = JSON.parse(
+      await sql(
+        `select json_build_object('state', public.state, 'journeyId', operation.journey_id, 'traceId', operation.producing_trace_id, 'ledgerEventId', root.event_id) from space_public_admission_requests public join sync_admission_requests live on live.admission_request_id=public.request_handle join sync_external_operations operation on operation.tenant_id=live.tenant_id and operation.external_operation_id=live.decision_external_operation_id join observability_journey_events root on root.event_id=operation.parent_journey_event_id and root.journey_id=operation.journey_id where public.tenant_id='${tenantId}' and public.space_id='${spaceId}' and public.display_name='${name}'`,
+      ),
+    );
+    assert.equal(evidence.state, state);
+    assert(evidence.journeyId && evidence.traceId && evidence.ledgerEventId, "Terminal decision retains its durable journey ledger and producing trace");
+    terminalLedger.push({ name, ...evidence });
     assert.equal(
       await sql(`select public.state from space_public_admission_requests public join sync_admission_requests live on live.admission_request_id=public.request_handle where public.tenant_id='${tenantId}' and public.space_id='${spaceId}' and public.display_name='${name}'`),
       state,
@@ -73,6 +83,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
         "1",
         "The HTTP journey and W3C trace reach the durable admission intent and ledger root",
       );
+      journeys.push({ name, journeyId, traceId });
       return { context, guest };
     } catch (error) {
       await writeFile(resolve(out, "failure-guest-network.json"), JSON.stringify(failures, null, 2));
@@ -192,11 +203,13 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   await page.screenshot({ path: resolve(out, "after-uncollected-seat-removed.png") });
 
   const apiLog = await readFile(resolve(repository, "artifacts/dashboard-api.log"), "utf8");
-  for (const reason of ["approved", "admission_denied", "admission_request_expired"]) {
+  for (const reason of ["approved", "admission_denied", "admission_request_expired", "admission_not_collected"]) {
     assert(
       apiLog.split("\n").some((line) => line.includes("public_invite.admission") && line.includes(reason)),
       `Missing structured admission outcome: ${reason}`,
     );
   }
+  await writeFile(resolve(out, "admission-journeys.json"), JSON.stringify(journeys, null, 2));
+  await writeFile(resolve(out, "admission-terminal-ledger.json"), JSON.stringify(terminalLedger, null, 2));
   console.log("PASS: signed-in dashboard Start a call → isolated public guest → host prompt and People badge → live approve/deny → terminal expiry → dashboard approve/deny share Sync admission");
 }
