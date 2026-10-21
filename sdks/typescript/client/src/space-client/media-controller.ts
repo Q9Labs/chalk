@@ -30,7 +30,11 @@ type CameraOwner = {
   readonly cancel: () => void;
   references: number;
 };
-type CameraState = { readonly status: "idle" | "ended" } | { readonly status: "capturing"; readonly owner: CameraOwner } | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly published: boolean; readonly onEnded: () => void };
+type CameraPhase =
+  | { readonly status: "idle" | "ended" }
+  | { readonly status: "capturing"; readonly owner: CameraOwner }
+  | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void };
+type CameraState = CameraPhase & { readonly ready: Promise<void> };
 export type MediaControllerEffects = {
   readonly configure: (
     intent: Readonly<{
@@ -96,7 +100,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #pendingSources = new Set<MediaSource>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #requestGenerations = new Map<string, number>();
-  #camera: CameraState = { status: "idle" };
+  #camera: CameraState = { status: "idle", ready: Promise.resolve() };
   #intent = { microphone: true, camera: true };
   #requests: readonly IncomingMediaRequest[] = Object.freeze([]);
   #ports: ConnectionPorts | null = null;
@@ -144,7 +148,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#transitionCamera({ status: "ended" });
       }
       this.#store.select("camera", deviceId);
-    }).pipe(Effect.mapError(normalizeClientError));
+    }).pipe(Effect.andThen(Effect.suspend(() => foreign(() => this.#camera.ready))), Effect.mapError(normalizeClientError));
   selectSpeaker = (deviceId: string): ClientEffect<void> =>
     foreign(() => this.#selection.selectSpeaker(deviceId)).pipe(
       Effect.tap(() => Effect.sync(() => this.#store.select("speaker", deviceId))),
@@ -544,21 +548,38 @@ class MediaControllerRuntime implements MediaControllerEffects {
       ),
     );
   }
-  #transitionCamera(next: CameraState): void {
+  #transitionCamera(next: CameraPhase): void {
     const previous = this.#camera;
     const sameOwner = "owner" in previous && "owner" in next && previous.owner === next.owner;
     if (previous.status === "live") previous.track.removeEventListener("ended", previous.onEnded);
-    this.#camera = next;
+    const retirement = this.#retireCameraPublication(previous, next);
+    const ready = next.status === "idle" ? Promise.resolve() : retirement;
+    this.#camera = { ...next, ready };
     if (!sameOwner && "owner" in previous) {
       previous.owner.cancel();
       if (previous.status === "live") previous.track.stop();
     }
-    if (next.status === "live") next.track.addEventListener("ended", next.onEnded, { once: true });
+    if (next.status === "live") {
+      next.track.addEventListener("ended", next.onEnded, { once: true });
+      void ready.then(() => this.#enablePrivateCamera(next.owner)).catch(() => undefined);
+    }
+    // Event/leave/dispose transitions have no awaiting caller; later acquisition still observes failures.
+    void retirement.catch(() => undefined);
     this.#publish();
+  }
+  #retireCameraPublication(previous: CameraState, next: CameraPhase): Promise<void> {
+    if (previous.status !== "live" || previous.publication === null || previous.publication === "initial") return previous.ready;
+    if (next.status === "live" && next.track === previous.track && next.publication !== null) return previous.ready;
+    const media = previous.publication;
+    return previous.ready.then(() => media.clearPreparedLocalTrack("camera", { stopTrack: false }));
+  }
+  #enablePrivateCamera(owner: CameraOwner): void {
+    const state = this.#camera;
+    if (state.status === "live" && state.owner === owner && state.publication === null) state.track.enabled = true;
   }
   #track(source: MediaSource): MediaStreamTrack | undefined {
     if (source !== "camera") return this.#tracks.get(source);
-    return this.#camera.status === "live" && this.#camera.published ? this.#camera.track : undefined;
+    return this.#camera.status === "live" && this.#camera.publication !== null && this.#camera.track.readyState === "live" ? this.#camera.track : undefined;
   }
   #hasTrack(source: MediaSource): boolean {
     return this.#track(source) !== undefined;
@@ -580,7 +601,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const onEnded = () => {
       if (this.#camera.status === "live" && this.#camera.track === track) this.#transitionCamera({ status: "ended" });
     };
-    this.#transitionCamera({ status: "live", owner: state.owner, track, published: true, onEnded });
+    this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
@@ -590,28 +611,43 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const state = this.#camera;
     if (state.status !== "live") return;
     if (state.owner.references > 0 && state.track.readyState === "live") {
-      state.track.enabled = true;
-      this.#transitionCamera({ ...state, published: false });
+      this.#transitionCamera({ ...state, publication: null });
     } else this.#transitionCamera({ status: "ended" });
   }
   #clearTracks(): void {
     this.#tracks.clear();
-    this.#transitionCamera({ status: "ended" });
+    this.#transitionCamera({ status: "idle" });
   }
   #cameraSource(purpose: "preview" | "publication", acquire: (signal: AbortSignal) => Effect.Effect<MediaStreamTrack, unknown> = (signal) => this.#captureSource("camera", signal)): Effect.Effect<CameraPreview, unknown> {
     return Effect.suspend(() => {
-      this.#discardEndedCamera();
-      const current = this.#camera;
-      if (current.status === "live") return this.#liveCameraSource(current, purpose);
-      if (current.status === "capturing") return this.#borrowCamera(current.owner);
-      return this.#borrowCamera(this.#beginCameraCapture(acquire));
+      const cancelled = Deferred.makeUnsafe<never, unknown>();
+      const cancel = () => Deferred.doneUnsafe(cancelled, Effect.fail(cancelledCaptureError()));
+      this.#pendingCaptures.add(cancel);
+      const source = Effect.sync(() => this.#discardEndedCamera()).pipe(
+        Effect.andThen(this.#cameraReady()),
+        Effect.andThen(
+          Effect.suspend(() => {
+            const current = this.#camera;
+            if (current.status === "live") return this.#liveCameraSource(current, purpose);
+            if (current.status === "capturing") return this.#borrowCamera(current.owner);
+            return this.#borrowCamera(this.#beginCameraCapture(acquire));
+          }),
+        ),
+      );
+      return Effect.raceFirst(source, Deferred.await(cancelled)).pipe(Effect.ensuring(Effect.sync(() => this.#pendingCaptures.delete(cancel))));
+    });
+  }
+  #cameraReady(): Effect.Effect<void, unknown> {
+    return Effect.suspend(() => {
+      const state = this.#camera;
+      return foreign(() => state.ready).pipe(Effect.andThen(Effect.suspend(() => (state === this.#camera ? Effect.void : this.#cameraReady()))));
     });
   }
   #discardEndedCamera(): void {
     if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" });
   }
   #liveCameraSource(current: CameraState & { readonly status: "live" }, purpose: "preview" | "publication"): Effect.Effect<CameraPreview, unknown> {
-    if (current.published && !current.track.enabled && purpose === "preview") {
+    if (current.publication !== null && !current.track.enabled && purpose === "preview") {
       const track = current.track.clone();
       track.enabled = true;
       const release = () => {
@@ -647,7 +683,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               const onEnded = () => {
                 if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
               };
-              this.#transitionCamera({ status: "live", owner, track, published: state.status === "live" && state.published, onEnded });
+              this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded });
               if (track.readyState !== "live") {
                 this.#transitionCamera({ status: "ended" });
                 throw cancelledCaptureError();
@@ -670,7 +706,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       released = true;
       owner.references--;
       const current = this.#camera;
-      if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || !current.published)) this.#transitionCamera({ status: "ended" });
+      if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || current.publication === null)) this.#transitionCamera({ status: "ended" });
     };
     return Deferred.await(owner.result).pipe(
       Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(cancelledCaptureError()))),
@@ -773,12 +809,16 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #discardCaptured(source: MediaSource, track: MediaStreamTrack, media: ConnectionPorts["media"], prepared: boolean): Effect.Effect<void, unknown> {
-    const clear = prepared ? foreign(() => media.clearPreparedLocalTrack(source, { stopTrack: source !== "camera" })).pipe(Effect.ignore) : Effect.void;
+    if (source === "camera")
+      return Effect.sync(() => {
+        if (this.#track(source) === track) this.#deleteTrack(source);
+      }).pipe(Effect.andThen(Effect.suspend(() => foreign(() => this.#camera.ready))));
+    const clear = prepared ? foreign(() => media.clearPreparedLocalTrack(source)).pipe(Effect.ignore) : Effect.void;
     return clear.pipe(
       Effect.andThen(
         Effect.sync(() => {
           if (this.#track(source) === track) this.#deleteTrack(source);
-          if (source !== "camera") track.stop();
+          track.stop();
         }),
       ),
     );
@@ -804,6 +844,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribeSync = null;
     if (this.#ports?.media !== ports?.media) this.#observedPublicationIds.clear();
     this.#ports = ports;
+    this.#bindCamera(ports);
     if (!ports) {
       this.#cancelCaptures();
       this.#screenAudioTrack?.stop();
@@ -828,6 +869,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#applyRemoteMediaState(ports, ports.sync.getSnapshot());
     this.#applyForcedMediaState(ports, ports.sync.getSnapshot());
     this.#publish();
+  }
+  #bindCamera(ports: ConnectionPorts | null): void {
+    if (!ports) return;
+    const state = this.#camera;
+    if (state.status === "live" && state.publication === "initial") this.#transitionCamera({ ...state, publication: ports.media });
   }
   #applyRemoteMediaState(ports: ConnectionPorts, snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>): void {
     for (const publication of ports.media.getSnapshot().remoteTracks) {

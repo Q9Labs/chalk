@@ -418,3 +418,115 @@ it("keeps an ended shared acquisition in the typed error channel", async () => {
     ),
   );
 });
+
+it.each(["device selection", "ended event", "stopped track", "leave"])("clears the SFU camera slot after %s before enabling a replacement", async (retirement) => {
+  const platform = createCoreTestPlatform();
+  const first = track("video");
+  const replacement = track("video");
+  const capture = vi
+    .fn()
+    .mockResolvedValueOnce(stream([first]))
+    .mockResolvedValueOnce(stream([replacement]));
+  let prepared: MediaStreamTrack | null = null;
+  const prepare = vi.fn((_source: string, value: MediaStreamTrack) => {
+    if (prepared) throw new Error("A camera track is already prepared");
+    prepared = value;
+  });
+  const clear = vi.fn(async () => {
+    const retiring = prepared;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    if (prepared === retiring) prepared = null;
+  });
+  const client = captureClient(platform, {
+    mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
+    createMediaClient: (input) => {
+      const media = platform.dependencies.createMediaClient(input);
+      return {
+        ...media,
+        prepareLocalTrack: prepare,
+        clearPreparedLocalTrack: clear,
+        stop: () => {
+          prepared = null;
+          media.stop();
+        },
+      };
+    },
+    createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: async () => ({ operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
+  });
+  try {
+    await enableFromCameraOff(client);
+    expect(prepared).toBe(first);
+    await client.media.setCameraEnabled(false);
+    if (retirement === "device selection") await client.media.selectCamera("another-camera");
+    else if (retirement === "ended event") {
+      first.stop();
+      first.dispatchEvent(new Event("ended"));
+    } else if (retirement === "stopped track") first.stop();
+    else {
+      await client.leave();
+      await client.join({ microphone: false, camera: false });
+    }
+    await client.media.setCameraEnabled(true);
+    expect(prepared).toBe(replacement);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(first.readyState).toBe("ended");
+    expect(replacement.readyState).toBe("live");
+  } finally {
+    client.dispose();
+  }
+  await vi.waitFor(() => expect(prepared).toBeNull());
+  expect(clear).toHaveBeenCalledTimes(2);
+});
+
+it.each(["leave", "dispose", "failed retirement"])("revokes camera waiters on %s without poisoning a fresh connection", async (retirement) => {
+  const platform = createCoreTestPlatform();
+  const capture = vi.fn(async () => stream([track("video")]));
+  let finishClear = () => {};
+  const clear = vi
+    .fn(async () => undefined)
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          finishClear = retirement === "failed retirement" ? () => reject(new Error("replaceTrack failed")) : resolve;
+        }),
+    );
+  const client = captureClient(platform, {
+    mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
+    createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), clearPreparedLocalTrack: clear }),
+    createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: async () => ({ operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
+  });
+  try {
+    await enableFromCameraOff(client);
+    await client.media.setCameraEnabled(false);
+    const selected = client.media.selectCamera("another-camera").catch(() => undefined);
+    await vi.waitFor(() => expect(clear).toHaveBeenCalledOnce());
+    const preview = client.media.captureCameraPreview().then(
+      (value) => {
+        value.release();
+        return "resolved";
+      },
+      () => "rejected",
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (retirement === "dispose") client.dispose();
+    else await client.leave();
+    finishClear();
+    await selected;
+    expect(await preview).toBe("rejected");
+    expect(capture).toHaveBeenCalledOnce();
+    if (retirement !== "dispose") {
+      await client.join({ microphone: false, camera: false });
+      await expect(client.media.setCameraEnabled(true)).resolves.toBeUndefined();
+      expect(capture).toHaveBeenCalledTimes(2);
+    }
+  } finally {
+    finishClear();
+    client.dispose();
+  }
+});
+
+async function enableFromCameraOff(client: ReturnType<typeof captureClient>): Promise<void> {
+  await client.join({ microphone: false, camera: false });
+  await client.media.setCameraEnabled(true);
+}

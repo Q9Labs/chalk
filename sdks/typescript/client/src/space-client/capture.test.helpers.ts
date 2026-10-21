@@ -19,7 +19,7 @@ export function pendingCapture() {
 export function pendingPreview() {
   const video = track("video");
   const { capture, release } = pendingCapture();
-  const client = captureClient(createCoreTestPlatform(), { mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] } });
+  const client = captureClient(createCoreTestPlatform(), { mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] } });
   return { video, capture, release, client };
 }
 export function pendingMedia() {
