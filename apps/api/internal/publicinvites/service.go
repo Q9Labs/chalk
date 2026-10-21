@@ -716,6 +716,8 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 	if arrival.State != ArrivalPending {
 		return AdmissionRequest{}, ErrAdmissionRequestTerminal
 	}
+	// Legacy approval allocates a seat, unlike canonical credential collection.
+	// Reject already-revoked requests before that allocation as well as at commit.
 	space, err := r.space.GetPublicSpace(ctx, arrival.TenantID, arrival.SpaceID)
 	if err != nil {
 		return AdmissionRequest{}, err
@@ -744,12 +746,14 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 		TenantID:              arrival.TenantID,
 		ArrivalHandle:         arrival.ArrivalHandle,
 		State:                 ArrivalAdmitted,
+		RequirePending:        true,
 		EpisodeID:             grant.EpisodeID,
 		ParticipantID:         grant.ParticipantID,
 		ParticipantGeneration: grant.ParticipantGeneration,
 		Provider:              grant.Provider,
 		ProviderSubject:       grant.ProviderSubject,
 	}); err != nil {
+		_ = r.access.DiscardPublicAccess(ctx, grant)
 		return AdmissionRequest{}, err
 	}
 	return request, nil
@@ -1089,6 +1093,9 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	if arrival.State == ArrivalPending && arrival.IdentityMode == IdentityGuest {
+		if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival); resolved || err != nil {
+			return result, err
+		}
 		valid, validationErr := r.pendingGuestArrivalValid(ctx, arrival, space)
 		if validationErr != nil {
 			return PublicSpaceArrival{}, validationErr
@@ -1100,11 +1107,6 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 			arrival, validationErr = r.invalidatePendingArrival(ctx, arrival)
 			if validationErr != nil {
 				return PublicSpaceArrival{}, validationErr
-			}
-		}
-		if arrival.State == ArrivalPending {
-			if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival); resolved || err != nil {
-				return result, err
 			}
 		}
 	}
@@ -1148,7 +1150,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 				return r.arrivalResult(space, current), true, nil
 			}
 			if readErr == nil && errors.Is(err, ErrArrivalUnavailable) {
-				state, reason = ArrivalUnavailable, "admission_episode_ended"
+				state, reason = ArrivalUnavailable, "public_arrival_invalidated"
 				break
 			}
 			return PublicSpaceArrival{}, false, err

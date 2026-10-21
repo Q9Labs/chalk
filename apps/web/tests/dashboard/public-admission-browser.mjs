@@ -42,7 +42,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     }
     assert.equal(await sql(query), expected);
   }
-  async function knock(name) {
+  async function knock(name, dashboard = false) {
     const journeyId = crypto.randomUUID();
     const traceId = crypto.randomUUID().replaceAll("-", "");
     const context = await browser.newContext({
@@ -72,7 +72,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await guest.getByLabel("Your name").fill(name);
       await guest.getByRole("button", { name: "Join", exact: true }).click();
       await guest.getByText(/Asking to join/).waitFor();
-      if (before) return { context, guest };
+      if (before || dashboard) return { context, guest };
       await page.getByRole("button", { name: `Admit ${name}`, exact: true }).waitFor({ timeout: 15000 });
       const badge = page.getByLabel("1 waiting to join", { exact: true });
       await badge.waitFor();
@@ -93,6 +93,55 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await context.close();
       throw error;
     }
+  }
+  async function proveDashboardWithoutHost() {
+    await page.getByRole("button", { name: "Leave call", exact: true }).click();
+    await page.getByRole("heading", { name: /You left/ }).waitFor();
+    const activeSeats = `select count(*) from participants p join episodes e on e.tenant_id=p.tenant_id and e.id=p.episode_id where e.tenant_id='${tenantId}' and e.space_id='${spaceId}' and p.status='active'`;
+    await waitForSql(activeSeats, "0");
+    await page.goto(`${origin}/dashboard/call/${spaceId}`);
+    await page.getByRole("link", { name: "Join call", exact: true }).waitFor();
+    const dashboardDocument = crypto.randomUUID();
+    await page.evaluate((marker) => {
+      window.admissionProofDocument = marker;
+    }, dashboardDocument);
+    const pending = await knock("Hostless dashboard guest", true);
+    try {
+      const guestDocument = crypto.randomUUID();
+      await pending.guest.evaluate((marker) => {
+        window.admissionProofDocument = marker;
+      }, guestDocument);
+      const row = page.locator(".orow").filter({ hasText: "Hostless dashboard guest" });
+      try {
+        await row.getByRole("button", { name: "Let in", exact: true }).waitFor({ timeout: 15000 });
+      } catch (error) {
+        await page.screenshot({ path: resolve(out, "before-dashboard-missing-knock.png") });
+        await pending.guest.screenshot({ path: resolve(out, "before-dashboard-guest-waiting.png") });
+        throw error;
+      }
+      assert.equal(await sql(`select count(*) from episodes where tenant_id='${tenantId}' and space_id='${spaceId}' and status='active'`), "1", "Approval targets an existing live Episode");
+      assert.equal(await sql(activeSeats), "0", "Dashboard approval has no connected host or participant");
+      assert.equal(await page.evaluate(() => window.admissionProofDocument), dashboardDocument, "Knock appeared without dashboard document reload");
+      await page.screenshot({ path: resolve(out, "after-dashboard-live-knock.png") });
+      await row.getByRole("button", { name: "Let in", exact: true }).click();
+      await pending.guest.getByTestId("stage").waitFor({ timeout: 20000 });
+      await pending.guest.getByRole("group", { name: "Stage with 1 participant", exact: true }).waitFor({ timeout: 15000 });
+      assert.equal(await pending.guest.evaluate(() => window.admissionProofDocument), guestDocument, "Guest entered automatically without document reload");
+      assert.equal(await page.evaluate(() => window.admissionProofDocument), dashboardDocument);
+      await row.waitFor({ state: "hidden" });
+      await pending.guest.screenshot({ path: resolve(out, "after-dashboard-hostless-guest-admitted.png") });
+      await terminalProjection("Hostless dashboard guest", "approved");
+      await writeFile(resolve(out, "dashboard-live-acceptance.json"), JSON.stringify({ dashboardKnockWithoutReload: true, connectedParticipantsBeforeApproval: 0, liveEpisodesBeforeApproval: 1, dashboardLetIn: true, guestStageParticipants: 1, guestEnteredWithoutRefresh: true }, null, 2));
+      await pending.guest.getByRole("button", { name: "Leave call", exact: true }).click();
+      await pending.guest.getByRole("heading", { name: /You left/ }).waitFor();
+      console.log("PASS: already-open dashboard receives a live knock without reload → Let in with zero connected hosts → guest enters the one-person stage without refresh");
+    } finally {
+      await pending.context.close();
+    }
+  }
+  if (process.argv.includes("--admission-dashboard-before")) {
+    await proveDashboardWithoutHost();
+    return;
   }
   if (before) {
     const pending = await knock("Approve guest");
@@ -202,6 +251,8 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     "left",
   );
   await page.screenshot({ path: resolve(out, "after-uncollected-seat-removed.png") });
+
+  await proveDashboardWithoutHost();
 
   const apiLog = await readFile(resolve(repository, "artifacts/dashboard-api.log"), "utf8");
   for (const reason of ["approved", "admission_denied", "admission_request_expired", "admission_not_collected"]) {

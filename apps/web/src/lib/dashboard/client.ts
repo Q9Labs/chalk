@@ -36,6 +36,7 @@ type Pages = {
   "home-metadata": { query: { spaceIds: string }; data: HomeMetadataDTO; action: never };
   "home-status": { query: { spaceIds: string }; data: HomeStatusDTO; action: never };
   home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
+  "call-knocks": { query: { spaceId: string }; data: Pick<CallPageDTO, "knocks">; action: never };
   call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
   developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
@@ -119,11 +120,11 @@ export async function signOut(): Promise<void> {
   csrfToken = undefined;
 }
 
-export function readPage<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<Pages[P]["data"]> {
+export function readPage<P extends DashboardPage>(page: P, query: Pages[P]["query"], signal?: AbortSignal): Promise<Pages[P]["data"]> {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (typeof value === "string") search.set(key, value);
   const suffix = search.size ? `?${search}` : "";
-  return send(() => fetch(`/dashboard-api/${page}${suffix}`, { headers: { Accept: "application/json" }, cache: "no-store" }));
+  return send(() => fetch(`/dashboard-api/${page}${suffix}`, { signal, headers: { Accept: "application/json" }, cache: "no-store" }));
 }
 
 export async function act<P extends DashboardPage, A extends Pages[P]["action"]>(page: P, action: A): Promise<Results[A["action"]]> {

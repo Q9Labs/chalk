@@ -229,7 +229,7 @@ Process.sleep(:infinity)
     if (process.argv.some((argument) => argument.startsWith("--admission"))) {
       admissionGuestBrowser = await chromium.launch({ headless: true });
       await provePublicAdmission({ browser: admissionGuestBrowser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl: call.inviteUrl, repository });
-      await leaveCall(page);
+      if (await page.getByRole("button", { name: "Leave call", exact: true }).count()) await leaveCall(page);
       await liveParticipants(0);
     } else {
       const resumedAdmission = page.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === "join");

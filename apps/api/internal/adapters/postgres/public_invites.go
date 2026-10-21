@@ -19,6 +19,7 @@ import (
 type publicInviteQuerier interface {
 	LockLifecycleEpisodeForUpdate(context.Context, sqlc.LockLifecycleEpisodeForUpdateParams) (sqlc.Episode, error)
 	LockLifecycleParticipantForUpdate(context.Context, sqlc.LockLifecycleParticipantForUpdateParams) (sqlc.Participant, error)
+	LockTenantSpaceForUpdate(context.Context, sqlc.LockTenantSpaceForUpdateParams) (sqlc.Space, error)
 	GetPublicAdmissionBinding(context.Context, sqlc.GetPublicAdmissionBindingParams) (sqlc.GetPublicAdmissionBindingRow, error)
 	CreateAutoSpaceLifecycle(context.Context, sqlc.CreateAutoSpaceLifecycleParams) (sqlc.AutoSpaceLifecycle, error)
 	CreateSpacePublicAdmissionRequest(context.Context, sqlc.CreateSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
@@ -321,9 +322,11 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 	var result publicinvites.Arrival
 	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
 		collecting := input.RequirePending && input.State == publicinvites.ArrivalAdmitted
+		var invite sqlc.SpacePublicInvite
+		var space sqlc.Space
 		if collecting {
-			// Space is immutable on an arrival. Read it without locking so collection
-			// takes Episode before arrival, matching finalization and expiry.
+			// The immutable binding locates the rows. Match admission decisions:
+			// invite, Space, Episode, arrival, participant.
 			binding, err := queries.GetSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
 			if errors.Is(err, pgx.ErrNoRows) {
 				return publicinvites.ErrArrivalNotFound
@@ -333,6 +336,20 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			}
 			if utilities.IDFromBytes(binding.TenantID.Bytes) != input.TenantID {
 				return publicinvites.ErrArrivalNotFound
+			}
+			invite, err = queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			if err != nil {
+				return fmt.Errorf("lock public collection invite: %w", err)
+			}
+			space, err = queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: binding.TenantID, ID: binding.SpaceID})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			if err != nil {
+				return fmt.Errorf("lock public collection Space: %w", err)
 			}
 			episode, err := queries.LockLifecycleEpisodeForUpdate(ctx, sqlc.LockLifecycleEpisodeForUpdateParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID, EpisodeID: uuid(input.EpisodeID)})
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -359,6 +376,13 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			return publicinvites.ErrArrivalUnavailable
 		}
 		if collecting {
+			valid, err := publicAdmissionProvenanceValid(space, invite, current, time.Now())
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return publicinvites.ErrArrivalUnavailable
+			}
 			participant, err := queries.LockLifecycleParticipantForUpdate(ctx, sqlc.LockLifecycleParticipantForUpdateParams{TenantID: current.TenantID, SpaceID: current.SpaceID, EpisodeID: uuid(input.EpisodeID), ParticipantID: uuid(input.ParticipantID)})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return publicinvites.ErrArrivalUnavailable
@@ -392,6 +416,17 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		return nil
 	})
 	return result, err
+}
+
+func publicAdmissionProvenanceValid(space sqlc.Space, invite sqlc.SpacePublicInvite, arrival sqlc.SpacePublicArrival, now time.Time) (bool, error) {
+	mode, err := configAdmissionMode(space.AdmissionPolicy)
+	if err != nil {
+		return false, err
+	}
+	return !space.ArchivedAt.Valid && mode == "knock" && invite.Enabled &&
+		arrival.State == string(publicinvites.ArrivalPending) && arrival.ExpiresAt.Time.After(now) &&
+		bytes.Equal(invite.Handle, arrival.InviteHandle) && invite.Generation == arrival.InviteGeneration &&
+		invite.StateEpoch == arrival.InviteStateEpoch, nil
 }
 
 func matchesExpectedProviderBinding(current sqlc.SpacePublicArrival, input publicinvites.UpdateArrivalStateInput) bool {

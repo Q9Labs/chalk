@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -201,15 +200,11 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 		if err != nil {
 			return err
 		}
-		if publicinvites.ArrivalState(currentArrival.State) != publicinvites.ArrivalPending || !currentArrival.ExpiresAt.Time.After(time.Now()) {
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-		mode, err := configAdmissionMode(space.AdmissionPolicy)
+		valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, time.Now())
 		if err != nil {
 			return err
 		}
-		if space.ArchivedAt.Valid || mode != "knock" || !invite.Enabled ||
-			!bytes.Equal(invite.Handle, currentArrival.InviteHandle) || invite.Generation != currentArrival.InviteGeneration || invite.StateEpoch != currentArrival.InviteStateEpoch {
+		if !valid {
 			return publicinvites.ErrAdmissionRequestTerminal
 		}
 
