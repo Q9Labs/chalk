@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/attribute"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -15,6 +17,46 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+type admissionLogExporter struct {
+	records []sdklog.Record
+}
+
+func (e *admissionLogExporter) Export(_ context.Context, records []sdklog.Record) error {
+	for _, record := range records {
+		e.records = append(e.records, record.Clone())
+	}
+	return nil
+}
+
+func (*admissionLogExporter) Shutdown(context.Context) error   { return nil }
+func (*admissionLogExporter) ForceFlush(context.Context) error { return nil }
+
+func TestAdmissionOutcomeOTLPLabels(t *testing.T) {
+	ctx := context.Background()
+	exporter := &admissionLogExporter{}
+	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(exporter)))
+	defer provider.Shutdown(ctx)
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(otelslog.NewHandler("test", otelslog.WithLoggerProvider(provider))))
+	defer slog.SetDefault(previousLogger)
+	for _, state := range []ArrivalState{ArrivalAdmitted, ArrivalRejected, ArrivalUnavailable} {
+		RecordAdmissionOutcome(ctx, Arrival{State: state}, "admission_denied")
+		if len(exporter.records) == 0 {
+			t.Fatal("missing admission OTLP log")
+		}
+		var got string
+		exporter.records[len(exporter.records)-1].WalkAttributes(func(attr attribute.KeyValue) bool {
+			if attr.Key == "state" {
+				got = attr.Value.AsString()
+			}
+			return true
+		})
+		if got != string(state) {
+			t.Fatalf("OTLP admission state = %q, want %q", got, state)
+		}
+	}
+}
 
 func TestAdmissionOutcomesAreObservableWithoutIdentityMetricLabels(t *testing.T) {
 	ctx := context.Background()

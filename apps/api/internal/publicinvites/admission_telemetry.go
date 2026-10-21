@@ -17,6 +17,6 @@ func RecordAdmissionOutcome(ctx context.Context, arrival Arrival, reason string)
 	attributes := []attribute.KeyValue{attribute.String("state", string(arrival.State)), attribute.String("reason", reason)}
 	admissionOutcomes.Add(ctx, 1, metric.WithAttributes(attributes...))
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chalk.public_invite.admission.state", string(arrival.State)), attribute.String("chalk.public_invite.admission.reason", reason))
-	slog.InfoContext(ctx, "public admission completed", "event", "public_invite.admission", "state", arrival.State, "reason", reason,
+	slog.InfoContext(ctx, "public admission completed", "event", "public_invite.admission", "state", string(arrival.State), "reason", reason,
 		"tenant_id", arrival.TenantID.String(), "space_id", arrival.SpaceID.String(), "arrival_handle", arrival.ArrivalHandle.String())
 }
