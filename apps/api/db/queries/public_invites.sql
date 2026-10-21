@@ -168,20 +168,22 @@ returning arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
 
 -- name: ListPendingSpacePublicAdmissionRequests :many
 
-select public.request_handle, public.arrival_handle, public.tenant_id, public.space_id,
-       public.display_name,
+select sqlc.embed(public),
        (case when live.status = 'admitted' then 'approved'
              when live.status = 'denied' then 'denied'
              when live.status = 'expired' then 'expired'
              when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
-             else public.state end)::text as state,
-       public.requested_at, public.expires_at,
-       coalesce(live.completed_at, public.decided_at) as decided_at,
-       public.decided_by, public.decision_request_key
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
 from space_public_admission_requests public
 left join sync_admission_requests live
   on live.tenant_id = public.tenant_id and live.space_id = public.space_id
   and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
 where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
   and (not sqlc.arg(state_set)::boolean or public.state = 'pending')
   and (not sqlc.arg(state_set)::boolean or (case when live.status = 'admitted' then 'approved'
@@ -193,20 +195,22 @@ order by public.requested_at, public.request_handle
 limit sqlc.arg(page_size)::integer;
 
 -- name: GetSpacePublicAdmissionRequest :one
-select public.request_handle, public.arrival_handle, public.tenant_id, public.space_id,
-       public.display_name,
+select sqlc.embed(public),
        (case when live.status = 'admitted' then 'approved'
              when live.status = 'denied' then 'denied'
              when live.status = 'expired' then 'expired'
              when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
-             else public.state end)::text as state,
-       public.requested_at, public.expires_at,
-       coalesce(live.completed_at, public.decided_at) as decided_at,
-       public.decided_by, public.decision_request_key
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
 from space_public_admission_requests public
 left join sync_admission_requests live
   on live.tenant_id = public.tenant_id and live.space_id = public.space_id
   and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
 where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
   and public.request_handle = sqlc.arg(request_handle);
 
@@ -368,20 +372,22 @@ returning tenant_id, space_id, deadline_at, creator_arrival_handle, state,
           created_at, updated_at;
 
 -- name: GetSpacePublicAdmissionRequestForArrival :one
-select public.request_handle, public.arrival_handle, public.tenant_id, public.space_id,
-       public.display_name,
+select sqlc.embed(public),
        (case when live.status = 'admitted' then 'approved'
              when live.status = 'denied' then 'denied'
              when live.status = 'expired' then 'expired'
              when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
-             else public.state end)::text as state,
-       public.requested_at, public.expires_at,
-       coalesce(live.completed_at, public.decided_at) as decided_at,
-       public.decided_by, public.decision_request_key
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
 from space_public_admission_requests public
 left join sync_admission_requests live
   on live.tenant_id = public.tenant_id and live.space_id = public.space_id
   and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
 where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
   and public.arrival_handle = sqlc.arg(arrival_handle);
 

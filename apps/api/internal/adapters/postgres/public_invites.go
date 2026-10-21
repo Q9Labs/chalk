@@ -446,7 +446,7 @@ func (r PublicInviteRepository) GetAdmissionRequest(ctx context.Context, tenantI
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public admission request: %w", err)
 	}
-	return r.withAdmissionBinding(ctx, mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)))
+	return r.withAdmissionBinding(ctx, mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(row)))
 }
 
 func (r PublicInviteRepository) ListAdmissionRequests(ctx context.Context, tenantID, spaceID utilities.ID, state publicinvites.AdmissionRequestState, pageSize int32) ([]publicinvites.AdmissionRequest, error) {
@@ -458,7 +458,7 @@ func (r PublicInviteRepository) ListAdmissionRequests(ctx context.Context, tenan
 	}
 	result := make([]publicinvites.AdmissionRequest, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)))
+		result = append(result, mapPublicAdmissionProjection(row))
 	}
 	return result, nil
 }
@@ -805,6 +805,27 @@ func mapPublicArrival(row sqlc.SpacePublicArrival) publicinvites.Arrival {
 		Provider: publicInviteNullableString(row.Provider), ProviderSubject: publicInviteNullableString(row.ProviderSubject),
 		ExpiresAt: timestamp(row.ExpiresAt), TerminalReason: publicInviteNullableString(row.TerminalReason), CreatedAt: timestamp(row.CreatedAt), UpdatedAt: timestamp(row.UpdatedAt), TerminalAt: nullableTimestamp(row.TerminalAt),
 	}
+}
+
+func mapPublicAdmissionProjection(row sqlc.ListPendingSpacePublicAdmissionRequestsRow) publicinvites.AdmissionRequest {
+	request := mapPublicAdmissionRequest(row.SpacePublicAdmissionRequest)
+	request.State = publicinvites.AdmissionRequestState(row.EffectiveState)
+	request.DecisionState = publicinvites.AdmissionDecisionNone
+	if row.AdmissionStatus != "pending" {
+		return request
+	}
+	if row.DecisionExternalOperationID.Valid {
+		request.DecisionState = publicinvites.AdmissionDecisionInFlight
+		switch row.DecisionOperation {
+		case "admit_participant":
+			request.DecisionAction = publicinvites.DecisionApprove
+		case "deny_admission":
+			request.DecisionAction = publicinvites.DecisionDeny
+		}
+	} else if row.SpacePublicAdmissionRequest.DecisionRequestKey.Valid {
+		request.DecisionState = publicinvites.AdmissionDecisionRetryable
+	}
+	return request
 }
 
 func mapPublicAdmissionRequest(row sqlc.SpacePublicAdmissionRequest) publicinvites.AdmissionRequest {

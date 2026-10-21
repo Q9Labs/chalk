@@ -180,11 +180,6 @@ export function needsSignIn(error: unknown): boolean {
   return error instanceof DashboardRequestError && error.status === 401 && ["sign_in_required", "session_binding_mismatch"].includes(error.code);
 }
 
-/** Whether a failed read definitively invalidates the current admission list. */
-export function admissionListUnavailable(error: unknown): boolean {
-  return error instanceof DashboardRequestError && [401, 403, 404, 410].includes(error.status);
-}
-
 /** Plain words for a failed request, with the wait when the engine is rate limiting. */
 export function errorMessage(error: unknown): string {
   if (!(error instanceof DashboardRequestError)) return "Check your connection, then try again.";

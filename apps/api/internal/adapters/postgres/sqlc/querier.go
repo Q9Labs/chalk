@@ -225,6 +225,8 @@ type Querier interface {
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
+	// Separate pending expiry from admitted cleanup. The lateral lookup starts
+	// cleanup at current active seats, never at retained admitted-request history.
 	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)

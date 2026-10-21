@@ -720,9 +720,39 @@ cross join lateral (
 where episodes.tenant_id = sqlc.arg(tenant_id) and episodes.space_id = sqlc.arg(space_id) and episodes.id = sqlc.arg(episode_id);
 
 -- name: ListDueAdmissionRequests :many
+-- Separate pending expiry from admitted cleanup. The lateral lookup starts
+-- cleanup at current active seats, never at retained admitted-request history.
+with candidates as materialized (
+    select requests.* from sync_admission_requests requests
+    left join space_public_admission_requests public
+      on public.tenant_id = requests.tenant_id and public.space_id = requests.space_id
+      and public.request_handle = requests.admission_request_id
+    left join space_public_arrivals arrivals
+      on arrivals.tenant_id = public.tenant_id and arrivals.arrival_handle = public.arrival_handle
+    where requests.status = 'pending' and requests.decision_external_operation_id is null
+      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now())
+    union all
+    select request.* from participants participant
+    cross join lateral (
+        select requests.* from sync_admission_requests requests
+        join space_public_admission_requests public
+          on public.tenant_id = requests.tenant_id and public.space_id = requests.space_id
+          and public.request_handle = requests.admission_request_id
+        join space_public_arrivals arrivals
+          on arrivals.tenant_id = public.tenant_id and arrivals.arrival_handle = public.arrival_handle
+        where requests.tenant_id = participant.tenant_id
+          and requests.episode_id = participant.episode_id
+          and requests.participant_id = participant.id and requests.status = 'admitted'
+          and ((arrivals.state = 'pending'
+            and requests.expires_at <= now() and requests.completed_at <= now() - interval '1 minute')
+            or arrivals.state in ('unavailable', 'rejected'))
+        limit 1
+    ) request
+    where participant.status = 'active'
+)
 select requests.*, arrivals.arrival_handle as public_arrival_handle,
        intent.journey_id, intent.producing_trace_id, intent.producing_span_id
-from sync_admission_requests requests
+from candidates requests
 left join sync_lifecycle_intents intent on intent.tenant_id = requests.tenant_id
   and intent.episode_id = requests.episode_id and intent.request_key = requests.request_key
   and intent.intent_name = 'admission_requested'
@@ -734,15 +764,7 @@ join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id =
   and episodes.id = requests.episode_id
 join participants on participants.tenant_id = requests.tenant_id and participants.episode_id = requests.episode_id
   and participants.id = requests.participant_id
-where (
-    (requests.status = 'pending' and requests.decision_external_operation_id is null
-      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now()))
-    or (requests.status = 'admitted' and participants.status = 'active'
-      and ((arrivals.state = 'pending'
-        and greatest(requests.expires_at, requests.completed_at + interval '1 minute') <= now())
-        or arrivals.state in ('unavailable', 'rejected')))
-  )
-  and episodes.status = 'active'
+where episodes.status = 'active'
 order by requests.expires_at, requests.admission_request_id
 limit sqlc.arg(page_size)::integer;
 

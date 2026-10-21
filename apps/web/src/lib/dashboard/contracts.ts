@@ -5,6 +5,8 @@ const id = z.uuid();
 const name = z.string().trim().min(1).max(120);
 const idempotencyKey = z.uuid();
 const admission = z.enum(["anyone", "knock"]);
+export const knockDecisionState = z.enum(["none", "in_flight", "retryable"]);
+export const knockDecisionAction = z.enum(["approve", "deny"]).nullable();
 export const pageQuery = z.strictObject({ cursor: z.string().max(1024).optional() });
 export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(1024).optional() });
 export const callStatusQuery = z.strictObject({ spaceId: id });
@@ -128,7 +130,7 @@ export type CallPageDTO = {
   episodes: (EpisodeDTO & { participantCount: number; recordings: RecordingDTO[]; recordingsNextCursor: string | null })[];
   live: LiveDTO["episode"];
   nextCursor: string | null;
-  knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string }[];
+  knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
 export type PastSessionDTO = { episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };

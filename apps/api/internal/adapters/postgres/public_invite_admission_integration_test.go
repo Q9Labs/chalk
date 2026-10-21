@@ -210,6 +210,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		}
 		return arrival.Arrival, request
 	}
+
 	for _, decision := range []publicinvites.AdmissionDecision{publicinvites.DecisionApprove, publicinvites.DecisionDeny} {
 		for _, explicitKey := range []bool{false, true} {
 			_, request := newKnock("Retry " + string(decision) + " guest")
@@ -251,6 +252,49 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 			}
 		}
 	}
+
+	t.Run("decision progress permits retry", func(t *testing.T) {
+		assertDecisionProgress := func(handle utilities.ID, want publicinvites.AdmissionDecisionState, action publicinvites.AdmissionDecision) {
+			t.Helper()
+			requests, err := service.ListAdmissionRequestsForSpace(ctx, tenantID, space.ID, publicinvites.AdmissionRequestPending, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, listed := range requests {
+				if listed.RequestHandle != handle {
+					continue
+				}
+				if listed.DecisionState != want || listed.DecisionAction != action {
+					t.Fatalf("decision list progress: got %s/%s, want %s/%s", listed.DecisionState, listed.DecisionAction, want, action)
+				}
+				return
+			}
+			t.Fatalf("pending request %s missing from authoritative list", handle)
+		}
+
+		for _, decision := range []publicinvites.AdmissionDecision{publicinvites.DecisionApprove, publicinvites.DecisionDeny} {
+			_, request := newKnock("Progress " + string(decision))
+			input := publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: request.RequestHandle, ActorID: accountID, Decision: decision, RequestKey: accountTenantIntegrationID(t).String()}
+			assertDecisionProgress(request.RequestHandle, publicinvites.AdmissionDecisionNone, "")
+			accepted, _, err := service.DecideAdmissionRequest(ctx, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if accepted.DecisionState != publicinvites.AdmissionDecisionInFlight || accepted.DecisionAction != decision {
+				t.Fatalf("accepted decision progress: got %s/%s, want in_flight/%s", accepted.DecisionState, accepted.DecisionAction, decision)
+			}
+			assertDecisionProgress(request.RequestHandle, publicinvites.AdmissionDecisionInFlight, decision)
+			exec(`update sync_external_operations set status='failed',completed_at=now(),last_error_code='test_retry_exhausted' where tenant_id=$1 and external_operation_id=(select decision_external_operation_id from sync_admission_requests where admission_request_id=$2)`, uuid(tenantID), uuid(request.RequestHandle))
+			exec(`update sync_admission_requests set decision_external_operation_id=null where admission_request_id=$1`, uuid(request.RequestHandle))
+			assertDecisionProgress(request.RequestHandle, publicinvites.AdmissionDecisionRetryable, "")
+			retried, _, err := service.DecideAdmissionRequest(ctx, input)
+			if err != nil || retried.DecisionState != publicinvites.AdmissionDecisionInFlight || retried.DecisionAction != decision {
+				t.Fatalf("retry did not restore in-flight progress: state=%s action=%s err=%v", retried.DecisionState, retried.DecisionAction, err)
+			}
+			assertDecisionProgress(request.RequestHandle, publicinvites.AdmissionDecisionInFlight, decision)
+		}
+	})
+
 	t.Run("reserved decision replay", func(t *testing.T) {
 		proveReservedAdmissionReplays(t, ctx, pool, service, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
 	})
@@ -306,4 +350,14 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err := pool.QueryRow(ctx, `select count(*) from episodes where tenant_id=$1 and space_id=$2`, uuid(tenantID), uuid(space.ID)).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("retry created an empty replacement Episode: count=%d, %v", count, err)
 	}
+	t.Run("cleanup query retained history", func(t *testing.T) {
+		if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") != "1" {
+			t.Skip("opt-in seeded EXPLAIN proof")
+		}
+		_, request := newKnock("Cleanup EXPLAIN fixture")
+		planCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		proveAdmissionCleanupPlan(t, planCtx, pool, request.RequestHandle)
+	})
+
 }

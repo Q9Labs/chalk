@@ -156,6 +156,71 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await dashboard.close();
     }
   }
+  async function proveDashboardDecisionRetry() {
+    const dashboard = await page.context().newPage();
+    await dashboard.goto(`${origin}/dashboard/call/${spaceId}`);
+    await dashboard.getByRole("link", { name: "Join call", exact: true }).waitFor();
+    const marker = crypto.randomUUID();
+    await dashboard.evaluate((value) => {
+      window.admissionProofDocument = value;
+    }, marker);
+    const pending = await knock("Retryable dashboard guest", true);
+    let decisions = 0;
+    const countDecision = (request) => {
+      if (new URL(request.url()).pathname === "/dashboard-api/call" && request.method() === "POST" && request.postDataJSON()?.action === "approve-knock") decisions++;
+    };
+    dashboard.on("request", countDecision);
+    const removeHold = async () => {
+      await promisify(execFile)("psql", [process.env.CHALK_DATABASE_URL, "-X", "-v", "ON_ERROR_STOP=1", "-c", "drop trigger if exists proof_hold_admission_decision on sync_external_operations; drop function if exists proof_hold_admission_decision();"]);
+    };
+    try {
+      const row = dashboard.locator(".orow").filter({ hasText: "Retryable dashboard guest" });
+      await row.getByRole("button", { name: "Let in", exact: true }).waitFor();
+      const handle = await sql(`select request_handle from space_public_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Retryable dashboard guest'`);
+      // Prevent the existing consumer from applying this one operation before
+      // the proof delivers its terminal outcome through Sync's real finalizer.
+      await promisify(execFile)("psql", [
+        process.env.CHALK_DATABASE_URL,
+        "-X",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        `create function proof_hold_admission_decision() returns trigger language plpgsql as $$ begin if new.operation_name='admit_participant' and new.payload->>'admissionRequestId'='${handle}' then new.next_attempt_at=now()+interval '1 hour'; end if; return new; end $$; create trigger proof_hold_admission_decision before insert on sync_external_operations for each row execute function proof_hold_admission_decision();`,
+      ]);
+      await row.getByRole("button", { name: "Let in", exact: true }).click();
+      await waitForSql(`select count(*) from sync_admission_requests where admission_request_id='${handle}' and decision_external_operation_id is not null`, "1");
+      const { stdout } = await promisify(execFile)("mix", ["run", "--no-start", "scripts/proof-fail-admission.exs"], { cwd: resolve(repository, "apps/sync"), env: { ...process.env, CHALK_PROOF_FAILED_REQUEST: handle }, timeout: 60000 });
+      await writeFile(resolve(out, "dashboard-sync-failure.log"), stdout);
+      await waitForSql(
+        `select count(*) from sync_admission_requests request join sync_external_operations operation on operation.tenant_id=request.tenant_id and operation.episode_id=request.episode_id and operation.payload->>'admissionRequestId'=request.admission_request_id::text where request.admission_request_id='${handle}' and request.status='pending' and request.decision_external_operation_id is null and operation.status='failed'`,
+        "1",
+      );
+      try {
+        await row.getByRole("button", { name: "Let in", exact: true }).waitFor({ timeout: 15000 });
+        assert.equal(await row.getByRole("button", { name: "Let in", exact: true }).isEnabled(), true);
+      } catch (error) {
+        await dashboard.screenshot({ path: resolve(out, "before-dashboard-failed-decision-stuck.png") });
+        throw new Error("Failed dashboard decision did not become actionable from server truth", { cause: error });
+      }
+      assert.equal(await dashboard.evaluate(() => window.admissionProofDocument), marker, "Retry became actionable without reloading the dashboard document");
+      await dashboard.screenshot({ path: resolve(out, "after-dashboard-failed-decision-retryable.png") });
+      await removeHold();
+      await row.getByRole("button", { name: "Let in", exact: true }).click();
+      await pending.guest.getByTestId("stage").waitFor({ timeout: 20000 });
+      await row.waitFor({ state: "hidden", timeout: 15000 });
+      assert.equal(decisions, 2, "The host submits exactly the accepted decision and its explicit retry");
+      await pending.guest.screenshot({ path: resolve(out, "after-dashboard-retried-guest-admitted.png") });
+      await writeFile(resolve(out, "dashboard-decision-retry.json"), JSON.stringify({ syncFailedAcceptedDecision: true, reservationReleased: true, serverRestoredActionableRow: true, documentReloaded: false, explicitDecisions: decisions, guestAdmittedAfterRetry: true }, null, 2));
+      await pending.guest.getByRole("button", { name: "Leave call", exact: true }).click();
+      await pending.guest.getByRole("heading", { name: /You left/ }).waitFor();
+      console.log("PASS: accepted dashboard decision → actual Sync failure → next server list enables retry → host retries → guest admitted without refresh");
+    } finally {
+      dashboard.off("request", countDecision);
+      await removeHold();
+      await pending.context.close();
+      await dashboard.close();
+    }
+  }
   async function proveDashboardWithoutHost() {
     await page.getByRole("button", { name: "Leave call", exact: true }).click();
     await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
@@ -190,7 +255,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       let polls = 0;
       let decisions = 0;
       const countPoll = (response) => {
-        if (new URL(response.url()).pathname === "/dashboard-api/call" && response.request().method() === "GET" && response.status() === 200) polls++;
+        if (new URL(response.url()).pathname === "/dashboard-api/call-status" && response.request().method() === "GET" && response.status() === 200) polls++;
       };
       const countDecision = (request) => {
         if (new URL(request.url()).pathname === "/dashboard-api/call" && request.method() === "POST" && request.postDataJSON()?.action === "approve-knock") decisions++;
@@ -199,16 +264,17 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       page.on("request", countDecision);
       try {
         await row.getByRole("button", { name: "Let in", exact: true }).click();
-        await row.waitFor({ state: "hidden" });
+        await row.getByRole("button", { name: "Letting in…", exact: true }).waitFor();
         for (let attempt = 0; attempt < 200 && polls < 4; attempt++) await new Promise((resolve) => setTimeout(resolve, 100));
         assert(polls >= 4, "Delayed finalisation witness needs at least four successful list polls");
-        if (await row.count()) await page.screenshot({ path: resolve(out, "before-dashboard-readded-knock.png") });
-        assert.equal(await row.count(), 0, "Accepted dashboard knock reappeared before Sync finalisation");
+        assert.equal(await row.count(), 1, "An accepted dashboard decision remains visible while Sync finalisation is pending");
+        assert.equal(await row.getByRole("button", { name: "Letting in…", exact: true }).isDisabled(), true);
+        assert.equal(await row.getByRole("button", { name: "Deny", exact: true }).isDisabled(), true);
         assert.equal(decisions, 1, "A delayed accepted decision must not be submitted twice");
         assert.equal(await sql(activeSeats), "0", "Participant lock must hold actual Sync finalisation, not just the browser response");
         assert.equal(await sql(`select state from space_public_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Hostless dashboard guest'`), "pending", "The database finalisation is still delayed through all four polls");
-        await page.screenshot({ path: resolve(out, "after-dashboard-accepted-row-hidden.png") });
-        await writeFile(resolve(out, "dashboard-delayed-finalisation.json"), JSON.stringify({ successfulPollsBeforeRelease: polls, decisions, acceptedRowStayedHidden: true, activeSeatsBeforeRelease: 0 }, null, 2));
+        await page.screenshot({ path: resolve(out, "after-dashboard-inflight-row-disabled.png") });
+        await writeFile(resolve(out, "dashboard-delayed-finalisation.json"), JSON.stringify({ successfulPollsBeforeRelease: polls, decisions, inFlightRowStayedDisabled: true, activeSeatsBeforeRelease: 0 }, null, 2));
       } finally {
         page.off("response", countPoll);
         page.off("request", countDecision);
@@ -228,6 +294,10 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     } finally {
       await pending.context.close();
     }
+  }
+  if (process.argv.includes("--admission-dashboard-retry")) {
+    await proveDashboardDecisionRetry();
+    return;
   }
   if (process.argv.includes("--admission-invalidation")) {
     await proveInvalidationTick();

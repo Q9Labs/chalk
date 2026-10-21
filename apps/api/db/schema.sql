@@ -518,6 +518,9 @@ create table participants (
 create index participants_sync_active_episode_capacity_idx
     on participants(tenant_id, space_id, episode_id)
     where status in ('joining', 'active', 'leaving');
+create index participants_admission_cleanup_active_idx
+    on participants(tenant_id, episode_id, id)
+    where status = 'active';
 create unique index participants_dashboard_account_episode_idx
     on participants(tenant_id, episode_id, account_id)
     where account_id is not null and status in ('joining', 'active');
@@ -1844,6 +1847,10 @@ create table sync_admission_requests (
 create index sync_admission_requests_pending_idx
     on sync_admission_requests(expires_at, admission_request_id)
     where status = 'pending';
+
+create index sync_admission_requests_admitted_participant_idx
+    on sync_admission_requests(tenant_id, episode_id, participant_id)
+    where status = 'admitted';
 
 create table sync_screen_share_leases (
     tenant_id uuid not null,

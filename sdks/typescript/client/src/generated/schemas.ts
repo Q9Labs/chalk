@@ -604,6 +604,8 @@ export const PrepareRecordingRequestSchema = Schema.Struct({
 export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
 
 export const PublicAdmissionRequestSchema = Schema.Struct({
+  decision_action: Schema.optional(Schema.String),
+  decision_state: Schema.String,
   display_name: Schema.String,
   expires_at: DateTimeStringSchema,
   request_handle: Schema.String,

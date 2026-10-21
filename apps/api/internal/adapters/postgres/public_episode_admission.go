@@ -48,7 +48,7 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		// live Episode: its original Episode may already have ended.
 		existing, err := queries.GetSpacePublicAdmissionRequestForArrival(ctx, sqlc.GetSpacePublicAdmissionRequestForArrivalParams{TenantID: uuid(arrival.TenantID), SpaceID: uuid(arrival.SpaceID), ArrivalHandle: uuid(arrival.ArrivalHandle)})
 		if err == nil {
-			result = mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(existing))
+			result = mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(existing))
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -119,7 +119,7 @@ func (r PublicInviteRepository) GetAdmissionRequestForArrival(ctx context.Contex
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public arrival admission: %w", err)
 	}
-	return r.withAdmissionBinding(ctx, mapPublicAdmissionRequest(sqlc.SpacePublicAdmissionRequest(row)))
+	return r.withAdmissionBinding(ctx, mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(row)))
 }
 
 func (r PublicInviteRepository) withAdmissionBinding(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
@@ -247,5 +247,6 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 	if legacy {
 		return r.decideLegacyAdmissionRequest(ctx, input)
 	}
-	return request, arrival, nil
+	request, err = r.GetAdmissionRequest(ctx, input.TenantID, input.SpaceID, input.RequestHandle)
+	return request, arrival, err
 }

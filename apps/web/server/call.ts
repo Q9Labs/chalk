@@ -5,9 +5,9 @@ import { attendance, live, run } from "./engine";
 import { callDTO, episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import { DashboardError } from "./http";
-import type { CallAction, CallPageDTO, CallStatusDTO, CallMetadataQuery, CallMetadataDTO } from "../src/lib/dashboard/contracts";
+import { knockDecisionAction, knockDecisionState, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
 function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"]): CallPageDTO["knocks"] {
-  return requests.filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now()).map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state }));
+  return requests.filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now()).map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state, decisionState: knockDecisionState.parse(k.decision_state), decisionAction: knockDecisionAction.parse(k.decision_action ?? null) }));
 }
 export async function callMetadata(engine: Engine, input: CallMetadataQuery): Promise<CallMetadataDTO> {
   if (input.kind === "recording") {

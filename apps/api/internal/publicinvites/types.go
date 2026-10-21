@@ -166,7 +166,18 @@ type AdmissionBinding struct {
 	ParticipantGeneration int64
 }
 
+type AdmissionDecisionState string
+
+const (
+	AdmissionDecisionNone      AdmissionDecisionState = "none"
+	AdmissionDecisionInFlight  AdmissionDecisionState = "in_flight"
+	AdmissionDecisionRetryable AdmissionDecisionState = "retryable"
+)
+
 type AdmissionRequest struct {
+	DecisionState  AdmissionDecisionState
+	DecisionAction AdmissionDecision
+
 	Binding       *AdmissionBinding
 	RequestHandle utilities.ID
 	ArrivalHandle utilities.ID

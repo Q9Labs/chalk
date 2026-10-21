@@ -1525,6 +1525,8 @@ export interface components {
       starts_at: components["schemas"]["DateTimeString"];
     };
     PublicAdmissionRequest: {
+      decision_action?: string;
+      decision_state: string;
       display_name: string;
       expires_at: components["schemas"]["DateTimeString"];
       request_handle: string;
