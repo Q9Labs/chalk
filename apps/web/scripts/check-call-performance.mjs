@@ -62,7 +62,7 @@ if (!values["record-baseline"]) {
   }
 }
 if (!values["skip-build"]) {
-  execFileSync("pnpm", ["run", "build"], { cwd: web, stdio: "inherit", timeout: 300_000 });
+  execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], { cwd: root, stdio: "inherit", timeout: 300_000 });
   execFileSync("pnpm", ["exec", "vite", "build", "--config", "vite.call-performance.config.ts"], { cwd: web, stdio: "inherit", timeout: 300_000 });
 }
 const report = {

@@ -29,6 +29,14 @@ if [[ "$1" == "--" ]]; then
   fi
 fi
 
+# Service suites can leave fixtures behind; each gate needs its own database.
+if ((command_mode == 0 && $# > 1)); then
+  for gate in "$@"; do
+    bash "${BASH_SOURCE[0]}" "${gate}"
+  done
+  exit 0
+fi
+
 repository_root="$(cd "$(dirname "$0")/../.." && pwd)"
 suffix="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 backend=""
