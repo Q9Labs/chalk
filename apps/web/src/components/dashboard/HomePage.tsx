@@ -38,11 +38,11 @@ export function HomePage() {
       // Each batch costs one tenant read. Scale cadence to 12 steady-state reads/minute,
       // regardless of how many live Spaces the person has loaded.
       interval: (data) => {
-        const count = data.live.filter((call) => call.episode).length;
+        const count = data.live.filter((call) => call.episode && data.calls.some((row) => row.id === call.spaceId)).length;
         return count ? 5000 * Math.ceil(count / 30) : data.pendingMetadata.length ? 5000 : undefined;
       },
       read: async (data) => {
-        const active = data.live.filter((call) => call.episode);
+        const active = data.live.filter((call) => call.episode && data.calls.some((row) => row.id === call.spaceId));
         const live: LiveDTO[] = [];
         for (let start = 0; start < active.length; start += 30) {
           const status = await readPage("home-status", {

@@ -69,6 +69,7 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
 }
 
 export async function refreshChecks({ open, fixture, check, CALL }) {
+  await archivedPollingChecks({ open, fixture, check });
   await pollingBackoffChecks({ open, fixture, check, CALL });
   await budgetChecks({ open, fixture, check, CALL });
   await artifactRecoveryChecks({ open, fixture, check, CALL });
@@ -288,6 +289,27 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     const kept =
       action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
     check(`stale refresh cannot undo ${action}`, raced && kept);
+    await context.close();
+  }
+}
+
+export async function archivedPollingChecks({ open, fixture, check }) {
+  const { tab, context } = await open("/dashboard", { set: "freshLive=1&knocks=0", clock: true });
+  try {
+    await fixture("set?fail=home");
+    await tab.getByRole("button", { name: "More actions for Q9 team" }).click();
+    await tab.getByRole("menuitem", { name: "Archive call", exact: true }).click();
+    await tab.getByText("Archived Q9 team", { exact: true }).waitFor();
+    await tab.waitForTimeout(150);
+    await tab.waitForLoadState("networkidle");
+    const reads = async () => (await fixture("log")).filter((entry) => entry.path === "/dashboard-api/home-status").length;
+    const before = await reads();
+    await tab.clock.runFor(30000);
+    await tab.waitForTimeout(150);
+    await tab.waitForLoadState("networkidle");
+    const after = await reads();
+    check("Home stops polling an archived live row after its full refresh fails", (await tab.locator(".live").count()) === 0 && after === before, `status reads=${before}->${after}`);
+  } finally {
     await context.close();
   }
 }
