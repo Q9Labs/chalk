@@ -1995,24 +1995,25 @@ func (q *Queries) MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkT
 	return i, err
 }
 
-const requeueFailedAdmissionExpiry = `-- name: RequeueFailedAdmissionExpiry :one
+const requeueFailedAdmissionDecision = `-- name: RequeueFailedAdmissionDecision :one
 update sync_external_operations
 set status = 'pending', completed_at = null, last_error_code = null,
     next_attempt_at = now(), attempt_count = 0
 where tenant_id = $1 and episode_id = $2
   and external_operation_id = $3
-  and operation_name = 'admission_request_expired' and status = 'failed'
+  and operation_name in ('admit_participant', 'deny_admission', 'admission_request_expired')
+  and status = 'failed'
 returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 `
 
-type RequeueFailedAdmissionExpiryParams struct {
+type RequeueFailedAdmissionDecisionParams struct {
 	TenantID            pgtype.UUID `json:"tenant_id"`
 	EpisodeID           pgtype.UUID `json:"episode_id"`
 	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
 }
 
-func (q *Queries) RequeueFailedAdmissionExpiry(ctx context.Context, arg RequeueFailedAdmissionExpiryParams) (SyncExternalOperation, error) {
-	row := q.db.QueryRow(ctx, requeueFailedAdmissionExpiry, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
+func (q *Queries) RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error) {
+	row := q.db.QueryRow(ctx, requeueFailedAdmissionDecision, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
 	var i SyncExternalOperation
 	err := row.Scan(
 		&i.TenantID,

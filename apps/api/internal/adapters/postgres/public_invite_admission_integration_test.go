@@ -196,6 +196,36 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		}
 		return arrival.Arrival, request
 	}
+	for _, decision := range []publicinvites.AdmissionDecision{publicinvites.DecisionApprove, publicinvites.DecisionDeny} {
+		for _, explicitKey := range []bool{false, true} {
+			_, request := newKnock("Retry " + string(decision) + " guest")
+			input := publicinvites.DecideAdmissionRequestInput{
+				TenantID: tenantID, SpaceID: space.ID, RequestHandle: request.RequestHandle,
+				ActorID: accountID, Decision: decision,
+			}
+			if explicitKey {
+				input.RequestKey = accountTenantIntegrationID(t).String()
+			}
+			if _, _, err := service.DecideAdmissionRequest(ctx, input); err != nil {
+				t.Fatal(err)
+			}
+			var originalOperationID string
+			if err := pool.QueryRow(ctx, `select decision_external_operation_id::text from sync_admission_requests where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle)).Scan(&originalOperationID); err != nil {
+				t.Fatal(err)
+			}
+			// Sync releases the reservation after exhausting an operation's retries.
+			exec(`update sync_external_operations set status='failed', completed_at=now(), last_error_code='test_retry_exhausted', attempt_count=5 where tenant_id=$1 and external_operation_id=$2::uuid`, uuid(tenantID), originalOperationID)
+			exec(`update sync_admission_requests set decision_external_operation_id=null where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle))
+			for range 2 {
+				if _, _, err := service.DecideAdmissionRequest(ctx, input); err != nil {
+					t.Fatalf("retry %s with explicit key %t: %v", decision, explicitKey, err)
+				}
+			}
+			if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations operation join sync_admission_requests request on request.tenant_id=operation.tenant_id and request.decision_external_operation_id=operation.external_operation_id where request.tenant_id=$1 and request.admission_request_id=$2 and operation.external_operation_id=$3::uuid and operation.status='pending' and operation.attempt_count=0 and operation.completed_at is null and operation.last_error_code is null`, uuid(tenantID), uuid(request.RequestHandle), originalOperationID).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("retry %s with explicit key %t must reuse its operation: count=%d, %v", decision, explicitKey, count, err)
+			}
+		}
+	}
 	uncollected, approved := newKnock("Uncollected guest")
 	key := accountTenantIntegrationID(t).String()
 	if _, _, err := service.DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: approved.RequestHandle, ActorID: accountID, RequestKey: key, Decision: publicinvites.DecisionApprove}); err != nil {

@@ -96,14 +96,7 @@ func enqueueDueAdmissionRequests(ctx context.Context, queries *sqlc.Queries, tx 
 			Request: episodes.Request{Key: "expired_" + requestID.String(), Fingerprint: sha256.Sum256(payload)},
 			Payload: payload, JourneyName: "participant.admission_expired",
 		}
-		operation, err := lockTenantExternalOperation(expiryCtx, queries, tenantID, spaceID, episodeID, input.OperationName, input.Request)
-		if errors.Is(err, pgx.ErrNoRows) {
-			operation, err = createTenantExternalOperation(expiryCtx, queries, tx, input)
-		} else if err == nil && operation.Status == "failed" {
-			operation, err = queries.RequeueFailedAdmissionExpiry(expiryCtx, sqlc.RequeueFailedAdmissionExpiryParams{
-				TenantID: request.TenantID, EpisodeID: request.EpisodeID, ExternalOperationID: operation.ExternalOperationID,
-			})
-		}
+		operation, err := createOrRetryAdmissionDecision(expiryCtx, queries, tx, input)
 		if err != nil {
 			span.RecordError(err)
 		}
@@ -121,6 +114,19 @@ func enqueueDueAdmissionRequests(ctx context.Context, queries *sqlc.Queries, tx 
 		count++
 	}
 	return count, nil
+}
+
+func createOrRetryAdmissionDecision(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, input tenantExternalOperationInput) (sqlc.SyncExternalOperation, error) {
+	operation, err := lockTenantExternalOperation(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, input.OperationName, input.Request)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return createTenantExternalOperation(ctx, queries, tx, input)
+	}
+	if err != nil || operation.Status != "failed" {
+		return operation, err
+	}
+	return queries.RequeueFailedAdmissionDecision(ctx, sqlc.RequeueFailedAdmissionDecisionParams{
+		TenantID: operation.TenantID, EpisodeID: operation.EpisodeID, ExternalOperationID: operation.ExternalOperationID,
+	})
 }
 
 func expireUncollectedAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, request sqlc.SyncAdmissionRequest, handle pgtype.UUID) (bool, error) {

@@ -224,7 +224,7 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 		if key == "" {
 			key = input.RequestHandle.String()
 		}
-		operation, err := createTenantExternalOperation(ctx, queries, tx, tenantExternalOperationInput{
+		operation, err := createOrRetryAdmissionDecision(ctx, queries, tx, tenantExternalOperationInput{
 			TenantID: input.TenantID, SpaceID: input.SpaceID, EpisodeID: episodeID, OperationName: operationName,
 			Request: episodes.Request{Key: key, Fingerprint: sha256.Sum256(payload)}, Payload: payload,
 			JourneyName: "participant.public_admission_decided",

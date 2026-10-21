@@ -765,13 +765,14 @@ select operation_name from sync_external_operations
 where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
   and external_operation_id = sqlc.arg(external_operation_id);
 
--- name: RequeueFailedAdmissionExpiry :one
+-- name: RequeueFailedAdmissionDecision :one
 update sync_external_operations
 set status = 'pending', completed_at = null, last_error_code = null,
     next_attempt_at = now(), attempt_count = 0
 where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
   and external_operation_id = sqlc.arg(external_operation_id)
-  and operation_name = 'admission_request_expired' and status = 'failed'
+  and operation_name in ('admit_participant', 'deny_admission', 'admission_request_expired')
+  and status = 'failed'
 returning *;
 
 -- name: ExpireUncollectedPublicArrival :exec

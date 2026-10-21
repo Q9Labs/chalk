@@ -328,7 +328,7 @@ type Querier interface {
 	RequestRecordingCompletionRecovery(ctx context.Context, arg RequestRecordingCompletionRecoveryParams) (pgtype.UUID, error)
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)
-	RequeueFailedAdmissionExpiry(ctx context.Context, arg RequeueFailedAdmissionExpiryParams) (SyncExternalOperation, error)
+	RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error)
 	ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	ReserveChatAttachmentUpload(ctx context.Context, arg ReserveChatAttachmentUploadParams) (ReserveChatAttachmentUploadRow, error)
 	ReserveEpisodeAdmissionDecision(ctx context.Context, arg ReserveEpisodeAdmissionDecisionParams) (int64, error)
