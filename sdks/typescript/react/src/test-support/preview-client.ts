@@ -1,5 +1,6 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
+import { createSpaceClient } from "@q9labsai/chalk-client";
 
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
 
@@ -59,6 +60,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   let attachmentSequence = 0;
   let recordingSequence = 0;
   const listeners = new Set<() => void>();
+  let cameraPreviewClient: SpaceClient | undefined;
 
   const setSnapshot = (nextSnapshot: SpaceSnapshot): void => {
     snapshot = nextSnapshot;
@@ -73,6 +75,20 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
 
   const client = {
     media: {
+      captureCameraPreview: async () => {
+        cameraPreviewClient ??= createSpaceClient({
+          space: "camera-preview",
+          getAccess: async () => {
+            throw new Error("Preview capture must not join a call");
+          },
+        });
+        const selected = snapshot.media.selection.camera;
+        if (selected) await cameraPreviewClient.media.selectCamera(selected);
+        const track = await cameraPreviewClient.media.captureCameraPreview();
+        const devices = cameraPreviewClient.getSnapshot().media.devices;
+        updateSnapshot((current) => ({ ...current, media: { ...current.media, devices } }));
+        return track;
+      },
       setMicrophoneEnabled: (enabled: boolean) => dispatch({ type: "setMicrophoneEnabled", enabled }),
       setCameraEnabled: (enabled: boolean) => dispatch({ type: "setCameraEnabled", enabled }),
       setScreenShareEnabled: (enabled: boolean) => dispatch({ type: "setScreenShareEnabled", enabled }),
@@ -149,7 +165,10 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     whiteboard: { transport: () => null },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
-    dispose: () => listeners.clear(),
+    dispose: () => {
+      cameraPreviewClient?.dispose();
+      listeners.clear();
+    },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

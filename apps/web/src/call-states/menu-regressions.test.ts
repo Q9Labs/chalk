@@ -14,7 +14,7 @@ beforeAll(async () => {
   ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({
     headless: true,
-    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream=device-count=3"],
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream=device-count=2"],
   });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 }, permissions: ["camera"] });
   page.on("pageerror", (error) => errors.push(error.message));
@@ -33,6 +33,57 @@ async function load(state: string) {
   await page.goto(`${origin}/call-states.html?state=${state}${state.startsWith("shell-browser") ? "&browserMedia" : ""}`);
   await page.locator('[data-part="call-frame"]').waitFor();
 }
+
+it("discovers both cameras when private preview reveals the permission-restricted inventory", async () => {
+  const privatePage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  privatePage.on("pageerror", (error) => errors.push(error.message));
+  try {
+    // Chromium fake UI pregrants capture. Model its pre-permission inventory while keeping both cameras and capture native.
+    await privatePage.addInitScript(() => {
+      let permitted = false;
+      const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      const enumerate = navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (constraints) => {
+        const stream = await capture(constraints);
+        permitted = true;
+        return stream;
+      };
+      navigator.mediaDevices.enumerateDevices = async () => (permitted ? enumerate() : [{ deviceId: "", groupId: "", kind: "videoinput", label: "", toJSON: () => ({}) }]);
+    });
+    await privatePage.goto(`${origin}/call-states.html?state=shell-browser-permission&browserMedia`);
+    await privatePage.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).waitFor();
+    await expect.poll(() => privatePage.evaluate(async () => (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput").every((device) => !device.label))).toBe(true);
+    const grant = await privatePage.evaluateHandle(() => {
+      let allow = () => {};
+      const granted = new Promise<void>((resolve) => {
+        allow = resolve;
+      });
+      const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (constraints) => granted.then(() => capture(constraints));
+      return () => allow();
+    });
+    await privatePage.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
+    if (artifacts) await privatePage.screenshot({ path: resolve(artifacts, "permission-before.png") });
+    await grant.evaluate((allow) => allow());
+    await grant.dispose();
+    const preview = privatePage.locator(".chalk-shell-preview video");
+    await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+    if (artifacts) await privatePage.screenshot({ path: resolve(artifacts, "permission-after.png") });
+    await expect.poll(() => privatePage.getByRole("menuitemradio").count()).toBe(2);
+    await privatePage.getByRole("menuitemradio", { name: "fake_device_0", exact: true }).waitFor();
+    await privatePage.getByRole("menuitemradio", { name: "fake_device_1", exact: true }).waitFor();
+    const second = await privatePage.evaluate(async () => (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput")[1]?.deviceId);
+    await privatePage.getByRole("menuitemradio").nth(1).click();
+    await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.srcObject instanceof MediaStream && video.srcObject.getVideoTracks()[0]?.getSettings().deviceId)).toBe(second);
+    expect(await privatePage.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).count()).toBe(1);
+    const track = await preview.evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));
+    await privatePage.keyboard.press("Escape");
+    await expect.poll(() => track.evaluate((value) => value?.readyState)).toBe("ended");
+    await track.dispose();
+  } finally {
+    await privatePage.close();
+  }
+}, 30_000);
 
 it("previews and switches real local cameras while unpublished, then releases capture", async () => {
   await load("shell-browser-cameras");
@@ -60,6 +111,18 @@ it("previews and switches real local cameras while unpublished, then releases ca
   await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0);
   await expect.poll(() => previous.evaluate((value) => value?.readyState)).toBe("ended");
   await previous.dispose();
+  await expect
+    .poll(() =>
+      preview.evaluate((video: HTMLVideoElement) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 16;
+        const context = canvas.getContext("2d");
+        if (!context) return false;
+        context.drawImage(video, 0, 0, 16, 16);
+        return context.getImageData(0, 0, 16, 16).data.some((value, index) => index % 4 !== 3 && value > 20);
+      }),
+    )
+    .toBe(true);
   // Keep the actual browser track, so removing the video alone cannot satisfy release.
   const track = await preview.evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));
   if (artifacts) await page.screenshot({ path: resolve(artifacts, "camera.png") });

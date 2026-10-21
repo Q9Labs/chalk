@@ -5,6 +5,43 @@ import { createSpaceClientForPlatform } from "./space-client";
 import type { ClientFailure } from "./types";
 
 describe("join with unavailable capture devices", () => {
+  it("refreshes cameras after private preview permission without publishing or enabling the camera", async () => {
+    const platform = createCoreTestPlatform();
+    let permitted = false;
+    const camera = (deviceId: string, label: string): MediaDeviceInfo => ({ deviceId, label, groupId: "cameras", kind: "videoinput", toJSON: () => ({ deviceId, label }) });
+    const preview = track("video");
+    const getUserMedia = vi.fn(async () => {
+      permitted = true;
+      return stream([preview]);
+    });
+    const start = vi.fn(async () => undefined);
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { getUserMedia, enumerateDevices: async () => (permitted ? [camera("one", "Front camera"), camera("two", "Back camera")] : [camera("", "")]) },
+          createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }),
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      await vi.waitFor(() => expect(client.getSnapshot().media.devices.cameras).toHaveLength(1));
+      start.mockClear();
+      const captured = await client.media.captureCameraPreview();
+      expect(captured).toBe(preview);
+      expect(client.getSnapshot().media.devices.cameras.map(({ label }) => label)).toEqual(["Front camera", "Back camera"]);
+      expect(client.getSnapshot().media.local.camera).toMatchObject({ state: "disabled", track: null });
+      expect(start).not.toHaveBeenCalled();
+      expect(preview.stop).not.toHaveBeenCalled();
+      captured.stop();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("preserves devices switched off before leaving when rejoining with defaults", async () => {
     const platform = createCoreTestPlatform();
     const getUserMedia = vi.fn(async () => stream([track("audio"), track("video")]));

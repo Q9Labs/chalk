@@ -27,6 +27,7 @@ export interface ControlBarSurfaceProps {
 
   microphoneTrack?: MediaStreamTrack | null;
   cameraTrack?: MediaStreamTrack | null;
+  captureCameraPreview?: () => Promise<MediaStreamTrack>;
   microphoneWarning?: boolean;
   cameraWarning?: boolean;
   speakingWhileMuted?: boolean;
@@ -290,6 +291,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     buttons,
     microphoneTrack: media.local.microphone.track,
     cameraTrack: media.local.camera.track,
+    captureCameraPreview: client.media.captureCameraPreview,
     mirrored: props.mirrored ?? mirrored,
     onMirrorChange: props.onMirrorChange ?? (props.mirrored === undefined ? setMirrored : undefined),
     microphoneWarning: media.local.microphone.state === "failed" || media.local.microphone.state === "unavailable",

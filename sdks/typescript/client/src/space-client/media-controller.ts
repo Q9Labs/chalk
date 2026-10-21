@@ -34,6 +34,8 @@ export type MediaControllerEffects = {
   ) => void;
   readonly setMicrophoneEnabled: (enabled: boolean) => ClientEffect<void>;
   readonly setCameraEnabled: (enabled: boolean) => ClientEffect<void>;
+  /** Captures an unpublished camera track and refreshes devices. The caller must stop the track. */
+  readonly captureCameraPreview: () => ClientEffect<MediaStreamTrack>;
   readonly setScreenShareEnabled: (enabled: boolean, options?: ScreenShareOptions) => ClientEffect<void>;
   readonly selectMicrophone: (deviceId: string) => ClientEffect<void>;
   readonly selectCamera: (deviceId: string) => ClientEffect<void>;
@@ -120,6 +122,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> => this.#set("microphone", enabled);
   setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
+  captureCameraPreview = (): ClientEffect<MediaStreamTrack> => this.#captureSource("camera").pipe(Effect.mapError(normalizeClientError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#startScreen(options) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {

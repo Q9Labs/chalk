@@ -8,6 +8,7 @@ import type { CallState } from "./states";
 function ShellCall({
   browserCameras = false,
   cameraOn = false,
+  privatePermission = false,
   host = false,
   report = false,
   blocked = false,
@@ -17,6 +18,7 @@ function ShellCall({
 }: {
   readonly browserCameras?: boolean;
   readonly cameraOn?: boolean;
+  readonly privatePermission?: boolean;
   readonly host?: boolean;
   readonly report?: boolean;
   readonly blocked?: boolean;
@@ -67,6 +69,14 @@ function ShellCall({
     if (!browserCameras) return;
     let cancelled = false;
     let stream: MediaStream | undefined;
+    if (privatePermission) {
+      void navigator.mediaDevices.enumerateDevices().then((devices) => {
+        if (!cancelled) client.updateSnapshot((snapshot) => ({ ...snapshot, media: { ...snapshot.media, devices: { ...snapshot.media.devices, cameras: devices.filter((device) => device.kind === "videoinput") } } }));
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     void navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(async (captured) => {
       stream = captured;
       if (cancelled) {
@@ -91,7 +101,7 @@ function ShellCall({
       cancelled = true;
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [browserCameras, cameraOn, client]);
+  }, [browserCameras, cameraOn, privatePermission, client]);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Chalk
@@ -159,6 +169,7 @@ function ShellSeams() {
 export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-browser-camera-on", title: "Shell browser camera on", render: () => <ShellCall browserCameras cameraOn /> },
   { id: "shell-browser-cameras", title: "Shell browser cameras", render: () => <ShellCall browserCameras /> },
+  { id: "shell-browser-permission", title: "Shell camera permission from private preview", render: () => <ShellCall browserCameras privatePermission /> },
   { id: "shell-seams", title: "Shell merge seams", render: () => <ShellSeams /> },
   { id: "shell-call", title: "Shell guest", render: () => <ShellCall /> },
   { id: "shell-light", title: "Shell guest in Light", render: () => <ShellCall initialColorScheme="light" /> },
