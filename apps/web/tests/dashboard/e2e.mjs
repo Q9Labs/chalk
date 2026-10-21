@@ -403,8 +403,15 @@ try {
       const decisionKey = crypto.randomUUID();
       const decided = await post(ada, "/dashboard-api/call", { action: "deny-knock", spaceId: knockingSpace, requestHandle: pending[0].handle, idempotencyKey: decisionKey }, session.csrfToken);
       assert.equal(decided.status, 200, await decided.clone().text());
-      const afterDecision = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
-      assert.deepEqual((await afterDecision.json()).knocks, []);
+      let remaining;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const afterDecision = await ada.request(`/dashboard-api/call-status?spaceId=${knockingSpace}`);
+        assert.equal(afterDecision.status, 200);
+        remaining = (await afterDecision.json()).knocks;
+        if (remaining.length === 0) break;
+        await delay(100);
+      }
+      assert.deepEqual(remaining, [], "Sync must commit denial to the shared status projection");
     }
     console.log("PASS: real engine retains Space knocks after Episode end; dashboard hides expired and denied knocks");
 

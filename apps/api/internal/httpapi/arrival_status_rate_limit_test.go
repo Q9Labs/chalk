@@ -72,3 +72,7 @@ func (r *arrivalBudgetRepository) UpdateArrivalState(_ context.Context, input pu
 	r.arrival.State = input.State
 	return r.arrival, nil
 }
+
+func (r *arrivalBudgetRepository) GetAdmissionRequestForArrival(context.Context, publicinvites.Arrival) (publicinvites.AdmissionRequest, error) {
+	return publicinvites.AdmissionRequest{}, publicinvites.ErrAdmissionRequestNotFound
+}

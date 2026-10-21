@@ -85,7 +85,7 @@ func proveAdmissionProvenanceCollection(t *testing.T, ctx context.Context, pool 
 			}
 			done := make(chan outcome, 1)
 			go func() {
-				result, err := runtime.ArrivalStatus(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: arrival.ArrivalHandle.String(), GuestCredential: base64.RawURLEncoding.EncodeToString([]byte("isolated-test-guest-credential"))})
+				result, err := runtime.ArrivalStatus(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: arrival.ArrivalHandle.String(), GuestCredential: base64.RawURLEncoding.EncodeToString([]byte("isolated-test-guest-credential"))}, func() error { return nil })
 				done <- outcome{result, err}
 			}()
 			select {

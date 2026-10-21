@@ -8,6 +8,7 @@ import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
+import { AdmissionKnocks } from "./AdmissionKnocks";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
@@ -21,6 +22,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 ];
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
+  const pendingDecisions = useRef(new Set<string>());
   const pages = useRef(1);
   const metadata = useRef({ after: Date.now() + 10000, next: 0 });
   const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
@@ -149,13 +151,18 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
   }
 
   async function answerKnock(handle: string, allow: boolean) {
+    if (pendingDecisions.current.has(handle) || knocks.find((knock) => knock.handle === handle)?.decisionState === "in_flight") return;
+    pendingDecisions.current.add(handle);
     try {
       const intent = `${allow ? "approve" : "deny"}:${handle}`;
       await act("call", { action: allow ? "approve-knock" : "deny-knock", spaceId, requestHandle: handle, idempotencyKey: intents.key(intent) });
       intents.done(intent);
-      update((data) => ({ ...data, knocks: data.knocks.filter((knock) => knock.handle !== handle) }), { refresh: false });
+      // The next authoritative status replaces optimistic progress, including retryable failures.
+      update((data) => ({ ...data, knocks: data.knocks.map((knock): CallPageDTO["knocks"][number] => (knock.handle === handle ? { ...knock, decisionState: "in_flight", decisionAction: allow ? "approve" : "deny" } : knock)) }), { refresh: false });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      pendingDecisions.current.delete(handle);
     }
   }
 
@@ -210,25 +217,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           </span>
         </div>
       ) : null}
-      {knocks.length ? (
-        <div className="list" aria-label="Asking to join" style={{ marginTop: 16 }}>
-          {knocks.map((knock) => (
-            <div className="orow" key={knock.handle}>
-              <span>
-                <b>{knock.name}</b> <span className="mu">asks to join</span>
-              </span>
-              <span className="ract">
-                <button type="button" className="btn gh sm" onClick={() => void answerKnock(knock.handle, false)}>
-                  Deny
-                </button>
-                <button type="button" className="btn sec sm" onClick={() => void answerKnock(knock.handle, true)}>
-                  Let in
-                </button>
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      <AdmissionKnocks knocks={knocks} onDecision={answerKnock} />
       <div className="cset">
         <div>
           <h2>Call link</h2>

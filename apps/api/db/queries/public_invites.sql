@@ -186,6 +186,7 @@ left join sync_external_operations operation
   and operation.external_operation_id = live.decision_external_operation_id
 where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
   and (not sqlc.arg(state_set)::boolean or public.state = 'pending')
+  and (not sqlc.arg(state_set)::boolean or sqlc.arg(state)::text <> 'pending' or public.expires_at > now())
   and (not sqlc.arg(state_set)::boolean or (case when live.status = 'admitted' then 'approved'
              when live.status = 'denied' then 'denied'
              when live.status = 'expired' then 'expired'

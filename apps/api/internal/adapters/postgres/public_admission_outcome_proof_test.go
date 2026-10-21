@@ -184,7 +184,7 @@ func proveTerminalAdmissionCollection(t *testing.T, ctx context.Context, pool *p
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := runtime.ArrivalStatus(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: arrival.ArrivalHandle.String(), GuestCredential: base64.RawURLEncoding.EncodeToString([]byte("isolated-test-guest-credential"))})
+			result, err := runtime.ArrivalStatus(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: arrival.ArrivalHandle.String(), GuestCredential: base64.RawURLEncoding.EncodeToString([]byte("isolated-test-guest-credential"))}, func() error { return nil })
 			if err != nil {
 				t.Fatal(err)
 			}

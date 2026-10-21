@@ -811,6 +811,7 @@ left join sync_external_operations operation
   and operation.external_operation_id = live.decision_external_operation_id
 where public.tenant_id = $1 and public.space_id = $2
   and (not $3::boolean or public.state = 'pending')
+  and (not $3::boolean or $4::text <> 'pending' or public.expires_at > now())
   and (not $3::boolean or (case when live.status = 'admitted' then 'approved'
              when live.status = 'denied' then 'denied'
              when live.status = 'expired' then 'expired'
