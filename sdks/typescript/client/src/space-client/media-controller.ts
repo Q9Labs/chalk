@@ -6,7 +6,7 @@ import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, 
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import { V1SyncError } from "../sync/v1-error";
-import { normalizeClientError, SpaceClientError } from "./errors";
+import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
@@ -133,13 +133,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> => this.#set("microphone", enabled);
   setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
-  captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeClientError));
+  captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#startScreen(options) : this.#stopScreen());
   selectMicrophone = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
       this.#selection.selectCapture("microphone", deviceId);
       this.#store.select("microphone", deviceId);
-    }).pipe(Effect.mapError(normalizeClientError));
+    }).pipe(Effect.mapError(normalizeMediaError));
   selectCamera = (deviceId: string): ClientEffect<void> =>
     Effect.sync(() => {
       const changed = this.#store.getSnapshot().media.selection.camera !== deviceId;
@@ -148,11 +148,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#transitionCamera({ status: "ended" });
       }
       this.#store.select("camera", deviceId);
-    }).pipe(Effect.mapError(normalizeClientError));
+    }).pipe(Effect.mapError(normalizeMediaError));
   selectSpeaker = (deviceId: string): ClientEffect<void> =>
     foreign(() => this.#selection.selectSpeaker(deviceId)).pipe(
       Effect.tap(() => Effect.sync(() => this.#store.select("speaker", deviceId))),
-      Effect.mapError(normalizeClientError),
+      Effect.mapError(normalizeMediaError),
     );
   acceptRequest = (requestId: string): ClientEffect<void> => {
     return Effect.suspend(() => {
@@ -165,12 +165,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
           }),
         ),
       );
-    }).pipe(Effect.mapError(normalizeClientError));
+    }).pipe(Effect.mapError(normalizeMediaError));
   };
   declineRequest = (requestId: string): ClientEffect<void> => {
     return Effect.sync(() => {
       this.#removeRequest(requestId);
-    }).pipe(Effect.mapError(normalizeClientError));
+    }).pipe(Effect.mapError(normalizeMediaError));
   };
   initialIntent(): Readonly<{
     microphone: boolean;
@@ -357,7 +357,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       )
       .pipe(
-        Effect.mapError(normalizeClientError),
+        Effect.mapError(normalizeMediaError),
 
         Effect.ensuring(
           Effect.sync(() => {
@@ -445,7 +445,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       )
       .pipe(
-        Effect.mapError(normalizeClientError),
+        Effect.mapError(normalizeMediaError),
 
         Effect.ensuring(
           Effect.sync(() => {
@@ -508,7 +508,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
           ),
         ),
       )
-      .pipe(Effect.mapError(normalizeClientError));
+      .pipe(Effect.mapError(normalizeMediaError));
   }
   #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
     return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(

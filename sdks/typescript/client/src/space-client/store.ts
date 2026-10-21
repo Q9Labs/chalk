@@ -1,4 +1,5 @@
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { connectionErrorCode } from "./errors";
 import type { ConnectionLifecycleSnapshot } from "../connection";
 import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, OfflineSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
 
@@ -108,20 +109,8 @@ export class SpaceStoreService extends Context.Service<SpaceStoreService, SpaceS
 export const makeSpaceStoreLayer = Layer.effect(SpaceStoreService, SpaceStore.make());
 export const makeFakeSpaceStoreLayer = (store = new SpaceStore()) => Layer.succeed(SpaceStoreService, store);
 
-function mapCode(code: string): ConnectionSlice["lastError"] extends infer T ? (T extends { readonly code: infer C } ? C : never) : never {
-  return ({
-    invalid_access: "access.invalid",
-    access_unavailable: "access.unavailable",
-    episode_ended: "episode.ended",
-    invalid_payload: "chat.payload_invalid",
-    permission_denied: "media.permission_denied",
-    unsupported_environment: "environment.unsupported",
-    rate_limited: "command.rate_limited",
-    command_rejected: "command.rejected",
-  }[code] ?? "client.internal_error") as never;
-}
 function connectionError(failure: ConnectionLifecycleSnapshot["failure"]): ConnectionSlice["lastError"] {
-  return failure ? empty({ code: publicCode(failure.code), recoverable: failure.recoverable, message: failure.message }) : null;
+  return failure ? empty({ code: connectionErrorCode(failure.code, failure.action), recoverable: failure.recoverable, message: failure.message }) : null;
 }
 
 function connectionStatus(snapshot: ConnectionLifecycleSnapshot): ConnectionSlice["status"] {
@@ -142,19 +131,4 @@ function sameError(left: ConnectionSlice["lastError"], right: ConnectionSlice["l
   if (left === right) return true;
   if (!left || !right) return false;
   return left.code === right.code && left.recoverable === right.recoverable && left.message === right.message;
-}
-
-function publicCode(code: string): ReturnType<typeof mapCode> {
-  switch (code) {
-    case "device_not_found":
-      return "media.device_not_found";
-    case "device_busy":
-      return "media.device_busy";
-    case "device_constraint_invalid":
-      return "media.device_constraint_invalid";
-    case "media_capture_failed":
-      return "media.capture_failed";
-    default:
-      return mapCode(code);
-  }
 }

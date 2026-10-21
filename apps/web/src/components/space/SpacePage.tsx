@@ -1,5 +1,5 @@
 import { useTheme } from "../../lib/theme-context";
-import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ErrorCode, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
@@ -10,6 +10,7 @@ type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" |
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
+type EntryFailure = { readonly message: string; readonly retryable: boolean };
 type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 export function SpacePage({
   slug,
@@ -19,7 +20,7 @@ export function SpacePage({
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
 } = {}) {
   const { mode } = useTheme();
-  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly reason: string | undefined; readonly cleanup: () => Promise<void> } | null>(null);
+  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly errorCode: ErrorCode | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -46,7 +47,7 @@ export function SpacePage({
   const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [pending, setPending] = useState<PendingArrival | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<EntryFailure | null>(null);
   const [preparing, setPreparing] = useState(Boolean(reloadMarker));
   const active = useRef(true);
   const reloadAttempted = useRef(false);
@@ -81,7 +82,7 @@ export function SpacePage({
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
       .catch(() => {
-        if (active.current) setError("Could not return to the Episode. Check your access before joining again.");
+        if (active.current) setError({ message: "Could not return to the Episode. Check your access before joining again.", retryable: true });
       })
       .finally(() => {
         if (active.current) setPreparing(false);
@@ -100,7 +101,7 @@ export function SpacePage({
         /* Joining works with storage disabled. */
       }
       if (slug && !inviteToken) {
-        setError(neutralSpaceError);
+        setError({ message: neutralSpaceError, retryable: false });
         return;
       }
       setError(null);
@@ -233,7 +234,7 @@ export function SpacePage({
         <StatusSurface
           phase={terminal.phase}
           callName={terminal.callName}
-          reason={terminal.reason}
+          errorCode={terminal.errorCode}
           theme={{ colorScheme: mode }}
           rejoinDisabled={Boolean(spaceAccess) || preparing}
           onRejoin={() => {
@@ -244,12 +245,12 @@ export function SpacePage({
             void terminal
               .cleanup()
               .then(() => globalThis.location.assign("/"))
-              .catch(() => setError("Couldn’t leave the call. Try again."));
+              .catch(() => setError({ message: "Couldn’t leave the call. Try again.", retryable: true }));
           }}
         />
         {error ? (
           <p role="alert" className="absolute inset-x-6 bottom-6 text-center text-sm">
-            {error}
+            {error.message}
           </p>
         ) : null}
       </main>
@@ -267,9 +268,9 @@ export function SpacePage({
         onFinish={finish}
         spaceName={spaceAccess.spaceName}
         inviteLink={spaceAccess.inviteLink}
-        onTerminal={(phase, cleanup, reason) => {
-          setTerminal({ phase, cleanup, reason, callName: spaceAccess.spaceName });
-          void cleanup().catch(() => setError("Couldn’t leave the call. Try Home again."));
+        onTerminal={(phase, cleanup, errorCode) => {
+          setTerminal({ phase, cleanup, errorCode, callName: spaceAccess.spaceName });
+          void cleanup().catch(() => setError({ message: "Couldn’t leave the call. Try Home again.", retryable: true }));
         }}
       />
     );
@@ -277,11 +278,11 @@ export function SpacePage({
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       {pending ? (
-        <CallLimbo spaceName={pending.spaceName} message={error ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+        <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
       ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
         <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
       ) : error ? (
-        <CallLimbo spaceName={callName} message={error} action={{ label: "Ask again", onClick: () => start() }} />
+        <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
       ) : (
         <NameNeeded
           spaceName={callName}
@@ -358,21 +359,25 @@ class AdmissionError extends Error {
     super(state);
   }
 }
-function neutralMessage(cause: unknown): string {
+function neutralMessage(cause: unknown): EntryFailure {
+  // Generated public-invite errors keep their contract code across Promise rejection.
+  if (cause instanceof SpacePublicInviteUnavailableError) return { message: "This invite link is unavailable. Ask the host for a new link.", retryable: false };
+  if (cause instanceof ArrivalUnavailableError) return { message: "Your request to join is no longer available. Open the invite link and join again.", retryable: false };
   if (cause instanceof AdmissionError) {
-    if (cause.state === "rejected") return "The host declined your request to join.";
-    if (cause.state === "unavailable") return "Your request to join expired or is no longer available.";
-    return "Your request to join is no longer active.";
+    if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true };
+    if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true };
+    return { message: "Your request to join is no longer active.", retryable: true };
   }
   if (cause && typeof cause === "object" && "status" in cause) {
-    if (cause.status === 404 || cause.status === 410) return neutralSpaceError;
-    if (cause.status === 401) return "Sign in again, then enter this Space.";
-    if (cause.status === 403) return "You do not have access to this Space. Ask the owner for access.";
-    if (cause.status === 429) return "Too many requests. Wait a minute, then enter this Space again.";
-    if (cause.status === 409) return "You could not enter this Space. Try entering again.";
+    if (cause.status === 404 || cause.status === 410) return { message: neutralSpaceError, retryable: false };
+    if (cause.status === 401) return { message: "Sign in again, then enter this Space.", retryable: true };
+    if (cause.status === 403) return { message: "You do not have access to this Space. Ask the owner for access.", retryable: true };
+    if (cause.status === 429) return { message: "Too many requests. Wait a minute, then enter this Space again.", retryable: true };
+    if (cause.status === 409) return { message: "You could not enter this Space. Try entering again.", retryable: true };
   }
-  return "Chalk could not connect. Check your connection and try entering again.";
+  return { message: "Chalk could not connect. Check your connection and try entering again.", retryable: true };
 }
+
 function LocalSpace({
   reloadMarker,
   credential,
@@ -397,7 +402,7 @@ function LocalSpace({
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName: string;
-  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, reason?: string) => void;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, errorCode?: ErrorCode) => void;
 }) {
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
@@ -408,7 +413,7 @@ function LocalSpace({
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
   const releaseFromLifecycle = useCallback(
-    (phase: ExitPhase, reason?: string) => {
+    (phase: ExitPhase, errorCode?: ErrorCode) => {
       if (endObserved.current) return;
       endObserved.current = true;
       intentionallyLeft.current = true;
@@ -417,14 +422,14 @@ function LocalSpace({
       } catch {
         /* Storage may be disabled. */
       }
-      onTerminal(phase, release, reason);
+      onTerminal(phase, release, errorCode);
     },
     [onTerminal, release],
   );
   useEffect(() => {
     if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
     else if (connection.removedByHost) releaseFromLifecycle("removed");
-    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.message);
+    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError?.code);
   }, [connection, releaseFromLifecycle]);
 
   useEffect(() => {

@@ -407,7 +407,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const unsubscribe = sync.subscribe(observe);
           observe(sync.getSnapshot());
           return Effect.sync(unsubscribe);
-        }).pipe((effect) => withinForegroundBudget(effect, timeoutMs, lifecycleFailure("sync_start_failed", true, "Sync did not become live before the startup deadline")));
+        }).pipe((effect) => withinForegroundBudget(effect, timeoutMs, lifecycleFailure("sync_hello_timeout", true, "Sync did not become live before the startup deadline")));
       const trace = <A, E>(step: Exclude<ConnectionJoinTraceStep, "join">, effect: Effect.Effect<A, E>): Effect.Effect<A, E> => {
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
         return effect.pipe(

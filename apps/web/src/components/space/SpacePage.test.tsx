@@ -39,10 +39,33 @@ describe("public Space entry", () => {
   it("releases a failed media arrival without an error event", async () => {
     const view = await enterInvite();
     const snapshot = mocks.client.getSnapshot();
-    mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "failed" } });
+    mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { message: "Private transport details", recoverable: true } }) });
     await act(async () => view.rerender(<SpacePage slug="design-lab" />));
     await waitFor(() => expect(mocks.finish).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Something went wrong while joining. Try again.")).toBeDefined();
+    expect(screen.queryByText(/Reference:/)).toBeNull();
+    expect(screen.queryByText("Private transport details")).toBeNull();
     mocks.client.getSnapshot.mockReturnValue(snapshot);
+  });
+
+  // The first case retains the startup-deadline text from not-joined-edge.jpg;
+  // the terminal route must replace it with safe guidance and the real code.
+  it.each([
+    ["connection.sync_hello_timeout", "The call service did not respond in time. Try again.", "Sync did not become live before the startup deadline"],
+    ["connection.media_start_failed", "Audio and video could not connect. Try again.", "Private transport details"],
+  ])("keeps %s when the host replaces the call screen", async (code, guidance, message) => {
+    const view = await enterInvite();
+    const snapshot = mocks.client.getSnapshot();
+    try {
+      mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code, recoverable: true, message } }) });
+      await act(async () => view.rerender(<SpacePage slug="design-lab" />));
+      expect(await screen.findByText(code)).toBeDefined();
+      expect(screen.getByText(guidance)).toBeDefined();
+      expect(screen.queryByText(/client.internal_error/)).toBeNull();
+      expect(screen.queryByText(message)).toBeNull();
+    } finally {
+      mocks.client.getSnapshot.mockReturnValue(snapshot);
+    }
   });
 
   it("does not prepare devices before joining an invite", async () => {
@@ -54,14 +77,14 @@ describe("public Space entry", () => {
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
   });
 
-  it.each(["episode.ended", "network.failed"])("preserves the terminal phase for %s", async (code) => {
+  it.each(["episode.ended", "connection.sync_start_failed"])("preserves the terminal phase for %s", async (code) => {
     const original = mocks.client.getSnapshot();
     mocks.client.getSnapshot.mockReturnValue({ ...original, connection: Object.assign({}, original.connection, { status: "failed", lastError: { code, message: "Connection failed" } }) });
     try {
       window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
       render(<SpacePage slug="design-lab" />);
       enterName("Ada");
-      await waitFor(() => expect(screen.getByText(code === "episode.ended" ? "episode-ended" : "failed")).toBeDefined());
+      await waitFor(() => expect(screen.getByRole("heading", { name: code === "episode.ended" ? "The call ended" : "Couldn’t connect to Design Lab" })).toBeDefined());
     } finally {
       cleanup();
       mocks.client.getSnapshot.mockReturnValue(original);
