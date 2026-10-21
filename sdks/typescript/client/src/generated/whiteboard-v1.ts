@@ -15,6 +15,11 @@ export const WhiteboardV1ProtocolMetadata = {
       name: "presentation_v1",
       exactFields: ["name"],
     },
+    view: {
+      name: "view_v1",
+      exactFields: ["name"],
+      extendedExactFields: ["name", "origins"],
+    },
   },
   identity: {
     credential: "participant-access-token",
@@ -30,7 +35,7 @@ export const WhiteboardV1ProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"],
+      accepts: ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"],
       heartbeatIntervalMs: 20000,
       missedDeadlinesBeforeClose: 2,
     },
@@ -110,6 +115,14 @@ export const WhiteboardV1ProtocolMetadata = {
       clientExactFields: ["type", "x", "y"],
       serverExactFields: ["type", "participant_id", "display_name", "x", "y", "occurred_at"],
     },
+    view: {
+      maxCoordinate: 1000000,
+      maxExtent: 2000000,
+      epochField: "origin_epoch",
+      originFields: ["origin_participant_id", "origin_sequence"],
+      clientExactFields: ["type", "x", "y", "width", "height", "bring"],
+      serverExactFields: ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"],
+    },
     welcome: {
       exactFields: ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"],
       extendedExactFields: ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"],
@@ -139,8 +152,8 @@ export const WhiteboardV1ProtocolMetadata = {
       exactFields: ["type", "correlation_id", "operation", "code", "recoverable", "message"],
     },
   },
-  clientFrames: ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "ping"],
-  serverFrames: ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"],
+  clientFrames: ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"],
+  serverFrames: ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"],
   receiptOperations: ["submit_update", "clear", "set_draw_permission", "set_presentation"],
   receiptOutcomes: ["committed", "duplicate"],
   resetReasons: ["scene_changed", "cursor_expired", "gap"],
@@ -195,9 +208,12 @@ export type WhiteboardV1Element = {
 export type WhiteboardV1Cursor = { readonly scene_id: string; readonly revision: string };
 export type WhiteboardV1SharedAppState = { readonly view_background_color: string } | null;
 export type WhiteboardV1PresentationExtension = { readonly name: "presentation_v1" };
+export type WhiteboardV1ViewExtension = { readonly name: "view_v1"; readonly origins?: true };
+export type WhiteboardV1Extensions = readonly [WhiteboardV1PresentationExtension] | readonly [WhiteboardV1PresentationExtension, WhiteboardV1ViewExtension];
+export type WhiteboardV1ViewOrigin = { readonly origin_participant_id: string; readonly origin_sequence: number; readonly origin_epoch?: string } | { readonly origin_participant_id?: never; readonly origin_sequence?: never; readonly origin_epoch?: never };
 export type WhiteboardV1ClientFrame =
   | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null }
-  | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly extensions: readonly [WhiteboardV1PresentationExtension] }
+  | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly extensions: WhiteboardV1Extensions }
   | { readonly type: "submit_update"; readonly operation_id: string; readonly scene_id: string; readonly sync_all: boolean; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "submit_update_part"; readonly operation_id: string; readonly scene_id: string; readonly sync_all: boolean; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "request_snapshot"; readonly request_id: string }
@@ -206,6 +222,7 @@ export type WhiteboardV1ClientFrame =
   | { readonly type: "set_draw_permission"; readonly operation_id: string; readonly participant_id: string; readonly can_draw: boolean }
   | { readonly type: "set_presentation"; readonly operation_id: string; readonly presenting: boolean }
   | { readonly type: "cursor"; readonly x: number; readonly y: number }
+  | ({ readonly type: "view"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean } & WhiteboardV1ViewOrigin)
   | { readonly type: "ping" };
 export type WhiteboardV1ServerFrame =
   | {
@@ -236,6 +253,7 @@ export type WhiteboardV1ServerFrame =
   | { readonly type: "update_part"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "commit"; readonly operation_id: string; readonly outcome: "committed" | "duplicate"; readonly scene_id: string; readonly revision: string }
   | { readonly type: "cursor"; readonly participant_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly occurred_at: string }
+  | ({ readonly type: "view"; readonly participant_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean; readonly occurred_at: string } & WhiteboardV1ViewOrigin)
   | { readonly type: "permission_updated"; readonly participant_id: string; readonly can_draw: boolean }
   | { readonly type: "presentation_updated"; readonly scene_id: string; readonly revision: string; readonly presenting: boolean }
   | { readonly type: "reset_required"; readonly scene_id: string; readonly reason: "scene_changed" | "cursor_expired" | "gap" }
@@ -353,7 +371,7 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
   switch (value.type) {
     case "hello":
       return (
-        (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.exactFields) || (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.extendedExactFields) && isPresentationExtensions(value.extensions))) &&
+        (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.exactFields) || (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.extendedExactFields) && isExtensions(value.extensions))) &&
         value.protocol === "whiteboard-v1" &&
         typeof value.token === "string" &&
         utf8Bytes(value.token) > 0 &&
@@ -401,6 +419,8 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.setPresentation.exactFields) && isBoundedIdentifier(value.operation_id, WhiteboardV1ProtocolLimits.operationIdMinBytes, WhiteboardV1ProtocolLimits.operationIdMaxBytes) && typeof value.presenting === "boolean";
     case "cursor":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.cursor.clientExactFields) && isFiniteNumber(value.x) && isFiniteNumber(value.y) && encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes;
+    case "view":
+      return isViewFields(value, WhiteboardV1ProtocolMetadata.frames.view.clientExactFields) && isViewRect(value) && typeof value.bring === "boolean" && encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes;
     case "ping":
       return hasExactKeys(value, ["type"]);
     default:
@@ -408,12 +428,39 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
   }
 }
 
+function isViewFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  if (hasExactRecordKeys(value, fields)) return true;
+  const originFields = [...fields, ...WhiteboardV1ProtocolMetadata.frames.view.originFields];
+  const validFields = hasExactRecordKeys(value, originFields) || (hasExactRecordKeys(value, [...originFields, WhiteboardV1ProtocolMetadata.frames.view.epochField]) && isUuid(value.origin_epoch));
+  return validFields && isUuid(value.origin_participant_id) && Number.isSafeInteger(value.origin_sequence) && Number(value.origin_sequence) > 0;
+}
+
+function isViewRect(value: Record<string, unknown>): boolean {
+  return (
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.width) &&
+    isFiniteNumber(value.height) &&
+    value.width > 0 &&
+    value.height > 0 &&
+    Math.abs(value.x) <= WhiteboardV1ProtocolMetadata.frames.view.maxCoordinate &&
+    Math.abs(value.y) <= WhiteboardV1ProtocolMetadata.frames.view.maxCoordinate &&
+    value.width <= WhiteboardV1ProtocolMetadata.frames.view.maxExtent &&
+    value.height <= WhiteboardV1ProtocolMetadata.frames.view.maxExtent
+  );
+}
+
 function isAppState(value: unknown): value is WhiteboardV1SharedAppState {
   return value === null || (hasExactKeys(value, WhiteboardV1ProtocolMetadata.sharedAppState.exactFields) && typeof value.view_background_color === "string" && utf8Bytes(value.view_background_color) <= 64);
 }
 
-function isPresentationExtensions(value: unknown): value is readonly [WhiteboardV1PresentationExtension] {
-  return Array.isArray(value) && value.length === 1 && hasExactKeys(value[0], WhiteboardV1ProtocolMetadata.extensions.presentation.exactFields) && value[0].name === WhiteboardV1ProtocolMetadata.extensions.presentation.name;
+function isExtension(value: unknown, extension: { readonly name: string; readonly exactFields: readonly string[] }): boolean {
+  return hasExactKeys(value, extension.exactFields) && value.name === extension.name;
+}
+
+function isExtensions(value: unknown): value is WhiteboardV1Extensions {
+  const { presentation, view } = WhiteboardV1ProtocolMetadata.extensions;
+  return Array.isArray(value) && (value.length === 1 || value.length === 2) && isExtension(value[0], presentation) && (value.length === 1 || isExtension(value[1], view) || (hasExactKeys(value[1], view.extendedExactFields) && value[1].name === view.name && value[1].origins === true));
 }
 
 function isWelcome(value: Record<string, unknown>): boolean {
@@ -487,6 +534,19 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
         utf8Bytes(value.display_name) <= WhiteboardV1ProtocolLimits.displayNameMaxBytes &&
         isFiniteNumber(value.x) &&
         isFiniteNumber(value.y) &&
+        typeof value.occurred_at === "string" &&
+        !Number.isNaN(Date.parse(value.occurred_at)) &&
+        encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes
+      );
+    case "view":
+      return (
+        isViewFields(value, WhiteboardV1ProtocolMetadata.frames.view.serverExactFields) &&
+        isUuid(value.participant_id) &&
+        typeof value.display_name === "string" &&
+        utf8Bytes(value.display_name) > 0 &&
+        utf8Bytes(value.display_name) <= WhiteboardV1ProtocolLimits.displayNameMaxBytes &&
+        isViewRect(value) &&
+        typeof value.bring === "boolean" &&
         typeof value.occurred_at === "string" &&
         !Number.isNaN(Date.parse(value.occurred_at)) &&
         encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes

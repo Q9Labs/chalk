@@ -38,6 +38,64 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
              })
   end
 
+  test "negotiates relay origins and accepts optional paired view versions" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "participant-token",
+      "cursor" => nil,
+      "extensions" => [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
+    }
+
+    assert {:ok, {:hello, _}} = GeneratedWhiteboardV1.decode_client_frame(hello)
+
+    view = %{
+      "type" => "view",
+      "x" => 1,
+      "y" => 2,
+      "width" => 300,
+      "height" => 200,
+      "bring" => false
+    }
+
+    assert {:ok, {:view, _}} = GeneratedWhiteboardV1.decode_client_frame(view)
+
+    versioned =
+      Map.merge(view, %{"origin_participant_id" => @participant_id, "origin_sequence" => 7})
+
+    assert {:ok, {:view, %{origin_participant_id: @participant_id, origin_sequence: 7}}} =
+             GeneratedWhiteboardV1.decode_client_frame(versioned)
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(Map.delete(versioned, "origin_sequence"))
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(%{versioned | "origin_sequence" => 0})
+  end
+
+  test "bounds view coordinates and extents before broadcasting" do
+    view = %{
+      "type" => "view",
+      "x" => 0,
+      "y" => 0,
+      "width" => 800,
+      "height" => 600,
+      "bring" => true
+    }
+
+    for field <- ["x", "y", "width", "height"] do
+      assert {:error, :invalid_payload} =
+               GeneratedWhiteboardV1.decode_client_frame(Map.put(view, field, 1.7e308))
+    end
+
+    assert {:ok, {:view, _}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               view
+               | "x" => -1_000_000,
+                 "width" => 2_000_000
+             })
+  end
+
   test "rejects unknown fields and oversized batches" do
     assert {:error, :invalid_payload} =
              GeneratedWhiteboardV1.decode_client_frame(%{

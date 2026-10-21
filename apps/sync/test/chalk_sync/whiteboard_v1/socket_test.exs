@@ -1,15 +1,29 @@
 defmodule ChalkSync.WhiteboardV1.SocketTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.WhiteboardV1.Episode
+  alias ChalkSync.WhiteboardV1.Fanout
 
   @participant_id "20000000-0000-4000-8000-000000000002"
   @scene_id "10000000-0000-4000-8000-000000000001"
 
   defmodule Repository do
+    def connect(identity) do
+      {:ok,
+       %{
+         capabilities: Process.get(:current_capabilities, identity.capabilities),
+         participant_capabilities: identity.capabilities,
+         scene_id: "10000000-0000-4000-8000-000000000001",
+         revision: 4,
+         can_draw: true,
+         is_presenting: false
+       }}
+    end
+
     def commit_update(_identity, operation) do
       send(self(), {:committed_update, operation})
 
@@ -29,7 +43,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
          %{
            scene_id: "10000000-0000-4000-8000-000000000001",
            revision: 4,
-           elements: [],
+           elements: Process.get(:whiteboard_snapshot_elements, []),
            app_state: nil
          }}
     end
@@ -47,6 +61,50 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
            }
          ]}
     end
+  end
+
+  test "coalesces recovering Bring commands and delivers the latest after the final snapshot ACK" do
+    count = GeneratedWhiteboardV1.limits()["snapshotPageMaxItems"] + 1
+    elements = Enum.map(1..count, fn index -> Map.put(element(), "id", "element-#{index}") end)
+    Process.put(:whiteboard_snapshot_elements, elements)
+    state = %{recovering_state() | view_negotiated: true}
+    Process.delete(:whiteboard_snapshot_elements)
+    assert length(state.snapshot.remaining) == 1
+
+    bring = %{
+      "type" => "view",
+      "participant_id" => "20000000-0000-4000-8000-000000000003",
+      "display_name" => "Host",
+      "x" => 10,
+      "y" => 20,
+      "width" => 300,
+      "height" => 200,
+      "bring" => true,
+      "occurred_at" => "2026-10-21T11:00:00.000Z"
+    }
+
+    assert {:ok, first} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, bring}, state)
+    latest = %{bring | "x" => 40}
+    assert {:ok, queued} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, latest}, first)
+
+    assert {:ok, queued} =
+             SocketWhiteboardV1.handle_info(
+               {:whiteboard_v1_frame, %{bring | "bring" => false}},
+               queued
+             )
+
+    assert {:push, {:text, _page}, recovering} = receive_frame(snapshot_ack(queued), queued)
+    refute_received {:whiteboard_v1_frame, _}
+    assert {:ok, live} = receive_frame(snapshot_ack(recovering), recovering)
+    assert live.phase == :live
+    assert_receive {:whiteboard_v1_frame, ^latest}
+
+    assert {:push, {:text, encoded}, delivered} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, latest}, live)
+
+    assert JSON.decode!(encoded) == latest
+    assert delivered.pending_bring == nil
+    refute_received {:whiteboard_v1_frame, _}
   end
 
   test "serializes overlapping snapshot requests without interrupting recovery" do
@@ -429,6 +487,198 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                          scene_id: @scene_id
                        }
                      }}
+  end
+
+  test "shares views only over view_v1 and lets only board managers bring everyone" do
+    host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
+    guest = %{identity() | capabilities: ["drawWhiteboard"]}
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+    live = %{initial | phase: :live, scene_id: @scene_id, revision: 4, display_name: "Ada"}
+    Fanout.subscribe(host.episode)
+
+    view = %{
+      "type" => "view",
+      "x" => 10,
+      "y" => 20,
+      "width" => 800,
+      "height" => 600,
+      "bring" => true
+    }
+
+    assert {:ok, _state} = receive_frame(view, %{live | identity: guest, view_negotiated: true})
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+
+    assert {:ok, _state} = receive_frame(view, %{live | identity: host, view_negotiated: false})
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+
+    assert {:ok, _state} = receive_frame(view, %{live | identity: host, view_negotiated: true})
+
+    assert_received {:whiteboard_v1_frame,
+                     %{"type" => "view", "bring" => true, "width" => 800} = frame}
+
+    other = %{live | identity: %{guest | participant_id: "60000000-0000-4000-8000-000000000006"}}
+    assert {:ok, ^other} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, other)
+
+    assert {:push, {:text, pushed}, _state} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, %{
+               other
+               | view_negotiated: true
+             })
+
+    assert JSON.decode!(pushed)["display_name"] == "Ada"
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  test "rechecks current management authority for bring after role changes" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+    Process.put(:current_capabilities, ["drawWhiteboard"])
+    assert {:ok, _} = receive_frame(view_frame(true), state)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+    Process.put(:current_capabilities, ["drawWhiteboard", "manageWhiteboard"])
+    assert {:ok, _} = receive_frame(view_frame(true), state)
+    assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  test "denied bring attempts still consume their rate-limit capacity" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+    Process.put(:current_capabilities, ["drawWhiteboard"])
+    assert {:ok, once} = receive_frame(view_frame(true), state)
+    assert {:ok, twice} = receive_frame(view_frame(true), once)
+    Process.put(:current_capabilities, ["drawWhiteboard", "manageWhiteboard"])
+    assert {:ok, _} = receive_frame(view_frame(true), twice)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  test "bring has bounded capacity independent of continuous cursor traffic" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+
+    saturated = saturate_cursor_window(state)
+
+    assert {:ok, brought} = receive_frame(view_frame(true), saturated)
+    assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+    assert {:ok, limited} = receive_frame(view_frame(true), brought)
+    assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+    assert {:ok, _} = receive_frame(view_frame(true), limited)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => true}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  test "ordinary views have bounded capacity independent of continuous cursor traffic" do
+    state = live_view_state()
+    Fanout.subscribe(state.identity.episode)
+    saturated = saturate_cursor_window(state)
+
+    limited =
+      Enum.reduce(1..10, saturated, fn _, state ->
+        assert {:ok, next} = receive_frame(view_frame(false), state)
+        assert_received {:whiteboard_v1_frame, %{"type" => "view", "bring" => false}}
+        next
+      end)
+
+    assert {:ok, _} = receive_frame(view_frame(false), limited)
+    refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  defp saturate_cursor_window(state) do
+    Enum.reduce(1..60, state, fn _, state ->
+      assert {:ok, next} = receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
+      next
+    end)
+  end
+
+  defp live_view_state do
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    %{
+      initial
+      | phase: :live,
+        scene_id: @scene_id,
+        revision: 4,
+        display_name: "Ada",
+        identity: %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]},
+        view_negotiated: true
+    }
+  end
+
+  defp view_frame(bring),
+    do: %{
+      "type" => "view",
+      "x" => 10,
+      "y" => 20,
+      "width" => 800,
+      "height" => 600,
+      "bring" => bring
+    }
+
+  test "preserves relay versions for negotiated peers and strips them for older view clients" do
+    host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    live = %{
+      initial
+      | phase: :live,
+        scene_id: @scene_id,
+        revision: 4,
+        display_name: "Ada",
+        identity: host,
+        view_negotiated: true,
+        view_origins_negotiated: true
+    }
+
+    Fanout.subscribe(host.episode)
+
+    view = %{
+      "type" => "view",
+      "x" => 10,
+      "y" => 20,
+      "width" => 800,
+      "height" => 600,
+      "bring" => false,
+      "origin_participant_id" => @scene_id,
+      "origin_epoch" => @participant_id,
+      "origin_sequence" => 42
+    }
+
+    assert {:ok, _} = receive_frame(view, live)
+
+    assert_received {:whiteboard_v1_frame,
+                     %{
+                       "type" => "view",
+                       "origin_participant_id" => @scene_id,
+                       "origin_epoch" => @participant_id,
+                       "origin_sequence" => 42
+                     } = frame}
+
+    peer = %{live | identity: %{host | participant_id: "60000000-0000-4000-8000-000000000006"}}
+
+    assert {:push, {:text, versioned}, _} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, peer)
+
+    assert JSON.decode!(versioned)["origin_sequence"] == 42
+    assert JSON.decode!(versioned)["origin_epoch"] == @participant_id
+
+    assert {:push, {:text, legacy}, _} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, %{
+               peer
+               | view_origins_negotiated: false
+             })
+
+    refute Map.has_key?(JSON.decode!(legacy), "origin_epoch")
+    refute Map.has_key?(JSON.decode!(legacy), "origin_sequence")
+    refute Map.has_key?(JSON.decode!(legacy), "origin_participant_id")
+  after
+    Fanout.unsubscribe(identity().episode)
   end
 
   test "does not echo a participant cursor or replay an applied update" do

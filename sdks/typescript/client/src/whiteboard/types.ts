@@ -42,11 +42,26 @@ export type ChalkWhiteboardV1Event =
       readonly y: number;
       readonly occurredAt: string;
     }
+  | ({
+      readonly type: "view";
+      readonly participantId: string;
+      readonly displayName: string;
+      readonly occurredAt: string;
+    } & ChalkWhiteboardView)
   | {
       readonly type: "reset_required";
       readonly sceneId: string;
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
     };
+
+/** The part of the board a person sees, in board coordinates. `bring` asks everyone to move there. */
+export type ChalkWhiteboardView = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly bring: boolean;
+} & ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never });
 
 export type ChalkWhiteboardV1Commit = {
   readonly operationId: string;
@@ -93,6 +108,10 @@ export type ChalkWhiteboardV1Transport = {
   readonly subscribe: (listener: (event: ChalkWhiteboardV1Event) => void) => () => void;
   readonly submitUpdate: (input: ChalkWhiteboardV1UpdateInput) => Promise<ChalkWhiteboardV1Commit>;
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
+  /** Whether the active subscription negotiated view_v1; remains stable during recovery. */
+  readonly supportsViews?: boolean;
+  /** Accepts views while subscribed; keeps the latest bring through recovery. False means views are unavailable. */
+  readonly sendView?: (view: ChalkWhiteboardView) => boolean;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
   readonly setDrawPermission: (participantId: string, canDraw: boolean) => Promise<void>;

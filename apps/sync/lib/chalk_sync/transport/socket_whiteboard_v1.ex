@@ -37,16 +37,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        identity: nil,
        display_name: nil,
        presentation_negotiated: false,
+       view_negotiated: false,
+       view_origins_negotiated: false,
        scene_id: nil,
        revision: 0,
        snapshot: nil,
        pending_snapshot_requests: [],
+       pending_bring: nil,
        awaiting_snapshot: false,
        missed_head: nil,
        multipart: nil,
        multipart_timer: nil,
-       cursor_window_started_at_ms: 0,
-       cursor_window_count: 0,
+       presence_windows: %{},
        outbound: OutboundQueue.new(),
        terminal: nil,
        observability: observability
@@ -87,8 +89,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "cursor", "participant_id" => participant_id}},
+        {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
         %{identity: %Identity{participant_id: participant_id}} = state
+      )
+      when type in ["cursor", "view"] do
+    {:ok, state}
+  end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view"}},
+        %{view_negotiated: false} = state
       ) do
     {:ok, state}
   end
@@ -125,8 +135,25 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view"} = frame},
+        %{phase: :live, view_origins_negotiated: false} = state
+      ) do
+    deliver_frame(
+      state,
+      Map.drop(frame, ["origin_participant_id", "origin_sequence", "origin_epoch"])
+    )
+  end
+
   def handle_info({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
     deliver_frame(state, frame)
+  end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view", "bring" => true} = frame},
+        %{phase: :recovering} = state
+      ) do
+    {:ok, %{state | pending_bring: frame}}
   end
 
   def handle_info(
@@ -219,6 +246,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     %{state | missed_head: {scene_id, revision}}
   end
 
+  defp resume_pending_bring(%{pending_bring: nil} = state), do: state
+
+  defp resume_pending_bring(%{pending_bring: frame} = state) do
+    send(self(), {:whiteboard_v1_frame, frame})
+    %{state | pending_bring: nil}
+  end
+
   defp catch_up_after_snapshot(state, nil) do
     {:ok, state}
   end
@@ -277,6 +311,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          %{phase: :awaiting_hello} = state
        ) do
     presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
+    view_negotiated = Enum.any?(extensions, &(&1["name"] == "view_v1"))
+
+    view_origins_negotiated =
+      Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
@@ -299,6 +337,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             identity: identity,
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
+            view_negotiated: view_negotiated,
+            view_origins_negotiated: view_origins_negotiated,
             scene_id: welcome["scene_id"],
             revision: String.to_integer(welcome["revision"])
         }
@@ -423,7 +463,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  defp handle_frame({:cursor, _cursor}, %{phase: :recovering} = state) do
+  defp handle_frame({type, _frame}, %{phase: :recovering} = state)
+       when type in [:cursor, :view] do
     {:ok, state}
   end
 
@@ -506,7 +547,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               missed_head: nil
           }
 
-          nil
+          next = resume_pending_bring(next)
           resume_snapshot_requests(next)
           catch_up_after_snapshot(next, state.missed_head)
       end
@@ -519,24 +560,70 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:cursor, cursor},
          %{phase: :live, identity: identity, display_name: display_name} = state
        ) do
-    case admit_cursor(state) do
-      {:ok, next} ->
-        frame = %{
-          "type" => "cursor",
-          "participant_id" => identity.participant_id,
-          "display_name" => display_name,
-          "x" => cursor.x,
-          "y" => cursor.y,
-          "occurred_at" =>
-            DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-        }
+    {admission, next} = admit_presence(state, :cursor)
 
-        Fanout.publish_cursor(identity.episode, frame)
-        {:ok, next}
+    with :ok <- admission do
+      frame = %{
+        "type" => "cursor",
+        "participant_id" => identity.participant_id,
+        "display_name" => display_name,
+        "x" => cursor.x,
+        "y" => cursor.y,
+        "occurred_at" =>
+          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      }
 
-      :rate_limited ->
-        {:ok, state}
+      Fanout.publish_cursor(identity.episode, frame)
     end
+
+    {:ok, next}
+  end
+
+  defp handle_frame({:view, _view}, %{phase: :live, view_negotiated: false} = state) do
+    {:ok, state}
+  end
+
+  defp handle_frame(
+         {:view, view},
+         %{phase: :live, identity: identity, display_name: display_name} = state
+       ) do
+    {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :view))
+
+    with :ok <- admit_view(view, identity, admission) do
+      frame = %{
+        "type" => "view",
+        "participant_id" => identity.participant_id,
+        "display_name" => display_name,
+        "x" => view.x,
+        "y" => view.y,
+        "width" => view.width,
+        "height" => view.height,
+        "bring" => view.bring,
+        "occurred_at" =>
+          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      }
+
+      frame =
+        case view do
+          %{origin_participant_id: origin, origin_sequence: sequence} ->
+            Map.merge(frame, %{
+              "origin_participant_id" => origin,
+              "origin_sequence" => sequence
+            })
+
+          _ ->
+            frame
+        end
+
+      frame =
+        if Map.has_key?(view, :origin_epoch),
+          do: Map.put(frame, "origin_epoch", view.origin_epoch),
+          else: frame
+
+      Fanout.publish_transient(identity.episode, frame)
+    end
+
+    {:ok, next}
   end
 
   defp handle_frame({:ping, _ping}, state) do
@@ -545,6 +632,21 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(_frame, state) do
     stop(state, 1008, "operation not available in this phase", :protocol_error)
+  end
+
+  defp admit_view(_view, _identity, {:error, reason}), do: {:error, reason}
+
+  defp admit_view(view, identity, :ok) do
+    if authorized_view?(view, identity), do: :ok, else: {:error, :unauthorized}
+  end
+
+  defp authorized_view?(%{bring: false}, _identity), do: true
+
+  defp authorized_view?(_bring, identity) do
+    case Episode.connect(identity) do
+      {:ok, %{"capabilities" => capabilities}} -> "manageWhiteboard" in capabilities
+      _unavailable -> false
+    end
   end
 
   defp submit_update(identity, operation, state) do
@@ -737,17 +839,17 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     "invalid whiteboard frame"
   end
 
-  defp admit_cursor(state) do
+  defp admit_presence(state, kind) do
     now_ms = System.monotonic_time(:millisecond)
+    limit = Map.fetch!(%{bring: 2, cursor: 60, view: 10}, kind)
+    {started, count} = Map.get(state.presence_windows, kind, {now_ms, 0})
+    {started, count} = if now_ms - started >= 1000, do: {now_ms, 0}, else: {started, count}
 
-    if now_ms - state.cursor_window_started_at_ms >= 1000 do
-      {:ok, %{state | cursor_window_started_at_ms: now_ms, cursor_window_count: 1}}
+    if count < limit do
+      {:ok,
+       %{state | presence_windows: Map.put(state.presence_windows, kind, {started, count + 1})}}
     else
-      if state.cursor_window_count < 60 do
-        {:ok, %{state | cursor_window_count: state.cursor_window_count + 1}}
-      else
-        :rate_limited
-      end
+      {{:error, :rate_limited}, state}
     end
   end
 

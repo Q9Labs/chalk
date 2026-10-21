@@ -53,6 +53,306 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("shares views only after the server accepts view_v1, and steps down for an older server", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    const view = { x: 1, y: 2, width: 300, height: 200, bring: false };
+    const hello = (index: number) => JSON.parse(sockets[index]?.sent[0] ?? "{}").extensions;
+    try {
+      await settle();
+      sockets[0]?.open();
+      await settle();
+      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      sockets[0]?.close(1008);
+      clock.advance(5_000);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
+      sockets[1]?.close(1008);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 2);
+      await startup;
+      expect(hello(2)).toEqual([{ name: "presentation_v1" }]);
+      expect(client.supportsViews).toBe(false);
+      expect(client.sendView(view)).toBe(false);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+
+    const currentClock = new TestClock();
+    const current = await startedRecoveryClient(currentClock);
+    try {
+      expect(current.client.supportsViews).toBe(true);
+      expect(current.client.sendView(view)).toBe(true);
+      expect(JSON.parse(current.sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view });
+      // A dropped connection is not a refusal: views stay available while the client reconnects.
+      current.sockets[0]?.close(1006);
+      currentClock.advance(5_000);
+      await settle();
+      current.sockets[1]?.open();
+      await settle();
+      expect(JSON.parse(current.sockets[1]?.sent[0] ?? "{}").type).toBe("hello");
+      expect(current.client.supportsViews).toBe(true);
+      expect(current.client.sendView(view)).toBe(true);
+    } finally {
+      await current.client.stopSceneSubscription();
+    }
+  });
+
+  it("originates monotonic versions, preserves relayed versions, and interoperates with an older view server", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
+    const sent = () => JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+    try {
+      client.sendView(view);
+      const first = sent();
+      expect(first).toMatchObject({ origin_participant_id: welcome().participant_id, origin_sequence: 1 });
+      client.sendView(view);
+      expect(sent().origin_sequence).toBe(2); // An intentional return to the same view is still a new local move.
+      client.sendView({ ...view, x: 11 });
+      expect(sent().origin_sequence).toBe(3);
+      client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
+      expect(sent()).toMatchObject({ origin_participant_id: sceneId, origin_sequence: 42 });
+      client.sendView({ ...view, x: 12 });
+      expect(sent().origin_sequence).toBe(4);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+    const older = recoveryClient(clock);
+    const startup = older.client.startSceneSubscription();
+    try {
+      await settle();
+      older.sockets[0]?.open();
+      await settle();
+      older.sockets[0]?.close(1008);
+      clock.advance(5000);
+      await acceptSnapshot(older.sockets, 1);
+      await startup;
+      expect(older.client.supportsViews).toBe(true);
+      older.client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
+      expect(JSON.parse(older.sockets[1]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+    } finally {
+      await older.client.stopSceneSubscription();
+    }
+  });
+
+  it("sends Bring as an unversioned command without consuming a view sequence", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
+      expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      client.sendView({ ...view, bring: false });
+      expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}").origin_sequence).toBe(1);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("starts a fresh transport epoch when the same participant reconnects", async () => {
+    const epochs = [];
+    for (const _ of [0, 1]) {
+      const { client, sockets } = await startedRecoveryClient(new TestClock());
+      try {
+        client.sendView({ x: 10, y: 20, width: 300, height: 200, bring: false });
+        const frame = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+        expect(frame.origin_sequence).toBe(1);
+        expect(frame.origin_epoch).toMatch(/^[0-9a-f-]{36}$/);
+        epochs.push(frame.origin_epoch);
+      } finally {
+        await client.stopSceneSubscription();
+      }
+    }
+    expect(epochs[0]).not.toBe(epochs[1]);
+  });
+
+  it("renegotiates view support on a later connection after a successful fallback", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    try {
+      for (const index of [0, 1]) {
+        await settle();
+        sockets[index]?.open();
+        await settle();
+        sockets[index]?.close(1008);
+        clock.advance(5000);
+      }
+      await acceptSnapshot(sockets, 2);
+      await startup;
+      expect(client.supportsViews).toBe(false);
+      sockets[2]?.close(1006);
+      clock.advance(5000);
+      await acceptSnapshot(sockets, 3);
+      expect(client.supportsViews).toBe(true);
+      expect(client.sendView({ x: 0, y: 0, width: 100, height: 100, bring: false })).toBe(true);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("bounds replay to the 256 most recently active peer views", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const events: ChalkWhiteboardV1Event[] = [];
+    try {
+      for (let index = 0; index < 300; index++) {
+        sockets[0]?.receive({ type: "view", participant_id: `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`, display_name: "Peer", x: index, y: 0, width: 100, height: 100, bring: false, occurred_at: "2026-10-21T00:00:00Z" });
+        await settle();
+      }
+      const unsubscribe = client.subscribe((event) => events.push(event));
+      const views = events.filter((event) => event.type === "view");
+      expect(views).toHaveLength(256);
+      expect(views[0]).toMatchObject({ x: 44 });
+      expect(views.at(-1)).toMatchObject({ x: 299 });
+      unsubscribe();
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("replays the latest ordinary peer view to a later board consumer", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const events: ChalkWhiteboardV1Event[] = [];
+    const view = { type: "view", participant_id: "20000000-0000-4000-8000-000000000001", display_name: "Omar", x: 10, y: 20, width: 300, height: 200, bring: true, occurred_at: "2026-10-21T04:00:00.000Z" };
+    let unsubscribe: () => void = () => undefined;
+    try {
+      sockets[0]?.receive(view);
+      await settle();
+      unsubscribe = client.subscribe((event) => events.push(event));
+      expect(events).toContainEqual(expect.objectContaining({ type: "view", participantId: view.participant_id, x: 10, bring: false }));
+    } finally {
+      unsubscribe();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends views immediately after ready consumers subscribe and resubscribe", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const socket = sockets[0];
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
+    const events: ChalkWhiteboardV1Event[] = [];
+    let unsubscribe: () => void = () => undefined;
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        unsubscribe();
+        unsubscribe = client.subscribe((event) => events.push(event));
+        expect(events.at(-1)).toMatchObject({ type: "snapshot", sceneId });
+        expect(client.sendView({ ...view, x: index })).toBe(true);
+        expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view, x: index });
+      }
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "request_snapshot")).toHaveLength(1);
+    } finally {
+      unsubscribe();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("flushes a recovering bring when a snapshot consumer resubscribes on completion", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const socket = sockets[0];
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    let unsubscribe: () => void = () => undefined;
+    const observe = () => {
+      unsubscribe();
+      unsubscribe = client.subscribe(() => undefined);
+    };
+    const stopObserving = client.subscribe((event) => {
+      if (event.type === "snapshot") observe();
+    });
+    try {
+      const snapshot = client.requestSnapshot();
+      expect(client.sendView(bring)).toBe(true);
+      socket?.receive(snapshotPage(socket.requestId()));
+      await snapshot;
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+      const view = { ...bring, x: 40, bring: false };
+      expect(client.sendView(view)).toBe(true);
+      expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view });
+    } finally {
+      unsubscribe();
+      stopObserving();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it.each(["initial", "requested"] as const)("sends an accepted bring after the %s snapshot without replacing it with ordinary views", async (phase) => {
+    const { client, sockets, recovery } = await recoveringViewClient(phase);
+    const socket = sockets[0];
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      expect(client.sendView(bring)).toBe(true);
+      expect(client.sendView({ ...bring, x: 99, bring: false })).toBe(true);
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
+      if (phase === "initial") await acceptSnapshot(sockets);
+      else socket?.receive(snapshotPage(socket.requestId()));
+      await recovery;
+      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("keeps only the latest accepted bring across a reconnect", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      sockets[0]?.close(1006);
+      expect(client.sendView(bring)).toBe(true);
+      expect(client.sendView({ ...bring, x: 40 })).toBe(true);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 1);
+      await settle();
+      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("preserves a queued Bring when origin negotiation falls back to plain views", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    try {
+      sockets[0]?.close(1006);
+      expect(client.sendView(bring)).toBe(true);
+      clock.advance(5_000);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      sockets[1]?.close(1008);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 2);
+      expect(client.supportsViews).toBe(true);
+      const frames = sockets[2]?.sent.map((wire) => JSON.parse(wire));
+      expect(frames?.find((frame) => frame.type === "hello").extensions).toContainEqual({ name: "view_v1" });
+      expect(frames?.filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("does not carry an accepted bring into a restarted subscription", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    const snapshot = client.requestSnapshot();
+    void snapshot.catch(() => undefined);
+    expect(client.sendView(bring)).toBe(true);
+    await client.stopSceneSubscription();
+    expect(client.sendView(bring)).toBe(false);
+    const restart = client.startSceneSubscription();
+    try {
+      await acceptSnapshot(sockets, 1);
+      await restart;
+      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("rejects shared snapshot callers together and permits a fresh request", async () => {
     const { client, sockets } = recoveryClient();
     const startup = client.startSceneSubscription();
@@ -355,11 +655,7 @@ describe("whiteboard slow-connection watchdog", () => {
     oldSocket.onclose?.({ code: 1000 });
     await settle();
     expect(snapshots.at(-1)).toMatchObject({ revision: "2" });
-    for (let sample = 0; sample < 20; sample += 1) {
-      clock.advance(sample === 0 ? 5_000 : 4_000);
-      sockets[1]?.receive({ type: "pong" });
-      await settle();
-    }
+    await answerProbes(clock, sockets[1], 20);
     expect(sockets[1]?.closeCalls).toEqual([]);
     await client.stopSceneSubscription();
   });
@@ -488,11 +784,7 @@ describe("whiteboard slow-connection watchdog", () => {
     await settle();
     clock.advance(2_000);
     await acceptSnapshot(sockets, 1);
-    for (let index = 0; index < 5; index += 1) {
-      clock.advance(index === 0 ? 5_000 : 4_000);
-      sockets[1]?.receive({ type: "pong" });
-      await settle();
-    }
+    await answerProbes(clock, sockets[1], 5);
     expect(sockets[1]?.closeCalls).toEqual([]);
     await client.stopSceneSubscription();
   });
@@ -566,6 +858,12 @@ async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number
   return result;
 }
 
+async function recoveringViewClient(phase: "initial" | "requested") {
+  const result = phase === "initial" ? recoveryClient() : await startedRecoveryClient(new TestClock());
+  const recovery = phase === "initial" ? result.client.startSceneSubscription() : result.client.requestSnapshot();
+  return { ...result, recovery };
+}
+
 async function acceptSnapshot(sockets: readonly TestSocket[], index = 0) {
   await settle();
   const socket = sockets[index];
@@ -602,6 +900,15 @@ function snapshotPage(requestId: string | undefined): Record<string, unknown> {
     elements: [],
     app_state: null,
   };
+}
+
+/** Answers each keepalive probe on time, starting with the first one five seconds in. */
+async function answerProbes(clock: TestClock, socket: TestSocket | undefined, probes: number) {
+  for (let probe = 0; probe < probes; probe += 1) {
+    clock.advance(probe === 0 ? 5_000 : 4_000);
+    socket?.receive({ type: "pong" });
+    await settle();
+  }
 }
 
 async function settle(): Promise<void> {

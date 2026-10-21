@@ -4,6 +4,14 @@ import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./
 const sceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 
 describe("whiteboard-v1 codec", () => {
+  it("rejects overflowing view rectangles on both wire boundaries", () => {
+    const view = { type: "view", x: 0, y: 0, width: 800, height: 600, bring: true } as const;
+    for (const field of ["x", "y", "width", "height"]) {
+      const unsafe = { ...view, [field]: 1.7e308 };
+      expect(() => encodeWhiteboardV1ClientFrame(unsafe)).toThrow();
+      expect(() => decodeWhiteboardV1ServerFrame(JSON.stringify({ ...unsafe, participant_id: sceneId, display_name: "Ada", occurred_at: "2026-10-21T00:00:00Z" }))).toThrow();
+    }
+  });
   it("encodes strict client frames", () => {
     const frame = {
       type: "hello",
@@ -33,6 +41,21 @@ describe("whiteboard-v1 codec", () => {
 
     expect(decodeWhiteboardV1ServerFrame(JSON.stringify(welcome))).toEqual(welcome);
     expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...welcome, presenting: true }))).toEqual({ ...welcome, presenting: true });
+  });
+
+  it("accepts optional paired relay versions without changing legacy view frames", () => {
+    const view = { type: "view", x: 1, y: 2, width: 300, height: 200, bring: false } as const;
+    const version = { origin_participant_id: sceneId, origin_sequence: 7 };
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame(view))).toEqual(view);
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame({ ...view, ...version }))).toEqual({ ...view, ...version });
+    const epoch = { origin_epoch: "20000000-0000-4000-8000-000000000002" };
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame({ ...view, ...version, ...epoch }))).toEqual({ ...view, ...version, ...epoch });
+    const remote = { ...view, participant_id: sceneId, display_name: "Ada", occurred_at: "2026-10-21T00:00:00Z" };
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify(remote))).toEqual(remote);
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...remote, ...version }))).toEqual({ ...remote, ...version });
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ ...remote, ...version, ...epoch }))).toEqual({ ...remote, ...version, ...epoch });
+    expect(() => encodeWhiteboardV1ClientFrame({ ...view, origin_participant_id: sceneId })).toThrow();
+    expect(() => encodeWhiteboardV1ClientFrame({ ...view, ...version, origin_sequence: 0 })).toThrow();
   });
 
   it("rejects unknown server fields", () => {

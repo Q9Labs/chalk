@@ -32,11 +32,12 @@ export class WhiteboardPresence {
     private readonly opts: {
       excalidrawAPI: ExcalidrawImperativeAPI;
       sendCursor: (payload: { x: number; y: number }) => void;
+      renderCursors: boolean;
       throttleMs: number;
       staleMs: number;
     },
   ) {
-    this.pruneInterval = setInterval(() => this.pruneStale(), 1000);
+    if (opts.renderCursors) this.pruneInterval = setInterval(() => this.pruneStale(), 1000);
   }
 
   dispose(): void {
@@ -53,6 +54,7 @@ export class WhiteboardPresence {
   }
 
   handleRemoteCursor(payload: { participantId: string; displayName: string; x: number; y: number; timestamp: Date }): void {
+    if (!this.opts.renderCursors) return;
     const ts = payload.timestamp instanceof Date ? payload.timestamp.getTime() : Date.now();
 
     this.collaborators.set(payload.participantId, {

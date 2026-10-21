@@ -1,5 +1,6 @@
 import type { Capability, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewClient, createSnapshot } from "@q9labsai/chalk-react/preview";
+import { boardActivity, planScene } from "./board-scene";
 import { cameraTrack, screenTrack } from "./media";
 
 export type Person = {
@@ -133,7 +134,10 @@ export function chatMessages(): ChatMessage[] {
 export type CallStateClient = ReturnType<typeof createCallStateClient>;
 
 /** The preview client plus the two seams Chalk needs from a live client: lifecycle events and a whiteboard transport. */
-export function createCallStateClient(snapshot: SpaceSnapshot) {
+/** What the fixture board holds: the plan scene, and the people who move their pointers over it. */
+export type BoardFixture = { readonly scene?: boolean; readonly people?: readonly Person[] };
+
+export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixture = {}) {
   const client = createPreviewClient(snapshot);
   const handlers = new Map<ClientEventName, Set<(event: never) => void>>();
   const on = <TEvent extends ClientEventName>(event: TEvent, handler: ClientEventHandler<TEvent>) => {
@@ -145,7 +149,7 @@ export function createCallStateClient(snapshot: SpaceSnapshot) {
   const emit = <TEvent extends ClientEventName>(event: TEvent, payload: ClientEventMap[TEvent]) => {
     for (const handler of handlers.get(event) ?? []) (handler as (event: ClientEventMap[TEvent]) => void)(payload);
   };
-  const transport = boardTransport((presenting) => client.updateSnapshot((current) => ({ ...current, whiteboard: { open: presenting, engine: { ...current.whiteboard.engine, status: "ready", sceneId: "scene-1", revision: "1", presenting } } })));
+  const transport = boardTransport(board, (presenting) => client.updateSnapshot((current) => ({ ...current, whiteboard: { open: presenting, engine: { ...current.whiteboard.engine, status: "ready", sceneId: "scene-1", revision: "1", presenting } } })));
   // The live client goes from leaving to left once the connection closes; the preview client stops at leaving.
   const previewLeave = client.leave.bind(client);
   const leave = async () => {
@@ -155,10 +159,11 @@ export function createCallStateClient(snapshot: SpaceSnapshot) {
   return Object.assign(client, { on, emit, leave, whiteboard: { transport: () => transport } });
 }
 
-function boardTransport(present: (presenting: boolean) => void): ChalkWhiteboardV1Transport {
+function boardTransport(board: BoardFixture, present: (presenting: boolean) => void): ChalkWhiteboardV1Transport {
   const listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
   let revision = 1;
-  const snapshot = (): ChalkWhiteboardV1Event => ({ type: "snapshot", sceneId: "scene-1", revision: String(revision), elements: [] });
+  let stopActivity: (() => void) | undefined;
+  const snapshot = (): ChalkWhiteboardV1Event => ({ type: "snapshot", sceneId: "scene-1", revision: String(revision), elements: board.scene ? planScene() : [] });
   const commit = () => ({ operationId: `op-${++revision}`, sceneId: "scene-1", revision: String(revision) });
   return {
     startSceneSubscription: () => Promise.resolve(),
@@ -166,10 +171,17 @@ function boardTransport(present: (presenting: boolean) => void): ChalkWhiteboard
     subscribe: (listener) => {
       listeners.add(listener);
       queueMicrotask(() => listener(snapshot()));
-      return () => void listeners.delete(listener);
+      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)));
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size > 0) return;
+        stopActivity?.();
+        stopActivity = undefined;
+      };
     },
     submitUpdate: async () => commit(),
     sendCursor: () => undefined,
+    sendView: () => true,
     requestSnapshot: async () => {
       for (const listener of listeners) listener(snapshot());
     },

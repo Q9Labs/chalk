@@ -3,6 +3,7 @@ import { CaptureUpdateAction, reconcileElements, restoreElements } from "@excali
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
+import { CANONICAL_INK, withInk } from "./ink";
 import { compareElementOrder } from "./order";
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements, remoteImageFileIds, retainStoredImages } from "./syncable";
@@ -53,6 +54,17 @@ export type WhiteboardCollaborationEvent =
       readonly y: number;
       readonly occurredAt: string;
     }
+  | ({
+      readonly type: "view";
+      readonly participantId: string;
+      readonly displayName: string;
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly bring: boolean;
+      readonly occurredAt: string;
+    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }))
   | {
       readonly type: "reset_required";
       readonly sceneId: string;
@@ -62,6 +74,8 @@ export type WhiteboardCollaborationEvent =
 export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOptions {
   excalidrawAPI: ExcalidrawImperativeAPI;
   canDraw: boolean;
+  /** Explicit management authority; omitted hosts keep the original draw-based behavior. */
+  canManage?: boolean;
   submitUpdate: (payload: { sceneId: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }) => Promise<WhiteboardCommit>;
   sendCursor: (payload: { x: number; y: number }) => void;
   requestSnapshot: () => Promise<void>;
@@ -69,12 +83,18 @@ export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOpt
   subscribe: (listener: (event: WhiteboardCollaborationEvent) => void) => () => void;
   onFileSyncStateChange?: (state: WhiteboardFileSyncState) => void;
   onSubmissionError?: (error: unknown) => void;
+  /** False when the host draws its own remote cursors. */
+  renderCursors?: boolean;
+  /** The colour this viewer sees for Ink, which travels as one canonical colour. */
+  inkColor?: string;
 }
 
 export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
   private sceneGeneration: string | null = null;
   private canDraw = true;
+  private canManage: boolean | undefined;
+  private inkColor: string;
   private storedImageFileIds = new Set<string>();
 
   private broadcastedElementVersions = new Map<string, { readonly version: number; readonly versionNonce: number }>();
@@ -96,6 +116,8 @@ export class ExcalidrawCollabEngine {
 
   constructor(private readonly opts: ExcalidrawCollabEngineOptions) {
     this.canDraw = opts.canDraw;
+    this.canManage = opts.canManage;
+    this.inkColor = opts.inkColor ?? CANONICAL_INK;
 
     this.filesSync = new WhiteboardFilesSync({
       excalidrawAPI: opts.excalidrawAPI,
@@ -108,6 +130,7 @@ export class ExcalidrawCollabEngine {
     this.presence = new WhiteboardPresence({
       excalidrawAPI: opts.excalidrawAPI,
       sendCursor: opts.sendCursor,
+      renderCursors: opts.renderCursors ?? true,
       throttleMs: CURSOR_THROTTLE_MS,
       staleMs: CURSOR_STALE_MS,
     });
@@ -120,8 +143,23 @@ export class ExcalidrawCollabEngine {
     this.canDraw = next;
   }
 
+  setCanManage(next: boolean | undefined): void {
+    this.canManage = next;
+  }
+
+  /** Repaints Ink for a new surface without a new version, so nothing is sent. */
+  setInkColor(next: string): void {
+    const previous = this.inkColor;
+    if (next === previous) return;
+    this.inkColor = next;
+    const api = this.opts.excalidrawAPI;
+    api.updateScene({ elements: api.getSceneElementsIncludingDeleted().map((element) => withInk(element, previous, next)), captureUpdate: CaptureUpdateAction.NEVER });
+    // Native history stores the rendered colour; it must not restore ink from the old surface.
+    api.history.clear();
+  }
+
   async clear(): Promise<WhiteboardCommit> {
-    if (!this.canDraw) throw new Error("whiteboard drawing is not permitted");
+    if (!(this.canManage ?? this.canDraw)) throw new Error("whiteboard management is not permitted");
     const commit = await this.opts.clear();
     this.storedImageFileIds.clear();
     this.sceneId = commit.sceneId;
@@ -134,6 +172,7 @@ export class ExcalidrawCollabEngine {
       elements: [],
       captureUpdate: CaptureUpdateAction.NEVER,
     });
+    this.opts.excalidrawAPI.history.clear();
     return commit;
   }
 
@@ -215,6 +254,8 @@ export class ExcalidrawCollabEngine {
           timestamp: new Date(event.occurredAt),
         });
         return;
+      case "view":
+        return;
       case "reset_required":
         this.requestSnapshot();
     }
@@ -225,7 +266,7 @@ export class ExcalidrawCollabEngine {
       sceneId: payload.sceneId,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: payload.syncAll,
-      remoteElements: payload.elements.map(fromWireElement),
+      remoteElements: payload.elements.map((element) => withInk(fromWireElement(element), CANONICAL_INK, this.inkColor)),
       isSnapshot: false,
     });
   }
@@ -235,7 +276,7 @@ export class ExcalidrawCollabEngine {
       sceneId: payload.sceneId,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: true,
-      remoteElements: payload.elements.map(fromWireElement),
+      remoteElements: payload.elements.map((element) => withInk(fromWireElement(element), CANONICAL_INK, this.inkColor)),
       appState: payload.appState,
       isSnapshot: true,
     });
@@ -408,7 +449,7 @@ export class ExcalidrawCollabEngine {
     const submitted: WhiteboardWireElement[] = [];
     for (const element of elements) {
       try {
-        submitted.push(toFittedWireElement(element));
+        submitted.push(toFittedWireElement(withInk(element, this.inkColor, CANONICAL_INK)));
         this.rejectedElementVersions.delete(element.id);
       } catch (cause) {
         const reported = this.rejectedElementVersions.has(element.id);

@@ -211,3 +211,71 @@ it("labels audio only on a remote share that includes it", async () => {
   await open("stage-share-local");
   expect(await page.getByLabel("With share audio", { exact: true }).count()).toBe(0);
 });
+
+it.each(["dark", "light"])("the board follow proof action follows Nora in %s", async (scheme) => {
+  const state = `board-follow-${scheme}`;
+  await open(state);
+  const action = await page.evaluate((id) => window.__CALL_STATES__?.find((entry) => entry.id === id)?.actions?.[0], state);
+  if (!action || !("click" in action)) throw new Error("Board follow proof has no click action");
+  await page.getByRole(action.role ?? "button", { name: action.click, exact: true }).click({ timeout: 5000 });
+  await page.locator(".chalk-board-chip").filter({ hasText: "Following Nora" }).waitFor();
+  expect(await page.getByRole("button", { name: "Stop following Nora", exact: true }).isVisible()).toBe(true);
+});
+
+it("reads the real engine history for keyboard edits and resets it after shared clear", async () => {
+  await open("board-people-dark");
+  await page.locator('.chalk-board[data-ready="true"]').waitFor();
+  const undo = page.locator(".chalk-board").getByRole("button", { name: "Undo", exact: true });
+  const redo = page.locator(".chalk-board").getByRole("button", { name: "Redo", exact: true });
+  expect(await undo.isEnabled()).toBe(false);
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const canvas = page.locator(".excalidraw canvas.interactive");
+  await canvas.click({ position: { x: 200, y: 200 } });
+  await page.keyboard.press("Meta+a");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => undo.isEnabled()).toBe(true);
+  await undo.click();
+  await expect.poll(() => redo.isEnabled()).toBe(true);
+  await page.getByRole("button", { name: "Board menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Clear board", exact: true }).click();
+  await page.getByText("Board cleared", { exact: true }).waitFor();
+  expect(await undo.isEnabled()).toBe(false);
+  expect(await redo.isEnabled()).toBe(false);
+});
+
+it("drops surface-coloured history before Undo and Redo can restore it", async () => {
+  await open("board-people-dark");
+  await page.locator('.chalk-board[data-ready="true"]').waitFor();
+  const undo = page.locator(".chalk-board").getByRole("button", { name: "Undo", exact: true });
+  const redo = page.locator(".chalk-board").getByRole("button", { name: "Redo", exact: true });
+  const canvas = page.locator(".excalidraw canvas.interactive");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("Board canvas is missing");
+  await page.getByRole("button", { name: "Pen", exact: true }).click();
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.8);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.85, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => undo.isEnabled()).toBe(true);
+  await page.getByRole("button", { name: "Board menu", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Paper", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => undo.isEnabled()).toBe(false);
+  expect(await redo.isEnabled()).toBe(false);
+  await page.locator(".excalidraw").focus();
+  await page.keyboard.press("Meta+z");
+  await page.keyboard.press("Meta+Shift+z");
+  expect(await undo.isEnabled()).toBe(false);
+  expect(await redo.isEnabled()).toBe(false);
+  const chalkPixels = await page.locator(".excalidraw canvas.static").evaluate((element) => {
+    if (!(element instanceof HTMLCanvasElement)) throw new Error("Board canvas is missing");
+    const canvas = element;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Board paint context is missing");
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let index = 0; index < pixels.length; index += 4) if (pixels[index] === 241 && pixels[index + 1] === 240 && pixels[index + 2] === 234 && pixels[index + 3] !== 0) count++;
+    return count;
+  });
+  expect(chalkPixels).toBe(0);
+});

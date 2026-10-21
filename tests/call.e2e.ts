@@ -1,19 +1,12 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
-import { prepareGuest } from "../scripts/web-proof/guest.mjs";
+import { withProofCall } from "../scripts/web-proof/guest.mjs";
 import { audioEvidence, incomingAudioLevel, remoteVideoFrames } from "../scripts/web-proof/media.mjs";
 
 // The web app has invite entry, not account sign-in. The runner authenticates to
 // the proof Tenant to create this Space; the browser never receives its API key.
 test("the real web app and SDK guest receive live video and audio", async ({ app, browser, screen }) => {
-  const invite = process.env.CHALK_E2E_INVITE;
-  const directory = process.env.CHALK_E2E_DIRECTORY;
-  if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
-  const guest = await prepareGuest(directory);
-  try {
-    await app.open(invite);
-    await screen.getByLabel("Your name").fill("Web proof A");
-    await screen.getByRole("button", "Join", { exact: true }).click();
+  await withProofCall({ app, screen }, async (guest) => {
     await screen.getByRole("button", "Unmute microphone", { exact: true }).click();
     await screen.getByRole("button", "Turn on camera", { exact: true }).click();
     await guest.ready;
@@ -35,7 +28,5 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
     await screen.getByRole("button", "Leave call", { exact: true }).click();
     await guest.leave();
     await expect(tile).not.toBeVisible();
-  } finally {
-    await guest.dispose();
-  }
+  });
 });
