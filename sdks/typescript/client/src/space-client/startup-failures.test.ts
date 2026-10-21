@@ -42,11 +42,11 @@ function browser() {
   vi.stubGlobal("WebSocket", SilentSocket);
   vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
 }
-function makeClient(getAccess: SpaceClientOptions["getAccess"]) {
+function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs = 25) {
   return createSpaceClientForPlatform(
     { space: "test", getAccess },
     {
-      syncStartupTimeoutMs: 25,
+      syncStartupTimeoutMs,
       dependencies: {
         createSyncClient: (input) => createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: new InMemoryV1PendingTargetStore() }),
       },
@@ -123,6 +123,47 @@ describe("public client startup failure contract", () => {
       expect.soft(errors).toEqual([expect.objectContaining({ code, recoverable })]);
     } finally {
       client.dispose();
+    }
+  });
+
+  it("classifies the retained empty-reason pre-handshake failures at the startup deadline", async () => {
+    browser();
+    // Sanitized from retained not-joined-edge.jpg and its expanded console text:
+    // each WebSocket attempt errors/closes with an empty reason, no open event,
+    // handshake response, or HTTP status, until the startup deadline. Origin
+    // telemetry records no handshakes. This does not identify the network cause.
+    let attempts = 0;
+    const send = vi.fn();
+    class PreHandshakeFailureSocket extends EventTarget {
+      constructor() {
+        super();
+        attempts += 1;
+        queueMicrotask(() => {
+          this.dispatchEvent(new Event("error"));
+          this.dispatchEvent(Object.assign(new Event("close"), { code: 1006, reason: "", wasClean: false }));
+        });
+      }
+      send = send;
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", PreHandshakeFailureSocket);
+    const client = makeClient(async () => accessGrant(), 10_000);
+    const errors: ClientFailure[] = [];
+    client.on("error", ({ error }) => errors.push(error));
+    try {
+      vi.useFakeTimers();
+      const rejection = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(attempts).toBeGreaterThan(0));
+      await vi.advanceTimersByTimeAsync(10_001);
+      expect(attempts).toBeGreaterThan(1);
+      expect(send).not.toHaveBeenCalled();
+      const failure = { code: "connection.sync_hello_timeout", recoverable: true };
+      expect(await rejection).toMatchObject(failure);
+      expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: failure });
+      expect(errors).toEqual([expect.objectContaining(failure)]);
+    } finally {
+      client.dispose();
+      await vi.advanceTimersByTimeAsync(1);
     }
   });
 

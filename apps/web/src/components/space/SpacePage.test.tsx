@@ -48,19 +48,21 @@ describe("public Space entry", () => {
     mocks.client.getSnapshot.mockReturnValue(snapshot);
   });
 
+  // The first case retains the startup-deadline text from not-joined-edge.jpg;
+  // the terminal route must replace it with safe guidance and the real code.
   it.each([
-    ["connection.sync_hello_timeout", "The call service did not respond in time. Try again."],
-    ["connection.media_start_failed", "Audio and video could not connect. Try again."],
-  ])("keeps %s when the host replaces the call screen", async (code, guidance) => {
+    ["connection.sync_hello_timeout", "The call service did not respond in time. Try again.", "Sync did not become live before the startup deadline"],
+    ["connection.media_start_failed", "Audio and video could not connect. Try again.", "Private transport details"],
+  ])("keeps %s when the host replaces the call screen", async (code, guidance, message) => {
     const view = await enterInvite();
     const snapshot = mocks.client.getSnapshot();
     try {
-      mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code, recoverable: true, message: "Private transport details" } }) });
+      mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code, recoverable: true, message } }) });
       await act(async () => view.rerender(<SpacePage slug="design-lab" />));
       expect(await screen.findByText(code)).toBeDefined();
       expect(screen.getByText(guidance)).toBeDefined();
       expect(screen.queryByText(/client.internal_error/)).toBeNull();
-      expect(screen.queryByText("Private transport details")).toBeNull();
+      expect(screen.queryByText(message)).toBeNull();
     } finally {
       mocks.client.getSnapshot.mockReturnValue(snapshot);
     }
