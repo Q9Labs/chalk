@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SnapshotSchema } from "../generated/sync";
+import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
+import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
 import { V1SyncClient, V1SyncError } from "./v1-client";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
@@ -1172,6 +1174,34 @@ describe("V1SyncClient", () => {
   });
 });
 describe("V1SyncClient collaboration_v1", () => {
+  it("reports a real acknowledgement deadline through the public reaction API as recoverable", async () => {
+    const clock = new TestClock();
+    const { client: sync, socket } = await liveCollaborationClient({ clock });
+    const platform = createCoreTestPlatform();
+    const access = opaqueAccessGrant("reaction-timeout");
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => ({ ...access, subject: { ...access.subject, participant_id: ownerId } }) }, { ...platform, dependencies: { ...platform.dependencies, createSyncClient: () => sync } });
+    let failure: unknown;
+    try {
+      await client.join({ microphone: false, camera: false });
+      expect(client.getSnapshot().connection.status).toBe("live");
+      const pending = client.reactions.send("🎉").catch((cause: unknown) => {
+        failure = cause;
+      });
+      await vi.waitFor(() => expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1));
+      for (let tick = 0; tick < 10; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      await pending;
+      expect(failure).toMatchObject({ code: "collaboration.unavailable", recoverable: true, message: "Couldn’t confirm your reaction. Try again." });
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().reactions.active).toEqual([]);
+    } finally {
+      client.dispose();
+      sync.stop();
+    }
+  });
   it("bounds dropped reaction acknowledgements despite healthy pongs, and never replays", async () => {
     const clock = new TestClock();
     const { client, socket, recover } = await liveCollaborationClient({ clock, reconnectDelayMs: 0 });
