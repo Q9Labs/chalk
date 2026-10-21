@@ -159,7 +159,7 @@ boot-time package installation. Bootstrap accepts `capture-minimal-v1` only for
 the Capture role.
 
 The `images/cpu` builder produces the render worker, native Node compositor and
-bootstrap/renewal agent. It uses checksum-pinned Go 1.26.9, Node.js 22.23.2 and
+bootstrap/renewal agent. It uses checksum-pinned Go 1.26.10, Node.js 22.23.2 and
 pnpm 12.8.1. Release starts a clean Debian builder at the fleet's disk size, then
 increases only CPU and memory if needed. The snapshot must still fit the fleet.
 

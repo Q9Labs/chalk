@@ -197,7 +197,9 @@ it("pins from the phone options row and refits instantly with reduced motion", a
   await page.getByRole("button", { name: "Pin", exact: true }).click();
   expect(await page.locator('[data-stage-item="stage-2"]').getAttribute("data-stage-role")).toBe("primary");
   expect(await page.locator('[data-stage-item="stage-2"]').evaluate((element) => element.getAnimations().length)).toBe(0);
-  expect(await page.getByRole("dialog").count()).toBe(0);
+  // Base UI removes closed popups on its next animation frame, even without motion.
+  expect(await page.locator('[role="dialog"][data-open]').count()).toBe(0);
+  expect(await page.getByRole("dialog").evaluateAll((dialogs) => dialogs.every((dialog) => dialog.hasAttribute("data-closed") && dialog.hasAttribute("data-ending-style") && dialog.getAnimations().length === 0))).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
