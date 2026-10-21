@@ -226,6 +226,31 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  it.each([1000, 4500])("evaluates %i ms of suspended silence before accepting a queued pong", async (silence) => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    const now = vi.spyOn(clock, "now");
+    try {
+      // A queued socket event can run before overdue timers after the event loop resumes.
+      now.mockReturnValue(silence);
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ health: silence >= 4000 ? "recovering" : "degraded", noticeUnresponsive: silence >= 4000 });
+      for (const elapsed of [500, 1000, 1500]) {
+        now.mockReturnValue(silence + elapsed);
+        socket.receive({ type: "pong" });
+        await settle();
+        expect(client.getSnapshot().connection.health).not.toBe("healthy");
+      }
+      now.mockReturnValue(silence + 2000);
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy", noticeUnresponsive: false });
+    } finally {
+      client.stop();
+      now.mockRestore();
+    }
+  });
   it("signals a silent live socket for presentation without restarting it or changing its phase", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });

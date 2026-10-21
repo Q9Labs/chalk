@@ -1,6 +1,6 @@
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -227,6 +227,7 @@ export function ScreenShareViewSurface({ screenShareTrack, ...props }: ScreenSha
 }
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
   const client = useSpaceClient();
+  const connection = useConnection();
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
@@ -248,7 +249,7 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
       hasAudio={active.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === active.id)?.media.screenShareHasAudio}
       capture={active.isLocal ? media.screenShare.capture : undefined}
       onStopSharing={active.isLocal ? () => client.media.setScreenShareEnabled(false) : undefined}
-      onChangeShare={active.isLocal ? (options) => client.media.setScreenShareEnabled(true, options) : undefined}
+      onChangeShare={active.isLocal && connection.status === "live" ? (options) => client.media.setScreenShareEnabled(true, options) : undefined}
     />
   );
 }

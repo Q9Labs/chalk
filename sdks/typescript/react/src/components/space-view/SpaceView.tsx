@@ -270,9 +270,7 @@ export function SpaceView({
               onOverflowClick={feature("participants") ? () => setActivePanel("participants") : undefined}
               shareCapture={media.screenShare.capture}
               onStopSharing={() => client.media.setScreenShareEnabled(false)}
-              onChangeShare={async (options) => {
-                await client.media.setScreenShareEnabled(true, options);
-              }}
+              onChangeShare={connection.status === "live" ? (options) => client.media.setScreenShareEnabled(true, options) : undefined}
               className="h-full"
             />
           }

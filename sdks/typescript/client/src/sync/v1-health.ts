@@ -20,6 +20,7 @@ export class V1SyncHealth {
   }
 
   observePong(now: number): void {
+    this.check(now);
     const gap = now - this.#lastPongAt;
     this.#lastPongAt = now;
     if (this.health === "healthy") return;

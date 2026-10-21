@@ -28,13 +28,13 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false }: 
   const messagesOnly = offline.pending.every((action) => action.kind === "chat_message");
   const pendingDetail = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"} will send when you’re back` : undefined;
   const notice = reconnecting ? (reconnectingNoticeDue ? `${offlineNoticeText(0, online)}${pendingDetail ? ` ${pendingDetail}` : ""}` : null) : connection.syncHealth === "degraded" ? "Connection is slow" : null;
+  if (offline.notice && offline.notice !== dismissedNotice) return <ToastStack toasts={[{ id: "offline-notice", message: offline.notice }]} onDismiss={() => setDismissedNotice(offline.notice ?? null)} />;
   if (notice)
     return (
       <div role="status" data-part="connection-notice" style={{ pointerEvents: "none" }} className="absolute inset-x-4 top-16 z-50 mx-auto w-fit max-w-[calc(100%_-_2rem)] rounded-full bg-[var(--chalk-surface)] px-3 py-1 text-center text-sm text-[var(--chalk-text)]">
         {notice}
       </div>
     );
-  if (offline.notice && offline.notice !== dismissedNotice) return <ToastStack toasts={[{ id: "offline-notice", message: offline.notice }]} onDismiss={() => setDismissedNotice(offline.notice ?? null)} />;
   return null;
 }
 

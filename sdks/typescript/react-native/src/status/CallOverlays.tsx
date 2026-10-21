@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { useBackHandler } from "../frame/back-handler";
+import { useDeviceLayout } from "../frame/device-layout";
+import { frameRegions } from "../frame/regions";
 import { useChat, useConnection, useRecording } from "../hooks/space-hooks";
 import { ChalkText } from "../primitives/ChalkText";
 import { Limbo, type LimboState } from "../limbo/Limbo";
@@ -27,6 +29,8 @@ export type CallOverlaysProps = {
  */
 export function CallOverlays({ screen, callName, rejoining, onHold, onRejoin, onHome }: CallOverlaysProps): React.JSX.Element {
   const { colors } = useTheme();
+  const layout = useDeviceLayout();
+  const { header } = frameRegions(layout.arrangement, layout.width, layout.height, layout.insets);
   const connection = useConnection();
   const recording = useRecording().current?.status === "recording";
   const queuedMessages = useChat().pendingSends.filter((send) => send.status === "queued").length;
@@ -45,7 +49,7 @@ export function CallOverlays({ screen, callName, rejoining, onHold, onRejoin, on
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <Veil level={screen.kind === "status" ? "none" : veil} />
       {screen.kind === "reconnecting" || (screen.kind === "call" && connection.syncHealth === "degraded") ? (
-        <View pointerEvents="none" style={{ position: "absolute", top: 56, left: 16, right: 16, alignItems: "center" }} testID="connection.notice">
+        <View pointerEvents="none" style={{ position: "absolute", top: header.y + header.height + 4, left: layout.insets.left + 16, right: layout.insets.right + 16, alignItems: "center" }} testID="connection.notice">
           <ChalkText accessibilityLiveRegion="polite" variant="caption" style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 }}>
             {screen.kind === "reconnecting" ? `Reconnecting…${queuedMessages ? ` ${queuedMessages} messages waiting to send.` : ""}` : "Connection is slow"}
           </ChalkText>

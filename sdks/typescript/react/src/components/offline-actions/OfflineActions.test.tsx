@@ -154,3 +154,11 @@ it("keeps degraded health live and shows only a subtle notice", async () => {
   expect(container.querySelector('[data-part="connection-notice"]')?.textContent).toBe("Connection is slow");
   expect(container.querySelector("[data-call-limbo]")).toBeNull();
 });
+
+it("keeps offline failures visible while health remains degraded", async () => {
+  const notice = "Your offline actions were not sent.";
+  const snapshot = withOffline("live", { pending: [], notice });
+  const { container } = await mount({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+  expect(container.textContent).toContain(notice);
+  expect(container.querySelector('[data-part="toast-stack"]')?.textContent).toContain(notice);
+});

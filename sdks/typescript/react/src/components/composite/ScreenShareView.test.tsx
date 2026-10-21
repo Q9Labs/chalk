@@ -6,8 +6,13 @@ import { expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { ScreenShareView } from "./ScreenShareView";
+import { SpaceView } from "../space-view/SpaceView";
 
-it.each([true, false])("preserves the connected share's local ownership: %s", async (isLocal) => {
+it.each([
+  { isLocal: true, stage: false },
+  { isLocal: false, stage: false },
+  { isLocal: true, stage: true },
+])("preserves share ownership and recovery restrictions: %j", async ({ isLocal, stage }) => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
   const track: MediaStreamTrack = {
     id: "screen",
@@ -33,6 +38,7 @@ it.each([true, false])("preserves the connected share's local ownership: %s", as
   const base = createSnapshot(["publishScreen"]);
   const client = createPreviewClient({
     ...base,
+    connection: { ...base.connection, status: "live" },
     self: { ...base.self, participantId: "self", displayName: "You" },
     participants: {
       ...base.participants,
@@ -62,13 +68,7 @@ it.each([true, false])("preserves the connected share's local ownership: %s", as
   document.body.appendChild(container);
   const root = createRoot(container);
   try {
-    await act(async () =>
-      root.render(
-        <ChalkProvider client={connected}>
-          <ScreenShareView />
-        </ChalkProvider>,
-      ),
-    );
+    await act(async () => root.render(<ChalkProvider client={connected}>{stage ? <SpaceView features={{ sounds: false }} generatedAvatars={false} /> : <ScreenShareView />}</ChalkProvider>));
     await act(async () => container.querySelector("video")?.dispatchEvent(new Event("loadeddata")));
     if (isLocal) {
       expect(container.textContent).toContain("Your screen");
@@ -81,6 +81,11 @@ it.each([true, false])("preserves the connected share's local ownership: %s", as
       if (!(tab instanceof HTMLElement)) throw new Error("Missing Browser tab action");
       await act(async () => tab.click());
       expect(share).toHaveBeenLastCalledWith(true, { surface: "browser", audio: true });
+      await act(async () => change.click());
+      await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting" } })));
+      expect(Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Change")).toBeUndefined();
+      expect(document.querySelector('[role="menuitem"]')).toBeNull();
+      expect(share).toHaveBeenCalledTimes(1);
       const stop = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Stop sharing");
       if (!stop) throw new Error("Missing Stop sharing control");
       await act(async () => stop.click());
