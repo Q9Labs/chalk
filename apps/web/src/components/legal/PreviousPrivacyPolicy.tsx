@@ -40,6 +40,60 @@ const PRIVACY_SECTIONS = [
   },
 ];
 
+const ARCHIVED_DATA_TYPES = [
+  {
+    label: "Account data.",
+    text: "Account creation and sign-in are currently unavailable. Existing account records, including names, email addresses, password hashes or Google identity details, tenant memberships, and roles, remain stored.",
+  },
+  {
+    label: "Sign-in and security data.",
+    text: "We retain previously recorded sign-in security data, including IP addresses, browser user agents, and device names. We record the same details for API keys to secure access and rate-limit abusive traffic.",
+  },
+  {
+    label: "Spaces, Episodes, and participation.",
+    text: "Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: display name, role, capabilities, and join and leave times.",
+  },
+  {
+    label: "Chat and files.",
+    text: "Messages you send in an Episode are stored with your display name and timestamps. Files you attach are stored as private objects with their filename, type, and size, and expire on a schedule.",
+  },
+  {
+    label: "Audio and video.",
+    text: "Your microphone, camera, and screen-share streams are processed in real time to deliver them to other participants. We do not store media streams unless recording is turned on for the Episode, and the product shows when that is the case.",
+  },
+  {
+    label: "Recordings and transcripts.",
+    text: "Where recording or transcription is enabled, we store the recording files, transcript text, and processing metadata as private objects. Temporary audio chunks used for transcription are deleted automatically within 24 hours.",
+  },
+  {
+    label: "Integrations and webhooks.",
+    text: "If your tenant connects an external integration or configures webhooks, we store the connection metadata and deliver event payloads to the endpoints your tenant chose. Webhook target URLs, signing secrets, and payloads are encrypted at rest.",
+  },
+  {
+    label: "Operational data.",
+    text: "We keep audit logs of administrative actions, structured request logs, and bounded diagnostic events (route, outcome, duration, trace IDs). We use these to run and secure the service, and we do not use them for advertising.",
+  },
+];
+
+const ARCHIVED_PROVIDERS = [
+  {
+    name: "Cloudflare",
+    description: "hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI performs speech-to-text when transcription is enabled.",
+  },
+  {
+    name: "Amazon Web Services",
+    description: "runs the transcription pipeline (job scheduling and secret storage) when transcription is enabled.",
+  },
+  {
+    name: "DeepInfra",
+    description: "may perform speech-to-text as an alternative provider when transcription is enabled.",
+  },
+  {
+    name: "DigitalOcean",
+    description: "runs recording workers when recording is enabled.",
+  },
+];
+
 export function PreviousPrivacyPolicy() {
   return (
     <>
@@ -48,30 +102,11 @@ export function PreviousPrivacyPolicy() {
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
-      <p>
-        <strong>Account data.</strong> Account creation and sign-in are currently unavailable. Existing account records, including names, email addresses, password hashes or Google identity details, tenant memberships, and roles, remain stored.
-      </p>
-      <p>
-        <strong>Sign-in and security data.</strong> We retain previously recorded sign-in security data, including IP addresses, browser user agents, and device names. We record the same details for API keys to secure access and rate-limit abusive traffic.
-      </p>
-      <p>
-        <strong>Spaces, Episodes, and participation.</strong> Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: display name, role, capabilities, and join and leave times.
-      </p>
-      <p>
-        <strong>Chat and files.</strong> Messages you send in an Episode are stored with your display name and timestamps. Files you attach are stored as private objects with their filename, type, and size, and expire on a schedule.
-      </p>
-      <p>
-        <strong>Audio and video.</strong> Your microphone, camera, and screen-share streams are processed in real time to deliver them to other participants. We do not store media streams unless recording is turned on for the Episode, and the product shows when that is the case.
-      </p>
-      <p>
-        <strong>Recordings and transcripts.</strong> Where recording or transcription is enabled, we store the recording files, transcript text, and processing metadata as private objects. Temporary audio chunks used for transcription are deleted automatically within 24 hours.
-      </p>
-      <p>
-        <strong>Integrations and webhooks.</strong> If your tenant connects an external integration or configures webhooks, we store the connection metadata and deliver event payloads to the endpoints your tenant chose. Webhook target URLs, signing secrets, and payloads are encrypted at rest.
-      </p>
-      <p>
-        <strong>Operational data.</strong> We keep audit logs of administrative actions, structured request logs, and bounded diagnostic events (route, outcome, duration, trace IDs). We use these to run and secure the service, and we do not use them for advertising.
-      </p>
+      {ARCHIVED_DATA_TYPES.map(({ label, text }) => (
+        <p key={label}>
+          <strong>{label}</strong> {text}
+        </p>
+      ))}
 
       <h2>Cookies</h2>
       <p>Chalk uses only functional cookies. We do not use advertising or cross-site tracking cookies.</p>
@@ -97,18 +132,11 @@ export function PreviousPrivacyPolicy() {
       <h2>Who processes your data</h2>
       <p>We use a small set of infrastructure providers, each bound by a data processing agreement:</p>
       <ul>
-        <li>
-          <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI performs speech-to-text when transcription is enabled.
-        </li>
-        <li>
-          <strong>Amazon Web Services</strong> runs the transcription pipeline (job scheduling and secret storage) when transcription is enabled.
-        </li>
-        <li>
-          <strong>DeepInfra</strong> may perform speech-to-text as an alternative provider when transcription is enabled.
-        </li>
-        <li>
-          <strong>DigitalOcean</strong> runs recording workers when recording is enabled.
-        </li>
+        {ARCHIVED_PROVIDERS.map(({ name, description }) => (
+          <li key={name}>
+            <strong>{name}</strong> {description}
+          </li>
+        ))}
       </ul>
       <p>We do not sell personal data, and we do not share it with anyone else except when the law requires it.</p>
 

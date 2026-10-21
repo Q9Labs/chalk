@@ -33,7 +33,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "International transfers",
     content:
-      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
+      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
   },
   {
     heading: "Children",
@@ -223,6 +223,10 @@ function PrivacyPolicy() {
         </li>
         <li>
           <strong>Axiom</strong> receives API request logs and Sync diagnostic traces to help us run and secure the service.
+        </li>
+        <li>
+          <strong>Discord</strong> receives operational alerts that may include a tenant's display name, and user-submitted "Report a problem" reports. Reports include the description you write, your display name and role, and the call name and ID. Diagnostics are included only if you opt in. The
+          report payload excludes email addresses and tokens.
         </li>
       </ul>
       <p>We do not sell personal data or share it for advertising or tracking. Apart from service providers processing data on our behalf, content you send to other participants, and integrations your tenant chooses, we disclose data only when the law requires it.</p>
