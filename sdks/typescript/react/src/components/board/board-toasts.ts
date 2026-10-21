@@ -7,16 +7,16 @@ export type BoardToast = Omit<Toast, "id">;
  * Board events join the call's own toast stack, so they look, sit and time out like every other toast. */
 export const BoardToastContext = createContext<(toast: BoardToast | null) => void>(() => undefined);
 
-export function useBoardToast(lifetime: object | null, visible: boolean): (toast: BoardToast) => void {
+export function useBoardToast(lifetime: object | null): (toast: BoardToast) => void {
   const publish = useContext(BoardToastContext);
-  const scope = useMemo(() => ({ active: visible }), [lifetime, visible]);
+  const scope = useMemo(() => ({ active: true }), [lifetime]);
   useEffect(() => {
-    scope.active = visible;
+    scope.active = true;
     return () => {
       scope.active = false;
       publish(null);
     };
-  }, [publish, scope, visible]);
+  }, [publish, scope]);
   return useCallback(
     (toast: BoardToast) => {
       if (scope.active) publish(toast);

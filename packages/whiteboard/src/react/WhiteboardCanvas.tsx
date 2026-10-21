@@ -612,7 +612,7 @@ function WhiteboardLoading({ classNames, loadingIcon }: { classNames: Whiteboard
 
 function WhiteboardLoadError({ className, error }: { className: string; error: string }): React.JSX.Element {
   return (
-    <div className={className} style={{ position: "absolute", inset: 0, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div role="alert" className={className} style={{ position: "absolute", inset: 0, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div>{error}</div>
     </div>
   );

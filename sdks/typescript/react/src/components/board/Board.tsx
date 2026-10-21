@@ -255,7 +255,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const offline = connection.status === "reconnecting";
   const phone = useMediaQuery("(max-width: 640px)");
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
-  const toast = useBoardToast(engine, visible);
+  const toast = useBoardToast(engine);
   const [surface, setSurface] = useState<BoardSurface>(() => readStored(SURFACE_KEY, SURFACES, "chalkboard"));
   const [place, setPlace] = useState<IslandPlace>(() => readStored(ISLAND_KEY, ISLAND_PLACES, "bottom"));
   const [tool, setTool] = useState<BoardTool>("pen");
@@ -385,12 +385,12 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     if (followingRef.current === event.participantId) goTo(event.participantId, true);
   };
   useEffect(() => {
-    if (!subscribe || !visible) return;
+    if (!subscribe) return;
     return subscribe((event) => {
       if (event.type === "cursor") rememberCursor(cursors.current, event);
       else if (event.type === "view") latestView.current(event);
     });
-  }, [visible, subscribe]);
+  }, [subscribe]);
 
   useEffect(() => {
     if (following) goTo(following, true, true);

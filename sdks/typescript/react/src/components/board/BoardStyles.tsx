@@ -44,7 +44,9 @@ const BOARD_CSS = `.chalk-board {
 
 /* Excalidraw draws; none of its own interface shows. */
 .chalk-board-engine {position:absolute; inset:0; transition:opacity .2s ease-out;}
-.chalk-board:not([data-ready]) .chalk-board-engine {opacity:0; pointer-events:none;}
+.chalk-board:not([data-ready]) .chalk-board-engine:not(:has([role="alert"])) {opacity:0; pointer-events:none;}
+.chalk-board-engine > [role="alert"] {background:var(--board-fill); color:var(--board-ink);}
+.chalk-board:has(.chalk-board-engine > [role="alert"]) .chalk-board-loading {display:none;}
 .chalk-board .excalidraw {--color-selection: var(--board-selection); background: transparent;}
 .chalk-board .excalidraw :is(.layer-ui__wrapper, .context-menu, .HintViewer, .Modal, .welcome-screen-center, .library-menu, .sidebar, .App-toolbar, .App-bottom-bar, .FixedSideContainer, .popover, .scroll-back-to-content, .excalidraw-tooltip, .ToolIcon__hidden, .App-menu, .layer-ui__wrapper__footer) {display:none !important;}
 body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {display:none !important;}

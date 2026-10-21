@@ -578,7 +578,7 @@ afterEach(() => {
   Reflect.deleteProperty(document, "fonts");
 });
 
-it.each(["load", "error"])("keeps Opening board while the engine is initialized but its stylesheet awaits %s", async (outcome) => {
+it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s outcome", async (outcome) => {
   const client = createPreviewClient();
   const container = document.createElement("div");
   document.body.append(container);
@@ -605,9 +605,13 @@ it.each(["load", "error"])("keeps Opening board while the engine is initialized 
       expect(container.querySelector(".chalk-board-loading")).toBeNull();
       expect(container.querySelector(".chalk-board")?.getAttribute("data-ready")).toBe("true");
     } else {
-      expect(container.querySelector(".chalk-board-loading")?.textContent).toContain("Opening board");
+      const engine = container.querySelector(".chalk-board-engine");
+      const loading = container.querySelector(".chalk-board-loading");
+      if (!(engine instanceof HTMLElement) || !(loading instanceof HTMLElement)) throw new Error("Missing board loading layers");
+      expect(getComputedStyle(engine).opacity).not.toBe("0");
+      expect(getComputedStyle(loading).display).toBe("none");
+      expect(engine.querySelector('[role="alert"]')?.textContent).toContain("Failed to load");
       expect(container.querySelector(".chalk-board")?.hasAttribute("data-ready")).toBe(false);
-      expect(container.textContent).toContain("Failed to load");
     }
   } finally {
     await act(async () => root.unmount());
@@ -617,9 +621,9 @@ it.each(["load", "error"])("keeps Opening board while the engine is initialized 
 });
 
 async function withOpenBoard(
-  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible">>) => Promise<void>) => Promise<void>,
+  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible">> | null) => Promise<void>) => Promise<void>,
   primary = true,
-  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean } = {},
+  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"] } = {},
 ) {
   const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
   const peer = createPeer();
@@ -628,14 +632,16 @@ async function withOpenBoard(
   document.body.append(container);
   const root = createRoot(container);
   const toast = vi.fn();
-  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible">> = {}) => {
+  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible">> | null = {}) => {
     await act(async () =>
       root.render(
-        <ChalkProvider client={client}>
-          <BoardToastContext value={toast}>
-            <Board board={board} primary={primary} visible colorScheme="dark" people={[]} following="remote" onFollow={() => undefined} sendView={options.sendView ?? (() => true)} {...props} />
-          </BoardToastContext>
-        </ChalkProvider>,
+        props === null ? null : (
+          <ChalkProvider client={client}>
+            <BoardToastContext value={toast}>
+              <Board board={board} primary={primary} visible colorScheme="dark" people={[]} following="remote" onFollow={options.onFollow ?? (() => undefined)} sendView={options.sendView ?? (() => true)} {...props} />
+            </BoardToastContext>
+          </ChalkProvider>
+        ),
       ),
     );
   };
@@ -667,6 +673,28 @@ it("receives followed views while the active board is a grid tile", async () => 
     });
     expect(engine.camera().x).toBeCloseTo(-75, 2);
   }, false);
+});
+
+it("receives Bring while the board tile is off-page and keeps that view on return", async () => {
+  vi.useFakeTimers();
+  const onFollow = vi.fn();
+  await withOpenBoard(
+    async (_container, engine, peer, toast, render) => {
+      await render({ visible: false });
+      toast.mockClear();
+      await act(async () => {
+        peer.receive("presenter", { x: 75, y: 25, width: 1, height: 1, bring: true });
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      expect(onFollow).toHaveBeenCalledWith("presenter");
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Someone brought everyone to this view" }));
+      expect(engine.camera().x).toBeCloseTo(-75, 2);
+      await render({ visible: true });
+      expect(engine.camera().x).toBeCloseTo(-75, 2);
+    },
+    true,
+    { onFollow },
+  );
 });
 
 it("keeps redo when colour changes without a selected scene element", async () => {
@@ -900,7 +928,7 @@ it("allows a manage-only custom role to clear without drawing", async () => {
 it("drops board action toasts when the board closes", async () => {
   await withOpenBoard(async (_container, _engine, _peer, toast, render) => {
     toast.mockClear();
-    await render({ visible: false });
+    await render(null);
     expect(toast).toHaveBeenCalledWith(null);
   });
 });
@@ -916,7 +944,7 @@ it("ignores a clear completion after the board lifetime ends", async () => {
         }),
     );
     await act(async () => menu.clear?.());
-    await render({ visible: false });
+    await render(null);
     toast.mockClear();
     await act(async () => resolve?.({ sceneId: "cleared", revision: "2" }));
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
