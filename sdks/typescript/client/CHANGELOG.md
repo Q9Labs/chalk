@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 5.1.0
 
+- Accept a server-selected media replacement during access refresh, including when the client clock still considers its prior credential valid, so rejoining with an expired media token works. The full participant subject check still runs before the client switches connections.
+- Add optional Sync health to connection snapshots without changing the public status union. Brief pong loss degrades without blocking; sustained silence triggers recovery and stable pongs clear it. Reaction acknowledgements time out after five seconds and are not replayed.
+- Guard media enabling at the controller boundary for every caller. Off intents are retained until Sync confirms them after reconnect, and media publication runs through revisioned workers so a late capture cannot enable a device after Off.
 - Add `media.captureCameraPreview()` to capture an unpublished camera track with the selected device and refresh the inventory after permission is granted. It shares live or pending camera capture; callers release a preview handle.
 - Exhausted media confirmations now return recoverable `media.timeout`; unrelated command retries are not classified as media failures.
 - Reaction acknowledgement timeouts return recoverable `collaboration.unavailable` without claiming whether the reaction arrived.

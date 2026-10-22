@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.1.0
 
 - Add optional `CallLimbo.className` for the message card, so a host can size the card around a form.
 - Route private camera previews through the SDK so granting permission refreshes the camera menu. Standalone `DevicePopover` and `ControlBarSurface` consumers can supply `captureCameraPreview`.
@@ -8,6 +8,7 @@
 - Keep keyboard-shortcut dialog content fixed while opening and closing. Report a problem remains unchanged and appears only when a host supplies `onReportProblem`.
 - Add optional `ChalkMenu.onOpenChange` for hosts that need to coordinate menu and dialog visibility.
 - Show stage-specific failed-entry guidance with a public error-code reference. Keep recoverable device capture warnings in the live call.
+- Show recovery notices without blocking the call, keep chat readable, and disable reaction sending and media enable controls until Sync is live. Local mute, private camera preview, device menus, and hand controls stay available.
 - Omit the reference when the host has no known error code instead of inventing an internal-error reference.
 
 ## 5.0.0

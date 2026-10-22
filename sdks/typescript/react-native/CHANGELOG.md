@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 5.1.0
 
+- Render registered native WebRTC host components so remote screen shares and camera video no longer disappear when React Native exports the video view as a string.
+- Disable reaction sending and media enable controls until Sync is live, and keep recovery notices non-blocking.
 - Show plain connection-not-ready and confirmation-timeout media feedback without exposing raw internal exception messages.
 
 ## 5.0.1

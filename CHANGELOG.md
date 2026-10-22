@@ -1,10 +1,12 @@
 # Changelog
 
-## 5.1.0 (unreleased)
+## 5.1.0
 
 - Client: add `media.captureCameraPreview()` for unpublished camera capture with post-permission device refresh. It shares live or pending camera capture; callers release a preview handle.
 - React: add optional `captureCameraPreview` to `DevicePopover` and `ControlBarSurface`, and optional `ChalkMenu.onOpenChange`. Fix camera-menu previews and the keyboard-shortcut dialog flash.
-- These additive SDK APIs require the next synchronized minor release. Before publishing, use `pnpm run package:release -- --bump 5.1.0` to advance the coordinated package versions, workspace ranges, and lockfile. This PR does not bump versions or publish packages.
+- Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
+- React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
+- Advance the seven coordinated Chalk SDK packages to 5.1.0. `@q9labsai/recording-presentation` remains at 0.1.1.
 
 ## 5.0.1 (unreleased)
 
