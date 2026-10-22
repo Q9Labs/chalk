@@ -1,6 +1,6 @@
-import type { Capability, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewClient, createSnapshot } from "@q9labsai/chalk-react/preview";
-import { boardActivity, planScene } from "./board-scene";
+import { boardActivity, planScene, smallScene } from "./board-scene";
 import { cameraTrack, screenTrack } from "./media";
 
 export type Person = {
@@ -134,8 +134,8 @@ export function chatMessages(): ChatMessage[] {
 export type CallStateClient = ReturnType<typeof createCallStateClient>;
 
 /** The preview client plus the two seams Chalk needs from a live client: lifecycle events and a whiteboard transport. */
-/** What the fixture board holds: the plan scene, and the people who move their pointers over it. */
-export type BoardFixture = { readonly scene?: boolean; readonly people?: readonly Person[] };
+/** What the fixture board holds: the plan scene or one small word, the people who move their pointers over it, and a relay channel to other tabs. */
+export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string };
 
 export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixture = {}) {
   const client = createPreviewClient(snapshot);
@@ -163,8 +163,15 @@ function boardTransport(board: BoardFixture, present: (presenting: boolean) => v
   const listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
   let revision = 1;
   let stopActivity: (() => void) | undefined;
-  const snapshot = (): ChalkWhiteboardV1Event => ({ type: "snapshot", sceneId: "scene-1", revision: String(revision), elements: board.scene ? planScene() : [] });
+  const snapshot = (): ChalkWhiteboardV1Event => ({ type: "snapshot", sceneId: "scene-1", revision: String(revision), elements: board.scene === "small" ? smallScene() : board.scene ? planScene() : [] });
   const commit = () => ({ operationId: `op-${++revision}`, sceneId: "scene-1", revision: String(revision) });
+  // Like Sync, a relay sends each accepted update to the other tabs on the same board, not back to its writer.
+  const relay = board.relay ? new BroadcastChannel(board.relay) : undefined;
+  if (relay)
+    relay.onmessage = (event: MessageEvent<readonly ChalkWhiteboardV1Element[]>) => {
+      const update: ChalkWhiteboardV1Event = { type: "update", sceneId: "scene-1", revision: String(++revision), elements: event.data };
+      listeners.forEach((listener) => listener(update));
+    };
   return {
     startSceneSubscription: () => Promise.resolve(),
     stopSceneSubscription: () => undefined,
@@ -179,7 +186,10 @@ function boardTransport(board: BoardFixture, present: (presenting: boolean) => v
         stopActivity = undefined;
       };
     },
-    submitUpdate: async () => commit(),
+    submitUpdate: async (input) => {
+      relay?.postMessage(input.elements);
+      return commit();
+    },
     sendCursor: () => undefined,
     sendView: () => true,
     requestSnapshot: async () => {

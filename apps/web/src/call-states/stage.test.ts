@@ -279,3 +279,89 @@ it("drops surface-coloured history before Undo and Redo can restore it", async (
   });
   expect(chalkPixels).toBe(0);
 });
+
+async function boardZoom() {
+  const label = await page.locator(".chalk-board-zoom-value").getAttribute("aria-label");
+  return Number(/Zoom (\d+)%/.exec(label ?? "")?.[1]);
+}
+
+it.each([
+  [1440, 900],
+  [1100, 760],
+])("opens a small drawing at full size, centred, in a %sx%s window", async (width, height) => {
+  await page.setViewportSize({ width, height });
+  try {
+    await open("board-small-dark");
+    await page.locator('.chalk-board[data-ready="true"]').waitFor();
+    await expect.poll(boardZoom, { timeout: 10_000 }).toBe(100);
+    // The word "Done" is the only green ink; its painted box sits in the middle of the board.
+    const centre = await page.locator(".excalidraw canvas.static").evaluate((element) => {
+      if (!(element instanceof HTMLCanvasElement)) throw new Error("Board canvas is missing");
+      const context = element.getContext("2d");
+      if (!context) throw new Error("Board paint context is missing");
+      const { data, width: w, height: h } = context.getImageData(0, 0, element.width, element.height);
+      let [left, right, top, bottom] = [w, 0, h, 0];
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const at = (y * w + x) * 4;
+          if (Math.abs((data[at] ?? 0) - 40) < 24 && Math.abs((data[at + 1] ?? 0) - 138) < 24 && Math.abs((data[at + 2] ?? 0) - 81) < 24) [left, right, top, bottom] = [Math.min(left, x), Math.max(right, x), Math.min(top, y), Math.max(bottom, y)];
+        }
+      return { x: (left + right) / 2 / w, y: (top + bottom) / 2 / h };
+    });
+    expect(centre.x).toBeCloseTo(0.5, 1);
+    expect(centre.y).toBeCloseTo(0.5, 1);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+it("still zooms out to fit a drawing larger than the board", async () => {
+  await page.setViewportSize({ width: 1100, height: 760 });
+  try {
+    await open("board-people-dark");
+    await page.locator('.chalk-board[data-ready="true"]').waitFor();
+    await expect.poll(boardZoom, { timeout: 10_000 }).toBeLessThan(100);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+it("brings a typed text back for both people after Undo and Redo", async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  try {
+    const [writer, viewer] = await Promise.all([context.newPage(), context.newPage()]);
+    for (const each of [writer, viewer]) {
+      await each.goto(`${origin}/call-states.html?state=board-relay-dark`, { waitUntil: "domcontentloaded" });
+      await each.locator('.chalk-board[data-ready="true"]').waitFor({ timeout: 20_000 });
+    }
+    // Ink is every painted pixel that stands out from the board's own colour.
+    const ink = (each: Page) =>
+      each.locator(".excalidraw canvas.static").evaluate((element) => {
+        if (!(element instanceof HTMLCanvasElement)) throw new Error("Board canvas is missing");
+        const context = element.getContext("2d");
+        if (!context) throw new Error("Board paint context is missing");
+        const { data } = context.getImageData(0, 0, element.width, element.height);
+        let count = 0;
+        for (let at = 0; at < data.length; at += 4) if (Math.abs((data[at] ?? 0) - (data[0] ?? 0)) + Math.abs((data[at + 1] ?? 0) - (data[1] ?? 0)) + Math.abs((data[at + 2] ?? 0) - (data[2] ?? 0)) > 120) count++;
+        return count;
+      });
+    const blank = (await ink(viewer)) + 50;
+    await writer.getByRole("button", { name: "Text", exact: true }).click();
+    await writer.locator(".excalidraw canvas.interactive").click();
+    await writer.keyboard.type("Shared note");
+    await writer.keyboard.press("Escape");
+    await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeGreaterThan(blank);
+
+    await writer.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeLessThan(blank);
+    // Undo leaves the text empty but on the board. A viewer that deletes it holds a copy as new as the writer's Redo,
+    // so whether Redo reaches them turns on a random tie-break.
+    await viewer.waitForTimeout(1_000);
+    expect(await viewer.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
+    await writer.getByRole("button", { name: "Redo", exact: true }).click({ timeout: 5_000 });
+    await expect.poll(() => ink(writer), { timeout: 10_000 }).toBeGreaterThan(blank);
+    await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeGreaterThan(blank);
+  } finally {
+    await context.close();
+  }
+});

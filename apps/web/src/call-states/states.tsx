@@ -122,6 +122,8 @@ export const CALL_STATES: readonly CallState[] = [
       actions: [{ click: "Follow Nora" }],
       render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
+    { id: `board-small-${scheme}`, title: `Board with one small word, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ scene: "small" }} /> },
+    { id: `board-relay-${scheme}`, title: `Board shared with other tabs, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ relay: `board-relay-${scheme}` }} /> },
     { id: `board-notes-${scheme}`, title: `Board sticky notes, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
   ]),
   { id: "board-loading", title: "Board loading", stallBoard: true, render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },

@@ -499,7 +499,13 @@ export class ExcalidrawCollabEngine {
     // Excalidraw takes the order of this list as the order of the elements and rewrites every order key that
     // disagrees with it. Sync lists a board by order key in its database's collation, not in the keys' own order.
     const remoteElements = [...(args.remoteElements as readonly ExcalidrawElement[])].sort(compareElementOrder);
-    const restoredRemote = restoreElements(remoteElements, null);
+    const received = new Map(remoteElements.map((element) => [element.id, element]));
+    // Excalidraw's restore deletes an empty text and bumps its version. A peer's undone text is empty but live, and
+    // a deleted copy here would be as new as the peer's Redo, so the Redo could lose the tie. Keep what arrived.
+    const restoredRemote = restoreElements(remoteElements, null).map((element) => {
+      const remote = received.get(element.id);
+      return remote && !remote.isDeleted && element.isDeleted ? { ...element, isDeleted: false, version: remote.version, versionNonce: remote.versionNonce } : element;
+    });
     this.storedImageFileIds = new Set([...this.storedImageFileIds, ...remoteImageFileIds(restoredRemote)]);
     const remoteForReconcile = toReconcileRemoteElements(restoredRemote);
     const appState = excalidrawAPI.getAppState();
