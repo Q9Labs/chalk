@@ -11,7 +11,14 @@ import { useLoad } from "./AppShell";
 import { ErrorPanel, Menu, MenuItem, Sk, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Ids = { readonly spaceId: string; readonly episodeId: string };
-type Transcript = { readonly kind: "loading" } | { readonly kind: "none" } | { readonly kind: "processing" } | { readonly kind: "failed" } | { readonly kind: "unavailable" } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
+type Transcript =
+  | { readonly kind: "loading" }
+  | { readonly kind: "none" }
+  | { readonly kind: "unrequested" }
+  | { readonly kind: "processing" }
+  | { readonly kind: "failed" }
+  | { readonly kind: "unavailable" }
+  | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
 
 async function loadSession({ spaceId, episodeId }: Ids) {
   const [session, call] = await Promise.all([readPage("past-session", { spaceId, episodeId }), readPage("call", { spaceId })]);
@@ -269,13 +276,16 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
       const { transcripts } = await act("past-session", { action: "transcripts", ...ids, recordingId });
       const transcript = transcripts.find((item) => item.status === "completed" || item.status === "complete") ?? transcripts[0];
       if (!transcript) {
+        // A transcript is made from the transcription source, which can outlive the video source.
+        if (transcriptionStatus === "ready") return { kind: "none" };
         if (sourceStatus === "failed" || sourceStatus === "expired" || transcriptionStatus === "expired") return { kind: "unavailable" };
         if (transcriptionStatus === "failed") return { kind: "failed" };
         return { kind: transcriptionStatus === "pending" || sourceStatus === "pending" ? "processing" : "none" };
       }
       if (transcript.status === "failed" || transcript.status === "terminal_failure") return { kind: "failed" };
       if (transcript.status === "deleted") return { kind: "unavailable" };
-      if (transcript.status === "not_requested") return { kind: "none" };
+      // The server refuses a new transcript while any transcript row exists for the recording.
+      if (transcript.status === "not_requested") return { kind: "unrequested" };
       if (transcript.status !== "completed" && transcript.status !== "complete") return { kind: "processing" };
       const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: transcript.id });
       return { kind: "ready", transcript, cues };
@@ -474,6 +484,7 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
       </div>
     );
   else if (transcript.kind === "processing") body = <div className="tempty">The transcript is being prepared.</div>;
+  else if (transcript.kind === "unrequested") body = <div className="tempty">There’s no transcript for this recording.</div>;
   else if (transcript.kind === "none")
     body = (
       <div className="tempty">

@@ -188,6 +188,21 @@ it("offers an older preparable attempt when the newest attempt failed", async ()
   expect(requests.filter((request) => request.action === "export-recording").map((request) => request.recordingId)).toEqual([older]);
 });
 
+it("offers a transcript when the video source expired but its transcription source is ready", async () => {
+  source = "expired";
+  artifact = "unavailable";
+  transcriptStatus = "";
+  await open();
+  expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
+});
+
+it("does not offer to create a transcript over an existing not-requested one", async () => {
+  transcriptStatus = "not_requested";
+  await open();
+  expect(screen.getByText("There’s no transcript for this recording.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+});
+
 it("replaces pending capture with its terminal reason without a reload", async () => {
   source = "pending";
   artifact = "unavailable";
