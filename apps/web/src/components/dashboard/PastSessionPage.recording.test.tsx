@@ -654,3 +654,35 @@ it("retries a transcript refresh that fails after an earlier read succeeded", as
   expect(screen.getByText("Saved speech")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
 });
+
+it("closes the prepare action on the server's answer when this page's clock runs behind", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  // The server's clock is 30 seconds ahead of the page's.
+  serverLagMs = -30_000;
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  await open();
+  // The server has closed the window, but the page's own deadline is still ahead, so it keeps the action until told.
+  await advance(40_000);
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
+  // recordings.go:161-175 answers a closed source with 202 and its unavailable state, which the page shows at once.
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
+  });
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+});
+
+it("asks the server at the page's own deadline when its clock runs behind and nothing was clicked", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  serverLagMs = -30_000;
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  await open();
+  await advance(59_000);
+  expect(metadataReads()).toBe(0);
+  await advance(1_000);
+  expect(metadataReads()).toBe(1);
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+});
