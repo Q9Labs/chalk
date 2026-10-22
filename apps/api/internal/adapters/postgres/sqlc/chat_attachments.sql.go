@@ -630,9 +630,7 @@ with authority as materialized (
         participant.space_id,
         participant.episode_id,
         participant.id,
-        participant.generation,
-        participant.account_id,
-        participant.identity_id
+        participant.generation
     from participants participant
     join episodes episode
         on episode.tenant_id = participant.tenant_id
@@ -667,31 +665,18 @@ reservation as (
     where sync_chat_streams.space_id = excluded.space_id
         and sync_chat_streams.attachment_count < 1000
         and sync_chat_streams.attachment_bytes + $8 <= 5368709120
-        -- One person may hold at most 40 attachments or 200 MiB of the Space budget. Rejoining
-        -- creates a new participant row, so this counts every row with the same account or identity.
+        -- One person may hold at most 40 attachments or 200 MiB of the Space budget, however many
+        -- times they rejoin. chat_person_participant_ids is shared with Sync's message limits.
         and (
             select count(*) < 40
                 and coalesce(sum(held.byte_length), 0) + $8 <= 209715200
             from sync_chat_attachments held
             where held.tenant_id = $11
                 and held.space_id = $12
-                and held.participant_id in (
-                    -- One lookup per key, so each uses its own index instead of scanning the Space.
-                    select authority.id
-                    from authority
-                    union
-                    select sibling.id
-                    from participants sibling
-                    join authority on sibling.account_id = authority.account_id
-                    where sibling.tenant_id = $11
-                        and sibling.space_id = $12
-                    union
-                    select sibling.id
-                    from participants sibling
-                    join authority on sibling.identity_id = authority.identity_id
-                    where sibling.tenant_id = $11
-                        and sibling.space_id = $12
-                )
+                and held.participant_id = any(array(
+                    select participant_id
+                    from chat_person_participant_ids($11, $12, $14)
+                ))
         )
     returning
         sync_chat_streams.tenant_id,

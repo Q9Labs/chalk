@@ -1,7 +1,6 @@
-defmodule ChalkSync.Chat.ParticipantLimitsPostgresTest do
+defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Admission
   alias ChalkSync.Chat
   alias ChalkSync.Chat.Repository.Postgres, as: Repository
   alias ChalkSync.Fanout.Collaboration
@@ -36,35 +35,88 @@ defmodule ChalkSync.Chat.ParticipantLimitsPostgresTest do
       })
 
     on_exit(fn ->
-      Application.delete_env(:chalk_sync, :chat_participant_limits)
+      Application.delete_env(:chalk_sync, :chat_person_limits)
       SyncPostgres.cleanup(connection, fixture.episode)
     end)
 
     {:ok, fixture: fixture, fanout: start_supervised!({Collaboration, name: nil})}
   end
 
-  test "one Participant's chat sends are rate limited without slowing another Participant",
+  test "one person's chat sends are rate limited without slowing another person",
        %{fixture: fixture, fanout: fanout} do
     [first, second] = fixture.identities
-    admission = start_supervised!({Admission, name: nil, rate_max: [chat: 2]})
-    options = [fanout: fanout, admission: admission]
+    limit(window_messages: 2)
 
     outcomes =
       for index <- 1..3 do
-        {:ok, result} = Chat.send_chat(first, chat("rate-first-#{index}"), options)
+        {:ok, result} = Chat.send_chat(first, chat("rate-first-#{index}"), fanout: fanout)
         {result["outcome"], result["error_code"]}
       end
 
     assert outcomes == [{"accepted", nil}, {"accepted", nil}, {"rejected", "rate_limited"}]
 
     assert {:ok, %{"outcome" => "accepted"}} =
-             Chat.send_chat(second, chat("rate-second-1"), options)
+             Chat.send_chat(second, chat("rate-second-1"), fanout: fanout)
   end
 
-  test "one Participant cannot fill the Space chat history past its message cap",
+  test "a retry of a stored message gets its original result when the window is full",
+       %{fixture: fixture, fanout: fanout} do
+    [first, _second] = fixture.identities
+    limit(window_messages: 1)
+
+    assert {:ok, %{"outcome" => "accepted", "message" => original}} =
+             Chat.send_chat(first, chat("retry-first-1"), fanout: fanout)
+
+    assert {:ok, %{"outcome" => "rejected", "error_code" => "rate_limited"}} =
+             Chat.send_chat(first, chat("retry-first-2"), fanout: fanout)
+
+    assert {:ok, %{"outcome" => "accepted", "message" => ^original}} =
+             Chat.send_chat(first, chat("retry-first-1"), fanout: fanout)
+  end
+
+  test "a person who rejoins as a new participant keeps the same rate window",
+       %{connection: connection, fixture: fixture} do
+    [first, rejoined] = same_person(connection, fixture)
+    limit(window_messages: 2)
+
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("rejoin-rate-1"))
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("rejoin-rate-2"))
+    assert {:error, :rate_limited} = Repository.append(rejoined, chat("rejoin-rate-3"))
+  end
+
+  test "sends from a seat that may no longer chat do not spend the person's window",
+       %{connection: connection, fixture: fixture} do
+    [stale, current] = same_person(connection, fixture)
+    limit(window_messages: 1)
+
+    Postgrex.query!(
+      connection,
+      "update participants set status = 'left', left_at = now(), last_left_reason = 'left' where id = $1",
+      [UUID.dump!(stale.participant_id)]
+    )
+
+    for index <- 1..3 do
+      assert {:error, reason} = Repository.append(stale, chat("stale-seat-#{index}"))
+      refute reason == :rate_limited
+    end
+
+    assert {:ok, %{outcome: :committed}} = Repository.append(current, chat("current-seat-1"))
+  end
+
+  test "a person who rejoins as a new participant keeps the same message cap",
+       %{connection: connection, fixture: fixture} do
+    [first, rejoined] = same_person(connection, fixture)
+    limit(messages: 2)
+
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("rejoin-cap-1"))
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("rejoin-cap-2"))
+    assert {:error, :rate_limited} = Repository.append(rejoined, chat("rejoin-cap-3"))
+  end
+
+  test "one person cannot fill the Space chat history past the message cap",
        %{fixture: fixture} do
     [first, second] = fixture.identities
-    Application.put_env(:chalk_sync, :chat_participant_limits, %{messages: 2, bytes: 1_000_000})
+    limit(messages: 2)
 
     assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("count-first-1"))
     assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("count-first-2"))
@@ -73,26 +125,21 @@ defmodule ChalkSync.Chat.ParticipantLimitsPostgresTest do
     assert {:ok, %{outcome: :committed}} = Repository.append(second, chat("count-second-1"))
   end
 
-  test "a retry of a stored message gets its original result after the window is full",
-       %{fixture: fixture, fanout: fanout} do
-    [first, _second] = fixture.identities
-    admission = start_supervised!({Admission, name: nil, rate_max: [chat: 1, chat_retry: 1]})
-    options = [fanout: fanout, admission: admission]
+  test "one person cannot fill the Space chat history past the byte cap",
+       %{fixture: fixture} do
+    [first, second] = fixture.identities
+    limit(bytes: 1_500)
+    long = String.duplicate("a", 600)
 
-    assert {:ok, %{"outcome" => "accepted", "message" => original}} =
-             Chat.send_chat(first, chat("retry-first-1"), options)
-
-    assert {:ok, %{"outcome" => "accepted", "message" => ^original}} =
-             Chat.send_chat(first, chat("retry-first-1"), options)
-
-    # The lookup window is now full too, so further retries are refused without a read.
-    assert {:ok, %{"outcome" => "rejected", "error_code" => "rate_limited"}} =
-             Chat.send_chat(first, chat("retry-first-1"), options)
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("bytes-first-1", long))
+    assert {:error, :rate_limited} = Repository.append(first, chat("bytes-first-2", long))
+    assert {:ok, %{outcome: :committed}} = Repository.append(second, chat("bytes-second-1", long))
   end
 
-  test "a person who rejoins as a new participant keeps the same message cap",
-       %{connection: connection, fixture: fixture} do
-    [first, rejoined] = fixture.identities
+  defp limit(limits), do: Application.put_env(:chalk_sync, :chat_person_limits, Map.new(limits))
+
+  # Both seeded participants become one API identity, the way a rejoin creates a second row.
+  defp same_person(connection, fixture) do
     identity_id = UUID.generate()
     tenant_id = UUID.dump!(fixture.episode.tenant_id)
 
@@ -102,11 +149,10 @@ defmodule ChalkSync.Chat.ParticipantLimitsPostgresTest do
       [UUID.dump!(identity_id), tenant_id, "chat-limit-#{identity_id}"]
     )
 
-    Postgrex.query!(
-      connection,
-      "update participants set identity_id = $2 where tenant_id = $1",
-      [tenant_id, UUID.dump!(identity_id)]
-    )
+    Postgrex.query!(connection, "update participants set identity_id = $2 where tenant_id = $1", [
+      tenant_id,
+      UUID.dump!(identity_id)
+    ])
 
     on_exit(fn ->
       Postgrex.query!(
@@ -120,22 +166,7 @@ defmodule ChalkSync.Chat.ParticipantLimitsPostgresTest do
       Postgrex.query!(connection, "delete from identities where tenant_id = $1", [tenant_id])
     end)
 
-    Application.put_env(:chalk_sync, :chat_participant_limits, %{messages: 2, bytes: 1_000_000})
-
-    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("rejoin-first-1"))
-    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("rejoin-first-2"))
-    assert {:error, :rate_limited} = Repository.append(rejoined, chat("rejoin-again-1"))
-  end
-
-  test "one Participant cannot fill the Space chat history past its byte cap",
-       %{fixture: fixture} do
-    [first, second] = fixture.identities
-    Application.put_env(:chalk_sync, :chat_participant_limits, %{messages: 100, bytes: 1_500})
-    long = String.duplicate("a", 600)
-
-    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("bytes-first-1", long))
-    assert {:error, :rate_limited} = Repository.append(first, chat("bytes-first-2", long))
-    assert {:ok, %{outcome: :committed}} = Repository.append(second, chat("bytes-second-1", long))
+    fixture.identities
   end
 
   defp chat(client_message_id, text \\ "Hello"),

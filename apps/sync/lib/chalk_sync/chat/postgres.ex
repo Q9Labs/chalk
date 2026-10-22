@@ -20,8 +20,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
-  # One person may hold at most 4% of a Space stream's 250,000 messages and 2 GiB.
-  @participant_limits %{messages: 10_000, bytes: 64 * 1024 * 1024}
+  # One person may send 30 messages in 10 seconds and hold at most 4% of a Space stream's
+  # 250,000 messages and 2 GiB, however many times they rejoin.
+  @person_limits %{
+    window_messages: 30,
+    window_ms: 10_000,
+    messages: 10_000,
+    bytes: 64 * 1024 * 1024
+  }
   @capabilities ["sendReaction", "sendChat"]
 
   @impl true
@@ -96,19 +102,6 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   def append(%Identity{}, _input), do: {:error, :invalid_payload}
-
-  @impl true
-  def committed(%Identity{} = identity, %{
-        client_message_id: client_message_id,
-        text: text,
-        attachment_ids: attachment_ids
-      }) do
-    existing(identity, client_message_id, request_fingerprint(text, attachment_ids))
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
 
   @impl true
   def head(%EpisodeKey{} = episode) do
@@ -322,7 +315,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   defp append_after_authorization(connection, identity, input, fingerprint) do
     with {:ok, profile} <- lock_authority(connection, identity),
-         :ok <- require_capability(profile, "sendChat") do
+         :ok <- require_capability(profile, "sendChat"),
+         :ok <- within_person_rate(connection, identity, input.client_message_id) do
       params = space_params(identity.episode)
       Postgrex.query!(connection, SQL.insert_stream(), params)
 
@@ -406,7 +400,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     encoded_bytes = Message.encoded_bytes(message)
     params = space_params(identity.episode)
 
-    with :ok <- within_person_limits(connection, identity, encoded_bytes),
+    with :ok <- within_person_caps(connection, identity, encoded_bytes),
          [[^sequence]] <-
            Postgrex.query!(connection, SQL.reserve_message(), params ++ [sequence, encoded_bytes]).rows do
       insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
@@ -418,21 +412,46 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
+  # This runs before the Space stream lock, so a refused flood never holds it. A retry of a stored
+  # message skips the window and gets its original result under the lock.
+  defp within_person_rate(connection, identity, client_message_id) do
+    limits = person_limits()
+
+    cond do
+      select_idempotent(connection, identity, client_message_id) != nil ->
+        :ok
+
+      person_count(connection, identity, SQL.person_recent_messages(), [limits.window_ms]) <
+          limits.window_messages ->
+        :ok
+
+      true ->
+        {:error, :rate_limited}
+    end
+  end
+
   # The Space stream lock is held here, so two sends from one person cannot both pass.
-  defp within_person_limits(connection, identity, encoded_bytes) do
-    limits = Application.get_env(:chalk_sync, :chat_participant_limits, @participant_limits)
+  defp within_person_caps(connection, identity, encoded_bytes) do
+    limits = person_limits()
 
     [[count, bytes]] =
-      Postgrex.query!(
-        connection,
-        SQL.person_usage(),
-        space_params(identity.episode) ++ [uuid(identity.participant_id)]
-      ).rows
+      Postgrex.query!(connection, SQL.person_usage(), person_params(identity)).rows
 
     if count < limits.messages and bytes + encoded_bytes <= limits.bytes,
       do: :ok,
       else: {:error, :rate_limited}
   end
+
+  defp person_count(connection, identity, sql, params) do
+    [[count]] = Postgrex.query!(connection, sql, person_params(identity) ++ params).rows
+    count
+  end
+
+  defp person_params(identity),
+    do: space_params(identity.episode) ++ [uuid(identity.participant_id)]
+
+  defp person_limits,
+    do: Map.merge(@person_limits, Application.get_env(:chalk_sync, :chat_person_limits, %{}))
 
   defp insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence) do
     Postgrex.query!(
@@ -543,24 +562,17 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   defp resolve_uncertain_append(identity, client_message_id, fingerprint) do
-    case existing(identity, client_message_id, fingerprint) do
-      :not_found -> {:error, :dependency_unavailable}
-      result -> result
-    end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp existing(identity, client_message_id, fingerprint) do
     connection = Database.connection(identity.episode, 1)
 
     case select_idempotent(connection, identity, client_message_id) do
       {message, ^fingerprint} -> {:ok, %{outcome: :duplicate, message: message}}
       {_message, _other_fingerprint} -> {:error, :client_message_id_conflict}
-      nil -> :not_found
+      nil -> {:error, :dependency_unavailable}
     end
+  rescue
+    _exception -> {:error, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   defp lock_authority(connection, identity) do

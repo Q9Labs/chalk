@@ -26,9 +26,7 @@ with authority as materialized (
         participant.space_id,
         participant.episode_id,
         participant.id,
-        participant.generation,
-        participant.account_id,
-        participant.identity_id
+        participant.generation
     from participants participant
     join episodes episode
         on episode.tenant_id = participant.tenant_id
@@ -63,31 +61,18 @@ reservation as (
     where sync_chat_streams.space_id = excluded.space_id
         and sync_chat_streams.attachment_count < 1000
         and sync_chat_streams.attachment_bytes + sqlc.arg(byte_length) <= 5368709120
-        -- One person may hold at most 40 attachments or 200 MiB of the Space budget. Rejoining
-        -- creates a new participant row, so this counts every row with the same account or identity.
+        -- One person may hold at most 40 attachments or 200 MiB of the Space budget, however many
+        -- times they rejoin. chat_person_participant_ids is shared with Sync's message limits.
         and (
             select count(*) < 40
                 and coalesce(sum(held.byte_length), 0) + sqlc.arg(byte_length) <= 209715200
             from sync_chat_attachments held
             where held.tenant_id = sqlc.arg(tenant_id)
                 and held.space_id = sqlc.arg(space_id)
-                and held.participant_id in (
-                    -- One lookup per key, so each uses its own index instead of scanning the Space.
-                    select authority.id
-                    from authority
-                    union
-                    select sibling.id
-                    from participants sibling
-                    join authority on sibling.account_id = authority.account_id
-                    where sibling.tenant_id = sqlc.arg(tenant_id)
-                        and sibling.space_id = sqlc.arg(space_id)
-                    union
-                    select sibling.id
-                    from participants sibling
-                    join authority on sibling.identity_id = authority.identity_id
-                    where sibling.tenant_id = sqlc.arg(tenant_id)
-                        and sibling.space_id = sqlc.arg(space_id)
-                )
+                and held.participant_id = any(array(
+                    select participant_id
+                    from chat_person_participant_ids(sqlc.arg(tenant_id), sqlc.arg(space_id), sqlc.arg(participant_id))
+                ))
         )
     returning
         sync_chat_streams.tenant_id,

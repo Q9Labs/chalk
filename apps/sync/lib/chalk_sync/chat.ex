@@ -1,6 +1,5 @@
 defmodule ChalkSync.Chat do
   @moduledoc "Durable Space chat commands and collaboration_v1 negotiation."
-  alias ChalkSync.Admission
   alias ChalkSync.Chat.Repository.Message
   alias ChalkSync.Chat.Repository.Postgres, as: PostgresRepository
   alias ChalkSync.Fanout.Collaboration
@@ -8,12 +7,7 @@ defmodule ChalkSync.Chat do
   alias ChalkSync.Stateholder.Identity
   @extension "collaboration_v1"
   @reactions_extension "collaboration_v2"
-  @type options :: [
-          repository: module(),
-          fanout: GenServer.server(),
-          admission: GenServer.server(),
-          observability: term()
-        ]
+  @type options :: [repository: module(), fanout: GenServer.server(), observability: term()]
   @spec negotiate(Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket) do
     negotiate(identity, chat_cursor, socket, [])
@@ -65,17 +59,14 @@ defmodule ChalkSync.Chat do
     repository = repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
-    input =
-      input
-      |> Map.put(:client_message_id, client_message_id)
-      |> Map.put(:text, text)
-      |> Map.put(:attachment_ids, attachment_ids)
-
     append_result =
-      case Admission.admit(admission(options), :chat, identity) do
-        :ok -> repository.append(identity, input)
-        {:error, reason} -> committed_or_rejected(repository, identity, input, options, reason)
-      end
+      repository.append(
+        identity,
+        input
+        |> Map.put(:client_message_id, client_message_id)
+        |> Map.put(:text, text)
+        |> Map.put(:attachment_ids, attachment_ids)
+      )
 
     case append_result do
       {:ok, %{outcome: outcome, message: message}} ->
@@ -263,20 +254,6 @@ defmodule ChalkSync.Chat do
     }
   end
 
-  # A retry of a message that already committed must still get its original result, even when
-  # the sender's window is full. Those lookups have their own window so a flood cannot use the
-  # rejection path to drive unbounded reads.
-  defp committed_or_rejected(repository, identity, input, options, reason) do
-    with :ok <- Admission.admit(admission(options), :chat_retry, identity),
-         {:ok, _duplicate} = result <- repository.committed(identity, input) do
-      result
-    else
-      :not_found -> {:error, reason}
-      {:error, :client_message_id_conflict} = conflict -> conflict
-      {:error, _lookup_unavailable} -> {:error, reason}
-    end
-  end
-
   defp rejected_chat(client_message_id, reason) do
     %{
       "type" => "chat_send_result",
@@ -395,7 +372,4 @@ defmodule ChalkSync.Chat do
       Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
     )
   end
-
-  defp admission(options),
-    do: Keyword.get(options, :admission, Application.get_env(:chalk_sync, :admission, Admission))
 end

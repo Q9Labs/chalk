@@ -110,34 +110,26 @@ defmodule ChalkSync.Chat.Repository.SQL do
     """
   end
 
-  # Rejoining creates a new participant row, so usage counts every row in the Space that
-  # shares the sender's account or API identity, not only the current row.
+  # chat_person_participant_ids is the one definition of a person, shared with the API's
+  # attachment cap, so a rejoin under a new participant row keeps the same limits.
+  def person_recent_messages do
+    """
+    select count(*)
+    from sync_chat_messages message
+    where message.tenant_id = $1
+      and message.space_id = $2
+      and message.created_at > now() - make_interval(secs => $4::bigint / 1000.0)
+      and message.participant_id = any(array(select participant_id from chat_person_participant_ids($1, $2, $3)))
+    """
+  end
+
   def person_usage do
     """
-    with sender as materialized (
-      select account_id, identity_id
-      from participants
-      where tenant_id = $1 and space_id = $2 and id = $3
-    ),
-    -- One lookup per key, so each uses its own index instead of scanning the Space.
-    person as materialized (
-      select $3::uuid as id
-      union
-      select sibling.id
-      from participants sibling
-      join sender on sibling.account_id = sender.account_id
-      where sibling.tenant_id = $1 and sibling.space_id = $2
-      union
-      select sibling.id
-      from participants sibling
-      join sender on sibling.identity_id = sender.identity_id
-      where sibling.tenant_id = $1 and sibling.space_id = $2
-    )
     select count(*), coalesce(sum(message.encoded_bytes), 0)::bigint
     from sync_chat_messages message
     where message.tenant_id = $1
       and message.space_id = $2
-      and message.participant_id in (select id from person)
+      and message.participant_id = any(array(select participant_id from chat_person_participant_ids($1, $2, $3)))
     """
   end
 

@@ -83,16 +83,6 @@ defmodule ChalkSync.Chat.Repository do
               {:ok, %{outcome: :committed | :duplicate, message: message()}}
               | {:error, error_code()}
 
-  @doc "Finds the stored result of an earlier `append/2` with the same client_message_id."
-  @callback committed(Identity.t(), %{
-              client_message_id: String.t(),
-              text: String.t(),
-              attachment_ids: [String.t()]
-            }) ::
-              {:ok, %{outcome: :duplicate, message: message()}}
-              | :not_found
-              | {:error, error_code()}
-
   @callback react(Identity.t(), map()) :: {:ok, map()} | {:error, error_code()}
 
   @callback head(EpisodeKey.t()) :: {:ok, head()} | {:error, error_code()}
