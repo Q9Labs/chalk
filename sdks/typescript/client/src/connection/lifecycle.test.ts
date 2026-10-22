@@ -213,3 +213,152 @@ function recoveryFixture() {
   };
   return fixture;
 }
+
+function admissionLayer(options: Pick<ConnectionOptions, "access" | "dependencies">) {
+  return makeConnectionLifecycleLayer({ apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", ...options });
+}
+function exerciseAdmission<A, E>(layer: ReturnType<typeof admissionLayer>, exercise: (lifecycle: ConnectionLifecycleCapability) => Effect.Effect<A, E>) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const lifecycle = yield* Effect.service(ConnectionLifecycleService);
+      return yield* exercise(lifecycle);
+    }).pipe(Effect.provide(layer), Effect.scoped),
+  );
+}
+function blockedSync(platform: ReturnType<typeof createCoreTestPlatform>) {
+  return {
+    ...platform.sync,
+    start: async () => {
+      throw new Error("blocked socket");
+    },
+  };
+}
+
+describe("failed join admission cleanup", () => {
+  it("re-admits a cancelled seat instead of trying to refresh it after access rejection", async () => {
+    const platform = createCoreTestPlatform();
+    const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
+    let cancelled = false;
+    let rejectAccess = true;
+    const layer = admissionLayer({
+      access: async ({ reason }) => {
+        if (reason === "join") cancelled = false;
+        if (cancelled) throw new Error("A cancelled admission cannot refresh access");
+        return grant;
+      },
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: async () => {
+          cancelled = true;
+          return true;
+        },
+        createSyncClient: () => {
+          if (rejectAccess) {
+            rejectAccess = false;
+            throw new ConnectionAccessFailure({ code: "access.invalid", cause: "rejected token" });
+          }
+          return platform.sync;
+        },
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Success");
+      }),
+    );
+  });
+
+  it("can retry the same confirmed seat when media fails after hello", async () => {
+    const platform = createCoreTestPlatform();
+    const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
+    let seat: "pending" | "joined" | "left" = "pending";
+    let attempts = 0;
+    let confirmHello!: () => void;
+    const hello = new Promise<void>((resolve) => {
+      confirmHello = resolve;
+    });
+    const layer = admissionLayer({
+      access: async () => {
+        if (seat === "left") throw new Error("The idempotent join is terminal");
+        return grant;
+      },
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: async () => seat !== "joined",
+        createSyncClient: () => ({
+          ...platform.sync,
+          start: async () => {
+            seat = "joined";
+            await platform.sync.start();
+            confirmHello();
+          },
+          leave: async () => {
+            seat = "left";
+            return platform.sync.leave();
+          },
+        }),
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          start: async () => {
+            await hello;
+            if (attempts++ === 0) throw new Error("Media signaling failed after hello");
+          },
+        }),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Failure");
+        expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Success");
+        yield* lifecycle.leave();
+        expect(seat).toBe("left");
+      }),
+    );
+  });
+
+  it("cancels the admitted seat before discarding access when Sync startup fails", async () => {
+    const platform = createCoreTestPlatform();
+    const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
+    const cancelled: string[] = [];
+    const layer = admissionLayer({
+      access: async () => grant,
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: async (access) => {
+          cancelled.push(access.subject.participantId);
+          return true;
+        },
+        createSyncClient: () => blockedSync(platform),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.exit(lifecycle.join());
+        expect(result._tag).toBe("Failure");
+        expect(cancelled).toEqual([grant.subject.participantId]);
+      }),
+    );
+  });
+});
+
+it("keeps failed HTTP cleanup unconfirmed so local Leave cannot clear a retry identity", async () => {
+  const platform = createCoreTestPlatform();
+  const layer = admissionLayer({
+    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+    dependencies: {
+      ...platform.dependencies,
+      cancelPendingAdmission: async () => {
+        throw new Error("offline");
+      },
+      createSyncClient: () => blockedSync(platform),
+    },
+  });
+  await exerciseAdmission(layer, (lifecycle) =>
+    Effect.gen(function* () {
+      expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Failure");
+      expect((yield* Effect.exit(lifecycle.leave()))._tag).toBe("Failure");
+      expect((yield* Effect.exit(lifecycle.leave()))._tag).toBe("Failure");
+      expect(lifecycle.getSnapshot().failure?.code).toBe("leave_unconfirmed");
+    }),
+  );
+});

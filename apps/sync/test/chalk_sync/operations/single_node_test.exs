@@ -45,6 +45,11 @@ defmodule ChalkSync.Operations.SingleNodeTest do
     assert {:error, :synchronous_standby_not_configured} = Probe.validate_database(observations)
   end
 
+  test "rejects a database without pending join transitions", %{observations: observations} do
+    assert {:error, :incompatible_database_migration} =
+             Probe.validate_database(%{observations | migration_version: 20_261_019_120_000})
+  end
+
   test "single-node mode retains primary durability checks", %{observations: observations} do
     for setting <- [:fsync, :full_page_writes, :data_checksums] do
       assert {:error, :unsafe_database_durability} =

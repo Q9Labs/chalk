@@ -28,7 +28,16 @@ function readOwnerReload(spaceId: string) {
 
 /** Owner access for one call: `join` admits the owner, `refresh-access` renews the same seat. */
 function ownerAccess(spaceId: string) {
+  const joinStorageKey = `chalk.owner-join:${spaceId}`;
   let joinKey = intentKey();
+  try {
+    joinKey = window.sessionStorage.getItem(joinStorageKey) ?? joinKey;
+    window.sessionStorage.setItem(joinStorageKey, joinKey);
+  } catch {
+    // The pending-seat lease still covers browsers with tab storage disabled.
+  }
+  const episodeStorageKey = `${joinStorageKey}:episode`;
+  let joined = false;
   let current: OwnerAccessDTO["access"] | undefined;
   const listeners = new Set<() => void>();
   let recovery: ReturnType<typeof readOwnerReload> | undefined;
@@ -36,6 +45,10 @@ function ownerAccess(spaceId: string) {
   const clearReload = () => {
     try {
       window.sessionStorage.removeItem(reloadRejoinStorageKey);
+      if (joined) {
+        window.sessionStorage.removeItem(joinStorageKey);
+        window.sessionStorage.removeItem(episodeStorageKey);
+      }
     } catch {
       // Storage may be disabled; intentional leave must still work.
     }
@@ -43,9 +56,24 @@ function ownerAccess(spaceId: string) {
   const restore = async () => {
     if (recovery === undefined) recovery = readOwnerReload(spaceId);
     const saved = recovery;
-    if (!saved) return;
+    let pendingEpisode: string | null = null;
+    try {
+      pendingEpisode = window.sessionStorage.getItem(episodeStorageKey);
+    } catch {
+      /* Tab storage is optional. */
+    }
+    if (!saved && !pendingEpisode) return;
     const page = await readPage("call", { spaceId });
-    if (page.live?.id === saved.episodeId) joinKey = saved.joinKey;
+    if (saved && page.live?.id === saved.episodeId) joinKey = saved.joinKey;
+    else if (pendingEpisode && page.live?.id !== pendingEpisode) {
+      joinKey = intentKey();
+      try {
+        window.sessionStorage.setItem(joinStorageKey, joinKey);
+        window.sessionStorage.removeItem(episodeStorageKey);
+      } catch {
+        /* The old Episode is terminal even without tab storage. */
+      }
+    }
   };
   const getAccess: GetAccess = async ({ reason, replaceMediaConnection }) => {
     await (restoring ??= restore().catch((error) => {
@@ -58,6 +86,12 @@ function ownerAccess(spaceId: string) {
         : // Without the current token the server replaces the media connection.
           await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
+    try {
+      window.sessionStorage.setItem(joinStorageKey, joinKey);
+      window.sessionStorage.setItem(episodeStorageKey, access.subject.episode_id);
+    } catch {
+      /* The lease still covers pending admission. */
+    }
     for (const listener of listeners) listener();
     return access;
   };
@@ -78,10 +112,14 @@ function ownerAccess(spaceId: string) {
       // Reload recovery is unavailable with tab storage disabled.
     }
   };
+  const observe = (snapshot: ReturnType<SpaceClient["getSnapshot"]>) => {
+    if (snapshot.connection.status === "live" || snapshot.connection.status === "reconnecting") joined = true;
+  };
   return {
     getAccess,
     saveReload,
     clearReload,
+    observe,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => {
@@ -107,18 +145,21 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
     };
+    const unsubscribe = owned.subscribe(() => owner.observe(owned.getSnapshot()));
     window.addEventListener("pagehide", pagehide);
     setClient(owned);
     return () => {
+      unsubscribe();
       window.removeEventListener("pagehide", pagehide);
       void owned
         .leave()
+        .then(() => owner.clearReload())
         .catch(() => undefined)
         .finally(() => owned.dispose());
     };
   }, [spaceId, owner, apiBaseURL]);
   const leave = () => {
-    owner.clearReload();
+    if (client?.getSnapshot().connection.lastError?.code !== "connection.leave_unconfirmed") owner.clearReload();
     void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
   };
 

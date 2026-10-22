@@ -69,11 +69,18 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: CommandDecision.resolve_receipt(identity, command)
 
   @impl ChalkSync.Stateholder
-  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id)
-      when is_binary(lifecycle_intent_id) do
+  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id),
+    do: apply_lifecycle(episode, lifecycle_intent_id, nil)
+
+  @impl ChalkSync.Stateholder
+  def confirm_admission(%Identity{} = identity),
+    do: apply_lifecycle(identity.episode, identity.admission_lifecycle_intent_id, identity)
+
+  defp apply_lifecycle(episode, lifecycle_intent_id, identity)
+       when is_binary(lifecycle_intent_id) do
     case UUID.dump(lifecycle_intent_id) do
       {:ok, _uuid} ->
-        case run_lifecycle_transaction(episode, lifecycle_intent_id) do
+        case run_lifecycle_transaction(episode, lifecycle_intent_id, identity) do
           {:ok, %LifecycleDecision{} = decision} ->
             FaultHooks.lifecycle(:after_commit_before_reply, episode, lifecycle_intent_id)
             WebhookObservation.lifecycle(episode, lifecycle_intent_id, decision)
@@ -386,10 +393,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     )
   end
 
-  defp run_lifecycle_transaction(episode, lifecycle_intent_id) do
+  defp run_lifecycle_transaction(episode, lifecycle_intent_id, identity) do
     Postgrex.transaction(
       Database.connection(episode),
-      &Lifecycle.transaction(&1, episode, lifecycle_intent_id),
+      &Lifecycle.transaction(&1, episode, lifecycle_intent_id, identity),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync lifecycle intent"
     )

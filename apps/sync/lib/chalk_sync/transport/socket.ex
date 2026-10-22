@@ -829,11 +829,8 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, _lifecycle} <-
-           Stateholder.apply_lifecycle_intent(
-             identity.episode,
-             identity.admission_lifecycle_intent_id
-           ),
+    with {:ok, %{result: result}} when result in [:applied, :already_applied] <-
+           Stateholder.confirm_admission(identity),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
@@ -851,6 +848,9 @@ defmodule ChalkSync.Transport.SocketV1 do
         collaboration_version
       )
     else
+      {:ok, %{result: :superseded}} ->
+        stop(state, 1008, "policy violation", :admission_rejected)
+
       {:error, :invalid_admission_intent} ->
         stop(state, 1008, "policy violation", :admission_rejected)
 

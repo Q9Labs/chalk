@@ -4,7 +4,7 @@ import type { ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClien
 import type { SpaceClientPlatform } from "./core";
 export type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
 export type CoreTestPlatform = SpaceClientPlatform & {
-  readonly dependencies: Pick<ConnectionDependencies, "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient">;
+  readonly dependencies: Pick<ConnectionDependencies, "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient" | "cancelPendingAdmission">;
   readonly media: {
     readonly getSnapshot: () => CoreTestMediaSnapshot;
     readonly emit: (snapshot: CoreTestMediaSnapshot) => void;
@@ -78,6 +78,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
   return {
     whiteboardUrl: null,
     dependencies: {
+      cancelPendingAdmission: async () => true,
       clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
       mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [] },
       createMediaClient: () => media,

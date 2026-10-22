@@ -215,10 +215,15 @@ where
     and participants.space_id = sqlc.arg(space_id)
     and participants.episode_id = sqlc.arg(episode_id)
     and participants.id = sqlc.arg(participant_id)
-    and participants.status = 'active'
     and episodes.status = 'active'
-    and sync_lifecycle_intents.status = 'applied'
-    and sync_lifecycle_intents.applied_event_id is not null
+    and (
+        (participants.status = 'active' and sync_lifecycle_intents.status = 'applied'
+            and sync_lifecycle_intents.applied_event_id is not null)
+        or (participants.status = 'joining' and sync_lifecycle_intents.status = 'pending'
+            and exists (select 1 from participant_join_seats seat
+                where seat.participant_id = participants.id and seat.generation = participants.generation
+                  and seat.state = 'pending' and seat.expires_at > now()))
+    )
     and (
         sync_admission_requests.admission_request_id is null
         or sync_admission_requests.status = 'admitted'
