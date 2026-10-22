@@ -288,7 +288,7 @@ async function boardZoom() {
 it.each([
   [1440, 900],
   [1100, 760],
-])("opens a small drawing at 100%%, centred, in a %sx%s window", async (width, height) => {
+])("opens a small drawing at full size, centred, in a %sx%s window", async (width, height) => {
   await page.setViewportSize({ width, height });
   try {
     await open("board-small-dark");
