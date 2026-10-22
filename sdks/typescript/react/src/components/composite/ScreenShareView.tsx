@@ -46,7 +46,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
   const [error, setError] = useState<string | null>(null);
   const status = state ?? (mediaVisible ? "live" : "connecting");
   const name = isLocal ? "Your screen" : `${sharedByName}'s screen`;
-  const source = capture?.surface === "monitor" ? "your screen" : capture?.surface === "browser" ? "a tab" : "a window";
+  const source = capture?.surface === "window" ? "a window" : capture?.surface === "browser" ? "a tab" : "your screen";
   const run = async (command: () => Promise<unknown>) => {
     if (pending) return;
     setPending(true);
