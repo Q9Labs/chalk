@@ -1240,11 +1240,16 @@
   pointer-events: none;
 }
 
-/* Notices sit between the header and the controls under them. A short call lifts them no higher than leaves room for one notice, and shows only the newest ones that fit. */
+/* Notices sit between the header and the controls under them, and show only the newest ones that fit. An open reaction tray lifts them with padding, because a margin does not shrink a box held by both top and bottom. They always keep room for one notice. */
 .chalk-toasts {
+  --chalk-toast-top: 60px;
   --chalk-toast-lift: 92px;
-  top: 60px;
-  bottom: min(var(--chalk-toast-lift), calc(100% - 60px - 80px));
+  box-sizing: border-box;
+  top: var(--chalk-toast-top);
+  bottom: min(var(--chalk-toast-lift), calc(100% - var(--chalk-toast-top) - 80px));
+  margin-bottom: 0;
+  padding-bottom: var(--chalk-reaction-toast-lift, 0px);
+  min-height: calc(80px + var(--chalk-reaction-toast-lift, 0px));
   container: chalk-toasts / size;
   justify-content: flex-end;
 }
@@ -1290,6 +1295,37 @@
   overflow: hidden;
   text-overflow: ellipsis;
   margin-right: 4px;
+}
+.chalk-toast[data-type="error"] {
+  max-width: min(560px, calc(100% - 32px));
+}
+.chalk-toast[data-type="error"] > span {
+  white-space: normal;
+  line-height: 1.35;
+  padding: 4px 0;
+}
+/* On a short screen an open board's controls fill the space under the header, so the newest notice takes the header's row, in two lines at most. */
+@media (max-height: 480px) {
+  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toasts {
+    top: 4px;
+    bottom: auto;
+    height: calc(var(--chalk-toast-top) - 8px);
+    min-height: 0;
+    padding-bottom: 0;
+    justify-content: center;
+  }
+  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toast {
+    min-height: 0;
+    padding: 3px 3px 3px 12px;
+    font-size: 13px;
+  }
+  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toast > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.3;
+    padding: 0;
+  }
 }
 .chalk-toast[data-exiting] {
   opacity: 0;
@@ -1658,9 +1694,8 @@
     min-height: 48px;
   }
   .chalk-toasts {
+    --chalk-toast-top: 52px;
     --chalk-toast-lift: 110px;
-    top: 52px;
-    bottom: min(var(--chalk-toast-lift), calc(100% - 52px - 80px));
   }
   .chalk-drawer {
     inset: auto 0 0;

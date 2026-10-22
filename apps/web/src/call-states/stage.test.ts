@@ -432,24 +432,55 @@ it("keeps a live share selectable when a phone guest pins the board", async () =
   }
 });
 
-it.each([
-  { width: 640, height: 320, shown: 1 },
-  { width: 390, height: 844, shown: 3 },
-])("shows the newest device notices that fit between the header and a $width by $height board's open tools", async ({ width, height, shown }) => {
+it.each(
+  [
+    { width: 640, height: 320, shown: 1 },
+    { width: 568, height: 320, shown: 1 },
+    { width: 374, height: 320, shown: 1 },
+    { width: 844, height: 390, shown: 1 },
+    { width: 390, height: 844, shown: 3 },
+  ].flatMap((size) => [false, true].map((tools) => ({ ...size, tools }))),
+)("keeps device notices on screen and off a $width by $height board's controls, drawing tools open: $tools", async ({ width, height, shown, tools }) => {
   await page.setViewportSize({ width, height });
   try {
     await open("board-notices-dark");
-    await page.getByRole("button", { name: "Drawing tools" }).click();
-    await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    await page.locator(".chalk-board[data-primary]").waitFor();
     await expect.poll(() => page.locator(".chalk-toast").count()).toBe(3);
-    const header = await page.locator(".chalk-header").evaluate((element) => element.getBoundingClientRect().bottom);
-    const toasts = await page.locator(".chalk-toast").evaluateAll((elements) => elements.map((element) => ({ shown: getComputedStyle(element).display !== "none", ...element.getBoundingClientRect().toJSON() })));
-    const visible = toasts.filter((toast) => toast.shown);
-    expect(visible).toHaveLength(shown);
-    expect(toasts.at(-1)?.shown).toBe(true);
-    for (const toast of visible) {
-      expect(toast.top).toBeGreaterThanOrEqual(header);
-      expect(toast.bottom).toBeLessThanOrEqual(height);
+    if (tools) {
+      await page.getByRole("button", { name: "Drawing tools" }).click();
+      await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    }
+    // An open reaction tray lifts the notices through this variable. On a screen 480 pixels tall or less the newest notice sits in the header's row instead, clear of the tray.
+    let unlifted = 0;
+    for (const reactionLift of ["0px", "36px", "120px"]) {
+      const placed = await page.locator('[data-part="toast-stack"]').evaluate(async (stack, lift) => {
+        if (!(stack instanceof HTMLElement)) throw new Error("The toast stack is not an element.");
+        stack.style.setProperty("--chalk-reaction-toast-lift", lift);
+        const zoom = document.querySelector(".chalk-board-zoom");
+        await Promise.all((zoom?.getAnimations() ?? []).map((animation) => animation.finished));
+        // The board clips its controls, so only the part inside the board can be seen or clicked.
+        const board = document.querySelector(".chalk-board[data-primary]")?.getBoundingClientRect();
+        if (!board) throw new Error("The primary board is missing.");
+        const controls = [...document.querySelectorAll(".chalk-board[data-primary] :is(.chalk-board-zoom, .chalk-board-island)")].map((element) => {
+          const box = element.getBoundingClientRect();
+          return new DOMRect(box.left, Math.max(box.top, board.top), box.width, Math.min(box.bottom, board.bottom) - Math.max(box.top, board.top));
+        });
+        const toasts = [...stack.querySelectorAll(".chalk-toast")].map((toast) => ({ shown: getComputedStyle(toast).display !== "none", box: toast.getBoundingClientRect(), text: toast.querySelector("span")?.getBoundingClientRect() }));
+        const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        return toasts.map(({ shown, box, text }) => ({ shown, top: box.top, bottom: box.bottom, textInside: !text || (text.top >= box.top - 0.5 && text.bottom <= box.bottom + 0.5), coversControl: controls.some((control) => overlaps(box, control)) }));
+      }, reactionLift);
+      const visible = placed.filter((toast) => toast.shown);
+      expect(visible, reactionLift).toHaveLength(shown);
+      expect(placed.at(-1)?.shown, reactionLift).toBe(true);
+      const newest = placed.at(-1)?.bottom ?? 0;
+      if (reactionLift === "0px") unlifted = newest;
+      expect(newest, reactionLift).toBeLessThanOrEqual(height <= 480 ? 60 : unlifted - Number.parseFloat(reactionLift) + 0.5);
+      for (const toast of visible) {
+        expect(toast.top, reactionLift).toBeGreaterThanOrEqual(0);
+        expect(toast.bottom, reactionLift).toBeLessThanOrEqual(height);
+        expect(toast.textInside, reactionLift).toBe(true);
+        expect(toast.coversControl, reactionLift).toBe(false);
+      }
     }
   } finally {
     await page.setViewportSize({ width: 1440, height: 900 });
