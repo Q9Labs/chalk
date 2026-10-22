@@ -41,7 +41,19 @@ it.each([403, 404, 410].flatMap((status) => ["recording", "transcript"].map((kin
     endedAt: "2026-10-21T00:05:00Z",
     participantCount: 1,
     recordingsNextCursor: null,
-    recordings: [{ id: "recording", status: kind === "recording" ? "processing" : "completed", exportStatus: "completed", transcriptionPending: false, createdAt: "2026-10-21T00:00:00Z", transcripts: [{ id: "transcript", status: "pending", languages: ["en"], createdAt: "2026-10-21T00:00:00Z" }] }],
+    recordings: [
+      {
+        id: "recording",
+        status: kind === "recording" ? "pending" : "completed",
+        sourceStatus: kind === "recording" ? "pending" : "available",
+        exportStatus: kind === "recording" ? "unavailable" : "ready",
+        exportRetryable: false,
+        failureMessage: null,
+        transcriptionStatus: "ready",
+        createdAt: "2026-10-21T00:00:00Z",
+        transcripts: [{ id: "transcript", status: "pending", languages: ["en"], createdAt: "2026-10-21T00:00:00Z" }],
+      },
+    ],
   } satisfies CallPageDTO["episodes"][number];
   vi.mocked(readPage)
     .mockResolvedValueOnce({ ...initial, episodes: [episode] })
