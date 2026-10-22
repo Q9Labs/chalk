@@ -30,6 +30,7 @@ for (const { name, file, line } of cases) {
     mkdirSync(path.join(root, path.dirname(file)), { recursive: true });
     copyFileSync(new URL("./gitleaks.sh", import.meta.url), path.join(root, "scripts/gates/gitleaks.sh"));
     copyFileSync(new URL("../../.gitleaks.toml", import.meta.url), path.join(root, ".gitleaks.toml"));
+    copyFileSync(new URL("../../.gitleaksignore", import.meta.url), path.join(root, ".gitleaksignore"));
     spawnSync("git", ["init", "-q"], { cwd: root });
     spawnSync("git", ["-c", "user.name=Gate", "-c", "user.email=gate@example.invalid", "commit", "-q", "--allow-empty", "-m", "empty"], { cwd: root });
     writeFileSync(path.join(root, file), `${line}\n`);
@@ -42,3 +43,13 @@ for (const { name, file, line } of cases) {
     assert.match(result.stdout + result.stderr, /leaks found: [1-9]/);
   });
 }
+
+test("every commit in this repository's history passes the secret scan", () => {
+  const root = new URL("../..", import.meta.url).pathname;
+  const result = spawnSync("bash", ["scripts/gates/gitleaks.sh"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, GITLEAKS_LOG_OPTS: "HEAD", GATE_SCOPE: "", GATE_EXPLICIT_FILES: "" },
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});

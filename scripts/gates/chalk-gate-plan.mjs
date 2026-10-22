@@ -92,7 +92,7 @@ function isKnownPath(file, workspaces) {
   if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/") || file.startsWith(".semgrep/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
-  return [".gitignore", ".gitleaks.toml", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
+  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
 function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
