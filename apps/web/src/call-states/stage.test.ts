@@ -133,6 +133,22 @@ it("uses a 96 by 128 picture-in-picture only for two-person phone Spotlight", as
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
+it("floats people over a phone board and keeps toasts above the board's tools", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open("board-people-dark");
+  await page.locator(".chalk-board-zoom").waitFor();
+  const stage = await page.getByTestId("stage").boundingBox();
+  const board = await page.locator('[data-stage-role="primary"]').boundingBox();
+  expect(board?.height).toBeCloseTo(stage?.height ?? 0, 0);
+  const tiles = await page.locator('[data-stage-role="strip"]').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  expect(tiles).toHaveLength(3);
+  for (const tile of tiles) expect([tile.width, tile.height, Math.round(tile.right)]).toEqual([76, 44, Math.round((stage?.x ?? 0) + (stage?.width ?? 0) - 12)]);
+  const controlsTop = Math.min(...(await page.locator(".chalk-board-island, .chalk-board-zoom").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))));
+  const toastBottom = await page.locator('[data-part="toast-stack"]').evaluate((stack) => stack.getBoundingClientRect().bottom);
+  expect(toastBottom).toBeLessThanOrEqual(controlsTop - 8);
+  await page.setViewportSize({ width: 1440, height: 900 });
+});
+
 it("cancels a departing tile's fade when the same participant immediately rejoins", async () => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await open("stage-grid-6");
