@@ -23,6 +23,7 @@ let transcriptStatus = "complete";
 let metadataStatus = 200;
 let transcriptHTTPStatus = 200;
 let extraRecordings: ReturnType<typeof recording>[] = [];
+let brokenURL: string | null = null;
 const requests: { path: string; action?: string; id?: string }[] = [];
 
 function recording() {
@@ -50,6 +51,7 @@ beforeEach(() => {
   metadataStatus = 200;
   transcriptHTTPStatus = 200;
   extraRecordings = [];
+  brokenURL = null;
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -73,6 +75,7 @@ beforeEach(() => {
       artifact = "pending";
       return Response.json({ recording: recording() });
     }
+    if (body?.action === "recording-url" && body.recordingId === brokenURL) return Response.json({ error: { code: "storage_unavailable" } }, { status: 503 });
     if (body?.action === "recording-url") return Response.json({ url: "https://storage.example.test/video.mp4" });
     if (path === "/dashboard-api/past-session") return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: [recording(), ...extraRecordings], nextCursor: null });
     throw new Error(`Unexpected request: ${path}`);
@@ -124,6 +127,19 @@ it("shows canonical complete transcripts before export and prepares a playable r
   const count = requests.filter((request) => request.path === "/dashboard-api/call-metadata").length;
   await tick();
   expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(count);
+});
+
+it("plays a newer attempt once it is ready even after an older attempt's video failed to load", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  artifact = "pending";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready" }];
+  brokenURL = older;
+  await open();
+  expect(screen.getByText("The recording didn’t load")).toBeTruthy();
+  artifact = "ready";
+  await tick();
+  expect(screen.queryByText("The recording didn’t load")).toBeNull();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
 });
 
 it("replaces pending capture with its terminal reason without a reload", async () => {

@@ -139,7 +139,7 @@ function Session({ ids, back, session, onRecording }: { readonly ids: Ids; reado
   const preparing = recording.exportStatus === "pending";
   const canPrepare = recording.sourceStatus === "available" && (recording.exportStatus === "none" || (recording.exportStatus === "failed" && recording.exportRetryable));
   const media = playable ? (
-    <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
+    <Player key={recording.id} ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
   ) : (
     <div className="pnote" role={failed ? "alert" : "status"}>
       <div>
