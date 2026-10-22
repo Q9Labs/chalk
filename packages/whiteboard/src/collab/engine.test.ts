@@ -161,8 +161,9 @@ function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").r
     getAppState: () => restoreAppState({}, null),
     getFiles: () => ({}),
     getName: () => "Board",
+    // Like Excalidraw, take the elements as given: updateScene does not restore them.
     updateScene: vi.fn((scene) => {
-      if (scene.elements) elements = restoreElements(scene.elements, null);
+      if (scene.elements) elements = [...scene.elements];
     }),
     updateLibrary: vi.fn(),
     resetScene: vi.fn(),
