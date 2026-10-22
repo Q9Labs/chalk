@@ -55,8 +55,16 @@ assigned public IP changes after a Spot stop/start, leaving the recorder's direc
 TLS hostname pointing at the previous address. The API tunnel does not replace
 this direct listener.
 
-Apply this root after provisioning a host or changing the nightly release
-configuration's `runtime.instance_id`, before running Release. It reads only
+Apply this root once when installing the retained allocation. On later host
+replacements, update the nightly release configuration's `runtime.instance_id`
+and the nightly managed deployment target together. The existing Release flow
+calls `scripts/releases/media.py qualify` after deployment and before either
+recorder cold boot. That caller automatically moves the existing tagged allocation
+to the SSM target and waits for AWS to confirm it. A retry after a lost response
+observes the completed move without remapping it again. Missing or ambiguous
+allocations fail closed; Release never allocates, releases, or changes DNS.
+
+The root reads only
 `/chalk/nightly/release/recorder.json` and refuses a host without the
 `chalk:environment=nightly` tag. Its separate state keeps the allocation when the
 host is replaced; only the association moves. Do not destroy or recreate the
@@ -69,6 +77,30 @@ tofu -chdir=infrastructure/nightly/recording-control-address plan -out=address.p
 tofu -chdir=infrastructure/nightly/recording-control-address apply address.plan
 tofu -chdir=infrastructure/nightly/recording-control-address output -raw public_ip
 ```
+
+Save the `allocation_id` output durably with the private backend coordinates and
+DNS undo, outside temporary directories, before replacing a host or removing the
+root. If that saved ID is lost, recover it read-only by its tags, then match the
+returned public IP to `nightly-recording-control.chalkmeet.com` before importing:
+
+```sh
+AWS_PROFILE=q9labs aws ec2 describe-addresses --region ap-southeast-1 --filters Name=tag:Name,Values=chalk-nightly-recording-control Name=tag:chalk:environment,Values=nightly --query 'Addresses[].{AllocationId:AllocationId,PublicIp:PublicIp}'
+```
+
+The lead must install [release-policy.json](recording-control-address/release-policy.json)
+on **only** `chalk-nightly-github-deploy` before deploying this release code.
+The existing role lacks address-read and reassociation permission. Save any
+existing inline policy of the same name as the undo first, then install:
+
+```sh
+AWS_PROFILE=q9labs aws iam put-role-policy --role-name chalk-nightly-github-deploy --policy-name chalk-nightly-recorder-address --policy-document file://infrastructure/nightly/recording-control-address/release-policy.json
+```
+
+This policy allows address/instance reads and association of only the
+allocation with both nightly recorder tags. The caller also rejects a target
+without `chalk:environment=nightly`. It grants no allocate, release, disassociate,
+DNS, or IAM-write permissions. Do not attach it to a production role. Restore the
+saved inline policy (or delete this inline policy if newly added) to undo it.
 
 The backend file supplies the existing nightly state bucket, as in
 `backend.hcl.example`. On the first install only, save the full Cloudflare record
@@ -87,9 +119,15 @@ retained allocation back to the previous nightly host to undo an association cha
 If a removal apply forgets the allocation, import its saved `allocation_id` into
 `aws_eip.control` before applying the restored root.
 
-Run `tofu test` in this root with OpenTofu 1.12.3 to exercise first installation,
-association with a replacement host, and rejection of a production host.
-The tests mock AWS and do not create cloud resources. Production's recorder
+Run `tofu test` in this root with OpenTofu 1.12.3 for host selection and production
+isolation. Run `python3 test_lifecycle.py` after `tofu init -backend=false` for a
+stateful apply of the real root against a local EC2/SSM emulator. It proves the
+allocation ID survives replacement, only the association moves, a lost response
+recovers on retry, the next plan is a no-op, and removal retains the allocation.
+`python3 test_lifecycle.py --negative replacement` injects an allocation-replacement
+dependency and must fail the allocation-ID assertion. `--negative retention` removes
+the retention policy and must fail the retained-removal assertion. These tests
+create no cloud resources. Production's recorder
 address is not managed by this root.
 
 `render-runtime <manifest> <output> nightly` selects the following caps.

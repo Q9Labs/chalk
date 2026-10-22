@@ -44,6 +44,7 @@ check dispatcher-validate tofu -chdir=infrastructure/nightly/transcription valid
 check recorder-address-init tofu -chdir=infrastructure/nightly/recording-control-address init -backend=false -input=false -upgrade=false
 check recorder-address-validate tofu -chdir=infrastructure/nightly/recording-control-address validate -no-color
 check recorder-address-tests tofu -chdir=infrastructure/nightly/recording-control-address test -no-color
+check recorder-address-lifecycle python3 infrastructure/nightly/recording-control-address/test_lifecycle.py
 # GitHub supports queue:max; actionlint 1.7.12 has not added that schema key yet.
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency
 check workflow-lint actionlint -ignore '^unexpected key "queue" for "concurrency" section' .github/workflows/ci.yml .github/workflows/nightly.yml .github/workflows/promote.yml .github/workflows/release-contracts.yml
