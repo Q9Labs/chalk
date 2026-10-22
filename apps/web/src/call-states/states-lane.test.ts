@@ -57,6 +57,9 @@ it("asks for a name in a full-width form, and Join call waits for one", async ()
   expect(field?.width).toBeGreaterThanOrEqual(264);
   expect(button?.width).toBe(field?.width);
   expect([label?.x, button?.x]).toEqual([field?.x, field?.x]);
+  // The mockup's join button is 44px tall and sits 14px under the field.
+  expect(button?.height).toBe(44);
+  expect((button?.y ?? 0) - ((field?.y ?? 0) + (field?.height ?? 0))).toBe(14);
 });
 
 it("announces a join, raised hand and recording through event toasts", async () => {

@@ -534,7 +534,7 @@ export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin
           onChange={(event) => onDisplayNameChange(event.target.value)}
           className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
         />
-        <ChalkButton type="submit" variant="solid" className="w-full" disabled={!displayName.trim()}>
+        <ChalkButton type="submit" variant="solid" className="mt-1.5 !h-11 w-full" disabled={!displayName.trim()}>
           Join call
         </ChalkButton>
       </form>
