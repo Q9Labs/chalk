@@ -398,10 +398,30 @@ describe("V1SyncClient", () => {
       sync.stop();
     }
   });
-  it("advertises full-entry confirmation so the server does not apply legacy hello confirmation", async () => {
-    const { client, socket } = await liveClient();
+  it("requests entry confirmation on the URL and sends entered only after Sync grants it", async () => {
+    const { client, socket, urls } = await liveClient();
     try {
-      expect(socket.frames().find((frame) => frame.type === "hello")).toMatchObject({ entry_confirmation: true });
+      expect(new URL(urls[0]!).searchParams.get("entry_confirmation")).toBe("1");
+      expect(socket.frames().find((frame) => frame.type === "hello")).not.toHaveProperty("entry_confirmation");
+      await client.confirmEntered();
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
+  it("enters a previous Sync through the legacy hello and never sends entered", async () => {
+    const { client, socket } = await liveClient({}, baseState(), ownerId, false);
+    try {
+      // Previous Sync accepts only these hello keys and has no entered frame.
+      const hello = socket.frames().find((frame) => frame.type === "hello")!;
+      expect(
+        Object.keys(hello)
+          .filter((key) => !["extensions", "journey_id", "traceparent", "tracestate"].includes(key))
+          .sort(),
+      ).toEqual(["protocol", "streams", "token", "type"]);
+      await client.confirmEntered();
+      expect(socket.frames().map((frame) => frame.type)).not.toContain("entered");
+      expect(client.getSnapshot().connection.phase).toBe("live");
     } finally {
       client.stop();
     }
@@ -439,6 +459,24 @@ describe("V1SyncClient", () => {
     try {
       await expect(client.confirmEntered()).resolves.toBeUndefined();
       expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: "entered" }));
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+  it("does not resend entry to a previous Sync after a rollback reconnect", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      await client.confirmEntered();
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", false);
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
       expect(client.getSnapshot().connection.phase).toBe("live");
     } finally {
       client.stop();
@@ -2036,9 +2074,15 @@ describe("v1 exact decoding and durable state", () => {
     for (const snapshot of malformed) await expect(restoreV1Snapshot(snapshot)).rejects.toBeInstanceOf(V1ReplicaError);
   });
 });
-async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId) {
+async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true) {
   const socket = new TestSocket();
-  const factory: SyncWebSocketFactory = { connect: () => socket };
+  const urls: string[] = [];
+  const factory: SyncWebSocketFactory = {
+    connect: (url) => {
+      urls.push(url);
+      return socket;
+    },
+  };
   const mediaPlane = new TestMediaPlane();
   const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: factory, mediaPlane, ...overrides });
   const snapshot = await wireSnapshot(initialState);
@@ -2055,13 +2099,14 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode: "snapshot",
     snapshot,
+    ...(entryConfirmation ? { entry_confirmation: true } : {}),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "recovery_complete", recovery_id: recoveryId, head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest } });
   for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
   expect(client.getSnapshot().connection.phase).toBe("live");
-  return { client, socket, state, mediaPlane };
+  return { client, socket, state, mediaPlane, urls };
 }
 async function liveCollaborationClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}) {
   const socket = new TestSocket();
@@ -2122,7 +2167,7 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date"): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2134,6 +2179,7 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode,
     ...(mode === "snapshot" ? { snapshot } : {}),
+    ...(entryConfirmation ? { entry_confirmation: true } : {}),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

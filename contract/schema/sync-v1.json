@@ -340,7 +340,6 @@
     }
   },
   "hello": {
-    "entryConfirmation": { "wireName": "entry_confirmation", "optional": true, "value": true },
     "direction": "client-to-server",
     "type": "hello",
     "token": {
@@ -399,6 +398,7 @@
     }
   },
   "welcome": {
+    "entryConfirmation": { "wireName": "entry_confirmation", "optional": true, "value": true },
     "direction": "server-to-client",
     "type": "welcome",
     "participantId": {

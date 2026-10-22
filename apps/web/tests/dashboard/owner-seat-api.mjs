@@ -39,7 +39,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     return fetch(`${apiOrigin}/v1/tenants/${s.tenant_id}/spaces/${s.space_id}/episodes/${s.episode_id}/participants/${s.participant_id}/cancel-join`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   }
   async function rejectOldHello(access) {
-    const ws = new WebSocket(syncOrigin);
+    const ws = new WebSocket(`${syncOrigin}?entry_confirmation=1`);
     try {
       const rejected = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("stale Sync hello was not rejected")), 5000);
@@ -62,7 +62,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
         ws.addEventListener("open", resolve, { once: true });
         ws.addEventListener("error", reject, { once: true });
       });
-      ws.send(JSON.stringify({ type: "hello", entry_confirmation: true, protocol: 1, token: access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
+      ws.send(JSON.stringify({ type: "hello", protocol: 1, token: access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
       await rejected;
     } finally {
       ws.close();
@@ -121,7 +121,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     await rejectOldHello(final.access);
     assert.equal(state(id), "joining:pending:false", "a cancelled attempt cannot confirm the rearmed seat");
     async function connectEntered(verifyPending = false) {
-      const socket = new WebSocket(syncOrigin);
+      const socket = new WebSocket(`${syncOrigin}?entry_confirmation=1`);
       try {
         const ready = new Promise((resolve, reject) => {
           socket.addEventListener("message", ({ data }) => {
@@ -144,7 +144,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
           socket.addEventListener("open", resolve, { once: true });
           socket.addEventListener("error", reject, { once: true });
         });
-        socket.send(JSON.stringify({ type: "hello", entry_confirmation: true, protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
+        socket.send(JSON.stringify({ type: "hello", protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
         await ready;
         return socket;
       } catch (error) {

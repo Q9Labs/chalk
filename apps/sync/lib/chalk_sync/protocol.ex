@@ -80,6 +80,11 @@ defmodule ChalkSync.ProtocolV1 do
           frame
       end
 
+    frame =
+      if Map.get(options, :entry_confirmation, false),
+        do: Map.put(frame, "entry_confirmation", true),
+        else: frame
+
     encode!(frame)
   end
 
@@ -211,13 +216,6 @@ defmodule ChalkSync.ProtocolV1 do
     if GeneratedV1.valid_server_frame?(frame),
       do: JSON.encode!(frame),
       else: raise(ArgumentError, "invalid protocol-v1 server frame")
-  end
-
-  defp normalize({:hello, %{entry_confirmation: entry} = hello}) do
-    with {:ok, {:hello, normalized}} <-
-           normalize({:hello, Map.delete(hello, :entry_confirmation)}) do
-      {:ok, {:hello, Map.put(normalized, :entry_confirmation, entry)}}
-    end
   end
 
   defp normalize(

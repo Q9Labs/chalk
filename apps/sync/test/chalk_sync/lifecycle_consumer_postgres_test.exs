@@ -17,6 +17,8 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
   if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
+  @entry_path "/v1/sync?entry_confirmation=1"
+
   setup_all do
     if @database_url do
       previous_stateholder = Application.fetch_env!(:chalk_sync, :stateholder)
@@ -161,8 +163,9 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     {:ok, client} = Client.connect(port, "/v1/sync")
     on_exit(fn -> Client.close_tcp(client) end)
-    client = Client.send_json(client, Map.delete(hello(fixture.identity), "entry_confirmation"))
+    client = Client.send_json(client, hello(fixture.identity))
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    refute Map.has_key?(welcome, "entry_confirmation")
     assert [["active", "joined", true]] = entry_row(connection, fixture)
     client = Client.acknowledge_recovery(client, welcome)
     assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
@@ -180,7 +183,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     assert {:ok, %{result: :applied}} = Postgres.confirm_admission(fixture.identity)
-    {:ok, client} = Client.connect(port, "/v1/sync")
+    {:ok, client} = Client.connect(port, @entry_path)
     on_exit(fn -> Client.close_tcp(client) end)
     client = Client.send_json(client, hello(fixture.identity))
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
@@ -214,7 +217,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     )
 
     on_exit(fn -> :telemetry.detach(handler) end)
-    {:ok, client} = Client.connect(port, "/v1/sync")
+    {:ok, client} = Client.connect(port, @entry_path)
     on_exit(fn -> Client.close_tcp(client) end)
     client = Client.send_json(client, hello(fixture.identity))
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
@@ -257,7 +260,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       connection = hd(connections)
       fixture = managed_pending_join(connection)
       on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
-      {:ok, client} = Client.connect(port, "/v1/sync")
+      {:ok, client} = Client.connect(port, @entry_path)
       on_exit(fn -> Client.close_tcp(client) end)
       client = Client.send_json(client, hello(fixture.identity))
       assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
@@ -300,7 +303,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       )
 
       if @reaped, do: assert([["expired"]] = seat_transition(connection, fixture, "expire"))
-      {:ok, client} = Client.connect(port, "/v1/sync")
+      {:ok, client} = Client.connect(port, @entry_path)
       on_exit(fn -> Client.close_tcp(client) end)
       client = Client.send_json(client, hello(fixture.identity))
       assert {:closed, 1008, "entry timeout", _client} = Client.recv(client)
@@ -315,7 +318,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     connection = hd(connections)
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
-    {:ok, client} = Client.connect(port, "/v1/sync")
+    {:ok, client} = Client.connect(port, @entry_path)
     on_exit(fn -> Client.close_tcp(client) end)
     client = Client.send_json(client, hello(fixture.identity))
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
@@ -337,10 +340,13 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     for entered <- [false, true] do
       fixture = managed_pending_join(connection)
       on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
-      {:ok, client} = Client.connect(port, "/v1/sync")
+      {:ok, client} = Client.connect(port, @entry_path)
       on_exit(fn -> Client.close_tcp(client) end)
       client = Client.send_json(client, hello(fixture.identity))
-      assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+
+      assert {:json, %{"type" => "welcome", "entry_confirmation" => true} = welcome, client} =
+               Client.recv(client)
+
       client = Client.acknowledge_recovery(client, welcome)
       assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
       assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
@@ -376,7 +382,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     assert [["pending"]] = seat_transition(connection, fixture, "retry")
-    {:ok, client} = Client.connect(port, "/v1/sync")
+    {:ok, client} = Client.connect(port, @entry_path)
     on_exit(fn -> Client.close_tcp(client) end)
     client = Client.send_json(client, hello(fixture.identity))
     assert {:closed, 1008, _reason, _client} = Client.recv(client)
@@ -423,7 +429,6 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
     %{
       "type" => "hello",
-      "entry_confirmation" => true,
       "protocol" => 1,
       "extensions" => [
         %{

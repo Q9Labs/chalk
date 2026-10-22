@@ -26,29 +26,6 @@
       "tracestate": "vendor=value"
     },
     {
-      "type": "hello",
-      "protocol": 1,
-      "token": "signed-token",
-      "streams": {
-        "control": {
-          "cursor": null
-        },
-        "media": {
-          "cursor": null
-        },
-        "presence": {
-          "cursor": null
-        },
-        "requests": {
-          "cursor": null
-        }
-      },
-      "journey_id": "00000000-0000-4000-8000-000000000042",
-      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-      "tracestate": "vendor=value",
-      "entry_confirmation": true
-    },
-    {
       "type": "command",
       "command_id": "command-00000001",
       "name": "set_hand_raised",
@@ -412,6 +389,20 @@
         "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       },
       "mode": "up_to_date"
+    },
+    {
+      "type": "welcome",
+      "protocol": 1,
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 18,
+        "state_schema_version": 1,
+        "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "mode": "up_to_date",
+      "entry_confirmation": true
     },
     {
       "type": "reaction",

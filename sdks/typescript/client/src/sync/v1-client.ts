@@ -77,6 +77,8 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
   #entryPending = false;
+  // Older Sync rejects new hello fields, so entry confirmation is requested on the URL and granted in welcome.
+  #entryNegotiated = false;
   readonly #requests = new Map<string, RequestDeferred>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
@@ -203,6 +205,8 @@ export class V1SyncClient implements V1CollaborationClient {
   /** Announces completed startup; transport recovery resends until acknowledged. */
   async confirmEntered(): Promise<void> {
     this.#requireLive();
+    // Without negotiation, Sync confirmed the entry at hello.
+    if (!this.#entryNegotiated) return;
     this.#entryPending = true;
     this.#send({ type: "entered" });
   }
@@ -368,9 +372,10 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#opened = false;
     this.#connectFailure = undefined;
     this.#emit();
+    this.#entryNegotiated = false;
     let socket: V1Socket;
     try {
-      socket = this.#options.webSocket.connect(this.#options.url);
+      socket = this.#options.webSocket.connect(entryConfirmationUrl(this.#options.url));
     } catch {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
@@ -431,7 +436,6 @@ export class V1SyncClient implements V1CollaborationClient {
       const hello = {
         type: "hello",
         protocol: 1,
-        entry_confirmation: true,
         token,
         streams: {
           control: { cursor: this.#control && { revision: this.#control.revision, state_schema_version: this.#control.stateSchemaVersion, state_digest: this.#control.stateDigest } },
@@ -575,6 +579,8 @@ export class V1SyncClient implements V1CollaborationClient {
   ): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#collaborationState.acceptWelcome(frame);
+    this.#entryNegotiated = frame.entry_confirmation === true;
+    if (!this.#entryNegotiated) this.#entryPending = false;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
     this.#updateLocalMediaStates();
@@ -725,7 +731,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
-    if (this.#entryPending) this.#send({ type: "entered" });
+    if (this.#entryPending && this.#entryNegotiated) this.#send({ type: "entered" });
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
@@ -1027,6 +1033,11 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
     (publication.publicationId === null || typeof publication.publicationId === "string") &&
     (!publication.enabled || publication.publicationId !== null)
   );
+}
+function entryConfirmationUrl(value: string): string {
+  const url = new URL(value);
+  url.searchParams.set("entry_confirmation", "1");
+  return url.toString();
 }
 function assertV1Url(value: string): void {
   const url = new URL(value);

@@ -32,13 +32,13 @@ defmodule ChalkSync.Transport.SocketV1 do
   @impl true
   def init(opts) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
+    opts = Map.new(opts)
 
     connection_attributes =
       opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
 
     observability =
       opts
-      |> Map.new()
       |> Map.get(:observability)
       |> Observability.merge(nil)
       |> Observability.root(
@@ -53,7 +53,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        hello_timer: timer,
        heartbeat_timer: nil,
        entry_timer: nil,
-       entry_confirmation: false,
+       entry_confirmation: Map.get(opts, :entry_confirmation, false),
        terminal_ack_timer: nil,
        terminal_head: nil,
        missed_heartbeats: 0,
@@ -883,7 +883,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with :ok <- confirm_legacy_entry(identity, Map.get(hello, :entry_confirmation, false)),
+    with :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
          {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
@@ -892,9 +892,13 @@ defmodule ChalkSync.Transport.SocketV1 do
              state.observability
            ),
          {:ok, coordinator} <-
-           Coordinator.begin_recovery(identity, self(), protocol_options) do
+           Coordinator.begin_recovery(
+             identity,
+             self(),
+             Map.put(protocol_options, :entry_confirmation, state.entry_confirmation)
+           ) do
       start_registered_recovery(
-        %{state | entry_confirmation: Map.get(hello, :entry_confirmation, false)},
+        state,
         identity,
         recovery,
         coordinator,

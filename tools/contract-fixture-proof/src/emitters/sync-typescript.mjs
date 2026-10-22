@@ -86,10 +86,8 @@ function renderTypeScript(contract) {
     "  return exactObject(value, ['name', 'chat_cursor']) && ['collaboration_v1', 'collaboration_v2'].includes(String(value.name)) && exactObject(value.chat_cursor, ['after_sequence', 'retained_floor_sequence']);",
     "}",
     "function strictHello(value: Record<string, unknown>): boolean {",
-    "  const entryFields = Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : [];",
-    "  if (entryFields.length && value.entry_confirmation !== true) return false;",
-    "  const base = exactObjectWithCorrelation(value, ['type', 'protocol', 'token', 'streams'].concat(entryFields));",
-    "  const extended = exactObjectWithCorrelation(value, ['type', 'protocol', 'token', 'streams', 'extensions'].concat(entryFields)) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);",
+    "  const base = exactObjectWithCorrelation(value, ['type', 'protocol', 'token', 'streams']);",
+    "  const extended = exactObjectWithCorrelation(value, ['type', 'protocol', 'token', 'streams', 'extensions']) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);",
     "  if ((!base && !extended) || !exactObject(value.streams, ['control', 'media', 'presence', 'requests'])) return false;",
     "  const streams = value.streams;",
     "  return exactObject(streams.control, ['cursor']) && (streams.control.cursor === null || strictCursor(streams.control.cursor)) && exactObject(streams.media, ['cursor']) && streams.media.cursor === null && exactObject(streams.presence, ['cursor']) && streams.presence.cursor === null && exactObject(streams.requests, ['cursor']) && streams.requests.cursor === null;",
@@ -184,7 +182,8 @@ function renderTypeScript(contract) {
     "  const base = ['type', 'protocol', 'participant_id', 'participant_generation', 'recovery_id', 'head', 'mode'];",
     "  const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;",
     "  const extensionValid = isObject(extension) && ['collaboration_v1', 'collaboration_v2'].includes(String(extension.name)) && exactObject(extension, ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']) && Array.isArray(extension.read_receipts);",
-    "  const fields = extensionValid ? [...base, 'extensions'] : base;",
+    "  if (Object.hasOwn(value, 'entry_confirmation') && value.entry_confirmation !== true) return false;",
+    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : [])];",
     "  if (!strictCursor(value.head)) return false;",
     "  if (value.mode === 'snapshot') return exactObjectWithCorrelation(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
     "  if (value.mode === 'terminal') return exactObjectWithCorrelation(value, [...fields, 'reason']);",
@@ -296,10 +295,10 @@ function renderTypeScript(contract) {
     "",
     "const NullCursorStreamSchema = Schema.Struct({ cursor: Schema.Null }).check(exactKeys(['cursor']));",
     "const StreamsSchema = Schema.Struct({ control: Schema.Struct({ cursor: Schema.NullOr(ControlCursorSchema) }).check(exactKeys(['cursor'])), media: NullCursorStreamSchema, presence: NullCursorStreamSchema, requests: NullCursorStreamSchema });",
-    `export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(${contract.protocol.value}), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), ...HelloCorrelationFields }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
+    `export const HelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(${contract.protocol.value}), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, ...HelloCorrelationFields }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
     "export const ChatCursorSchema = Schema.Struct({ after_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema) }).check(exactKeys(['after_sequence', 'retained_floor_sequence']));",
     "export const CollaborationHelloExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), chat_cursor: ChatCursorSchema }).check(exactKeys(['name', 'chat_cursor']));",
-    `export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(${contract.protocol.value}), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), extensions: Schema.Tuple([CollaborationHelloExtensionSchema]), ...HelloCorrelationFields }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
+    `export const ExtendedHelloFrameSchema = Schema.Struct({ type: Schema.Literal('hello'), protocol: Schema.Literal(${contract.protocol.value}), token: boundedUtf8String(${limits.tokenBytes}), streams: StreamsSchema, extensions: Schema.Tuple([CollaborationHelloExtensionSchema]), ...HelloCorrelationFields }).check(boundedFrame(${limits.decodedInboundFrameBytes}));`,
     "export const DeliveryAckFrameSchema = Schema.Struct({ type: Schema.Literal('delivery_ack'), stream: Schema.Literal('control'), revision: PositiveIntegerSchema, state_digest: StateDigestSchema });",
     "export const RecoveryAckFrameSchema = Schema.Struct({ type: Schema.Literal('recovery_ack'), recovery_id: UuidSchema, revision: NonNegativeIntegerSchema, state_digest: StateDigestSchema });",
     "",
@@ -375,7 +374,9 @@ function renderTypeScript(contract) {
   lines.push(
     "export const CollaborationWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), capabilities: CollaborationCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
-  lines.push(`const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };`);
+  lines.push(
+    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)) };`,
+  );
   lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");
   lines.push("export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('replay'), ...ServerCorrelationFields });");
