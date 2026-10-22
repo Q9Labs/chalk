@@ -10,7 +10,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
   const space = await client.spaces.create({
     admissionPolicy: { mode: "open" },
     defaultEpisodeDurationSeconds: 3600,
-    lingerWindowSeconds: 0,
+    lingerWindowSeconds: 60,
     maximumEpisodeDurationSeconds: 3600,
     mediaPlane: "cf_sfu",
     name: "Synthetic server SDK joins",
