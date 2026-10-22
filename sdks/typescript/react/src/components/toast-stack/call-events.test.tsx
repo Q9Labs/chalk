@@ -66,3 +66,10 @@ it("announces someone else's raised hand, but never your own, so no toast covers
   expect(events).toHaveLength(1);
   expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("Nora</b> raised a hand");
 });
+
+it.each(["client.internal_error", "connection.invalid_state"] as const)("does not expose internal media details for %s", (code) => {
+  const toast = mediaFailureToast({ code, recoverable: true, message: "setCameraEnabled belongs to an inactive connection" }, "camera");
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).not.toContain("setCameraEnabled");
+  expect(text).toContain(code === "connection.invalid_state" ? "Wait for the call to reconnect" : "Your camera couldn’t start");
+});

@@ -8,6 +8,34 @@ import { control, observeMicrophonePublication } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
+  it("reports a camera command interrupted by recovery without exposing internals", async () => {
+    const platform = createCoreTestPlatform();
+    const track = Object.assign(mediaTrack(), { kind: "video" });
+    let finish: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const command = vi.fn(async () => {
+      await pending;
+      return { operationId: "camera-on", name: "set_camera_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const };
+    });
+    const client = capturedClient(platform, track, { sync: { setCameraEnabled: command } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      const enabling = client.media.setCameraEnabled(true);
+      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." });
+      await vi.waitFor(() => expect(command).toHaveBeenCalledOnce());
+      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "failed", peerConnectionState: "failed", iceConnectionState: "failed" }, failure: { code: "signaling_failed", recoverable: true } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      finish();
+      await result;
+      expect(track.readyState).toBe("live");
+    } finally {
+      finish();
+      client.dispose();
+    }
+  });
+
   it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused and reconciles it after recovery", async (source) => {
     const localTargets: boolean[] = [];
     const { platform, command, client, setEnabled, track } = createConvergenceScenario(source, {
