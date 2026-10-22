@@ -304,7 +304,7 @@ it.each([
       for (let y = 0; y < h; y++)
         for (let x = 0; x < w; x++) {
           const at = (y * w + x) * 4;
-          if (Math.abs(data[at] - 40) < 24 && Math.abs(data[at + 1] - 138) < 24 && Math.abs(data[at + 2] - 81) < 24) [left, right, top, bottom] = [Math.min(left, x), Math.max(right, x), Math.min(top, y), Math.max(bottom, y)];
+          if (Math.abs((data[at] ?? 0) - 40) < 24 && Math.abs((data[at + 1] ?? 0) - 138) < 24 && Math.abs((data[at + 2] ?? 0) - 81) < 24) [left, right, top, bottom] = [Math.min(left, x), Math.max(right, x), Math.min(top, y), Math.max(bottom, y)];
         }
       return { x: (left + right) / 2 / w, y: (top + bottom) / 2 / h };
     });
