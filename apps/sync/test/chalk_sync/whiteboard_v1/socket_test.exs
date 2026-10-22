@@ -25,11 +25,14 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
        }}
     end
 
+    # The Episode's poller runs this, so the answer and the read log live in app env.
     def episode_access(episode) do
-      send(self(), {:episode_access_read, episode})
+      if test = Application.get_env(:chalk_sync, :whiteboard_test_reads),
+        do: send(test, {:episode_access_read, episode})
 
-      Process.get(
-        :whiteboard_episode_access,
+      Application.get_env(
+        :chalk_sync,
+        :whiteboard_test_access,
         {:ok,
          %{
            status: "active",
@@ -440,20 +443,29 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     setup do
       {:ok, initial} = SocketWhiteboardV1.init(%{})
       Process.cancel_timer(initial.hello_timer)
-      # Access is cached per Episode, so each test gets its own Episode.
+      # Access is read per Episode, so each test gets its own Episode.
       identity = %{identity() | episode: %{identity().episode | episode_id: UUID.generate()}}
       Fanout.subscribe(identity.episode)
-      on_exit(fn -> Process.delete(:whiteboard_episode_access) end)
+      Application.put_env(:chalk_sync, :whiteboard_test_reads, self())
+      Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 50)
 
-      # The last access check is older than the one-second cache, so the next event checks again.
+      on_exit(fn ->
+        for key <- [
+              :whiteboard_test_reads,
+              :whiteboard_test_access,
+              :whiteboard_authority_poll_ms,
+              :whiteboard_authority_stale_ms
+            ],
+            do: Application.delete_env(:chalk_sync, key)
+      end)
+
       state = %{
         initial
         | phase: :live,
           identity: identity,
           display_name: "Ada",
           scene_id: @scene_id,
-          revision: 4,
-          authority_checked_at: System.monotonic_time(:millisecond) - 2_000
+          revision: 4
       }
 
       update = %{
@@ -469,6 +481,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     test "closes instead of sending a cursor after the Participant left", %{state: state} do
       access("active", "left")
+      read(state)
 
       assert {:stop, :normal, {1008, "policy violation"}, closed} =
                receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
@@ -482,9 +495,24 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       update: update
     } do
       access("ended", "active")
+      read(state)
 
       assert {:stop, :normal, {1008, "policy violation"}, _closed} =
                SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
+    end
+
+    test "an idle board closes on its own tick after the Participant left", %{state: state} do
+      access("active", "left")
+      read(state)
+
+      assert {:stop, :normal, {1008, "policy violation"}, _closed} =
+               SocketWhiteboardV1.handle_info(:whiteboard_authority_tick, state)
+    end
+
+    test "a live board keeps ticking while access holds", %{state: state} do
+      read(state)
+      assert {:ok, ^state} = SocketWhiteboardV1.handle_info(:whiteboard_authority_tick, state)
+      assert_receive :whiteboard_authority_tick, 500
     end
 
     test "stays open while a removal or an Episode end can still be undone", %{
@@ -498,6 +526,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
           ] do
         access(episode_status, participant_status)
         state = %{state | identity: %{state.identity | episode: new_episode(state)}}
+        read(state)
 
         assert {:push, {:text, _update}, _state} =
                  SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
@@ -508,7 +537,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       state: state,
       update: update
     } do
-      Process.put(:whiteboard_episode_access, {:retryable, {:storage_unavailable, "timeout"}})
+      Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 100)
+
+      Application.put_env(
+        :chalk_sync,
+        :whiteboard_test_access,
+        {:retryable, {:storage_unavailable, "timeout"}}
+      )
+
+      read(state)
+      Process.sleep(150)
 
       assert {:stop, :normal, {1012, "dependency unavailable"}, closed} =
                SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
@@ -529,10 +567,15 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
           "20000000-0000-4000-8000-#{String.pad_leading(Integer.to_string(index), 12, "0")}"
         end
 
-      Process.put(
-        :whiteboard_episode_access,
+      Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 60_000)
+
+      Application.put_env(
+        :chalk_sync,
+        :whiteboard_test_access,
         {:ok, %{status: "active", participants: Map.new(participants, &{{&1, 1}, "active"})}}
       )
+
+      read(state)
 
       for participant_id <- participants do
         socket = %{state | identity: %{state.identity | participant_id: participant_id}}
@@ -541,27 +584,32 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                  SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, socket)
       end
 
-      assert_received {:episode_access_read, _episode}
-      refute_received {:episode_access_read, _episode}
-    end
-
-    test "each socket checks access at most once a second", %{state: state, update: update} do
-      fresh = %{state | authority_checked_at: System.monotonic_time(:millisecond)}
-      access("active", "left")
-
-      assert {:push, {:text, _update}, _state} =
-               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, fresh)
-
       refute_received {:episode_access_read, _episode}
     end
   end
 
   defp access(episode_status, participant_status) do
-    Process.put(
-      :whiteboard_episode_access,
+    Application.put_env(
+      :chalk_sync,
+      :whiteboard_test_access,
       {:ok,
        %{status: episode_status, participants: %{{@participant_id, 1} => participant_status}}}
     )
+  end
+
+  # Starts the Episode's poller for this test process and waits for its first read.
+  defp read(state) do
+    ChalkSync.WhiteboardV1.Authority.watch(state.identity.episode)
+    assert_receive {:episode_access_read, _episode}, 1_000
+    wait_for(fn -> :ets.member(ChalkSync.WhiteboardV1.Authority, state.identity.episode) end)
+  end
+
+  defp wait_for(condition, attempts \\ 100) do
+    cond do
+      condition.() -> :ok
+      attempts == 0 -> flunk("condition not met")
+      true -> Process.sleep(10) && wait_for(condition, attempts - 1)
+    end
   end
 
   defp new_episode(state), do: %{state.identity.episode | episode_id: UUID.generate()}
@@ -646,8 +694,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       | phase: :live,
         scene_id: @scene_id,
         revision: 4,
-        display_name: "Ada",
-        authority_checked_at: System.monotonic_time(:millisecond)
+        display_name: "Ada"
     }
 
     Fanout.subscribe(host.episode)
@@ -854,7 +901,6 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       initial
       | phase: :live,
         identity: identity,
-        authority_checked_at: System.monotonic_time(:millisecond),
         scene_id: @scene_id,
         revision: 4
     }

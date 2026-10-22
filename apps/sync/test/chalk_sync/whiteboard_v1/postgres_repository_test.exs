@@ -4,10 +4,12 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.PostgresRepository
   alias ChalkSync.WhiteboardV1.SQL
@@ -276,8 +278,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
   test "a live board stays open through a removal or an end that is undone, and closes when final",
        %{connection: connection, host: host, participant: participant} do
-    Application.put_env(:chalk_sync, :whiteboard_authority_ttl_ms, 0)
-    on_exit(fn -> Application.delete_env(:chalk_sync, :whiteboard_authority_ttl_ms) end)
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 20)
+    on_exit(fn -> Application.delete_env(:chalk_sync, :whiteboard_authority_poll_ms) end)
     {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(host)
 
     removed = [
@@ -292,6 +294,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     socket = live_socket(participant, scene_id)
 
     # A host removes the Participant, the provider call fails, and the lifecycle restores them.
+    # Each step waits for several reads, so the socket's answer reflects the database.
     lifecycle(connection, PlannerSQL.mark_participant_leaving(), removed)
     assert {:push, _frame, _state} = deliver(socket, scene_id)
     lifecycle(connection, FinalizerSQL.restore_participant_active(), removed)
@@ -303,11 +306,13 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     lifecycle(connection, FinalizerSQL.restore_episode_active(), ended)
     assert {:push, _frame, _state} = deliver(socket, scene_id)
 
-    # A removal that completes closes the socket for good.
+    # A removal that completes closes the socket for good, on its tick with no traffic.
     lifecycle(connection, PlannerSQL.mark_participant_leaving(), removed)
     lifecycle(connection, FinalizerSQL.complete_external_participant(), removed)
 
-    assert {:stop, :normal, {1008, "policy violation"}, _state} = deliver(socket, scene_id)
+    assert {:stop, :normal, {1008, "policy violation"}, _state} =
+             SocketWhiteboardV1.handle_info(:whiteboard_authority_tick, socket)
+
     assert {:push, _frame, _state} = deliver(live_socket(host, scene_id), scene_id)
 
     # An Episode end that completes closes every remaining socket.
@@ -318,7 +323,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
              deliver(live_socket(host, scene_id), scene_id)
   end
 
-  test "reports the lifecycle state of every Participant in an Episode", %{
+  test "reports the lifecycle state of every current Participant in an Episode", %{
+    connection: connection,
     host: host,
     participant: participant
   } do
@@ -327,6 +333,16 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     assert participants[{String.downcase(host.participant_id), 1}] == "active"
     assert participants[{String.downcase(participant.participant_id), 1}] == "active"
+
+    # Rows of Participants who left are history, so the read stays within the Episode's capacity.
+    Postgrex.query!(
+      connection,
+      "update participants set status = 'left', left_at = now(), last_left_reason = 'left' where id = $1",
+      [uuid(participant.participant_id)]
+    )
+
+    assert {:ok, %{participants: current}} = PostgresRepository.episode_access(host.episode)
+    assert Map.keys(current) == [{String.downcase(host.participant_id), 1}]
 
     assert {:error, :not_found} =
              PostgresRepository.episode_access(%{host.episode | episode_id: UUID.generate()})
@@ -422,6 +438,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   defp live_socket(identity, scene_id) do
     {:ok, initial} = SocketWhiteboardV1.init(%{})
     Process.cancel_timer(initial.hello_timer)
+    Authority.watch(identity.episode)
+    settle(identity.episode)
 
     %{
       initial
@@ -461,6 +479,33 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
   defp lifecycle(connection, statement, params) do
     assert %Postgrex.Result{num_rows: 1} = Postgrex.query!(connection, statement, params)
+    [tenant_id, space_id, episode_id | _participant] = params
+
+    settle(%EpisodeKey{
+      tenant_id: UUID.load!(tenant_id),
+      space_id: UUID.load!(space_id),
+      episode_id: UUID.load!(episode_id)
+    })
+  end
+
+  # Waits for the Episode's poller to finish two reads that started after this point.
+  defp settle(episode) do
+    for _read <- 1..2 do
+      [{_episode, _access, read_at, _failure}] = wait_for_entry(episode)
+      wait_for_entry(episode, read_at)
+    end
+  end
+
+  defp wait_for_entry(episode, after_ms \\ nil, attempts \\ 200) do
+    case :ets.lookup(Authority, episode) do
+      [{_episode, _access, read_at, _failure}] = entry
+      when is_nil(after_ms) or read_at > after_ms ->
+        entry
+
+      _missing_or_old when attempts > 0 ->
+        Process.sleep(5)
+        wait_for_entry(episode, after_ms, attempts - 1)
+    end
   end
 
   defp element(id, version, version_nonce) do

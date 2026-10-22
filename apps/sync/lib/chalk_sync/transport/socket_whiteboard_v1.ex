@@ -36,7 +36,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        phase: :awaiting_hello,
        hello_timer: timer,
        identity: nil,
-       authority_checked_at: nil,
        display_name: nil,
        presentation_negotiated: false,
        view_negotiated: false,
@@ -79,30 +78,29 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   # Fanout delivers to every subscribed socket, so a Participant who was removed or whose
-  # Episode ended would keep receiving and sending live frames until it disconnected.
+  # Episode ended would keep receiving and sending live frames until it disconnected. An idle
+  # board gets the same check from its tick.
   defp current_authority(%{identity: nil} = state), do: {:ok, state}
 
   defp current_authority(state) do
-    now_ms = System.monotonic_time(:millisecond)
+    case Authority.check(state.identity) do
+      :ok ->
+        {:ok, state}
 
-    if is_integer(state.authority_checked_at) and
-         now_ms - state.authority_checked_at < Authority.ttl_ms() do
-      {:ok, state}
-    else
-      case Authority.check(state.identity) do
-        :ok ->
-          {:ok, %{state | authority_checked_at: now_ms}}
+      {:error, :permission_denied} ->
+        stop(state, 1008, "policy violation", :permission_denied)
 
-        {:error, :permission_denied} ->
-          stop(state, 1008, "policy violation", :permission_denied)
+      {:retryable, {_reason, failure}} ->
+        {:stop, reason, close, state} =
+          stop(state, 1012, "dependency unavailable", :dependency_unavailable)
 
-        {:retryable, {_reason, failure}} ->
-          {:stop, reason, close, state} =
-            stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-
-          {:stop, reason, close, put_in(state.terminal[:failure], failure)}
-      end
+        {:stop, reason, close, put_in(state.terminal[:failure], failure)}
     end
+  end
+
+  defp handle_message(:whiteboard_authority_tick, state) do
+    Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
+    {:ok, state}
   end
 
   defp handle_message(:hello_timeout, %{phase: :awaiting_hello} = state) do
@@ -358,6 +356,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:ok, welcome} <- Episode.connect(identity) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
+      Authority.watch(identity.episode)
+      Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
 
       welcome =
         if presentation_negotiated do
@@ -372,7 +372,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           | phase: :live,
             hello_timer: nil,
             identity: identity,
-            authority_checked_at: System.monotonic_time(:millisecond),
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
             view_negotiated: view_negotiated,

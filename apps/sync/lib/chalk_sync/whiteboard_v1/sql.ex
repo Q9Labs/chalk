@@ -36,7 +36,8 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
-  # Every Participant's lifecycle state in one Episode, read without a row lock.
+  # The lifecycle state of every current Participant in one Episode, read without a row lock.
+  # Left rows are history and count as missing, so the read stays within the Episode's capacity.
   def episode_access do
     """
     select episode.status, participant.id, participant.generation, participant.status
@@ -45,6 +46,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       on participant.tenant_id = episode.tenant_id
       and participant.space_id = episode.space_id
       and participant.episode_id = episode.id
+      and participant.status in ('joining', 'active', 'leaving')
     where episode.tenant_id = $1
       and episode.space_id = $2
       and episode.id = $3
