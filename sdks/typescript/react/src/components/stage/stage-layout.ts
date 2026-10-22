@@ -3,7 +3,7 @@ export interface StageBox {
   readonly width: number;
   readonly height: number;
 }
-export type StageRole = "primary" | "strip" | "grid";
+export type StageRole = "primary" | "strip" | "grid" | "float";
 export interface StageFrame {
   readonly id: string;
   readonly role: StageRole;
@@ -148,22 +148,36 @@ const FLOAT_SPEAKER = { width: 120, height: 68 };
 const FLOAT_PERSON = { width: 76, height: 44 };
 const FLOAT_MAX = 3;
 
-/** The board mockup's floating faces: the speaker first and larger, the local person last, then a +N tile. */
+/**
+ * The board mockup's floating faces: the speaker first and larger, the local person last, then a +N tile.
+ * Shared content floats above the faces and never folds into +N, which lists people only.
+ */
 function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry {
-  const speaker = options.speakerId && options.speakerId !== options.localId && stripIds.includes(options.speakerId) ? options.speakerId : null;
-  const local = options.localId && stripIds.includes(options.localId) ? options.localId : null;
-  const others = stripIds.filter((id) => id !== speaker && id !== local);
+  const content = stripIds.filter((id) => options.wideIds?.includes(id));
+  const people = stripIds.filter((id) => !content.includes(id));
+  const speaker = options.speakerId && options.speakerId !== options.localId && people.includes(options.speakerId) ? options.speakerId : null;
+  const local = options.localId && people.includes(options.localId) ? options.localId : null;
+  const others = people.filter((id) => id !== speaker && id !== local);
   const ordered = [...(speaker ? [speaker] : []), ...others, ...(local ? [local] : [])];
-  const shown = ordered.length > FLOAT_MAX ? [...ordered.slice(0, FLOAT_MAX - 2), ...ordered.slice(-1)] : ordered;
-  const overflowCount = ordered.length - shown.length;
-  const frames: StageFrame[] = [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box }];
-  let y = 56;
-  for (const id of overflowCount ? [...shown, MORE_TILE_ID] : shown) {
-    const size = id === speaker ? FLOAT_SPEAKER : FLOAT_PERSON;
-    frames.push({ id, role: "strip", page: 0, x: box.width - 12 - size.width, y, ...size });
-    y += size.height + options.gap;
+  const fold = (max: number): readonly string[] => (ordered.length <= max ? ordered : [...(max > 1 ? [...ordered.slice(0, max - 2), ...ordered.slice(-1)] : []), MORE_TILE_ID]);
+  const stack = (ids: readonly string[]): StageFrame[] => {
+    let y = 56;
+    return ids.map((id) => {
+      const size = id === speaker || content.includes(id) ? FLOAT_SPEAKER : FLOAT_PERSON;
+      const frame: StageFrame = { id, role: "float", page: 0, x: box.width - 12 - size.width, y, ...size };
+      y += size.height + options.gap;
+      return frame;
+    });
+  };
+  // A short stage, such as a phone on its side, keeps fewer faces so the column stays over the board.
+  let max = Math.max(1, Math.min(FLOAT_MAX, options.maxPerPage ?? FLOAT_MAX));
+  let floats = stack([...content, ...fold(max)]);
+  while (max > 1 && (floats.at(-1)?.y ?? 0) + (floats.at(-1)?.height ?? 0) > box.height - 8) {
+    max -= 1;
+    floats = stack([...content, ...fold(max)]);
   }
-  return { frames, pageCount: 1, perPage: frames.length - 1, overflowCount };
+  const shownPeople = floats.filter((frame) => frame.id !== MORE_TILE_ID && !content.includes(frame.id)).length;
+  return { frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box }, ...floats], pageCount: 1, perPage: floats.length, overflowCount: ordered.length - shownPeople };
 }
 
 /** Content takes whichever placement gives it more visible area; people justify into the remainder. */

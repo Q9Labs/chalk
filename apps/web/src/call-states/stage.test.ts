@@ -133,19 +133,19 @@ it("uses a 96 by 128 picture-in-picture only for two-person phone Spotlight", as
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
-it("floats people over a phone board and keeps toasts above the board's tools", async () => {
-  await page.setViewportSize({ width: 390, height: 844 });
+it.each([390, 650])("floats people over a board on a %ipx-wide screen and keeps toasts above the board's tools", async (width) => {
+  await page.setViewportSize({ width, height: 844 });
   await open("board-people-dark");
   await page.locator(".chalk-board-zoom").waitFor();
   const stage = await page.getByTestId("stage").boundingBox();
   const board = await page.locator('[data-stage-role="primary"]').boundingBox();
   expect(board?.height).toBeCloseTo(stage?.height ?? 0, 0);
-  const tiles = await page.locator('[data-stage-role="strip"]').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  const tiles = await page.locator('[data-stage-role="float"]').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
   expect(tiles).toHaveLength(3);
   for (const tile of tiles) expect([tile.width, tile.height, Math.round(tile.right)]).toEqual([76, 44, Math.round((stage?.x ?? 0) + (stage?.width ?? 0) - 12)]);
   // Faces this small keep a short tag with the first name, and the local person comes last.
   expect(
-    await page.locator('[data-stage-role="strip"] [data-part="tile-tag"]').evaluateAll((tags) =>
+    await page.locator('[data-stage-role="float"] [data-part="tile-tag"]').evaluateAll((tags) =>
       tags
         .map((tag) => [tag.getBoundingClientRect().top, tag instanceof HTMLElement ? tag.innerText.trim() : ""] as const)
         .sort((a, b) => a[0] - b[0])

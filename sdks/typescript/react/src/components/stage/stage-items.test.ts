@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { choosePrimary, type StageItem, type PrimaryContext } from "./stage-items";
+import { choosePrimary, floatingSpeakerId, type StageItem, type PrimaryContext } from "./stage-items";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, MORE_TILE_ID } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
@@ -98,4 +98,31 @@ describe("a board on a phone", () => {
     expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "malik", "me", MORE_TILE_ID]);
     expect(geometry.overflowCount).toBe(3);
   });
+
+  it("floats shared content above the faces and never folds it into +N", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["share", "me", "nora", "malik", "akash"], { ...options, wideIds: ["whiteboard", "share"] });
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "share", "malik", "me", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(2);
+  });
+
+  it("keeps fewer faces on a short stage so the column stays over the board", () => {
+    const short = { width: 608, height: 202 };
+    const geometry = fitSpotlight(short, "whiteboard", ["me", "nora", "malik"], options);
+    const last = geometry.frames.at(-1);
+    expect((last?.y ?? 0) + (last?.height ?? 0)).toBeLessThanOrEqual(short.height - 8);
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "me", MORE_TILE_ID]);
+  });
+
+  it("honours the visible-tile limit", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik"], { ...options, maxPerPage: 2 });
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "me", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(2);
+  });
+});
+
+it("leads the floating faces with the active speaker before anyone else speaking", () => {
+  const remote = (id: string, flags: { isActiveSpeaker?: boolean; isSpeaking?: boolean }): StageItem => ({ kind: "participant", id, participant: { id, displayName: id, ...flags } });
+  const items = [remote("nora", { isSpeaking: true }), remote("malik", { isActiveSpeaker: true, isSpeaking: true })];
+  expect(floatingSpeakerId(items, null)).toBe("malik");
+  expect(floatingSpeakerId([remote("nora", {})], "akash")).toBe("akash");
 });

@@ -87,6 +87,12 @@ export function choosePrimary(items: readonly StageItem[], context: PrimaryConte
   );
 }
 
+/** The remote person whose face leads the floating column: the active speaker, then anyone speaking, then the last speaker. */
+export function floatingSpeakerId(items: readonly StageItem[], lastSpeakerId: string | null): string | null {
+  const remote = (predicate: (participant: Participant) => boolean) => participantWhere(items, (participant) => !participant.isLocal && predicate(participant));
+  return (remote((participant) => participant.isActiveSpeaker === true) ?? remote((participant) => participant.isSpeaking === true))?.id ?? lastSpeakerId;
+}
+
 /** Grid order: pinned item first, everything else in stable order. */
 export function gridOrder(items: readonly StageItem[], pinnedId: string | null): StageItem[] {
   if (!pinnedId) return [...items];

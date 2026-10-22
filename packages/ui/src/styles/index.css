@@ -816,6 +816,16 @@
   height: 12px;
 }
 
+/* Faces float over the board on a narrow stage. The board keeps its tools at the bottom, so toasts rise above them, and an edge and a shadow lift each face off the drawing. */
+[data-chalk]:has([data-stage-role="float"]) .chalk-toasts {
+  bottom: 182px;
+}
+[data-stage-role="float"] [data-part="stage-tile"] {
+  box-shadow:
+    0 0 0 1px var(--chalk-app-line-strong),
+    0 6px 18px rgb(0 0 0 / 0.5);
+}
+
 /* A tile under 70px tall, such as a face floating over a phone board, keeps a small tag with the first name. */
 @container (max-height: 70px) {
   [data-part="tile-tag"] {
@@ -1620,16 +1630,6 @@
   }
   .chalk-toasts {
     bottom: 110px;
-  }
-  /* A phone board keeps its tools at the bottom of the stage, so toasts rise above them. */
-  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toasts {
-    bottom: 182px;
-  }
-  /* Faces float over a phone board, so an edge and a shadow lift them off the drawing. */
-  [data-chalk]:has(.chalk-board[data-primary]) [data-stage-role="strip"] [data-part="stage-tile"] {
-    box-shadow:
-      0 0 0 1px var(--chalk-app-line-strong),
-      0 6px 18px rgb(0 0 0 / 0.5);
   }
   .chalk-drawer {
     inset: auto 0 0;
