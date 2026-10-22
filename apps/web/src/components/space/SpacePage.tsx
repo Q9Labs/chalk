@@ -33,7 +33,7 @@ export function SpacePage(props: SpacePageProps = {}) {
 }
 function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
-  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly errorCode: ErrorCode | undefined; readonly cleanup: () => Promise<void> } | null>(null);
+  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string | undefined; readonly errorCode: ErrorCode | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -55,7 +55,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   });
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
-  const [callName, setCallName] = useState(slug ?? "Call");
+  const [callName, setCallName] = useState<string>();
   const autoArrivalAttempted = useRef(false);
   const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
@@ -76,7 +76,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
       if (arrival?.arrival.arrival_handle) void client.leaveSpacePublicInviteArrival(arrival.arrival.arrival_handle).catch(() => undefined);
     };
   }, [client]);
-  const complete = useCallback((prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string) => {
+  const complete = useCallback((prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string | undefined) => {
     if (!active.current) {
       void prepared.finish().catch(() => undefined);
       return;
@@ -92,7 +92,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     setDisplayName(marker.displayName);
     setEntranceSettings({ displayName: marker.displayName, ...devicesOff });
     setPreparing(true);
-    const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: slug }));
+    const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: undefined }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
       .catch(() => {
@@ -297,9 +297,9 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     <main data-chalk data-chalk-theme={mode} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="min-h-0 flex-1">
         {pending ? (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName ?? "the call"}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
         ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName}…`} />
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
         ) : error ? (
           <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
         ) : (
@@ -321,7 +321,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
 type JoinedSpaceAccess = {
   readonly prepared: SpaceEntryAccess;
   readonly inviteLink?: string;
-  readonly spaceName: string;
+  readonly spaceName?: string;
 };
 type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
@@ -331,14 +331,14 @@ type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & 
 type PendingArrival = {
   readonly arrival: Awaited<ReturnType<PublicInviteClient["getSpacePublicInviteArrival"]>>;
   readonly inviteLink: string;
-  readonly spaceName: string;
+  readonly spaceName?: string;
 };
 type PublicPreparation = {
   readonly kind: "public";
   readonly arrival: PendingArrival["arrival"];
   readonly canonicalSlug: string;
   readonly inviteLink: string;
-  readonly spaceName: string;
+  readonly spaceName?: string;
   readonly prepared?: SpaceEntryAccess;
 };
 async function arrive(client: PublicInviteClient, displayName: string, slug: string | undefined, inviteToken: string | undefined): Promise<PublicPreparation> {
@@ -347,7 +347,7 @@ async function arrive(client: PublicInviteClient, displayName: string, slug: str
     const verifiedSlug = arrival.space?.slug ?? slug;
     if (!verifiedSlug) throw new Error(neutralSpaceError);
     const inviteLink = canonicalSpaceInviteLink(verifiedSlug, inviteToken);
-    return { kind: "public", arrival, canonicalSlug: verifiedSlug, inviteLink, spaceName: arrival.space?.name ?? verifiedSlug };
+    return { kind: "public", arrival, canonicalSlug: verifiedSlug, inviteLink, spaceName: arrival.space?.name };
   }
   const created = await client.createPublicSpace(displayName);
   const prepared = createPreparedPublicSpace(client, created.arrival);
@@ -422,7 +422,7 @@ function LocalSpace({
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
-  readonly spaceName: string;
+  readonly spaceName?: string;
   readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, errorCode?: ErrorCode) => void;
 }) {
   const { mode, setPreference } = useTheme();
@@ -515,9 +515,9 @@ function LocalSpace({
   );
 }
 /** The web asks only for identity. Devices are requested inside the admitted call. */
-export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly theme: ThemeMode; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
+export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange, onJoin }: { readonly spaceName?: string; readonly theme: ThemeMode; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
   return (
-    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
+    <CallLimbo spaceName={spaceName} message={spaceName ? `Join ${spaceName}` : "Join call"} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
       <form
         className="mt-4 flex w-full flex-col gap-2 text-left"
         onSubmit={(event) => {

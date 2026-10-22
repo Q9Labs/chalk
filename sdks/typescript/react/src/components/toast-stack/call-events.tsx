@@ -33,7 +33,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b style={{ fontWeight: 600 }}>No {device} found.</b> Plug one in, or check that your Mac can see it in System Settings.
+          <b style={{ fontWeight: 600 }}>No {device} found.</b> Connect one, then try again.
         </>
       ),
     };

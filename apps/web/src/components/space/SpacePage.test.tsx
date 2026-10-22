@@ -30,6 +30,16 @@ describe("public Space entry", () => {
       vi.useRealTimers();
     }
   });
+  it("names the call, not its link slug, before the guest enters", async () => {
+    const slug = "call-f689563f-f6ba-411f-b917-851ff649a822";
+    window.history.replaceState({}, "", `/space/${slug}#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockReturnValue(new Promise(() => undefined));
+    render(<SpacePage slug={slug} />);
+    expect(screen.getByText("Join call")).toBeDefined();
+    await act(async () => enterName("Ada"));
+    expect(screen.getByRole("status").textContent).toBe("Joining the call…");
+    expect(document.body.textContent).not.toContain(slug);
+  });
   it("does not blame an invite link for a join conflict", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     mocks.publicClient.arriveBySpacePublicInvite.mockRejectedValue(Object.assign(new Error("Participant is not active"), { status: 409 }));
@@ -340,7 +350,7 @@ describe("reload rejoin", () => {
         <SpacePage slug="design-lab" />
       </StrictMode>,
     );
-    expect(screen.getByRole("status").textContent).toBe("Joining design-lab…");
+    expect(screen.getByRole("status").textContent).toBe("Joining the call…");
     expect(mocks.holder.entranceProps).toBeUndefined();
     await act(async () => completeRecovery?.(mocks.prepared));
     await waitFor(() => expect(mocks.holder.chalkProps?.defaults).toEqual({ microphone: false, camera: false }));

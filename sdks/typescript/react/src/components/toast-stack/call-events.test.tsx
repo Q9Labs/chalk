@@ -52,5 +52,7 @@ it("explains a missing camera with the canonical device recovery copy", () => {
   const toast = mediaFailureToast({ code: "media.device_not_found", recoverable: true, message: "Missing input" }, "camera");
   const text = renderToStaticMarkup(<>{toast?.message}</>);
   expect(text).toContain("No camera found.");
-  expect(text).toContain("Plug one in, or check that your Mac can see it in System Settings.");
+  expect(text).toContain("Connect one, then try again.");
+  // People join from Windows, Android and iPhone too, so the copy names no platform.
+  expect(text).not.toMatch(/Mac|System Settings/);
 });
