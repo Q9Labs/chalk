@@ -143,6 +143,15 @@ it("floats people over a phone board and keeps toasts above the board's tools", 
   const tiles = await page.locator('[data-stage-role="strip"]').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
   expect(tiles).toHaveLength(3);
   for (const tile of tiles) expect([tile.width, tile.height, Math.round(tile.right)]).toEqual([76, 44, Math.round((stage?.x ?? 0) + (stage?.width ?? 0) - 12)]);
+  // Faces this small keep a short tag with the first name, and the local person comes last.
+  expect(
+    await page.locator('[data-stage-role="strip"] [data-part="tile-tag"]').evaluateAll((tags) =>
+      tags
+        .map((tag) => [tag.getBoundingClientRect().top, tag instanceof HTMLElement ? tag.innerText.trim() : ""] as const)
+        .sort((a, b) => a[0] - b[0])
+        .map(([, name]) => name),
+    ),
+  ).toEqual(["Nora", "Malik", "You"]);
   const controlsTop = Math.min(...(await page.locator(".chalk-board-island, .chalk-board-zoom").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))));
   const toastBottom = await page.locator('[data-part="toast-stack"]').evaluate((stack) => stack.getBoundingClientRect().bottom);
   expect(toastBottom).toBeLessThanOrEqual(controlsTop - 8);

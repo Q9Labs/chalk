@@ -157,12 +157,21 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           <>
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             {showName && (
-              <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
-                {participant.displayName}
-                {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
-              </span>
+              <>
+                <span dir="auto" data-part="tile-full-name" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
+                  {participant.displayName}
+                  {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
+                </span>
+                <span dir="auto" data-part="tile-short-name" className="hidden min-w-0 truncate [unicode-bidi:plaintext]">
+                  {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
+                </span>
+              </>
             )}
-            {following ? <span className="shrink-0 font-semibold opacity-80">following</span> : null}
+            {following ? (
+              <span data-part="tile-following" className="shrink-0 font-semibold opacity-80">
+                following
+              </span>
+            ) : null}
             {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
             {showStatus && participant.isHandRaised && (
               <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
