@@ -584,7 +584,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
           Opening board
         </div>
       ) : null}
-      {primary && ready && empty ? <BoardHint canDraw={canDraw} /> : null}
+      {primary && ready && empty ? <BoardHint canDraw={canDraw} mobile={presentation === "mobile"} /> : null}
       {primary && tool === "note" && canDraw ? <div className="chalk-board-note-layer" aria-hidden="true" onPointerDown={placeNoteAt} /> : null}
       {primary ? <BoardCursors cursorsRef={cursors} cameraRef={camera.cameraRef} colorFor={colorFor} hidden={offline} renderAvatar={renderCursorAvatar} /> : null}
       {primary && ready ? (
@@ -676,7 +676,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   );
 }
 
-function BoardHint({ canDraw }: { readonly canDraw: boolean }) {
+function BoardHint({ canDraw, mobile }: { readonly canDraw: boolean; readonly mobile: boolean }) {
   if (!canDraw)
     return (
       <div className="chalk-board-hint">
@@ -686,17 +686,21 @@ function BoardHint({ canDraw }: { readonly canDraw: boolean }) {
   return (
     <div className="chalk-board-hint">
       <p>An empty board. Draw, type or add a sticky note.</p>
-      <ul>
-        <li>
-          <kbd>P</kbd> Pen
-        </li>
-        <li>
-          <kbd>T</kbd> Text
-        </li>
-        <li>
-          <kbd>N</kbd> Sticky note
-        </li>
-      </ul>
+      {mobile ? (
+        <p>Draw with one finger. Use two fingers to move or zoom.</p>
+      ) : (
+        <ul>
+          <li>
+            <kbd>P</kbd> Pen
+          </li>
+          <li>
+            <kbd>T</kbd> Text
+          </li>
+          <li>
+            <kbd>N</kbd> Sticky note
+          </li>
+        </ul>
+      )}
     </div>
   );
 }
