@@ -37,6 +37,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 	}{
 		{name: "current token resumes", status: 201},
 		{name: "expired token replaces", age: 6 * time.Minute, status: 201, replacement: true},
+		{name: "overlapping expired refresh is fenced before SFU join", age: 6 * time.Minute, change: "overlap", status: 201, replacement: true},
 		{name: "long expired token replaces", age: 24 * time.Hour, status: 201, replacement: true},
 		{name: "explicit replacement", change: "replace", status: 201, replacement: true},
 		{name: "bad signature", change: "signature", status: 401, code: "media_token.invalid_signature"},
@@ -180,6 +181,17 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(body)))
 			request.Header.Set("Content-Type", "application/json")
 			request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID}))
+			if tc.change == "overlap" {
+				fixture.beforeCreate = func() {
+					fixture.beforeCreate = nil
+					fenced := repo.connection != "original"
+					retry := httptest.NewRecorder()
+					router.ServeHTTP(retry, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)).WithContext(request.Context()))
+					if !fenced || retry.Code != 409 || fixture.created != 0 || !strings.Contains(retry.Body.String(), "participant.connection_superseded") {
+						t.Fatalf("overlapping refresh reached SFU before fence: fenced=%v status=%d created=%d", fenced, retry.Code, fixture.created)
+					}
+				}
+			}
 			response := httptest.NewRecorder()
 			logged := observability.RequestMiddleware(logger)(router)
 			logged.ServeHTTP(response, request)
@@ -298,12 +310,16 @@ func (r *refreshGrantRepository) SetParticipantMediaConnection(_ context.Context
 
 type refreshGrantPlane struct {
 	replacementGrantFixture
-	created int
-	resumed int
-	issuer  accessgrants.Issuer
+	beforeCreate func()
+	created      int
+	resumed      int
+	issuer       accessgrants.Issuer
 }
 
 func (f *refreshGrantPlane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
+	if f.beforeCreate != nil {
+		f.beforeCreate()
+	}
 	f.created++
 	return f.replacementGrantFixture.CreateJoin(ctx, input)
 }

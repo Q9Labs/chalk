@@ -148,9 +148,19 @@ func issueAccessGrantEndpoint(
 			previous := subject
 			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
 			if implicitReplacement {
-				if err := generations.CheckParticipantMediaConnection(ctx, previous); err != nil {
+				stage = "media_binding"
+				reservationID, err := utilities.NewID()
+				if err != nil {
+					return accessGrantResponse{}, err
+				}
+				reservation := previous
+				reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
+				// Commit the fence before creating an external session. A lost response
+				// or failed join can recover through authenticated explicit replacement.
+				if err := generations.ReplaceParticipantMediaConnection(ctx, previous, reservation); err != nil {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
+				previous = reservation
 			}
 			stage = "media_connection"
 			if replaceMediaConnection {
