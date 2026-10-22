@@ -7,7 +7,7 @@ export type PortalLayer = "sheets" | "menus" | "toasts";
 type Entry = { readonly key: number; readonly node: ReactNode };
 
 type PortalStore = {
-  readonly hosts: Readonly<Record<PortalLayer, RefObject<View | null>>>;
+  readonly menuHost: RefObject<View | null>;
   readonly set: (layer: PortalLayer, key: number, node: ReactNode) => void;
   readonly remove: (layer: PortalLayer, key: number) => void;
   readonly subscribe: (listener: () => void) => () => void;
@@ -22,7 +22,7 @@ function createPortalStore(): PortalStore {
     for (const listener of listeners) listener();
   };
   return {
-    hosts: { sheets: createRef<View>(), menus: createRef<View>(), toasts: createRef<View>() },
+    menuHost: createRef<View>(),
     set(layer, key, node) {
       const current = layers[layer];
       const index = current.findIndex((entry) => entry.key === key);
@@ -55,8 +55,8 @@ function usePortalStore(): PortalStore {
   return store;
 }
 
-export function usePortalHostRef(layer: PortalLayer): RefObject<View | null> {
-  return usePortalStore().hosts[layer];
+export function useMenuHostRef(): RefObject<View | null> {
+  return usePortalStore().menuHost;
 }
 
 let nextKey = 0;
@@ -82,12 +82,12 @@ export function Portal({ layer, children }: { readonly layer: PortalLayer; reado
 
 export function PortalHost({ layer }: { readonly layer: PortalLayer }): React.JSX.Element {
   const entries = usePortalEntries(layer);
-  const hostRef = usePortalHostRef(layer);
+  const hostRef = useMenuHostRef();
+  const content = entries.map((entry) => <Fragment key={entry.key}>{entry.node}</Fragment>);
+  if (layer !== "menus") return <>{content}</>;
   return (
     <View collapsable={false} pointerEvents="box-none" ref={hostRef} style={StyleSheet.absoluteFill}>
-      {entries.map((entry) => (
-        <Fragment key={entry.key}>{entry.node}</Fragment>
-      ))}
+      {content}
     </View>
   );
 }

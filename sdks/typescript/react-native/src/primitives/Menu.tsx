@@ -3,7 +3,7 @@ import { AccessibilityInfo, findNodeHandle, Keyboard, Pressable, ScrollView, Sty
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { useBackHandler } from "../frame/back-handler";
 import { useDeviceLayout } from "../frame/device-layout";
-import { Portal, usePortalHostRef } from "../frame/portal";
+import { Portal, useMenuHostRef } from "../frame/portal";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon, type IconName } from "../icons/Icon";
 import { timings } from "../motion/motion";
@@ -35,7 +35,7 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
   const { colors, elevation } = useTheme();
   const layout = useDeviceLayout();
   const reduceMotion = useReducedMotion();
-  const hostRef = usePortalHostRef("menus");
+  const hostRef = useMenuHostRef();
   const [anchor, setAnchor] = useState<{ readonly trigger: Rect; readonly viewport: Rect } | null>(null);
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
   const firstItem = useRef<View | null>(null);
