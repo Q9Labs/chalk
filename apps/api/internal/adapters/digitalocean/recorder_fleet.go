@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
@@ -46,6 +47,8 @@ type RecorderFleetConfig struct {
 }
 
 type RecorderFleet struct {
+	rateLimitMu    sync.Mutex
+	rateLimit      RateLimitSnapshot
 	presignArchive func(context.Context, recorderfleet.ArchiveSpec) (string, error)
 	baseURL        *url.URL
 	client         *http.Client
@@ -409,11 +412,20 @@ func (a *RecorderFleet) doJSON(ctx context.Context, method, path string, query u
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
+	a.rateLimitMu.Lock()
+	a.rateLimit.Requests++
+	a.rateLimitMu.Unlock()
 	response, err := a.client.Do(request)
 	if err != nil {
 		return fmt.Errorf("%w: DigitalOcean request", recorderfleet.ErrProviderUnavailable)
 	}
 	defer response.Body.Close()
+	now := time.Now()
+	a.observeResponse(response.Header, now)
+	if response.StatusCode == http.StatusTooManyRequests {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
+		return fmt.Errorf("%w: DigitalOcean status 429", &recorderfleet.ProviderRateLimitError{RetryAt: retryDeadline(response.Header, now)})
+	}
 	if response.StatusCode == http.StatusNotFound {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
 		return errNotFound

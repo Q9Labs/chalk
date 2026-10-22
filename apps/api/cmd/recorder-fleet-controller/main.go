@@ -30,7 +30,7 @@ func run() error {
 		return err
 	}
 	defer lease.Close()
-	reconciler, err := buildReconciler(config)
+	reconciler, err := buildReconciler(config, logger)
 	if err != nil {
 		return err
 	}
