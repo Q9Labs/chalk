@@ -173,3 +173,24 @@ rules:
         - "/scripts/**"
         - "/apps/**/scripts/**"
         - "/packages/**/scripts/**"
+
+  - id: chalk.guard-ui-media-actions
+    message: Route media enable, retry, request acceptance, and capture-device changes through runMediaAction so current public connection health gates them. Off actions must remain allowed.
+    severity: ERROR
+    languages: [typescript]
+    patterns:
+      - pattern-either:
+          - pattern: $CLIENT.media.setMicrophoneEnabled(...)
+          - pattern: $CLIENT.media.setCameraEnabled(...)
+          - pattern: $CLIENT.media.setScreenShareEnabled(...)
+          - pattern: $CLIENT.media.acceptRequest(...)
+          - pattern: $CLIENT.media.selectMicrophone(...)
+          - pattern: $CLIENT.media.selectCamera(...)
+      - pattern-not-inside: runMediaAction(...)
+    paths:
+      include:
+        - /sdks/typescript/react/src/**
+        - /sdks/typescript/react-native/src/**
+      exclude:
+        - "**/*.test.*"
+        - "**/test-support/**"

@@ -1,4 +1,5 @@
 "use client";
+import { runMediaAction } from "@q9labsai/chalk-client";
 import { CallLimbo } from "../call-limbo/CallLimbo";
 import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
@@ -290,7 +291,11 @@ function SpaceSurface(
       overlay={
         <>
           {media.incomingRequests[0] ? (
-            <MediaRequestDialog request={media.incomingRequests[0]} onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))} onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId))} />
+            <MediaRequestDialog
+              request={media.incomingRequests[0]}
+              onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))}
+              onAllow={() => void runCommand(() => runMediaAction(client, true, () => client.media.acceptRequest(media.incomingRequests[0]!.requestId)))}
+            />
           ) : null}
         </>
       }

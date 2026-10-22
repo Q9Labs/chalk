@@ -2,9 +2,52 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
+import { SpaceClientError } from "@q9labsai/chalk-client";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { SpaceView } from "./SpaceView";
+
+it.each([
+  { capability: "publishVideo", label: "Turn on camera" },
+  { capability: "publishAudio", label: "Unmute microphone" },
+  { capability: "publishScreen", label: "Share screen" },
+] as const)("checks the current connection before retrying $capability", async ({ capability, label }) => {
+  const base = createSnapshot([capability]);
+  const snapshot = { ...base, connection: { ...base.connection, status: "live" as const } };
+  const onCommand = vi.fn(() => {
+    throw new SpaceClientError({ code: "media.device_busy", recoverable: true, message: "Device busy" });
+  });
+  const client = createPreviewClient(snapshot, { onCommand, updateCommand: (current) => current });
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click());
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
+    if (!retry) throw new Error("Missing media retry");
+    // Change the current snapshot without a render: a captured toast callback must not use stale state.
+    const current = vi.spyOn(client, "getSnapshot").mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting", syncHealth: "recovering" } });
+    await act(async () => retry.click());
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Try again");
+    current.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+    await act(async () => retry.click());
+    expect(onCommand).toHaveBeenCalledTimes(2);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+    vi.restoreAllMocks();
+  }
+});
 
 it("blocks push-to-talk during recovery but still releases a live press after recovery starts", async () => {
   const snapshot = createSnapshot(["publishAudio"]);

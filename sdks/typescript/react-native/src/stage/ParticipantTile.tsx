@@ -1,3 +1,4 @@
+import { runMediaAction } from "@q9labsai/chalk-client";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -114,7 +115,7 @@ function FlipCameraButton({ back, float, testID }: { readonly back: boolean; rea
   const other = useSpaceSelector(selectOtherCamera);
   const flip = useCallback(() => {
     if (other === null) return;
-    client.media.selectCamera(other).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn't switch the camera." }));
+    runMediaAction(client, true, () => client.media.selectCamera(other)).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn't switch the camera." }));
   }, [client, other, toasts]);
   if (other === null) return null;
 

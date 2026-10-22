@@ -357,6 +357,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
         ),
       )
       .pipe(
+        Effect.catch((cause) => {
+          // The local pause already ran. Transport recovery cannot veto turning a device off.
+          if (!enabled && this.#ports?.sync.getSnapshot().connection.phase !== "live") {
+            return earlyPause ? foreign(() => earlyPause!) : Effect.void;
+          }
+          return Effect.fail(cause);
+        }),
         Effect.mapError(normalizeMediaError),
 
         Effect.ensuring(
@@ -455,60 +462,44 @@ class MediaControllerRuntime implements MediaControllerEffects {
       );
   }
   #stopScreen(): ClientEffect<void> {
-    let intentRevision = 0;
     let earlyPause: Promise<void> | null = null;
     const localPause = Effect.suspend(() => {
-      intentRevision = (this.#intentRevisions.get("screen") ?? 0) + 1;
-      this.#intentRevisions.set("screen", intentRevision);
+      this.#intentRevisions.set("screen", (this.#intentRevisions.get("screen") ?? 0) + 1);
       this.#ports?.media.setLocalSourceIntent?.("screen", false);
       if (this.#ports) earlyPause = this.#beginLocalPause(this.#ports, "screen");
       return Effect.void;
     });
-    return localPause
-      .pipe(
-        Effect.andThen(
-          this.#serialize(
-            "screen",
-            this.#connection.runCommand((ports) =>
-              Effect.suspend(() => {
-                const track = this.#track("screen");
-                let paused = false;
-                return (earlyPause ? foreign(() => earlyPause!) : this.#localTarget(ports, "screen", false)).pipe(
-                  Effect.tap(() =>
-                    Effect.sync(() => {
-                      paused = true;
-                    }),
-                  ),
-                  Effect.andThen(foreign(() => ports.sync.setScreenShareEnabled(false))),
-                  Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, "stopScreenShare"))),
-                  Effect.andThen(this.#clearScreenAudio(ports.media)),
-                  Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen"))),
-                  Effect.tap(() =>
-                    Effect.sync(() => {
-                      this.#assertActivePorts(ports, "stopScreenShare");
-                      if (this.#track("screen") === track) this.#deleteTrack("screen");
-                      track?.stop();
-                      this.#screenEndedPending = false;
-                      this.#publish();
-                    }),
-                  ),
-                  Effect.asVoid,
-                  Effect.catch((cause) =>
-                    (paused && !isSyncRejection(cause)) || this.#intentRevisions.get("screen") !== intentRevision
-                      ? Effect.fail(cause)
-                      : Effect.sync(() => ports.media.setLocalSourceIntent?.("screen", true)).pipe(
-                          Effect.andThen(this.#localTarget(ports, "screen", true)),
-                          Effect.catch(() => Effect.void),
-                          Effect.andThen(Effect.fail(cause)),
-                        ),
-                  ),
-                );
+    return localPause.pipe(
+      Effect.andThen(
+        this.#serialize(
+          "screen",
+          Effect.suspend(() => {
+            const ports = this.#ports;
+            const track = this.#track("screen");
+            const cleanup = (ports ? this.#clearScreenAudio(ports.media).pipe(Effect.andThen(foreign(() => ports.media.clearPreparedLocalTrack("screen")))) : Effect.void).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (this.#track("screen") === track) this.#deleteTrack("screen");
+                  track?.stop();
+                  this.#screenEndedPending = false;
+                  this.#publish();
+                }),
+              ),
+            );
+            // Capture belongs to the local user. Sync availability must never gate its release.
+            return (earlyPause ? foreign(() => earlyPause!) : Effect.void).pipe(
+              Effect.matchEffect({
+                onFailure: (cause) => cleanup.pipe(Effect.andThen(Effect.fail(cause))),
+                onSuccess: () => cleanup,
               }),
-            ),
-          ),
+              Effect.andThen(ports?.sync.getSnapshot().connection.phase === "live" ? this.#connection.runCommand((active) => foreign(() => active.sync.setScreenShareEnabled(false))) : Effect.void),
+              Effect.asVoid,
+            );
+          }),
         ),
-      )
-      .pipe(Effect.mapError(normalizeMediaError));
+      ),
+      Effect.mapError(normalizeMediaError),
+    );
   }
   #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
     return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(

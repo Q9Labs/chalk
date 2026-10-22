@@ -1,3 +1,4 @@
+import { runMediaAction } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StatusBar, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -86,13 +87,13 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
     haptics.mute();
     playSound(microphoneOn ? "mute" : "unmute", soundsEnabled);
     if (microphoneOn) noteOwnMicrophoneChange();
-    const turnOn = () => client.media.setMicrophoneEnabled(true).catch((cause: unknown) => reportMediaFailure("microphone", cause, turnOn));
-    if (microphoneOn) client.media.setMicrophoneEnabled(false).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t mute your microphone." }));
+    const turnOn = () => runMediaAction(client, true, () => client.media.setMicrophoneEnabled(true)).catch((cause: unknown) => reportMediaFailure("microphone", cause, turnOn));
+    if (microphoneOn) runMediaAction(client, false, () => client.media.setMicrophoneEnabled(false)).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t mute your microphone." }));
     else void turnOn();
   }, [client, microphoneOn, noteOwnMicrophoneChange, reportMediaFailure, soundsEnabled, toasts]);
   const toggleCamera = useCallback(() => {
-    const turnOn = () => client.media.setCameraEnabled(true).catch((cause: unknown) => reportMediaFailure("camera", cause, turnOn));
-    if (cameraOn) client.media.setCameraEnabled(false).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t turn off your camera." }));
+    const turnOn = () => runMediaAction(client, true, () => client.media.setCameraEnabled(true)).catch((cause: unknown) => reportMediaFailure("camera", cause, turnOn));
+    if (cameraOn) runMediaAction(client, false, () => client.media.setCameraEnabled(false)).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t turn off your camera." }));
     else void turnOn();
   }, [cameraOn, client, reportMediaFailure, toasts]);
   const exit = useCallback(

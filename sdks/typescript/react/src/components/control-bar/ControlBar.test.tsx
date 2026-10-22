@@ -98,7 +98,7 @@ describe("media command failures", () => {
 
 it("requests a replacement without first disabling an active screen share", async () => {
   const onCommand = vi.fn();
-  const client = createPreviewClient(undefined, { onCommand });
+  const client = createPreviewClient(createSnapshot(["publishScreen"]), { onCommand });
   await client.media.setScreenShareEnabled(true);
   onCommand.mockClear();
   function ChangeShare() {
@@ -164,4 +164,51 @@ describe("Sync availability", () => {
       client.dispose();
     }
   });
+});
+
+it.each(["microphone", "camera", "share", "replacement", "microphone-device", "camera-device"] as const)("guards a retained %s action at click time", async (action) => {
+  const snapshot = createSnapshot(["publishAudio", "publishVideo", "publishScreen"]);
+  const onCommand = vi.fn();
+  const client = createPreviewClient(snapshot, { onCommand, updateCommand: (current) => current });
+  function Harness() {
+    const { surfaceProps: controls } = useConnectedControlBarBehavior({});
+    const activate = () => {
+      switch (action) {
+        case "microphone":
+          return controls.onToggleMute?.();
+        case "camera":
+          return controls.onToggleVideo?.();
+        case "share":
+          return controls.onToggleScreenShare?.();
+        case "replacement":
+          return controls.onStartScreenShare?.({ surface: "browser" });
+        case "microphone-device":
+          return controls.onAudioInputChange?.("other");
+        case "camera-device":
+          return controls.onVideoInputChange?.("other");
+      }
+    };
+    return <button onClick={activate}>Activate</button>;
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <Harness />
+        </ChalkProvider>,
+      ),
+    );
+    const current = vi.spyOn(client, "getSnapshot").mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting", syncHealth: "recovering" } });
+    await act(async () => container.querySelector("button")?.click());
+    expect(onCommand).not.toHaveBeenCalled();
+    current.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+    await act(async () => container.querySelector("button")?.click());
+    expect(onCommand).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    client.dispose();
+    vi.restoreAllMocks();
+  }
 });

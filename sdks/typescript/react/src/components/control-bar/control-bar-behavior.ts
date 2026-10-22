@@ -1,3 +1,4 @@
+import { runMediaAction } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
@@ -309,7 +310,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
       : undefined,
     onStartScreenShare: (options) =>
       void run(async () => {
-        await client.media.setScreenShareEnabled(true, options);
+        await runMediaAction(client, true, () => client.media.setScreenShareEnabled(true, options));
       }, "screen"),
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
@@ -360,12 +361,12 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           await context.close();
         }
       }),
-    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone"),
-    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera"),
-    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
+    onToggleMute: () => void run(() => runMediaAction(client, !microphoneEnabled, () => client.media.setMicrophoneEnabled(!microphoneEnabled)), "microphone"),
+    onToggleVideo: () => void run(() => runMediaAction(client, !cameraEnabled, () => client.media.setCameraEnabled(!cameraEnabled)), "camera"),
+    onAudioInputChange: (deviceId) => void run(() => runMediaAction(client, true, () => client.media.selectMicrophone(deviceId)), "microphone"),
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId)),
-    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
-    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen"),
+    onVideoInputChange: (deviceId) => void run(() => runMediaAction(client, true, () => client.media.selectCamera(deviceId)), "camera"),
+    onToggleScreenShare: () => void run(() => runMediaAction(client, !screenSharing, () => client.media.setScreenShareEnabled(!screenSharing)), "screen"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,

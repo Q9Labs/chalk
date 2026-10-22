@@ -1,3 +1,4 @@
+import { runMediaAction } from "@q9labsai/chalk-client";
 import { SpaceClientError, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useRef } from "react";
 import { Linking, Platform } from "react-native";
@@ -110,8 +111,10 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
               label: "Try again",
               testID: "toast.try-again",
               onPress: () => {
-                toasts.dismiss(id);
-                retry();
+                void runMediaAction(client, true, () => {
+                  toasts.dismiss(id);
+                  retry();
+                });
               },
             },
           ],
@@ -120,7 +123,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
       }
       toasts.show({ kind: "error", leading, dismissible: true, wrap: true, message: mediaFailureMessage(permission, code) });
     },
-    [onOpenSettings, toasts],
+    [client, onOpenSettings, toasts],
   );
 
   return { noteOwnMicrophoneChange, reportMediaFailure };
@@ -169,8 +172,10 @@ function noticeToast(notice: Notice, { client, toasts, colors, dismiss }: Notice
       const who = request.actorDisplayName ? firstName(request.actorDisplayName) : "The host";
       const unmute = request.kind === "unmute";
       const accept = () => {
-        dismiss();
-        client.media.acceptRequest(request.requestId).catch(() => toasts.show({ kind: "error", dismissible: true, message: unmute ? "Couldn’t unmute you." : "Couldn’t turn on your camera." }));
+        runMediaAction(client, true, async () => {
+          await client.media.acceptRequest(request.requestId);
+          dismiss();
+        }).catch(() => toasts.show({ kind: "error", dismissible: true, message: unmute ? "Couldn’t unmute you." : "Couldn’t turn on your camera." }));
       };
       return {
         input: {
