@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 const root = resolve(import.meta.dirname, "../../../..");
 const require = createRequire(resolve(root, "apps/web/package.json"));
 const temporary = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-ui-"));
-const webPort = process.env.CHALK_DEV_WEB_PORT || "3070";
+const webPort = process.env.CHALK_DEV_WEB_PORT || process.env.VITE_PORT || "3070";
 const fixturePort = process.env.FIXTURE_PORT || "3071";
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const fixtureOrigin = `http://127.0.0.1:${fixturePort}`;
