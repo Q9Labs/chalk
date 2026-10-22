@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Durable M4 queue. Standard library only; helpers are installed by content hash."""
 import argparse
+import ctypes
 import fcntl
 import hashlib
 import json
@@ -17,6 +18,18 @@ import tempfile
 import time
 
 DEFAULT_ROOT = Path.home() / '.local/share/chalk-remote/v1'
+if sys.platform == 'darwin':
+    LIBC = ctypes.CDLL(None, use_errno=True)
+    LIBPROC = ctypes.CDLL('/usr/lib/libproc.dylib')
+else:
+    BOOT_ID = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+
+
+class BSDInfo(ctypes.Structure):
+    # Darwin sys/proc_info.h: proc_bsdinfo, including the microsecond birth receipt.
+    _fields_ = [('ids', ctypes.c_uint32 * 12), ('comm', ctypes.c_char * 16),
+                ('name', ctypes.c_char * 32), ('misc', ctypes.c_uint32 * 6),
+                ('seconds', ctypes.c_uint64), ('micros', ctypes.c_uint64)]
 
 
 def database(root):
@@ -44,6 +57,8 @@ def wake(root, isolated=False):
         if isolated:
             command.append('--isolated')
         subprocess.Popen([*command, 'daemon'], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                         env={key: value for key, value in os.environ.items()
+                              if key not in ('CHALK_REMOTE_JOB_TOKEN', 'CHALK_REMOTE_RESOURCE_DIR', 'CHALK_REMOTE_SLOT')},
                          start_new_session=True, close_fds=True)
 
 
@@ -85,9 +100,47 @@ def submit(root, db, args):
             shutil.rmtree(incoming)
 
 
+def process_info(pid):
+    if sys.platform == 'darwin':
+        info = BSDInfo()
+        if LIBPROC.proc_pidinfo(int(pid), 3, 0, ctypes.byref(info), ctypes.sizeof(info)) != ctypes.sizeof(info) or info.ids[1] == 5:
+            return '', None
+        return f'{info.seconds}.{info.micros:06d}', int(info.ids[4])
+    try:
+        fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+        return ('', None) if fields[0] == 'Z' else (BOOT_ID + ':' + fields[19], int(fields[1]))
+    except (OSError, IndexError):
+        return '', None
+
+
 def process_start(pid):
-    result = subprocess.run(['ps', '-p', str(pid), '-o', 'lstart='], capture_output=True, text=True)
-    return result.stdout.strip()
+    return process_info(pid)[0]
+
+
+def process_environment(pid):
+    if sys.platform != 'darwin':
+        try:
+            return Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+        except OSError:
+            return ()
+    mib = (ctypes.c_int * 3)(1, 49, int(pid))  # CTL_KERN, KERN_PROCARGS2.
+    size = ctypes.c_size_t()
+    if LIBC.sysctl(mib, 3, None, ctypes.byref(size), None, 0) or not 4 <= size.value <= 4 * 1024 * 1024:
+        return ()
+    buffer = ctypes.create_string_buffer(size.value)
+    if LIBC.sysctl(mib, 3, buffer, ctypes.byref(size), None, 0):
+        return ()
+    data = buffer.raw[:size.value]
+    argc = int.from_bytes(data[:4], sys.byteorder, signed=True)
+    try:
+        offset = data.index(b'\0', 4) + 1  # Executable path, then alignment padding.
+        while offset < len(data) and data[offset] == 0:
+            offset += 1
+        for _ in range(argc):
+            offset = data.index(b'\0', offset) + 1
+        return data[offset:].split(b'\0')
+    except ValueError:
+        return ()
 
 
 def job_token(job):
@@ -95,49 +148,56 @@ def job_token(job):
 
 
 def owned_processes(job, pid, started, slot):
-    # setpgrp (including with-timeout.sh) changes process group but preserves the job's session.
-    # Session membership survives reparenting and cwd changes; start times protect PID reuse.
-    owned = set()
-    processes = subprocess.check_output(['ps', '-axo', 'pid=,ppid='], text=True)
-    parents = {}
-    for line in processes.splitlines():
-        p, parent = line.split()
-        parents[int(p)] = int(parent)
-    if pid and process_start(pid) == started:
-        owned.add(pid)
-    if pid and process_start(pid) in ('', started):
-        for p in parents:
+    # Capture birth and parent together, before reading any ownership evidence.
+    pids = subprocess.check_output(['ps', '-axo', 'pid='], text=True).split()
+    snapshot = {int(p): process_info(int(p)) for p in pids}
+    path = job / 'members.json'
+    known = {int(p): birth for p, birth in json.loads(path.read_text()).items()} if path.exists() else {}
+    parents = {p: birth for p, birth in known.items() if birth and snapshot.get(p, ('', None))[0] == birth}
+    marker = ('CHALK_REMOTE_JOB_TOKEN=' + job_token(job)).encode()
+    owned = {p: birth for p, (birth, _) in snapshot.items()
+             if birth and p != os.getpid() and marker in process_environment(p)}
+    session = {}
+    if pid and started and snapshot.get(pid, ('', None))[0] == started and process_start(pid) == started:
+        parents[pid] = started
+        session[pid] = started
+        for p, (birth, _) in snapshot.items():
             try:
-                if os.getsid(p) == pid:
-                    owned.add(p)
+                if birth and os.getsid(p) == pid:
+                    session[p] = birth
             except ProcessLookupError:
                 pass
+        if process_start(pid) == started:
+            owned.update(session)
+    # A live, birth-verified member can still prove its direct descendants after
+    # the supervisor dies. A recycled numeric SID or PPID cannot.
     changed = True
     while changed:
-        children = {p for p, parent in parents.items() if parent in owned}
-        changed = not children.issubset(owned)
-        owned.update(children)
-    marker = 'CHALK_REMOTE_JOB_TOKEN=' + job_token(job)
-    environment_flag = '-Eww' if sys.platform == 'darwin' else 'eww'
-    # Environment bytes stay in memory; only matched PIDs become cleanup receipts.
-    environment = subprocess.check_output(['ps', environment_flag, '-axo', 'pid=,stat=,command='], text=True)
-    for line in environment.splitlines():
-        fields = line.split(maxsplit=2)
-        if len(fields) == 3 and marker in fields[2].split() and not fields[1].startswith('Z'):
-            owned.add(int(fields[0]))
-    receipts = {p: process_start(p) for p in owned if p != os.getpid()}
-    if not receipts:
-        return {}
-    states = subprocess.check_output(['ps', '-axo', 'pid=,stat='], text=True)
-    alive = {int(line.split()[0]) for line in states.splitlines() if not line.split()[1].startswith('Z')}
-    return {p: start for p, start in receipts.items() if p in alive and start}
+        children = {p: birth for p, (birth, parent) in snapshot.items()
+                    if birth and p not in parents and parent in parents
+                    and process_start(parent) == parents[parent]}
+        changed = bool(children)
+        parents.update(children)
+    owned.update(parents)
+    return {p: birth for p, birth in owned.items() if p != os.getpid() and process_start(p) == birth}
+
+
+def remember_members(job, discovered):
+    path = job / 'members.json'
+    receipts = {int(p): birth for p, birth in json.loads(path.read_text()).items()} if path.exists() else {}
+    for p, birth in discovered.items():
+        receipts.setdefault(p, birth)  # Never refresh a receipt to a replacement's birth.
+    temporary = job / 'members.tmp'
+    temporary.write_text(json.dumps(receipts))
+    temporary.replace(path)
+    return receipts
 
 
 def stop_job(job, pid, started, slot=None):
-    receipts = owned_processes(job, pid, started, slot)
+    receipts = remember_members(job, owned_processes(job, pid, started, slot))
     for sig in (signal.SIGTERM, signal.SIGKILL):
         if sig == signal.SIGKILL:
-            receipts.update(owned_processes(job, pid, started, slot))
+            receipts = remember_members(job, owned_processes(job, pid, started, slot))
         for p, start in receipts.items():
             if start and process_start(p) == start:
                 try:
@@ -158,6 +218,10 @@ def stop_job(job, pid, started, slot=None):
     deadline = time.monotonic() + 5
     while True:
         remaining = owned_processes(job, pid, started, slot)
+        for p, birth in remaining.items():
+            if p in receipts and receipts[p] != birth:
+                raise RuntimeError(f'process identity changed during cleanup: pid={p}')
+        remaining.update({p: birth for p, birth in receipts.items() if process_start(p) == birth})
         if not remaining:
             return
         if time.monotonic() >= deadline:
@@ -206,25 +270,38 @@ def check_slot_ports(job, slot):
     if ports.is_symlink() or ports.read_text().strip() != str(slot):
         raise ValueError('invalid slot port receipt')
     base = 21000 + slot * 100
-    found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}',
-                            f'-iUDP:{base+1}-{base+18}', '-Fpcn'], capture_output=True, text=True)
-    if found.returncode not in (0, 1):
-        raise RuntimeError('could not inspect slot ports')
-    holders = []
+    holders = {}
+    omitted = False
     owner = command = ''
-    for line in found.stdout.splitlines():
-        if line.startswith('p'):
-            owner = line[1:]
-        elif line.startswith('c'):
-            command = line[1:]
-        elif line.startswith('n'):
-            # lsof selects either endpoint. Only a local endpoint can reserve this slot.
-            local = line[1:].split('->', 1)[0]
-            port = local.rsplit(':', 1)[-1]
-            if port.isdigit() and base + 1 <= int(port) <= base + 18:
-                holders.append(f'pid={owner} command={command} socket={line[1:]}')
+    with subprocess.Popen(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}',
+                            f'-iUDP:{base+1}-{base+18}', '-Fpcn'], stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, text=True) as found:
+        for line in found.stdout:
+            line = line.rstrip('\n')
+            if line.startswith('p'):
+                owner = line[1:]
+            elif line.startswith('c'):
+                command = line[1:65]
+            elif line.startswith('n'):
+                # Remote endpoints and connection churn do not change slot ownership.
+                local = line[1:].split('->', 1)[0]
+                port = local.rsplit(':', 1)[-1]
+                if port.isdigit() and base + 1 <= int(port) <= base + 18:
+                    key = (owner, command, local)
+                    if key not in holders:
+                        if len(holders) < 8:
+                            holders[key] = bounded_text(f'pid={owner} command={command} socket={local}', 160)
+                        else:
+                            omitted = True
+        if found.wait() not in (0, 1):
+            raise RuntimeError('could not inspect slot ports')
     if holders:
-        raise RuntimeError('slot ports still held; no ownership inferred: ' + '; '.join(holders))
+        evidence = '; '.join(holders.values()) + ('; additional holders omitted' if omitted else '')
+        raise RuntimeError('slot ports still held; no ownership inferred: ' + evidence)
+
+
+def bounded_text(value, limit=2048):
+    return value.encode()[:limit].decode(errors='ignore')
 
 
 def finish(root, db, row, result, reason):
@@ -254,7 +331,7 @@ def complete(root, db, row, result, reason, isolated):
             check_slot_ports(job, row['slot'])
         finish(root, db, row, result, reason)
     except Exception as error:
-        message = f'cleanup quarantined slot {row["slot"]}: {type(error).__name__}: {error}'
+        message = bounded_text(f'cleanup quarantined slot {row["slot"]}: {type(error).__name__}: {error}')
         if message != row['cleanup_error']:
             with (job / 'output.log').open('a') as log:
                 log.write('\n[remote] ' + message + '; retry in 30 seconds\n')
@@ -270,13 +347,35 @@ def worker(root, args):
     job = root / 'jobs' / args.id
     request = json.loads((job / 'request.json').read_text())
     login_shell = '/bin/zsh' if sys.platform == 'darwin' else '/bin/bash'
-    child = subprocess.run([login_shell, '-lc', 'exec bash "$@"', 'chalk-queue',
-                            str(job / 'runner.sh'), args.work, *request], stdin=subprocess.DEVNULL)
+    child = subprocess.Popen([login_shell, '-lc', 'exec bash "$@"', 'chalk-queue',
+                              str(job / 'runner.sh'), args.work, *request], stdin=subprocess.DEVNULL)
+    started = process_start(os.getpid())
+    remember_members(job, {os.getpid(): started})
+    while child.poll() is None:
+        remember_members(job, owned_processes(job, os.getpid(), started, None))
+        time.sleep(.2)
     result = child.returncode if child.returncode >= 0 else 128 - child.returncode
+    remember_members(job, owned_processes(job, os.getpid(), started, None))
     temporary = job / 'exitcode.tmp'
     temporary.write_text(str(result))
     temporary.replace(job / 'exitcode')
     return result
+
+
+def describe(db, row):
+    status = dict(row)
+    if row['state'] != 'queued':
+        return status
+    blocked = db.execute("SELECT id,slot,cleanup_error,cleanup_after FROM jobs WHERE state='quarantined' ORDER BY slot").fetchall()
+    status['blocked_by'] = [{'id': r['id'], 'slot': r['slot'], 'error': bounded_text(r['cleanup_error'] or 'cleanup pending', 256),
+                             'retry_at': r['cleanup_after']} for r in blocked[:8]]
+    status['blocked_by_omitted'] = max(0, len(blocked) - 8)
+    details = [f'{r["id"]} slot={r["slot"]}: {r["error"]}; retry={time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["retry_at"]))}'
+               for r in status['blocked_by']]
+    if status['blocked_by_omitted']:
+        details.append(f'{status["blocked_by_omitted"]} additional quarantines omitted')
+    status['blocking_summary'] = bounded_text(' | '.join(details))
+    return status
 
 
 def exclusive_request(request):
@@ -559,7 +658,7 @@ def main():
                 else:
                     wake(root, args.isolated)
         if args.action != 'read':
-            print(json.dumps(dict(row)))
+            print(json.dumps(describe(db, row)))
         else:
             log = root / 'jobs' / args.id / 'output.log'
             if log.exists():

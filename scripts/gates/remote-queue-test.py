@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tiny real-process queue regressions. --isolated never competes for the M4 heavy lock."""
 import concurrent.futures
+from contextlib import closing
 import fcntl
 import io
 import json
@@ -198,6 +199,194 @@ class QueueTest(unittest.TestCase):
                 child.wait()
                 child.stdout.close()
             db.close()
+
+    def test_argv_token_never_authorizes_cleanup(self):
+        queue = runpy.run_path(str(HELPER))
+        job = self.root / 'jobs/ended'
+        job.mkdir(parents=True)
+        foreign = subprocess.Popen([sys.executable, '-c', 'import time; print("ready",flush=True); time.sleep(20)',
+                                    'CHALK_REMOTE_JOB_TOKEN=' + queue['job_token'](job)],
+                                   env={**os.environ, 'CHALK_REMOTE_JOB_TOKEN': 'another-job-token'},
+                                   stdout=subprocess.PIPE, text=True, start_new_session=True, cwd='/')
+        try:
+            self.assertEqual(foreign.stdout.readline().strip(), 'ready')
+            queue['stop_job'](job, None, None)
+            self.assertIsNone(foreign.poll(), 'an argv string authorized signalling a foreign process')
+        finally:
+            if foreign.poll() is None:
+                foreign.kill()
+            foreign.wait()
+            foreign.stdout.close()
+
+    def test_queue_wake_does_not_inherit_a_workloads_identity(self):
+        queue = runpy.run_path(str(HELPER))
+        job = self.root / 'jobs/origin'
+        job.mkdir(parents=True)
+        old = os.environ.get('CHALK_REMOTE_JOB_TOKEN')
+        try:
+            os.environ['CHALK_REMOTE_JOB_TOKEN'] = queue['job_token'](job)
+            queue['wake'](self.root, True)
+        finally:
+            if old is None:
+                os.environ.pop('CHALK_REMOTE_JOB_TOKEN', None)
+            else:
+                os.environ['CHALK_REMOTE_JOB_TOKEN'] = old
+        deadline = time.monotonic() + 4
+        processes = []
+        while not processes and time.monotonic() < deadline:
+            lines = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True).splitlines()
+            processes = [int(line.split()[0]) for line in lines if str(self.root) in line and line.endswith(' daemon')]
+            time.sleep(.02)
+        self.assertEqual(len(processes), 1)
+        queue['stop_job'](job, None, None)
+        self.assertTrue(queue['process_start'](processes[0]), 'workload cleanup killed the shared dispatcher it woke')
+
+    def test_absent_original_worker_cannot_authorize_a_later_session(self):
+        queue = runpy.run_path(str(HELPER))
+        job = self.root / 'jobs/old'
+        job.mkdir(parents=True)
+        code = ('import subprocess,sys; child=subprocess.Popen([sys.executable,"-c",'
+                '"import time; print(\\\"ready\\\",flush=True); time.sleep(20)"],stdout=sys.stdout); print(child.pid,flush=True)')
+        leader = subprocess.Popen([sys.executable, '-c', code], env={**os.environ, 'CHALK_REMOTE_JOB_TOKEN': 'another-job-token'},
+                                  stdout=subprocess.PIPE, text=True, start_new_session=True, cwd='/')
+        child = None
+        try:
+            lines = [leader.stdout.readline().strip(), leader.stdout.readline().strip()]
+            child = int(next(value for value in lines if value.isdigit()))
+            self.assertIn('ready', lines)
+            leader.wait(timeout=3)
+            self.assertEqual(os.getsid(child), leader.pid)
+            queue['stop_job'](job, leader.pid, 'old worker birth')
+            state = subprocess.run(['ps', '-p', str(child), '-o', 'stat='], capture_output=True, text=True).stdout.strip()
+            self.assertTrue(state and not state.startswith('Z'), 'stale SID authorized signalling a foreign child')
+        finally:
+            if leader.poll() is None:
+                leader.kill()
+            leader.wait()
+            leader.stdout.close()
+            if child:
+                try:
+                    os.kill(child, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_ownership_scan_cannot_adopt_a_replacement_birth(self):
+        queue = runpy.run_path(str(HELPER))
+        job = self.root / 'jobs/old'
+        job.mkdir(parents=True)
+        foreign = subprocess.Popen([sys.executable, '-c', 'import time; print("ready",flush=True); time.sleep(20)'],
+                                   env={**os.environ, 'CHALK_REMOTE_JOB_TOKEN': 'another-job-token'},
+                                   stdout=subprocess.PIPE, text=True, start_new_session=True, cwd='/')
+        try:
+            self.assertEqual(foreign.stdout.readline().strip(), 'ready')
+            actual_start = queue['process_start']
+            seen = []
+            def interleaved_start(pid):
+                if pid == foreign.pid and not seen:
+                    seen.append('old worker birth')
+                    return 'old worker birth'
+                return actual_start(pid)
+            queue['owned_processes'].__globals__['process_start'] = interleaved_start
+            queue['stop_job'](job, foreign.pid, 'old worker birth')
+            self.assertIsNone(foreign.poll(), 'cleanup adopted a replacement process birth')
+        finally:
+            if foreign.poll() is None:
+                foreign.kill()
+            foreign.wait()
+            foreign.stdout.close()
+
+    def test_quarantine_holder_evidence_is_bounded_and_connection_churn_is_quiet(self):
+        queue = runpy.run_path(str(HELPER))
+        db = queue['database'](self.root)
+        job = self.root / 'jobs/ended'
+        (job / 'resources').mkdir(parents=True)
+        listener = socket.socket()
+        sockets = []
+        try:
+            for slot in range(90, 100):
+                base = 21000 + slot * 100
+                found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}', '-t'], capture_output=True, text=True)
+                if not found.stdout:
+                    listener.bind(('127.0.0.1', base + 4))
+                    break
+            else:
+                self.fail('no unused port block')
+            listener.listen()
+            (job / 'resources/slot').write_text(str(slot))
+            with db:
+                db.execute("INSERT INTO jobs(id,priority,submitted,wait_seconds,state,slot) VALUES('ended',0,?,0,'running',?)", (time.time(), slot))
+            previous = None
+            for count in (30, 60):
+                for _ in range(30):
+                    client = socket.create_connection(listener.getsockname())
+                    accepted, _ = listener.accept()
+                    sockets.extend((client, accepted))
+                row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+                queue['complete'](self.root, db, row, 0, 'test', False)
+                row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+                self.assertLessEqual(len(row['cleanup_error'].encode()), 2048)
+                self.assertLessEqual(row['cleanup_error'].count('pid='), 8)
+                log = (job / 'output.log').read_bytes()
+                if previous is not None:
+                    self.assertEqual(log, previous, 'equivalent holder retries appended duplicate evidence')
+                previous = log
+            for offset in range(1, 11):
+                if offset != 4:
+                    extra = socket.socket()
+                    extra.bind(('127.0.0.1', base + offset))
+                    extra.listen()
+                    sockets.append(extra)
+            row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+            queue['complete'](self.root, db, row, 0, 'test', False)
+            row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+            self.assertLessEqual(len(row['cleanup_error'].encode()), 2048)
+            self.assertLessEqual(row['cleanup_error'].count('pid='), 8)
+            self.assertIn('additional holders omitted', row['cleanup_error'])
+        finally:
+            for sock in sockets:
+                sock.close()
+            listener.close()
+            db.close()
+
+    def test_waiting_client_sees_quarantined_jobs_errors_and_retry_times(self):
+        os.environ['CHALK_REMOTE_SLOTS'] = '3'
+        for slot in range(3):
+            self.submit(f'blocked{slot}')
+            job = self.root / 'jobs' / f'blocked{slot}'
+            (job / 'resources').mkdir()
+            (job / 'resources/postgres').write_text('invalid\n')
+            with closing(sqlite3.connect(self.root / 'queue.sqlite')) as db, db:
+                db.execute("UPDATE jobs SET state='quarantined',slot=?,result=0 WHERE id=?", (slot, f'blocked{slot}'))
+        self.submit('waiting', 'exit 7')
+        self.lock.close()
+        try:
+            deadline = time.monotonic() + 5
+            while not self.status('blocked2')['cleanup_error'] and time.monotonic() < deadline:
+                time.sleep(.05)
+            waiting = self.status('waiting')
+            self.assertEqual({row['id'] for row in waiting.get('blocked_by', [])}, {'blocked0', 'blocked1', 'blocked2'})
+            self.assertTrue(all(row['error'] and row['retry_at'] > time.time() for row in waiting['blocked_by']))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.shell_client, 'waiting')
+                time.sleep(2.5)
+                self.release_quarantines()
+                result = future.result(timeout=12)
+            self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+            for name in ('blocked0', 'blocked1', 'blocked2'):
+                self.assertIn(name, result.stdout)
+            self.assertIn('invalid slot resource receipt', result.stdout)
+            self.assertIn('retry', result.stdout)
+            reports = [line for line in result.stdout.splitlines() if line.startswith('[remote] queue blocked:')]
+            self.assertTrue(reports, result.stdout)
+            self.assertEqual(len(reports), len(set(reports)), 'unchanged blockers were printed again: ' + result.stdout)
+        finally:
+            self.release_quarantines()
+
+    def release_quarantines(self):
+        for receipt in (self.root / 'jobs').glob('blocked*/resources/postgres'):
+            receipt.unlink(missing_ok=True)
+        with closing(sqlite3.connect(self.root / 'queue.sqlite')) as db, db:
+            db.execute("UPDATE jobs SET cleanup_after=0 WHERE state='quarantined'")
 
     def test_cleanup_quarantine_does_not_interrupt_other_slots_or_recovery(self):
         os.environ['CHALK_REMOTE_SLOTS'] = '2'

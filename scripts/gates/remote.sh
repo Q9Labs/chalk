@@ -196,7 +196,7 @@ echo "[local] job ID: ${run_id}; reattach: scripts/gates/remote.sh --attach ${ru
 echo "[local] full log: ${log_file}"
 
 follow() {
-  local offset=0 result chunk status response
+  local offset=0 result chunk status response blockers previous_blockers=""
   chunk="$(mktemp "${log_dir}/.read.XXXXXX")"
   trap 'rm -f "$chunk"' RETURN
   # A failed transfer is discarded and retried from its last confirmed byte offset.
@@ -213,6 +213,15 @@ follow() {
         cat "${chunk}"
       else
         sed -n '/^==> /p; /^\[remote\]/p; /^REMOTE_GATE_EXIT/p; /^TIMEOUT/p' "${chunk}"
+      fi
+      blockers="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("blocking_summary", ""))' <<<"$response")"
+      if [[ "$blockers" != "$previous_blockers" ]]; then
+        if [[ -n "$blockers" ]]; then
+          printf '[remote] queue blocked: %s\n' "$blockers"
+        else
+          echo '[remote] queue blockers cleared'
+        fi
+        previous_blockers="$blockers"
       fi
       result="$(python3 -c 'import json,sys; row=json.load(sys.stdin); print(row["result"] if row["state"]=="done" else "")' <<<"$response")"
       if [[ -n "$result" ]]; then

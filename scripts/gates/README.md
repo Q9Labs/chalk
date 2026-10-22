@@ -166,14 +166,20 @@ lock before checking for legacy checkouts without a lock. That check has a
 30-second limit; a checkout that remains active fails only the new ticket.
 Bare legacy waiters remain queued and cannot extend this guard. New checkout names and port blocks avoid the old harness's process
 veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
-Cleanup signals only processes identified by inherited job IDs or the recorded
-worker/session. Port matches never authorize signals. Reserved local slot ports
+Cleanup reads real environment entries (Darwin sysctl or Linux procfs), never
+argv, and checks native process birth identities before and after ownership reads.
+Session ownership requires the original supervisor to remain alive. Supervisors
+persist birth-protected member receipts, and cleanup never refreshes a receipt to
+a replacement's birth. Queue dispatchers strip inherited workload identities.
+Port matches never authorize signals. Reserved local slot ports
 must be free before release; a foreign holder quarantines the slot and its PID,
 command and socket appear in job status and logs. Cleanup failures also quarantine
-only that slot, with a 30-second retry. Healthy slots keep running. After a
+only that slot, with a 30-second retry. Evidence has at most eight holder records
+and 2,048 UTF-8 bytes; repeated connections do not append equivalent evidence.
+Queued status and clients report the blocking job IDs, errors and retry times;
+client output changes only when that report changes. Healthy slots keep running. After a
 dispatcher restart, surviving supervisors finish and supply their saved exit codes.
-Job-specific
-Postgres and Redis container and volume receipts survive dispatcher crashes;
+Job-specific Postgres and Redis container and volume receipts survive dispatcher crashes;
 completion and recovery remove those resources before releasing the slot.
 FIFO applies among new tickets. After merge, lanes may voluntarily resubmit
 legacy waiters through the new client to use the slots sooner.
