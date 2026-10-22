@@ -15,6 +15,7 @@ const CONNECTION_ERROR_CODE_MAP = {
   device_constraint_invalid: "media.device_constraint_invalid",
   media_capture_failed: "media.capture_failed",
   sync_start_failed: "connection.sync_start_failed",
+  state_digest_recovery_failed: "connection.state_digest_recovery_failed",
   sync_hello_timeout: "connection.sync_hello_timeout",
   media_start_failed: "connection.media_start_failed",
   join_cleanup_unconfirmed: "connection.join_cleanup_unconfirmed",

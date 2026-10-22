@@ -7,6 +7,21 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it.each(["startup", "live"] as const)("surfaces a failed digest recovery during %s without replacing the Sync client", async (phase) => {
+    const fixture = recoveryFixture();
+    const createSync = vi.spyOn(fixture.dependencies, "createSyncClient");
+    if (phase === "startup") vi.spyOn(fixture.platform.sync, "start").mockImplementation(async () => fixture.failSync("state_digest_recovery_failed"));
+    await fixture.run(async (lifecycle) => {
+      if (phase === "live") {
+        expect(lifecycle.getSnapshot().state).toBe("live");
+        fixture.failSync("state_digest_recovery_failed");
+      }
+      await vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "state_digest_recovery_failed", recoverable: false } }));
+      await fixture.tick(60000);
+      expect(createSync).toHaveBeenCalledTimes(1);
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "state_digest_recovery_failed", recoverable: false } });
+    });
+  });
   it("leaves Sync recovery and command eligibility unchanged during a brief transport loss", async () => {
     const platform = createCoreTestPlatform();
     const access = parseParsedAccessGrant({

@@ -11,7 +11,7 @@ import { V1SyncError } from "./v1-error";
 import { frameSignature } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
-import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError } from "./v1-reducer";
+import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
   V1AdmissionTarget,
   V1AssignableRole,
@@ -42,6 +42,7 @@ const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
+const DIGEST_RECOVERY_COOLDOWN_MS = 60000;
 type RequestDeferred = Deferred<V1DirectedRequestResult> & {
   readonly frame: SyncV1ClientFrame;
 };
@@ -71,6 +72,7 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #requestListeners = new Set<(request: V1DirectedRequest) => void>();
   readonly #collaborationState: V1CollaborationState;
   readonly #controlHeads = new Map<number, string>();
+  #snapshotRevision: number | null = null;
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
   readonly #requests = new Map<string, RequestDeferred>();
@@ -84,6 +86,8 @@ export class V1SyncClient implements V1CollaborationClient {
   #participantId: string | null = null;
   #participantGeneration: number | null = null;
   #recovery: Recovery | null = null;
+  #snapshotRecoveryRequested = false;
+  #lastDigestRecoveryAt: number | null = null;
   #started = false;
   #startupGeneration = 0;
   #connectionGeneration = 0;
@@ -337,7 +341,7 @@ export class V1SyncClient implements V1CollaborationClient {
     return promise;
   }
   #connect(): void {
-    if (!this.#started || !this.#transportAvailable || this.#socket) return;
+    if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
     const socket = this.#options.webSocket.connect(this.#options.url);
@@ -401,8 +405,10 @@ export class V1SyncClient implements V1CollaborationClient {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
       await this.#handleFrame(frame);
-    } catch {
-      this.#recover("invalid_frame");
+    } catch (error) {
+      if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
+      else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
+      else this.#recover("invalid_frame");
     }
   }
   async #handleFrame(frame: SyncV1ServerFrame): Promise<void> {
@@ -523,15 +529,20 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#emit();
       return;
     }
+    if (this.#snapshotRecoveryRequested && frame.mode !== "snapshot") throw new V1ReplicaError("digest recovery requires a full snapshot");
     if (frame.mode === "snapshot") {
-      this.#control = await restoreV1Snapshot(frame.snapshot);
+      const control = await restoreV1Snapshot(frame.snapshot);
+      if (!sameHead(control, frame.head)) throw new V1ReplicaError("snapshot head mismatch");
+      this.#control = control;
+      this.#snapshotRevision = control.revision;
+      this.#snapshotRecoveryRequested = false;
       this.#controlHeads.clear();
       this.#controlEvents.clear();
       this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
+      await this.#commandScheduler.settleProven();
     }
     if (frame.mode === "replay" && (!this.#control || this.#control.revision >= frame.head.revision)) throw new V1ReplicaError("invalid replay welcome");
     if (frame.mode === "up_to_date" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("up-to-date head mismatch");
-    if (frame.mode === "snapshot" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("snapshot head mismatch");
     this.#recovery = { id: frame.recovery_id, head: frame.head, replayEvents: 0, replayBytes: 0, controlComplete: false };
     if (frame.mode === "snapshot") this.#ackRecovery();
     this.#emit();
@@ -675,7 +686,9 @@ export class V1SyncClient implements V1CollaborationClient {
       }
     >,
   ): boolean {
-    return this.#controlHeads.get(ack.revision) === ack.state_digest;
+    // A validated authoritative snapshot includes every earlier committed revision.
+    // Stored duplicate receipts keep their original head, even after it is superseded.
+    return (this.#snapshotRevision !== null && ack.revision < this.#snapshotRevision) || this.#controlHeads.get(ack.revision) === ack.state_digest;
   }
   #rememberControlHead(revision: number, digest: string): void {
     this.#controlHeads.set(revision, digest);
@@ -742,6 +755,29 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!socket) return;
     socket.close(CLIENT_RESTART_CLOSE_CODE, reason);
     this.#disconnected(socket);
+  }
+  #recoverDigestMismatch(): void {
+    const now = this.#clock().now();
+    if (this.#lastDigestRecoveryAt !== null && now - this.#lastDigestRecoveryAt < DIGEST_RECOVERY_COOLDOWN_MS) {
+      this.#failDigestRecovery();
+      return;
+    }
+    this.#lastDigestRecoveryAt = now;
+    this.#snapshotRecoveryRequested = true;
+    this.#control = null;
+    this.#snapshotRevision = null;
+    this.#controlHeads.clear();
+    this.#controlEvents.clear();
+    this.#recover("state_digest_mismatch");
+  }
+  #failDigestRecovery(): void {
+    this.#phase = { phase: "terminal", terminalReason: "state_digest_recovery_failed" };
+    this.#clearReconnect();
+    this.#commandScheduler.stop("state_digest_recovery_failed");
+    const socket = this.#socket;
+    socket?.close(CLIENT_RESTART_CLOSE_CODE, "state_digest_recovery_failed");
+    if (socket) this.#disconnected(socket);
+    this.#emit();
   }
   #handleLifecycle(event: "online" | "offline" | "active" | "inactive"): void {
     if (event === "online" || event === "offline") this.#online = event === "online";

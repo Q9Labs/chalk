@@ -16,6 +16,13 @@ export class V1ReplicaError extends Error {
   }
 }
 
+export class V1StateDigestMismatchError extends V1ReplicaError {
+  constructor() {
+    super("control state digest mismatch");
+    this.name = "V1StateDigestMismatchError";
+  }
+}
+
 export async function restoreV1Snapshot(snapshot: Snapshot): Promise<V1ControlState> {
   const state = snapshotToState(snapshot);
   assertV1ControlSemantics(state);
@@ -141,7 +148,7 @@ function durableProjection(state: V1ControlState): unknown {
 }
 
 async function assertDigest(state: V1ControlState): Promise<void> {
-  if ((await computeV1StateDigest(state)) !== state.stateDigest) throw new V1ReplicaError("control state digest mismatch");
+  if ((await computeV1StateDigest(state)) !== state.stateDigest) throw new V1StateDigestMismatchError();
 }
 
 function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
