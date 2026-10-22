@@ -382,7 +382,7 @@ describe("reload rejoin", () => {
     render(<SpacePage slug="design-lab" />);
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
     await leaveCall();
-    expect(await screen.findByRole("heading", { name: "You left design-lab" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "You left the call" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Rejoin" })).toBeDefined();
     expect(screen.queryByLabelText("Your name")).toBeNull();
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
