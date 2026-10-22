@@ -354,8 +354,10 @@ it("brings a typed text back for both people after Undo and Redo", async () => {
 
     await writer.getByRole("button", { name: "Undo", exact: true }).click();
     await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeLessThan(blank);
-    // The viewer takes in the undone text; a viewer that answers with a delete would empty the writer's Redo here.
+    // Undo leaves the text empty but on the board. A viewer that deletes it holds a copy as new as the writer's Redo,
+    // so whether Redo reaches them turns on a random tie-break.
     await viewer.waitForTimeout(1_000);
+    expect(await viewer.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
     await writer.getByRole("button", { name: "Redo", exact: true }).click({ timeout: 5_000 });
     await expect.poll(() => ink(writer), { timeout: 10_000 }).toBeGreaterThan(blank);
     await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeGreaterThan(blank);
