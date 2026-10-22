@@ -1206,6 +1206,10 @@
   z-index: 90;
   pointer-events: none;
 }
+/* An open board keeps its tools at the bottom of the stage, so toasts rise above them. */
+[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="bottom"]) .chalk-toasts {
+  bottom: 156px;
+}
 .chalk-toast {
   display: flex;
   align-items: center;
