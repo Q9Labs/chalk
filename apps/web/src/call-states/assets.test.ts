@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { encodeEmbeddedWhiteboardMessage } from "@q9labsai/chalk-whiteboard/embedded";
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { EXCALIDRAW_ASSET_ROOT, MATHJAX_ASSET_ROOT } from "../lib/whiteboard-asset-versions";
 import { startCallHarness } from "./browser-harness";
 
 let origin: string;
@@ -99,7 +100,7 @@ it("loads call, board, sticky note, text and math assets from our origin", async
     expect(pageErrors).toEqual([]);
     expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
     expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
-    expect(requests.some(({ url }) => new URL(url).pathname === "/chalk-mathjax/4.1.3/tex-svg.js")).toBe(true);
+    expect(requests.some(({ url }) => new URL(url).pathname === `${MATHJAX_ASSET_ROOT}/tex-svg.js`)).toBe(true);
     expect(requests.some(({ url }) => url.includes("/sre/speech-worker.js"))).toBe(true);
     expect(requests.some(({ url }) => url.includes("/sre/mathmaps/en.json"))).toBe(true);
   } finally {
@@ -130,7 +131,7 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
     await page.addScriptTag({
       type: "module",
       content: `import { configureWhiteboardAssets } from ${JSON.stringify(assetsModule)};
-        configureWhiteboardAssets({ excalidrawCssPath: "/chalk-whiteboard/0.18.1/index.css", mathJaxBasePath: "/chalk-mathjax/4.1.3" });
+        configureWhiteboardAssets({ excalidrawCssPath: ${JSON.stringify(`${EXCALIDRAW_ASSET_ROOT}/index.css`)}, mathJaxBasePath: ${JSON.stringify(MATHJAX_ASSET_ROOT)} });
         const { convertToExcalidrawElements, exportToSvg } = await import(${JSON.stringify(excalidrawModule)});
         const svg = await exportToSvg({ elements: convertToExcalidrawElements([{ type: "text", text: "Local font failure", fontFamily: 1, x: 0, y: 0 }]), appState: {}, files: null });
         const output = document.createElement("output");
@@ -140,7 +141,7 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
     });
     await page.locator("#font-failure-proof").waitFor({ timeout: 10_000 });
     expect(await page.locator("#font-failure-proof").textContent()).toContain("<svg");
-    expect(requests).toContain(`${origin}/chalk-whiteboard/0.18.1/fonts/Virgil/Virgil-Regular.woff2`);
+    expect(requests).toContain(`${origin}${EXCALIDRAW_ASSET_ROOT}/fonts/Virgil/Virgil-Regular.woff2`);
     expect(
       requests.filter((url) => /^https?:/.test(url) && new URL(url).origin !== origin),
       "external font fallback requests",
