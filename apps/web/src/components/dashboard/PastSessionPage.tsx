@@ -71,15 +71,43 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
         </div>
       </div>
     );
+  const { recordings } = state.data.session;
+  const recording = recordings.find((item) => item.exportStatus === "ready") ?? recordings[0];
+  // Recordings are newest first, so a later attempt than the one shown sits before it.
+  const newer = recording ? recordings.slice(0, recordings.indexOf(recording)).find((item) => preparable(item) || item.exportStatus === "pending") : undefined;
+  // Player, transcript and export state belong to one recording, so a new selection starts fresh.
   return (
-    <Session ids={ids} back={back(state.data.callName)} session={state.data.session} onRecording={(recording) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? recording : item)) } }), { refresh: false })} />
+    <Session
+      key={recording?.id ?? "none"}
+      ids={ids}
+      back={back(state.data.callName)}
+      session={state.data.session}
+      recording={recording}
+      newer={newer}
+      onRecording={(next) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? next : item)) } }), { refresh: false })}
+    />
   );
 }
 
-function Session({ ids, back, session, onRecording }: { readonly ids: Ids; readonly back: ReactNode; readonly session: PastSessionDTO; readonly onRecording: (recording: RecordingDTO) => void }) {
+const preparable = (recording: RecordingDTO) => recording.sourceStatus === "available" && (recording.exportStatus === "none" || (recording.exportStatus === "failed" && recording.exportRetryable));
+
+function Session({
+  ids,
+  back,
+  session,
+  recording,
+  newer,
+  onRecording,
+}: {
+  readonly ids: Ids;
+  readonly back: ReactNode;
+  readonly session: PastSessionDTO;
+  readonly recording: RecordingDTO | undefined;
+  readonly newer: RecordingDTO | undefined;
+  readonly onRecording: (recording: RecordingDTO) => void;
+}) {
   const phone = usePhone();
-  const { episode, attendance, recordings } = session;
-  const recording = recordings.find((item) => item.exportStatus === "ready") ?? recordings[0];
+  const { episode, attendance } = session;
   const [transcript, setTranscript] = useTranscript(ids, recording);
   const intents = useIntentKeys();
   const toast = useToast();
@@ -120,13 +148,13 @@ function Session({ ids, back, session, onRecording }: { readonly ids: Ids; reado
       </div>
     );
 
-  async function prepareRecording() {
-    if (!recording || exporting) return;
+  async function prepareRecording(target: RecordingDTO) {
+    if (exporting) return;
     setExporting(true);
     try {
-      const result = await act("past-session", { action: "export-recording", ...ids, recordingId: recording.id, idempotencyKey: intents.key(`export:${recording.id}`) });
+      const result = await act("past-session", { action: "export-recording", ...ids, recordingId: target.id, idempotencyKey: intents.key(`export:${target.id}`) });
       onRecording(result.recording);
-      intents.done(`export:${recording.id}`);
+      intents.done(`export:${target.id}`);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     } finally {
@@ -137,9 +165,25 @@ function Session({ ids, back, session, onRecording }: { readonly ids: Ids; reado
   const failed = recording.sourceStatus === "failed" || recording.status === "failed" || recording.exportStatus === "failed";
   const unavailable = recording.sourceStatus === "expired" || (recording.exportStatus === "unavailable" && recording.sourceStatus !== "pending");
   const preparing = recording.exportStatus === "pending";
-  const canPrepare = recording.sourceStatus === "available" && (recording.exportStatus === "none" || (recording.exportStatus === "failed" && recording.exportRetryable));
+  const canPrepare = preparable(recording);
   const media = playable ? (
-    <Player key={recording.id} ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
+    <>
+      <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
+      {newer ? (
+        <div className="pnote" role="status">
+          <div>
+            {preparable(newer) ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
+            <b>{preparable(newer) ? "A newer recording is ready to prepare" : "Preparing the newer recording"}</b>
+            <p>{preparable(newer) ? "Prepare it to watch or download it here." : "It replaces this video here when it’s ready."}</p>
+            {preparable(newer) ? (
+              <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(newer)}>
+                {exporting ? "Preparing…" : newer.exportStatus === "failed" ? "Try again" : "Prepare recording"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </>
   ) : (
     <div className="pnote" role={failed ? "alert" : "status"}>
       <div>
@@ -147,7 +191,7 @@ function Session({ ids, back, session, onRecording }: { readonly ids: Ids; reado
         <b>{failed ? "The recording couldn’t be made" : unavailable ? "The recording is no longer available" : canPrepare ? "The recording is ready to prepare" : preparing ? "Preparing the recording" : "Processing the recording"}</b>
         <p>{failed || unavailable ? recording.failureMessage || "The recording source is no longer available." : canPrepare ? "Prepare this session’s video to watch or download it." : "You can leave this page and return when the video is ready."}</p>
         {canPrepare ? (
-          <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording()}>
+          <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
             {exporting ? "Preparing…" : failed ? "Try again" : "Prepare recording"}
           </button>
         ) : null}

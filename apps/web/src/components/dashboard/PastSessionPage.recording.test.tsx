@@ -24,7 +24,8 @@ let metadataStatus = 200;
 let transcriptHTTPStatus = 200;
 let extraRecordings: ReturnType<typeof recording>[] = [];
 let brokenURL: string | null = null;
-const requests: { path: string; action?: string; id?: string }[] = [];
+let stalledTranscripts: string | null = null;
+const requests: { path: string; action?: string; id?: string; recordingId?: string }[] = [];
 
 function recording() {
   return recordingDTO(
@@ -52,6 +53,7 @@ beforeEach(() => {
   transcriptHTTPStatus = 200;
   extraRecordings = [];
   brokenURL = null;
+  stalledTranscripts = null;
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -64,11 +66,12 @@ beforeEach(() => {
     const url = new URL(input, "https://chalk.test");
     const path = url.pathname;
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
-    requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined });
+    requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined, recordingId: body?.recordingId });
     if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
     if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
     if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: { ...recording(), id: url.searchParams.get("id") } }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
     if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
+    if (body?.action === "transcripts" && body.recordingId === stalledTranscripts) return new Promise<Response>(() => {});
     if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
     if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
     if (body?.action === "export-recording") {
@@ -140,6 +143,36 @@ it("plays a newer attempt once it is ready even after an older attempt's video f
   await tick();
   expect(screen.queryByText("The recording didn’t load")).toBeNull();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+});
+
+it("drops the older attempt's transcript when a newer attempt becomes the selected recording", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  artifact = "pending";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready" }];
+  stalledTranscripts = id;
+  await open();
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  artifact = "ready";
+  await tick();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(screen.queryByText("Saved speech")).toBeNull();
+});
+
+it("keeps a newer preparable attempt reachable while an older export plays", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready" }];
+  await open();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(screen.getByText("A newer recording is ready to prepare")).toBeTruthy();
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
+  });
+  expect(requests.filter((request) => request.action === "export-recording").map((request) => request.recordingId)).toEqual([id]);
+  expect(screen.getByText("Preparing the newer recording")).toBeTruthy();
+  artifact = "ready";
+  await tick();
+  expect(screen.queryByText("Preparing the newer recording")).toBeNull();
+  expect(requests.filter((request) => request.action === "recording-url").map((request) => request.recordingId)).toEqual([older, id]);
 });
 
 it("replaces pending capture with its terminal reason without a reload", async () => {
