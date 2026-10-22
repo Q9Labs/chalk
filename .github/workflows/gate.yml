@@ -64,7 +64,8 @@ jobs:
     name: Root ${{ matrix.group }}
     needs: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Includes median Chromium setup (~9.5m): tests/bundles take ~12m each; leaks take ~27m.
+    timeout-minutes: ${{ fromJSON('{"browser-tests":24,"call-performance":24,"call-leaks":54}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -123,9 +124,9 @@ jobs:
         if: matrix.group == 'checks'
         uses: ./.github/actions/setup-scanners
 
-      # The browser-tests lane runs tools/sdk-web-consumer-e2e in Chromium.
+      # Browser tests, call bundle budgets and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: matrix.group == 'browser-tests'
+        if: contains(fromJSON('["browser-tests", "call-performance", "call-leaks"]'), matrix.group)
         run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
 
       # call-performance runs in the root gate for call rendering changes;
