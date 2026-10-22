@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { choosePrimary, type StageItem, type PrimaryContext } from "./stage-items";
-import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight } from "./stage-layout";
+import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, MORE_TILE_ID } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
 const board: StageItem = { kind: "whiteboard", id: "whiteboard" };
@@ -77,4 +77,25 @@ it("lets a phone board fill its allotted area instead of forcing a video aspect"
   const board = geometry.frames[0];
   expect(board?.width).toBe(box.width);
   expect(board?.height).toBe(box.height - Math.round(box.height * 0.3) - 8);
+});
+
+describe("a board on a phone", () => {
+  const box = { width: 358, height: 692 };
+  const options = { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, floatingPhonePeople: true, speakerId: "malik", localId: "me" };
+
+  it("keeps the whole stage for the board and floats people at its right edge, speaker first and larger", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik"], options);
+    expect(geometry.frames.map(({ id, x, y, width, height }) => ({ id, x, y, width, height }))).toEqual([
+      { id: "whiteboard", x: 0, y: 0, width: 358, height: 692 },
+      { id: "malik", x: 226, y: 56, width: 120, height: 68 },
+      { id: "nora", x: 270, y: 132, width: 76, height: 44 },
+      { id: "me", x: 270, y: 184, width: 76, height: 44 },
+    ]);
+  });
+
+  it("shows the speaker and the local person, then folds everyone else into a +N tile", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik", "akash", "sofia"], options);
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "malik", "me", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(3);
+  });
 });

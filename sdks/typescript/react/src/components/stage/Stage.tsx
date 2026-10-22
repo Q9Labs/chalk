@@ -157,13 +157,24 @@ export function Stage({
     const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
     const remaining = ordered.filter((item) => item.id !== primary.id);
     const strip = [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))];
+    const speakerId = remaining.find((item) => item.kind === "participant" && !item.participant.isLocal && (item.participant.isActiveSpeaker || item.participant.isSpeaking))?.id ?? (interactive ? lastSpeakerRef.current : null);
+    const localId = remaining.find((item) => item.kind === "participant" && item.participant.isLocal)?.id ?? null;
     return fitSpotlight(
       box,
       primary.id,
       strip.map((item) => item.id),
-      { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", slimPhoneStrip: primary.kind === "whiteboard", wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds, maxPerPage },
+      {
+        ...DEFAULT_SPOTLIGHT_OPTIONS,
+        primaryAspect: aspect,
+        content: primary.kind !== "participant",
+        floatingPhonePeople: primary.kind === "whiteboard",
+        speakerId,
+        localId,
+        wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds,
+        maxPerPage,
+      },
     );
-  }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
+  }, [activePinnedId, box, interactive, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
   const animate = animateOverride ?? !prefersReducedMotion;
   const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean; departedAt?: number }[] }>({
