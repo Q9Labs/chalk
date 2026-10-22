@@ -70,7 +70,8 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
   const client = useSpaceClient();
   const { colors, scheme } = useTheme();
   const view = useStageView();
-  const { phone } = useDeviceLayout();
+  const { width, height } = useDeviceLayout();
+  const phone = Math.min(width, height) < 600;
   const status = useSpaceSelector(selectBoard);
   const roster = useSpaceSelector(selectRoster);
   const selfId = useSpaceSelector(selectSelfId);
