@@ -68,6 +68,14 @@ describe("normalizeMenuAnchor", () => {
     expect(placement.y + frame.y).toBe(trigger.y + trigger.height + 6);
   });
 
+  it("uses the measured portal origin when Android system bars inset the app window", () => {
+    // The provider's DecorView Y is 24, but measureInWindow reports this host at Y = 0.
+    const portal = { x: 0, y: 0, width: 393, height: 828 };
+    const trigger = { x: 100, y: 100, width: 44, height: 44 };
+    const placement = placeMenu(normalizeMenuAnchor(trigger, portal), menu, portal, { top: 0, bottom: 0, left: 0, right: 0 });
+    expect(placement.y).toBe(150);
+  });
+
   it("leaves window-sized anchors unchanged after the external notice is dismissed", () => {
     const trigger = { x: 70, y: 90, width: 100, height: 44 };
     expect(normalizeMenuAnchor(trigger, { x: 0, y: 0, width: 402, height: 874 })).toEqual(trigger);

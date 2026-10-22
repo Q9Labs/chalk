@@ -3,7 +3,7 @@ import { AccessibilityInfo, findNodeHandle, Keyboard, Pressable, ScrollView, Sty
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { useBackHandler } from "../frame/back-handler";
 import { useDeviceLayout } from "../frame/device-layout";
-import { Portal } from "../frame/portal";
+import { Portal, usePortalHostRef } from "../frame/portal";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon, type IconName } from "../icons/Icon";
 import { timings } from "../motion/motion";
@@ -35,7 +35,8 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
   const { colors, elevation } = useTheme();
   const layout = useDeviceLayout();
   const reduceMotion = useReducedMotion();
-  const [trigger, setTrigger] = useState<Rect | null>(null);
+  const hostRef = usePortalHostRef("menus");
+  const [anchor, setAnchor] = useState<{ readonly trigger: Rect; readonly viewport: Rect } | null>(null);
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
   const firstItem = useRef<View | null>(null);
   const keyboardHeight = useKeyboardHeight();
@@ -46,13 +47,20 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
   useEffect(() => {
     if (!open) {
       firstItem.current = null;
-      setTrigger(null);
+      setAnchor(null);
       setPlacement(null);
       shown.value = 0;
       return;
     }
-    anchorRef.current?.measureInWindow((x, y, width, height) => setTrigger({ x, y, width, height }));
-  }, [anchorRef, open, shown]);
+    const host = hostRef.current;
+    const trigger = anchorRef.current;
+    if (!host || !trigger) return;
+    // Both native measurements must use the same window origin, including Android system bars.
+    host.measureInWindow((x, y, width, height) => {
+      const viewport = { x, y, width, height };
+      trigger.measureInWindow((x, y, width, height) => setAnchor({ trigger: normalizeMenuAnchor({ x, y, width, height }, viewport), viewport }));
+    });
+  }, [anchorRef, hostRef, open, shown]);
 
   // Like iOS menus, an open menu closes when the screen rotates or resizes, because its trigger moved.
   const viewport = `${layout.x},${layout.y}:${layout.width}x${layout.height}`;
@@ -73,12 +81,12 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
 
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
-      if (!trigger || placement) return;
+      if (!anchor || placement) return;
       const { width, height } = event.nativeEvent.layout;
-      setPlacement(placeMenu(normalizeMenuAnchor(trigger, layout), { width, height }, layout, layout.insets, keyboardHeight));
+      setPlacement(placeMenu(anchor.trigger, { width, height }, anchor.viewport, layout.insets, keyboardHeight));
       shown.value = reduceMotion ? 1 : withTiming(1, timings.menu);
     },
-    [keyboardHeight, layout, placement, reduceMotion, shown, trigger],
+    [anchor, keyboardHeight, layout, placement, reduceMotion, shown],
   );
 
   useEffect(() => {
@@ -103,7 +111,7 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
   const surfaceStatic = [styles.surface, { minWidth, backgroundColor: colors.popover, borderColor: colors.lineStrong, boxShadow: elevation.popover }, placement ? { left: placement.x, top: placement.y, maxHeight: placement.maxHeight ?? undefined } : styles.measuring];
   const surfaceRef = useMeasuredRef<View>(testID, surfaceStatic);
 
-  if (!open || !trigger) return null;
+  if (!open || !anchor) return null;
   return (
     <Portal layer="menus">
       <Pressable accessible={false} onPress={onClose} style={StyleSheet.absoluteFill} testID={testID ? `${testID}.backdrop` : undefined} />

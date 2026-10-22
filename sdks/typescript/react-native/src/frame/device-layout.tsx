@@ -6,7 +6,7 @@ export type DeviceLayout = {
   readonly arrangement: Arrangement;
   /** True for `portrait` and `landscape`: the phone look (bottom sheets, 52 pt dock, 48 pt menu rows). */
   readonly phone: boolean;
-  /** Window origin of the allocated SDK frame; portals use coordinates local to this frame. */
+  /** Allocated SDK frame origin; menus close when the frame moves. */
   readonly x: number;
   readonly y: number;
   readonly width: number;
