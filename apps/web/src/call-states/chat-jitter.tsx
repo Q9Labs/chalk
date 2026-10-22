@@ -21,7 +21,20 @@ export function ChatJitterState() {
     const snapshot = liveSnapshot({ others: PEOPLE.slice(0, 2), chat: messages });
     return createCallStateClient({ ...snapshot, chat: { ...snapshot.chat, readReceipts: [{ participantId: "nora", participantGeneration: 1, readThroughSequence: "11", readAt: new Date().toISOString() }] } });
   });
-  useEffect(() => () => client.dispose(), [client]);
+  useEffect(() => {
+    const append = () =>
+      client.updateSnapshot((current) => {
+        const previous = current.chat.messages.at(-1);
+        if (!previous) throw new Error("Chat jitter fixture needs a message to append after");
+        const sequence = String(BigInt(previous.sequence) + 1n);
+        return { ...current, chat: { ...current.chat, messages: [...current.chat.messages, { ...previous, messageId: `jitter-${sequence}`, clientMessageId: `jitter-${sequence}`, sequence, text: "Incoming message\n".repeat(12), attachments: [], reactions: [] }] } };
+      });
+    window.addEventListener("chat-jitter-incoming", append);
+    return () => {
+      window.removeEventListener("chat-jitter-incoming", append);
+      client.dispose();
+    };
+  }, [client]);
   return (
     <main className="h-dvh">
       <Chalk client={client} displayName={SELF_NAME} spaceName={SPACE_NAME} theme={{ colorScheme: "dark" }} />
