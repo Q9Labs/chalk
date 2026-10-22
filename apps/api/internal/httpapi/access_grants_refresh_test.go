@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -161,7 +162,10 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 			}
 			fixture := &refreshGrantPlane{issuer: freshIssuer}
 			active := accessgrants.NewActiveAuthorizer(repo)
-			endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			observed := observability.InstrumentParticipantMediaVerifier(verifier, observability.NewLaunchTelemetry(logger))
+			endpoint := issueAccessGrantEndpoint(fixture, fixture, observed, active, active, fixture, fixture, fixture, fixture)
 			router := chi.NewRouter()
 			endpoint.Mount(router, RateLimitOptions{})
 			generation := subject.ParticipantGeneration
@@ -177,8 +181,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 			request.Header.Set("Content-Type", "application/json")
 			request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID}))
 			response := httptest.NewRecorder()
-			var logs bytes.Buffer
-			logged := observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil)))(router)
+			logged := observability.RequestMiddleware(logger)(router)
 			logged.ServeHTTP(response, request)
 			if response.Code != tc.status {
 				t.Fatalf("status=%d want=%d body=%s", response.Code, tc.status, response.Body.String())
@@ -210,6 +213,9 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 				}
 				return
 			}
+			if tc.change != "replace" && (!strings.Contains(logs.String(), `"outcome":"accepted"`) || strings.Contains(logs.String(), `"outcome":"rejected"`)) {
+				t.Fatalf("successful grant recorded rejected authentication: %s", logs.String())
+			}
 			wantConnection := "original"
 			if tc.replacement {
 				wantConnection = "replacement"
@@ -224,6 +230,15 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 			issued, err := verifier.Verify(context.Background(), grant.Media.Token)
 			if err != nil || issued.CloudflareConnectionID != wantConnection {
 				t.Fatalf("issued subject=%+v err=%v", issued, err)
+			}
+			if tc.replacement && tc.change != "replace" {
+				logs.Reset()
+				if _, err := observed.Verify(context.Background(), token.Token); !errors.Is(err, accessgrants.ErrExpired) {
+					t.Fatalf("strict authentication accepted expired token: %v", err)
+				}
+				if !strings.Contains(logs.String(), `"outcome":"rejected"`) {
+					t.Fatalf("strict expiry was not recorded as rejected: %s", logs.String())
+				}
 			}
 		})
 	}

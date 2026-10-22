@@ -113,7 +113,7 @@ func issueAccessGrantEndpoint(
 				if currentToken == "" {
 					return accessGrantResponse{}, apiErrorMediaTokenRequired
 				}
-				subject, err = mediaVerifier.Verify(ctx, currentToken)
+				subject, err = mediaVerifier.Verify(observability.ContextWithAccessGrantRefresh(ctx), currentToken)
 				if err != nil && !errors.Is(err, accessgrants.ErrExpired) {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}

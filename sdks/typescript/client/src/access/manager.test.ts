@@ -80,3 +80,40 @@ describe("ConnectionAccessService", () => {
     expect(failure.code).toBe("access.invalid");
   });
 });
+
+it("applies a server-selected replacement before the local expiry and notifies media recovery", async () => {
+  const initial = accessGrant(240_000, "initial", "connection-1");
+  const replacement = accessGrant(600_000, "replacement", "connection-2");
+  const requests: ConnectionAccessRequest[] = [];
+  const replacements: ParsedAccessGrant[] = [];
+  const provider = (request: ConnectionAccessRequest) => {
+    requests.push(request);
+    return Effect.succeed(requests.length === 1 ? initial : replacement);
+  };
+  const program = Effect.gen(function* () {
+    const service = yield* ConnectionAccessService;
+    yield* service.subscribeAutomaticMediaReplacement((grant) => replacements.push(grant));
+    yield* service.initialize();
+    yield* TestClock.adjust("180 seconds");
+    return yield* service.ensureFresh();
+  });
+  const result = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider)), Effect.provide(TestClock.layer())));
+  expect(requests[1]?.replaceMediaConnection).toBe(false);
+  expect(result).toBe(replacement);
+  expect(replacements).toEqual([replacement]);
+});
+
+it("rejects a server-selected replacement that changes the participant generation", async () => {
+  const initial = accessGrant(240_000, "initial", "connection-1");
+  const replacement = { ...accessGrant(600_000, "replacement", "connection-2"), subject: { ...initial.subject, participantGeneration: 2 } };
+  let requests = 0;
+  const provider = () => Effect.succeed(++requests === 1 ? initial : replacement);
+  const program = Effect.gen(function* () {
+    const service = yield* ConnectionAccessService;
+    yield* service.initialize();
+    yield* TestClock.adjust("180 seconds");
+    return yield* service.ensureFresh().pipe(Effect.flip);
+  });
+  const result = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider)), Effect.provide(TestClock.layer())));
+  expect(result.code).toBe("access.invalid");
+});
