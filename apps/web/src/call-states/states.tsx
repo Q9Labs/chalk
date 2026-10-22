@@ -120,7 +120,13 @@ export const CALL_STATES: readonly CallState[] = [
     {
       id: `board-notices-${scheme}`,
       title: `Board with three device notices, ${scheme}`,
-      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} then={raiseDeviceNotices} />,
+      render: () => {
+        // ?notices=1 raises one notice, and ?embed=320 renders the call 320px tall inside the window, as a host page does.
+        const params = new URLSearchParams(window.location.search);
+        const count = Number(params.get("notices") ?? 3);
+        const embed = params.get("embed");
+        return <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} then={(client) => raiseDeviceNotices(client, count)} height={embed ? Number(embed) : undefined} />;
+      },
     },
     { id: `board-share-${scheme}`, title: `Board beside a live share, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
     {
@@ -203,11 +209,25 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
 }
 
 /** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
-function raiseDeviceNotices(client: CallStateClient) {
-  for (let index = 0; index < 3; index += 1) client.emit("error", { error: new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Your camera could not start." }) });
+function raiseDeviceNotices(client: CallStateClient, count: number) {
+  for (let index = 0; index < count; index += 1) client.emit("error", { error: new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Your camera could not start." }) });
 }
 
-function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void; readonly board?: BoardFixture }) {
+function Live({
+  snapshot,
+  layout,
+  then,
+  initialColorScheme,
+  board,
+  height,
+}: {
+  readonly initialColorScheme?: "light" | "dark";
+  readonly snapshot: SpaceSnapshot;
+  readonly layout?: SpaceLayout;
+  readonly then?: (client: CallStateClient) => void;
+  readonly board?: BoardFixture;
+  readonly height?: number;
+}) {
   const [client] = useState(() => createCallStateClient(snapshot, board));
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [transition] = useState(() => then);
@@ -217,7 +237,7 @@ function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly 
     return () => clearTimeout(timer);
   }, [client, transition]);
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
+    <main className="h-dvh min-h-0 w-full overflow-hidden" style={height ? { height } : undefined}>
       <Chalk
         theme={{ colorScheme }}
         onColorSchemeChange={(next) => {

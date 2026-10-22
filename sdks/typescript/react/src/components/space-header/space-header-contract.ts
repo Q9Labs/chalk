@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export interface SpaceHeaderProps {
   spaceName: string;
   people?: readonly { readonly participantId: string; readonly displayName: string }[];
@@ -27,6 +29,8 @@ export interface SpaceHeaderProps {
   isTranscribing?: boolean;
   layout?: "grid" | "focus";
   onLayoutChange?: (layout: "grid" | "focus") => void;
+  /** A control for notices that have no room on the stage, placed at the header's end, before the people button. */
+  notices?: ReactNode;
   className?: string;
 }
 

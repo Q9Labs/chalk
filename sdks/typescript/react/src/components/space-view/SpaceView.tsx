@@ -25,6 +25,7 @@ import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { NoticeButton } from "../toast-stack/NoticeButton";
 import { BoardToastContext, type BoardToast } from "../board/board-toasts";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
@@ -230,6 +231,13 @@ export function SpaceView({
     setCommandError(null);
     onDismissCommandError?.();
   };
+  const toasts = [...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...(whiteboard?.isOpen ? boardToasts : []), ...commandToasts];
+  const dismissToast = (id: string) => {
+    if (id === "space-command-error") dismissCommandError();
+    else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
+    else callToasts.dismiss(id);
+  };
+  const [noticesFolded, setNoticesFolded] = useState(false);
   return (
     <ParticipantVolumeProvider>
       <BoardToastContext.Provider value={showBoardToast}>
@@ -267,6 +275,7 @@ export function SpaceView({
             isRecording: recording.current?.status === "recording",
             layout,
             onLayoutChange: updateLayout,
+            notices: noticesFolded ? <NoticeButton toasts={toasts} onDismiss={dismissToast} /> : undefined,
           }}
           stage={
             <SpaceStage
@@ -336,16 +345,7 @@ export function SpaceView({
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
             </CallCard>
           }
-          toasts={
-            <ToastStack
-              toasts={[...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...(whiteboard?.isOpen ? boardToasts : []), ...commandToasts]}
-              onDismiss={(id) => {
-                if (id === "space-command-error") dismissCommandError();
-                else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
-                else callToasts.dismiss(id);
-              }}
-            />
-          }
+          toasts={<ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setNoticesFolded} />}
           mediaOutput={
             <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
               <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />

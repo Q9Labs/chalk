@@ -432,56 +432,92 @@ it("keeps a live share selectable when a phone guest pins the board", async () =
   }
 });
 
-it.each(
-  [
-    { width: 640, height: 320, shown: 1 },
-    { width: 568, height: 320, shown: 1 },
-    { width: 374, height: 320, shown: 1 },
-    { width: 844, height: 390, shown: 1 },
-    { width: 390, height: 844, shown: 3 },
-  ].flatMap((size) => [false, true].map((tools) => ({ ...size, tools }))),
-)("keeps device notices on screen and off a $width by $height board's controls, drawing tools open: $tools", async ({ width, height, shown, tools }) => {
+// Full windows, and 320px-tall calls inside an 844px-tall window, as a host page embeds them.
+const noticeCalls = [
+  ...[
+    { width: 640, height: 320 },
+    { width: 374, height: 320 },
+    { width: 568, height: 320 },
+    { width: 844, height: 390 },
+    { width: 390, height: 844 },
+  ].map(({ width, height }) => ({ name: `${width}x${height}`, width, height, embed: 0 })),
+  ...[390, 640, 844].map((width) => ({ name: `${width}x320 embed`, width, height: 844, embed: 320 })),
+];
+const noticeCases = noticeCalls.flatMap((call) => (["dark", "light"] as const).flatMap((scheme) => [false, true].flatMap((tools) => [false, true].flatMap((tray) => [1, 3].map((notices) => ({ ...call, scheme, tools, tray, notices }))))));
+
+it.each(noticeCases)("shows notices whole and off every control: $name, $scheme, tools open $tools, reactions open $tray, $notices notices", async ({ width, height, embed, scheme, tools, tray, notices }) => {
   await page.setViewportSize({ width, height });
   try {
-    await open("board-notices-dark");
-    await page.locator(".chalk-board[data-primary]").waitFor();
-    await expect.poll(() => page.locator(".chalk-toast").count()).toBe(3);
+    await open(`board-notices-${scheme}&notices=${notices}${embed ? `&embed=${embed}` : ""}`);
+    await page.locator(".chalk-board[data-primary] .chalk-board-zoom").waitFor();
+    await expect.poll(() => page.locator(".chalk-toast").count()).toBe(notices);
     if (tools) {
-      await page.getByRole("button", { name: "Drawing tools" }).click();
+      await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
       await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
     }
-    // An open reaction tray lifts the notices through this variable. On a screen 480 pixels tall or less the newest notice sits in the header's row instead, clear of the tray.
-    let unlifted = 0;
-    for (const reactionLift of ["0px", "36px", "120px"]) {
-      const placed = await page.locator('[data-part="toast-stack"]').evaluate(async (stack, lift) => {
-        if (!(stack instanceof HTMLElement)) throw new Error("The toast stack is not an element.");
-        stack.style.setProperty("--chalk-reaction-toast-lift", lift);
-        const zoom = document.querySelector(".chalk-board-zoom");
-        await Promise.all((zoom?.getAnimations() ?? []).map((animation) => animation.finished));
-        // The board clips its controls, so only the part inside the board can be seen or clicked.
-        const board = document.querySelector(".chalk-board[data-primary]")?.getBoundingClientRect();
-        if (!board) throw new Error("The primary board is missing.");
-        const controls = [...document.querySelectorAll(".chalk-board[data-primary] :is(.chalk-board-zoom, .chalk-board-island)")].map((element) => {
-          const box = element.getBoundingClientRect();
-          return new DOMRect(box.left, Math.max(box.top, board.top), box.width, Math.min(box.bottom, board.bottom) - Math.max(box.top, board.top));
-        });
-        const toasts = [...stack.querySelectorAll(".chalk-toast")].map((toast) => ({ shown: getComputedStyle(toast).display !== "none", box: toast.getBoundingClientRect(), text: toast.querySelector("span")?.getBoundingClientRect() }));
-        const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-        return toasts.map(({ shown, box, text }) => ({ shown, top: box.top, bottom: box.bottom, textInside: !text || (text.top >= box.top - 0.5 && text.bottom <= box.bottom + 0.5), coversControl: controls.some((control) => overlaps(box, control)) }));
-      }, reactionLift);
-      const visible = placed.filter((toast) => toast.shown);
-      expect(visible, reactionLift).toHaveLength(shown);
-      expect(placed.at(-1)?.shown, reactionLift).toBe(true);
-      const newest = placed.at(-1)?.bottom ?? 0;
-      if (reactionLift === "0px") unlifted = newest;
-      expect(newest, reactionLift).toBeLessThanOrEqual(height <= 480 ? 60 : unlifted - Number.parseFloat(reactionLift) + 0.5);
-      for (const toast of visible) {
-        expect(toast.top, reactionLift).toBeGreaterThanOrEqual(0);
-        expect(toast.bottom, reactionLift).toBeLessThanOrEqual(height);
-        expect(toast.textInside, reactionLift).toBe(true);
-        expect(toast.coversControl, reactionLift).toBe(false);
-      }
+    if (tray) {
+      await page.getByRole("button", { name: "Reactions", exact: true }).click();
+      await page.locator(".chalk-shell-reactions").waitFor();
     }
+    await page.waitForFunction(() => [...document.querySelectorAll(".chalk-board-zoom, .chalk-toast, .chalk-shell-reactions")].every((element) => element.getAnimations().every((animation) => animation.playState !== "running")));
+    const problems = await page.evaluate(() => {
+      const found: string[] = [];
+      const frame = document.querySelector("[data-part='call-frame']")?.getBoundingClientRect();
+      if (!frame) return ["no call frame"];
+      // A control counts only where it can be seen: inside the window, the call, and the board or toolbar that clips it.
+      const visible = (element: Element) => {
+        let box = { left: Math.max(0, frame.left), right: Math.min(innerWidth, frame.right), top: Math.max(0, frame.top), bottom: Math.min(innerHeight, frame.bottom) };
+        for (const clip of [element, element.closest(".chalk-board-island"), element.closest(".chalk-board")]) {
+          if (!clip) continue;
+          const rect = clip.getBoundingClientRect();
+          box = { left: Math.max(box.left, rect.left), right: Math.min(box.right, rect.right), top: Math.max(box.top, rect.top), bottom: Math.min(box.bottom, rect.bottom) };
+        }
+        return box;
+      };
+      const controls = document.querySelectorAll(".chalk-frame-header :is(button, a), .chalk-board[data-primary] :is(.chalk-board-zoom button, .chalk-board-island button, .chalk-board-menu-button), .chalk-shell-reactions button, [data-part='dock'] button");
+      for (const control of controls) {
+        const box = visible(control);
+        if (box.right - box.left < 1 || box.bottom - box.top < 1 || getComputedStyle(control).visibility === "hidden") continue;
+        for (const at of [0.15, 0.5, 0.85]) {
+          const target = document.elementFromPoint(box.left + (box.right - box.left) * at, (box.top + box.bottom) / 2);
+          if (target?.closest(".chalk-toast")) found.push(`a notice takes ${control.getAttribute("aria-label") ?? control.textContent?.trim()}'s click at ${Math.round(at * 100)}%`);
+        }
+      }
+      const shown = [...document.querySelectorAll<HTMLElement>(".chalk-toast")].filter((toast) => !toast.hasAttribute("data-folded"));
+      for (const toast of shown) {
+        const box = toast.getBoundingClientRect();
+        const text = toast.querySelector<HTMLElement>(":scope > span");
+        if (box.height < 47.5) found.push(`a notice is ${box.height}px tall`);
+        if (box.top < frame.top - 0.5 || box.bottom > frame.bottom + 0.5) found.push("a notice leaves the call");
+        if (text && (text.scrollHeight > text.clientHeight + 1 || text.scrollWidth > text.clientWidth + 1 || getComputedStyle(text).textOverflow === "ellipsis")) found.push("a notice cuts its message");
+      }
+      const button = document.querySelector("[data-part='notice-button']");
+      const place = button?.getBoundingClientRect();
+      const reachable = Boolean(button && place && place.width > 0 && button.contains(document.elementFromPoint(place.left + place.width / 2, place.top + place.height / 2)));
+      if (shown.length === 0 && !reachable) found.push("no notice shows and the header has no notice button to click");
+      if (shown.length > 0 && button) found.push("the header offers notices that already show");
+      return found;
+    });
+    expect(problems).toEqual([]);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+it.each(["dark", "light"])("opens every folded notice whole from the header of a 320px-tall embedded call in %s", async (scheme) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await open(`board-notices-${scheme}&notices=3&embed=320`);
+    await page.locator(".chalk-board[data-primary] .chalk-board-zoom").waitFor();
+    await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
+    const button = page.getByRole("button", { name: "Show 3 notices" });
+    await button.click();
+    const list = page.getByRole("dialog", { name: "Notices" });
+    await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(3);
+    const messages = await list.locator("[data-part='notice'] > span").evaluateAll((spans) => spans.map((span) => ({ text: span.textContent ?? "", whole: span.scrollHeight <= span.clientHeight + 1 && span.scrollWidth <= span.clientWidth + 1 })));
+    for (const message of messages) expect(message).toEqual({ text: "Your device couldn’t start. Check that it is connected and available, then try again.", whole: true });
+    await list.getByRole("button", { name: "Dismiss" }).first().click();
+    await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(2);
   } finally {
     await page.setViewportSize({ width: 1440, height: 900 });
   }

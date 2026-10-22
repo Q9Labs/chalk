@@ -1240,20 +1240,17 @@
   pointer-events: none;
 }
 
-/* Notices sit between the header and the controls under them, and show only the newest ones that fit. An open reaction tray lifts them with padding, because a margin does not shrink a box held by both top and bottom. They always keep room for one notice. */
+/* Notices sit in the band between the header and the controls under it, and an open reaction tray shrinks that band with padding, because a margin does not shrink a box held by both top and bottom. ToastStack shows only the newest notices that fit the band whole. */
 .chalk-toasts {
   --chalk-toast-top: 60px;
   --chalk-toast-lift: 92px;
   box-sizing: border-box;
   top: var(--chalk-toast-top);
-  bottom: min(var(--chalk-toast-lift), calc(100% - var(--chalk-toast-top) - 80px));
+  bottom: var(--chalk-toast-lift);
   margin-bottom: 0;
   padding-bottom: var(--chalk-reaction-toast-lift, 0px);
-  min-height: calc(80px + var(--chalk-reaction-toast-lift, 0px));
-  container: chalk-toasts / size;
   justify-content: flex-end;
 }
-/* An open board keeps its tools at the bottom of the stage, so toasts rise above them. On a narrow board the open drawing tools lift the zoom control 60px more. */
 [data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="bottom"]) .chalk-toasts {
   --chalk-toast-lift: 160px;
 }
@@ -1263,20 +1260,11 @@
 [data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="expanded"]) .chalk-toasts {
   --chalk-toast-lift: 242px;
 }
-@container chalk-toasts (max-height: 255px) {
-  .chalk-toast:nth-last-child(n + 3) {
-    display: none;
-  }
-}
-@container chalk-toasts (max-height: 167px) {
-  .chalk-toast:not(:last-child) {
-    display: none;
-  }
-}
 .chalk-toast {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
   min-height: 48px;
   max-width: calc(100% - 32px);
   padding: 6px 6px 6px 14px;
@@ -1291,41 +1279,59 @@
     transform 0.15s ease-out;
 }
 .chalk-toast > span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   margin-right: 4px;
+  line-height: 1.35;
+  padding: 4px 0;
 }
 .chalk-toast[data-type="error"] {
   max-width: min(560px, calc(100% - 32px));
 }
-.chalk-toast[data-type="error"] > span {
-  white-space: normal;
-  line-height: 1.35;
-  padding: 4px 0;
+/* A notice with no room stays readable to screen readers, and the header's notice button shows it. */
+.chalk-toast[data-folded] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  pointer-events: none;
 }
-/* On a short screen an open board's controls fill the space under the header, so the newest notice takes the header's row, in two lines at most. */
-@media (max-height: 480px) {
-  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toasts {
-    top: 4px;
-    bottom: auto;
-    height: calc(var(--chalk-toast-top) - 8px);
-    min-height: 0;
-    padding-bottom: 0;
-    justify-content: center;
-  }
-  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toast {
-    min-height: 0;
-    padding: 3px 3px 3px 12px;
-    font-size: 13px;
-  }
-  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toast > span {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-height: 1.3;
-    padding: 0;
-  }
+/* The header's notice button stays when a phone hides the header's other controls. */
+.chalk-notice-button {
+  margin: 0 8px 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--chalk-danger-surface);
+  color: var(--chalk-danger-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.chalk-notice-list {
+  z-index: 85;
+  display: grid;
+  gap: 4px;
+  width: 360px;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  padding: 6px;
+}
+.chalk-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 10px;
+}
+.chalk-notice > span {
+  flex: 1;
+  line-height: 1.35;
 }
 .chalk-toast[data-exiting] {
   opacity: 0;
