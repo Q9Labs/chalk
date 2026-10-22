@@ -147,7 +147,10 @@ it("keeps 300 calls when a reload replays more pages than the limit needs", asyn
   await tick();
   expect(screen.getAllByText(/^(Call|New) \d+$/)).toHaveLength(300);
   await tick();
-  const [, query] = requests().findLast(([name]) => name === "home-status") ?? [];
+  const [, query] =
+    requests()
+      .filter(([name]) => name === "home-status")
+      .at(-1) ?? [];
   expect(query && "spaceIds" in query ? query.spaceIds?.split(",") : []).toHaveLength(300);
 });
 
