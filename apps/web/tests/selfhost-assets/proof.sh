@@ -5,6 +5,10 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 proof_dir="${ASSET_PROOF_ROOT:-/Users/agents/lanes/selfhost-assets/evidence}"
 mkdir -p "$proof_dir"
+for label in before after; do
+  if [[ -d "$proof_dir/$label" ]]; then rm -r "$proof_dir/$label"; fi
+  rm -f "$proof_dir/$label-sizes.json" "$proof_dir/$label-web.log" "$proof_dir/$label-call.log"
+done
 saved="$(mktemp -d)"
 files=(apps/web/src/lib/whiteboard-assets.ts apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html packages/whiteboard/src/react/WhiteboardCanvas.tsx packages/whiteboard/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts apps/web/vite.config.ts apps/web/vite.call-states.config.ts apps/web/src/components/legal/LegalPage.tsx)
 restore() {

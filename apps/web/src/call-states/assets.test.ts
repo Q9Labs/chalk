@@ -65,8 +65,7 @@ it("loads call, board, sticky note, text and math assets from our origin", async
       await page.getByRole("button", { name: tool, exact: true }).click();
       const target = tool === "Sticky note" ? page.locator(".chalk-board-note-layer") : canvas;
       await target.click({ position: { x, y: 320 } });
-      await page.locator("textarea.excalidraw-wysiwyg").waitFor();
-      await page.keyboard.type(text);
+      await page.locator("textarea.excalidraw-wysiwyg").fill(text);
       expect(await page.locator("textarea.excalidraw-wysiwyg").inputValue()).toBe(text);
       if (tool === "Sticky note") await page.keyboard.press("Escape");
     }
