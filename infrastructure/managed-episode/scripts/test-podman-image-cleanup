@@ -37,24 +37,29 @@ parent="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-parent)"
 printf 'FROM localhost/cleanup-parent\nCOPY child /child\n' >"${fixture_root}/context/Containerfile"
 "${p[@]}" build --layers --format docker -t localhost/cleanup-child "${fixture_root}/context"
 child="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-child)"
-"${p[@]}" image untag "$parent"
-if "${p[@]}" image rm --no-prune "$parent"; then
-  echo 'Expected intermediate parent removal to refuse a dependent child' >&2; exit 1
-fi
-"${p[@]}" image exists "$parent"
 "${p[@]}" image untag "$child"
 "${p[@]}" image rm --no-prune "$child"
 "${p[@]}" image exists "$parent"
-echo 'PASS real parent refusal; later child removed without implicitly pruning parent'
+echo 'PASS real no-prune removal preserves the parent image'
+
+"${p[@]}" build --layers --format docker -t localhost/cleanup-child "${fixture_root}/context"
+child="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-child)"
+child_layers="$("${p[@]}" image inspect --format '{{json .RootFS.Layers}}' "$child")"
+"${p[@]}" image untag "$parent"
+# Podman 4.9 accepts this removal; dependent layers still belong to the child.
+"${p[@]}" image rm --no-prune "$parent"
+"${p[@]}" image exists "$child"
+[[ "$("${p[@]}" image inspect --format '{{json .RootFS.Layers}}' "$child")" == "$child_layers" ]]
+echo 'PASS real intermediate removal preserves the child and its layers'
 
 # Creation is sufficient: no executable, network, running process or image pull is needed.
-"${p[@]}" tag "$parent" localhost/cleanup-container
+"${p[@]}" tag "$child" localhost/cleanup-container
 container="$("${p[@]}" create --network none localhost/cleanup-container /unused)"
 "${p[@]}" image list --all --no-trunc --format '{{.Id}} {{.Containers}} {{range .RepoDigests}}{{.}} {{end}}'
-"${p[@]}" image untag "$parent"
-if "${p[@]}" image rm --no-prune "$parent"; then
+"${p[@]}" image untag "$child"
+if "${p[@]}" image rm --no-prune "$child"; then
   echo 'Expected non-force removal to preserve a container-backed image' >&2; exit 1
 fi
 "${p[@]}" container exists "$container"
-"${p[@]}" image exists "$parent"
+"${p[@]}" image exists "$child"
 echo 'PASS real container-backed refusal preserves container and image'

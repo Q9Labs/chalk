@@ -872,7 +872,8 @@ cleanup_unused_images() {
     manifests+=("$(jq -er '.release_root' "$active_pointer")/release-manifest.json")
     # A failed pointer commit can leave a healthy ledger entry but no durable release.
     if [[ -f "$ledger_file" && ! -L "$ledger_file" ]]; then
-      jq -sr --arg current "$active_id" 'reverse[] | select((.outcome == "healthy" or .outcome == "adopted") and .release_id != $current) | [.release_id, .manifest_sha256] | @tsv' "$ledger_file" >"${stage_root}/previous-releases" || return 1
+      # A crash can truncate an append; retain complete records independently.
+      jq -Rsr --arg current "$active_id" 'split("\n") | map(fromjson? | select(type == "object")) | reverse[] | select((.outcome == "healthy" or .outcome == "adopted") and .release_id != $current) | [.release_id, .manifest_sha256] | @tsv' "$ledger_file" >"${stage_root}/previous-releases" || return 1
       while IFS=$'\t' read -r previous_id previous_hash; do
         [[ "$previous_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ && "$previous_hash" =~ ^[0-9a-f]{64}$ ]] || continue
         previous_manifest="${state_root}/releases/${previous_id}/release-manifest.json"

@@ -523,7 +523,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   dangling_id="sha256:$(printf '2%.0s' {1..64})"
   later_image="example.com/later@sha256:$(printf '3%.0s' {1..64})"
   case "$image_case" in
-    multi-digest|multi-name|parent-refusal|late-container|retargeted-name|dangling|ledger-missing|ledger-tampered|ledger-invalid-id)
+    multi-digest|multi-name|parent-refusal|late-container|retargeted-name|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|ledger-truncated)
       case "$image_case" in
         multi-digest)
           export FAKE_DUPLICATE_IMAGE_ID="${stale_image##*@}"
@@ -531,7 +531,8 @@ if [[ "$test_group" == image-cleanup ]]; then
           ;;
         multi-name)
           export FAKE_PRESSURE_IMAGE_ID="${stale_image##*@}"
-          jq --arg ref "$stale_image" 'map(if (.refs|index($ref)) then .names = ["example.com/unused:old", "example.com/unused:older"] else . end)' "$image_state" >"${image_state}.tmp"
+          observed_names="$(jq -c '.multi_name.tags' "${managed_root}/scripts/fixtures/podman-4.9.3-image-cleanup.json")"
+          jq --arg ref "$stale_image" --argjson names "$observed_names" 'map(if (.refs|index($ref)) then .names = $names else . end)' "$image_state" >"${image_state}.tmp"
           ;;
         parent-refusal)
           export FAKE_PRESSURE_IMAGE_ID="${later_image##*@}"
@@ -548,6 +549,11 @@ if [[ "$test_group" == image-cleanup ]]; then
           ;;
         dangling)
           jq --arg id "$dangling_id" '. + [{id:$id,refs:[],containers:0}]' "$image_state" >"${image_state}.tmp"
+          ;;
+        ledger-truncated)
+          printf '{"outcome":"healthy","release_id":"incomplete' >>"${cleanup_state}/ledger.jsonl"
+          cp "$image_state" "${image_state}.tmp"
+          export FAKE_PRESSURE_IMAGE_ID="${stale_image##*@}"
           ;;
         ledger-*)
           jq -cn --arg hash "$(printf '5%.0s' {1..64})" '{outcome:"healthy",release_id:"removed-promotion",manifest_sha256:$hash}' >>"${cleanup_state}/ledger.jsonl"
@@ -569,7 +575,7 @@ if [[ "$test_group" == image-cleanup ]]; then
       ;;
   esac
   case "$image_case" in
-    active|rollback|previous|candidate|multi-digest|multi-name|parent-refusal|late-container|retargeted-name|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|all)
+    active|rollback|previous|candidate|multi-digest|multi-name|parent-refusal|late-container|retargeted-name|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|ledger-truncated|all)
       run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/cleanup-case.log" 2>&1 || { tail -n 20 "${fixture_root}/cleanup-case.log" >&2; fail "image cleanup deployment failed"; }
       for protected_class in active rollback previous candidate; do
         case "$image_case" in
@@ -646,7 +652,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   esac
   unset FAKE_IMAGE_STATE
   if [[ "$image_case" == all ]]; then
-    for image_case in multi-digest multi-name parent-refusal late-container retargeted-name dangling ledger-missing ledger-tampered ledger-invalid-id space image-space boundary cleanup-error cleanup-error-space rollback-health; do
+    for image_case in multi-digest multi-name parent-refusal late-container retargeted-name dangling ledger-missing ledger-tampered ledger-invalid-id ledger-truncated space image-space boundary cleanup-error cleanup-error-space rollback-health; do
       CHALK_TEST_IMAGE_CASE="$image_case" "$0" --group image-cleanup
     done
   fi
