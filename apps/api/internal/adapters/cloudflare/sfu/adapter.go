@@ -290,7 +290,9 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 		Tracks:             tracks,
 	}
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
-	err := a.request(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
+	started := time.Now()
+	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
+	logAddTracksCall(ctx, input, time.Since(started), statusCode, err)
 	if err != nil {
 		return response.toMediaPlane(), err
 	}
@@ -358,7 +360,13 @@ func (a Adapter) createConnection(ctx context.Context) (string, error) {
 	return response.SessionID, nil
 }
 
-func (a Adapter) request(ctx context.Context, method string, path string, body any, output any, operation string) (err error) {
+func (a Adapter) request(ctx context.Context, method string, path string, body any, output any, operation string) error {
+	_, err := a.requestStatus(ctx, method, path, body, output, operation)
+	return err
+}
+
+// requestStatus returns the upstream HTTP status, or 0 when no response arrived.
+func (a Adapter) requestStatus(ctx context.Context, method string, path string, body any, output any, operation string) (statusCode int, err error) {
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu."+operation, trace.WithSpanKind(trace.SpanKindClient))
 	responseBytes := 0
 	defer func() {
@@ -373,18 +381,18 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 	span.SetAttributes(attribute.String("http.request.method", method), attribute.String("server.address", "rtc.live.cloudflare.com"))
 
 	if a.client == nil {
-		return newProviderFailure(operation, failureStageTransport, 0, "plane_unavailable")
+		return 0, newProviderFailure(operation, failureStageTransport, 0, "plane_unavailable")
 	}
 	var encoded []byte
 	if body != nil {
 		encoded, err = json.Marshal(body)
 		if err != nil {
-			return newProviderFailure(operation, failureStageContract, 0, "invalid_request")
+			return 0, newProviderFailure(operation, failureStageContract, 0, "invalid_request")
 		}
 	}
 	request, err := http.NewRequestWithContext(ctx, method, fmt.Sprintf("%s/apps/%s%s", a.endpoint, url.PathEscape(a.appID), path), bytes.NewReader(encoded))
 	if err != nil {
-		return newProviderFailure(operation, failureStageContract, 0, "invalid_request")
+		return 0, newProviderFailure(operation, failureStageContract, 0, "invalid_request")
 	}
 	request.Header.Set("Authorization", "Bearer "+a.appSecret)
 	request.Header.Set("Accept", "application/json")
@@ -397,29 +405,29 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			code = "timeout"
 		}
-		return newProviderFailure(operation, failureStageTransport, 0, code)
+		return 0, newProviderFailure(operation, failureStageTransport, 0, code)
 	}
 	defer providerResponse.Body.Close()
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
 	if err != nil {
-		return newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, "transport_error")
+		return providerResponse.StatusCode, newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, "transport_error")
 	}
 	responseBytes = len(payload)
 	if providerResponse.StatusCode < 200 || providerResponse.StatusCode >= 300 {
-		return sfuStatusError(operation, providerResponse.StatusCode, payload)
+		return providerResponse.StatusCode, sfuStatusError(operation, providerResponse.StatusCode, payload)
 	}
 	if output != nil {
 		if err := json.Unmarshal(payload, output); err != nil {
-			return newProviderFailure(operation, failureStageDecode, providerResponse.StatusCode, "invalid_json")
+			return providerResponse.StatusCode, newProviderFailure(operation, failureStageDecode, providerResponse.StatusCode, "invalid_json")
 		}
 		if validator, ok := output.(responseValidator); ok {
 			if err := validator.providerError(operation); err != nil {
-				return err
+				return providerResponse.StatusCode, err
 			}
 		}
 	}
-	return nil
+	return providerResponse.StatusCode, nil
 }
 
 func (r *closeTracksResponse) providerError(operation string) error {
