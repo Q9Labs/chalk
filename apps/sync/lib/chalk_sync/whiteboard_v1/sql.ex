@@ -36,6 +36,25 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
+  # The same Participant and Episode conditions as lock_authority, read without a row lock.
+  def participant_active do
+    """
+    select 1
+    from participants participant
+    join episodes episode
+      on episode.tenant_id = participant.tenant_id
+      and episode.space_id = participant.space_id
+      and episode.id = participant.episode_id
+    where participant.tenant_id = $1
+      and participant.space_id = $2
+      and participant.episode_id = $3
+      and participant.id = $4
+      and participant.generation = $5
+      and participant.status = 'active'
+      and episode.status = 'active'
+    """
+  end
+
   def ensure_scene do
     """
     insert into sync_whiteboard_scenes (

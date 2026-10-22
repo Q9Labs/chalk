@@ -271,6 +271,23 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert Enum.all?(stored, &(&1["version"] == 3))
   end
 
+  test "reports a Participant who left as no longer allowed on the board", %{
+    connection: connection,
+    host: host,
+    participant: participant
+  } do
+    assert :ok = PostgresRepository.participant_active(participant)
+
+    Postgrex.query!(
+      connection,
+      "update participants set status = 'left', left_at = now(), last_left_reason = 'left' where id = $1",
+      [uuid(participant.participant_id)]
+    )
+
+    assert {:error, :permission_denied} = PostgresRepository.participant_active(participant)
+    assert :ok = PostgresRepository.participant_active(host)
+  end
+
   test "lists a snapshot in the byte order of the order keys and ids", %{connection: connection} do
     # A database collation such as en_US puts "aa" before "aA". The keys' own
     # order is byte order, and a client rewrites every key that arrives out of it.

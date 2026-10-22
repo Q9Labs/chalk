@@ -13,9 +13,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
+  alias ChalkSync.WhiteboardV1.Repository
   @hello_timeout_ms 5000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
+  @authority_ttl_ms 1000
   @impl true
   def init(options) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
@@ -35,6 +37,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        phase: :awaiting_hello,
        hello_timer: timer,
        identity: nil,
+       authority_checked_at: nil,
        display_name: nil,
        presentation_negotiated: false,
        view_negotiated: false,
@@ -56,122 +59,149 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   @impl true
-  def handle_in({text, opcode: :text}, state) do
+  def handle_in(payload, state) do
+    with {:ok, state} <- current_authority(state), do: receive_payload(payload, state)
+  end
+
+  @impl true
+  def handle_info(message, state) do
+    with {:ok, state} <- current_authority(state), do: handle_message(message, state)
+  end
+
+  defp receive_payload({text, opcode: :text}, state) do
     case Protocol.decode(text) do
       {:ok, frame} -> handle_frame(frame, state)
       {:error, reason} -> stop(state, 1009, close_reason(reason), :protocol_error)
     end
   end
 
-  def handle_in({_payload, _options}, state) do
+  defp receive_payload({_payload, _options}, state) do
     stop(state, 1009, "text frames only", :protocol_error)
   end
 
-  @impl true
-  def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state) do
+  # Fanout delivers to every subscribed socket, so a Participant who was removed or whose
+  # Episode ended would keep receiving and sending live frames until it disconnected.
+  defp current_authority(%{identity: nil} = state), do: {:ok, state}
+
+  defp current_authority(state) do
+    now_ms = System.monotonic_time(:millisecond)
+
+    if is_integer(state.authority_checked_at) and
+         now_ms - state.authority_checked_at < @authority_ttl_ms do
+      {:ok, state}
+    else
+      case Repository.participant_active(state.identity) do
+        :ok -> {:ok, %{state | authority_checked_at: now_ms}}
+        {:error, _reason} -> stop(state, 1008, "policy violation", :permission_denied)
+        _unavailable -> stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+      end
+    end
+  end
+
+  defp handle_message(:hello_timeout, %{phase: :awaiting_hello} = state) do
     stop(state, 1008, "hello timeout", :hello_timeout)
   end
 
-  def handle_info(:hello_timeout, state) do
+  defp handle_message(:hello_timeout, state) do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_multipart_timeout, operation_id},
-        %{multipart: %{operation_id: operation_id}} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_multipart_timeout, operation_id},
+         %{multipart: %{operation_id: operation_id}} = state
+       ) do
     state = %{state | multipart: nil, multipart_timer: nil}
     operation_failure(operation_id, :submit_update, {:retryable, :overloaded}, state)
   end
 
-  def handle_info({:whiteboard_multipart_timeout, _operation_id}, state) do
+  defp handle_message({:whiteboard_multipart_timeout, _operation_id}, state) do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
-        %{identity: %Identity{participant_id: participant_id}} = state
-      )
-      when type in ["cursor", "view"] do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
+         %{identity: %Identity{participant_id: participant_id}} = state
+       )
+       when type in ["cursor", "view"] do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "view"}},
-        %{view_negotiated: false} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "view"}},
+         %{view_negotiated: false} = state
+       ) do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
-        %{phase: :live, presentation_negotiated: false} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
+         %{phase: :live, presentation_negotiated: false} = state
+       ) do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame,
-         %{"type" => "presentation_updated", "scene_id" => scene_id, "revision" => revision} =
-           frame},
-        %{phase: :live, presentation_negotiated: true, scene_id: scene_id} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame,
+          %{"type" => "presentation_updated", "scene_id" => scene_id, "revision" => revision} =
+            frame},
+         %{phase: :live, presentation_negotiated: true, scene_id: scene_id} = state
+       ) do
     deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
-        %{phase: :live} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "presentation_updated"}},
+         %{phase: :live} = state
+       ) do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame,
-         %{"type" => type, "scene_id" => scene_id, "revision" => revision} = frame},
-        %{phase: :live, scene_id: scene_id} = state
-      )
-      when type in ["update", "update_part"] and is_binary(revision) do
+  defp handle_message(
+         {:whiteboard_v1_frame,
+          %{"type" => type, "scene_id" => scene_id, "revision" => revision} = frame},
+         %{phase: :live, scene_id: scene_id} = state
+       )
+       when type in ["update", "update_part"] and is_binary(revision) do
     deliver_in_order(state, frame, scene_id, String.to_integer(revision))
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "view"} = frame},
-        %{phase: :live, view_origins_negotiated: false} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "view"} = frame},
+         %{phase: :live, view_origins_negotiated: false} = state
+       ) do
     deliver_frame(
       state,
       Map.drop(frame, ["origin_participant_id", "origin_sequence", "origin_epoch"])
     )
   end
 
-  def handle_info({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
+  defp handle_message({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
     deliver_frame(state, frame)
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "view", "bring" => true} = frame},
-        %{phase: :recovering} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "view", "bring" => true} = frame},
+         %{phase: :recovering} = state
+       ) do
     {:ok, %{state | pending_bring: frame}}
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"scene_id" => scene_id, "revision" => revision}},
-        %{phase: :recovering} = state
-      )
-      when is_binary(revision) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"scene_id" => scene_id, "revision" => revision}},
+         %{phase: :recovering} = state
+       )
+       when is_binary(revision) do
     {:ok, note_missed_head(state, scene_id, String.to_integer(revision))}
   end
 
-  def handle_info({:whiteboard_v1_frame, _frame}, state) do
+  defp handle_message({:whiteboard_v1_frame, _frame}, state) do
     {:ok, state}
   end
 
-  def handle_info(
-        {:whiteboard_v1_head, scene_id, revision},
-        %{phase: :live, identity: identity} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_head, scene_id, revision},
+         %{phase: :live, identity: identity} = state
+       ) do
     cond do
       scene_id != state.scene_id ->
         enqueue_and_push(
@@ -187,41 +217,41 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
-  def handle_info({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state) do
+  defp handle_message({:whiteboard_v1_head, scene_id, revision}, %{phase: :recovering} = state) do
     {:ok, note_missed_head(state, scene_id, revision)}
   end
 
-  def handle_info({:whiteboard_v1_head, _scene_id, _revision}, state) do
+  defp handle_message({:whiteboard_v1_head, _scene_id, _revision}, state) do
     {:ok, state}
   end
 
-  def handle_info(:whiteboard_drain, state) do
+  defp handle_message(:whiteboard_drain, state) do
     push_next(state)
   end
 
-  def handle_info(
-        :whiteboard_snapshot_next,
-        %{
-          phase: :live,
-          terminal: nil,
-          pending_snapshot_requests: [_ | _],
-          outbound: %{frame_count: queued}
-        } = state
-      )
-      when queued > 0 do
+  defp handle_message(
+         :whiteboard_snapshot_next,
+         %{
+           phase: :live,
+           terminal: nil,
+           pending_snapshot_requests: [_ | _],
+           outbound: %{frame_count: queued}
+         } = state
+       )
+       when queued > 0 do
     send(self(), :whiteboard_snapshot_next)
     {:ok, state}
   end
 
-  def handle_info(:whiteboard_snapshot_next, %{terminal: terminal} = state)
-      when not is_nil(terminal) do
+  defp handle_message(:whiteboard_snapshot_next, %{terminal: terminal} = state)
+       when not is_nil(terminal) do
     {:ok, state}
   end
 
-  def handle_info(
-        :whiteboard_snapshot_next,
-        %{phase: :live, pending_snapshot_requests: [request | remaining]} = state
-      ) do
+  defp handle_message(
+         :whiteboard_snapshot_next,
+         %{phase: :live, pending_snapshot_requests: [request | remaining]} = state
+       ) do
     result =
       handle_frame({:request_snapshot, request}, %{state | pending_snapshot_requests: remaining})
 
@@ -233,7 +263,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     result
   end
 
-  def handle_info(:whiteboard_snapshot_next, state) do
+  defp handle_message(:whiteboard_snapshot_next, state) do
     {:ok, state}
   end
 
@@ -258,7 +288,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp catch_up_after_snapshot(state, {scene_id, revision}) do
-    handle_info({:whiteboard_v1_head, scene_id, revision}, state)
+    handle_message({:whiteboard_v1_head, scene_id, revision}, state)
   end
 
   defp deliver_in_order(state, frame, scene_id, revision) do
@@ -335,6 +365,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           | phase: :live,
             hello_timer: nil,
             identity: identity,
+            authority_checked_at: System.monotonic_time(:millisecond),
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
             view_negotiated: view_negotiated,

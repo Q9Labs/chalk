@@ -12,6 +12,7 @@ defmodule ChalkSync.WhiteboardV1.Repository do
         }
 
   @callback connect(Identity.t()) :: {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  @callback participant_active(Identity.t()) :: :ok | {:error, atom()} | {:retryable, atom()}
   @callback commit_update(Identity.t(), map()) ::
               {:ok, commit()} | {:error, atom()} | {:retryable, atom()}
   @callback clear(Identity.t(), map()) ::
@@ -25,6 +26,7 @@ defmodule ChalkSync.WhiteboardV1.Repository do
               {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
 
   def connect(identity), do: impl().connect(identity)
+  def participant_active(identity), do: impl().participant_active(identity)
   def commit_update(identity, operation), do: impl().commit_update(identity, operation)
   def clear(identity, operation), do: impl().clear(identity, operation)
 

@@ -24,6 +24,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
        }}
     end
 
+    def participant_active(_identity), do: Process.get(:whiteboard_access, :ok)
+
     def commit_update(_identity, operation) do
       send(self(), {:committed_update, operation})
 
@@ -419,6 +421,72 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     end)
   end
 
+  describe "a live socket whose Participant lost access" do
+    setup do
+      {:ok, initial} = SocketWhiteboardV1.init(%{})
+      Process.cancel_timer(initial.hello_timer)
+      identity = identity()
+      Fanout.subscribe(identity.episode)
+      on_exit(fn -> Process.delete(:whiteboard_access) end)
+
+      # The last access check is older than the one-second cache, so the next event checks again.
+      state = %{
+        initial
+        | phase: :live,
+          identity: identity,
+          display_name: "Ada",
+          scene_id: @scene_id,
+          revision: 4,
+          authority_checked_at: System.monotonic_time(:millisecond) - 2_000
+      }
+
+      update = %{
+        "type" => "update",
+        "operation_id" => "operation-0000000005",
+        "scene_id" => @scene_id,
+        "revision" => "5",
+        "elements" => [element()]
+      }
+
+      {:ok, state: state, update: update}
+    end
+
+    test "closes instead of sending a cursor", %{state: state} do
+      Process.put(:whiteboard_access, {:error, :permission_denied})
+
+      assert {:stop, :normal, {1008, "policy violation"}, closed} =
+               receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
+
+      assert closed.terminal == %{close_code: 1008, reason: :permission_denied}
+      refute_received {:whiteboard_v1_frame, %{"type" => "cursor"}}
+    end
+
+    test "closes instead of receiving other people's board updates", %{
+      state: state,
+      update: update
+    } do
+      Process.put(:whiteboard_access, {:error, :permission_denied})
+
+      assert {:stop, :normal, {1008, "policy violation"}, _closed} =
+               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
+    end
+
+    test "closes for a retry when access cannot be checked", %{state: state, update: update} do
+      Process.put(:whiteboard_access, {:retryable, :storage_unavailable})
+
+      assert {:stop, :normal, {1012, "dependency unavailable"}, _closed} =
+               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
+    end
+
+    test "checks access at most once a second", %{state: state, update: update} do
+      fresh = %{state | authority_checked_at: System.monotonic_time(:millisecond)}
+      Process.put(:whiteboard_access, {:error, :permission_denied})
+
+      assert {:push, {:text, _update}, _state} =
+               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, fresh)
+    end
+  end
+
   test "enforces the hello deadline and strict text framing" do
     assert {:ok, state} = SocketWhiteboardV1.init(%{})
 
@@ -493,7 +561,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
     guest = %{identity() | capabilities: ["drawWhiteboard"]}
     {:ok, initial} = SocketWhiteboardV1.init(%{})
-    live = %{initial | phase: :live, scene_id: @scene_id, revision: 4, display_name: "Ada"}
+
+    live = %{
+      initial
+      | phase: :live,
+        scene_id: @scene_id,
+        revision: 4,
+        display_name: "Ada",
+        authority_checked_at: System.monotonic_time(:millisecond)
+    }
+
     Fanout.subscribe(host.episode)
 
     view = %{
@@ -698,6 +775,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       initial
       | phase: :live,
         identity: identity,
+        authority_checked_at: System.monotonic_time(:millisecond),
         scene_id: @scene_id,
         revision: 4
     }

@@ -202,6 +202,21 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end)
   end
 
+  @impl true
+  def participant_active(%Identity{} = identity) do
+    params = context(identity) ++ [uuid(identity.participant_id), identity.participant_generation]
+
+    case Postgrex.query(Database.connection(identity.episode), SQL.participant_active(), params,
+           timeout: 1_000
+         ) do
+      {:ok, %Postgrex.Result{rows: [_row]}} -> :ok
+      {:ok, %Postgrex.Result{rows: []}} -> {:error, :permission_denied}
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  catch
+    :exit, _reason -> {:retryable, :storage_unavailable}
+  end
+
   defp transaction(identity, callback) do
     connection = Database.connection(identity.episode)
 
