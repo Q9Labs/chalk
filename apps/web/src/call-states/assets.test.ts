@@ -16,7 +16,7 @@ beforeAll(async () => {
   await promisify(execFile)(process.execPath, [resolve(import.meta.dirname, "../../../../packages/whiteboard/scripts/build-embedded.mjs")]);
   // Each browser suite owns its harness and cleanup independently.
   // fallow-ignore-next-line code-duplication
-  ({ origin, stop } = await startCallHarness());
+  ({ origin, stop } = await startCallHarness(Number(process.env.CHALK_CALL_HARNESS_PORT ?? 0)));
   browser = await chromium.launch({ headless: true });
 }, 60_000);
 
