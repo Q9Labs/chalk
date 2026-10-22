@@ -20,25 +20,23 @@ async function loadSession({ spaceId, episodeId }: Ids) {
 
 export function PastSessionPage({ spaceId, episodeId }: Ids) {
   const ids = useMemo(() => ({ spaceId, episodeId }), [spaceId, episodeId]);
+  const metadata = useRef(0);
   const { state, reload, update } = useLoad(() => loadSession(ids), `past:${spaceId}:${episodeId}`, {
     visibility: "status",
     interval: (data) => (data.session.recordings.some(pendingRecording) ? 5000 : undefined),
     read: async (data) => {
-      const recordings = await Promise.all(
-        data.session.recordings.map(async (recording) => {
-          if (!pendingRecording(recording)) return recording;
-          try {
-            const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
-            return result.kind === "recording" ? result.recording : recording;
-          } catch (error) {
-            if (error instanceof DashboardRequestError && (error.status === 404 || error.status === 410)) {
-              return { ...recording, sourceStatus: "expired" as const, exportStatus: "unavailable" as const, transcriptionStatus: "expired" as const, exportRetryable: false, failureMessage: "The recording source is no longer available." };
-            }
-            throw error;
-          }
-        }),
-      );
-      return { ...data, session: { ...data.session, recordings } };
+      const pending = data.session.recordings.filter(pendingRecording);
+      const recording = pending[metadata.current++ % pending.length];
+      if (!recording) return data;
+      let next = recording;
+      try {
+        const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
+        if (result.kind === "recording") next = result.recording;
+      } catch (error) {
+        if (!(error instanceof DashboardRequestError) || (error.status !== 404 && error.status !== 410)) throw error;
+        next = { ...recording, sourceStatus: "expired", exportStatus: "unavailable", transcriptionStatus: "expired", exportRetryable: false, failureMessage: "The recording source is no longer available." };
+      }
+      return { ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? next : item)) } };
     },
   });
   const phone = usePhone();
@@ -238,7 +236,7 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
       return { kind: "ready", transcript, cues };
     })().then(
       (next) => current && setState(next),
-      () => current && setState({ kind: "failed" }),
+      (error: unknown) => current && setState({ kind: error instanceof DashboardRequestError && (error.status === 404 || error.status === 410) ? "unavailable" : "failed" }),
     );
     return () => {
       current = false;

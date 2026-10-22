@@ -344,6 +344,7 @@ async function dashboard(request, response, page, url, entry) {
       state.recordingScenario = "export_pending";
       return send(response, 200, { recording: recordingsFor(data.sessions[0], false)[0] });
     case "transcripts":
+      if (state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
       return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()), nextCursor: null });
     case "create-transcript":
       if (state.transcript !== "none") return fail(response, 409, "transcript_already_exists");

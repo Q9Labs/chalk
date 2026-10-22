@@ -21,8 +21,9 @@ let artifact = "none";
 let retryable = false;
 let transcriptStatus = "complete";
 let metadataStatus = 200;
-let otherRecording: ReturnType<typeof recording> | undefined;
-const requests: { path: string; action?: string }[] = [];
+let transcriptHTTPStatus = 200;
+let extraRecordings: ReturnType<typeof recording>[] = [];
+const requests: { path: string; action?: string; id?: string }[] = [];
 
 function recording() {
   return recordingDTO(
@@ -47,7 +48,8 @@ function recording() {
 
 beforeEach(() => {
   metadataStatus = 200;
-  otherRecording = undefined;
+  transcriptHTTPStatus = 200;
+  extraRecordings = [];
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -57,12 +59,14 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
-    const path = new URL(input, "https://chalk.test").pathname;
+    const url = new URL(input, "https://chalk.test");
+    const path = url.pathname;
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
-    requests.push({ path, action: body?.action });
+    requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined });
     if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
     if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
-    if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: recording() }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
+    if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: { ...recording(), id: url.searchParams.get("id") } }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
+    if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
     if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
     if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
     if (body?.action === "export-recording") {
@@ -70,7 +74,7 @@ beforeEach(() => {
       return Response.json({ recording: recording() });
     }
     if (body?.action === "recording-url") return Response.json({ url: "https://storage.example.test/video.mp4" });
-    if (path === "/dashboard-api/past-session") return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: otherRecording ? [recording(), otherRecording] : [recording()], nextCursor: null });
+    if (path === "/dashboard-api/past-session") return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: [recording(), ...extraRecordings], nextCursor: null });
     throw new Error(`Unexpected request: ${path}`);
   });
 });
@@ -137,7 +141,7 @@ it("replaces pending capture with its terminal reason without a reload", async (
 it.each([404, 410])("keeps the session and another recording when one pending recording disappears: %s", async (status) => {
   source = "pending";
   artifact = "unavailable";
-  otherRecording = { ...recording(), id: "00000000-0000-4000-8000-000000000002", status: "completed", sourceStatus: "available", exportStatus: "ready", transcriptionStatus: "ready" };
+  extraRecordings = [{ ...recording(), id: "00000000-0000-4000-8000-000000000002", status: "completed", sourceStatus: "available", exportStatus: "ready", transcriptionStatus: "ready" }];
   await open();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   metadataStatus = status;
@@ -176,4 +180,32 @@ it("shows a terminal transcript failure rather than polling it forever", async (
   const count = requests.length;
   await tick();
   expect(requests).toHaveLength(count);
+});
+
+it.each([404, 410])("shows an unavailable transcript when the selected recording disappears: %s", async (status) => {
+  source = "pending";
+  artifact = "unavailable";
+  transcriptStatus = "";
+  await open();
+  metadataStatus = status;
+  transcriptHTTPStatus = status;
+  await tick();
+  expect(screen.getByText("The recording source is no longer available.")).toBeTruthy();
+  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  expect(screen.queryByText("The transcript couldn’t be made")).toBeNull();
+});
+
+it("shares metadata polling across pending attempts with one request per tick", async () => {
+  source = "pending";
+  artifact = "unavailable";
+  transcriptStatus = "";
+  const second = "00000000-0000-4000-8000-000000000002";
+  const third = "00000000-0000-4000-8000-000000000003";
+  extraRecordings = [second, third].map((id) => ({ ...recording(), id }));
+  await open();
+  await tick();
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata").map((request) => request.id)).toEqual([id]);
+  await tick();
+  await tick();
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata").map((request) => request.id)).toEqual([id, second, third]);
 });
