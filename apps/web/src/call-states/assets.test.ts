@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { encodeEmbeddedWhiteboardMessage } from "../../../../packages/whiteboard/src/embedded/protocol";
+import { encodeEmbeddedWhiteboardMessage } from "@q9labsai/chalk-whiteboard/embedded";
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
@@ -53,7 +53,9 @@ it("loads call, board, sticky note, text and math assets from our origin", async
       ["Text", 520, "Local board text"],
     ] as const) {
       await page.getByRole("button", { name: tool, exact: true }).click();
-      await canvas.click({ position: { x, y: 320 } });
+      const target = tool === "Sticky note" ? page.locator(".chalk-board-note-layer") : canvas;
+      await target.click({ position: { x, y: 320 } });
+      await page.locator("textarea.excalidraw-wysiwyg").waitFor();
       await page.keyboard.type(text);
       await page.keyboard.press("Escape");
     }

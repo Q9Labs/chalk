@@ -488,6 +488,9 @@ importers:
       '@q9labsai/chalk-ui':
         specifier: workspace:^5.1.0
         version: link:../../packages/ui
+      '@q9labsai/chalk-whiteboard':
+        specifier: workspace:^5.1.0
+        version: link:../../packages/whiteboard
       '@tanstack/react-router':
         specifier: 1.170.41
         version: 1.170.41(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
