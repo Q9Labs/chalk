@@ -125,7 +125,12 @@ defmodule ChalkSync.Chat.Repository.SQL do
 
   def person_usage do
     """
-    select count(*), coalesce(sum(message.encoded_bytes), 0)::bigint
+    select
+      count(*),
+      coalesce(sum(message.encoded_bytes), 0)::bigint,
+      count(*) filter (
+        where message.created_at > now() - make_interval(secs => $4::bigint / 1000.0)
+      )
     from sync_chat_messages message
     where message.tenant_id = $1
       and message.space_id = $2

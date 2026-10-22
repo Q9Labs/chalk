@@ -412,8 +412,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  # This runs before the Space stream lock, so a refused flood never holds it. A retry of a stored
-  # message skips the window and gets its original result under the lock.
+  # A cheap first check before the Space stream lock, so a refused flood never holds it. A retry of a
+  # stored message skips it and gets its original result under the lock.
   defp within_person_rate(connection, identity, client_message_id) do
     limits = person_limits()
 
@@ -430,16 +430,22 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  # The Space stream lock is held here, so two sends from one person cannot both pass.
+  # The Space stream lock is held here, so two sends from one person, even on two Sync nodes,
+  # cannot both pass the window or the caps.
   defp within_person_caps(connection, identity, encoded_bytes) do
     limits = person_limits()
 
-    [[count, bytes]] =
-      Postgrex.query!(connection, SQL.person_usage(), person_params(identity)).rows
+    [[count, bytes, recent]] =
+      Postgrex.query!(
+        connection,
+        SQL.person_usage(),
+        person_params(identity) ++ [limits.window_ms]
+      ).rows
 
-    if count < limits.messages and bytes + encoded_bytes <= limits.bytes,
-      do: :ok,
-      else: {:error, :rate_limited}
+    if recent < limits.window_messages and count < limits.messages and
+         bytes + encoded_bytes <= limits.bytes,
+       do: :ok,
+       else: {:error, :rate_limited}
   end
 
   defp person_count(connection, identity, sql, params) do

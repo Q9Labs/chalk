@@ -74,6 +74,49 @@ defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
              Chat.send_chat(first, chat("retry-first-1"), fanout: fanout)
   end
 
+  test "sends racing from two Sync nodes cannot pass the window together",
+       %{fixture: fixture} do
+    [first, _second] = fixture.identities
+    limit(window_messages: 2)
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("race-first-0"))
+
+    # Hold the Space stream lock so both sends pass the early check before either commits.
+    # Linked to the test process, so it closes with it.
+    [blocker] = SyncPostgres.start_connections(@database_url, 1)
+    test = self()
+
+    holder =
+      Task.async(fn ->
+        Postgrex.transaction(blocker, fn locked ->
+          Postgrex.query!(
+            locked,
+            "select 1 from sync_chat_streams where tenant_id = $1 and space_id = $2 for update",
+            [UUID.dump!(first.episode.tenant_id), UUID.dump!(first.episode.space_id)]
+          )
+
+          send(test, :locked)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :locked
+
+    racers =
+      for {node, index} <- [first: 1, second: 2] do
+        Task.async(fn ->
+          Process.put(:sync_test_node, node)
+          Repository.append(first, chat("race-first-#{index}"))
+        end)
+      end
+
+    Process.sleep(300)
+    send(holder.pid, :release)
+    Task.await(holder)
+    outcomes = racers |> Task.await_many() |> Enum.map(&elem(&1, 0)) |> Enum.sort()
+
+    assert outcomes == [:error, :ok]
+  end
+
   test "a person who rejoins as a new participant keeps the same rate window",
        %{connection: connection, fixture: fixture} do
     [first, rejoined] = same_person(connection, fixture)
