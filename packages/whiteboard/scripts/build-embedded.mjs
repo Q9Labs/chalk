@@ -22,7 +22,7 @@ await mkdir(join(outputRoot, "mathjax"), { recursive: true });
 await mkdir(join(outputRoot, "licenses"), { recursive: true });
 
 await build({
-  entryPoints: [join(packageRoot, "src", "embedded", "renderer.tsx")],
+  entryPoints: [join(packageRoot, "src", "embedded", "renderer-entry.ts")],
   outfile: join(outputRoot, "renderer.js"),
   bundle: true,
   format: "iife",
@@ -31,6 +31,20 @@ await build({
   minify: true,
   legalComments: "none",
   sourcemap: false,
+  plugins: [
+    {
+      name: "embedded-local-fonts",
+      setup(builder) {
+        builder.onLoad({ filter: /@excalidraw[\/]excalidraw[\/]dist[\/].*\.js$/ }, async ({ path }) => {
+          const code = await readFile(path, "utf8");
+          if (!code.includes(".ASSETS_FALLBACK_URL")) return;
+          const patched = code.replace(/[\w$]+\.push\(new URL\([\w$]+,\s*[\w$]+\.ASSETS_FALLBACK_URL\)\)/g, "void 0");
+          if (patched === code) throw new Error("Excalidraw's font fallback changed; update the embedded asset transform");
+          return { contents: patched, loader: "js" };
+        });
+      },
+    },
+  ],
   define: {
     "process.env.NODE_ENV": '"production"',
   },

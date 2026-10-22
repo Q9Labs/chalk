@@ -154,12 +154,14 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
   }
 }, 30_000);
 
-it("loads the embedded board from file URLs with adjacent fonts", async () => {
+it("loads the embedded renderer entry with local fonts and no CDN requests", async () => {
   const context = await browser.newContext();
   const messages: string[] = [];
   const failures: string[] = [];
+  const requests: string[] = [];
+  context.on("request", (request) => requests.push(request.url()));
   try {
-    await context.addInitScript(`window.ReactNativeWebView = { postMessage: (message) => console.log("native-bridge:" + message) };`);
+    await context.addInitScript(`window.ReactNativeWebView = { postMessage: (message) => console.log("native-bridge:" + message) }; document.addEventListener("securitypolicyviolation", (event) => console.error("asset-policy:" + event.blockedURI));`);
     const page = await context.newPage();
     page.on("console", (message) => messages.push(message.text()));
     page.on("pageerror", (error) => failures.push(error.message));
@@ -172,9 +174,30 @@ it("loads the embedded board from file URLs with adjacent fonts", async () => {
     await page.evaluate((data) => window.dispatchEvent(new MessageEvent("message", { data })), initialize);
     await page.locator(".excalidraw canvas.interactive").waitFor();
     await page.evaluate(() => document.fonts.ready);
+    const font = await page.evaluate(async () => {
+      try {
+        const faces = await document.fonts.load("20px Excalifont", "Embedded board text");
+        return { faces: faces.map((face) => ({ family: face.family, status: face.status })), error: null };
+      } catch (error) {
+        return { faces: [], error: String(error) };
+      }
+    });
+    expect(
+      requests.filter((request) => /^https?:/.test(request)),
+      "embedded external font or CDN requests",
+    ).toEqual([]);
+    expect(messages.filter((message) => message.startsWith("asset-policy:"))).toEqual([]);
+    expect(font.error).toBeNull();
+    expect(font.faces.length).toBeGreaterThan(0);
+    expect(font.faces.every((face) => face.status === "loaded")).toBe(true);
+    expect(requests.some((request) => request.startsWith("file:") && request.includes("/fonts/Excalifont/"))).toBe(true);
     expect(messages.some((message) => message.includes("renderer_load_failed"))).toBe(false);
     expect(failures).toEqual([]);
   } finally {
+    if (process.env.ASSET_PROOF_DIR) {
+      await mkdir(process.env.ASSET_PROOF_DIR, { recursive: true });
+      await writeFile(resolve(process.env.ASSET_PROOF_DIR, "embedded-requests.json"), JSON.stringify({ requests, messages, failures }, null, 2));
+    }
     await context.close();
   }
 }, 30_000);
