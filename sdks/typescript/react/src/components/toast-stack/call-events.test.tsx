@@ -73,3 +73,8 @@ it.each(["client.internal_error", "connection.invalid_state"] as const)("does no
   expect(text).not.toContain("setCameraEnabled");
   expect(text).toContain(code === "connection.invalid_state" ? "Wait for the call to reconnect" : "Your camera couldn’t start");
 });
+
+it.each(["client.internal_error", "connection.invalid_state"] as const)("preserves non-media command guidance for %s", (code) => {
+  const toast = mediaFailureToast({ code, recoverable: false, message: "Recording is not allowed for this participant." });
+  expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("Recording is not allowed for this participant.");
+});
