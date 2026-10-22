@@ -46,7 +46,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.3",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "github-slugger": "2.0.0",
     "jsdom": "^29.1.1",
     "playwright": "^1.62.1",
@@ -55,6 +55,6 @@
     "remark-gfm": "4.0.1",
     "typescript": "^6.0.3",
     "vite": "8.1.6",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
