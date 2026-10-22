@@ -1,3 +1,10 @@
+-- name: LockChatAttachmentStream :exec
+-- Reservations in one Space wait here, so the per-person count in the next statement sees every
+-- reservation committed before it.
+insert into sync_chat_streams (tenant_id, space_id)
+values (sqlc.arg(tenant_id), sqlc.arg(space_id))
+on conflict (tenant_id, space_id) do update set updated_at = sync_chat_streams.updated_at;
+
 -- name: ReserveChatAttachmentUpload :one
 with authority as materialized (
     select
@@ -5,7 +12,9 @@ with authority as materialized (
         participant.space_id,
         participant.episode_id,
         participant.id,
-        participant.generation
+        participant.generation,
+        participant.account_id,
+        participant.identity_id
     from participants participant
     join episodes episode
         on episode.tenant_id = participant.tenant_id
@@ -49,19 +58,21 @@ reservation as (
             where held.tenant_id = sqlc.arg(tenant_id)
                 and held.space_id = sqlc.arg(space_id)
                 and held.participant_id in (
+                    -- One lookup per key, so each uses its own index instead of scanning the Space.
+                    select authority.id
+                    from authority
+                    union
                     select sibling.id
-                    from participants sender
-                    join participants sibling
-                        on sibling.tenant_id = sender.tenant_id
-                        and sibling.space_id = sender.space_id
-                        and (
-                            sibling.id = sender.id
-                            or sibling.account_id = sender.account_id
-                            or sibling.identity_id = sender.identity_id
-                        )
-                    where sender.tenant_id = sqlc.arg(tenant_id)
-                        and sender.space_id = sqlc.arg(space_id)
-                        and sender.id = sqlc.arg(participant_id)
+                    from participants sibling
+                    join authority on sibling.account_id = authority.account_id
+                    where sibling.tenant_id = sqlc.arg(tenant_id)
+                        and sibling.space_id = sqlc.arg(space_id)
+                    union
+                    select sibling.id
+                    from participants sibling
+                    join authority on sibling.identity_id = authority.identity_id
+                    where sibling.tenant_id = sqlc.arg(tenant_id)
+                        and sibling.space_id = sqlc.arg(space_id)
                 )
         )
     returning

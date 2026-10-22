@@ -114,20 +114,24 @@ defmodule ChalkSync.Chat.Repository.SQL do
   # shares the sender's account or API identity, not only the current row.
   def person_usage do
     """
-    with person as materialized (
+    with sender as materialized (
+      select account_id, identity_id
+      from participants
+      where tenant_id = $1 and space_id = $2 and id = $3
+    ),
+    -- One lookup per key, so each uses its own index instead of scanning the Space.
+    person as materialized (
+      select $3::uuid as id
+      union
       select sibling.id
-      from participants sender
-      join participants sibling
-        on sibling.tenant_id = sender.tenant_id
-        and sibling.space_id = sender.space_id
-        and (
-          sibling.id = sender.id
-          or sibling.account_id = sender.account_id
-          or sibling.identity_id = sender.identity_id
-        )
-      where sender.tenant_id = $1
-        and sender.space_id = $2
-        and sender.id = $3
+      from participants sibling
+      join sender on sibling.account_id = sender.account_id
+      where sibling.tenant_id = $1 and sibling.space_id = $2
+      union
+      select sibling.id
+      from participants sibling
+      join sender on sibling.identity_id = sender.identity_id
+      where sibling.tenant_id = $1 and sibling.space_id = $2
     )
     select count(*), coalesce(sum(message.encoded_bytes), 0)::bigint
     from sync_chat_messages message

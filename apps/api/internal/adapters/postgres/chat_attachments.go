@@ -17,6 +17,12 @@ import (
 
 type ChatAttachmentRepository struct {
 	queries chatAttachmentQuerier
+	db      chatAttachmentDB
+}
+
+type chatAttachmentDB interface {
+	sqlc.DBTX
+	Begin(context.Context) (pgx.Tx, error)
 }
 
 type chatAttachmentQuerier interface {
@@ -32,13 +38,29 @@ type chatAttachmentQuerier interface {
 	CompleteChatAttachmentCleanup(context.Context, sqlc.CompleteChatAttachmentCleanupParams) (int64, error)
 }
 
-func NewChatAttachmentRepository(db sqlc.DBTX) ChatAttachmentRepository {
-	return ChatAttachmentRepository{queries: sqlc.New(db)}
+func NewChatAttachmentRepository(db chatAttachmentDB) ChatAttachmentRepository {
+	return ChatAttachmentRepository{queries: sqlc.New(db), db: db}
 }
 
 func (r ChatAttachmentRepository) Reserve(ctx context.Context, input chatattachments.ReserveInput) (chatattachments.Upload, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return chatattachments.Upload{}, fmt.Errorf("begin chat attachment reservation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	queries := sqlc.New(tx)
+	if err := queries.LockChatAttachmentStream(ctx, sqlc.LockChatAttachmentStreamParams{
+		TenantID: uuid(input.Subject.TenantID), SpaceID: uuid(input.Subject.SpaceID),
+	}); err != nil {
+		return chatattachments.Upload{}, fmt.Errorf("lock chat attachment stream: %w", err)
+	}
+	// A retry of a stored reservation returns it even when the person is now at the cap.
+	existing, found, err := findReservation(ctx, queries, input)
+	if err != nil || found {
+		return existing, err
+	}
 	upload := input.Upload
-	row, err := r.queries.ReserveChatAttachmentUpload(ctx, sqlc.ReserveChatAttachmentUploadParams{
+	row, err := queries.ReserveChatAttachmentUpload(ctx, sqlc.ReserveChatAttachmentUploadParams{
 		AttachmentID: uuid(upload.AttachmentID), ClientAttachmentID: input.ClientAttachmentID,
 		RequestFingerprint: upload.RequestFingerprint[:], UploadID: uuid(upload.UploadID),
 		ObjectKey: upload.ObjectKey, OriginalFilename: upload.FileName, MimeType: upload.MIMEType,
@@ -49,7 +71,13 @@ func (r ChatAttachmentRepository) Reserve(ctx context.Context, input chatattachm
 		ParticipantGeneration: input.Subject.ParticipantGeneration,
 	})
 	if chatAttachmentUniqueViolation(err) {
-		return r.existingReservation(ctx, input)
+		// The failed insert aborted the transaction, so the conflict is read outside it.
+		_ = tx.Rollback(ctx)
+		existing, found, err := findReservation(ctx, r.queries, input)
+		if err == nil && !found {
+			return chatattachments.Upload{}, chatattachments.ErrClientAttachmentIDConflict
+		}
+		return existing, err
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return chatattachments.Upload{}, chatattachments.ErrQuotaExceeded
@@ -57,27 +85,7 @@ func (r ChatAttachmentRepository) Reserve(ctx context.Context, input chatattachm
 	if err != nil {
 		return chatattachments.Upload{}, fmt.Errorf("reserve chat attachment upload: %w", err)
 	}
-	return mapChatAttachmentUpload(
-		row.AttachmentID, row.UploadID, row.ObjectKey, row.OriginalFilename,
-		row.MimeType, row.ByteLength, row.Sha256, row.RequestFingerprint,
-		row.Status, row.ExpiresAt,
-	)
-}
-
-func (r ChatAttachmentRepository) existingReservation(ctx context.Context, input chatattachments.ReserveInput) (chatattachments.Upload, error) {
-	subject := input.Subject
-	row, err := r.queries.GetChatAttachmentByClientID(ctx, sqlc.GetChatAttachmentByClientIDParams{
-		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
-		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
-		ParticipantGeneration: subject.ParticipantGeneration, ClientAttachmentID: input.ClientAttachmentID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return chatattachments.Upload{}, chatattachments.ErrClientAttachmentIDConflict
-	}
-	if err != nil {
-		return chatattachments.Upload{}, fmt.Errorf("read duplicate chat attachment upload: %w", err)
-	}
-	upload, err := mapChatAttachmentUpload(
+	reserved, err := mapChatAttachmentUpload(
 		row.AttachmentID, row.UploadID, row.ObjectKey, row.OriginalFilename,
 		row.MimeType, row.ByteLength, row.Sha256, row.RequestFingerprint,
 		row.Status, row.ExpiresAt,
@@ -85,10 +93,39 @@ func (r ChatAttachmentRepository) existingReservation(ctx context.Context, input
 	if err != nil {
 		return chatattachments.Upload{}, err
 	}
-	if !bytes.Equal(upload.RequestFingerprint[:], input.Upload.RequestFingerprint[:]) {
-		return chatattachments.Upload{}, chatattachments.ErrClientAttachmentIDConflict
+	if err := tx.Commit(ctx); err != nil {
+		return chatattachments.Upload{}, fmt.Errorf("commit chat attachment reservation: %w", err)
 	}
-	return upload, nil
+	return reserved, nil
+}
+
+// findReservation returns the Participant's stored reservation for the client attachment ID. A stored
+// reservation with a different request is a conflict.
+func findReservation(ctx context.Context, queries chatAttachmentQuerier, input chatattachments.ReserveInput) (chatattachments.Upload, bool, error) {
+	subject := input.Subject
+	row, err := queries.GetChatAttachmentByClientID(ctx, sqlc.GetChatAttachmentByClientIDParams{
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
+		ParticipantGeneration: subject.ParticipantGeneration, ClientAttachmentID: input.ClientAttachmentID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return chatattachments.Upload{}, false, nil
+	}
+	if err != nil {
+		return chatattachments.Upload{}, false, fmt.Errorf("read duplicate chat attachment upload: %w", err)
+	}
+	upload, err := mapChatAttachmentUpload(
+		row.AttachmentID, row.UploadID, row.ObjectKey, row.OriginalFilename,
+		row.MimeType, row.ByteLength, row.Sha256, row.RequestFingerprint,
+		row.Status, row.ExpiresAt,
+	)
+	if err != nil {
+		return chatattachments.Upload{}, false, err
+	}
+	if !bytes.Equal(upload.RequestFingerprint[:], input.Upload.RequestFingerprint[:]) {
+		return chatattachments.Upload{}, false, chatattachments.ErrClientAttachmentIDConflict
+	}
+	return upload, true, nil
 }
 
 func (r ChatAttachmentRepository) ClaimFinalize(

@@ -555,6 +555,24 @@ func (q *Queries) GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAt
 	return i, err
 }
 
+const lockChatAttachmentStream = `-- name: LockChatAttachmentStream :exec
+insert into sync_chat_streams (tenant_id, space_id)
+values ($1, $2)
+on conflict (tenant_id, space_id) do update set updated_at = sync_chat_streams.updated_at
+`
+
+type LockChatAttachmentStreamParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	SpaceID  pgtype.UUID `json:"space_id"`
+}
+
+// Reservations in one Space wait here, so the per-person count in the next statement sees every
+// reservation committed before it.
+func (q *Queries) LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) error {
+	_, err := q.db.Exec(ctx, lockChatAttachmentStream, arg.TenantID, arg.SpaceID)
+	return err
+}
+
 const releaseChatAttachmentUploadFinalize = `-- name: ReleaseChatAttachmentUploadFinalize :execrows
 update sync_chat_attachments
 set
@@ -587,7 +605,9 @@ with authority as materialized (
         participant.space_id,
         participant.episode_id,
         participant.id,
-        participant.generation
+        participant.generation,
+        participant.account_id,
+        participant.identity_id
     from participants participant
     join episodes episode
         on episode.tenant_id = participant.tenant_id
@@ -631,19 +651,21 @@ reservation as (
             where held.tenant_id = $11
                 and held.space_id = $12
                 and held.participant_id in (
+                    -- One lookup per key, so each uses its own index instead of scanning the Space.
+                    select authority.id
+                    from authority
+                    union
                     select sibling.id
-                    from participants sender
-                    join participants sibling
-                        on sibling.tenant_id = sender.tenant_id
-                        and sibling.space_id = sender.space_id
-                        and (
-                            sibling.id = sender.id
-                            or sibling.account_id = sender.account_id
-                            or sibling.identity_id = sender.identity_id
-                        )
-                    where sender.tenant_id = $11
-                        and sender.space_id = $12
-                        and sender.id = $14
+                    from participants sibling
+                    join authority on sibling.account_id = authority.account_id
+                    where sibling.tenant_id = $11
+                        and sibling.space_id = $12
+                    union
+                    select sibling.id
+                    from participants sibling
+                    join authority on sibling.identity_id = authority.identity_id
+                    where sibling.tenant_id = $11
+                        and sibling.space_id = $12
                 )
         )
     returning
