@@ -118,14 +118,48 @@ shipment target from branch, release mode, or directory.
 The runner snapshots the local commit plus staged, unstaged, and untracked work;
 ignored files are not shipped. The merge-base tree becomes `origin/master`.
 
-Runs queue behind live processes using `/tmp/chalk-remote-*` checkouts. A macOS
-`shlock` PID lock serializes simultaneous arrivals and is reclaimed after owner
-death. Waiting prints once and checks every 30 seconds. Set
-`CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` to change the 5400-second wait; expiry exits 76.
-The runner reaps only abandoned checkouts with a generated run name and matching
-ownership marker; logs and unmarked scratch directories survive. It checks disk space,
-shares dependency caches, limits each setup step and the gate runtime, saves logs
-locally, and deletes its checkout on exit.
+The M4 registers a durable SQLite ticket, then a detached dispatcher waits and runs
+the job there. Ticket order is FIFO; the lead can use `--priority` to move ahead of
+other waiting tickets, without interrupting a running job. `--run-id ID` (or
+`CHALK_REMOTE_RUN_ID`) reuses the original ticket and result, including after an
+ambiguous submission response. Registration finishes only after the whole snapshot
+arrives. A default run ID is printed before registration.
+
+Network drops automatically retry log reads from the last confirmed byte. After
+Air sleep, a T3 restart, or Ctrl-C, run `scripts/gates/remote.sh --attach ID`.
+Ctrl-C detaches; it does not cancel the ticket. There is no default queue expiry.
+An explicit `CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` retains its old meaning (exit 76).
+The M4 checks free disk at admission and bounds setup and gate runtime as before.
+
+State lives under `~/.local/share/chalk-remote/v1` on the M4. A dispatcher owns
+the admission lock and reaps dead worker descendants and their queue-owned
+`/tmp/chalk-remote-queue-*` checkouts before admitting the next ticket. It exits
+when idle. A later submission or attach restarts it; live log reads also restart a
+dead dispatcher and record exit 137 for interrupted work. Logs and submission
+files expire after seven days, on the next dispatcher start. Small result
+tombstones remain so an old run ID cannot execute twice. Abandoned partial uploads
+expire after an hour; an active upload holds a lease and cannot be reaped.
+
+### Cut-over and undo
+
+The client installs helpers by content hash and verifies the transfer before an
+atomic rename. Each ticket carries its own worker script; deployment does not
+rewrite running code. The new dispatcher drains existing legacy clients first,
+then uses their `/tmp/chalk-remote-admission.lock` PID lock for mutual exclusion.
+It keeps the old checkout-process signal too, so old clients wait for surviving
+workers after a dispatcher crash. It never cancels or changes a legacy ticket.
+FIFO starts at registration in the new queue; legacy tickets retain their old order.
+
+To undo, restore the old client for future submissions. Let new tickets finish or
+reattach with this revision; keep their state and helpers until they drain. No
+shared runner or launchd service is replaced.
+
+Tiny proofs (no dependency installs or heavy admission):
+
+```sh
+node --test scripts/gates/remote-queue.test.mjs
+python3 scripts/gates/remote-queue-ssh-test.py agents-macmini
+```
 
 `root` installs Chromium. Set `CHALK_REMOTE_NEEDS_BROWSER=1` for custom `--`
 commands that need it. `CHALK_REMOTE_REPO` overrides the local repository root.

@@ -358,6 +358,8 @@ export function createGatePlan(files, options = {}) {
       "node",
       "--test",
       "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/remote-queue.test.mjs",
+      "tools/sdk-web-consumer-e2e/scripts/preflight.test.mjs",
       "scripts/gates/with-postgres.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
       "apps/sync/scripts/reliability_harness.test.mjs",

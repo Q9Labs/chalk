@@ -55,6 +55,9 @@ jobs:
       - name: Install repository dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check packed-consumer adapters before browser setup
+        run: node tools/sdk-web-consumer-e2e/scripts/run.mjs --preflight-only
+
       - name: Install browser runtimes
         run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium firefox webkit
 
