@@ -113,8 +113,8 @@ export class SpaceClientCore {
   subscribe = (listener: () => void): (() => void) => this.#store.subscribe(listener);
   join(options: JoinOptions = {}): ClientEffect<void> {
     return Effect.sync(() => this.#requireActive()).pipe(
-      Effect.tap(() => Effect.sync(() => this.controllers.media.configure(options))),
       Effect.andThen(this.#connection.configureJoin(options)),
+      Effect.tap(() => Effect.sync(() => this.controllers.media.configure(options))),
       Effect.andThen(this.#connection.join()),
       Effect.andThen(options.displayName === undefined ? Effect.void : this.controllers.participants.renameSelf(options.displayName)),
       Effect.catchTag("ConnectionLifecycleFailure", (failure) => Effect.fail(failure.code === "episode_ended" ? new SpaceClientError({ code: "episode.ended", recoverable: failure.recoverable, message: failure.message }) : failure)),

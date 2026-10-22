@@ -7,7 +7,7 @@ import { useSpaceClient } from "../context/space-client-context";
 import { useMeasuredRef } from "../frame/measurement";
 import { usePreferences } from "../frame/preferences";
 import { haptics } from "../haptics/haptics";
-import { useCan, useChat, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
+import { useCan, useConnection, useChat, useParticipants, useRecording, useSelf } from "../hooks/space-hooks";
 import { Icon } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { announce } from "../primitives/announce";
@@ -52,7 +52,8 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
   const toasts = useToasts();
   const { soundsEnabled } = usePreferences();
   const canRaiseHand = useCan("raiseHand");
-  const canReact = useCan("sendReaction");
+  const live = useConnection().status === "live";
+  const canReact = useCan("sendReaction") && live;
 
   const fail = useCallback((message: string) => () => toasts.show({ kind: "error", dismissible: true, message }), [toasts]);
   const toggleHand = useCallback(() => {

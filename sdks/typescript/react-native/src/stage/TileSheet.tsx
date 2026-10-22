@@ -83,7 +83,11 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
             icon="flip"
             label={`Switch to the ${person.back ? "front" : "back"} camera`}
             onPress={run(() => {
-              if (person.otherCamera) client.media.selectCamera(person.otherCamera).then(() => announce(`Switched to the ${person.back ? "front" : "back"} camera`), failed("Couldn't switch the camera."));
+              const otherCamera = person.otherCamera;
+              if (otherCamera)
+                client.media.selectCamera(otherCamera).then(() => {
+                  announce(`Switched to the ${person.back ? "front" : "back"} camera`);
+                }, failed("Couldn't switch the camera."));
             })}
             testID="tile-sheet.flip"
           />

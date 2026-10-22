@@ -18,6 +18,10 @@ describe("callScreen", () => {
     expect(callScreen(connection("live"), false)).toEqual({ kind: "call" });
   });
 
+  it("keeps degraded Sync health on the usable call screen", () => {
+    expect(callScreen({ ...connection("live"), syncHealth: "degraded" }, false)).toEqual({ kind: "call" });
+  });
+
   it("shows the person's own leave as left, even when the leave call failed", () => {
     expect(callScreen(connection("left"), true)).toEqual({ kind: "status", outcome: "left" });
     expect(callScreen(connection("left", { removedByHost: true }), true)).toEqual({ kind: "status", outcome: "left" });

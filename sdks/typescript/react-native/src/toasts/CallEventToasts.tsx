@@ -22,7 +22,7 @@ export type CallEventToasts = {
   /** Call before the person turns their own microphone off, so it isn't reported as a host mute. */
   readonly noteOwnMicrophoneChange: () => void;
   /** Says why turning on the microphone or camera failed, with the way forward (F1, K1, K2). */
-  readonly reportMediaFailure: (permission: Permission, cause: unknown, retry: () => void) => void;
+  readonly reportMediaFailure: (permission: Permission, cause: unknown, retry: () => Promise<void>) => void;
 };
 
 export type CallEventToastsOptions = {
@@ -70,7 +70,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
   }, []);
 
   const reportMediaFailure = useCallback(
-    (permission: Permission, cause: unknown, retry: () => void) => {
+    function reportMediaFailure(permission: Permission, cause: unknown, retry: () => Promise<void>): void {
       const code = cause instanceof SpaceClientError ? cause.code : null;
       const icon: IconName = permission === "microphone" ? "micOff" : "camOff";
       const leading = <Icon color={latest.current.colors.dangerText} name={icon} />;
@@ -110,8 +110,14 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
               label: "Try again",
               testID: "toast.try-again",
               onPress: () => {
-                toasts.dismiss(id);
-                retry();
+                void retry().then(
+                  () => toasts.dismiss(id),
+                  (cause: unknown) => {
+                    if (cause instanceof SpaceClientError && cause.code === "connection.invalid_state") return;
+                    toasts.dismiss(id);
+                    reportMediaFailure(permission, cause, retry);
+                  },
+                );
               },
             },
           ],
@@ -169,8 +175,10 @@ function noticeToast(notice: Notice, { client, toasts, colors, dismiss }: Notice
       const who = request.actorDisplayName ? firstName(request.actorDisplayName) : "The host";
       const unmute = request.kind === "unmute";
       const accept = () => {
-        dismiss();
-        client.media.acceptRequest(request.requestId).catch(() => toasts.show({ kind: "error", dismissible: true, message: unmute ? "Couldn’t unmute you." : "Couldn’t turn on your camera." }));
+        void client.media.acceptRequest(request.requestId).then(dismiss, (cause: unknown) => {
+          if (cause instanceof SpaceClientError && cause.code === "connection.invalid_state") return;
+          toasts.show({ kind: "error", dismissible: true, message: unmute ? "Couldn’t unmute you." : "Couldn’t turn on your camera." });
+        });
       };
       return {
         input: {

@@ -37,7 +37,9 @@ export function useCallToasts() {
                   onClick: () => {
                     // The client error event owns any retry failure and its sound.
                     void client.media.setScreenShareEnabled(true).then(
-                      () => setToasts((current) => current.filter((event) => event.id !== id)),
+                      () => {
+                        setToasts((current) => current.filter((event) => event.id !== id));
+                      },
                       () => undefined,
                     );
                   },

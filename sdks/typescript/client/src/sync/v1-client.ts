@@ -1,3 +1,4 @@
+import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -19,6 +20,7 @@ import type {
   V1DirectedRequestResult,
   V1MediaPublication,
   V1MediaSource,
+  V1MediaPause,
   V1PendingTarget,
   V1Presence,
   V1Projection,
@@ -39,8 +41,6 @@ const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
-const NOTICE_PROBE_INTERVAL_MS = 500;
-const NOTICE_SILENCE_MS = 750;
 type RequestDeferred = Deferred<V1DirectedRequestResult> & {
   readonly frame: SyncV1ClientFrame;
 };
@@ -66,6 +66,7 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #options: V1SyncClientOptions;
   readonly #commandScheduler: V1CommandScheduler;
   readonly #listeners = new Set<(snapshot: V1EpisodeSnapshot) => void>();
+  readonly #mediaPauseListeners = new Set<(pause: V1MediaPause) => void>();
   readonly #requestListeners = new Set<(request: V1DirectedRequest) => void>();
   readonly #collaborationState: V1CollaborationState;
   readonly #controlHeads = new Map<number, string>();
@@ -91,8 +92,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #missedHeartbeats = 0;
   #noticeTimer: unknown;
   #noticeProbeTimer: unknown;
-  #noticeLastInboundAt = 0;
-  #noticeUnresponsive = false;
+  #health = new V1SyncHealth(0);
   #unsubscribeLifecycle: (() => void) | undefined;
   #inbound = Promise.resolve();
   #transportAvailable = true;
@@ -132,6 +132,7 @@ export class V1SyncClient implements V1CollaborationClient {
       stateChanged: () => this.#emit(),
     });
     this.#collaborationState = new V1CollaborationState({
+      clock: () => this.#clock(),
       request: options.collaboration,
       requestIds: options.requestIds,
       maxPendingRequests: options.maxPendingCollaborationRequests,
@@ -186,7 +187,7 @@ export class V1SyncClient implements V1CollaborationClient {
     const pendingCommands = this.#commandScheduler.pendingCommands;
     const optimisticControl = this.#control && this.#participantId ? optimisticV1Control(this.#control, this.#participantId, pendingCommands) : this.#control;
     return {
-      connection: this.#phase.phase === "live" ? { ...this.#phase, noticeUnresponsive: this.#noticeUnresponsive } : { ...this.#phase },
+      connection: this.#phase.phase === "live" ? { ...this.#phase, noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : { ...this.#phase },
       participantId: this.#participantId,
       participantGeneration: this.#participantGeneration,
       control: this.#control,
@@ -202,6 +203,16 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#listeners.add(listener);
     listener(this.getSnapshot());
     return () => this.#listeners.delete(listener);
+  }
+  onMediaPause(listener: (pause: V1MediaPause) => void): () => void {
+    this.#mediaPauseListeners.add(listener);
+    return () => this.#mediaPauseListeners.delete(listener);
+  }
+  #notifyMediaPause(event: Extract<SyncV1ServerFrame, { type: "event" }>): void {
+    const source = event.name === "participant_microphone_stopped" ? "microphone" : event.name === "participant_camera_stopped" ? "camera" : event.name === "participant_screen_share_stopped" ? "screen" : null;
+    if (source && "participant_id" in event.payload && event.payload.participant_id === this.#participantId) {
+      for (const listener of this.#mediaPauseListeners) listener({ source, revision: event.revision });
+    }
   }
   onDirectedRequest(listener: (request: V1DirectedRequest) => void): () => void {
     this.#requestListeners.add(listener);
@@ -374,14 +385,6 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
-      if (this.#phase.phase === "live") {
-        this.#noticeLastInboundAt = this.#now();
-        this.#scheduleNoticeCheck();
-        if (this.#noticeUnresponsive) {
-          this.#noticeUnresponsive = false;
-          this.#emit();
-        }
-      }
       await this.#handleFrame(frame);
     } catch {
       this.#recover("invalid_frame");
@@ -412,6 +415,7 @@ export class V1SyncClient implements V1CollaborationClient {
           this.#control = await applyV1Event(this.#requireControl(), frame);
           this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
           this.#rememberControlEvent(frame);
+          this.#notifyMediaPause(frame);
         }
         await this.#commandScheduler.settleTerminalLifecycle(frame, this.#participantId);
         await this.#commandScheduler.settleProven();
@@ -474,10 +478,14 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "error":
         throw new V1ReplicaError(frame.code);
-      case "pong":
+      case "pong": {
         this.#requireLive();
         this.#missedHeartbeats = 0;
+        const previous = this.#health.health;
+        this.#health.observePong(this.#now());
+        if (previous !== this.#health.health) this.#emit();
         return;
+      }
     }
   }
   async #welcome(
@@ -530,6 +538,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#control = await applyV1Event(this.#requireControl(), event);
       this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
       this.#rememberControlEvent(event);
+      this.#notifyMediaPause(event);
     }
     this.#ackRecovery();
     this.#emit();
@@ -825,33 +834,29 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #startNoticeProbe(): void {
     this.#clearNoticeProbe();
-    this.#noticeLastInboundAt = this.#now();
-    this.#scheduleNoticeCheck();
+    this.#send({ type: "ping" });
+    this.#health = new V1SyncHealth(this.#now());
     const tick = () => {
       this.#noticeProbeTimer = undefined;
       if (this.#phase.phase !== "live") return;
+      const previous = this.#health.health;
+      this.#health.check(this.#now());
+      if (previous !== this.#health.health) this.#emit();
       this.#send({ type: "ping" });
-      this.#noticeProbeTimer = this.#clock().setTimeout(tick, NOTICE_PROBE_INTERVAL_MS);
+      this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
     };
-    this.#noticeProbeTimer = this.#clock().setTimeout(tick, NOTICE_PROBE_INTERVAL_MS);
-  }
-  #scheduleNoticeCheck(): void {
-    if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
-    const remaining = Math.max(0, NOTICE_SILENCE_MS - (this.#now() - this.#noticeLastInboundAt));
+    this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
     this.#noticeTimer = this.#clock().setTimeout(() => {
       this.#noticeTimer = undefined;
-      if (this.#phase.phase !== "live" || this.#noticeUnresponsive) return;
-      if (this.#now() - this.#noticeLastInboundAt < NOTICE_SILENCE_MS) return this.#scheduleNoticeCheck();
-      this.#noticeUnresponsive = true;
+      this.#health.check(this.#now());
       this.#emit();
-    }, remaining);
+    }, SYNC_HEALTH_BUDGET.degradedAfterMs);
   }
   #clearNoticeProbe(): void {
     if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
     if (this.#noticeProbeTimer !== undefined) this.#clock().clearTimeout(this.#noticeProbeTimer);
     this.#noticeTimer = undefined;
     this.#noticeProbeTimer = undefined;
-    this.#noticeUnresponsive = false;
   }
   #emit(): void {
     const snapshot = this.getSnapshot();

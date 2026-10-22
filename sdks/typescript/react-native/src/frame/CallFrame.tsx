@@ -86,14 +86,14 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
     haptics.mute();
     playSound(microphoneOn ? "mute" : "unmute", soundsEnabled);
     if (microphoneOn) noteOwnMicrophoneChange();
-    const turnOn = () => client.media.setMicrophoneEnabled(true).catch((cause: unknown) => reportMediaFailure("microphone", cause, turnOn));
+    const turnOn = () => client.media.setMicrophoneEnabled(true);
     if (microphoneOn) client.media.setMicrophoneEnabled(false).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t mute your microphone." }));
-    else void turnOn();
+    else void turnOn().catch((cause: unknown) => reportMediaFailure("microphone", cause, turnOn));
   }, [client, microphoneOn, noteOwnMicrophoneChange, reportMediaFailure, soundsEnabled, toasts]);
   const toggleCamera = useCallback(() => {
-    const turnOn = () => client.media.setCameraEnabled(true).catch((cause: unknown) => reportMediaFailure("camera", cause, turnOn));
+    const turnOn = () => client.media.setCameraEnabled(true);
     if (cameraOn) client.media.setCameraEnabled(false).catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t turn off your camera." }));
-    else void turnOn();
+    else void turnOn().catch((cause: unknown) => reportMediaFailure("camera", cause, turnOn));
   }, [cameraOn, client, reportMediaFailure, toasts]);
   const exit = useCallback(
     (how: "leave" | "end") => {

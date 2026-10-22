@@ -1,10 +1,91 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { SpaceClientError } from "@q9labsai/chalk-client";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
+import { liveMediaClient } from "../../../tests/helpers/live-media";
 import { SpaceView } from "./SpaceView";
+
+it.each([
+  { capability: "publishVideo", label: "Turn on camera" },
+  { capability: "publishAudio", label: "Unmute microphone" },
+  { capability: "publishScreen", label: "Share screen" },
+] as const)("checks the current connection before retrying $capability", async ({ capability, label }) => {
+  const fixture = await liveMediaClient();
+  const { client } = fixture;
+  const capture = capability === "publishScreen" ? fixture.display : fixture.capture;
+  capture.mockRejectedValue(new DOMException("Device busy", "NotReadableError"));
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click());
+    await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1)));
+    await act(async () => vi.waitFor(() => expect(container.textContent).toContain("Try again")));
+    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
+    if (!retry) throw new Error("Missing media retry");
+    await act(async () => fixture.health(true));
+    await act(async () => retry.click());
+    await expect((capability === "publishVideo" ? fixture.actions.camera : capability === "publishAudio" ? fixture.actions.microphone : fixture.actions.screen).mock.results.at(-1)?.value).rejects.toMatchObject({ code: "connection.invalid_state" });
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Try again");
+    await act(async () => fixture.health(false));
+    await act(async () => retry.click());
+    await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2)));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+    vi.restoreAllMocks();
+  }
+});
+
+it("blocks push-to-talk during recovery but still releases a live press after recovery starts", async () => {
+  const snapshot = createSnapshot(["publishAudio"]);
+  const onCommand = vi.fn();
+  const client = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting" } }, { onCommand });
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const key = (type: "keydown" | "keyup") => document.body.dispatchEvent(new KeyboardEvent(type, { key: " ", code: "Space", bubbles: true, cancelable: true }));
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => {
+      key("keydown");
+      key("keyup");
+    });
+    expect(onCommand).not.toHaveBeenCalledWith({ type: "setMicrophoneEnabled", enabled: true }, expect.anything());
+    await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "live" } })));
+    await act(async () => {
+      key("keydown");
+    });
+    expect(onCommand).toHaveBeenLastCalledWith({ type: "setMicrophoneEnabled", enabled: true }, expect.anything());
+    await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "reconnecting" } })));
+    await act(async () => {
+      key("keyup");
+    });
+    expect(onCommand).toHaveBeenLastCalledWith({ type: "setMicrophoneEnabled", enabled: false }, expect.anything());
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
 
 it.each(["observer", "custom-reader"])("keeps chat history available without write actions for %s", async (role) => {
   const base = createSnapshot([]);

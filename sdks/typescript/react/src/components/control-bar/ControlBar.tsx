@@ -29,10 +29,10 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
     return () => document.removeEventListener("fullscreenchange", changed);
   }, []);
   const has = (button: (typeof buttonsToRender)[number]) => buttonsToRender.includes(button);
-  const iconButton = (label: string, icon: React.ReactNode, onClick?: () => void, active?: boolean, badge = 0, hand = false) => (
+  const iconButton = (label: string, icon: React.ReactNode, onClick?: () => void, active?: boolean, badge = 0, hand = false, disabled = false) => (
     <ChalkTooltip
       trigger={
-        <ChalkIconButton size="lg" aria-label={label} aria-pressed={active} onClick={onClick}>
+        <ChalkIconButton size="lg" aria-label={label} aria-pressed={active} onClick={onClick} disabled={disabled}>
           {icon}
           {badge > 0 ? <span className="chalk-shell-dot" aria-label={`${badge} unread`} /> : null}
           {hand ? <span className="chalk-shell-dot" aria-label="Hand raised" /> : null}
@@ -50,7 +50,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <ShellIcon name="chat" />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
   const copyLink = () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.());
   const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
-  const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <ShellIcon name="smile" />, props.onOpenReactions, undefined, 0, props.isHandRaised) : null;
+  const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <ShellIcon name="smile" />, props.onOpenReactions, undefined, 0, props.isHandRaised, props.reactionsDisabled) : null;
   return (
     <div ref={dock} data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
       <ShellStyles />
@@ -59,6 +59,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="mic"
           isActive={!props.isMuted}
           busy={props.microphonePending}
+          toggleDisabled={props.mediaEnableDisabled && props.isMuted}
           onToggle={props.onToggleMute ?? (() => {})}
           devices={effectiveAudioInputDevices}
           selectedDeviceId={props.selectedAudioInput}
@@ -79,6 +80,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="video"
           isActive={props.isVideoEnabled ?? true}
           busy={props.cameraPending}
+          toggleDisabled={props.mediaEnableDisabled && !props.isVideoEnabled}
           onToggle={props.onToggleVideo ?? (() => {})}
           devices={effectiveVideoInputDevices}
           selectedDeviceId={props.selectedVideoInput}
@@ -91,9 +93,9 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
         />
       ) : null}
       <span className="chalk-shell-gap chalk-shell-desktop" />
-      {has("screenshare") ? <ShareControl sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
+      {has("screenshare") ? <ShareControl disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
       {reactions}
-      {!reactions && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
+      {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
       {has("record") && (props.onToggleRecording || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span> : null}
       <span className="chalk-shell-desktop">{iconButton(fullscreen ? "Exit fullscreen" : "Fullscreen", <ShellIcon name={fullscreen ? "min" : "max"} />, toggleFullscreen, fullscreen)}</span>
@@ -120,7 +122,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             </button>
           ) : null}
           {has("screenshare") && canCaptureDisplay ? (
-            <button type="button" className="chalk-sheet-row" onClick={props.onToggleScreenShare}>
+            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
             </button>
