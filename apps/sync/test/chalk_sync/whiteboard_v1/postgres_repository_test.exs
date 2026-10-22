@@ -496,14 +496,14 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   # Waits for the Episode's poller to finish two reads that started after this point.
   defp settle(episode) do
     for _read <- 1..2 do
-      [{_episode, _access, read_at, _failure}] = wait_for_entry(episode)
+      [{_episode, _poller, _access, read_at, _failure}] = wait_for_entry(episode)
       wait_for_entry(episode, read_at)
     end
   end
 
   defp wait_for_entry(episode, after_ms \\ nil, attempts \\ 200) do
     case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
-      [{_episode, _access, read_at, _failure}] = entry
+      [{_episode, _poller, _access, read_at, _failure}] = entry
       when is_nil(after_ms) or read_at > after_ms ->
         entry
 

@@ -189,9 +189,110 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     Enum.each(sockets, &send(&1, :close))
 
     assert_receive {:DOWN, ^monitor, :process, ^poller, :normal}
-    refute :ets.member(Authority, EpisodeKey.authority_key(identity.episode))
+    wait_until(fn -> not :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
     drain_reads(identity.episode)
     refute_receive {:read, _episode}, 200
+  end
+
+  test "a killed poller's stored read leaves memory, and another poller's read stays" do
+    identity = identity()
+    other = identity()
+    test = self()
+
+    [socket, other_socket] =
+      for episode <- [identity.episode, other.episode] do
+        spawn(fn ->
+          Authority.watch(episode)
+          send(test, :watching)
+          receive do: (:close -> :ok)
+        end)
+      end
+
+    assert_receive :watching
+    assert_receive :watching
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(other.episode)) end)
+    [{poller, _value}] = pollers(identity.episode)
+    monitor = Process.monitor(poller)
+
+    # A kill skips the poller's own cleanup.
+    Process.exit(poller, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^poller, :killed}
+    send(socket, :close)
+
+    wait_until(fn -> not :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+    assert pollers(identity.episode) == []
+    assert :ets.member(Authority, EpisodeKey.authority_key(other.episode))
+    send(other_socket, :close)
+  end
+
+  test "a poller that replaces a killed one keeps its own stored read" do
+    identity = identity()
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+    [{killed, _value}] = pollers(identity.episode)
+    monitor = Process.monitor(killed)
+    Process.exit(killed, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^killed, :killed}
+
+    # Like a socket, check until a new poller runs: a watch can still reach the killed poller's
+    # name before the Registry drops it, and a check with no stored read watches again.
+    wait_until(fn ->
+      Authority.check(identity)
+      match?([{poller, _value}] when poller != killed, pollers(identity.episode))
+    end)
+
+    [{poller, _value}] = pollers(identity.episode)
+    wait_until(fn -> stored_by(identity.episode) == poller end)
+
+    # Authority has handled the killed poller's exit, and the new read is still there.
+    :sys.get_state(Authority)
+    assert stored_by(identity.episode) == poller
+  end
+
+  test "after a removal or an end is final, the board stops within one poll interval" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 200)
+
+    for {episode_status, participant_status, denial} <- [
+          {"active", "left", :participant_inactive},
+          {"ended", "active", :episode_ended}
+        ] do
+      access("active", "active")
+      identity = identity()
+      Authority.watch(identity.episode)
+      wait_until(fn -> Authority.check(identity) == :ok end)
+
+      # The removal commits just after a read, the latest it can be seen.
+      drain_reads(identity.episode)
+      assert_receive {:read, _episode}, 1_000
+      access(episode_status, participant_status)
+      final_at = System.monotonic_time(:millisecond)
+
+      assert until_not_ok(identity) == {:error, {:permission_denied, denial}}
+      assert System.monotonic_time(:millisecond) - final_at <= Authority.poll_ms() + 100
+    end
+  end
+
+  test "when reads fail after a removal, the board stops by the freshness deadline" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 100)
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 600)
+    identity = identity()
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+
+    # The removal commits, but no read after it succeeds.
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+    good_read_at = System.monotonic_time(:millisecond)
+
+    Application.put_env(
+      :chalk_sync,
+      :authority_test_access,
+      {:retryable, {:storage_unavailable, "timeout"}}
+    )
+
+    assert until_not_ok(identity) == {:retryable, {:storage_unavailable, "timeout"}}
+    assert System.monotonic_time(:millisecond) - good_read_at <= 600 + 100
   end
 
   test "an Episode named in a different letter case shares one poller and one stored read" do
@@ -244,6 +345,21 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
         ChalkSync.Episodes.Registry,
         {:whiteboard_authority, EpisodeKey.authority_key(episode)}
       )
+
+  defp stored_by(episode) do
+    case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
+      [{_episode, poller, _access, _read_at, _failure}] -> poller
+      [] -> nil
+    end
+  end
+
+  # Checks the way a busy socket does, every 5 ms, until access is no longer allowed.
+  defp until_not_ok(identity, attempts \\ 1_000) do
+    case Authority.check(identity) do
+      :ok when attempts > 0 -> Process.sleep(5) && until_not_ok(identity, attempts - 1)
+      result -> result
+    end
+  end
 
   defp access(episode_status, participant_status) do
     Application.put_env(

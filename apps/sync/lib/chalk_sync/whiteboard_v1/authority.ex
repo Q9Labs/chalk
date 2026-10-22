@@ -6,6 +6,9 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   Episode's lifecycle states every second and stores them here. Sockets only look up the stored
   result, on every frame and on a one-second tick, so a large call costs one database read per
   second per node whether its boards are busy or idle.
+
+  Each stored read names the poller that wrote it. This process monitors every poller and drops
+  that poller's reads when it exits, even when a kill skips the poller's own cleanup.
   """
 
   use GenServer
@@ -39,6 +42,21 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @spec watch(EpisodeKey.t()) :: :ok
   def watch(%EpisodeKey{} = episode), do: Poller.watch(episode, self())
 
+  @doc false
+  def own(poller), do: GenServer.cast(__MODULE__, {:own, poller})
+
+  @impl true
+  def handle_cast({:own, poller}, state) do
+    Process.monitor(poller)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _monitor, :process, poller, _reason}, state) do
+    :ets.match_delete(@table, {:_, poller, :_, :_, :_})
+    {:noreply, state}
+  end
+
   @doc """
   The socket's access from the latest stored read. `connected_at` is when the socket's own connect
   check started: a read that started no later can predate the Participant's join, so it never denies.
@@ -50,11 +68,11 @@ defmodule ChalkSync.WhiteboardV1.Authority do
       [] ->
         watch(identity.episode)
 
-      [{_episode, :not_found, read_at, _failure}]
+      [{_episode, _poller, :not_found, read_at, _failure}]
       when not is_integer(connected_at) or read_at > connected_at ->
         {:error, {:permission_denied, :episode_not_found}}
 
-      [{_episode, access, read_at, failure}] ->
+      [{_episode, _poller, access, read_at, failure}] ->
         # The socket's own connect check read the database too, so it counts as a fresh read.
         fresh_at = if is_integer(connected_at), do: max(read_at, connected_at), else: read_at
 
@@ -76,10 +94,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @doc false
   def store(episode, access, read_at, failure),
-    do: :ets.insert(@table, {EpisodeKey.authority_key(episode), access, read_at, failure})
-
-  @doc false
-  def forget(episode), do: :ets.delete(@table, EpisodeKey.authority_key(episode))
+    do: :ets.insert(@table, {EpisodeKey.authority_key(episode), self(), access, read_at, failure})
 
   defp stale_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_stale_ms, @stale_ms)
 

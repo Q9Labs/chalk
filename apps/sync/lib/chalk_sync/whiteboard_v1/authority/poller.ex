@@ -1,6 +1,6 @@
 defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   @moduledoc false
-  # One per Episode per node. It stops, and forgets the Episode, when its last socket exits.
+  # One per Episode per node. It stops when its last socket exits, and Authority then drops its read.
 
   use GenServer, restart: :temporary
 
@@ -33,6 +33,8 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
 
   @impl true
   def init(episode) do
+    Authority.own(self())
+
     {:ok, %{episode: episode, sockets: MapSet.new(), access: nil, read_at: now_ms()},
      {:continue, :read}}
   end
@@ -60,9 +62,6 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
       do: {:stop, :normal, %{state | sockets: sockets}},
       else: {:noreply, %{state | sockets: sockets}}
   end
-
-  @impl true
-  def terminate(_reason, state), do: Authority.forget(state.episode)
 
   # A failed read keeps the last good access and its time, so sockets close only once it is stale.
   defp read(state) do
