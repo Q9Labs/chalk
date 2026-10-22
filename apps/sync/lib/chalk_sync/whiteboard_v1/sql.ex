@@ -253,19 +253,11 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
-  # Each Episode keeps only its newest policy receipts. A retry older than
-  # that window commits again instead of returning duplicate.
-  def prune_draw_policy_receipts do
+  def count_draw_policy_receipts do
     """
-    delete from sync_whiteboard_draw_policy_receipts
+    select count(*)
+    from sync_whiteboard_draw_policy_receipts
     where tenant_id = $1 and space_id = $2 and episode_id = $3
-      and (participant_id, operation_id) not in (
-        select participant_id, operation_id
-        from sync_whiteboard_draw_policy_receipts
-        where tenant_id = $1 and space_id = $2 and episode_id = $3
-        order by completed_at desc, participant_id, operation_id desc
-        limit $4
-      )
     """
   end
 

@@ -15,8 +15,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   @max_replay_items @limits["snapshotPageMaxItems"]
   @max_replay_bytes @limits["socketQueueMaxBytes"]
   @max_draw_grants @limits["drawAccessMaxGrants"]
-  # Eight hosts' worth of full pending stores, so ordinary retries stay idempotent.
-  @max_draw_policy_receipts 8 * @limits["pendingOperationMaxItems"]
+  # Policy changes allowed in one Episode; far above what a real call needs.
+  @max_draw_policy_receipts 1024
 
   @impl true
   def connect(%Identity{} = identity) do
@@ -596,9 +596,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   defp apply_draw_policy(connection, identity, operation) do
     with :missing <- draw_policy_receipt(connection, identity, operation),
+         :ok <- draw_policy_capacity(connection, identity),
          :ok <- upsert_draw_policy(connection, identity, operation),
          :ok <- insert_draw_policy_receipt(connection, identity, operation),
-         :ok <- prune_draw_policy_receipts(connection, identity),
          :ok <- notify_access(connection, identity) do
       {:ok, :committed}
     else
@@ -643,11 +643,12 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
-  defp prune_draw_policy_receipts(connection, identity) do
-    params = context(identity) ++ [@max_draw_policy_receipts]
-
-    case Postgrex.query(connection, SQL.prune_draw_policy_receipts(), params) do
-      {:ok, _result} -> :ok
+  # Receipts are never evicted, so a retry from any time in the call stays a
+  # duplicate. New changes stop at the cap instead, as rate_limited.
+  defp draw_policy_capacity(connection, identity) do
+    case Postgrex.query(connection, SQL.count_draw_policy_receipts(), context(identity)) do
+      {:ok, %Postgrex.Result{rows: [[count]]}} when count < @max_draw_policy_receipts -> :ok
+      {:ok, _result} -> {:error, :rate_limited}
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end

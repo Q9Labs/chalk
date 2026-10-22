@@ -153,32 +153,26 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
              PostgresRepository.set_draw_policy(host, %{operation | policy: "picked"})
   end
 
-  test "an Episode keeps a bounded window of policy receipts, and retries inside it stay duplicates",
-       %{host: host, episode: episode} do
-    for index <- 1..1026 do
+  test "an Episode caps policy changes, and a retry from any time in the call stays a duplicate",
+       %{host: host, collaborator: collaborator} do
+    for index <- 1..1024 do
       set_policy(host, policy_at(index), "policy-bound-#{pad(index)}")
     end
 
-    %Postgrex.Result{rows: [[count]]} =
-      Postgrex.query!(
-        Database.connection(episode),
-        "select count(*) from sync_whiteboard_draw_policy_receipts where tenant_id = $1 and space_id = $2 and episode_id = $3",
-        [
-          UUID.dump!(episode.tenant_id),
-          UUID.dump!(episode.space_id),
-          UUID.dump!(episode.episode_id)
-        ]
-      )
+    assert {:error, :rate_limited} =
+             PostgresRepository.set_draw_policy(host, %{
+               operation_id: "policy-bound-#{pad(1025)}",
+               policy: "picked"
+             })
 
-    assert count == 1024
+    # The first change, retried after 1023 later ones, must not undo them.
+    assert {:ok, %{outcome: :duplicate}} =
+             PostgresRepository.set_draw_policy(host, %{
+               operation_id: "policy-bound-#{pad(1)}",
+               policy: policy_at(1)
+             })
 
-    for index <- [3, 1026] do
-      assert {:ok, %{outcome: :duplicate}} =
-               PostgresRepository.set_draw_policy(host, %{
-                 operation_id: "policy-bound-#{pad(index)}",
-                 policy: policy_at(index)
-               })
-    end
+    assert {:ok, %{draw_policy: "hosts"}} = PostgresRepository.draw_access(collaborator)
   end
 
   test "unpicking someone under picked people does not block them once everyone can draw", %{
