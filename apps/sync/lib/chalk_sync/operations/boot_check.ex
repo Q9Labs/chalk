@@ -11,6 +11,7 @@ defmodule ChalkSync.Operations.BootCheck do
   def init(_options) do
     case Probe.run(boot?: true) do
       {:ok, observations} -> {:ok, observations}
+      {:error, reason, _observations} -> {:stop, {:production_boot_check_failed, reason}}
       {:error, reason} -> {:stop, {:production_boot_check_failed, reason}}
     end
   end

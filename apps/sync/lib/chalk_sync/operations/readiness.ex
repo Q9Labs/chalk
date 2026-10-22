@@ -154,7 +154,10 @@ defmodule ChalkSync.Operations.Readiness do
     }
   end
 
-  defp apply_result(state, {:error, reason}, now) do
+  defp apply_result(state, {:error, reason}, now),
+    do: apply_result(state, {:error, reason, %{}}, now)
+
+  defp apply_result(state, {:error, reason, details}, now) do
     failures = state.consecutive_failures + 1
     still_ready? = state.status == :ready and failures < 2
 
@@ -165,7 +168,7 @@ defmodule ChalkSync.Operations.Readiness do
         consecutive_successes: 0,
         first_success_at_ms: nil,
         last_checked_at_ms: now,
-        details: %{reason: Atom.to_string(reason)}
+        details: Map.put(details, :reason, Atom.to_string(reason))
     }
   end
 
