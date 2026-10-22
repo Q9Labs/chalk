@@ -164,9 +164,9 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
     assert [["active", "joined", true]] = entry_row(connection, fixture)
     client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
     assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
-    assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
-    assert {:json, %{"type" => "recovery_complete"}, _client} = Client.recv(client)
+    assert {:json, %{"stream" => "presence"}, _client} = Client.recv(client)
     assert [["active", "joined", true]] = entry_row(connection, fixture)
   end
 
