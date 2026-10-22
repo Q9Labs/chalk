@@ -160,6 +160,8 @@ describe("media capture ownership", () => {
       await Promise.all([on, off]);
       expect(capture).toHaveBeenCalledOnce();
       expect(send.mock.calls.at(-1)).toEqual([false]);
+      expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+      expect(original.track.enabled).toBe(false);
     } finally {
       releaseClear();
       client.dispose();
