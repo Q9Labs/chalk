@@ -29,6 +29,8 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   useLayoutEffect(() => {
     returnFocus.current = document.activeElement;
     const tray = listRef.current;
+    const frame = tray?.closest<HTMLElement>("[data-part='call-frame']");
+    const notices = frame?.querySelector<HTMLElement>("[data-part='toast-stack']");
     const anchor = tray?.closest("[data-part='call-frame']")?.querySelector("[data-part='dock'] button[aria-label='Reactions']") ?? returnFocus.current;
     const place = () => {
       if (!tray || !(anchor instanceof HTMLElement) || !(tray.offsetParent instanceof HTMLElement)) return;
@@ -37,7 +39,13 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
       const width = tray.offsetWidth;
       const height = tray.offsetHeight;
       tray.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, trigger.x + trigger.width / 2 - width / 2)) - parent.x}px`;
-      tray.style.top = `${Math.max(8, Math.min(window.innerHeight - height - 8, position === "top" ? trigger.y - height - 10 : trigger.bottom + 10)) - parent.y}px`;
+      const top = Math.max(8, Math.min(window.innerHeight - height - 8, position === "top" ? trigger.y - height - 10 : trigger.bottom + 10));
+      tray.style.top = `${top - parent.y}px`;
+      if (notices?.offsetParent instanceof HTMLElement) {
+        // Use the CSS baseline so board-tool clearance remains in effect.
+        const baseline = notices.offsetParent.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(notices).bottom);
+        frame?.style.setProperty("--chalk-reaction-toast-lift", `${Math.max(0, baseline - top + 12)}px`);
+      }
     };
     place();
     const resize = new ResizeObserver(place);
@@ -47,6 +55,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     return () => {
       window.removeEventListener("resize", place);
       resize.disconnect();
+      frame?.style.removeProperty("--chalk-reaction-toast-lift");
       if (returnFocus.current instanceof HTMLElement && returnFocus.current.isConnected) returnFocus.current.focus();
     };
   }, [position]);

@@ -1199,11 +1199,12 @@
   left: 0;
   right: 0;
   bottom: 92px;
+  margin-bottom: var(--chalk-reaction-toast-lift, 0px);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  z-index: 90;
+  z-index: 45;
   pointer-events: none;
 }
 /* An open board keeps its tools at the bottom of the stage, so toasts rise above them. */

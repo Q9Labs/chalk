@@ -3,6 +3,7 @@ import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import type { PreviewClientCommand } from "@q9labsai/chalk-react/preview";
 import { createRoot } from "react-dom/client";
+import { ToastLayeringFixture } from "./toast-layering";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
 import { fixtureClock, fixtureMediaDevices, resourceCounts } from "./resource-ledger";
@@ -133,7 +134,13 @@ function settleJoin(connection: HarnessConnection, resolveJoin: () => void, reje
 
 installHarness(client);
 
-createRoot(document.getElementById("root")!).render(<Chalk client={client} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />);
+createRoot(document.getElementById("root")!).render(
+  new URL(location.href).searchParams.get("fixture") === "toast-layering" ? (
+    <ToastLayeringFixture />
+  ) : (
+    <Chalk client={client} displayName={fixtureUser ?? "Packed user"} spaceName="Packed SDK consumer" features={{ chat: true, participants: true, screenShare: true, reactions: true, handRaise: true }} />
+  ),
+);
 
 function publicSnapshot(snapshot: SpaceSnapshot) {
   return {
