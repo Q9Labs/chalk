@@ -130,6 +130,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
     <BoardToastContext.Provider value={publishNotice}>
       <div data-chalk style={{ ...style, fontFamily: "Figtree,system-ui,sans-serif" }}>
         <Board
+          presentation="mobile"
           board={canvas}
           primary={boardContext.primary}
           phone={boardContext.phone}

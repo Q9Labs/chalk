@@ -881,7 +881,7 @@ it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s 
 async function withOpenBoard(
   check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null) => Promise<void>) => Promise<void>,
   primary = true,
-  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
+  options: { capabilities?: readonly Capability[]; canDraw?: boolean; phone?: boolean; presentation?: BoardProps["presentation"]; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
 ) {
   const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
   options.onClient?.(client);
@@ -898,6 +898,8 @@ async function withOpenBoard(
         board={board}
         primary={primary}
         visible
+        phone={options.phone}
+        presentation={options.presentation}
         colorScheme="dark"
         people={[]}
         following={following}
@@ -1580,4 +1582,30 @@ it.each([2, 500])("follows an idle leader with %i active views", async (count) =
     await act(async () => vi.advanceTimersByTimeAsync(2200));
     expect(engine.camera().x).toBeCloseTo(-432, 2);
   }, true);
+});
+
+it("keeps the dockable island available on an 820-point native tablet", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() {
+        this.onResize([{ contentRect: { width: 820, height: 900 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  await withOpenBoard(
+    async (container) => {
+      expect(container.querySelector('.chalk-board-island[data-place="bottom"]')).not.toBeNull();
+      await clickControl(container, "Board menu");
+      const left = [...container.querySelectorAll<HTMLElement>(".chalk-board-tile")].find((item) => item.textContent === "Left");
+      expect(left).toBeDefined();
+      await act(async () => left?.click());
+      expect(container.querySelector('.chalk-board-island[data-place="left"]')).not.toBeNull();
+    },
+    true,
+    { phone: false },
+  );
+
 });

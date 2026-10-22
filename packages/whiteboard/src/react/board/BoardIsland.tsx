@@ -21,6 +21,7 @@ export type IslandProps = {
   readonly place: IslandPlace;
   readonly onPlace: (place: IslandPlace, announce: boolean) => void;
   readonly compact: boolean;
+  readonly primaryToolsFirst?: boolean;
 };
 
 const TOOLS: readonly (readonly { readonly tool: BoardTool; readonly label: string; readonly key: string; readonly glyph: BoardGlyph }[])[] = [
@@ -148,19 +149,39 @@ function Separator() {
   return <span className="chalk-board-separator" aria-hidden="true" />;
 }
 
-function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, ...colors }: IslandProps & { readonly place: IslandPlace }) {
+function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, compact, primaryToolsFirst, ...colors }: IslandProps & { readonly place: IslandPlace }) {
+  const phone = compact && primaryToolsFirst;
+  const primaryTools = ["pen", "text", "note", "eraser"];
+  const entries = TOOLS.flat();
+  const shapes = <ShapesButton tool={tool} shape={shape} onTool={onTool} side={place === "top" ? "bottom" : "top"} />;
+  const button = (entry: (typeof entries)[number]) => <ToolButton key={entry.tool} entry={entry} active={tool === entry.tool} onTool={onTool} />;
   const groups: ReactNode[] = TOOLS.map((group, index) => (
     <span key={index} className="chalk-board-group">
       {group.map((entry) => (
         <ToolButton key={entry.tool} entry={entry} active={tool === entry.tool} onTool={onTool} />
       ))}
-      {index === 1 ? <ShapesButton tool={tool} shape={shape} onTool={onTool} side={place === "top" ? "bottom" : "top"} /> : null}
+      {index === 1 ? shapes : null}
     </span>
   ));
   return (
     <>
-      {groups.flatMap((group, index) => [index > 0 ? <Separator key={`s${index}`} /> : null, group])}
+      {phone
+        ? entries
+            .filter((entry) => primaryTools.includes(entry.tool))
+            .map((entry) => (
+              <span key={entry.tool} className="chalk-board-group">
+                {button(entry)}
+                {entry.tool === "pen" ? shapes : null}
+              </span>
+            ))
+        : groups.flatMap((group, index) => [index > 0 ? <Separator key={`s${index}`} /> : null, group])}
       <Separator />
+      {phone ? (
+        <>
+          <ColorButton {...colors} />
+          <Separator />
+        </>
+      ) : null}
       <Tip label="Undo" keyName="⌘Z">
         <button type="button" className="chalk-board-tool" aria-label="Undo" disabled={!canUndo} onClick={onUndo}>
           <BoardIcon name="undo" />
@@ -172,7 +193,7 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
         </button>
       </Tip>
       <Separator />
-      <ColorButton {...colors} />
+      {phone ? entries.filter((entry) => !primaryTools.includes(entry.tool)).map(button) : <ColorButton {...colors} />}
     </>
   );
 }

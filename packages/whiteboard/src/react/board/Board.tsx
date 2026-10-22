@@ -55,6 +55,7 @@ export type BoardProps = {
   readonly primary: boolean;
   readonly visible: boolean;
   readonly phone?: boolean;
+  readonly presentation?: "web" | "mobile";
   readonly colorScheme: CallTheme;
   readonly people: readonly { readonly id: string; readonly displayName: string }[];
   readonly following: string | null;
@@ -261,7 +262,7 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
  * Chalk's board: Excalidraw draws, and every control around it is the call's own. Each person picks their own
  * surface and island place; the drawing, the cursors and the views are shared.
  */
-export function Board({ board, primary, visible, colorScheme, people, following, onFollow, sendView, onClose, isHost, connectionStatus, sceneId, sceneStatus, ownParticipantId, viewBounds, renderCursorAvatar, onExport, phone: phoneOverride, downloadLabel }: BoardProps) {
+export function Board({ board, primary, visible, colorScheme, people, following, onFollow, sendView, onClose, isHost, connectionStatus, sceneId, sceneStatus, ownParticipantId, viewBounds, renderCursorAvatar, onExport, phone: phoneOverride, downloadLabel, presentation = "web" }: BoardProps) {
   const root = useRef<HTMLDivElement | null>(null);
   const offline = connectionStatus === "reconnecting";
   const smallViewport = useMediaQuery("(max-width: 640px)");
@@ -279,7 +280,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const [narrow, setNarrow] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const canDraw = primary && (board.collab?.canDraw ?? board.canDraw ?? true);
-  const compact = phone || narrow;
+  const compact = phoneOverride ?? (phone || narrow);
   const history = useEngineHistory(root, engine);
   // Once this person draws or places a note, the camera is theirs: the board never fits under their hand.
   const touched = useRef(false);
@@ -574,7 +575,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const followed = following ? nameOf(following) : null;
   const ready = engine !== null;
   return (
-    <div ref={root} className="chalk-board" data-surface={surface} data-theme={colorScheme} data-ready={ready || undefined} data-compact={compact || undefined} data-primary={primary || undefined} data-elements={elementCount} style={surfaceVars} hidden={!visible}>
+    <div ref={root} className="chalk-board" data-presentation={presentation} data-surface={surface} data-theme={colorScheme} data-ready={ready || undefined} data-compact={compact || undefined} data-primary={primary || undefined} data-elements={elementCount} style={surfaceVars} hidden={!visible}>
       <BoardStyles />
       <WhiteboardCanvas {...board} headless canDraw={canDraw} collab={board.collab ? { ...board.collab, canDraw, canManage: isHost } : undefined} inkColor={ink} theme="light" isVisible={visible} className="chalk-board-engine" onEngineReady={setEngine} />
       {!ready ? (
@@ -613,6 +614,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
           ) : null}
           <div className="chalk-board-corner">
             <BoardMenu
+              presentation={presentation}
               surface={surface}
               onSurface={chooseSurface}
               place={!compact && canDraw ? place : undefined}
@@ -635,10 +637,14 @@ export function Board({ board, primary, visible, colorScheme, people, following,
             <button type="button" aria-label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
               <BoardIcon name="plus" size={16} />
             </button>
-            <span className="chalk-board-zoom-rule" aria-hidden="true" />
-            <button type="button" aria-label="Fit to content" onClick={fit}>
-              <BoardIcon name="fit" size={16} />
-            </button>
+            {presentation === "web" ? (
+              <>
+                <span className="chalk-board-zoom-rule" aria-hidden="true" />
+                <button type="button" aria-label="Fit to content" onClick={fit}>
+                  <BoardIcon name="fit" size={16} />
+                </button>
+              </>
+            ) : null}
           </div>
           {canDraw ? (
             <BoardIsland
@@ -658,6 +664,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
               place={place}
               onPlace={choosePlace}
               compact={compact}
+              primaryToolsFirst={presentation === "mobile"}
             />
           ) : null}
           <div className="chalk-board-announcer" aria-live="polite">

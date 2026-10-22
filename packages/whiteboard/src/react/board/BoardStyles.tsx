@@ -91,6 +91,14 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-menu-button:active {transform:scale(.94);}
 .chalk-board-menu-button[aria-expanded="true"], .chalk-board-menu-button[data-popup-open] {background:var(--chalk-text); color:var(--chalk-canvas);}
 .chalk-menu.chalk-board-menu {width:304px;}
+.chalk-menu.chalk-board-menu-mobile {width:264px;}
+.chalk-board-menu-mobile .chalk-menu-item {min-height:44px;}
+.chalk-board-options {display:grid;}
+.chalk-board-options .chalk-board-tile {display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 10px; border:0; font-size:14px; font-weight:500; text-align:left;}
+.chalk-board-options .chalk-board-tile-preview {width:22px; height:22px; flex:none;}
+.chalk-board-options .chalk-board-tile-preview svg {display:none;}
+.chalk-board-options .chalk-board-tile[data-checked] {border:0;}
+.chalk-board-option-check {margin-left:auto;}
 .chalk-board-menu-rule {border:0; border-top:1px solid var(--chalk-line); margin:4px 0;}
 .chalk-board-menu-sublabel {padding:6px 10px 4px; font-size:12px; font-weight:600; color:var(--chalk-muted-text);}
 .chalk-board-tiles {display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; padding:2px 4px 8px;}
@@ -126,6 +134,8 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-island[data-place="expanded"] {left:12px; right:12px; bottom:12px; padding:4px; border-radius:28px; overflow-x:auto; scrollbar-width:none;}
 .chalk-board-island[data-dragging] {z-index:6; cursor:grabbing; box-shadow:0 0 0 1px var(--chalk-line-strong), 0 14px 36px rgba(0,0,0,.45);}
 .chalk-board:has(.chalk-board-island[data-place="expanded"]) .chalk-board-zoom {translate:0 -60px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-island {padding:4px; border-radius:28px;}
+.chalk-board[data-presentation="mobile"]:has(.chalk-board-island[data-place="expanded"]) .chalk-board-zoom {translate:0 -64px;}
 .chalk-board-group {display:contents;}
 .chalk-board-separator {flex:none; width:1px; height:24px; margin:0 4px; background:var(--chalk-line-strong);}
 .chalk-board-island[data-place="left"] .chalk-board-separator {width:24px; height:1px; margin:4px 0;}

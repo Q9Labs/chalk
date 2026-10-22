@@ -5,6 +5,7 @@ import type { WhoCanDraw } from "./board-draw-policy";
 import { DRAW_POLICIES, ISLAND_PLACES, SURFACES, type BoardSurface, type IslandPlace } from "./board-model";
 
 export type BoardMenuProps = {
+  readonly presentation?: "web" | "mobile";
   readonly surface: BoardSurface;
   readonly onSurface: (surface: BoardSurface) => void;
   /** Offered outside a phone, to people who can draw. */
@@ -40,15 +41,30 @@ function IslandPreview({ place }: { readonly place: IslandPlace }) {
   );
 }
 
-function Tiles<T extends string>({ label, value, options, onChange, preview }: { readonly label: string; readonly value: T; readonly options: readonly { readonly id: T; readonly label: string }[]; readonly onChange: (value: T) => void; readonly preview: (id: T) => React.ReactNode }) {
+function Tiles<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  preview,
+  list,
+}: {
+  readonly label: string;
+  readonly value: T;
+  readonly options: readonly { readonly id: T; readonly label: string }[];
+  readonly onChange: (value: T) => void;
+  readonly preview: (id: T) => React.ReactNode;
+  readonly list: boolean;
+}) {
   return (
     <>
       <div className="chalk-board-menu-sublabel">{label}</div>
-      <Menu.RadioGroup value={value} onValueChange={(next: T) => onChange(next)} className="chalk-board-tiles" aria-label={label}>
+      <Menu.RadioGroup value={value} onValueChange={(next: T) => onChange(next)} className={list ? "chalk-board-options" : "chalk-board-tiles"} aria-label={label}>
         {options.map((option) => (
           <Menu.RadioItem key={option.id} value={option.id} closeOnClick={false} className="chalk-board-tile">
             {preview(option.id)}
-            {option.label}
+            <span>{option.label}</span>
+            {list ? <Menu.RadioItemIndicator className="chalk-board-option-check">✓</Menu.RadioItemIndicator> : null}
           </Menu.RadioItem>
         ))}
       </Menu.RadioGroup>
@@ -101,16 +117,30 @@ function WhoCanDrawSection({ policy, people, onPolicy, onPick }: WhoCanDraw) {
 }
 
 /** The board's own menu: export, the person's own appearance, and the host's board actions. */
-export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCopy, whoCanDraw, onBring, onClear, onClose, downloadLabel = "Download as PNG" }: BoardMenuProps) {
+export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCopy, whoCanDraw, onBring, onClear, onClose, downloadLabel = "Download as PNG", presentation = "web" }: BoardMenuProps) {
+  const list = presentation === "mobile";
+  const appearance = (
+    <>
+      {!list ? <ChalkMenuLabel>Board appearance</ChalkMenuLabel> : null}
+      <Tiles list={list} label={list ? "Surface, just for you" : "Surface"} value={surface} options={SURFACES} onChange={onSurface} preview={(id) => <SurfacePreview surface={id} />} />
+      {place ? <Tiles list={list} label="Tool island" value={place} options={ISLAND_PLACES} onChange={onPlace} preview={(id) => <IslandPreview place={id} />} /> : null}
+    </>
+  );
   return (
     <ChalkMenu
-      className="chalk-board-menu"
+      className={list ? "chalk-board-menu chalk-board-menu-mobile" : "chalk-board-menu"}
       trigger={
         <button type="button" className="chalk-board-menu-button" aria-label="Board menu">
           <BoardIcon name="more" />
         </button>
       }
     >
+      {list ? (
+        <>
+          {appearance}
+          <Menu.Separator className="chalk-board-menu-rule" />
+        </>
+      ) : null}
       <ChalkMenuItem onClick={onDownload}>
         <BoardIcon name="download" size={18} />
         {downloadLabel}
@@ -120,11 +150,9 @@ export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCo
         Copy as image
       </ChalkMenuItem>
       <Menu.Separator className="chalk-board-menu-rule" />
-      <ChalkMenuLabel>Board appearance</ChalkMenuLabel>
-      <Tiles label="Surface" value={surface} options={SURFACES} onChange={onSurface} preview={(id) => <SurfacePreview surface={id} />} />
-      {place ? <Tiles label="Tool island" value={place} options={ISLAND_PLACES} onChange={onPlace} preview={(id) => <IslandPreview place={id} />} /> : null}
+      {!list ? appearance : null}
       {whoCanDraw ? <WhoCanDrawSection {...whoCanDraw} /> : null}
-      {onBring || onClear ? <Menu.Separator className="chalk-board-menu-rule" /> : null}
+      {!list && (onBring || onClear) ? <Menu.Separator className="chalk-board-menu-rule" /> : null}
       {onBring ? (
         <ChalkMenuItem onClick={onBring}>
           <BoardIcon name="target" size={18} />
