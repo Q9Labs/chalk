@@ -14,6 +14,10 @@ cleanup() { restore; if [[ -d "$saved/fonts" ]]; then mv "$saved/fonts" apps/web
 trap cleanup EXIT
 for index in "${!files[@]}"; do cp "${files[$index]}" "$saved/$index"; done
 mv apps/web/public/fonts "$saved/fonts"
+# Generated vendor assets must not leak into the baseline when this script is rerun.
+for directory in apps/web/public/chalk-whiteboard apps/web/public/chalk-mathjax; do
+  if [[ -d "$directory" ]]; then rm -r "$directory"; fi
+done
 for file in "${files[@]}"; do
   if git cat-file -e "origin/master:$file" 2>/dev/null; then git show "origin/master:$file" > "$file"; else : > "$file"; fi
 done

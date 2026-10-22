@@ -90,6 +90,8 @@ it("loads call, board, sticky note, text and math assets from our origin", async
     expect(pageErrors).toEqual([]);
     expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
     expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
+    expect(requests.some(({ url }) => url.includes("/sre/speech-worker.js"))).toBe(true);
+    expect(requests.some(({ url }) => url.includes("/sre/mathmaps/en.json"))).toBe(true);
   } finally {
     if (process.env.ASSET_PROOF_DIR) {
       await writeFile(resolve(process.env.ASSET_PROOF_DIR, "call-requests.json"), JSON.stringify({ requests, failed, pageErrors, fonts, external: requests.filter(({ url }) => /^https?:/.test(url) && new URL(url).origin !== origin) }, null, 2));
