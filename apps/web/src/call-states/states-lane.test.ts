@@ -300,7 +300,8 @@ it.each([
         await page.keyboard.down(key);
         if (release) await page.keyboard.up(key);
       } else await page.keyboard.press(key);
-      const notice = page.getByRole("alert").filter({ hasText: `Couldn’t change your ${source} settings.` });
+      const copy = release || source === "camera" ? `Couldn’t change your ${source} settings.` : `Your ${source} couldn’t start.`;
+      const notice = page.getByRole("alert").filter({ hasText: copy });
       await notice.waitFor({ timeout: 5_000 });
       expect(await page.getByRole("alert").allTextContents()).not.toEqual(expect.arrayContaining([expect.stringMatching(/setCameraEnabled|setMicrophoneEnabled|inactive connection/)]));
       expect(await page.evaluate(() => window.__mediaCalls)).toEqual(release ? [true, false] : [source !== "camera"]);

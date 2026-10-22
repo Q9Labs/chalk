@@ -1,12 +1,13 @@
-import { commandFailureMessage, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { commandFailurePresentation, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { CallEventIcon } from "./CallEventIcon";
 import { Avatar } from "../atomic/Avatar";
 import type { ClientFailure, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { Toast } from "./ToastStack";
 
-export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource, action?: MediaCommandAction): Omit<Toast, "id"> | null {
+export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource, action?: MediaCommandAction, onRetry?: () => void): Omit<Toast, "id"> | null {
   if (!failure) return null;
-  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: commandFailureMessage(failure, source, action) };
+  const presentation = commandFailurePresentation(failure, source, action, onRetry !== undefined);
+  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: presentation.message, action: presentation.retry && onRetry ? { label: "Try again", onClick: onRetry } : undefined };
 }
 
 /** Snapshot changes, not initial history, are events for the person already in the call. */

@@ -87,7 +87,7 @@ describe("media command failures", () => {
         const button = container.querySelector(`[data-part="${part}-split"] .chalk-shell-main`);
         if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing ${part} control`);
         await act(async () => button.click());
-        expect(onCommandError).toHaveBeenLastCalledWith(expect.objectContaining({ code }), source, source, "start");
+        expect(onCommandError).toHaveBeenLastCalledWith(expect.objectContaining({ code }), source, source, "start", expect.any(Function));
       }
     } finally {
       await act(async () => root.unmount());
@@ -272,7 +272,7 @@ it("keeps the legacy speaker callback source empty while providing optional medi
       ),
     );
     await act(async () => container.querySelector("button")?.click());
-    expect(onCommandError).toHaveBeenLastCalledWith(failure, undefined, "speaker", undefined);
+    expect(onCommandError).toHaveBeenLastCalledWith(failure, undefined, "speaker", "select", expect.any(Function));
   } finally {
     await act(async () => root.unmount());
     container.remove();

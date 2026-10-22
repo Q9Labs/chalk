@@ -1,6 +1,6 @@
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
-import { SpaceClientError, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
+import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -139,11 +139,13 @@ export function SpaceView({
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
-  const onCommandError = (failure: ClientFailure | string | null, source?: MediaCommandSource, mediaSource?: MediaCommandSource, action?: MediaCommandAction) => {
+  const [retryCommand, setRetryCommand] = useState<() => Promise<unknown>>();
+  const onCommandError = (failure: ClientFailure | string | null, source?: MediaCommandSource, mediaSource?: MediaCommandSource, action?: MediaCommandAction, command?: () => Promise<unknown>) => {
     if (!failure && commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(failure);
     setCommandSource(mediaSource ?? source);
     setCommandAction(action);
+    setRetryCommand(() => command);
     if (failure && typeof failure !== "string") playSound("error", failure);
   };
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
@@ -186,34 +188,29 @@ export function SpaceView({
       setCommandError(null);
       setCommandSource(undefined);
       setCommandAction(undefined);
+      setRetryCommand(undefined);
     } catch (cause) {
       setCommandError(commandFailure(cause));
       setCommandSource(source);
       setCommandAction(action);
+      setRetryCommand(() => command);
     }
   }, []);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
   const displayedCommandSource = externalCommandError != null ? externalCommandSource : commandSource;
-  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, displayedCommandSource, externalCommandError != null ? externalCommandAction : commandAction);
   const retryMedia = async () => {
+    if (!retryCommand) return;
     try {
-      if (commandSource === "screen") await client.media.setScreenShareEnabled(commandAction !== "stop");
-      else if (commandSource === "camera") await client.media.setCameraEnabled(commandAction !== "stop");
-      else if (commandSource === "microphone") await client.media.setMicrophoneEnabled(commandAction !== "stop");
+      await retryCommand();
       onCommandError(null);
     } catch (cause) {
-      if (cause instanceof SpaceClientError && cause.code === "connection.invalid_state") return;
-      onCommandError(cause instanceof SpaceClientError ? cause : { code: "client.internal_error", recoverable: true, message: "Your device couldn’t start. Try again." }, commandSource, commandSource, commandAction);
+      onCommandError(commandFailure(cause), commandSource, commandSource, commandAction, retryCommand);
     }
   };
-  const retryableMedia = externalCommandError == null && commandSource && typeof displayedCommandError === "object" && displayedCommandError?.recoverable && (commandSource === "screen" || displayedCommandError.code === "media.device_busy");
-  const commandToasts: Toast[] = mappedFailure
-    ? [{ id: "space-command-error", ...mappedFailure, action: retryableMedia ? { label: "Try again", onClick: () => void retryMedia() } : undefined }]
-    : typeof displayedCommandError === "string"
-      ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }]
-      : [];
+  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, displayedCommandSource, externalCommandError != null ? externalCommandAction : commandAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+  const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);
   useEffect(() => {

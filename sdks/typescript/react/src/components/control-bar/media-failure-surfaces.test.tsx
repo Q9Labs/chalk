@@ -40,7 +40,7 @@ it("standalone ControlBar uses safe camera failure guidance", async () => {
     await act(async () => button?.click());
     const actual = container.querySelector('[role="alert"]')?.textContent;
 
-    expect(actual).toBe("Couldn’t change your camera settings.");
+    expect(actual).toBe("Your camera couldn’t start.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -98,7 +98,7 @@ it("standalone MediaRequestDialog uses safe camera failure guidance", async () =
     const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Allow"));
     expect(button).not.toBeUndefined();
     await act(async () => button?.click());
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("That change was interrupted.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Couldn’t respond to the camera request.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -117,7 +117,7 @@ it.each(["Allow", "Not now"])("uses safe microphone guidance for standalone %s r
     const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === action);
     if (!button) throw new Error("Missing request action");
     await act(async () => button.click());
-    const safe = "Couldn’t change your microphone settings.";
+    const safe = "Couldn’t respond to the microphone request.";
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(safe);
     expect(onActionError).toHaveBeenCalledWith(safe, action === "Allow" ? "allow" : "decline");
   } finally {
@@ -149,7 +149,7 @@ it("uses safe screen guidance when changing the shared surface", async () => {
     const tab = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent === "Browser tab");
     if (!(tab instanceof HTMLElement)) throw new Error("Missing Browser tab option");
     await act(async () => tab.click());
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Couldn’t change screen sharing.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Your screen couldn’t be shared.");
   } finally {
     await act(async () => root.unmount());
     container.remove();

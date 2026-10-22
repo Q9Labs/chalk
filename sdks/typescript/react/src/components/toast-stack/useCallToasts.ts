@@ -30,22 +30,7 @@ export function useCallToasts() {
         const toast = mediaFailureToast(error, failedSource);
         if (toast) {
           const id = `call-event-${++sequence.current}`;
-          const action =
-            failedSource === "screen" && error.recoverable
-              ? {
-                  label: "Try again",
-                  onClick: () => {
-                    // The client error event owns any retry failure and its sound.
-                    void client.media.setScreenShareEnabled(true).then(
-                      () => {
-                        setToasts((current) => current.filter((event) => event.id !== id));
-                      },
-                      () => undefined,
-                    );
-                  },
-                }
-              : undefined;
-          setToasts((current) => [...current, { ...toast, action, failureCode: error.code, id }].slice(-20));
+          setToasts((current) => [...current, { ...toast, failureCode: error.code, id }].slice(-20));
         }
         failedSource = undefined;
       });

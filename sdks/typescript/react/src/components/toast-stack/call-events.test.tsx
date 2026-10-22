@@ -93,7 +93,7 @@ it("gives unsupported speaker selection safe non-retry guidance", () => {
 });
 
 it.each([undefined, "camera", "microphone", "screen"] as const)("keeps expired request guidance terminal for %s", (source) => {
-  const toast = mediaFailureToast({ code: "media.request_invalid", recoverable: false, message: "private request details" }, source);
+  const toast = mediaFailureToast({ code: "media.request_invalid", recoverable: false, message: "private request details" }, source, "request");
   expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("The media request is no longer active.");
 });
 

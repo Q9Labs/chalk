@@ -106,7 +106,7 @@ export interface ControlBarProps {
   readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
   /** The second argument retains the published MediaSource contract; the third also identifies speaker commands. */
-  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource, commandSource?: MediaCommandSource, action?: MediaCommandAction) => void;
+  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource, commandSource?: MediaCommandSource, action?: MediaCommandAction, retryCommand?: () => Promise<unknown>) => void;
   readonly participantColorSeed?: string;
   readonly participantGradientPreference?: ParticipantGradientPreference;
   readonly className?: string;
@@ -271,7 +271,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           setCommandSource(source);
           setCommandAction(action);
         }
-        props.onCommandError?.(failure, source === "speaker" ? undefined : source, source, action);
+        props.onCommandError?.(failure, source === "speaker" ? undefined : source, source, action, command);
       }
     },
     [props.onCommandError],
@@ -348,38 +348,42 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     selectedAudioOutput: media.selection.speaker ?? undefined,
     selectedVideoInput: media.selection.camera ?? undefined,
     onTestSpeaker: () =>
-      void run(async () => {
-        const context = new AudioContext();
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        const output = context.createMediaStreamDestination();
-        const audio = new Audio();
-        try {
-          if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
-          audio.srcObject = output.stream;
-          oscillator.connect(gain).connect(output);
-          gain.gain.value = 0.15;
-          oscillator.frequency.value = 440;
-          oscillator.start();
-          await audio.play();
-          await new Promise<void>((resolve) => {
-            oscillator.onended = () => resolve();
-            oscillator.stop(context.currentTime + 0.4);
-          });
-        } finally {
-          audio.pause();
-          audio.srcObject = null;
-          oscillator.disconnect();
-          gain.disconnect();
-          output.stream.getTracks().forEach((track) => track.stop());
-          await context.close();
-        }
-      }, "speaker"),
+      void run(
+        async () => {
+          const context = new AudioContext();
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          const output = context.createMediaStreamDestination();
+          const audio = new Audio();
+          try {
+            if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
+            audio.srcObject = output.stream;
+            oscillator.connect(gain).connect(output);
+            gain.gain.value = 0.15;
+            oscillator.frequency.value = 440;
+            oscillator.start();
+            await audio.play();
+            await new Promise<void>((resolve) => {
+              oscillator.onended = () => resolve();
+              oscillator.stop(context.currentTime + 0.4);
+            });
+          } finally {
+            audio.pause();
+            audio.srcObject = null;
+            oscillator.disconnect();
+            gain.disconnect();
+            output.stream.getTracks().forEach((track) => track.stop());
+            await context.close();
+          }
+        },
+        "speaker",
+        "test",
+      ),
     onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone", microphoneEnabled ? "stop" : "start"),
     onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera", cameraEnabled ? "stop" : "start"),
-    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
-    onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker"),
-    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
+    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone", "select"),
+    onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
+    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),
     onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
     onToggleChat: props.onToggleChat,
