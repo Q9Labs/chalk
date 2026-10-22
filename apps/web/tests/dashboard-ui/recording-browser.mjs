@@ -1,4 +1,5 @@
 import { recordingChecks } from "./recording-checks.mjs";
+import { resolve } from "node:path";
 
 const [playwrightPath, origin] = process.argv.slice(2);
 const { chromium } = await import(playwrightPath);
@@ -6,6 +7,7 @@ const browser = await chromium.launch({ ...(process.env.DASHBOARD_BROWSER_PATH ?
 const fixture = (query) => fetch(`${origin}/__fixture/${query}`).then((response) => response.json());
 const results = [];
 const errors = [];
+let sequence = 0;
 try {
   await recordingChecks({
     CALL: "/dashboard/call/00000000-0000-4000-8000-000000000100",
@@ -14,7 +16,12 @@ try {
     open: async (route, { width = 1440, set = "", clock = false } = {}) => {
       await fixture("reset");
       await fixture(`set?${set}`);
-      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const evidence = process.env.DASHBOARD_RECORDING_EVIDENCE;
+      const scenario = new URLSearchParams(set).get("recordingScenario") || "default";
+      const context = await browser.newContext({
+        viewport: { width, height: 900 },
+        ...(evidence ? { recordVideo: { dir: resolve(evidence, "videos", `${++sequence}-${scenario}-${width}`), size: { width, height: 900 } } } : {}),
+      });
       await context.addCookies([
         { name: "fx_session", value: "hasan", url: origin },
         { name: "chalk_theme", value: "dark", url: origin },

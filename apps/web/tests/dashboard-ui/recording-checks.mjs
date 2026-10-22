@@ -22,13 +22,30 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
         if (scenario === "export_failed") check(`${width}: retryable export offers a retry and keeps its transcript`, retry === 1 && waiting === 0 && (await tab.locator(".tline").count()) > 0);
         if (scenario === "export_exhausted") check(`${width}: exhausted export stops waiting without a retry`, retry === 0 && waiting === 0 && (await tab.getByText("The recording export could not be completed.", { exact: true }).count()) === 1);
         if (scenario === "transcript_failed") check(`${width}: terminal transcript does not spin forever`, (await tab.getByText("The transcript couldn’t be made", { exact: true }).count()) === 1);
-        if (evidence) await tab.screenshot({ path: resolve(evidence, `${scenario}-${width}.png`), fullPage: true });
+        if (evidence) {
+          await tab.screenshot({ path: resolve(evidence, `${scenario}-${width}.png`), fullPage: true });
+          await tab.waitForTimeout(1500);
+        }
       } finally {
         await context.close();
       }
     }
   }
   if (process.env.DASHBOARD_RECORDING_BASELINE) return;
+  {
+    const { tab, context } = await open(session, { set: "recordingScenario=pending", clock: true });
+    try {
+      await fixture("set?recordingScenario=missing");
+      const request = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-metadata"));
+      await tab.clock.runFor(5000);
+      await request;
+      await tab.getByText("The recording source is no longer available.", { exact: true }).waitFor();
+      check("a deleted recording leaves session attendance visible", (await tab.getByText("Who came", { exact: true }).count()) === 1 && (await tab.getByText("Couldn’t load this session", { exact: true }).count()) === 0);
+      if (evidence) await tab.screenshot({ path: resolve(evidence, "deleted-1440.png"), fullPage: true });
+    } finally {
+      await context.close();
+    }
+  }
   // Poll the real page through pending -> terminal, and prove it stops reading afterwards.
   {
     const { tab, context } = await open(session, { set: "recordingScenario=pending", clock: true });
@@ -64,7 +81,16 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
         await tab.clock.runFor(5000);
         await request;
         await tab.getByRole("region", { name: "Recording", exact: true }).waitFor();
-        check("ready export displays the player without a reload", (await tab.locator("video[src]").count()) === 1);
+        await tab.clock.resume();
+        await tab.locator("video[src]").waitFor({ state: "attached" });
+        await tab.waitForFunction(() => {
+          const video = document.querySelector("video");
+          return video && video.readyState >= 1 && video.duration > 0;
+        });
+        await tab.getByRole("button", { name: "Play", exact: true }).click();
+        await tab.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
+        check("ready export plays the prepared MP4 without a reload", await tab.locator("video").evaluate((video) => !video.paused && video.currentTime > 0));
+        await tab.getByRole("button", { name: "Pause", exact: true }).click();
         await tab.getByRole("button", { name: "Download", exact: true }).click();
         check("ready export offers the actual MP4 download", (await tab.getByRole("menuitem", { name: "Recording (MP4)", exact: true }).count()) === 1);
         if (evidence) await tab.screenshot({ path: resolve(evidence, "playback-1440.png"), fullPage: true });

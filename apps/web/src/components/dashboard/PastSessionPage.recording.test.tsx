@@ -20,6 +20,8 @@ let source = "available";
 let artifact = "none";
 let retryable = false;
 let transcriptStatus = "complete";
+let metadataStatus = 200;
+let otherRecording: ReturnType<typeof recording> | undefined;
 const requests: { path: string; action?: string }[] = [];
 
 function recording() {
@@ -44,6 +46,8 @@ function recording() {
 }
 
 beforeEach(() => {
+  metadataStatus = 200;
+  otherRecording = undefined;
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -58,7 +62,7 @@ beforeEach(() => {
     requests.push({ path, action: body?.action });
     if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
     if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
-    if (path === "/dashboard-api/call-metadata") return Response.json({ kind: "recording", recording: recording() });
+    if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: recording() }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
     if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
     if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
     if (body?.action === "export-recording") {
@@ -66,7 +70,7 @@ beforeEach(() => {
       return Response.json({ recording: recording() });
     }
     if (body?.action === "recording-url") return Response.json({ url: "https://storage.example.test/video.mp4" });
-    if (path === "/dashboard-api/past-session") return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: [recording()], nextCursor: null });
+    if (path === "/dashboard-api/past-session") return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: otherRecording ? [recording(), otherRecording] : [recording()], nextCursor: null });
     throw new Error(`Unexpected request: ${path}`);
   });
 });
@@ -128,6 +132,33 @@ it("replaces pending capture with its terminal reason without a reload", async (
   await tick();
   expect(screen.getByText("The recording capture did not complete.")).toBeTruthy();
   expect(screen.queryByText("Processing the recording")).toBeNull();
+});
+
+it.each([404, 410])("keeps the session and another recording when one pending recording disappears: %s", async (status) => {
+  source = "pending";
+  artifact = "unavailable";
+  otherRecording = { ...recording(), id: "00000000-0000-4000-8000-000000000002", status: "completed", sourceStatus: "available", exportStatus: "ready", transcriptionStatus: "ready" };
+  await open();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  metadataStatus = status;
+  await tick();
+  expect(screen.queryByText("Couldn’t load this session")).toBeNull();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(screen.getByText("Who came")).toBeTruthy();
+  const count = requests.length;
+  await tick();
+  expect(requests).toHaveLength(count);
+});
+
+it.each([403, 503])("preserves page-level authorization and transient-error handling: %s", async (status) => {
+  source = "pending";
+  artifact = "unavailable";
+  transcriptStatus = "";
+  await open();
+  metadataStatus = status;
+  await tick();
+  expect(Boolean(screen.queryByText("Couldn’t load this session"))).toBe(status === 403);
+  expect(Boolean(screen.queryByText("Processing the recording"))).toBe(status === 503);
 });
 
 it.each([true, false])("offers export retry only when the server permits it: %s", async (allowed) => {

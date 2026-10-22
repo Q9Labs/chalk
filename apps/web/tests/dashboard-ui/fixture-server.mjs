@@ -260,6 +260,7 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, newest && !ids.includes(newest) ? { live, calls, first: homeDTO(data) } : { live, calls });
     }
     if (page === "call-metadata") {
+      if (query.kind === "recording" && state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
       const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));
       if (query.kind === "recording") return send(response, 200, { kind: "recording", recording: recordings.find((item) => item.id === query.id && item.status === "processing") ?? recordings.find((item) => item.id === query.id) });
       return send(response, 200, { kind: "transcript", transcript: recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id && item.status === "processing") ?? recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id) });

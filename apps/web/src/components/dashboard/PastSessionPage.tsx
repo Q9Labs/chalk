@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, readPage } from "../../lib/dashboard/client";
+import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
 import { pendingRecording } from "../../lib/dashboard/recording";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
@@ -27,8 +27,15 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       const recordings = await Promise.all(
         data.session.recordings.map(async (recording) => {
           if (!pendingRecording(recording)) return recording;
-          const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
-          return result.kind === "recording" ? result.recording : recording;
+          try {
+            const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
+            return result.kind === "recording" ? result.recording : recording;
+          } catch (error) {
+            if (error instanceof DashboardRequestError && (error.status === 404 || error.status === 410)) {
+              return { ...recording, sourceStatus: "expired" as const, exportStatus: "unavailable" as const, transcriptionStatus: "expired" as const, exportRetryable: false, failureMessage: "The recording source is no longer available." };
+            }
+            throw error;
+          }
         }),
       );
       return { ...data, session: { ...data.session, recordings } };
