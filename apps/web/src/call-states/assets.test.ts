@@ -69,9 +69,13 @@ it("loads call, board, sticky note, text and math assets from our origin", async
     fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, status: font.status })));
     if (process.env.ASSET_PROOF_DIR) await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, "board.png") });
     const mathModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/react/mathjax-renderer.ts")}`;
+    const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
     await page.addScriptTag({
       type: "module",
       content: `import { renderLatexToSvg } from ${JSON.stringify(mathModule)};
+        import { configureWhiteboardAssets, getWhiteboardAssets } from ${JSON.stringify(assetsModule)};
+        const paths = getWhiteboardAssets();
+        if (paths) configureWhiteboardAssets({ ...paths, mathJaxBasePath: paths.mathJaxBasePath + "/" });
         const output = document.createElement("output");
         output.id = "math-assets-proof";
         output.hidden = true;
@@ -90,6 +94,7 @@ it("loads call, board, sticky note, text and math assets from our origin", async
     expect(pageErrors).toEqual([]);
     expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
     expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
+    expect(requests.some(({ url }) => new URL(url).pathname === "/chalk-mathjax/4.1.3/tex-svg.js")).toBe(true);
     expect(requests.some(({ url }) => url.includes("/sre/speech-worker.js"))).toBe(true);
     expect(requests.some(({ url }) => url.includes("/sre/mathmaps/en.json"))).toBe(true);
   } finally {

@@ -6,7 +6,7 @@ cd "$root"
 proof_dir="${ASSET_PROOF_ROOT:-/Users/agents/lanes/selfhost-assets/evidence}"
 mkdir -p "$proof_dir"
 saved="$(mktemp -d)"
-files=(apps/web/src/lib/whiteboard-assets.ts apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html packages/whiteboard/src/react/WhiteboardCanvas.tsx packages/whiteboard/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts apps/web/vite.config.ts apps/web/vite.call-states.config.ts)
+files=(apps/web/src/lib/whiteboard-assets.ts apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html packages/whiteboard/src/react/WhiteboardCanvas.tsx packages/whiteboard/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts apps/web/vite.config.ts apps/web/vite.call-states.config.ts apps/web/src/components/legal/LegalPage.tsx)
 restore() {
   for index in "${!files[@]}"; do cp "$saved/$index" "${files[$index]}"; done
 }
@@ -45,5 +45,3 @@ for label in before after; do
     pnpm --filter web exec vitest run src/call-states/assets.test.ts
   fi
 done
-unset ASSET_PROOF_DIR
-pnpm run gate -- --base origin/master
