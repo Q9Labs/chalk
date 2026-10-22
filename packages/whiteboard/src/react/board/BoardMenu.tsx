@@ -4,6 +4,8 @@ import { BoardIcon } from "./BoardIcon";
 import type { WhoCanDraw } from "./board-draw-policy";
 import { DRAW_POLICIES, ISLAND_PLACES, SURFACES, type BoardSurface, type IslandPlace } from "./board-model";
 
+const MOBILE_ISLAND_PLACES = [...ISLAND_PLACES].reverse();
+
 export type BoardMenuProps = {
   readonly presentation?: "web" | "mobile";
   readonly surface: BoardSurface;
@@ -127,7 +129,8 @@ export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCo
     <>
       {!list ? <ChalkMenuLabel>Board appearance</ChalkMenuLabel> : null}
       <Tiles list={list} label={list ? "Surface, just for you" : "Surface"} value={surface} options={SURFACES} onChange={onSurface} preview={(id) => <SurfacePreview surface={id} />} />
-      {place ? <Tiles list={list} label="Tool island" value={place} options={ISLAND_PLACES} onChange={onPlace} preview={(id) => <IslandPreview place={id} />} /> : null}
+      {place && list ? <Menu.Separator className="chalk-board-menu-rule" /> : null}
+      {place ? <Tiles list={list} label="Tool island" value={place} options={list ? MOBILE_ISLAND_PLACES : ISLAND_PLACES} onChange={onPlace} preview={(id) => (list ? null : <IslandPreview place={id} />)} /> : null}
     </>
   );
   return (
