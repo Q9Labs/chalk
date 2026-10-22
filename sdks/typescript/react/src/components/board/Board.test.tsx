@@ -1130,3 +1130,93 @@ it("ignores a clear completion after the board lifetime ends", async () => {
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
   });
 });
+
+it("does not resurrect an ended share pin when the same person shares again", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (sharing: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage
+            tiles={[
+              { id: "self", displayName: "Amina", isLocal: true },
+              { id: "other", displayName: "Omar", isScreenSharing: sharing },
+            ]}
+            layout="focus"
+            generatedAvatars={false}
+            whiteboard={{ isOpen: true, props: {}, sendView: () => true }}
+          />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(true);
+    await finishOpening(container);
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it("does not resurrect an ended screen-switcher choice when the same person shares again", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (sharing: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage
+            tiles={[
+              { id: "self", displayName: "Amina", isLocal: true, isScreenSharing: true },
+              { id: "other", displayName: "Omar", isScreenSharing: sharing },
+            ]}
+            layout="focus"
+            generatedAvatars={false}
+            whiteboard={{ isOpen: true, props: {}, sendView: () => true }}
+          />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(true);
+    await finishOpening(container);
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:self"] button')?.click());
+    const switcher = container.querySelector('[data-stage-item="screen-share:self"] [aria-label="Whose screen is big"]');
+    const chooseOmar = [...(switcher?.querySelectorAll("button") ?? [])].find((button) => button.textContent === "Omar");
+    expect(chooseOmar).toBeDefined();
+    await act(async () => chooseOmar?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});

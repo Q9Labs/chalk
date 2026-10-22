@@ -38,6 +38,10 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   const activePin = items.some((item) => item.id === pin) ? pin : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
+  useEffect(() => {
+    if (pin !== activePin) setPin(activePin);
+    if (selectedShare !== activeShare) setSelectedShare(activeShare);
+  }, [pin, activePin, selectedShare, activeShare]);
   const follow = useCallback((id: string | null) => {
     if (id) {
       setPin(null);
