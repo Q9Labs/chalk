@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
@@ -11,6 +11,7 @@ import * as BoardMenuModule from "./BoardMenu";
 import { BoardToastContext } from "./board-toasts";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import type { Capability, ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 
 type TestEngine = {
   pan: (x: number, y: number) => void;
@@ -154,6 +155,9 @@ vi.mock("@excalidraw/excalidraw", async () => {
     return { api, controls, attach };
   };
   return {
+    restoreElements: (elements: readonly TextElement[]) => elements,
+    reconcileElements: (local: readonly TextElement[], remote: readonly TextElement[]) => [...local, ...remote],
+    isInvisiblySmallElement: () => false,
     getSceneVersion: (elements: readonly TextElement[]) => elements.reduce((sum, element) => sum + element.version, 0),
     CaptureUpdateAction: { NEVER: "NEVER", IMMEDIATELY: "IMMEDIATELY" },
     newElementWith: (element: TextElement, update: Partial<TextElement>) => ({ ...element, ...update, version: element.version + 1 }),
@@ -192,6 +196,9 @@ function createPeer() {
   return {
     board: { collab },
     clear,
+    scene: (sceneId: string, revision: string) => {
+      for (const listener of listeners) listener({ type: "snapshot", sceneId, revision, elements: [] });
+    },
     cursor: (participantId: string, occurredAt = new Date().toISOString()) => {
       for (const listener of listeners) listener({ type: "cursor", participantId, displayName: participantId, x: 0, y: 0, occurredAt });
     },
@@ -483,6 +490,83 @@ it("does not permanently hide Follow after one rejected view send", async () => 
   }
 });
 
+it.each(["other", "screen-share:other"])("follows on the first click after pinning %s and makes Board primary", async (pinned) => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const tiles = [
+    { id: "self", displayName: "Amina", isLocal: true },
+    { id: "other", displayName: "Omar", isScreenSharing: true },
+  ];
+  const render = async (isOpen: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage tiles={tiles} layout="focus" generatedAvatars={false} whiteboard={{ isOpen, props: {}, sendView: () => true }} />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(false);
+    await act(async () => container.querySelector<HTMLElement>(`[data-stage-item="${pinned}"] button`)?.click());
+    await render(true);
+    await finishOpening(container);
+    const follow = container.querySelector<HTMLElement>('[aria-label="Follow Omar"]');
+    expect(follow).not.toBeNull();
+    await act(async () => follow?.click());
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="other"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it("returns to the followed board when an explicitly pinned remote share ends", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (sharing: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage
+            tiles={[
+              { id: "self", displayName: "Amina", isLocal: true, isScreenSharing: true },
+              { id: "other", displayName: "Omar", isScreenSharing: sharing },
+            ]}
+            layout="focus"
+            generatedAvatars={false}
+            whiteboard={{ isOpen: true, props: {}, sendView: () => true }}
+          />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(true);
+    await finishOpening(container);
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
 it("does not resume following when the board closes and reopens", async () => {
   const client = createPreviewClient();
   const container = document.createElement("div");
@@ -632,13 +716,32 @@ async function withOpenBoard(
   document.body.append(container);
   const root = createRoot(container);
   const toast = vi.fn();
+  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible">>) {
+    const [following, setFollowing] = useState<string | null>("remote");
+    return (
+      <Board
+        board={board}
+        primary={primary}
+        visible
+        colorScheme="dark"
+        people={[]}
+        following={following}
+        onFollow={(id) => {
+          setFollowing(id);
+          options.onFollow?.(id);
+        }}
+        sendView={options.sendView ?? (() => true)}
+        {...props}
+      />
+    );
+  }
   const render = async (props: Partial<Pick<BoardProps, "primary" | "visible">> | null = {}) => {
     await act(async () =>
       root.render(
         props === null ? null : (
           <ChalkProvider client={client}>
             <BoardToastContext value={toast}>
-              <Board board={board} primary={primary} visible colorScheme="dark" people={[]} following="remote" onFollow={options.onFollow ?? (() => undefined)} sendView={options.sendView ?? (() => true)} {...props} />
+              <OpenBoard {...props} />
             </BoardToastContext>
           </ChalkProvider>
         ),
@@ -678,23 +781,100 @@ it("receives followed views while the active board is a grid tile", async () => 
 it("receives Bring while the board tile is off-page and keeps that view on return", async () => {
   vi.useFakeTimers();
   const onFollow = vi.fn();
+  const sizes = new Map<Element, ((width: number, height: number) => void)[]>();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly callback: (entries: { contentRect: { width: number; height: number } }[]) => void) {}
+      observe(element: Element) {
+        sizes.set(element, [...(sizes.get(element) ?? []), (width, height) => this.callback([{ contentRect: { width, height } }])]);
+      }
+      disconnect() {}
+    },
+  );
   await withOpenBoard(
-    async (_container, engine, peer, toast, render) => {
+    async (container, engine, peer, toast, render) => {
+      const resize = (width: number, height: number) => sizes.get(container.querySelector(".chalk-board")!)?.forEach((callback) => callback(width, height));
       await render({ visible: false });
+      await act(async () => resize(0, 0));
       toast.mockClear();
       await act(async () => {
-        peer.receive("presenter", { x: 75, y: 25, width: 1, height: 1, bring: true });
+        peer.receive("presenter", { x: 75, y: 25, width: 400, height: 300, bring: true });
         await vi.advanceTimersByTimeAsync(600);
       });
       expect(onFollow).toHaveBeenCalledWith("presenter");
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Someone brought everyone to this view" }));
-      expect(engine.camera().x).toBeCloseTo(-75, 2);
       await render({ visible: true });
+      await act(async () => {
+        resize(800, 600);
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      // cameraForView fits the 400x300 sender into 800x600 at zoom 2.
       expect(engine.camera().x).toBeCloseTo(-75, 2);
+      await act(async () => engine.pan(12, 34));
+      expect(onFollow).toHaveBeenLastCalledWith(null);
     },
     true,
     { onFollow },
   );
+});
+
+it.each([false, true])("standalone Clear Undo survives callback changes but not unmount, unmount %s", async (unmount) => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let current: WhiteboardEngineHandle | undefined;
+  const render = () =>
+    root.render(
+      <WhiteboardCanvas
+        onEngineReady={(engine) => {
+          current = engine;
+        }}
+      />,
+    );
+  try {
+    await act(async () => render());
+    await vi.waitFor(() => expect(loadedEngines()).toHaveLength(1));
+    await act(async () => document.getElementById("chalk-excalidraw-styles")?.dispatchEvent(new Event("load")));
+    await vi.waitFor(() => expect(current).toBeDefined());
+    const engine = loadedEngines()[0];
+    if (!engine || !current) throw new Error("Standalone board must be ready");
+    await act(async () => engine.select("stroke"));
+    const restore = await act(async () => current?.clearWithUndo());
+    if (!restore) throw new Error("Clear must return Undo");
+    await act(async () => (unmount ? root.render(null) : render()));
+    await act(async () => expect(restore()).toBe(!unmount));
+    expect(engine.elements()).toHaveLength(unmount ? 0 : 1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+it.each(["new empty scene", "new empty revision", "disposed"])("refuses Clear Undo after %s", async (change) => {
+  const menu = observeBoardMenu();
+  await withOpenBoard(async (_container, engine, peer, toast, render) => {
+    await act(async () => engine.select("stroke"));
+    await act(async () => menu.clear?.());
+    const action = toast.mock.calls.find(([value]) => value?.message === "Board cleared")?.[0].action;
+    expect(action).toBeDefined();
+    if (change === "disposed") await render(null);
+    else await act(async () => peer.scene(change === "new empty scene" ? "next" : "scene", "2"));
+    await act(async () => action.onClick());
+    expect(engine.elements()).toHaveLength(0);
+  });
+});
+
+it("restores Clear Undo before a subsequent scene change", async () => {
+  const menu = observeBoardMenu();
+  await withOpenBoard(async (_container, engine, _peer, toast) => {
+    await act(async () => engine.select("stroke"));
+    await act(async () => menu.clear?.());
+    const action = toast.mock.calls.find(([value]) => value?.message === "Board cleared")?.[0].action;
+    expect(action).toBeDefined();
+    await act(async () => action.onClick());
+    expect(engine.elements()).toHaveLength(1);
+  });
 });
 
 it("keeps redo when colour changes without a selected scene element", async () => {
@@ -918,7 +1098,7 @@ it("allows a manage-only custom role to clear without drawing", async () => {
       expect(menu.clear).toBeTypeOf("function");
       await act(async () => menu.clear?.());
       expect(peer.clear).toHaveBeenCalledOnce();
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
+      expect(toast).toHaveBeenCalledWith({ message: "Board cleared" });
     },
     true,
     { capabilities: ["manageWhiteboard"], canDraw: false },
@@ -949,4 +1129,94 @@ it("ignores a clear completion after the board lifetime ends", async () => {
     await act(async () => resolve?.({ sceneId: "cleared", revision: "2" }));
     expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "Board cleared" }));
   });
+});
+
+it("does not resurrect an ended share pin when the same person shares again", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (sharing: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage
+            tiles={[
+              { id: "self", displayName: "Amina", isLocal: true },
+              { id: "other", displayName: "Omar", isScreenSharing: sharing },
+            ]}
+            layout="focus"
+            generatedAvatars={false}
+            whiteboard={{ isOpen: true, props: {}, sendView: () => true }}
+          />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(true);
+    await finishOpening(container);
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it("does not resurrect an ended screen-switcher choice when the same person shares again", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (sharing: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage
+            tiles={[
+              { id: "self", displayName: "Amina", isLocal: true, isScreenSharing: true },
+              { id: "other", displayName: "Omar", isScreenSharing: sharing },
+            ]}
+            layout="focus"
+            generatedAvatars={false}
+            whiteboard={{ isOpen: true, props: {}, sendView: () => true }}
+          />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(true);
+    await finishOpening(container);
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:self"] button')?.click());
+    const switcher = container.querySelector('[data-stage-item="screen-share:self"] [aria-label="Whose screen is big"]');
+    const chooseOmar = [...(switcher?.querySelectorAll("button") ?? [])].find((button) => button.textContent === "Omar");
+    expect(chooseOmar).toBeDefined();
+    await act(async () => chooseOmar?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(true);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
 });

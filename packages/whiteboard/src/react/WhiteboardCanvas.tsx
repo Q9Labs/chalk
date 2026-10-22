@@ -50,6 +50,8 @@ export interface WhiteboardEngineHandle {
   excalidraw: ExcalidrawModule;
   /** Clears the shared board; resolves once the new empty scene is committed. */
   clear: () => Promise<void>;
+  /** Clears and returns a restore bound to that committed scene and this engine lifetime. */
+  clearWithUndo: () => Promise<() => boolean>;
   /** Renders LaTeX and places it on the board, or replaces the selected formula. */
   placeMath: (latex: string) => Promise<void>;
 }
@@ -543,6 +545,13 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
   );
   const placeMathRef = useRef(placeMath);
   placeMathRef.current = placeMath;
+  const liveApi = useRef(api);
+  useEffect(() => {
+    liveApi.current = api;
+    return () => {
+      liveApi.current = null;
+    };
+  }, [api]);
   const { engineRef } = collaboration;
   useEffect(() => {
     if (!api || !excalidraw || !loaded || !isReady || !collaboration.ready || !onEngineReady) return;
@@ -556,6 +565,18 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
           api.updateScene({ elements: [], captureUpdate: excalidraw.CaptureUpdateAction.NEVER });
           api.history.clear();
         }
+      },
+      clearWithUndo: async () => {
+        const engine = engineRef.current;
+        if (engine) return engine.clearWithUndo();
+        const before = api.getSceneElements();
+        api.updateScene({ elements: [], captureUpdate: excalidraw.CaptureUpdateAction.NEVER });
+        api.history.clear();
+        return () => {
+          if (liveApi.current !== api || api.getSceneElementsIncludingDeleted().length > 0) return false;
+          api.updateScene({ elements: before.map((element) => excalidraw.newElementWith(element, {})), captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY });
+          return true;
+        };
       },
       placeMath: (latex) => placeMathRef.current(latex),
     });
