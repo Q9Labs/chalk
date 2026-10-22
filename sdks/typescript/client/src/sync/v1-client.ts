@@ -71,6 +71,7 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #requestListeners = new Set<(request: V1DirectedRequest) => void>();
   readonly #collaborationState: V1CollaborationState;
   readonly #controlHeads = new Map<number, string>();
+  #snapshotRevision: number | null = null;
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
   readonly #requests = new Map<string, RequestDeferred>();
@@ -518,10 +519,12 @@ export class V1SyncClient implements V1CollaborationClient {
       const control = await restoreV1Snapshot(frame.snapshot);
       if (!sameHead(control, frame.head)) throw new V1ReplicaError("snapshot head mismatch");
       this.#control = control;
+      this.#snapshotRevision = control.revision;
       this.#snapshotRecoveryRequested = false;
       this.#controlHeads.clear();
       this.#controlEvents.clear();
       this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
+      await this.#commandScheduler.settleProven();
     }
     if (frame.mode === "replay" && (!this.#control || this.#control.revision >= frame.head.revision)) throw new V1ReplicaError("invalid replay welcome");
     if (frame.mode === "up_to_date" && !sameHead(this.#control, frame.head)) throw new V1ReplicaError("up-to-date head mismatch");
@@ -668,7 +671,9 @@ export class V1SyncClient implements V1CollaborationClient {
       }
     >,
   ): boolean {
-    return this.#controlHeads.get(ack.revision) === ack.state_digest;
+    // A validated authoritative snapshot includes every earlier committed revision.
+    // Stored duplicate receipts keep their original head, even after it is superseded.
+    return (this.#snapshotRevision !== null && ack.revision < this.#snapshotRevision) || this.#controlHeads.get(ack.revision) === ack.state_digest;
   }
   #rememberControlHead(revision: number, digest: string): void {
     this.#controlHeads.set(revision, digest);
@@ -744,6 +749,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#lastDigestRecoveryAt = now;
     this.#snapshotRecoveryRequested = true;
     this.#control = null;
+    this.#snapshotRevision = null;
     this.#controlHeads.clear();
     this.#controlEvents.clear();
     this.#recover("state_digest_mismatch");

@@ -1180,6 +1180,7 @@ function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | unde
 }
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const reason = snapshot.connection.terminalReason;
+  if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
   if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
