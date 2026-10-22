@@ -116,9 +116,9 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 			t.Fatalf("rerun: %v", err)
 		}
 		requireIndexValid(t, checker)
-		var leftover bool
-		if err := checker.QueryRow(ctx, `select to_regclass('participants_episode_recent_join_idx_invalid') is not null`).Scan(&leftover); err != nil || leftover {
-			t.Fatalf("the invalid index was not dropped: leftover=%v, err=%v", leftover, err)
+		var invalid int
+		if err := checker.QueryRow(ctx, `select count(*) from pg_index where indrelid = to_regclass('participants') and not indisvalid`).Scan(&invalid); err != nil || invalid != 0 {
+			t.Fatalf("the rerun left %d invalid indexes on participants (err %v)", invalid, err)
 		}
 	})
 }
@@ -136,27 +136,19 @@ func spaceActivityIndexMigrationUp(t *testing.T) []string {
 	}
 	var statements []string
 	var current strings.Builder
-	block := false
 	for line := range strings.SplitSeq(up, "\n") {
 		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "-- +goose StatementBegin":
-			block = true
-		case trimmed == "-- +goose StatementEnd":
-			block = false
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		current.WriteString(line + "\n")
+		if strings.HasSuffix(trimmed, ";") {
 			statements = append(statements, current.String())
 			current.Reset()
-		case trimmed == "" || strings.HasPrefix(trimmed, "--"):
-		default:
-			current.WriteString(line + "\n")
-			if !block && strings.HasSuffix(trimmed, ";") {
-				statements = append(statements, current.String())
-				current.Reset()
-			}
 		}
 	}
-	if len(statements) != 4 {
-		t.Fatalf("expected four Up statements, got %d", len(statements))
+	if len(statements) != 2 {
+		t.Fatalf("expected two Up statements, got %d", len(statements))
 	}
 	return statements
 }
