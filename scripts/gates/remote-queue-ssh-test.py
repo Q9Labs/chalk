@@ -64,7 +64,7 @@ try:
     client.wait()
     assert wait('queued', 'done')['result'] == 23
     output = call('read queued 0').decode()
-    assert 'detached' in output and 'REMOTE_QUEUE_RESULT=23' in output, output
+    assert 'detached' in output and json.loads(call('status queued'))['result'] == 23, output
     assert wait('first', 'done')['result'] == 0
     print('PASS: FIFO tickets; killed queued client SSH; detached job ran; reattach returned exit 23.')
     # Drive the actual shell client's attach/retry path against this isolated service.

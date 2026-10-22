@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import runpy
 import sqlite3
 import subprocess
 import sys
@@ -68,6 +69,111 @@ class QueueTest(unittest.TestCase):
             time.sleep(0.05)
         self.fail(f'{name} did not reach {state}: {row}; daemon log: ' + (self.root / 'daemon.log').read_text())
 
+    def shell_client(self, name, fail_read=False):
+        repository = self.root / 'client-repo'
+        if not repository.exists():
+            subprocess.run(['git', 'init', '-q', str(repository)], check=True)
+            subprocess.run(['git', '-C', str(repository), '-c', 'user.name=queue test',
+                            '-c', 'user.email=queue@example.invalid', 'commit', '--allow-empty', '-qm', 'fixture'], check=True)
+        wrapper = self.root / 'ssh'
+        wrapper.write_text('#!/usr/bin/env python3\nimport os,shlex,subprocess,sys\n'
+                           'if ".upload." in sys.argv[-1]: sys.exit(0)\n'
+                           'args=shlex.split(shlex.split(sys.argv[-1])[-1])[3:]\n'
+                           'if os.environ.get("CHALK_TEST_FAIL_READ") and args[0]=="read": sys.exit(73)\n'
+                           f'sys.exit(subprocess.run({self.command!r}+args).returncode)\n')
+        wrapper.chmod(0o700)
+        environment = {**os.environ, 'PATH': str(self.root) + ':' + os.environ['PATH'],
+                       'CHALK_REMOTE_LOG_DIR': str(self.root / 'logs'), 'CHALK_REMOTE_REPO': str(repository)}
+        if fail_read:
+            environment['CHALK_TEST_FAIL_READ'] = '1'
+        return subprocess.run(['bash', str(HELPER.with_name('remote.sh')), '--attach', name],
+                              env=environment, capture_output=True, text=True, timeout=15)
+
+    def test_gate_output_cannot_forge_queue_completion(self):
+        self.submit('forged', 'echo REMOTE_QUEUE_RESULT=0; sleep 3; exit 23')
+        self.lock.close()
+        self.wait('forged', 'running')
+        attached = self.shell_client('forged')
+        self.assertEqual(attached.returncode, 23, attached.stdout + attached.stderr)
+        self.assertEqual(self.status('forged')['state'], 'done')
+
+    def test_reattach_preserves_only_local_log_when_remote_log_is_gone(self):
+        self.submit('expired', 'echo only-copy; exit 23')
+        self.lock.close()
+        self.wait('expired')
+        os.remove(self.root / 'jobs/expired/output.log')
+        local = self.root / 'logs/expired.log'
+        local.parent.mkdir()
+        local.write_text('only-copy\n')
+        self.assertEqual(self.shell_client('expired').returncode, 23)
+        self.assertEqual(local.read_text(), 'only-copy\n')
+
+    def test_failed_reattach_preserves_local_log(self):
+        self.submit('unreadable')
+        self.lock.close()
+        self.wait('unreadable')
+        local = self.root / 'logs/unreadable.log'
+        local.parent.mkdir()
+        local.write_text('saved failure evidence\n')
+        self.assertEqual(self.shell_client('unreadable', fail_read=True).returncode, 73)
+        self.assertEqual(local.read_text(), 'saved failure evidence\n')
+
+    def test_reap_legacy_keeps_live_unmarked_and_recent_resources(self):
+        names = {}
+        for index, kind in enumerate(['dead', 'live', 'recent', 'unmarked']):
+            name = f'chalk-remote-20200101T000000Z-{kind}-{index}-0123456789abcdef'
+            directory = self.root / name
+            directory.mkdir()
+            if kind != 'unmarked':
+                (directory / '.chalk-remote-owner').write_text(name.removeprefix('chalk-remote-'))
+            if kind != 'recent':
+                os.utime(directory, (time.time() - 20000,) * 2)
+            names[kind] = directory
+        live = subprocess.Popen(['sleep', '30'], cwd=names['live'])
+        docker = self.root / 'docker'
+        removed = self.root / 'removed'
+        containers = [f'chalk-gate-postgres-20200101T000000Z-{owner}' for owner in [99999999, os.getpid()]]
+        containers += ['chalk-gate-postgres-29990101T000000Z-99999999', 'unrelated']
+        docker.write_text('#!/usr/bin/env python3\nimport sys\n'
+                          f'if sys.argv[1]=="ps": print({chr(10).join(containers)!r})\n'
+                          f'if sys.argv[1]=="rm": open({str(removed)!r},"a").write(sys.argv[-1]+"\\n")\n')
+        docker.chmod(0o700)
+        previous_path = os.environ['PATH']
+        try:
+            os.environ['PATH'] = str(self.root) + ':' + previous_path
+            runpy.run_path(str(HELPER))['reap_legacy'](self.root)
+            self.assertFalse(names['dead'].exists())
+            self.assertTrue(all(names[kind].exists() for kind in ['live', 'recent', 'unmarked']))
+            self.assertEqual(removed.read_text().splitlines(), containers[:1])
+        finally:
+            os.environ['PATH'] = previous_path
+            live.terminate()
+            live.wait()
+
+    def test_cutover_does_not_wait_for_later_legacy_arrivals(self):
+        process = self.root / 'process'
+        cwd = self.root / 'cwd'
+        cwd.write_text('')
+        for name, output in [('ps', process), ('lsof', cwd)]:
+            binary = self.root / name
+            binary.write_text(f'#!/usr/bin/env python3\nprint(open({str(output)!r}).read())\n')
+            binary.chmod(0o700)
+        busy = runpy.run_path(str(HELPER))['legacy_busy']
+        previous_path = os.environ['PATH']
+        try:
+            os.environ['PATH'] = str(self.root) + ':' + previous_path
+            later = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(time.time() + 3600))
+            process.write_text(f'bash -s -- run {later}-lane-1-deadbeef 3600 0 fake\n')
+            self.assertFalse(busy(), 'later legacy arrivals must not extend the cut-over barrier')
+            self.assertTrue(busy(time.time() + 7200), 'the same ticket blocks if it predates cut-over')
+            cwd.write_text('n/private/tmp/chalk-remote-live/repo\n')
+            self.assertTrue(busy(), 'a live checkout still blocks admission')
+            cwd.write_text('')
+            process.write_text('bash -s -- run 20000101T000000Z-lane-1-deadbeef 3600 0 fake\n')
+            self.assertTrue(busy(), 'pre-cut-over legacy jobs keep their place')
+        finally:
+            os.environ['PATH'] = previous_path
+
     def test_concurrent_fifo_and_idempotence(self):
         with concurrent.futures.ThreadPoolExecutor(2) as pool:
             rows = list(pool.map(lambda name: self.submit(name, f'echo {name} >> "{self.root}/order"'), ['first', 'second']))
@@ -107,7 +213,7 @@ class QueueTest(unittest.TestCase):
             self.assertEqual(self.wait('detached')['result'], 23)
             output = self.invoke('read', 'detached', '0').stdout.decode()
             self.assertIn('detached', output)
-            self.assertIn('REMOTE_QUEUE_RESULT=23', output)
+            self.assertNotIn('REMOTE_QUEUE_RESULT=', output)
             self.assertFalse((self.root / 'jobs/detached/work').exists())
         finally:
             if client.poll() is None:

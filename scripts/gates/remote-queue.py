@@ -163,21 +163,26 @@ def finish(root, db, row, result, reason):
                    (result, time.time(), row['id']))
 
 
-def legacy_busy():
+def legacy_busy(cutover=None):
     processes = subprocess.check_output(['ps', '-axo', 'command='], text=True)
-    # Drain old queued clients before competing for the shared admission lock.
-    if any(re.match(r'^bash -s -- run [A-Za-z0-9-]+ ', line.strip()) for line in processes.splitlines()):
-        return True
+    # Later legacy arrivals cannot extend the rollout barrier forever. They still share shlock.
+    stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(cutover if cutover is not None else time.time()))
+    for line in processes.splitlines():
+        match = re.match(r'^bash -s -- run ([A-Za-z0-9-]+) ', line.strip())
+        if match:
+            created = match[1].split('-')[0]
+            if not re.fullmatch(r'\d{8}T\d{6}Z', created) or created <= stamp:
+                return True
     if re.search(r'[/]tmp/chalk-remote-\d{8}T', processes):
         return True
     result = subprocess.run(['lsof', '-d', 'cwd', '-Fn'], capture_output=True, text=True)
     return bool(re.search(r'^n(/private)?/tmp/chalk-remote-', result.stdout, re.M))
 
 
-def admission(isolated):
+def admission(isolated, cutover):
     if isolated:
         return True
-    if legacy_busy():
+    if legacy_busy(cutover):
         return False
     return subprocess.run(['shlock', '-p', str(os.getpid()), '-f', '/tmp/chalk-remote-admission.lock']).returncode == 0
 
@@ -207,6 +212,37 @@ def reap(root, db):
         # Keep the small tombstone so a run ID can never execute twice.
 
 
+def reap_legacy(temp_root=Path('/tmp')):
+    cutoff = time.time() - 4 * 3600
+    processes = subprocess.check_output(['ps', '-axo', 'command='], text=True)
+    cwd = subprocess.run(['lsof', '-d', 'cwd', '-Fn'], capture_output=True, text=True).stdout
+    for directory in temp_root.glob('chalk-remote-*'):
+        marker = directory / '.chalk-remote-owner'
+        if (not re.fullmatch(r'chalk-remote-\d{8}T\d{6}Z-[A-Za-z0-9-]{1,24}-\d+-[0-9a-f]{16}', directory.name)
+                or directory.is_symlink() or not directory.is_dir() or directory.stat().st_mtime >= cutoff
+                or marker.is_symlink() or not marker.is_file()
+                or marker.read_text().strip() != directory.name.removeprefix('chalk-remote-')):
+            continue
+        if directory.name not in processes and directory.name not in cwd:
+            shutil.rmtree(directory)
+    for docker in dict.fromkeys([shutil.which('docker'), str(Path.home() / '.orbstack/bin/docker')]):
+        if not docker or not os.access(docker, os.X_OK):
+            continue
+        try:
+            if subprocess.run([docker, 'info'], capture_output=True, timeout=10).returncode:
+                continue
+            names = subprocess.check_output([docker, 'ps', '-a', '--filter', 'name=chalk-gate-postgres',
+                                             '--format', '{{.Names}}'], text=True, timeout=10)
+            stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(cutoff))
+            for name in names.splitlines():
+                match = re.fullmatch(r'chalk-gate-postgres-(\d{8}T\d{6}Z)-(\d+)', name)
+                if match and match[1] < stamp and not process_start(int(match[2])):
+                    subprocess.run([docker, 'rm', '-f', '--volumes', name], capture_output=True, timeout=10)
+            break
+        except (subprocess.SubprocessError, OSError) as error:
+            print(f'legacy container cleanup deferred: {error}', flush=True)
+
+
 def expire_waiters(root, db):
     rows = db.execute("SELECT * FROM jobs WHERE state='queued' AND wait_seconds>0 AND submitted+wait_seconds<=?", (time.time(),)).fetchall()
     for row in rows:
@@ -223,12 +259,15 @@ def daemon(root, db, isolated):
                 stop_job(root / 'jobs' / row['id'], row['pid'], row['started'])
                 finish(root, db, row, 137, 'dispatcher restarted; interrupted job reaped')
             reap(root, db)
+            if not isolated:
+                reap_legacy()
+            cutover = db.execute('SELECT MIN(submitted) FROM jobs').fetchone()[0]
             while True:
                 expire_waiters(root, db)
                 row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
                 if row is None:
                     return
-                if not admission(isolated):
+                if not admission(isolated, cutover):
                     time.sleep(2)
                     continue
                 child = None
@@ -324,8 +363,6 @@ def main():
                 with log.open('rb') as source:
                     source.seek(args.offset)
                     shutil.copyfileobj(source, sys.stdout.buffer)
-            if row['state'] == 'done':
-                print(f"\nREMOTE_QUEUE_RESULT={row['result']}", flush=True)
 
 
 if __name__ == '__main__':

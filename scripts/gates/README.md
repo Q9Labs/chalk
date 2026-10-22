@@ -144,11 +144,14 @@ expire after an hour; an active upload holds a lease and cannot be reaped.
 
 The client installs helpers by content hash and verifies the transfer before an
 atomic rename. Each ticket carries its own worker script; deployment does not
-rewrite running code. The new dispatcher drains existing legacy clients first,
-then uses their `/tmp/chalk-remote-admission.lock` PID lock for mutual exclusion.
+rewrite running code. The new dispatcher first drains legacy run IDs created
+before the earliest durable ticket, then uses their
+`/tmp/chalk-remote-admission.lock` PID lock for mutual exclusion. Later legacy
+arrivals cannot extend that cut-over barrier; active legacy jobs always finish.
 It keeps the old checkout-process signal too, so old clients wait for surviving
 workers after a dispatcher crash. It never cancels or changes a legacy ticket.
-FIFO starts at registration in the new queue; legacy tickets retain their old order.
+FIFO starts at registration in the new queue. Legacy clients keep their existing
+lock admission behavior.
 
 To undo, restore the old client for future submissions. Let new tickets finish or
 reattach with this revision; keep their state and helpers until they drain. No

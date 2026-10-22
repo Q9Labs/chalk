@@ -190,24 +190,27 @@ echo "[local] job ID: ${run_id}; reattach: scripts/gates/remote.sh --attach ${ru
 echo "[local] full log: ${log_file}"
 
 follow() {
-  local offset=0 result chunk status
+  local offset=0 result chunk status response
   chunk="$(mktemp "${log_dir}/.read.XXXXXX")"
   trap 'rm -f "$chunk"' RETURN
-  : >"${log_file}"
   # A failed transfer is discarded and retried from its last confirmed byte offset.
   remote attach "$run_id" >/dev/null || true
   while :; do
-    if remote read "$run_id" "$offset" >"${chunk}"; then
-      cat "${chunk}" >>"${log_file}"
+    # Read status first: a completed receipt guarantees all final output is ready to read.
+    if response="$(remote status "$run_id")" && remote read "$run_id" "$offset" >"${chunk}"; then
+      if [[ -s "$chunk" ]]; then
+        ((offset != 0)) || : >"${log_file}"
+        cat "${chunk}" >>"${log_file}"
+      fi
       offset=$((offset + $(wc -c <"${chunk}")))
       if [[ "${CHALK_REMOTE_VERBOSE:-0}" == 1 ]]; then
         cat "${chunk}"
       else
         sed -n '/^==> /p; /^\[remote\]/p; /^REMOTE_GATE_EXIT/p; /^TIMEOUT/p' "${chunk}"
       fi
-      result="$(sed -n 's/^REMOTE_QUEUE_RESULT=//p' "${chunk}" | tail -1)"
+      result="$(python3 -c 'import json,sys; row=json.load(sys.stdin); print(row["result"] if row["state"]=="done" else "")' <<<"$response")"
       if [[ -n "$result" ]]; then
-        [[ "${CHALK_REMOTE_VERBOSE:-0}" == 1 ]] || tail -n "${tail_lines}" "${log_file}"
+        [[ "${CHALK_REMOTE_VERBOSE:-0}" == 1 || ! -f "$log_file" ]] || tail -n "${tail_lines}" "${log_file}"
         rm -f "$chunk"
         trap - RETURN
         return "$result"

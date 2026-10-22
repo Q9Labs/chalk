@@ -6,13 +6,7 @@ import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn, spawnSync } from "node:child_process";
-
-// Run before loading Playwright, building packages, creating temp dirs, or starting a server.
-const preflight = spawnSync(process.execPath, ["--test", new URL("./media-client.test.mjs", import.meta.url).pathname, new URL("./recovery.test.mjs", import.meta.url).pathname], { stdio: "inherit" });
-if (preflight.error) throw preflight.error;
-if (preflight.status !== 0) process.exit(preflight.status ?? 1);
-if (process.argv.includes("--preflight-only")) process.exit(0);
+import { spawn } from "node:child_process";
 
 const fixtureDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryDirectory = resolve(fixtureDirectory, "../..");
