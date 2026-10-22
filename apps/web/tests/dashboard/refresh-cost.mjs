@@ -143,7 +143,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const recordingId = crypto.randomUUID();
     const transcriptId = crypto.randomUUID();
     sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${recordingId}','${tenantId}','${call.id}','${episodeId}','completed','r2');
-      insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${transcriptId}','${tenantId}','${call.id}','${episodeId}','${recordingId}','pending','{en}');`);
+      insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${transcriptId}','${tenantId}','${call.id}','${episodeId}','${recordingId}','preparing','{en}');`);
     await callPage.reload();
     await callPage.getByText("Transcript processing", { exact: true }).waitFor();
     const fullBeforeDeletion = dashboardReads.filter((path) => path === "/dashboard-api/call").length;
