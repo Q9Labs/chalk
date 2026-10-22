@@ -15,7 +15,9 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
     cancelPendingAdmission: async (access, signal) => {
       const { tenantId, spaceId, episodeId, participantId } = access.subject;
       const path = [tenantId, spaceId, episodeId, participantId].map(encodeURIComponent);
-      const baseURL = options.apiBaseURL.replace(/\/+$/u, "");
+      let baseEnd = options.apiBaseURL.length;
+      while (baseEnd > 0 && options.apiBaseURL[baseEnd - 1] === "/") baseEnd--;
+      const baseURL = options.apiBaseURL.slice(0, baseEnd);
       const response = await fetch(`${baseURL}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/cancel-join`, {
         method: "POST",
         headers: { Authorization: `Bearer ${access.media.token}` },
