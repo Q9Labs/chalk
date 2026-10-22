@@ -92,7 +92,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     setDisplayName(marker.displayName);
     setEntranceSettings({ displayName: marker.displayName, ...devicesOff });
     setPreparing(true);
-    const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: undefined }));
+    const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: prepared.arrival.space?.name }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
       .catch(() => {

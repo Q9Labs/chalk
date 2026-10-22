@@ -363,6 +363,8 @@ describe("reload rejoin", () => {
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
     expect(mocks.holder.chalkProps?.defaults).toEqual({ microphone: false, camera: false });
+    // The recovered arrival still names the call.
+    expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "Design Lab" });
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem(reloadRejoinStorageKey)).toBeNull();
   });
@@ -382,7 +384,7 @@ describe("reload rejoin", () => {
     render(<SpacePage slug="design-lab" />);
     await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
     await leaveCall();
-    expect(await screen.findByRole("heading", { name: "You left the call" })).toBeDefined();
+    expect(await screen.findByRole("heading", { name: "You left Design Lab" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Rejoin" })).toBeDefined();
     expect(screen.queryByLabelText("Your name")).toBeNull();
     expect(mocks.resumePublicSpace).toHaveBeenCalledOnce();
