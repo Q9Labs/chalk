@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ChalkWhiteboardV1Transport, Participant, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { ChalkWhiteboardV1Error, type ChalkWhiteboardV1Transport, type Participant, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -70,6 +70,20 @@ it("offers hosts the people who are not hosts, with their picks, and sends the h
 
   await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, self: { ...snapshot.self, capabilities: ["drawWhiteboard"], can: (capability) => capability === "drawWhiteboard" } })));
   expect(control).toBeUndefined();
+});
+
+it("tells the host when Sync refuses a policy change, such as an older Sync that has no drawing policy", async () => {
+  const refused = new ChalkWhiteboardV1Error({ operation: "set_draw_policy", code: "unavailable", recoverable: true, message: "The call-wide drawing policy is unavailable on this Sync server." });
+  const client = hostClient({ setDrawPolicy: async () => Promise.reject(refused), setDrawPermission: async () => undefined });
+  const toast = vi.fn();
+  let control: WhoCanDraw | undefined;
+  function Probe() {
+    control = useWhoCanDraw(toast);
+    return null;
+  }
+  await mount(client, <Probe />);
+  await act(async () => control?.onPolicy("hosts"));
+  expect(toast).toHaveBeenCalledWith({ type: "error", message: "Could not change who can draw. Try again." });
 });
 
 it("shows the picker's empty states in the host's board menu", async () => {

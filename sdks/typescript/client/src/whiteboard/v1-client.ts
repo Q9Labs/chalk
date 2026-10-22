@@ -32,6 +32,8 @@ const MAX_TIMER_DRIFT_MS = 250;
 const MAX_SLOW_CONNECTION_BACKOFF_MS = 4_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+/** Matches the retries the hello ladder used to give a rejected token, so a key rotation or clock skew still clears up. */
+const MAX_REJECTED_HELLO_RETRIES = 4;
 const encoder = new TextEncoder();
 
 type Deferred<T> = {
@@ -70,6 +72,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   /** Strictly increasing, so a restore replays operations made in the same millisecond in the order they were made. */
   #lastCreatedAt = 0;
   readonly #reservedOperationIds = new Set<string>();
+  /** Access changes still being saved, by createdAt, so a later change whose save finishes first still waits its turn. */
+  readonly #savingAccessChanges = new Map<string, number>();
   readonly #awaitingOperationIds = new Set<string>();
   readonly #pendingStoreWrites = new Set<Promise<void>>();
   readonly #operationRetryTimers = new Map<string, unknown>();
@@ -104,6 +108,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #waitingForOperations = false;
   #reconnectTimer: unknown;
   #reconnectAttempt = 0;
+  #rejectedHelloRetries = 0;
   #heartbeatTimer: unknown;
   readonly #heartbeats: { readonly sentAt: number; slow: boolean }[] = [];
   #ignoredHeartbeats = 0;
@@ -144,6 +149,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
     this.#hello = "draw-policy";
+    this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
     this.#publishSummary("loading", null);
@@ -322,7 +328,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   async setDrawPolicy(policy: ChalkWhiteboardDrawPolicy): Promise<void> {
     this.#assertLive("set_draw_policy");
     if (this.#drawPolicy === null) {
-      throw error(failure("set_draw_policy", "unavailable", true, "The call-wide drawing policy is unavailable on this Sync server."));
+      throw error(policyUnavailable());
     }
     if (!this.#capabilities.includes("manageWhiteboard")) {
       throw error(failure("set_draw_policy", "permission_denied", false, "Whiteboard management permission is required."));
@@ -581,6 +587,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#phase = "live";
     this.#viewsSupported = viewsNegotiated(this.#hello);
     this.#reconnectAttempt = 0;
+    this.#rejectedHelloRetries = 0;
     this.#participantId = frame.participant_id;
     if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
     this.#sceneId = frame.scene_id;
@@ -592,9 +599,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#drawPermissions = [];
     this.#presentationSupported = "presenting" in frame;
     this.#presenting = "presenting" in frame ? frame.presenting : false;
-    this.#publishSummary("loading", null);
+    // A change restored from the store has no caller to reject, so the summary carries the refusal too.
+    const refused = this.#hello !== "draw-policy" && this.#dropPolicyChanges();
+    this.#publishSummary("loading", refused ? policyUnavailable() : null);
     this.#clearHeartbeat();
-    if (this.#hello !== "draw-policy") this.#dropPolicyChanges();
     const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     this.#awaitingOperationIds.clear();
     this.#waitingForOperations = true;
@@ -608,14 +616,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   /** A Sync without draw_policy_v1 closes the socket on a policy change, so a change saved for a newer Sync is dropped, not replayed. */
-  #dropPolicyChanges(): void {
+  #dropPolicyChanges(): boolean {
+    let dropped = false;
     for (const [operationId, entry] of this.#operations) {
       if (entry.pending.frame.type !== "set_draw_policy") continue;
+      dropped = true;
       this.#operations.delete(operationId);
       this.#clearOperationRetryTimer(operationId);
-      entry.deferred && rejectDeferred(entry.deferred, error(failure("set_draw_policy", "unavailable", true, "The call-wide drawing policy is unavailable on this Sync server.")));
+      entry.deferred && rejectDeferred(entry.deferred, error(policyUnavailable()));
       void this.#store.remove(operationId).catch(() => undefined);
     }
+    return dropped;
   }
 
   #requestSnapshotAfterOperations(): void {
@@ -701,24 +712,30 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation byte capacity is full."));
     }
     this.#reservedOperationIds.add(frame.operation_id);
+    if (isAccessChange(frame)) this.#savingAccessChanges.set(frame.operation_id, pending.createdAt);
     let storeWrite: Promise<void>;
     try {
       storeWrite = this.#store.put(pending);
     } catch (cause) {
+      this.#reservedOperationIds.delete(frame.operation_id);
+      this.#abandonAccessChange(frame.operation_id);
       throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
     }
     this.#pendingStoreWrites.add(storeWrite);
     try {
       await storeWrite;
     } catch (cause) {
+      this.#abandonAccessChange(frame.operation_id);
       throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
     } finally {
       this.#pendingStoreWrites.delete(storeWrite);
       this.#reservedOperationIds.delete(frame.operation_id);
+      this.#savingAccessChanges.delete(frame.operation_id);
     }
     if (frame.type === "set_draw_policy" && this.#phase === "live" && this.#hello !== "draw-policy") {
       void this.#store.remove(frame.operation_id).catch(() => undefined);
-      throw error(failure("set_draw_policy", "unavailable", true, "The call-wide drawing policy is unavailable on this Sync server."));
+      this.#sendNextAccessChange();
+      throw error(policyUnavailable());
     }
     let deferred!: Deferred<ChalkWhiteboardV1Commit>;
     const promise = new Promise<ChalkWhiteboardV1Commit>((resolve, reject) => {
@@ -798,19 +815,31 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
    * Sync also stores a per-person choice according to the policy it lands under, so their order matters too.
    */
   #sendable(frame: ChalkWhiteboardV1PendingOperation["frame"]): boolean {
-    if (!isAccessChange(frame)) return true;
-    for (const entry of this.#operations.values()) {
-      if (isAccessChange(entry.pending.frame)) return entry.pending.operationId === frame.operation_id;
-    }
-    return true;
+    return !isAccessChange(frame) || this.#nextAccessChangeId() === frame.operation_id;
   }
 
   #sendNextAccessChange(): void {
     if (this.#phase !== "live" || this.#snapshots.size > 0) return;
-    const next = [...this.#operations.values()].find((entry) => isAccessChange(entry.pending.frame));
+    const nextId = this.#nextAccessChangeId();
+    const next = nextId === undefined ? undefined : this.#operations.get(nextId);
     if (!next) return;
     if (this.#waitingForOperations) this.#awaitingOperationIds.add(next.pending.operationId);
     this.#sendOperation(next.pending.frame);
+  }
+
+  /** The oldest access change, counting ones still being saved. */
+  #nextAccessChangeId(): string | undefined {
+    let next: { readonly id: string; readonly createdAt: number } | undefined;
+    const consider = (id: string, createdAt: number) => {
+      if (!next || createdAt < next.createdAt || (createdAt === next.createdAt && id.localeCompare(next.id) < 0)) next = { id, createdAt };
+    };
+    for (const entry of this.#operations.values()) if (isAccessChange(entry.pending.frame)) consider(entry.pending.operationId, entry.pending.createdAt);
+    for (const [id, createdAt] of this.#savingAccessChanges) consider(id, createdAt);
+    return next?.id;
+  }
+
+  #abandonAccessChange(operationId: string): void {
+    if (this.#savingAccessChanges.delete(operationId)) this.#sendNextAccessChange();
   }
 
   #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
@@ -826,14 +855,24 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#operationRetryTimers.set(operationId, timer);
   }
 
+  /**
+   * Every Sync closes with 1009 on a hello it can't decode, such as one with an unknown extension, so only that steps the hello down.
+   * A 1008 rejects the token or the participant, or says the hello came too late, and any of those can clear up on the next try.
+   */
   #disconnected(socket: SyncSocket, closeCode: number): void {
     if (socket !== this.#socket) return;
-    const rejectedPresentationHello = this.#rejectedPresentationHello(closeCode);
+    const authenticating = this.#phase === "authenticating";
+    const beforeWelcome = authenticating || this.#phase === "connecting";
     const wasLive = this.#phase === "live";
     this.#resetDisconnectedState();
     if (!this.#started || !this.#transportAvailable) return;
-    if (rejectedPresentationHello) {
+    if (authenticating && closeCode === 1009 && this.#hello !== "legacy") {
       this.#fallbackHello();
+      this.#scheduleReconnect();
+      return;
+    }
+    if (beforeWelcome && closeCode === 1008 && this.#rejectedHelloRetries < MAX_REJECTED_HELLO_RETRIES) {
+      this.#rejectedHelloRetries += 1;
       this.#scheduleReconnect();
       return;
     }
@@ -843,10 +882,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     if (wasLive) this.#hello = "draw-policy";
     this.#scheduleReconnect();
-  }
-
-  #rejectedPresentationHello(closeCode: number): boolean {
-    return this.#phase === "authenticating" && this.#hello !== "legacy" && terminalCloseCode(closeCode);
   }
 
   #fallbackHello(): void {
@@ -1226,6 +1261,10 @@ function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_i
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };
   return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }] };
+}
+
+function policyUnavailable(): ChalkWhiteboardV1Failure {
+  return failure("set_draw_policy", "unavailable", true, "The call-wide drawing policy is unavailable on this Sync server.");
 }
 
 function terminalCloseCode(closeCode: number): boolean {

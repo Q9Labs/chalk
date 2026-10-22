@@ -65,19 +65,19 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       sockets[0]?.open();
       await settle();
       expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }]);
-      sockets[0]?.close(1008);
+      sockets[0]?.close(1009);
       clock.advance(1_000);
       await settle();
       sockets[1]?.open();
       await settle();
       expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
-      sockets[1]?.close(1008);
+      sockets[1]?.close(1009);
       clock.advance(1_000);
       await settle();
       sockets[2]?.open();
       await settle();
       expect(hello(2)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
-      sockets[2]?.close(1008);
+      sockets[2]?.close(1009);
       clock.advance(1_000);
       await acceptSnapshot(sockets, 3);
       await startup;
@@ -135,7 +135,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
         await settle();
         older.sockets[index]?.open();
         await settle();
-        older.sockets[index]?.close(1008);
+        older.sockets[index]?.close(1009);
         clock.advance(1_000);
       }
       await acceptSnapshot(older.sockets, 2);
@@ -187,7 +187,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
         await settle();
         sockets[index]?.open();
         await settle();
-        sockets[index]?.close(1008);
+        sockets[index]?.close(1009);
         clock.advance(1_000);
       }
       await acceptSnapshot(sockets, 3);
@@ -333,7 +333,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
         await settle();
         sockets[index]?.open();
         await settle();
-        sockets[index]?.close(1008);
+        sockets[index]?.close(1009);
       }
       clock.advance(1_000);
       await acceptSnapshot(sockets, 3);
@@ -593,6 +593,83 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     }
   });
 
+  it("sends access changes in the order they were made even when a later save finishes first", async () => {
+    const saves: PromiseWithResolvers<void>[] = [];
+    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+      override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
+        await super.put(operation);
+        if (operation.frame.type !== "set_draw_policy") return;
+        const save = Promise.withResolvers<void>();
+        saves.push(save);
+        await save.promise;
+      }
+    })();
+    const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
+    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
+    try {
+      sockets[0]?.receive({ type: "draw_access", policy: "picked", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+      await settle();
+      const changes = [client.setDrawPolicy("everyone"), client.setDrawPolicy("hosts"), client.setDrawPolicy("picked")];
+      void changes[1]?.catch(() => undefined);
+      await settle();
+      saves[2]?.resolve();
+      await settle();
+      saves[1]?.reject(new Error("disk full"));
+      await settle();
+      expect(sent()).toEqual([]);
+
+      saves[0]?.resolve();
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["everyone"]);
+      sockets[0]?.receive({ type: "commit", operation_id: sent()[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["everyone", "picked"]);
+      sockets[0]?.receive({ type: "commit", operation_id: sent()[1].operation_id, outcome: "committed", scene_id: sceneId, revision: "2" });
+      await expect(changes[0]).resolves.toBeUndefined();
+      await expect(changes[1]).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
+      await expect(changes[2]).resolves.toBeUndefined();
+    } finally {
+      for (const save of saves) save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends a held access change when the save of the one before it fails", async () => {
+    const saves: PromiseWithResolvers<void>[] = [];
+    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+      override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
+        if (operation.frame.type !== "set_draw_policy") return super.put(operation);
+        const save = Promise.withResolvers<void>();
+        saves.push(save);
+        await save.promise;
+        await super.put(operation);
+      }
+    })();
+    const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
+    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
+    try {
+      sockets[0]?.receive({ type: "draw_access", policy: "picked", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+      await settle();
+      const first = client.setDrawPolicy("everyone");
+      void first.catch(() => undefined);
+      const second = client.setDrawPolicy("hosts");
+      await settle();
+      saves[1]?.resolve();
+      await settle();
+      expect(sent()).toEqual([]);
+
+      saves[0]?.reject(new Error("disk full"));
+      await expect(first).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts"]);
+      sockets[0]?.receive({ type: "commit", operation_id: sent()[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      await expect(second).resolves.toBeUndefined();
+    } finally {
+      for (const save of saves) save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("sends a held access change when a snapshot fails for good", async () => {
     const { client, sockets } = await startedRecoveryClient(new TestClock());
     const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy" || frame.type === "set_draw_permission");
@@ -663,7 +740,7 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await settle();
       sockets[1]?.open();
       await settle();
-      sockets[1]?.close(1008);
+      sockets[1]?.close(1009);
       clock.advance(5_000);
       await settle();
       sockets[2]?.open();
@@ -684,7 +761,90 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     }
   });
 
-  it("drops a saved policy change instead of replaying it to a Sync without draw_policy_v1", async () => {
+  it("with an older Sync, falls back and refuses a host's policy change that was waiting on the dropped connection", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    try {
+      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+      await settle();
+      const change = client.setDrawPolicy("hosts");
+      void change.catch(() => undefined);
+      await settle();
+      sockets[0]?.close(1006);
+      clock.advance(5_000);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      sockets[1]?.close(1009, "invalid whiteboard frame");
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 2);
+      expect(JSON.parse(sockets[2]?.sent[0] ?? "{}").extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      expect((sockets[2]?.sent ?? []).map((wire) => JSON.parse(wire).type)).not.toContain("set_draw_policy");
+      await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable", recoverable: true });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("with a current Sync, keeps its hello and a saved policy change when a token is rejected once, and gives up after repeated rejections", async () => {
+    const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
+    first.sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+    await settle();
+    void first.client.setDrawPolicy("hosts").catch(() => undefined);
+    await settle();
+    await first.client.stopSceneSubscription();
+
+    const clock = new TestClock();
+    const second = recoveryClient(clock, undefined, { pendingStore });
+    const startup = second.client.startSceneSubscription();
+    const sent = (index: number) => (second.sockets[index]?.sent ?? []).map((wire) => JSON.parse(wire));
+    try {
+      await settle();
+      // Sync's hello deadline can pass while the token is still being fetched.
+      second.sockets[0]?.open();
+      second.sockets[0]?.close(1008, "hello timeout");
+      clock.advance(5_000);
+      await settle();
+      second.sockets[1]?.open();
+      await settle();
+      second.sockets[1]?.close(1008, "invalid token");
+      clock.advance(5_000);
+      await settle();
+      second.sockets[2]?.open();
+      await settle();
+      second.sockets[2]?.receive(welcome());
+      await settle();
+      expect(sent(2)[0].extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }]);
+      expect(
+        sent(2)
+          .filter((frame) => frame.type === "set_draw_policy")
+          .map((frame) => frame.policy),
+      ).toEqual(["hosts"]);
+    } finally {
+      void startup.catch(() => undefined);
+      await second.client.stopSceneSubscription();
+    }
+
+    const rejected = recoveryClient(clock);
+    const rejectedStartup = rejected.client.startSceneSubscription();
+    void rejectedStartup.catch(() => undefined);
+    try {
+      for (let index = 0; index < 5; index += 1) {
+        await settle();
+        rejected.sockets[index]?.open();
+        await settle();
+        rejected.sockets[index]?.close(1008, "invalid token");
+        clock.advance(10_000);
+      }
+      await expect(rejectedStartup).rejects.toMatchObject({ code: "permission_denied", recoverable: false });
+      expect(rejected.sockets.map((socket) => JSON.parse(socket.sent[0] ?? "{}").extensions.length)).toEqual([3, 3, 3, 3, 3]);
+    } finally {
+      await rejected.client.stopSceneSubscription();
+    }
+  });
+
+  it("with an older Sync, refuses a saved policy change on the summary instead of replaying it", async () => {
     const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
     const person = "20000000-0000-4000-8000-000000000002";
     const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
@@ -697,13 +857,15 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
 
     const clock = new TestClock();
     const second = recoveryClient(clock, undefined, { pendingStore });
+    const errors: (string | undefined)[] = [];
+    second.client.subscribeSummary((summary) => errors.push(summary.error?.operation));
     const startup = second.client.startSceneSubscription();
     const sent = (index: number) => (second.sockets[index]?.sent ?? []).map((wire) => JSON.parse(wire));
     try {
       await settle();
       second.sockets[0]?.open();
       await settle();
-      second.sockets[0]?.close(1008);
+      second.sockets[0]?.close(1009, "invalid whiteboard frame");
       clock.advance(1_000);
       await settle();
       second.sockets[1]?.open();
@@ -711,6 +873,7 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       second.sockets[1]?.receive(welcome());
       await settle();
       expect(sent(1)[0].extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      expect(errors).toContain("set_draw_policy");
       expect(sent(1).map((frame) => frame.type)).not.toContain("set_draw_policy");
       const permissions = sent(1).filter((frame) => frame.type === "set_draw_permission");
       expect(permissions.map((frame) => frame.can_draw)).toEqual([false]);
