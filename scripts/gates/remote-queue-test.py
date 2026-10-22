@@ -53,10 +53,10 @@ class QueueTest(unittest.TestCase):
     def invoke(self, *args, **kwargs):
         return subprocess.run([*self.command, *args], capture_output=True, check=True, **kwargs)
 
-    def payload(self, script):
+    def payload(self, script, request=None):
         archive = io.BytesIO()
         with tarfile.open(fileobj=archive, mode='w') as tar:
-            for name, data in {'repo.bundle': b'fake', 'request.json': b'["fake"]',
+            for name, data in {'repo.bundle': b'fake', 'request.json': json.dumps(request or ['fake']).encode(),
                                'runner.sh': ('set -eu\ncd "$1"\n' + script + '\n').encode()}.items():
                 entry = tarfile.TarInfo(name)
                 entry.size = len(data)
@@ -124,8 +124,99 @@ class QueueTest(unittest.TestCase):
         helper.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(legacy_lock))
                           .replace('if legacy_busy(cutover):', 'if False:')
                           .replace('return legacy_active()', 'return False')
-                          .replace('                reap_legacy()', '                pass'))
+                          .replace('                reap_legacy()', '                pass')
+                          .replace("if __name__ == '__main__':", "def legacy_active():\n    return False\n\nif __name__ == '__main__':"))
         self.command = [sys.executable, str(helper), '--root', str(self.root)]
+
+    def test_invalid_disk_threshold_rejected_before_ticket(self):
+        for index, value in enumerate(('not-a-number', '-1', '1.5', 'NaN', '')):
+            result = subprocess.run([*self.command, 'submit', f'invalid-{index}'],
+                                    input=self.payload('exit 0', ['fake', 'revision', value, '60']),
+                                    capture_output=True)
+            self.assertNotEqual(result.returncode, 0, value)
+            self.assertIn(b'disk', result.stderr)
+        with sqlite3.connect(self.root / 'queue.sqlite') as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM jobs').fetchone()[0], 0)
+        # Tickets accepted by an older client must fail once, without killing admission.
+        old_job = self.root / 'jobs' / 'old-invalid'
+        old_job.mkdir()
+        (old_job / 'request.json').write_text('["fake", "revision", "invalid", "60"]')
+        with sqlite3.connect(self.root / 'queue.sqlite') as db:
+            db.execute("INSERT INTO jobs(id,priority,submitted,wait_seconds,state) VALUES(?,0,?,0,'queued')",
+                       ('old-invalid', time.time()))
+        self.submit('valid')
+        self.lock.close()
+        self.assertEqual(self.wait('old-invalid')['result'], 64)
+        self.assertEqual(self.wait('valid')['result'], 0)
+
+    @unittest.skipUnless(shutil.which('shlock'), 'requires the macOS legacy shlock binary')
+    def test_exclusive_lock_survives_dispatcher_death(self):
+        legacy_lock = self.root / 'legacy.lock'
+        self.shared_fixture(legacy_lock)
+        ready = self.root / 'worker-ready'
+        self.submit('exclusive', f'touch "{ready}"; sleep 10', '--exclusive')
+        self.lock.close()
+        row = self.wait('exclusive', 'running')
+        deadline = time.monotonic() + 3
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.02)
+        self.assertTrue(ready.exists())
+        daemon_pid = int((self.root / 'dispatcher.pid').read_text())
+        os.kill(daemon_pid, signal.SIGKILL)
+        deadline = time.monotonic() + 3
+        while subprocess.run(['ps', '-p', str(daemon_pid)], stdout=subprocess.DEVNULL).returncode == 0 and time.monotonic() < deadline:
+            time.sleep(.02)
+        try:
+            os.kill(row['pid'], 0)
+            result = subprocess.run(['shlock', '-p', str(os.getpid()), '-f', str(legacy_lock)])
+            self.assertNotEqual(result.returncode, 0, 'legacy job acquired the lock while exclusive worker survived')
+            self.assertEqual(int(legacy_lock.read_text()), row['pid'])
+        finally:
+            try:
+                os.killpg(row['pid'], signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            self.invoke('attach', 'exclusive')
+            self.wait('exclusive')
+
+    @unittest.skipUnless(shutil.which('shlock'), 'requires the macOS legacy shlock binary')
+    def test_exclusive_reserves_lock_before_cutover_guard(self):
+        legacy_lock = self.root / 'legacy.lock'
+        self.shared_fixture(legacy_lock)
+        helper = Path(self.command[1])
+        probe = self.root / 'guard-entered'
+        unblock = self.root / 'guard-release'
+        override = f"""
+def legacy_active():
+    Path({str(probe)!r}).touch()
+    deadline = time.monotonic() + 5
+    while not Path({str(unblock)!r}).exists() and time.monotonic() < deadline:
+        time.sleep(.02)
+    return False
+
+def legacy_busy(*args):
+    return legacy_active()
+"""
+        helper.write_text(helper.read_text().replace('if False:', 'if legacy_busy(cutover):')
+                          .replace("if __name__ == '__main__':", override + "\nif __name__ == '__main__':"))
+        self.submit('exclusive', 'exit 0', '--exclusive')
+        self.lock.close()
+        try:
+            deadline = time.monotonic() + 4
+            while not probe.exists() and time.monotonic() < deadline:
+                time.sleep(.02)
+            self.assertTrue(probe.exists(), 'exclusive must check active legacy work')
+            self.assertTrue(legacy_lock.exists(), 'cutover guard ran before reserving the legacy lock')
+            contender = subprocess.Popen(['sleep', '5'])
+            try:
+                result = subprocess.run(['shlock', '-p', str(contender.pid), '-f', str(legacy_lock)])
+                self.assertNotEqual(result.returncode, 0, 'a later legacy waiter defeated the reservation')
+            finally:
+                contender.terminate()
+                contender.wait()
+        finally:
+            unblock.touch()
+            self.wait('exclusive')
 
     @unittest.skipUnless(shutil.which("shlock"), "requires the macOS legacy shlock binary")
     def test_only_exclusive_holds_legacy_lock_and_releases_before_cleanup(self):
@@ -260,30 +351,6 @@ class QueueTest(unittest.TestCase):
             os.environ['PATH'] = previous_path
             live.terminate()
             live.wait()
-
-    def test_cutover_does_not_wait_for_later_legacy_arrivals(self):
-        process = self.root / 'process'
-        cwd = self.root / 'cwd'
-        cwd.write_text('')
-        for name, output in [('ps', process), ('lsof', cwd)]:
-            binary = self.root / name
-            binary.write_text(f'#!/usr/bin/env python3\nprint(open({str(output)!r}).read())\n')
-            binary.chmod(0o700)
-        busy = runpy.run_path(str(HELPER))['legacy_busy']
-        previous_path = os.environ['PATH']
-        try:
-            os.environ['PATH'] = str(self.root) + ':' + previous_path
-            later = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(time.time() + 3600))
-            process.write_text(f'bash -s -- run {later}-lane-1-deadbeef 3600 0 fake\n')
-            self.assertFalse(busy(), 'later legacy arrivals must not extend the cut-over barrier')
-            self.assertTrue(busy(time.time() + 7200), 'the same ticket blocks if it predates cut-over')
-            cwd.write_text('n/private/tmp/chalk-remote-live/repo\n')
-            self.assertTrue(busy(), 'a live checkout still blocks admission')
-            cwd.write_text('')
-            process.write_text('bash -s -- run 20000101T000000Z-lane-1-deadbeef 3600 0 fake\n')
-            self.assertTrue(busy(), 'pre-cut-over legacy jobs keep their place')
-        finally:
-            os.environ['PATH'] = previous_path
 
     def test_concurrent_fifo_and_idempotence(self):
         with concurrent.futures.ThreadPoolExecutor(2) as pool:

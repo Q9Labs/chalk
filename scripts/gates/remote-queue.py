@@ -65,6 +65,7 @@ def submit(root, db, args):
             request = json.loads((incoming / 'request.json').read_text())
             if not isinstance(request, list) or not request or not all(isinstance(x, str) for x in request):
                 raise ValueError('request must be an argument list')
+            disk_threshold(request)
             with db:
                 db.execute('BEGIN IMMEDIATE')
                 row = db.execute('SELECT * FROM jobs WHERE id=?', (args.id,)).fetchone()
@@ -169,29 +170,20 @@ def finish(root, db, row, result, reason):
                    (result, time.time(), row['id']))
 
 
-def legacy_busy(cutover=None):
-    processes = subprocess.check_output(['ps', '-axo', 'command='], text=True)
-    # Later legacy arrivals cannot extend the rollout barrier forever. They still share shlock.
-    stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(cutover if cutover is not None else time.time()))
-    for line in processes.splitlines():
-        match = re.match(r'^bash -s -- run ([A-Za-z0-9-]+) ', line.strip())
-        if match:
-            created = match[1].split('-')[0]
-            if not re.fullmatch(r'\d{8}T\d{6}Z', created) or created <= stamp:
-                return True
-    if re.search(r'[/]tmp/chalk-remote-\d{8}T', processes):
-        return True
-    result = subprocess.run(['lsof', '-d', 'cwd', '-Fn'], capture_output=True, text=True)
-    return bool(re.search(r'^n(/private)?/tmp/chalk-remote-', result.stdout, re.M))
-
-
 def exclusive_request(request):
     return any(value in ('gate', '--full') or re.search(r'gate:full|call-performance|performance[-:]|perf[-:]budget|check-call-performance', value)
                for value in request)
 
 
+def disk_threshold(request):
+    value = request[2] if len(request) >= 4 else '8'
+    if not re.fullmatch(r'[0-9]{1,9}', value):
+        raise ValueError('minimum free disk GiB must be a nonnegative integer of at most 9 digits')
+    return int(value)
+
+
 def resources_available(root, request):
-    minimum_disk = int(request[2]) if len(request) >= 4 else 8
+    minimum_disk = disk_threshold(request)
     if shutil.disk_usage(root).free < minimum_disk * 1024 ** 3:
         return False
     try:
@@ -223,22 +215,21 @@ def legacy_active():
     return bool(re.search(r'^n(/private)?/tmp/chalk-remote-\d{8}T', cwd, re.M))
 
 
-def admission(isolated, cutover):
+def admission(isolated, owner):
     if isolated:
         return True
-    if legacy_busy(cutover):
-        return False
     lock = Path('/tmp/chalk-remote-admission.lock')
-    if lock.exists() and lock.read_text().strip() == str(os.getpid()):
+    if lock.exists() and lock.read_text().strip() == str(owner):
         return True
-    return subprocess.run(['shlock', '-p', str(os.getpid()), '-f', str(lock)]).returncode == 0
+    return subprocess.run(['shlock', '-p', str(owner), '-f', str(lock)]).returncode == 0
 
 
 
-def release(isolated):
+def release(isolated, owner=None):
     if not isolated:
+        owner = owner if owner is not None else os.getpid()
         lock = Path('/tmp/chalk-remote-admission.lock')
-        if lock.exists() and lock.read_text().strip() == str(os.getpid()):
+        if lock.exists() and lock.read_text().strip() == str(owner):
             lock.unlink()
 
 
@@ -309,6 +300,8 @@ def daemon(root, db, isolated):
         try:
             for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
                 stop_job(root / 'jobs' / row['id'], row['pid'], row['started'])
+                if row['exclusive']:
+                    release(isolated, row['pid'])
                 finish(root, db, row, 137, 'dispatcher restarted; interrupted job reaped')
             reap(root, db)
             if not isolated:
@@ -318,7 +311,7 @@ def daemon(root, db, isolated):
                     result = child.poll()
                     if result is not None:
                         if row['exclusive']:
-                            release(isolated)
+                            release(isolated, child.pid)
                         stop_job(root / 'jobs' / row['id'], child.pid, started)
                         finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
                         del running[ticket]
@@ -333,29 +326,25 @@ def daemon(root, db, isolated):
                     continue
                 job = root / 'jobs' / row['id']
                 request = json.loads((job / 'request.json').read_text())
+                try:
+                    disk_threshold(request)
+                except ValueError as error:
+                    finish(root, db, row, 64, str(error))
+                    continue
                 exclusive = bool(row['exclusive'] or exclusive_request(request))
                 # Ordinary jobs never acquire the legacy lock. A live legacy job occupies
                 # one slot; existing slot jobs keep their isolated ports and continue running.
                 occupied = int(not isolated and legacy_occupied())
                 if (len(running) + occupied >= slots or (exclusive and running)
-                        or not resources_available(root, request)
-                        or (exclusive and not admission(isolated, row['submitted']))):
+                        or not resources_available(root, request)):
                     time.sleep(0.2)
                     continue
                 slot = next(i for i in range(slots) if i not in {r['slot'] for r, _, _ in running.values()})
                 child = None
                 started = None
                 try:
-                    with db:
-                        db.execute("UPDATE jobs SET state='running',slot=?,exclusive=? WHERE id=?", (slot, int(exclusive), row['id']))
-                    row = db.execute('SELECT * FROM jobs WHERE id=?', (row['id'],)).fetchone()
                     work = Path('/tmp') / ('chalk-queue-work-' + hashlib.sha256(str(job).encode()).hexdigest()[:24])
-                    (job / 'work').symlink_to(work)
-                    work.mkdir()
-                    (job / 'repo.bundle').rename(work / 'repo.bundle')
                     with (job / 'output.log').open('ab') as log:
-                        log.write(f"[remote] ticket {row['ticket']} running: {row['id']} slot={slot} exclusive={exclusive}\n".encode())
-                        log.flush()
                         login_shell = '/bin/zsh' if sys.platform == 'darwin' else '/bin/bash'
                         child = subprocess.Popen(['/bin/bash', '-ec',
                                                   'read -r ready; shell="$1"; shift; exec "$shell" -lc \'exec bash "$@"\' chalk-queue "$@"', 'chalk-queue', login_shell,
@@ -364,14 +353,39 @@ def daemon(root, db, isolated):
                                                  stdin=subprocess.PIPE, stdout=log, stderr=log,
                                                  start_new_session=True, close_fds=True)
                         started = process_start(child.pid)
+                        # The blocked worker owns the reservation, then keeps the same PID
+                        # through exec. Dispatcher death cannot invalidate an exclusive lock.
+                        if exclusive and not admission(isolated, child.pid):
+                            child.stdin.close()
+                            child.wait()
+                            time.sleep(.2)
+                            continue
                         with db:
-                            db.execute('UPDATE jobs SET pid=?,started=? WHERE id=?', (child.pid, started, row['id']))
+                            db.execute("UPDATE jobs SET state='running',slot=?,exclusive=?,pid=?,started=? WHERE id=?",
+                                       (slot, int(exclusive), child.pid, started, row['id']))
+                        row = db.execute('SELECT * FROM jobs WHERE id=?', (row['id'],)).fetchone()
+                        # Reserve before inspecting orphaned legacy work. Bare legacy waiters
+                        # cannot run while we own shlock and must not extend this guard.
+                        deadline = time.monotonic() + 30
+                        while exclusive and not isolated and legacy_active():
+                            if time.monotonic() >= deadline:
+                                raise RuntimeError('legacy checkout still active after 30-second admission guard')
+                            time.sleep(.2)
+                        (job / 'work').symlink_to(work)
+                        work.mkdir()
+                        (job / 'repo.bundle').rename(work / 'repo.bundle')
+                        log.write(f"[remote] ticket {row['ticket']} running: {row['id']} slot={slot} exclusive={exclusive}\n".encode())
+                        log.flush()
                         child.stdin.write(b'run\n')
                         child.stdin.close()
                     running[row['ticket']] = (row, child, started)
                 except Exception as error:
                     if child:
                         stop_job(job, child.pid, started)
+                        child.stdin.close()
+                        child.wait()
+                        if exclusive:
+                            release(isolated, child.pid)
                     finish(root, db, row, 70, f'queue failed: {error}')
         finally:
             release(isolated)

@@ -158,9 +158,11 @@ rewrite running code. Legacy waiters keep their old shlock and drain one at a
 time. A live legacy lock owner counts as one occupied slot. Ordinary jobs never
 acquire that lock, even when all new slots are running. Only exclusive jobs take
 it, and release it immediately when their process exits, before descendant
-cleanup. The bounded guard waits for legacy tickets created before the exclusive
-ticket before taking that lock; later arrivals cannot extend its barrier. Active legacy work always
-finishes. New checkout names and port blocks avoid the old harness's process
+cleanup. The exclusive worker owns the lock through exec, so dispatcher death
+cannot make a surviving exclusive worker lose its lock. Admission reserves the
+lock before checking for legacy checkouts without a lock. That check has a
+30-second limit; a checkout that remains active fails only the new ticket.
+Bare legacy waiters remain queued and cannot extend this guard. New checkout names and port blocks avoid the old harness's process
 veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
 FIFO applies among new tickets. After merge, lanes may voluntarily resubmit
 legacy waiters through the new client to use the slots sooner.

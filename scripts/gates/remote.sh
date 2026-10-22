@@ -114,6 +114,7 @@ esac
 host="${CHALK_REMOTE_HOST:-agents-macmini}"
 base_ref="${CHALK_REMOTE_BASE_REF:-origin/master}"
 min_free_gib="${CHALK_REMOTE_MIN_FREE_GIB:-8}"
+[[ "$min_free_gib" =~ ^[0-9]{1,9}$ ]] || { echo "CHALK_REMOTE_MIN_FREE_GIB must be a nonnegative integer of at most 9 digits" >&2; exit 2; }
 gate_timeout="${CHALK_REMOTE_GATE_TIMEOUT_SECONDS:-3600}"
 tail_lines="${CHALK_REMOTE_TAIL_LINES:-60}"
 queue_timeout="${CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS:-0}"

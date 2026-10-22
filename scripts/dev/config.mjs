@@ -151,6 +151,10 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     },
     secretResolver,
     databaseName: "chalk_dev",
+    postgres: {
+      container: env.CHALK_POSTGRES_CONTAINER || "chalk-postgres",
+      volume: env.CHALK_POSTGRES_VOLUME || "chalk-postgres",
+    },
     redis: {
       port: redisPort,
       container: env.CHALK_REDIS_CONTAINER || "chalk-dev-redis",
