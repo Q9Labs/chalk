@@ -441,6 +441,9 @@ const server = createServer(async (request, response) => {
             state.hideTranscripts = value === "pending";
             state.transcriptionPending = value === "pending";
             state.finishedTranscript = "complete";
+          } else if (key === "admission") {
+            if (!["anyone", "knock"].includes(value)) return fail(response, 400, "invalid_admission");
+            accounts.hasan.calls[0].admission = value;
           } else if (key === "metadataComplete") {
             for (const session of accounts.hasan.sessions) if (session.kept === "processing") session.kept = "done";
             state.finishedTranscript = value;

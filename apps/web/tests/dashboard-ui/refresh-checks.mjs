@@ -296,11 +296,9 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
 
 export async function missingMetadataChecks({ open, fixture, check, CALL }) {
   for (const status of [403, 404, 410]) {
-    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure", clock: true });
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure&admission=knock", clock: true });
     try {
       await tab.getByText("Transcript processing", { exact: true }).waitFor();
-      await tab.getByRole("button", { name: "Ask to join", exact: true }).click();
-      await tab.waitForLoadState("networkidle");
       const reads = async (page) => (await fixture("log")).filter((entry) => entry.path === `/dashboard-api/${page}`).length;
       const full = await reads("call");
       await tab.route("**/dashboard-api/call-metadata?*", (route) => route.fulfill({ status, json: { error: { code: "artifact_unavailable" } } }));
@@ -592,6 +590,9 @@ export async function reviewPollChecks({ open, fixture, check, CALL }) {
     try {
       const initial = await reads();
       await tab.getByRole("button", { name: "Deny", exact: true }).click();
+      const settled = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+      await tab.clock.runFor(3000);
+      await settled;
       await tab.locator(".orow").waitFor({ state: "hidden" });
       await tab.waitForTimeout(150);
       await tab.waitForLoadState("networkidle");
