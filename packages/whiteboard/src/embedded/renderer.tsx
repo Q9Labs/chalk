@@ -134,6 +134,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
           board={canvas}
           primary={boardContext.primary}
           phone={boardContext.phone}
+          landscapeControlsVisible={boardContext.landscapeControlsVisible}
           visible
           colorScheme={configuration.theme}
           isHost={configuration.canClear}

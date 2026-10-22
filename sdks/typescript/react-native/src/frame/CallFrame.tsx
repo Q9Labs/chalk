@@ -28,6 +28,7 @@ import { PortalHost, usePortalCount } from "./portal";
 import { useMeasuredRef } from "./measurement";
 import { usePreferences } from "./preferences";
 import { frameRegions } from "./regions";
+import { LandscapeControlsContext } from "./call-controls";
 
 export type CallFrameProps = {
   readonly displayName?: string;
@@ -127,7 +128,9 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
     <View ref={screenRef} style={screenStyle} testID="frame.screen">
       <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} />
       <View accessibilityElementsHidden={layered} importantForAccessibility={layered ? "no-hide-descendants" : "auto"} style={StyleSheet.absoluteFill}>
-        <Stage frame={regions.stage} onOpenPeople={() => setSheet("people")} />
+        <LandscapeControlsContext.Provider value={layout.arrangement === "landscape" && !chrome.hidden}>
+          <Stage frame={regions.stage} onOpenPeople={() => setSheet("people")} />
+        </LandscapeControlsContext.Provider>
         {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
         <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chrome.style]}>
           <Header arrangement={layout.arrangement} callName={callName} detailsOpen={sheet === "details"} onOpenDetails={() => setSheet("details")} ref={nameRef} />

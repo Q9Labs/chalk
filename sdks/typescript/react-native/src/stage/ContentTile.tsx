@@ -1,10 +1,11 @@
 import { ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
 import { useDeviceLayout } from "../frame/device-layout";
+import { LandscapeControlsContext } from "../frame/call-controls";
 import { useDevScenario } from "../frame/dev-scenario";
 import { useMeasuredRef } from "../frame/measurement";
 import { createNativeMediaStream } from "../media/native-webrtc";
@@ -71,6 +72,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
   const { colors, scheme } = useTheme();
   const view = useStageView();
   const { width, height } = useDeviceLayout();
+  const landscapeControlsVisible = useContext(LandscapeControlsContext);
   const phone = Math.min(width, height) < 600;
   const status = useSpaceSelector(selectBoard);
   const roster = useSpaceSelector(selectRoster);
@@ -84,6 +86,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
     () => ({
       primary: !mini,
       phone,
+      landscapeControlsVisible,
       following: view.following,
       ownParticipantId: selfId,
       people: roster.map((person) => ({ id: person.participantId, displayName: person.displayName })),
@@ -94,7 +97,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
       viewsAvailable: capabilities.viewsAvailable,
       colors,
     }),
-    [mini, phone, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, colors],
+    [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, colors],
   );
   const onClose = useCallback(() => {
     view.setBoardOpen(false);

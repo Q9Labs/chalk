@@ -20,6 +20,7 @@ export type ChalkEmbeddedBoardNotice = { readonly id: string; readonly message: 
 export type ChalkEmbeddedBoardContext = {
   readonly primary: boolean;
   readonly phone: boolean;
+  readonly landscapeControlsVisible?: boolean;
   readonly following: string | null;
   readonly ownParticipantId: string | null;
   readonly people: readonly { readonly id: string; readonly displayName: string }[];

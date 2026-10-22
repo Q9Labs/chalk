@@ -55,6 +55,7 @@ export type BoardProps = {
   readonly primary: boolean;
   readonly visible: boolean;
   readonly phone?: boolean;
+  readonly landscapeControlsVisible?: boolean;
   readonly presentation?: "web" | "mobile";
   readonly colorScheme: CallTheme;
   readonly people: readonly { readonly id: string; readonly displayName: string }[];
@@ -262,7 +263,29 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
  * Chalk's board: Excalidraw draws, and every control around it is the call's own. Each person picks their own
  * surface and island place; the drawing, the cursors and the views are shared.
  */
-export function Board({ board, primary, visible, colorScheme, people, following, onFollow, sendView, onClose, isHost, connectionStatus, sceneId, sceneStatus, ownParticipantId, viewBounds, renderCursorAvatar, onExport, phone: phoneOverride, downloadLabel, presentation = "web" }: BoardProps) {
+export function Board({
+  board,
+  primary,
+  visible,
+  colorScheme,
+  people,
+  following,
+  onFollow,
+  sendView,
+  onClose,
+  isHost,
+  connectionStatus,
+  sceneId,
+  sceneStatus,
+  ownParticipantId,
+  viewBounds,
+  renderCursorAvatar,
+  onExport,
+  phone: phoneOverride,
+  downloadLabel,
+  presentation = "web",
+  landscapeControlsVisible = false,
+}: BoardProps) {
   const root = useRef<HTMLDivElement | null>(null);
   const offline = connectionStatus === "reconnecting";
   const smallViewport = useMediaQuery("(max-width: 640px)");
@@ -575,7 +598,20 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const followed = following ? nameOf(following) : null;
   const ready = engine !== null;
   return (
-    <div ref={root} className="chalk-board" data-presentation={presentation} data-surface={surface} data-theme={colorScheme} data-ready={ready || undefined} data-compact={compact || undefined} data-primary={primary || undefined} data-elements={elementCount} style={surfaceVars} hidden={!visible}>
+    <div
+      ref={root}
+      className="chalk-board"
+      data-presentation={presentation}
+      data-call-controls={landscapeControlsVisible || undefined}
+      data-surface={surface}
+      data-theme={colorScheme}
+      data-ready={ready || undefined}
+      data-compact={compact || undefined}
+      data-primary={primary || undefined}
+      data-elements={elementCount}
+      style={surfaceVars}
+      hidden={!visible}
+    >
       <BoardStyles />
       <WhiteboardCanvas {...board} headless canDraw={canDraw} collab={board.collab ? { ...board.collab, canDraw, canManage: isHost } : undefined} inkColor={ink} theme="light" isVisible={visible} className="chalk-board-engine" onEngineReady={setEngine} />
       {!ready ? (
