@@ -114,8 +114,10 @@ func TestRunLoopHonorsDigitalOcean429Burst(t *testing.T) {
 					header := make(http.Header)
 					switch len(calls) {
 					case 1:
+						// DigitalOcean's documented burst 429: zero remaining, a Retry-After, and a far reset.
+						header.Set("RateLimit-Remaining", "0")
 						header.Set("Retry-After", "13")
-						header.Set("RateLimit-Reset", strconv.FormatInt(time.Now().Add(27*time.Second).Unix(), 10))
+						header.Set("RateLimit-Reset", strconv.FormatInt(time.Now().Add(50*time.Minute).Unix(), 10))
 					case 3:
 						header.Set("Retry-After", time.Now().Add(33*time.Second).UTC().Format(http.TimeFormat))
 					case 4, 6:
@@ -136,7 +138,7 @@ func TestRunLoopHonorsDigitalOcean429Burst(t *testing.T) {
 				if err := runLoop(ctx, 5*time.Second, runner, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 					t.Fatal(err)
 				}
-				bounds := [][2]time.Duration{{27 * time.Second, 29 * time.Second}, {10 * time.Second, 13 * time.Second}, {32 * time.Second, 39 * time.Second}, {5 * time.Second, 5 * time.Second}, {5 * time.Second, 7 * time.Second}}
+				bounds := [][2]time.Duration{{13 * time.Second, 15 * time.Second}, {10 * time.Second, 13 * time.Second}, {32 * time.Second, 39 * time.Second}, {5 * time.Second, 5 * time.Second}, {5 * time.Second, 7 * time.Second}}
 				for i, bound := range bounds {
 					if got := calls[i+1].Sub(calls[i]); got < bound[0] || got > bound[1] {
 						t.Fatalf("request %d retry delay %s outside %s..%s", i+1, got, bound[0], bound[1])

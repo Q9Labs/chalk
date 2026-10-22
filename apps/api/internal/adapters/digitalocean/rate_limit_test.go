@@ -52,7 +52,8 @@ func TestRecorderFleetPreservesRateLimitDeadline(t *testing.T) {
 				return
 			}
 			minimum, maximum := 17*time.Second, 19*time.Second
-			if kind == "seconds" {
+			// A valid Retry-After wins over RateLimit-Reset, which is only its fallback.
+			if kind == "seconds" || kind == "both" {
 				minimum, maximum = 12*time.Second, 13*time.Second
 			}
 			if delay := limited.RetryDeadline().Sub(start); delay < minimum || delay > maximum {
@@ -73,7 +74,9 @@ func TestRecorderFleetDistinguishesBurstAndHourlyRateLimits(t *testing.T) {
 		{name: "burst seconds", remaining: "1234", retryAfter: "12"},
 		{name: "burst date", remaining: "1234", retryAfter: "date"},
 		{name: "unknown allowance", retryAfter: "12"},
-		{name: "hourly exhausted", remaining: "0", retryAfter: "12", wantHourly: true},
+		// DigitalOcean documents its burst 429 as remaining 0 with a Retry-After.
+		{name: "burst with zero remaining", remaining: "0", retryAfter: "12"},
+		{name: "hourly without retry", remaining: "0", wantHourly: true},
 		{name: "hourly invalid retry", remaining: "0", retryAfter: "invalid", wantHourly: true},
 		{name: "burst without retry", remaining: "1234", wantZero: true},
 	} {
