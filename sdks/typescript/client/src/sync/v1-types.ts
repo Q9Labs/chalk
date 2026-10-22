@@ -238,3 +238,6 @@ export type V1SyncClientOptions = {
   readonly maxPendingCollaborationRequests?: number;
 };
 export type V1Socket = SyncSocket;
+
+/** Explicit host pause; control revisions do not identify a self-media operation. */
+export type V1MediaPause = { readonly source: V1MediaSource; readonly revision: number };

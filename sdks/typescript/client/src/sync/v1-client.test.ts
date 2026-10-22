@@ -765,6 +765,27 @@ describe("V1SyncClient", () => {
     await recovering;
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
+  it.each([
+    ["participant_microphone_stopped", "microphone"],
+    ["participant_camera_stopped", "camera"],
+    ["participant_screen_share_stopped", "screen"],
+  ] as const)("delivers an explicit self %s once, not from projections", async (name, source) => {
+    const { client, socket, state } = await liveClient();
+    const pause = vi.fn();
+    const unsubscribe = client.onMediaPause(pause);
+    try {
+      const digest = await computeV1StateDigest({ ...state, revision: 2 });
+      const event = { ...eventBase("participant_microphone_stopped"), name, resulting_state_digest: digest, payload: { participant_id: ownerId }, external_operation_id: commandIds[0] };
+      socket.receive(event);
+      socket.receive(event);
+      await vi.waitFor(() => expect(client.getSnapshot().control?.revision).toBe(2));
+      await settle();
+      expect(pause).toHaveBeenCalledExactlyOnceWith({ source, revision: 2 });
+    } finally {
+      unsubscribe();
+      client.stop();
+    }
+  });
   it("sends self media as live targets and completes from explicit results", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const microphone = client.setMicrophoneEnabled(true, { requestId: commandIds[0] });

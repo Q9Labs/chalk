@@ -20,6 +20,7 @@ import type {
   V1DirectedRequestResult,
   V1MediaPublication,
   V1MediaSource,
+  V1MediaPause,
   V1PendingTarget,
   V1Presence,
   V1Projection,
@@ -65,6 +66,7 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly #options: V1SyncClientOptions;
   readonly #commandScheduler: V1CommandScheduler;
   readonly #listeners = new Set<(snapshot: V1EpisodeSnapshot) => void>();
+  readonly #mediaPauseListeners = new Set<(pause: V1MediaPause) => void>();
   readonly #requestListeners = new Set<(request: V1DirectedRequest) => void>();
   readonly #collaborationState: V1CollaborationState;
   readonly #controlHeads = new Map<number, string>();
@@ -201,6 +203,16 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#listeners.add(listener);
     listener(this.getSnapshot());
     return () => this.#listeners.delete(listener);
+  }
+  onMediaPause(listener: (pause: V1MediaPause) => void): () => void {
+    this.#mediaPauseListeners.add(listener);
+    return () => this.#mediaPauseListeners.delete(listener);
+  }
+  #notifyMediaPause(event: Extract<SyncV1ServerFrame, { type: "event" }>): void {
+    const source = event.name === "participant_microphone_stopped" ? "microphone" : event.name === "participant_camera_stopped" ? "camera" : event.name === "participant_screen_share_stopped" ? "screen" : null;
+    if (source && "participant_id" in event.payload && event.payload.participant_id === this.#participantId) {
+      for (const listener of this.#mediaPauseListeners) listener({ source, revision: event.revision });
+    }
   }
   onDirectedRequest(listener: (request: V1DirectedRequest) => void): () => void {
     this.#requestListeners.add(listener);
@@ -403,6 +415,7 @@ export class V1SyncClient implements V1CollaborationClient {
           this.#control = await applyV1Event(this.#requireControl(), frame);
           this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
           this.#rememberControlEvent(frame);
+          this.#notifyMediaPause(frame);
         }
         await this.#commandScheduler.settleTerminalLifecycle(frame, this.#participantId);
         await this.#commandScheduler.settleProven();
@@ -525,6 +538,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#control = await applyV1Event(this.#requireControl(), event);
       this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
       this.#rememberControlEvent(event);
+      this.#notifyMediaPause(event);
     }
     this.#ackRecovery();
     this.#emit();

@@ -1,3 +1,4 @@
+import { capturedClient, createConvergenceScenario, enterRecovery, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionSyncClient } from "../connection/dependencies";
 import type { V1DirectedRequest } from "../sync/v1-types";
@@ -218,7 +219,7 @@ describe("SpaceClient media convergence", () => {
       await new Promise((resolve) => setTimeout(resolve, 30));
       expect(replacement.stop).toHaveBeenCalled();
       expect(server, JSON.stringify(command.mock.calls.map(([v]) => v))).toBe(false);
-      expect(command.mock.calls.map(([v]) => v)).toEqual([false]);
+      expect(command.mock.calls.map(([v]) => v)).toEqual(barrier === "off-ack" ? [false, false] : [false]);
     } finally {
       finishPicker();
       finishOff();
@@ -316,7 +317,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it.each([false, true])("applies forced off only to the old publication (fresh publication: %s)", async (fresh) => {
+  it.each([false, true])("ignores untagged off projections (fresh publication: %s)", async (fresh) => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
     const close = vi.fn(async () => {
@@ -328,9 +329,9 @@ describe("SpaceClient media convergence", () => {
       await client.join({ microphone: true, camera: false });
       const active = observeMicrophonePublication(platform, track, { publicationId: fresh ? "fresh-publication" : "old-publication" });
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [{ ...active, enabled: false, publicationId: null }] } });
-      expect(close).toHaveBeenCalledTimes(fresh ? 0 : 1);
-      expect(track.enabled).toBe(fresh);
-      expect(client.getSnapshot().media.local.microphone.state).toBe(fresh ? "enabled" : "disabled");
+      expect(close).not.toHaveBeenCalled();
+      expect(track.enabled).toBe(true);
+      expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
     } finally {
       client.dispose();
     }
@@ -345,6 +346,7 @@ describe("SpaceClient media convergence", () => {
       await client.join({ microphone: true, camera: false });
       observeMicrophonePublication(platform, track, { control: { ...control, participants: [] } });
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [] } });
+      platform.emitMediaPause({ source: "microphone", revision: 2 });
       await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
       expect(client.getSnapshot().connection.status).toBe("live");
     } finally {
@@ -785,87 +787,9 @@ describe("SpaceClient media convergence", () => {
   });
 });
 
-function mediaTrack(): MediaStreamTrack {
-  return Object.assign(new EventTarget(), {
-    contentHint: "",
-    enabled: true,
-    id: "track-1",
-    kind: "audio",
-    label: "",
-    muted: false,
-    readyState: "live" as const,
-    onended: null,
-    onmute: null,
-    onunmute: null,
-    applyConstraints: async () => undefined,
-    clone: mediaTrack,
-    getCapabilities: () => ({}),
-    getConstraints: () => ({}),
-    getSettings: () => ({}),
-    stop: () => undefined,
-  });
-}
-
-function capturedClient(
-  platform: ReturnType<typeof createCoreTestPlatform>,
-  track: MediaStreamTrack,
-  overrides: { readonly mediaDevices?: Partial<NonNullable<typeof platform.dependencies.mediaDevices>>; readonly media?: Partial<ReturnType<typeof platform.dependencies.createMediaClient>>; readonly sync?: Partial<ConnectionSyncClient> } = {},
-): ReturnType<typeof createSpaceClientForPlatform> {
-  return createSpaceClientForPlatform(
-    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-    {
-      ...platform,
-      dependencies: {
-        ...platform.dependencies,
-        mediaDevices: { getUserMedia: async () => mediaStream(track), ...overrides.mediaDevices },
-        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), ...overrides.media }),
-        createSyncClient: () => ({ ...platform.sync, ...overrides.sync }),
-      },
-    },
-  );
-}
-
-function mediaStream(track: MediaStreamTrack): MediaStream {
-  return Object.assign(new EventTarget(), {
-    active: true,
-    id: "stream-1",
-    onaddtrack: null,
-    onremovetrack: null,
-    addTrack: () => undefined,
-    removeTrack: () => undefined,
-    clone: () => mediaStream(track),
-    getTracks: () => [track],
-    getAudioTracks: () => (track.kind === "audio" ? [track] : []),
-    getVideoTracks: () => (track.kind === "video" ? [track] : []),
-    getTrackById: (id: string) => (id === track.id ? track : null),
-  });
-}
-
-function createConvergenceScenario(source: "microphone" | "camera" | "screen", overrides: Parameters<typeof capturedClient>[2] = {}) {
-  const platform = createCoreTestPlatform();
-  const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video", stop: vi.fn() });
-  const capture = vi.fn(async () => mediaStream(track));
-  const command = vi.fn<ConnectionSyncClient["setMicrophoneEnabled"]>(async () => {
-    if (platform.sync.getSnapshot().connection.phase !== "live") throw new V1SyncError("Sync is recovering", "not_live");
-    return { operationId: "target", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
-  });
-  const client = capturedClient(platform, track, {
-    ...overrides,
-    mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, ...overrides.mediaDevices },
-    sync: { setMicrophoneEnabled: command, setCameraEnabled: command, setScreenShareEnabled: command, ...overrides.sync },
-  });
-  const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : source === "camera" ? client.media.setCameraEnabled : client.media.setScreenShareEnabled;
-  return { platform, track, capture, command, client, setEnabled };
-}
-
 async function joinWithSharedAudio(client: ReturnType<typeof createSpaceClientForPlatform>) {
   await client.join({ microphone: false, camera: false });
   await client.media.setScreenShareEnabled(true, { audio: true });
-}
-
-async function enterRecovery({ platform, client }: Pick<ReturnType<typeof createConvergenceScenario>, "platform" | "client">) {
-  platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
-  await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
 }
 
 async function resumeWithOff({ platform, command }: Pick<ReturnType<typeof createConvergenceScenario>, "platform" | "command">) {
