@@ -4332,6 +4332,17 @@ create table participant_join_seats (
 -- pending -> joined (hello), cancelled (HTTP), expired (lease).
 -- cancelled/expired -> pending (retry); joined -> left (normal departure trigger).
 -- +goose StatementBegin
+create function sync_admission_capacity_policy() returns table (
+    snapshot_reservation_bytes bigint, reservation_bytes bigint,
+    admission_events bigint, reserved_intents bigint,
+    max_snapshot_bytes bigint, max_events bigint, max_event_bytes bigint,
+    max_intents bigint, max_intent_bytes bigint, max_participants bigint
+) language sql immutable parallel safe as $$
+    select 2048::bigint, 16384::bigint, 2::bigint, 1::bigint,
+           1048576::bigint, 2048::bigint, 33554432::bigint,
+           2048::bigint, 33554432::bigint, 500::bigint;
+$$;
+
 create function transition_participant_join_seat(
     seat_tenant uuid, seat_space uuid, seat_episode uuid, seat_participant uuid,
     seat_generation bigint, action text, expected_connection text default null
@@ -4340,7 +4351,9 @@ declare
     seat participant_join_seats%rowtype;
     intent sync_lifecycle_intents%rowtype;
     terminal_state text;
+    capacity record;
 begin
+    select * into strict capacity from sync_admission_capacity_policy();
     if action not in ('confirm', 'cancel', 'expire', 'retry') then
         raise exception 'invalid participant join transition';
     end if;
@@ -4418,11 +4431,11 @@ begin
         where participant_id=seat_participant;
         update participants set status='left', left_at=now(), updated_at=now() where id=seat_participant;
         update sync_episode_control set
-            snapshot_reserved_bytes=snapshot_reserved_bytes-2048,
-            lifecycle_reserved_events=lifecycle_reserved_events-2,
-            lifecycle_reserved_bytes=lifecycle_reserved_bytes-32768,
-            lifecycle_reserved_intents=lifecycle_reserved_intents-1,
-            lifecycle_reserved_intent_bytes=lifecycle_reserved_intent_bytes-16384,
+            snapshot_reserved_bytes=snapshot_reserved_bytes-capacity.snapshot_reservation_bytes,
+            lifecycle_reserved_events=lifecycle_reserved_events-capacity.admission_events,
+            lifecycle_reserved_bytes=lifecycle_reserved_bytes-capacity.admission_events * capacity.reservation_bytes,
+            lifecycle_reserved_intents=lifecycle_reserved_intents-capacity.reserved_intents,
+            lifecycle_reserved_intent_bytes=lifecycle_reserved_intent_bytes-capacity.reservation_bytes,
             updated_at=now()
         where tenant_id=seat_tenant and space_id=seat_space and episode_id=seat_episode;
         seat.state := terminal_state;
@@ -4430,20 +4443,20 @@ begin
 
     if action='retry' and seat.state in ('cancelled','expired') then
         update sync_episode_control set
-            snapshot_reserved_bytes=snapshot_reserved_bytes+2048,
-            lifecycle_reserved_events=lifecycle_reserved_events+2,
-            lifecycle_reserved_bytes=lifecycle_reserved_bytes+32768,
-            lifecycle_reserved_intents=lifecycle_reserved_intents+1,
-            lifecycle_reserved_intent_bytes=lifecycle_reserved_intent_bytes+16384,
+            snapshot_reserved_bytes=snapshot_reserved_bytes+capacity.snapshot_reservation_bytes,
+            lifecycle_reserved_events=lifecycle_reserved_events+capacity.admission_events,
+            lifecycle_reserved_bytes=lifecycle_reserved_bytes+capacity.admission_events * capacity.reservation_bytes,
+            lifecycle_reserved_intents=lifecycle_reserved_intents+capacity.reserved_intents,
+            lifecycle_reserved_intent_bytes=lifecycle_reserved_intent_bytes+capacity.reservation_bytes,
             updated_at=now()
         where tenant_id=seat_tenant and space_id=seat_space and episode_id=seat_episode
-          and snapshot_bytes+snapshot_reserved_bytes+2048 <= 1048576
-          and lifecycle_event_count+lifecycle_reserved_events+2 <= 2048
-          and lifecycle_event_bytes+lifecycle_reserved_bytes+32768 <= 33554432
-          and lifecycle_intent_count+lifecycle_reserved_intents+1 <= 2048
-          and lifecycle_intent_bytes+lifecycle_reserved_intent_bytes+16384 <= 33554432
+          and snapshot_bytes+snapshot_reserved_bytes+capacity.snapshot_reservation_bytes <= capacity.max_snapshot_bytes
+          and lifecycle_event_count+lifecycle_reserved_events+capacity.admission_events <= capacity.max_events
+          and lifecycle_event_bytes+lifecycle_reserved_bytes+capacity.admission_events * capacity.reservation_bytes <= capacity.max_event_bytes
+          and lifecycle_intent_count+lifecycle_reserved_intents+capacity.reserved_intents <= capacity.max_intents
+          and lifecycle_intent_bytes+lifecycle_reserved_intent_bytes+capacity.reservation_bytes <= capacity.max_intent_bytes
           and (select count(*) from participants where tenant_id=seat_tenant and space_id=seat_space
-            and episode_id=seat_episode and status in ('joining','active','leaving')) < 500;
+            and episode_id=seat_episode and status in ('joining','active','leaving')) < capacity.max_participants;
         if not found then return 'capacity_exceeded'; end if;
         update participants set status='joining', generation=generation+1, left_at=null, media_connection_id=null,
             media_connection_generation=null, updated_at=now() where id=seat_participant;

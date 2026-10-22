@@ -190,12 +190,17 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		operation["parameters"] = g.parameters(route.Parameters)
 	}
 
+	rateLimits := make([]map[string]any, 0, 1+len(route.SharedRateLimits))
 	if route.RateLimit.Name != "" {
-		operation["x-chalk-rate-limit"] = map[string]any{
-			"name":           route.RateLimit.Name,
-			"limit":          route.RateLimit.Limit,
-			"window_seconds": int(route.RateLimit.Window.Seconds()),
-		}
+		primary := rateLimitContract(route.RateLimit)
+		operation["x-chalk-rate-limit"] = primary
+		rateLimits = append(rateLimits, primary)
+	}
+	for _, shared := range route.SharedRateLimits {
+		rateLimits = append(rateLimits, rateLimitContract(shared))
+	}
+	if len(rateLimits) > 0 {
+		operation["x-chalk-rate-limits"] = rateLimits
 	}
 
 	if route.Request != nil {
@@ -216,6 +221,10 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		g.doc.Paths[route.Path] = make(map[string]any)
 	}
 	g.doc.Paths[route.Path][method] = operation
+}
+
+func rateLimitContract(policy ratelimit.Policy) map[string]any {
+	return map[string]any{"name": policy.Name, "limit": policy.Limit, "window_seconds": int(policy.Window.Seconds())}
 }
 
 func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {

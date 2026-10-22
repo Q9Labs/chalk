@@ -112,7 +112,7 @@ type Model = {
   refreshInFlight: boolean;
   recoveryQueued: RecoveryKind | null;
   joinCancelled: boolean;
-  admissionCleanupConfirmed: boolean;
+  admissionCleanup: "cancelled" | "not_cancelled" | "unknown";
   closed: boolean;
   epoch: number;
 };
@@ -200,7 +200,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         refreshInFlight: false,
         recoveryQueued: null,
         joinCancelled: false,
-        admissionCleanupConfirmed: true,
+        admissionCleanup: "cancelled",
         closed: false,
         epoch: 0,
       };
@@ -438,7 +438,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
-            model.admissionCleanupConfirmed = false;
+            model.admissionCleanup = "unknown";
             const media = yield* trace(
               "create_media_client",
               Effect.try({
@@ -491,9 +491,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
                   const retry = !retried && failure.code === "invalid_access";
                   if (!retry) yield* recordFailure(failure);
-                  model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
+                  model.admissionCleanup = yield* cancelPendingAdmission();
                   yield* stopPorts();
-                  if (retry) return yield* performJoin(model.admissionCleanupConfirmed ? "join" : "access_retry", true);
+                  if (retry) return yield* performJoin(model.admissionCleanup === "not_cancelled" ? "access_retry" : "join", true);
                   yield* transition("failed");
                   return yield* Effect.fail(failure);
                 }),
@@ -525,19 +525,20 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* transition("left");
           if (!confirmed) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, "The Episode left locally without a durable Leave acknowledgement"));
         });
-      const cancelPendingAdmission = (): Effect.Effect<boolean> =>
+      const cancelPendingAdmission = (): Effect.Effect<Model["admissionCleanup"]> =>
         Effect.gen(function* () {
           const grant = access.currentUnsafe();
-          if (!grant) return model.admissionCleanupConfirmed;
+          if (!grant) return model.admissionCleanup;
           const cancel = platform.cancelPendingAdmission;
-          if (!cancel) return false;
+          if (!cancel) return "not_cancelled";
           const result = yield* Effect.exit(
             Effect.tryPromise({
               try: (signal) => cancel(grant, signal),
               catch: (cause) => lifecycleFailure("internal_error", true, "Admission cancellation failed", cause),
             }).pipe(Effect.timeout(3000)),
           );
-          return result._tag === "Success" && result.value;
+          if (result._tag !== "Success") return "unknown";
+          return result.value ? "cancelled" : "not_cancelled";
         });
       const leaveIsConfirmed = (): Effect.Effect<boolean> =>
         Effect.gen(function* leaveIsConfirmedEffect() {
@@ -547,7 +548,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const leave = foreign(() => sync.leave()).pipe(Effect.timeout(LEAVE_TIMEOUT_MS));
             if ((yield* Effect.exit(leave))._tag === "Success") return true;
           }
-          return yield* cancelPendingAdmission();
+          return (yield* cancelPendingAdmission()) === "cancelled";
         });
       const publishFreshAccess = (): Effect.Effect<void> =>
         enqueue(
@@ -1202,6 +1203,6 @@ function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | unde
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const reason = snapshot.connection.terminalReason;
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
-  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
 }

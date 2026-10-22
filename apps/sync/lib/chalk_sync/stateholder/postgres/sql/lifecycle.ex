@@ -84,22 +84,22 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      snapshot_reserved_bytes = snapshot_reserved_bytes - 2048,
+      snapshot_reserved_bytes = snapshot_reserved_bytes - (select snapshot_reservation_bytes from sync_admission_capacity_policy()),
       lifecycle_event_count = lifecycle_event_count + 1,
       lifecycle_event_bytes = lifecycle_event_bytes + $9,
       lifecycle_reserved_events = lifecycle_reserved_events - 1,
-      lifecycle_reserved_bytes = lifecycle_reserved_bytes - 16384,
+      lifecycle_reserved_bytes = lifecycle_reserved_bytes - (select reservation_bytes from sync_admission_capacity_policy()),
       updated_at = now()
     where tenant_id = $1
       and space_id = $2
       and episode_id = $3
       and control_revision = $4 - 1
-      and snapshot_reserved_bytes >= 2048
-      and $8 + snapshot_reserved_bytes - 2048 <= 1048576
+      and snapshot_reserved_bytes >= (select snapshot_reservation_bytes from sync_admission_capacity_policy())
+      and $8 + snapshot_reserved_bytes - (select snapshot_reservation_bytes from sync_admission_capacity_policy()) <= (select max_snapshot_bytes from sync_admission_capacity_policy())
       and lifecycle_reserved_events >= 1
-      and lifecycle_reserved_bytes >= 16384
-      and lifecycle_event_count < 2048
-      and lifecycle_event_bytes + $9 <= 33554432
+      and lifecycle_reserved_bytes >= (select reservation_bytes from sync_admission_capacity_policy())
+      and lifecycle_event_count < (select max_events from sync_admission_capacity_policy())
+      and lifecycle_event_bytes + $9 <= (select max_event_bytes from sync_admission_capacity_policy())
     returning control_revision
     """
   end
@@ -116,17 +116,17 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
       lifecycle_event_count = lifecycle_event_count + 1,
       lifecycle_event_bytes = lifecycle_event_bytes + $9,
       lifecycle_reserved_events = lifecycle_reserved_events - 1,
-      lifecycle_reserved_bytes = lifecycle_reserved_bytes - 16384,
+      lifecycle_reserved_bytes = lifecycle_reserved_bytes - (select reservation_bytes from sync_admission_capacity_policy()),
       updated_at = now()
     where tenant_id = $1
       and space_id = $2
       and episode_id = $3
       and control_revision = $4 - 1
-      and $8 + snapshot_reserved_bytes <= 1048576
+      and $8 + snapshot_reserved_bytes <= (select max_snapshot_bytes from sync_admission_capacity_policy())
       and lifecycle_reserved_events >= 1
-      and lifecycle_reserved_bytes >= 16384
-      and lifecycle_event_count < 2048
-      and lifecycle_event_bytes + $9 <= 33554432
+      and lifecycle_reserved_bytes >= (select reservation_bytes from sync_admission_capacity_policy())
+      and lifecycle_event_count < (select max_events from sync_admission_capacity_policy())
+      and lifecycle_event_bytes + $9 <= (select max_event_bytes from sync_admission_capacity_policy())
     returning control_revision
     """
   end
@@ -152,11 +152,11 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
       and space_id = $2
       and episode_id = $3
       and control_revision = $4 - 1
-      and $8 <= 1048576
+      and $8 <= (select max_snapshot_bytes from sync_admission_capacity_policy())
       and lifecycle_reserved_events >= 1
-      and lifecycle_reserved_bytes >= 16384
-      and lifecycle_event_count < 2048
-      and lifecycle_event_bytes + $9 <= 33554432
+      and lifecycle_reserved_bytes >= (select reservation_bytes from sync_admission_capacity_policy())
+      and lifecycle_event_count < (select max_events from sync_admission_capacity_policy())
+      and lifecycle_event_bytes + $9 <= (select max_event_bytes from sync_admission_capacity_policy())
     returning control_revision
     """
   end

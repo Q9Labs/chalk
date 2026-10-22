@@ -81,6 +81,13 @@ func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint
 	return e
 }
 
+// SharedRateLimits describes resource quotas enforced by endpoint middleware,
+// after the primary caller quota. It does not install another caller limiter.
+func (e Endpoint[Request, Response]) SharedRateLimits(policies ...ratelimit.Policy) Endpoint[Request, Response] {
+	e.contract.SharedRateLimits = policies
+	return e
+}
+
 func (e Endpoint[Request, Response]) RequestBody(name string, sample any) Endpoint[Request, Response] {
 	e.contract.Request = &APISchemaRef{Name: name, Type: sample}
 	e.contract.BodyLimitBytes = maxRequestBodyBytes

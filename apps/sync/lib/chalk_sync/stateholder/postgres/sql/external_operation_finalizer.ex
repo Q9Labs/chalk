@@ -242,15 +242,15 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
       state_schema_version = $6,
       state_digest = $7,
       snapshot_bytes = $8,
-      snapshot_reserved_bytes = greatest(snapshot_reserved_bytes - 2048, 0),
+      snapshot_reserved_bytes = greatest(snapshot_reserved_bytes - (select snapshot_reservation_bytes from sync_admission_capacity_policy()), 0),
       lifecycle_reserved_events = greatest(lifecycle_reserved_events - 1, 0),
-      lifecycle_reserved_bytes = greatest(lifecycle_reserved_bytes - 16384, 0),
+      lifecycle_reserved_bytes = greatest(lifecycle_reserved_bytes - (select reservation_bytes from sync_admission_capacity_policy()), 0),
       participant_event_count = participant_event_count + 1,
       participant_event_bytes = participant_event_bytes + $9,
       updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and control_revision = $4 - 1
-      and $8 + greatest(snapshot_reserved_bytes - 2048, 0) <= 1048576
+      and $8 + greatest(snapshot_reserved_bytes - (select snapshot_reservation_bytes from sync_admission_capacity_policy()), 0) <= 1048576
       and participant_event_count < 250000
       and participant_event_bytes + $9 <= 2147483648
     returning control_revision

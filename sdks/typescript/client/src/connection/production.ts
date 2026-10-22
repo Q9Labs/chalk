@@ -25,7 +25,8 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       });
       if (!response.ok) throw new Error(`Admission cancellation failed with HTTP ${response.status}`);
       const body: unknown = await response.json();
-      return typeof body === "object" && body !== null && "cancelled" in body && body.cancelled === true;
+      if (typeof body !== "object" || body === null || !("cancelled" in body) || typeof body.cancelled !== "boolean") throw new Error("Admission cancellation returned an invalid outcome");
+      return body.cancelled;
     },
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, input),
     createSyncClient: (input) => createSyncClient(options.syncURL, input),

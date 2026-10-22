@@ -557,14 +557,16 @@ function collectOperationPolicies(document) {
         continue;
       }
       const rateLimit = operation["x-chalk-rate-limit"];
+      const rateLimits = operation["x-chalk-rate-limits"] ?? (rateLimit ? [rateLimit] : []);
       const maxBodyBytes = operation["x-chalk-max-body-bytes"];
-      if (!rateLimit && !maxBodyBytes) {
+      if (!rateLimits.length && !maxBodyBytes) {
         continue;
       }
       policies.push({
         operationId: operation.operationId,
         value: {
           ...(maxBodyBytes ? { maxBodyBytes } : {}),
+          ...(rateLimits.length ? { rateLimits: rateLimits.map(({ limit, name, window_seconds }) => ({ limit, policy: name, windowSeconds: window_seconds })) } : {}),
           ...(rateLimit
             ? {
                 rateLimit: {

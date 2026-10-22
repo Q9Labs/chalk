@@ -234,23 +234,24 @@ limit 1;
 -- name: ReserveParticipantAdmission :one
 update sync_episode_control
 set
-    snapshot_reserved_bytes = snapshot_reserved_bytes + sqlc.arg(snapshot_reservation_bytes),
-    lifecycle_reserved_events = lifecycle_reserved_events + 2,
-    lifecycle_reserved_bytes = lifecycle_reserved_bytes + 2 * sqlc.arg(reservation_bytes)::bigint,
+    snapshot_reserved_bytes = snapshot_reserved_bytes + capacity.snapshot_reservation_bytes,
+    lifecycle_reserved_events = lifecycle_reserved_events + capacity.admission_events,
+    lifecycle_reserved_bytes = lifecycle_reserved_bytes + capacity.admission_events * capacity.reservation_bytes,
     lifecycle_intent_count = lifecycle_intent_count + 1,
     lifecycle_intent_bytes = lifecycle_intent_bytes + sqlc.arg(intent_payload_bytes),
-    lifecycle_reserved_intents = lifecycle_reserved_intents + 1,
-    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + sqlc.arg(reservation_bytes)::bigint,
+    lifecycle_reserved_intents = lifecycle_reserved_intents + capacity.reserved_intents,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + capacity.reservation_bytes,
     updated_at = now()
+from sync_admission_capacity_policy() capacity
 where
     sync_episode_control.tenant_id = sqlc.arg(tenant_id)
     and sync_episode_control.space_id = sqlc.arg(space_id)
     and sync_episode_control.episode_id = sqlc.arg(episode_id)
-    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + sqlc.arg(snapshot_reservation_bytes) <= 1048576
-    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + 2 <= 2048
-    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + 2 * sqlc.arg(reservation_bytes)::bigint <= 33554432
-    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 2 <= 2048
-    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + sqlc.arg(intent_payload_bytes) + sqlc.arg(reservation_bytes)::bigint <= 33554432
+    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + capacity.snapshot_reservation_bytes <= capacity.max_snapshot_bytes
+    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + capacity.admission_events <= capacity.max_events
+    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + capacity.admission_events * capacity.reservation_bytes <= capacity.max_event_bytes
+    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 1 + capacity.reserved_intents <= capacity.max_intents
+    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + sqlc.arg(intent_payload_bytes) + capacity.reservation_bytes <= capacity.max_intent_bytes
     and (
         select count(*)
         from participants
@@ -259,29 +260,30 @@ where
             and participants.space_id = sync_episode_control.space_id
             and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
-    ) < sqlc.arg(max_active_participants)::bigint
-returning *;
+    ) < capacity.max_participants
+returning sync_episode_control.*;
 
 -- name: ReserveKnockAdmission :one
 update sync_episode_control
 set
-    snapshot_reserved_bytes = snapshot_reserved_bytes + sqlc.arg(snapshot_reservation_bytes),
-    lifecycle_reserved_events = lifecycle_reserved_events + 3,
-    lifecycle_reserved_bytes = lifecycle_reserved_bytes + 3 * sqlc.arg(reservation_bytes)::bigint,
+    snapshot_reserved_bytes = snapshot_reserved_bytes + capacity.snapshot_reservation_bytes,
+    lifecycle_reserved_events = lifecycle_reserved_events + capacity.admission_events + 1,
+    lifecycle_reserved_bytes = lifecycle_reserved_bytes + (capacity.admission_events + 1) * capacity.reservation_bytes,
     lifecycle_intent_count = lifecycle_intent_count + 2,
     lifecycle_intent_bytes = lifecycle_intent_bytes + sqlc.arg(requested_payload_bytes) + sqlc.arg(join_payload_bytes),
-    lifecycle_reserved_intents = lifecycle_reserved_intents + 1,
-    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + sqlc.arg(reservation_bytes)::bigint,
+    lifecycle_reserved_intents = lifecycle_reserved_intents + capacity.reserved_intents,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + capacity.reservation_bytes,
     updated_at = now()
+from sync_admission_capacity_policy() capacity
 where
     sync_episode_control.tenant_id = sqlc.arg(tenant_id)
     and sync_episode_control.space_id = sqlc.arg(space_id)
     and sync_episode_control.episode_id = sqlc.arg(episode_id)
-    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + sqlc.arg(snapshot_reservation_bytes) <= 1048576
-    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + 3 <= 2048
-    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + 3 * sqlc.arg(reservation_bytes)::bigint <= 33554432
-    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 3 <= 2048
-    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + sqlc.arg(requested_payload_bytes) + sqlc.arg(join_payload_bytes) + sqlc.arg(reservation_bytes)::bigint <= 33554432
+    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + capacity.snapshot_reservation_bytes <= capacity.max_snapshot_bytes
+    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + capacity.admission_events + 1 <= capacity.max_events
+    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + (capacity.admission_events + 1) * capacity.reservation_bytes <= capacity.max_event_bytes
+    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 2 + capacity.reserved_intents <= capacity.max_intents
+    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + sqlc.arg(requested_payload_bytes) + sqlc.arg(join_payload_bytes) + capacity.reservation_bytes <= capacity.max_intent_bytes
     and (
         select count(*)
         from participants
@@ -290,8 +292,8 @@ where
             and participants.space_id = sync_episode_control.space_id
             and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
-    ) < sqlc.arg(max_active_participants)::bigint
-returning *;
+    ) < capacity.max_participants
+returning sync_episode_control.*;
 
 -- name: CreateAdmissionRequest :one
 insert into sync_admission_requests (

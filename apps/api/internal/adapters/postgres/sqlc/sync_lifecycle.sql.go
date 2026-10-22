@@ -2259,23 +2259,24 @@ func (q *Queries) ReserveEpisodeEnd(ctx context.Context, arg ReserveEpisodeEndPa
 const reserveKnockAdmission = `-- name: ReserveKnockAdmission :one
 update sync_episode_control
 set
-    snapshot_reserved_bytes = snapshot_reserved_bytes + $1,
-    lifecycle_reserved_events = lifecycle_reserved_events + 3,
-    lifecycle_reserved_bytes = lifecycle_reserved_bytes + 3 * $2::bigint,
+    snapshot_reserved_bytes = snapshot_reserved_bytes + capacity.snapshot_reservation_bytes,
+    lifecycle_reserved_events = lifecycle_reserved_events + capacity.admission_events + 1,
+    lifecycle_reserved_bytes = lifecycle_reserved_bytes + (capacity.admission_events + 1) * capacity.reservation_bytes,
     lifecycle_intent_count = lifecycle_intent_count + 2,
-    lifecycle_intent_bytes = lifecycle_intent_bytes + $3 + $4,
-    lifecycle_reserved_intents = lifecycle_reserved_intents + 1,
-    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + $2::bigint,
+    lifecycle_intent_bytes = lifecycle_intent_bytes + $1 + $2,
+    lifecycle_reserved_intents = lifecycle_reserved_intents + capacity.reserved_intents,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + capacity.reservation_bytes,
     updated_at = now()
+from sync_admission_capacity_policy() capacity
 where
-    sync_episode_control.tenant_id = $5
-    and sync_episode_control.space_id = $6
-    and sync_episode_control.episode_id = $7
-    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + $1 <= 1048576
-    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + 3 <= 2048
-    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + 3 * $2::bigint <= 33554432
-    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 3 <= 2048
-    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + $3 + $4 + $2::bigint <= 33554432
+    sync_episode_control.tenant_id = $3
+    and sync_episode_control.space_id = $4
+    and sync_episode_control.episode_id = $5
+    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + capacity.snapshot_reservation_bytes <= capacity.max_snapshot_bytes
+    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + capacity.admission_events + 1 <= capacity.max_events
+    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + (capacity.admission_events + 1) * capacity.reservation_bytes <= capacity.max_event_bytes
+    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 2 + capacity.reserved_intents <= capacity.max_intents
+    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + $1 + $2 + capacity.reservation_bytes <= capacity.max_intent_bytes
     and (
         select count(*)
         from participants
@@ -2284,31 +2285,25 @@ where
             and participants.space_id = sync_episode_control.space_id
             and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
-    ) < $8::bigint
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+    ) < capacity.max_participants
+returning sync_episode_control.tenant_id, sync_episode_control.space_id, sync_episode_control.episode_id, sync_episode_control.control_revision, sync_episode_control.folded_state, sync_episode_control.state_schema_version, sync_episode_control.state_digest, sync_episode_control.snapshot_bytes, sync_episode_control.snapshot_reserved_bytes, sync_episode_control.participant_event_count, sync_episode_control.participant_event_bytes, sync_episode_control.lifecycle_event_count, sync_episode_control.lifecycle_event_bytes, sync_episode_control.lifecycle_reserved_events, sync_episode_control.lifecycle_reserved_bytes, sync_episode_control.lifecycle_intent_count, sync_episode_control.lifecycle_intent_bytes, sync_episode_control.lifecycle_reserved_intents, sync_episode_control.lifecycle_reserved_intent_bytes, sync_episode_control.receipt_count, sync_episode_control.receipt_bytes, sync_episode_control.retention_checkpoint_revision, sync_episode_control.retention_checkpoint_state_digest, sync_episode_control.retention_checkpoint_event_count, sync_episode_control.retention_cleaned_at, sync_episode_control.retention_deleted_event_rows, sync_episode_control.retention_deleted_event_bytes, sync_episode_control.retention_deleted_receipt_rows, sync_episode_control.retention_deleted_receipt_bytes, sync_episode_control.retention_deleted_lifecycle_intent_rows, sync_episode_control.retention_deleted_lifecycle_intent_bytes, sync_episode_control.retention_deleted_external_operation_rows, sync_episode_control.retention_deleted_external_operation_bytes, sync_episode_control.retention_deleted_admission_request_rows, sync_episode_control.retention_deleted_admission_request_bytes, sync_episode_control.retention_deleted_recording_rows, sync_episode_control.retention_deleted_recording_bytes, sync_episode_control.retention_deleted_screen_share_lease_rows, sync_episode_control.retention_deleted_screen_share_lease_bytes, sync_episode_control.retention_deleted_publication_fence_rows, sync_episode_control.retention_deleted_publication_fence_bytes, sync_episode_control.retention_deleted_publication_grant_reservation_rows, sync_episode_control.retention_deleted_publication_grant_reservation_bytes, sync_episode_control.created_at, sync_episode_control.updated_at
 `
 
 type ReserveKnockAdmissionParams struct {
-	SnapshotReservationBytes int64       `json:"snapshot_reservation_bytes"`
-	ReservationBytes         int64       `json:"reservation_bytes"`
-	RequestedPayloadBytes    int64       `json:"requested_payload_bytes"`
-	JoinPayloadBytes         int64       `json:"join_payload_bytes"`
-	TenantID                 pgtype.UUID `json:"tenant_id"`
-	SpaceID                  pgtype.UUID `json:"space_id"`
-	EpisodeID                pgtype.UUID `json:"episode_id"`
-	MaxActiveParticipants    int64       `json:"max_active_participants"`
+	RequestedPayloadBytes int64       `json:"requested_payload_bytes"`
+	JoinPayloadBytes      int64       `json:"join_payload_bytes"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) ReserveKnockAdmission(ctx context.Context, arg ReserveKnockAdmissionParams) (SyncEpisodeControl, error) {
 	row := q.db.QueryRow(ctx, reserveKnockAdmission,
-		arg.SnapshotReservationBytes,
-		arg.ReservationBytes,
 		arg.RequestedPayloadBytes,
 		arg.JoinPayloadBytes,
 		arg.TenantID,
 		arg.SpaceID,
 		arg.EpisodeID,
-		arg.MaxActiveParticipants,
 	)
 	var i SyncEpisodeControl
 	err := row.Scan(
@@ -2364,23 +2359,24 @@ func (q *Queries) ReserveKnockAdmission(ctx context.Context, arg ReserveKnockAdm
 const reserveParticipantAdmission = `-- name: ReserveParticipantAdmission :one
 update sync_episode_control
 set
-    snapshot_reserved_bytes = snapshot_reserved_bytes + $1,
-    lifecycle_reserved_events = lifecycle_reserved_events + 2,
-    lifecycle_reserved_bytes = lifecycle_reserved_bytes + 2 * $2::bigint,
+    snapshot_reserved_bytes = snapshot_reserved_bytes + capacity.snapshot_reservation_bytes,
+    lifecycle_reserved_events = lifecycle_reserved_events + capacity.admission_events,
+    lifecycle_reserved_bytes = lifecycle_reserved_bytes + capacity.admission_events * capacity.reservation_bytes,
     lifecycle_intent_count = lifecycle_intent_count + 1,
-    lifecycle_intent_bytes = lifecycle_intent_bytes + $3,
-    lifecycle_reserved_intents = lifecycle_reserved_intents + 1,
-    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + $2::bigint,
+    lifecycle_intent_bytes = lifecycle_intent_bytes + $1,
+    lifecycle_reserved_intents = lifecycle_reserved_intents + capacity.reserved_intents,
+    lifecycle_reserved_intent_bytes = lifecycle_reserved_intent_bytes + capacity.reservation_bytes,
     updated_at = now()
+from sync_admission_capacity_policy() capacity
 where
-    sync_episode_control.tenant_id = $4
-    and sync_episode_control.space_id = $5
-    and sync_episode_control.episode_id = $6
-    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + $1 <= 1048576
-    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + 2 <= 2048
-    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + 2 * $2::bigint <= 33554432
-    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 2 <= 2048
-    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + $3 + $2::bigint <= 33554432
+    sync_episode_control.tenant_id = $2
+    and sync_episode_control.space_id = $3
+    and sync_episode_control.episode_id = $4
+    and sync_episode_control.snapshot_bytes + sync_episode_control.snapshot_reserved_bytes + capacity.snapshot_reservation_bytes <= capacity.max_snapshot_bytes
+    and sync_episode_control.lifecycle_event_count + sync_episode_control.lifecycle_reserved_events + capacity.admission_events <= capacity.max_events
+    and sync_episode_control.lifecycle_event_bytes + sync_episode_control.lifecycle_reserved_bytes + capacity.admission_events * capacity.reservation_bytes <= capacity.max_event_bytes
+    and sync_episode_control.lifecycle_intent_count + sync_episode_control.lifecycle_reserved_intents + 1 + capacity.reserved_intents <= capacity.max_intents
+    and sync_episode_control.lifecycle_intent_bytes + sync_episode_control.lifecycle_reserved_intent_bytes + $1 + capacity.reservation_bytes <= capacity.max_intent_bytes
     and (
         select count(*)
         from participants
@@ -2389,29 +2385,23 @@ where
             and participants.space_id = sync_episode_control.space_id
             and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
-    ) < $7::bigint
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+    ) < capacity.max_participants
+returning sync_episode_control.tenant_id, sync_episode_control.space_id, sync_episode_control.episode_id, sync_episode_control.control_revision, sync_episode_control.folded_state, sync_episode_control.state_schema_version, sync_episode_control.state_digest, sync_episode_control.snapshot_bytes, sync_episode_control.snapshot_reserved_bytes, sync_episode_control.participant_event_count, sync_episode_control.participant_event_bytes, sync_episode_control.lifecycle_event_count, sync_episode_control.lifecycle_event_bytes, sync_episode_control.lifecycle_reserved_events, sync_episode_control.lifecycle_reserved_bytes, sync_episode_control.lifecycle_intent_count, sync_episode_control.lifecycle_intent_bytes, sync_episode_control.lifecycle_reserved_intents, sync_episode_control.lifecycle_reserved_intent_bytes, sync_episode_control.receipt_count, sync_episode_control.receipt_bytes, sync_episode_control.retention_checkpoint_revision, sync_episode_control.retention_checkpoint_state_digest, sync_episode_control.retention_checkpoint_event_count, sync_episode_control.retention_cleaned_at, sync_episode_control.retention_deleted_event_rows, sync_episode_control.retention_deleted_event_bytes, sync_episode_control.retention_deleted_receipt_rows, sync_episode_control.retention_deleted_receipt_bytes, sync_episode_control.retention_deleted_lifecycle_intent_rows, sync_episode_control.retention_deleted_lifecycle_intent_bytes, sync_episode_control.retention_deleted_external_operation_rows, sync_episode_control.retention_deleted_external_operation_bytes, sync_episode_control.retention_deleted_admission_request_rows, sync_episode_control.retention_deleted_admission_request_bytes, sync_episode_control.retention_deleted_recording_rows, sync_episode_control.retention_deleted_recording_bytes, sync_episode_control.retention_deleted_screen_share_lease_rows, sync_episode_control.retention_deleted_screen_share_lease_bytes, sync_episode_control.retention_deleted_publication_fence_rows, sync_episode_control.retention_deleted_publication_fence_bytes, sync_episode_control.retention_deleted_publication_grant_reservation_rows, sync_episode_control.retention_deleted_publication_grant_reservation_bytes, sync_episode_control.created_at, sync_episode_control.updated_at
 `
 
 type ReserveParticipantAdmissionParams struct {
-	SnapshotReservationBytes int64       `json:"snapshot_reservation_bytes"`
-	ReservationBytes         int64       `json:"reservation_bytes"`
-	IntentPayloadBytes       int64       `json:"intent_payload_bytes"`
-	TenantID                 pgtype.UUID `json:"tenant_id"`
-	SpaceID                  pgtype.UUID `json:"space_id"`
-	EpisodeID                pgtype.UUID `json:"episode_id"`
-	MaxActiveParticipants    int64       `json:"max_active_participants"`
+	IntentPayloadBytes int64       `json:"intent_payload_bytes"`
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) ReserveParticipantAdmission(ctx context.Context, arg ReserveParticipantAdmissionParams) (SyncEpisodeControl, error) {
 	row := q.db.QueryRow(ctx, reserveParticipantAdmission,
-		arg.SnapshotReservationBytes,
-		arg.ReservationBytes,
 		arg.IntentPayloadBytes,
 		arg.TenantID,
 		arg.SpaceID,
 		arg.EpisodeID,
-		arg.MaxActiveParticipants,
 	)
 	var i SyncEpisodeControl
 	err := row.Scan(

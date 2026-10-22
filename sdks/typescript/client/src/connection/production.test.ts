@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { parseParsedAccessGrant } from "../access/grant";
+import { opaqueAccessGrant } from "../space-client/core.test.helpers";
+
 import { createDefaultConnectionDependencies, bindConnectionMediaClient } from "./production";
 
 const whiteboard = vi.hoisted(() => vi.fn());
@@ -53,5 +56,26 @@ describe("production media adapter", () => {
     expect(source.closeForcedLocalPublication).toHaveBeenCalledWith("camera");
     expect(source.remotePublicationsChanged).toHaveBeenCalledOnce();
     expect(source.remotePublicationResumed).toHaveBeenCalledOnce();
+  });
+});
+
+describe("production admission cancellation", () => {
+  it.each([true, false])("preserves a confirmed %s outcome", async (cancelled) => {
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ cancelled })));
+    try {
+      const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1" });
+      await expect(dependencies.cancelPendingAdmission?.(parseParsedAccessGrant(opaqueAccessGrant(1)), new AbortController().signal)).resolves.toBe(cancelled);
+    } finally {
+      request.mockRestore();
+    }
+  });
+  it("does not turn an invalid cancellation response into confirmed non-cancellation", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+    try {
+      const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1" });
+      await expect(dependencies.cancelPendingAdmission?.(parseParsedAccessGrant(opaqueAccessGrant(1)), new AbortController().signal)).rejects.toThrow("invalid outcome");
+    } finally {
+      request.mockRestore();
+    }
   });
 });

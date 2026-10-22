@@ -232,9 +232,8 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 
 		if _, err := queries.ReserveParticipantAdmission(ctx, sqlc.ReserveParticipantAdmissionParams{
-			SnapshotReservationBytes: episodes.ParticipantSnapshotReservationBytes, ReservationBytes: episodes.LifecycleReservationBytes,
-			IntentPayloadBytes: int64(len(payload)), MaxActiveParticipants: episodes.MaximumActiveParticipants,
-			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
+			IntentPayloadBytes: int64(len(payload)),
+			TenantID:           uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 		}); errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrCapacityExceeded
 		} else if err != nil {
@@ -320,9 +319,8 @@ func createKnockAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx,
 		return fmt.Errorf("encode admission requested payload: %w", err)
 	}
 	if _, err := queries.ReserveKnockAdmission(ctx, sqlc.ReserveKnockAdmissionParams{
-		SnapshotReservationBytes: episodes.ParticipantSnapshotReservationBytes, ReservationBytes: episodes.LifecycleReservationBytes,
 		RequestedPayloadBytes: int64(len(requestedPayload)), JoinPayloadBytes: int64(len(joinPayload)), TenantID: uuid(input.TenantID),
-		SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID), MaxActiveParticipants: episodes.MaximumActiveParticipants,
+		SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 	}); errors.Is(err, pgx.ErrNoRows) {
 		return episodes.ErrCapacityExceeded
 	} else if err != nil {

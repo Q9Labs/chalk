@@ -301,6 +301,9 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 					t.Fatalf("policy queued %d requests, want 2", count)
 				}
 			}
+			if mode == "open" {
+				proveSharedAdmissionCapacity(t, ctx, pool, tenantID, spaceID, episode.ID, admitted.Participant.ID, retry.Participant.Generation)
+			}
 			var reserved int64
 			if err := pool.QueryRow(ctx, `select snapshot_reserved_bytes from sync_episode_control where episode_id=$1`, episode.ID).Scan(&reserved); err != nil {
 				t.Fatal(err)

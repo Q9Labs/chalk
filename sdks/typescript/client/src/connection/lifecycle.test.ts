@@ -237,6 +237,51 @@ describe("failed join admission cleanup", () => {
     );
   });
 
+  it.each([true, false])("re-admits the same participant when cancellation response is lost after commit=%s", async (committed) => {
+    const platform = createCoreTestPlatform();
+    let cancelled = false;
+    let confirmations = 0;
+    const requests: { reason: string; replaceMediaConnection: boolean }[] = [];
+    const layer = admissionLayer({
+      access: async ({ reason, replaceMediaConnection }) => {
+        requests.push({ reason, replaceMediaConnection });
+        if (reason === "join") cancelled = false;
+        if (cancelled) throw new Error("A cancelled seat cannot refresh access");
+        return parseParsedAccessGrant(opaqueAccessGrant(1));
+      },
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: async () => {
+          cancelled = committed;
+          throw new Error("Cancellation response lost");
+        },
+        createSyncClient: (() => {
+          const create = rejectFirstAccess(platform);
+          return () => {
+            const sync = create();
+            return {
+              ...sync,
+              start: async () => {
+                confirmations += 1;
+                await sync.start();
+              },
+            };
+          };
+        })(),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        yield* lifecycle.join();
+        expect(requests).toEqual([
+          { reason: "join", replaceMediaConnection: false },
+          { reason: "join", replaceMediaConnection: false },
+        ]);
+        expect(confirmations).toBe(1);
+      }),
+    );
+  });
+
   it.each([false, undefined])("replaces rejected legacy access when cancellation is %s", async (cancelled) => {
     const platform = createCoreTestPlatform();
     const requests: { reason: string; replaceMediaConnection: boolean }[] = [];

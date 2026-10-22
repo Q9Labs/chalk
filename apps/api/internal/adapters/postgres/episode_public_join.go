@@ -138,11 +138,8 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 		}
 		payload := episodes.ParticipantJoinedPayload(participantID, input.DisplayName, input.Role)
 		if _, err := queries.ReserveParticipantAdmission(ctx, sqlc.ReserveParticipantAdmissionParams{
-			SnapshotReservationBytes: episodes.ParticipantSnapshotReservationBytes,
-			ReservationBytes:         episodes.LifecycleReservationBytes,
-			IntentPayloadBytes:       int64(len(payload)),
-			MaxActiveParticipants:    episodes.MaximumActiveParticipants,
-			TenantID:                 uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: episode.ID,
+			IntentPayloadBytes: int64(len(payload)),
+			TenantID:           uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: episode.ID,
 		}); errors.Is(err, pgx.ErrNoRows) {
 			return episodes.ErrCapacityExceeded
 		} else if err != nil {
