@@ -1,6 +1,5 @@
 # Secret-scan findings in past commits that are fixtures, placeholders or host names, not credentials.
 # Each line names one commit, file, rule and line, so a new secret anywhere still fails the scan.
-# Rule hits in the working tree have no commit, so they use file:rule:line.
 
 # Go and TypeScript tests: idempotency and request keys, nonces, and placeholder API keys and tokens.
 dc8f4a7af8731b2bdeab38836955e9b68269b502:apps/api/internal/adapters/postgres/public_invites_test.go:generic-api-key:125
@@ -52,6 +51,3 @@ b83a463efa9f3665ef3c00638904cfef9351c3c7:scratchpad/history/2026-W31.md:generic-
 063b5a6230dc11745eb42b2f65dadd34666577cd:scratchpad/react-native-mobile-v2-audit-session-log-2026-07-30.md:generic-api-key:16
 385c7ea4596cfb59749a5d130ecef9992da6c07a:scratchpad/sync-codewalk.html:generic-api-key:1905
 385c7ea4596cfb59749a5d130ecef9992da6c07a:scratchpad/sync-codewalk.html:generic-api-key:1907
-
-# The working-tree copy of the placeholder refresh token in the access-grant refresh test.
-apps/api/internal/httpapi/access_grants_refresh_test.go:generic-api-key:397
