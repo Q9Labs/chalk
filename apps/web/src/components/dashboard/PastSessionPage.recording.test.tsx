@@ -74,6 +74,7 @@ beforeEach(() => {
     if (body?.action === "transcripts" && body.recordingId === stalledTranscripts) return new Promise<Response>(() => {});
     if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
     if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
+    if (body?.action === "export-recording" && source === "expired") return Response.json({ error: { code: "recording_source_expired" } }, { status: 409 });
     if (body?.action === "export-recording") {
       artifact = "pending";
       return Response.json({ recording: recording() });
@@ -201,6 +202,18 @@ it("does not offer to create a transcript over an existing not-requested one", a
   await open();
   expect(screen.getByText("There’s no transcript for this recording.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+});
+
+it("removes the prepare action when an export is refused because the source expired meanwhile", async () => {
+  await open();
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
+  source = "expired";
+  artifact = "unavailable";
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
+  });
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
 });
 
 it("replaces pending capture with its terminal reason without a reload", async () => {

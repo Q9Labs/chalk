@@ -20,6 +20,16 @@ type Transcript =
   | { readonly kind: "unavailable" }
   | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
 
+async function freshRecording(spaceId: string, recording: RecordingDTO): Promise<RecordingDTO> {
+  try {
+    const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
+    return result.kind === "recording" ? result.recording : recording;
+  } catch (error) {
+    if (!(error instanceof DashboardRequestError) || (error.status !== 404 && error.status !== 410)) throw error;
+    return { ...recording, sourceStatus: "expired", exportStatus: "unavailable", transcriptionStatus: "expired", exportRetryable: false, failureMessage: "The recording source is no longer available." };
+  }
+}
+
 async function loadSession({ spaceId, episodeId }: Ids) {
   const [session, call] = await Promise.all([readPage("past-session", { spaceId, episodeId }), readPage("call", { spaceId })]);
   return { session, callName: call.call.name };
@@ -35,14 +45,7 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       const pending = data.session.recordings.filter(pendingRecording);
       const recording = pending[metadata.current++ % pending.length];
       if (!recording) return data;
-      let next = recording;
-      try {
-        const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
-        if (result.kind === "recording") next = result.recording;
-      } catch (error) {
-        if (!(error instanceof DashboardRequestError) || (error.status !== 404 && error.status !== 410)) throw error;
-        next = { ...recording, sourceStatus: "expired", exportStatus: "unavailable", transcriptionStatus: "expired", exportRetryable: false, failureMessage: "The recording source is no longer available." };
-      }
+      const next = await freshRecording(spaceId, recording);
       return { ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? next : item)) } };
     },
   });
@@ -165,6 +168,9 @@ function Session({
       intents.done(`export:${target.id}`);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
+      // A refusal can mean the source expired since the page loaded; reread it so a dead action disappears.
+      // The refusal is already reported, so a failed reread keeps the current state.
+      await freshRecording(ids.spaceId, target).then(onRecording, () => undefined);
     } finally {
       setExporting(false);
     }
