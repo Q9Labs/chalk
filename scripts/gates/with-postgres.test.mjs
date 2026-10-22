@@ -44,7 +44,7 @@ esac
   });
 }
 
-test("a gate stopped with TERM exits 143 even when its command exits 0 on TERM", async () => {
+test("a gate stopped with TERM exits 143 even when its command exits 0 on TERM", async (context) => {
   const root = mkdtempSync(path.join(tmpdir(), "chalk-postgres-signal-"));
   const write = (file, source) => writeFileSync(path.join(root, file), source, { mode: 0o755 });
   try {
@@ -64,6 +64,12 @@ test("a gate stopped with TERM exits 143 even when its command exits 0 on TERM",
     const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
     let early;
     exited.then((result) => (early = result));
+    // A failed assertion leaves the wrapper running, and the test runner would wait for it.
+    context.after(async () => {
+      if (early !== undefined) return;
+      process.kill(-child.pid, "SIGKILL");
+      await exited;
+    });
     const deadline = Date.now() + 10_000;
     while (!existsSync(ready)) {
       assert.equal(early, undefined, "the wrapper exited before its command started");
