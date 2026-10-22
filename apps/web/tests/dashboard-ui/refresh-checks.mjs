@@ -291,8 +291,18 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await tab.waitForTimeout(500);
     release();
     await tab.waitForTimeout(500);
-    const kept =
-      action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
+    if (action === "deny") {
+      // A denial stays in flight until an authoritative status removes the row; the stale read must not offer Deny again.
+      const shown = (await tab.locator(".orow button").allTextContents()).join(", ");
+      await tab
+        .locator(".orow")
+        .waitFor({ state: "hidden", timeout: 8000 })
+        .catch(() => {});
+      check("stale refresh cannot undo deny", raced && !shown.split(", ").includes("Deny") && (await tab.locator(".orow").count()) === 0, shown);
+      await context.close();
+      continue;
+    }
+    const kept = action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
     check(`stale refresh cannot undo ${action}`, raced && kept);
     await context.close();
   }
@@ -589,6 +599,8 @@ export async function reviewPollChecks({ open, fixture, check, CALL }) {
     try {
       const initial = await reads();
       await tab.getByRole("button", { name: "Deny", exact: true }).click();
+      // Tick only after the decision is acknowledged, so the status read sees it.
+      await tab.getByRole("button", { name: "Denying…", exact: true }).waitFor();
       const settled = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
       await tab.clock.runFor(3000);
       await settled;
