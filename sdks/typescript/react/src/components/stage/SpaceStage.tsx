@@ -104,7 +104,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
     <Stage
       items={items}
       layout={layout}
-      pinnedId={followed ? "whiteboard" : (pin ?? activeShare)}
+      pinnedId={pin ?? activeShare ?? (followed ? "whiteboard" : null)}
       onPinnedChange={setPin}
       onFollowChange={(id) => follow(followed === id ? null : id)}
       followingId={followed}

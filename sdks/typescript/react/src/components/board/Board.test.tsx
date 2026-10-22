@@ -516,6 +516,8 @@ it.each(["other", "screen-share:other"])("follows on the first click after pinni
     await act(async () => follow?.click());
     expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
     expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
     await render(false);
     await act(async () => container.querySelector<HTMLElement>('[data-stage-item="other"] button')?.click());
     expect(container.querySelector('[data-stage-item="other"]')?.getAttribute("data-stage-role")).toBe("primary");
