@@ -12,7 +12,7 @@
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
     "brand:assets": "pnpm exec tsx scripts/brand-assets.ts",
     "preview": "vite preview",
-    "test": "pnpm run sync:public && node --test tests/selfhost-assets/headers.mjs tests/selfhost-assets/versions.mjs && pnpm exec vitest run --config ./vitest.config.ts",
+    "test": "pnpm run sync:public && node --test tests/selfhost-assets/headers.mjs tests/selfhost-assets/versions.mjs tests/selfhost-assets/concurrent-sync.mjs && pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "perf:call": "node scripts/check-call-performance.mjs",
     "perf:call:propose": "node scripts/propose-call-budgets.mjs",
