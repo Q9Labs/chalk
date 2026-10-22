@@ -9,10 +9,11 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 )
 
+// Two minutes covers the supported 60-second SDK startup plus admission and response time.
 func createParticipantJoinSeat(ctx context.Context, tx pgx.Tx, participant sqlc.Participant) error {
 	_, err := tx.Exec(ctx, `insert into participant_join_seats
         (tenant_id, space_id, episode_id, participant_id, generation, state, expires_at)
-        values ($1,$2,$3,$4,$5,'pending',now()+interval '1 minute')`,
+        values ($1,$2,$3,$4,$5,'pending',now()+interval '2 minutes')`,
 		participant.TenantID, participant.SpaceID, participant.EpisodeID, participant.ID, participant.Generation)
 	if err != nil {
 		return fmt.Errorf("create pending participant join: %w", err)

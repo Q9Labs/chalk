@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 )
 
@@ -12,8 +13,7 @@ type ParticipantJoinService interface {
 }
 
 type cancelParticipantJoinRequest struct {
-	Route      issueSyncTokenEndpointRequest
-	Credential string
+	Route issueSyncTokenEndpointRequest
 }
 
 type cancelParticipantJoinResponse struct {
@@ -30,22 +30,15 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 			if err != nil {
 				return cancelParticipantJoinRequest{}, err
 			}
-			credential, ok := bearerToken(r.Header.Get("Authorization"))
-			if !ok {
-				return cancelParticipantJoinRequest{}, apiErrorUnauthenticated
-			}
-			return cancelParticipantJoinRequest{Route: route, Credential: credential}, nil
+			return cancelParticipantJoinRequest{Route: route}, nil
 		},
 		func(ctx context.Context, request cancelParticipantJoinRequest) (cancelParticipantJoinResponse, error) {
-			if service == nil || verifier == nil {
+			if service == nil {
 				return cancelParticipantJoinResponse{}, apiErrorServiceUnavailable
 			}
-			subject, err := verifier.Verify(ctx, request.Credential)
-			if err != nil {
-				if isParticipantMediaCredentialRejection(err) {
-					return cancelParticipantJoinResponse{}, apiErrorUnauthenticated
-				}
-				return cancelParticipantJoinResponse{}, err
+			subject, ok := accessgrants.SubjectFromContext(ctx)
+			if !ok {
+				return cancelParticipantJoinResponse{}, apiErrorUnauthenticated
 			}
 			route := request.Route
 			if subject.TenantID != route.TenantID || subject.SpaceID != route.SpaceID || subject.EpisodeID != route.EpisodeID || subject.ParticipantID != route.ParticipantID {
@@ -56,7 +49,7 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 				ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, MediaConnectionID: subject.CloudflareConnectionID,
 			})
 			return cancelParticipantJoinResponse{Cancelled: cancelled}, err
-		}).Auth(APIAuthParticipantMedia).RateLimit(authenticatedWriteRateLimit).
+		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantJoinCancellation", cancelParticipantJoinResponse{}).
 		Errors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID,

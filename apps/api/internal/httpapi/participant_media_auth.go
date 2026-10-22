@@ -17,20 +17,18 @@ type ActiveParticipantAuthorizer interface {
 	AuthorizeActiveParticipant(context.Context, accessgrants.Subject) (bool, error)
 }
 
-func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {
+func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if verifier == nil || authorizer == nil {
+			if verifier == nil {
 				writeServiceUnavailable(w)
 				return
 			}
-
 			credential, ok := bearerToken(r.Header.Get("Authorization"))
 			if !ok {
 				writeUnauthenticated(w)
 				return
 			}
-
 			subject, err := verifier.Verify(r.Context(), credential)
 			if err != nil {
 				if isParticipantMediaCredentialRejection(err) {
@@ -40,7 +38,24 @@ func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer Activ
 				writeServiceUnavailable(w)
 				return
 			}
+			ctx := accessgrants.WithSubject(r.Context(), subject)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
 
+func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return requireParticipantMediaCredential(verifier)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if authorizer == nil {
+				writeServiceUnavailable(w)
+				return
+			}
+			subject, ok := accessgrants.SubjectFromContext(r.Context())
+			if !ok {
+				writeUnauthenticated(w)
+				return
+			}
 			active, err := authorizer.AuthorizeActiveParticipant(r.Context(), subject)
 			if err != nil {
 				writeServiceUnavailable(w)
@@ -50,10 +65,8 @@ func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer Activ
 				writeAPIError(w, apiErrorForbidden)
 				return
 			}
-
-			ctx := accessgrants.WithSubject(r.Context(), subject)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
+			next.ServeHTTP(w, r)
+		}))
 	}
 }
 
