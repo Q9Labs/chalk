@@ -1,0 +1,85 @@
+name: CodeQL
+
+# Pull requests analyse only the languages whose files changed. Master pushes and the weekly run analyse every
+# language, so anything a pull request skips is analysed once it merges.
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "27 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  languages:
+    name: Select CodeQL languages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      languages: ${{ steps.select.outputs.languages }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Select languages
+        id: select
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            node scripts/gates/codeql-languages.mjs "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+          else
+            node scripts/gates/codeql-languages.mjs --full >> "${GITHUB_OUTPUT}"
+          fi
+          cat "${GITHUB_OUTPUT}"
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: languages
+    # A failed selection analyses every language.
+    if: ${{ !cancelled() && (needs.languages.result != 'success' || needs.languages.outputs.languages != '[]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.languages.result == 'success' && needs.languages.outputs.languages || '["actions", "go", "javascript-typescript", "python"]') }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/api/go.mod
+          cache: false
+
+      # Same languages, build modes, default queries and categories as the default setup this replaces, so existing
+      # alerts carry over.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'go' && 'autobuild' || 'none' }}
+          dependency-caching: true
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+        with:
+          category: /language:${{ matrix.language }}
