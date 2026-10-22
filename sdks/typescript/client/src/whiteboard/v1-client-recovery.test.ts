@@ -65,13 +65,13 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await settle();
       expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
       sockets[0]?.close(1008);
-      clock.advance(5_000);
+      clock.advance(1_000);
       await settle();
       sockets[1]?.open();
       await settle();
       expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
       sockets[1]?.close(1008);
-      clock.advance(5_000);
+      clock.advance(1_000);
       await acceptSnapshot(sockets, 2);
       await startup;
       expect(hello(2)).toEqual([{ name: "presentation_v1" }]);
@@ -89,7 +89,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       expect(JSON.parse(current.sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view });
       // A dropped connection is not a refusal: views stay available while the client reconnects.
       current.sockets[0]?.close(1006);
-      currentClock.advance(5_000);
+      currentClock.advance(1_000);
       await settle();
       current.sockets[1]?.open();
       await settle();
@@ -128,7 +128,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       older.sockets[0]?.open();
       await settle();
       older.sockets[0]?.close(1008);
-      clock.advance(5000);
+      clock.advance(1_000);
       await acceptSnapshot(older.sockets, 1);
       await startup;
       expect(older.client.supportsViews).toBe(true);
@@ -179,13 +179,13 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
         sockets[index]?.open();
         await settle();
         sockets[index]?.close(1008);
-        clock.advance(5000);
+        clock.advance(1_000);
       }
       await acceptSnapshot(sockets, 2);
       await startup;
       expect(client.supportsViews).toBe(false);
       sockets[2]?.close(1006);
-      clock.advance(5000);
+      clock.advance(1_000);
       await acceptSnapshot(sockets, 3);
       expect(client.supportsViews).toBe(true);
       expect(client.sendView({ x: 0, y: 0, width: 100, height: 100, bring: false })).toBe(true);
@@ -303,7 +303,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       sockets[0]?.close(1006);
       expect(client.sendView(bring)).toBe(true);
       expect(client.sendView({ ...bring, x: 40 })).toBe(true);
-      clock.advance(5_000);
+      clock.advance(1_000);
       await acceptSnapshot(sockets, 1);
       await settle();
       expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
@@ -319,12 +319,12 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     try {
       sockets[0]?.close(1006);
       expect(client.sendView(bring)).toBe(true);
-      clock.advance(5_000);
+      clock.advance(1_000);
       await settle();
       sockets[1]?.open();
       await settle();
       sockets[1]?.close(1008);
-      clock.advance(5_000);
+      clock.advance(1_000);
       await acceptSnapshot(sockets, 2);
       expect(client.supportsViews).toBe(true);
       const frames = sockets[2]?.sent.map((wire) => JSON.parse(wire));

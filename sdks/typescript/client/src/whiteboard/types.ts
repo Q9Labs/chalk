@@ -144,6 +144,8 @@ export type ChalkWhiteboardV1ClientOptions = {
   readonly pendingStore?: ChalkWhiteboardV1PendingOperationStore;
   readonly cursor?: { readonly sceneId: string; readonly revision: string };
   readonly reconnectDelayMs?: number;
+  /** Per-attempt WebSocket opening allowance, clamped to 10–60 seconds; defaults to 10 seconds. */
+  readonly dialTimeoutMs?: number;
   readonly retryDelayMs?: number;
   readonly onSummary?: (summary: ChalkWhiteboardSummary) => void;
   readonly watchdog?: boolean;

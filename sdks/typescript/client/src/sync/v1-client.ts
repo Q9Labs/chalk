@@ -1,4 +1,5 @@
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
+import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -87,6 +88,8 @@ export class V1SyncClient implements V1CollaborationClient {
   #startupGeneration = 0;
   #connectionGeneration = 0;
   #reconnectTimer: unknown;
+  #cancelDial: (() => void) | undefined;
+  #dialTimeoutCount = 0;
   #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -169,6 +172,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
     this.#clearReconnect();
+    this.#clearDial();
     this.#clearHeartbeat();
     this.#clearNoticeProbe();
     this.#commandScheduler.stop("client_stopped");
@@ -187,7 +191,7 @@ export class V1SyncClient implements V1CollaborationClient {
     const pendingCommands = this.#commandScheduler.pendingCommands;
     const optimisticControl = this.#control && this.#participantId ? optimisticV1Control(this.#control, this.#participantId, pendingCommands) : this.#control;
     return {
-      connection: this.#phase.phase === "live" ? { ...this.#phase, noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : { ...this.#phase },
+      connection: { ...this.#phase, ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}), ...(this.#dialTimeoutCount ? { dialTimeoutCount: this.#dialTimeoutCount } : {}) },
       participantId: this.#participantId,
       participantGeneration: this.#participantGeneration,
       control: this.#control,
@@ -339,7 +343,18 @@ export class V1SyncClient implements V1CollaborationClient {
     const socket = this.#options.webSocket.connect(this.#options.url);
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
+    this.#cancelDial = scheduleSyncDialDeadline(
+      this.#clock(),
+      () => {
+        this.#cancelDial = undefined;
+        this.#dialTimeoutCount += 1;
+        this.#recover("WebSocket dial timeout");
+      },
+      this.#options.dialTimeoutMs,
+    );
     socket.onopen = () => {
+      if (socket !== this.#socket) return;
+      this.#clearDial();
       void this.#authenticate(socket);
     };
     socket.onmessage = (event) => {
@@ -695,6 +710,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #disconnected(socket: V1Socket): void {
     if (socket !== this.#socket) return;
     this.#socket = null;
+    this.#clearDial();
     this.#recovery = null;
     this.#clearHeartbeat();
     this.#clearNoticeProbe();
@@ -776,6 +792,10 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #now(): number {
     return this.#clock().now();
+  }
+  #clearDial(): void {
+    this.#cancelDial?.();
+    this.#cancelDial = undefined;
   }
   #clearReconnect(): void {
     if (this.#reconnectTimer === undefined) return;

@@ -344,8 +344,14 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncBindingCleanup?.();
           model.syncNoticeUnresponsive = false;
           let latestSnapshot: V1EpisodeSnapshot | null = null;
+          let observedDialTimeouts = 0;
           let snapshotQueued = false;
           const unsubscribe = sync.subscribe((snapshot) => {
+            const count = snapshot.connection.dialTimeoutCount ?? 0;
+            if (sync === model.sync && count > observedDialTimeouts) {
+              observedDialTimeouts = count;
+              diagnostics.record({ event: "sync_dial_timeout", state: model.state, epoch: model.epoch, attempt: count });
+            }
             if (sync === model.sync && snapshot.connection.phase === "live") {
               const notice = snapshot.connection.noticeUnresponsive === true;
               if (notice !== model.syncNoticeUnresponsive) {

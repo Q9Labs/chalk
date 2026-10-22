@@ -98,6 +98,8 @@ export type V1EpisodeSnapshot = {
     readonly terminalReason?: string;
     readonly noticeUnresponsive?: boolean;
     readonly health?: import("./v1-health").SyncHealth;
+    /** Cumulative count retained across successful retries; contains no URL or credentials. */
+    readonly dialTimeoutCount?: number;
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;
@@ -229,6 +231,8 @@ export type V1SyncClientOptions = {
   readonly clock?: SyncClock;
   readonly lifecycle?: SyncLifecycle;
   readonly reconnectDelayMs?: number;
+  /** Per-attempt WebSocket opening allowance, clamped to 10–60 seconds; defaults to 10 seconds. */
+  readonly dialTimeoutMs?: number;
   readonly maxPendingCommands?: number;
   readonly maxPendingBytes?: number;
   readonly maxPendingAgeMs?: number;
