@@ -28,6 +28,7 @@ let stalledTranscripts: string | null = null;
 let recordingState: string | null = null;
 let transcriptionSource: string | null = null;
 let expiresAt: string | null = null;
+let transcriptionExpiresAt: string | null = null;
 let exportHTTPStatus = 202;
 let createHTTPStatus = 200;
 const requests: { path: string; action?: string; id?: string; recordingId?: string }[] = [];
@@ -42,7 +43,7 @@ function recording() {
       status: recordingState ?? (artifact === "ready" ? "completed" : "pending"),
       source: { status: source, ...(expiresAt ? { expires_at: expiresAt } : {}) },
       export: { status: artifact, retryable, failure_message: source === "failed" ? "The recording capture did not complete." : source === "expired" ? "The recording source is no longer available." : artifact === "failed" ? "The recording export could not be completed." : null },
-      transcription_preparation: { status: transcriptionSource ?? (source === "failed" ? "failed" : source === "pending" ? "pending" : "ready") },
+      transcription_preparation: { status: transcriptionSource ?? (source === "failed" ? "failed" : source === "pending" ? "pending" : "ready"), ...(transcriptionExpiresAt ? { expires_at: transcriptionExpiresAt } : {}) },
       transcription_policy: "automatic",
       storage_provider: "r2",
       storage_key: null,
@@ -62,6 +63,7 @@ beforeEach(() => {
   recordingState = null;
   transcriptionSource = null;
   expiresAt = null;
+  transcriptionExpiresAt = null;
   exportHTTPStatus = 202;
   createHTTPStatus = 200;
   vi.useFakeTimers();
@@ -535,4 +537,81 @@ it("says a newer attempt failed when it can only be retried", async () => {
   expect(screen.getByText("A newer recording couldn’t be prepared")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   expect(screen.queryByText("A newer recording is ready to prepare")).toBeNull();
+});
+
+it("offers a transcript from a ready source only while both its own deadline and the video's are ahead", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  const deadlines = { none: null, past: "2026-10-22T11:59:00Z", ahead: "2026-10-22T13:00:00Z" } as const;
+  const mismatches = [];
+  for (const transcription of ["none", "past", "ahead"] as const) {
+    for (const video of ["none", "past", "ahead"] as const) {
+      transcriptStatus = "";
+      transcriptionSource = "ready";
+      transcriptionExpiresAt = deadlines[transcription];
+      expiresAt = deadlines[video];
+      await open();
+      // transcripts.go:218-231 refuses a source whose expires_at has passed, and it never outlives the video source (schema.sql:402-414).
+      const allowed = transcription !== "past" && video !== "past";
+      const create = screen.queryByRole("button", { name: /^Make a transcript/ }) !== null;
+      const copy = screen.queryAllByText(allowed ? "There’s no transcript for this recording." : "No transcript is available because the recording source could not be kept.").length > 0;
+      if (create !== allowed || !copy) mismatches.push({ transcription, video, create, copy });
+      cleanup();
+    }
+  }
+  expect(mismatches).toEqual([]);
+});
+
+it.each([
+  ["before the video", "2026-10-22T12:00:30Z", 30_000],
+  ["together with the video", "2026-10-22T12:01:00Z", 60_000],
+])("closes the transcript action at its own deadline when it expires %s", async (_name, transcriptionDeadline, at) => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptionExpiresAt = transcriptionDeadline;
+  transcriptStatus = "";
+  await open();
+  expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
+  const count = requests.length;
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(at - 1_000);
+  });
+  expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  // The video keeps its own, later deadline.
+  expect(screen.queryByRole("button", { name: "Prepare recording" }) !== null).toBe(at < 60_000);
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(60_000 - at);
+  });
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(requests).toHaveLength(count);
+});
+
+it.each([
+  ["answers from a clock that is behind", 200],
+  ["fails", 503],
+])("keeps asking about a lapsed export when the server first %s", async (_name, status) => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  artifact = "ready";
+  await open();
+  metadataStatus = status;
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(1);
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  metadataStatus = 200;
+  source = "expired";
+  artifact = "unavailable";
+  await tick();
+  await tick();
+  expect(screen.queryByRole("region", { name: "Recording" })).toBeNull();
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+  const count = requests.filter((request) => request.path === "/dashboard-api/call-metadata").length;
+  await tick();
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(count);
 });

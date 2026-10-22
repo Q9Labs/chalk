@@ -3,12 +3,17 @@ import type { RecordingDTO, TranscriptDTO } from "./contracts";
 /** A recording is polled exactly while the page shows it waiting, so a terminal state never polls and a wait never stalls. */
 export function pendingRecording(recording: RecordingDTO, now = Date.now()): boolean {
   const video = videoState(recording, now);
-  return video === "capturing" || video === "preparing" || recording.transcriptionStatus === "pending";
+  return video === "capturing" || video === "preparing" || recording.transcriptionStatus === "pending" || lapsedExport(recording, now);
 }
 
-/** The server closes the source retention window at read time, so the page closes it on its own clock too. */
-export function pastSourceDeadline(recording: RecordingDTO, now: number): boolean {
-  return recording.sourceExpiresAt !== null && Date.parse(recording.sourceExpiresAt) <= now;
+/** Only the server knows whether a ready export outlives its source, so one past its deadline is read until the server answers. */
+export function lapsedExport(recording: RecordingDTO, now: number): boolean {
+  return recording.exportStatus === "ready" && recording.sourceStatus !== "expired" && passed(recording.sourceExpiresAt, now);
+}
+
+/** The server closes retention windows at read time, so the page closes them on its own clock too. */
+export function passed(deadline: string | null, now: number): boolean {
+  return deadline !== null && Date.parse(deadline) <= now;
 }
 
 export type VideoState = "play" | "capture_failed" | "expired" | "capturing" | "preparing" | "preparable" | "retryable" | "export_failed";
@@ -31,7 +36,7 @@ export function videoState(recording: RecordingDTO, now: number): VideoState {
   if (recording.exportStatus === "ready") return recording.status === "completed" ? "play" : "preparing";
   if (recording.sourceStatus === "failed") return "capture_failed";
   if (recording.sourceStatus === "pending") return "capturing";
-  if (recording.sourceStatus === "expired" || pastSourceDeadline(recording, now) || recording.exportStatus === "unavailable") return "expired";
+  if (recording.sourceStatus === "expired" || passed(recording.sourceExpiresAt, now) || recording.exportStatus === "unavailable") return "expired";
   if (recording.exportStatus === "pending") return "preparing";
   if (recording.exportStatus === "failed") return recording.exportRetryable ? "retryable" : "export_failed";
   return "preparable";
@@ -61,8 +66,8 @@ export function transcriptState(recording: RecordingDTO, transcript: TranscriptD
     // Any other row, such as not_requested, still blocks a new request.
     return "none";
   }
-  // "ready" already means a live transcription source; it never outlives the video deadline, which closes both.
-  if (recording.transcriptionStatus === "ready") return pastSourceDeadline(recording, now) ? "expired" : "creatable";
+  // The transcription source has its own deadline, never later than the video's; either one closes it.
+  if (recording.transcriptionStatus === "ready") return passed(recording.transcriptionExpiresAt, now) || passed(recording.sourceExpiresAt, now) ? "expired" : "creatable";
   if (recording.transcriptionStatus === "pending") return "preparing";
   if (recording.transcriptionStatus === "failed") return "failed";
   if (recording.transcriptionStatus === "expired") return "expired";

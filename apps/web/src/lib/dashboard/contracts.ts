@@ -122,6 +122,7 @@ export type RecordingDTO = {
   exportRetryable: boolean;
   failureMessage: string | null;
   transcriptionStatus: Recording["transcription_preparation"]["status"];
+  transcriptionExpiresAt: string | null;
   createdAt: string;
   transcripts?: TranscriptDTO[];
   transcriptsNextCursor?: string | null;

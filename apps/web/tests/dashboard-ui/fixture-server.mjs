@@ -175,6 +175,7 @@ function recordingScenario() {
     exportRetryable: mode === "export_failed",
     failureMessage: failed ? "The recording capture did not complete." : expired ? "The recording source is no longer available." : ["export_failed", "export_exhausted"].includes(mode) ? "The recording export could not be completed." : null,
     sourceExpiresAt: null,
+    transcriptionExpiresAt: null,
     transcriptionStatus: failed || mode === "transcript_failed" ? "failed" : expired ? "expired" : pending ? "pending" : "ready",
   };
 }
@@ -192,6 +193,7 @@ const recordingsFor = (episode, withTranscripts) =>
           failureMessage: null,
           transcriptionStatus: state.transcriptionPending ? "pending" : "ready",
           sourceExpiresAt: null,
+          transcriptionExpiresAt: null,
           createdAt: episode.startedAt,
           ...recordingScenario(),
           ...(withTranscripts ? { transcripts: state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),

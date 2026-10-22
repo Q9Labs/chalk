@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
-import { pastSourceDeadline, pendingRecording, TRANSCRIPT, transcriptState, VIDEO, videoState, type TranscriptState } from "../../lib/dashboard/recording";
+import { lapsedExport, pendingRecording, TRANSCRIPT, transcriptState, VIDEO, videoState, type TranscriptState } from "../../lib/dashboard/recording";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -59,13 +59,13 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       return { ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? next : item)) } };
     },
   });
-  const now = useClock(state.kind === "ready" ? state.data.session.recordings.map((item) => item.sourceExpiresAt) : []);
+  const now = useClock(state.kind === "ready" ? state.data.session.recordings.flatMap((item) => [item.sourceExpiresAt, item.transcriptionExpiresAt]) : []);
   const replace = useCallback((next: RecordingDTO) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? next : item)) } }), { refresh: false }), [update]);
-  // Only the server knows whether a ready export outlives its source, so ask it once the deadline passes.
-  const lapsed = state.kind === "ready" ? state.data.session.recordings.filter((item) => item.exportStatus === "ready" && item.sourceStatus !== "expired" && pastSourceDeadline(item, now)) : [];
+  // Ask the server at the deadline itself rather than on the next poll, which then keeps asking until it answers.
+  const lapsed = state.kind === "ready" ? state.data.session.recordings.filter((item) => lapsedExport(item, now)) : [];
   const lapsedIds = lapsed.map((item) => item.id).join();
   useEffect(() => {
-    // Keyed by the lapsed ids, so each lapsed set is reread once. A failed reread leaves the export playing until the next load.
+    // Keyed by the lapsed ids, so each lapsed set is read once here; polling covers a stale or failed answer.
     for (const item of lapsed) void freshRecording(spaceId, item).then(replace, () => undefined);
   }, [lapsedIds, spaceId, replace]);
   const phone = usePhone();

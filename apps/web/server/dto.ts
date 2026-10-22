@@ -19,6 +19,7 @@ export function recordingDTO(recording: Recording): RecordingDTO {
     exportRetryable: recording.export.retryable,
     failureMessage: recording.export.failure_message ?? null,
     transcriptionStatus: recording.transcription_preparation.status,
+    transcriptionExpiresAt: recording.transcription_preparation.expires_at ?? null,
     createdAt: recording.created_at,
   };
 }
