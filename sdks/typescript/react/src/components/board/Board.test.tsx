@@ -1601,6 +1601,9 @@ it("keeps the dockable island available on an 820-point native tablet", async ()
     async (container) => {
       expect(container.querySelector('.chalk-board-island[data-place="bottom"]')).not.toBeNull();
       await clickControl(container, "Board menu");
+      const positions = container.querySelector('[aria-label="Tool island"]');
+      expect([...(positions?.querySelectorAll('[role="menuitemradio"]') ?? [])].map((item) => item.textContent?.replace("✓", ""))).toEqual(["Top", "Bottom", "Left"]);
+      expect(positions?.querySelector(".chalk-board-tile-preview")).toBeNull();
       const left = [...container.querySelectorAll<HTMLElement>(".chalk-board-tile")].find((item) => item.textContent === "Left");
       expect(left).toBeDefined();
       await act(async () => left?.click());
