@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO, type HomeDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
@@ -27,14 +27,21 @@ const shown = (data: HomeDTO): HomeCallDTO[] => data.calls.slice(0, HOME_STATUS_
 
 export function HomePage() {
   const pages = useRef(1);
+  const last = useRef<string>(undefined);
   const { state, reload, update } = useLoad<HomeDTO>(
     async () => {
       let data = await readPage("home", {});
-      // Keep expanded rows when the list reloads, up to Home's 300 calls.
-      for (let page = 1; page < pages.current && data.nextCursor && data.calls.length < HOME_STATUS_ROWS; page++) {
+      // Keep expanded rows when the list reloads, up to Home's 300 calls: read as many pages as before, and on until
+      // the last row Home showed is back, since new calls on top push it onto a later page. A row that is gone stops
+      // that search at twice the pages.
+      const reached = () => !last.current || data.calls.some((call) => call.id === last.current);
+      let read = 1;
+      while (data.nextCursor && data.calls.length < HOME_STATUS_ROWS && (read < pages.current || (!reached() && read < 2 * pages.current))) {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
+        read++;
       }
+      pages.current = read;
       return data;
     },
     "home",
@@ -66,6 +73,9 @@ export function HomePage() {
       },
     },
   );
+  useEffect(() => {
+    if (state.kind === "ready") last.current = shown(state.data).at(-1)?.id;
+  }, [state]);
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
   const toast = useToast();

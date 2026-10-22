@@ -150,10 +150,8 @@ it("reloads when more calls were made elsewhere than the first page holds", asyn
   truth.failFirstPage = false;
   truth.calls = [mine, ...others, planning];
   // The first check after a failure waits twice the interval.
+  // The reload reads on until Planning, the last row Home showed, is back.
   await tick(10_000);
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-  });
   expect(screen.getAllByText(/^(Made in this tab|Elsewhere \d|Planning)$/).map((item) => item.textContent)).toEqual(["Made in this tab", ...others.map((call) => call.name), "Planning"]);
 });
 
@@ -251,6 +249,23 @@ it("puts a call made elsewhere on top within one check and keeps the expanded hi
   await tick();
   expect(requests().slice(before)).toEqual([["home-status", { home: "1", spaceIds: history.map((call) => call.id).join(",") }]]);
   expect(screen.getAllByText(/^(Paged \d+|Made in another tab)$/)[0]?.textContent).toBe("Made in another tab");
+  expect(screen.getAllByText(/^Paged \d+$/)).toHaveLength(100);
+});
+
+it("keeps every expanded row when more than a page of calls is made elsewhere", async () => {
+  const history = Array.from({ length: 100 }, (_, index) => row(uuid(0x100 + index), `Paged ${index}`));
+  const truth: Truth = { calls: history, live: {} };
+  serve(truth);
+  await open();
+  for (let count = 1; count < 20; count++)
+    await reactAct(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+    });
+  // Six new calls fill the first page, so Home can't merge it and reloads every page it had read.
+  const fresh = Array.from({ length: 6 }, (_, index) => row(uuid(0x50 + index), `New ${index}`));
+  truth.calls = [...fresh, ...history];
+  await tick();
+  expect(screen.getAllByText(/^New \d$/)).toHaveLength(6);
   expect(screen.getAllByText(/^Paged \d+$/)).toHaveLength(100);
 });
 
