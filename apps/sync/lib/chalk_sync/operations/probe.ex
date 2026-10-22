@@ -14,14 +14,14 @@ defmodule ChalkSync.Operations.Probe do
   @external_operation_staleness_floor_ms 2_000
   @external_operation_staleness_ceiling_ms 30_000
 
-  @spec run(keyword()) :: {:ok, map()} | {:error, atom()}
+  @spec run(keyword()) :: {:ok, map()} | {:error, atom()} | {:error, atom(), map()}
   def run(options \\ []) do
     boot? = Keyword.get(options, :boot?, false)
 
     with :ok <- production_modules(),
          {:ok, provider_bridge} <- provider_bridge_observation(),
          {:ok, database} <- database_observations(),
-         :ok <- validate_database(database),
+         :ok <- validate_observed_database(database),
          {:ok, processes} <- process_observations(boot?) do
       {:ok, %{database: database, processes: processes, provider_bridge: provider_bridge}}
     end
@@ -105,7 +105,12 @@ defmodule ChalkSync.Operations.Probe do
            Postgrex.query(connection, role_query(), [], timeout: @query_timeout_ms),
          {:ok, %{rows: [[migration_version]]}} <-
            Postgrex.query(connection, migration_query(), [], timeout: @query_timeout_ms),
-         {:ok, %{rows: [[pending_age_ms, retention_cleanup_lag_ms]]}} <-
+         {:ok,
+          %{
+            rows: [
+              [pending_age_ms, retention_cleanup_lag_ms, pending, due, retrying, attempts, code]
+            ]
+          }} <-
            Postgrex.query(connection, pending_age_query(), [], timeout: @query_timeout_ms),
          {:ok, %{rows: [[synchronous_standbys, wal_lag_bytes]]}} <-
            Postgrex.query(connection, replication_query(), [], timeout: @query_timeout_ms) do
@@ -123,12 +128,40 @@ defmodule ChalkSync.Operations.Probe do
          wal_lag_bytes: wal_lag_bytes,
          synchronous_standby_requirement: synchronous_standby_requirement(),
          oldest_pending_lifecycle_intent_ms: pending_age_ms,
+         lifecycle_intents: %{
+           pending: pending,
+           due: due,
+           retrying: retrying,
+           oldest_attempt_count: attempts,
+           oldest_error_code: public_lifecycle_error_code(code)
+         },
          retention_cleanup_lag_ms: retention_cleanup_lag_ms
        }}
     else
       _error -> {:error, :database_unavailable}
     end
   end
+
+  defp validate_observed_database(database) do
+    case validate_database(database) do
+      {:error, :lifecycle_intent_lag} ->
+        {:error, :lifecycle_intent_lag, %{database: database}}
+
+      result ->
+        result
+    end
+  end
+
+  defp public_lifecycle_error_code(nil), do: nil
+
+  defp public_lifecycle_error_code(code)
+       when code in ~w(dependency_unavailable overloaded decision_unavailable episode_not_found
+                      lifecycle_intent_not_found invalid_state admission_request_not_found
+                      participant_not_found invalid_lifecycle_intent stale_participant_generation
+                      invalid_lifecycle_transition episode_ending recording_in_progress),
+       do: code
+
+  defp public_lifecycle_error_code(_code), do: "other"
 
   @doc false
   def validate_database(observations) do
@@ -374,14 +407,7 @@ defmodule ChalkSync.Operations.Probe do
   defp pending_age_query do
     """
     select
-      (
-        select coalesce(
-          (extract(epoch from (now() - min(created_at))) * 1000)::bigint,
-          0
-        )
-        from sync_lifecycle_intents
-        where status = 'pending'
-      ),
+      pending.oldest_age_ms,
       (
         select coalesce(
           (extract(epoch from (now() - min(episode.ended_at) - interval '7 days')) * 1000)::bigint,
@@ -395,7 +421,26 @@ defmodule ChalkSync.Operations.Probe do
         where episode.status = 'ended'
           and episode.ended_at <= now() - interval '7 days'
           and control.retention_cleaned_at is null
-      )
+      ),
+      pending.total, pending.due, pending.retrying,
+      oldest.attempt_count, oldest.last_error_code
+    from (
+      select
+        coalesce((extract(epoch from (now() - min(created_at))) * 1000)::bigint, 0)
+          as oldest_age_ms,
+        count(*) as total,
+        count(*) filter (where next_attempt_at <= now()) as due,
+        count(*) filter (where attempt_count > 0) as retrying
+      from sync_lifecycle_intents
+      where status = 'pending'
+    ) pending
+    left join lateral (
+      select attempt_count, last_error_code
+      from sync_lifecycle_intents
+      where status = 'pending'
+      order by created_at, lifecycle_intent_id
+      limit 1
+    ) oldest on true
     """
   end
 

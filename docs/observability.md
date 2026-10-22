@@ -36,3 +36,15 @@ The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord.
+
+### Sync lifecycle readiness evidence
+
+When `/readyz` reports `lifecycle_intent_lag`, its cached dependency snapshot
+retains the database observations from that failed probe. `database.lifecycle_intents`
+reports pending, due, and retrying counts, plus the oldest pending intent's attempt
+count and allowlisted error code (`other` for unknown codes; `null` before a failure).
+The oldest pending age includes scheduled retries, not only work currently due.
+Use these fields to distinguish undiscovered backlog from repeated delivery failures;
+they do not establish the underlying cause of a `dependency_unavailable` result.
+The response contains no intent, Episode, participant, or Tenant identifiers.
+Readiness thresholds, retry scheduling, and the one-second query timeout are unchanged.
