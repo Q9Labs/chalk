@@ -37,7 +37,7 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if err != nil {
 			return fmt.Errorf("lock public admission invite: %w", err)
 		}
-		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(arrival.TenantID), ID: uuid(arrival.SpaceID)})
+		space, err := queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: uuid(arrival.TenantID), ID: uuid(arrival.SpaceID)})
 		if err != nil {
 			return fmt.Errorf("lock public admission Space: %w", err)
 		}
@@ -161,7 +161,7 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 		if err != nil {
 			return err
 		}
-		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: live.TenantID, ID: live.SpaceID})
+		space, err := queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: live.TenantID, ID: live.SpaceID})
 		if err != nil {
 			return err
 		}

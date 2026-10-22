@@ -1107,7 +1107,7 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	if arrival.State == ArrivalPending && arrival.IdentityMode == IdentityGuest {
-		if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival); resolved || err != nil {
+		if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival, beforeInvalidate); resolved || err != nil {
 			return result, err
 		}
 		valid, validationErr := r.pendingGuestArrivalValid(ctx, arrival, space)
@@ -1127,13 +1127,21 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 	return r.arrivalResult(space, arrival), nil
 }
 
-func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace, arrival Arrival) (PublicSpaceArrival, bool, error) {
+func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace, arrival Arrival, beforeWrite func() error) (PublicSpaceArrival, bool, error) {
 	request, err := r.service.repository.GetAdmissionRequestForArrival(ctx, arrival)
 	if errors.Is(err, ErrAdmissionRequestNotFound) {
 		return PublicSpaceArrival{}, false, nil
 	}
 	if err != nil {
 		return PublicSpaceArrival{}, false, err
+	}
+	switch request.State {
+	case AdmissionRequestApproved, AdmissionRequestDenied, AdmissionRequestExpired, AdmissionRequestInvalidated:
+		if err := beforeWrite(); err != nil {
+			return PublicSpaceArrival{}, false, err
+		}
+	default:
+		return PublicSpaceArrival{}, false, nil
 	}
 	state, reason := ArrivalPending, ""
 	switch request.State {

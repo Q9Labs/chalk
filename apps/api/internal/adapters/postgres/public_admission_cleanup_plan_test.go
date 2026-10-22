@@ -30,7 +30,7 @@ func proveAdmissionCleanupPlan(t *testing.T, ctx context.Context, pool *pgxpool.
 	exec := func(query string, args ...any) {
 		t.Helper()
 		if _, err := tx.Exec(ctx, query, args...); err != nil {
-			t.Fatal(err)
+			t.Fatalf("cleanup seed %.80s: %v", query, err)
 		}
 	}
 	exec(`create temp table proof_seed on commit drop as

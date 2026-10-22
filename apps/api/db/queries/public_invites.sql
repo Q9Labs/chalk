@@ -1,3 +1,10 @@
+-- name: LockTenantSpaceForAdmission :one
+-- Serialize admission and policy changes without blocking the previous API's
+-- arrival-first INSERT, which needs a foreign-key KEY SHARE lock on this Space.
+select * from spaces
+where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id)
+for no key update;
+
 -- name: GetSpacePublicInvite :one
 select tenant_id, space_id, handle, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,

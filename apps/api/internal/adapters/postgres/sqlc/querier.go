@@ -295,6 +295,9 @@ type Querier interface {
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
 	LockTenantMediaLimits(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	LockTenantMediaPolicyForEpisode(ctx context.Context, id pgtype.UUID) (LockTenantMediaPolicyForEpisodeRow, error)
+	// Serialize admission and policy changes without blocking the previous API's
+	// arrival-first INSERT, which needs a foreign-key KEY SHARE lock on this Space.
+	LockTenantSpaceForAdmission(ctx context.Context, arg LockTenantSpaceForAdmissionParams) (Space, error)
 	LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSpaceForUpdateParams) (Space, error)
 	LockTenantTranscriptionForUpdate(ctx context.Context, arg LockTenantTranscriptionForUpdateParams) (Transcription, error)
 	LockWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error

@@ -1149,6 +1149,44 @@ func (q *Queries) LockSpacePublicInviteByHandle(ctx context.Context, handle []by
 	return i, err
 }
 
+const lockTenantSpaceForAdmission = `-- name: LockTenantSpaceForAdmission :one
+select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at from spaces
+where tenant_id = $1 and id = $2
+for no key update
+`
+
+type LockTenantSpaceForAdmissionParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+// Serialize admission and policy changes without blocking the previous API's
+// arrival-first INSERT, which needs a foreign-key KEY SHARE lock on this Space.
+func (q *Queries) LockTenantSpaceForAdmission(ctx context.Context, arg LockTenantSpaceForAdmissionParams) (Space, error) {
+	row := q.db.QueryRow(ctx, lockTenantSpaceForAdmission, arg.TenantID, arg.ID)
+	var i Space
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.TenantID,
+		&i.Slug,
+		&i.MediaPlane,
+		&i.Metadata,
+		&i.RecurringPolicy,
+		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
+		&i.DefaultEpisodeDurationSeconds,
+		&i.MaximumEpisodeDurationSeconds,
+		&i.LingerWindowSeconds,
+		&i.CreatedByUserID,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const markAutoSpaceLifecycleArchived = `-- name: MarkAutoSpaceLifecycleArchived :one
 update auto_space_lifecycles
 set state = 'archived', claim_expires_at = null, archive_completed_at = now(), next_retry_at = null,

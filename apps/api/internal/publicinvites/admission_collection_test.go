@@ -33,7 +33,7 @@ func TestConcurrentAdmissionCollectionKeepsWinningMediaBinding(t *testing.T) {
 			results := make(chan outcome, 2)
 			for range 2 {
 				go func() {
-					result, resolved, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival)
+					result, resolved, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival, func() error { return nil })
 					results <- outcome{result, resolved, err}
 				}()
 			}
@@ -186,7 +186,7 @@ func TestLegacyApprovedCollectionCannotBypassTheKnockGuard(t *testing.T) {
 	repository := legacyCollectionRepository{&collectionRepository{arrival: arrival}}
 	access := &guardedLegacyAccess{}
 	runtime := Runtime{service: NewService(repository), access: access}
-	result, resolved, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival)
+	result, resolved, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival, func() error { return nil })
 	if err != nil || !resolved || result.State != ArrivalUnavailable || result.Access != nil || access.allocated {
 		t.Fatalf("legacy collection: state=%s resolved=%v allocated=%v err=%v", result.State, resolved, access.allocated, err)
 	}

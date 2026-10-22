@@ -25,7 +25,11 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if testing.Short() || databaseURL == "" {
 		t.Skip("isolated PostgreSQL integration database is not configured")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	timeout := 30 * time.Second
+	if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") == "1" {
+		timeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
@@ -93,8 +97,13 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	t.Run("expired pending arrival retry", func(t *testing.T) {
 		proveExpiredPendingArrivalRetry(t, ctx, pool, repository, invite, tenantID, space.ID)
 	})
+	t.Run("mixed version arrival lock", func(t *testing.T) { proveAdmissionRolloutLockOrder(t, ctx, pool, arrival.Arrival.ArrivalHandle) })
 	t.Run("control before Episode", func(t *testing.T) {
-		proveAdmissionControlLockOrder(t, ctx, pool, tenantID, host.Episode.ID, arrival.Arrival.ArrivalHandle)
+		controlArrival, err := service.CreateArrival(ctx, publicinvites.CreateArrivalInput{TenantID: tenantID, SpaceID: space.ID, Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch, IdentityMode: publicinvites.IdentityGuest, DisplayName: "Control guest", GuestCredential: []byte("control-lock-test-credential"), IdempotencyKey: accountTenantIntegrationID(t).String()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		proveAdmissionControlLockOrder(t, ctx, pool, tenantID, host.Episode.ID, controlArrival.Arrival.ArrivalHandle)
 	})
 	arrival, err = service.CreateArrival(ctx, publicinvites.CreateArrivalInput{
 		TenantID: tenantID, SpaceID: space.ID,
@@ -338,7 +347,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 			t.Skip("opt-in seeded EXPLAIN proof")
 		}
 		_, request := newKnock("Cleanup EXPLAIN fixture")
-		planCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		planCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 		defer cancel()
 		proveAdmissionCleanupPlan(t, planCtx, pool, request.RequestHandle)
 	})

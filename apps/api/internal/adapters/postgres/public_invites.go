@@ -19,7 +19,7 @@ import (
 type publicInviteQuerier interface {
 	LockLifecycleEpisodeForUpdate(context.Context, sqlc.LockLifecycleEpisodeForUpdateParams) (sqlc.Episode, error)
 	LockLifecycleParticipantForUpdate(context.Context, sqlc.LockLifecycleParticipantForUpdateParams) (sqlc.Participant, error)
-	LockTenantSpaceForUpdate(context.Context, sqlc.LockTenantSpaceForUpdateParams) (sqlc.Space, error)
+	LockTenantSpaceForAdmission(context.Context, sqlc.LockTenantSpaceForAdmissionParams) (sqlc.Space, error)
 	GetPublicAdmissionBinding(context.Context, sqlc.GetPublicAdmissionBindingParams) (sqlc.GetPublicAdmissionBindingRow, error)
 	CreateAutoSpaceLifecycle(context.Context, sqlc.CreateAutoSpaceLifecycleParams) (sqlc.AutoSpaceLifecycle, error)
 	CreateSpacePublicAdmissionRequest(context.Context, sqlc.CreateSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
@@ -345,7 +345,7 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			if err != nil {
 				return fmt.Errorf("lock public collection invite: %w", err)
 			}
-			space, err = queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: binding.TenantID, ID: binding.SpaceID})
+			space, err = queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: binding.TenantID, ID: binding.SpaceID})
 			if errors.Is(err, pgx.ErrNoRows) {
 				return publicinvites.ErrArrivalUnavailable
 			}

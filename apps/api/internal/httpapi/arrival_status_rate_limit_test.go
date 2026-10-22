@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -53,9 +54,10 @@ func TestArrivalStatusCannotInvalidateWithExhaustedWrites(t *testing.T) {
 
 type arrivalBudgetRepository struct {
 	publicinvites.Repository
-	arrival publicinvites.Arrival
-	hash    [32]byte
-	updates int
+	arrival      publicinvites.Arrival
+	hash         [32]byte
+	updates      int
+	requestState publicinvites.AdmissionRequestState
 }
 
 func (r *arrivalBudgetRepository) GetArrival(context.Context, utilities.ID) (publicinvites.Arrival, error) {
@@ -74,5 +76,91 @@ func (r *arrivalBudgetRepository) UpdateArrivalState(_ context.Context, input pu
 }
 
 func (r *arrivalBudgetRepository) GetAdmissionRequestForArrival(context.Context, publicinvites.Arrival) (publicinvites.AdmissionRequest, error) {
-	return publicinvites.AdmissionRequest{}, publicinvites.ErrAdmissionRequestNotFound
+	if r.requestState == "" {
+		return publicinvites.AdmissionRequest{}, publicinvites.ErrAdmissionRequestNotFound
+	}
+	return publicinvites.AdmissionRequest{State: r.requestState}, nil
+}
+
+func TestArrivalStatusTerminalAdmissionRequiresWriteBudget(t *testing.T) {
+	for _, state := range []publicinvites.AdmissionRequestState{publicinvites.AdmissionRequestApproved, publicinvites.AdmissionRequestDenied, publicinvites.AdmissionRequestExpired, publicinvites.AdmissionRequestInvalidated, publicinvites.AdmissionRequestPending} {
+		t.Run(string(state), func(t *testing.T) {
+			tenant := mustTestID(t, "00000000-0000-4000-8000-00000000000a")
+			space := mustTestID(t, "00000000-0000-4000-8000-00000000000b")
+			handle := mustTestID(t, "00000000-0000-4000-8000-00000000000c")
+			credential := []byte("arrival-terminal-budget-credential")
+			repo := &arrivalBudgetRepository{arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, ArrivalHandle: handle, IdentityMode: publicinvites.IdentityGuest, State: publicinvites.ArrivalPending, ExpiresAt: time.Now().Add(time.Hour)}, hash: sha256.Sum256(credential), requestState: state}
+			private := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+			signer, err := publicinvites.NewSigner(publicinvites.Keyring{CurrentKeyID: "test", Signer: private, Verifiers: map[string]ed25519.PublicKey{"test": private.Public().(ed25519.PublicKey)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			access := &arrivalBudgetAccess{}
+			runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repo, signer), arrivalBudgetSpace{}, inviteBudgetLifecycle{}, access, inviteBudgetAccounts{}, inviteBudgetLinks{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			options := DefaultRateLimitOptions()
+			now := time.Now()
+			options.Now = func() time.Time { return now }
+			key := "ip:192.0.2.1"
+			for i := 0; i < authenticatedWriteRateLimit.Limit; i++ {
+				options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now)
+			}
+			request := func() *httptest.ResponseRecorder {
+				router := chi.NewRouter()
+				publicInviteArrivalStatusEndpoint(runtime).Mount(router, options)
+				req := httptest.NewRequest(http.MethodGet, "/public/space-invite-arrival", nil)
+				req.RemoteAddr = "192.0.2.1:1234"
+				req.Header.Set(publicInviteTokenHeader, handle.String())
+				req.AddCookie(&http.Cookie{Name: publicGuestCookiePrefix + handle.String(), Value: base64.RawURLEncoding.EncodeToString(credential)})
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, req)
+				return response
+			}
+			pending := state == publicinvites.AdmissionRequestPending
+			wantStatus := http.StatusTooManyRequests
+			if pending {
+				wantStatus = http.StatusOK
+			}
+			if response := request(); response.Code != wantStatus || repo.updates != 0 || access.grants != 0 {
+				t.Fatalf("exhausted writes: status=%d updates=%d grants=%d body=%s", response.Code, repo.updates, access.grants, response.Body.String())
+			}
+			options.Limiter = ratelimit.NewLocalLimiter()
+			if response := request(); response.Code != http.StatusOK {
+				t.Fatalf("available writes: status=%d body=%s", response.Code, response.Body.String())
+			}
+			wantUpdates := 1
+			if pending {
+				wantUpdates = 0
+			}
+			if repo.updates != wantUpdates {
+				t.Fatalf("persistent updates=%d want%d", repo.updates, wantUpdates)
+			}
+			for i := 0; i < authenticatedWriteRateLimit.Limit-wantUpdates; i++ {
+				if !options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now).Allowed {
+					t.Fatal("status spent too many writes")
+				}
+			}
+			if options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now).Allowed {
+				t.Fatal("terminal resolution did not spend one write")
+			}
+		})
+	}
+}
+
+type arrivalBudgetSpace struct{ publicinvites.Space }
+
+func (arrivalBudgetSpace) GetPublicSpace(_ context.Context, tenant, space utilities.ID) (publicinvites.PublicSpace, error) {
+	return publicinvites.PublicSpace{TenantID: tenant, SpaceID: space, Name: "Call", Slug: "call", AdmissionMode: publicinvites.AdmissionKnock}, nil
+}
+
+type arrivalBudgetAccess struct {
+	publicinvites.Access
+	grants int
+}
+
+func (a *arrivalBudgetAccess) GrantPublicAccess(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+	a.grants++
+	return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
 }
