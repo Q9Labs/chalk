@@ -81,6 +81,11 @@ describe("Privacy Policy advance notice", () => {
     expect(screen.getByText("Originally effective 7 August 2026")).toBeTruthy();
     expect(screen.getByText(/We keep your data while your account or tenant is active/)).toBeTruthy();
   });
+  it("keys participation retention to the tenant that owns the Space, not a host account", () => {
+    render(<LegalPage kind="privacy" />);
+    expect(screen.getByText(/Space, Episode, and participant records/).textContent).toContain("while the tenant that owns the Space exists");
+    expect(screen.queryByText(/host's Chalk account/)).toBeNull();
+  });
   it("discloses webhook content and endpoint retention criteria", () => {
     render(<LegalPage kind="privacy" />);
     expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("cleanup after 30 days");
