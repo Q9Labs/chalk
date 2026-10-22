@@ -364,6 +364,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     collaboration_deletions = [
       SQL.delete_whiteboard_operation_receipts(),
       SQL.delete_whiteboard_permissions(),
+      SQL.delete_whiteboard_draw_policies(),
       SQL.delete_whiteboard_elements(),
       SQL.delete_whiteboard_scenes()
     ]

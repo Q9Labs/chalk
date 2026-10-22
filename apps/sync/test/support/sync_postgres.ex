@@ -498,6 +498,7 @@ defmodule ChalkSync.SyncPostgres do
       delete(transaction, "sync_whiteboard_files", tenant_id)
       delete(transaction, "sync_whiteboard_operation_receipts", tenant_id)
       delete(transaction, "sync_whiteboard_permissions", tenant_id)
+      delete(transaction, "sync_whiteboard_draw_policies", tenant_id)
       delete(transaction, "sync_whiteboard_elements", tenant_id)
       delete(transaction, "sync_whiteboard_scenes", tenant_id)
       delete(transaction, "sync_chat_read_receipts", tenant_id)

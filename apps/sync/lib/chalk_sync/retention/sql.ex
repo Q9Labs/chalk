@@ -302,6 +302,7 @@ defmodule ChalkSync.Retention.SQL do
     do: delete_rows("sync_whiteboard_operation_receipts")
 
   def delete_whiteboard_permissions, do: delete_rows("sync_whiteboard_permissions")
+  def delete_whiteboard_draw_policies, do: delete_rows("sync_whiteboard_draw_policies")
   def delete_whiteboard_elements, do: delete_rows("sync_whiteboard_elements")
 
   def delete_whiteboard_scenes do
