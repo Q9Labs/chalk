@@ -517,7 +517,7 @@ function LocalSpace({
 /** The web asks only for identity. Devices are requested inside the admitted call. */
 export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange, onJoin }: { readonly spaceName?: string; readonly theme: ThemeMode; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
   return (
-    <CallLimbo spaceName={spaceName} message={spaceName ? `Join ${spaceName}` : "Join call"} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
+    <CallLimbo spaceName={spaceName} message={spaceName ? `Join ${spaceName}` : "Join the call"} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
       <form
         className="mt-4 flex w-full flex-col gap-2 text-left"
         onSubmit={(event) => {

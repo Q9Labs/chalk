@@ -35,7 +35,7 @@ describe("public Space entry", () => {
     window.history.replaceState({}, "", `/space/${slug}#spaceInviteToken=${spacePageTestToken}`);
     mocks.publicClient.arriveBySpacePublicInvite.mockReturnValue(new Promise(() => undefined));
     render(<SpacePage slug={slug} />);
-    expect(screen.getByText("Join call")).toBeDefined();
+    expect(screen.getByText("Join the call")).toBeDefined();
     await act(async () => enterName("Ada"));
     expect(screen.getByRole("status").textContent).toBe("Joining the call…");
     expect(document.body.textContent).not.toContain(slug);
