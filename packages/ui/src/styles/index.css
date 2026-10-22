@@ -1598,6 +1598,10 @@
   .chalk-toasts {
     bottom: 110px;
   }
+  /* A phone board keeps its tools at the bottom of the stage, so toasts rise above them. */
+  [data-chalk]:has(.chalk-board[data-primary]) .chalk-toasts {
+    bottom: 182px;
+  }
   .chalk-drawer {
     inset: auto 0 0;
     width: 100%;
