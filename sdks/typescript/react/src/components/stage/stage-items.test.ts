@@ -135,3 +135,8 @@ it("leads the floating faces with the active speaker before anyone else speaking
   expect(speakingParticipantId(items)).toBe("malik");
   expect(floatingSpeakerId([remote("nora", {})], "akash")).toBe("akash");
 });
+
+it("preserves the public slim phone strip option", () => {
+  const geometry = fitSpotlight({ width: 358, height: 692 }, "whiteboard", ["a", "b"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, slimPhoneStrip: true });
+  expect(geometry.frames[0]?.height).toBe(692 - 52 - 8);
+});

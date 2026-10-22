@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChalkButton } from "@q9labsai/chalk-react";
+import { ChalkProvider, ChalkButton } from "@q9labsai/chalk-react";
 import { SpaceStage } from "../../../../sdks/typescript/react/src/components/stage/SpaceStage";
 import { SpacePresentation } from "../../../../sdks/typescript/react/src/components/space-view/SpacePresentation";
 import type { Participant } from "../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
 import type { ScreenShareState } from "../../../../sdks/typescript/react/src/components/composite/ScreenShareView";
 import { cameraTrack } from "./media";
+import { createCallStateClient, liveSnapshot, HOST } from "./fixtures";
 import type { CallState } from "./states";
 
 type Share = "none" | "remote" | "local" | "two";
@@ -129,6 +130,15 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
   );
 }
 
+function BoardShareFixture() {
+  const [client] = useState(() => createCallStateClient(liveSnapshot({ board: true, capabilities: HOST }), { scene: true }));
+  return (
+    <ChalkProvider client={client}>
+      <StageFixture board share="remote" />
+    </ChalkProvider>
+  );
+}
+
 export const STAGE_STATES: readonly CallState[] = [
   ...[3, 5, 6, 7, 12, 24, 30].map((count) => ({ id: `stage-grid-${count}`, title: `${count} people in justified Grid`, render: () => <StageFixture count={count} layout="grid" /> })),
   { id: "stage-spotlight", title: "Spotlight", render: () => <StageFixture /> },
@@ -137,6 +147,7 @@ export const STAGE_STATES: readonly CallState[] = [
   { id: "stage-avatars-light", title: "Bold Facehash tiles in Light", render: () => <StageFixture cameras={false} layout="grid" theme="light" /> },
   { id: "stage-long-names-light", title: "Long and RTL names in Light", render: () => <StageFixture count={6} layout="grid" theme="light" names={["You", "Nora", "Akash", "Sofia Alexandrova-Fitzgerald Lindqvist", "مالك الحداد", "Priya"]} /> },
   { id: "stage-avatars", title: "Bold speaking Facehash tiles", render: () => <StageFixture cameras={false} layout="grid" /> },
+  { id: "stage-board-share", title: "Board with a live screen share", render: () => <BoardShareFixture /> },
   { id: "stage-board", title: "Board in Spotlight", render: () => <StageFixture board /> },
   { id: "stage-board-grid", title: "Double-width board in Grid", render: () => <StageFixture board layout="grid" /> },
   { id: "stage-long-names", title: "Long and right-to-left tile names", render: () => <StageFixture count={6} layout="grid" names={["You", "Nora", "Akash", "Sofia Alexandrova-Fitzgerald Lindqvist", "مالك الحداد", "Priya"]} /> },
