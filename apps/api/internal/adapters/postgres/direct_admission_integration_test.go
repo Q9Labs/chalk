@@ -260,8 +260,8 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 				t.Fatalf("direct admission queued %d requests", count)
 			}
 			retry := post(t, path, writer, requestKey, body, http.StatusCreated)
-			if retry.Participant.ID != admitted.Participant.ID || retry.Participant.Generation != admitted.Participant.Generation || retry.Intent.ID != admitted.Intent.ID {
-				t.Fatal("retry did not return the same seat and intent")
+			if retry.Participant.ID != admitted.Participant.ID || retry.Participant.Generation != admitted.Participant.Generation+1 || retry.Intent.ID != admitted.Intent.ID {
+				t.Fatal("retry did not preserve the seat and intent while fencing the previous grant")
 			}
 			post(t, path, writer, requestKey, strings.Replace(body, `"direct"`, `"policy"`, 1), http.StatusConflict)
 			post(t, path, writer, "direct-unknown-role-"+mode, strings.Replace(body, "custom_guest", "unknown", 1), http.StatusBadRequest)
