@@ -60,7 +60,8 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
-  { id: "name-needed", title: "Name needed", render: () => <JoinName /> },
+  { id: "name-needed", title: "Name needed", render: () => <JoinName theme="dark" /> },
+  { id: "name-needed-light", title: "Name needed, light", render: () => <JoinName theme="light" /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",
@@ -222,11 +223,11 @@ function WaitingForHost() {
   );
 }
 
-function JoinName() {
+function JoinName({ theme }: { readonly theme: "light" | "dark" }) {
   const [name, setName] = useState("");
   return (
-    <main className="h-dvh">
-      <NameNeeded spaceName={SPACE_NAME} displayName={name} onDisplayNameChange={setName} onJoin={() => undefined} />
+    <main data-chalk data-chalk-theme={theme} className="h-dvh">
+      <NameNeeded spaceName={SPACE_NAME} theme={theme} displayName={name} onDisplayNameChange={setName} onJoin={() => undefined} />
     </main>
   );
 }

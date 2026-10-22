@@ -44,7 +44,7 @@ it("joining exposes consent; the ready card copies the link and announces Copied
   expect(await page.getByRole("img", { name: "Scan to join this call" }).isVisible()).toBe(true);
 }, 30_000);
 
-it("asks for a name in a full-width form, and Join call waits for one", async () => {
+it("asks for a name, and Join call waits for one", async () => {
   await page.goto(`${origin}/call-states.html?state=name-needed`);
   const name = page.getByLabel("Your name");
   const join = page.getByRole("button", { name: "Join call", exact: true });
@@ -52,14 +52,49 @@ it("asks for a name in a full-width form, and Join call waits for one", async ()
   expect(await join.isDisabled()).toBe(true);
   await name.fill("Nora");
   expect(await join.isEnabled()).toBe(true);
-  // As in the mockup, the label, the field and the button share one left edge and one width.
-  const [label, field, button] = await Promise.all([page.locator('label[for="join-display-name"]'), name, join].map((element) => element.boundingBox()));
-  expect(field?.width).toBeGreaterThanOrEqual(264);
-  expect(button?.width).toBe(field?.width);
-  expect([label?.x, button?.x]).toEqual([field?.x, field?.x]);
-  // The mockup's join button is 44px tall and sits 14px under the field.
-  expect(button?.height).toBe(44);
-  expect((button?.y ?? 0) - ((field?.y ?? 0) + (field?.height ?? 0))).toBe(14);
+});
+
+it.each(
+  [
+    { width: 1440, height: 900, card: 320 },
+    { width: 390, height: 844, card: 300 },
+    { width: 844, height: 390, card: 320 },
+  ].flatMap((size) => (["dark", "light"] as const).map((theme) => ({ ...size, theme }))),
+)("lays out the name card as in the mockup at $width by $height in $theme", async ({ width, height, card, theme }) => {
+  await page.setViewportSize({ width, height });
+  try {
+    await page.goto(`${origin}/call-states.html?state=${theme === "dark" ? "name-needed" : "name-needed-light"}`);
+    const name = page.getByLabel("Your name");
+    const label = page.locator('label[for="join-display-name"]');
+    const [box, field, button, tag] = await Promise.all([page.locator('[data-part="limbo-message"]'), name, page.getByRole("button", { name: "Join call", exact: true }), label].map((element) => element.boundingBox()));
+    // The mockup's card has a 1px border and 20px padding, and the label, field and button fill its content box.
+    expect(box?.width).toBe(card);
+    for (const control of [field, button, tag]) expect(control?.x).toBe((box?.x ?? 0) + 21);
+    expect([field?.width, button?.width]).toEqual([card - 42, card - 42]);
+    // The join button is 44px tall and sits 14px under the field.
+    expect([field?.height, button?.height]).toEqual([44, 44]);
+    expect((button?.y ?? 0) - ((field?.y ?? 0) + (field?.height ?? 0))).toBe(14);
+    // The label and the card share the page's theme, so the label stays readable.
+    const contrast = await label.evaluate((element) => {
+      const card = element.closest('[data-part="limbo-message"]');
+      if (!card) throw new Error("The label is outside the limbo card.");
+      const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+      if (!canvas) throw new Error("The contrast check requires Canvas 2D.");
+      const luminance = (color: string) => {
+        canvas.clearRect(0, 0, 1, 1);
+        canvas.fillStyle = color;
+        canvas.fillRect(0, 0, 1, 1);
+        const [r = 0, g = 0, b = 0] = canvas.getImageData(0, 0, 1, 1).data;
+        const [lr, lg, lb] = [r, g, b].map((value) => (value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * (lr ?? 0) + 0.7152 * (lg ?? 0) + 0.0722 * (lb ?? 0);
+      };
+      const [text, background] = [luminance(getComputedStyle(element).color), luminance(getComputedStyle(card).backgroundColor)];
+      return (Math.max(text, background) + 0.05) / (Math.min(text, background) + 0.05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
 });
 
 it("announces a join, raised hand and recording through event toasts", async () => {

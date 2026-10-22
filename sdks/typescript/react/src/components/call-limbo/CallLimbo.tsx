@@ -5,6 +5,7 @@ import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { CallEventIcon } from "../toast-stack/CallEventIcon";
 import { ChalkButton } from "../chalk-ui";
+import { cn } from "../../utils/cn";
 
 export interface CallLimboProps {
   readonly spaceName?: string;
@@ -20,10 +21,12 @@ export interface CallLimboProps {
   readonly initiallyCovered?: boolean;
   readonly theme?: ChalkTheme;
   readonly blocking?: boolean;
+  /** Extra classes for the message card, such as a fixed width around a form. */
+  readonly className?: string;
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -77,7 +80,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
         transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}
     >
-      <div data-part={active ? "limbo-message" : undefined} style={{ borderRadius: 16 }} className="flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center">
+      <div data-part={active ? "limbo-message" : undefined} style={{ borderRadius: 16 }} className={cn("flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center", className)}>
         {message ? (
           <p role={active ? "status" : undefined} className="flex items-center gap-2.5 text-[17px] font-semibold">
             {message.endsWith("…") ? <span aria-hidden="true" className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
