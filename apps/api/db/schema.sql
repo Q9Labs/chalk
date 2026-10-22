@@ -649,6 +649,8 @@ create index sync_chat_messages_space_created_at_idx
     on sync_chat_messages(tenant_id, space_id, created_at, sequence);
 create index sync_chat_messages_episode_sequence_idx
     on sync_chat_messages(tenant_id, space_id, episode_id, sequence);
+create index sync_chat_messages_participant_usage_idx
+    on sync_chat_messages(tenant_id, space_id, participant_id) include (created_at, encoded_bytes);
 
 create table sync_chat_attachments (
     tenant_id uuid not null,
