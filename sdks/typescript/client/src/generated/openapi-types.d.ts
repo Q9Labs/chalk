@@ -1651,6 +1651,7 @@ export interface components {
       stop_reason?: "duration_limit";
     };
     RecordingTranscriptionPreparation: {
+      expires_at?: components["schemas"]["DateTimeString"] | null;
       /** @enum {string} */
       status: "none" | "pending" | "ready" | "failed" | "expired";
     };

@@ -2305,6 +2305,8 @@ select selected.id as recording_id,
 		when transcription_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
 		else 'none'
 	end::text as transcription_preparation_status,
+	-- The transcription source has its own window, never longer than the recording source window; a disabled policy has none.
+	(case when selected.transcription_policy = 'disabled' then null else transcription_source.expires_at end)::timestamptz as transcription_source_expires_at,
 	export_job.id as export_job_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported
@@ -2351,6 +2353,7 @@ type ListRecordingDeferredArtifactStatesRow struct {
 	CaptureStopReason              string             `json:"capture_stop_reason"`
 	TranscriptionPolicy            string             `json:"transcription_policy"`
 	TranscriptionPreparationStatus string             `json:"transcription_preparation_status"`
+	TranscriptionSourceExpiresAt   pgtype.Timestamptz `json:"transcription_source_expires_at"`
 	ExportJobID                    pgtype.UUID        `json:"export_job_id"`
 	ExportStatus                   string             `json:"export_status"`
 	Retryable                      bool               `json:"retryable"`
@@ -2374,6 +2377,7 @@ func (q *Queries) ListRecordingDeferredArtifactStates(ctx context.Context, arg L
 			&i.CaptureStopReason,
 			&i.TranscriptionPolicy,
 			&i.TranscriptionPreparationStatus,
+			&i.TranscriptionSourceExpiresAt,
 			&i.ExportJobID,
 			&i.ExportStatus,
 			&i.Retryable,
