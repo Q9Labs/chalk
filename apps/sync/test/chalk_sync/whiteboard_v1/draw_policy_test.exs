@@ -195,32 +195,37 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     assert can_draw?(collaborator)
   end
 
+  test "a host's choice that waits behind a policy change is stored for the new policy", %{
+    episode: episode,
+    host: host,
+    collaborator: collaborator
+  } do
+    set_policy(host, "picked", "policy-picked-00005")
+    set_permission(host, collaborator, true, "permission-pick-00002")
+
+    # The unpick read picked, so on its own it would delete the choice. It
+    # lands after everyone, where it must be kept as a block.
+    assert {:ok, %{outcome: :committed}} =
+             while_policy_changes(episode, host, "everyone", fn ->
+               PostgresRepository.set_draw_permission(host, %{
+                 operation_id: "permission-unpick-0002",
+                 participant_id: collaborator.participant_id,
+                 can_draw: false
+               })
+             end)
+
+    refute can_draw?(collaborator)
+  end
+
   test "a drawing that waits behind a policy change is checked against the new policy", %{
     episode: episode,
     host: host,
     collaborator: collaborator
   } do
     {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(collaborator)
-    {:ok, options} = Database.connection_options(@database_url)
-    {:ok, blocker} = Postgrex.start_link(options)
-    parent = self()
-
-    holder =
-      Task.async(fn ->
-        Postgrex.transaction(blocker, fn transaction ->
-          hold_scene_and_set_hosts(transaction, episode, host)
-          send(parent, :scene_locked)
-
-          receive do
-            :commit -> :ok
-          end
-        end)
-      end)
-
-    assert_receive :scene_locked, 5_000
 
     drawing =
-      Task.async(fn ->
+      while_policy_changes(episode, host, "hosts", fn ->
         PostgresRepository.commit_update(collaborator, %{
           operation_id: "update-waiting-00001",
           scene_id: scene_id,
@@ -228,11 +233,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
         })
       end)
 
-    Process.sleep(200)
-    send(holder.pid, :commit)
-    assert {:ok, :ok} = Task.await(holder)
-    assert {:error, :permission_denied} = Task.await(drawing)
-    GenServer.stop(blocker)
+    assert {:error, :permission_denied} = drawing
   end
 
   test "only hosts see the per-person choices", %{
@@ -323,7 +324,36 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
            } = JSON.decode!(frame)
   end
 
-  defp hold_scene_and_set_hosts(transaction, episode, host) do
+  # Runs the change while another transaction holds the scene lock and sets
+  # the policy, so the change has read the old policy and must wait for the new.
+  defp while_policy_changes(episode, host, policy, change) do
+    {:ok, options} = Database.connection_options(@database_url)
+    {:ok, blocker} = Postgrex.start_link(options)
+    parent = self()
+
+    holder =
+      Task.async(fn ->
+        Postgrex.transaction(blocker, fn transaction ->
+          hold_scene_and_set_policy(transaction, episode, host, policy)
+          send(parent, :scene_locked)
+
+          receive do
+            :commit -> :ok
+          end
+        end)
+      end)
+
+    assert_receive :scene_locked, 5_000
+    waiting = Task.async(change)
+    Process.sleep(200)
+    send(holder.pid, :commit)
+    assert {:ok, :ok} = Task.await(holder)
+    result = Task.await(waiting)
+    GenServer.stop(blocker)
+    result
+  end
+
+  defp hold_scene_and_set_policy(transaction, episode, host, policy) do
     params = [
       UUID.dump!(episode.tenant_id),
       UUID.dump!(episode.space_id),
@@ -338,8 +368,8 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
 
     Postgrex.query!(
       transaction,
-      "insert into sync_whiteboard_draw_policies (tenant_id, space_id, episode_id, policy, updated_by_participant_id) values ($1, $2, $3, 'hosts', $4)",
-      params ++ [UUID.dump!(host.participant_id)]
+      "insert into sync_whiteboard_draw_policies (tenant_id, space_id, episode_id, policy, updated_by_participant_id) values ($1, $2, $3, $4, $5) on conflict (tenant_id, space_id, episode_id) do update set policy = excluded.policy",
+      params ++ [policy, UUID.dump!(host.participant_id)]
     )
   end
 

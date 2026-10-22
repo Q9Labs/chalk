@@ -110,9 +110,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     fingerprint = fingerprint(operation)
 
     transaction(identity, fn connection ->
-      with {:ok, authority} <- authority(connection, identity),
+      with {:ok, authority, scene} <- locked_scene(connection, identity),
            :ok <- require_capability(authority, "manageWhiteboard"),
-           {:ok, scene} <- current_scene(connection, identity),
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
            :ok <- store_permission(connection, identity, authority.draw_policy, operation),
            :ok <-
@@ -413,15 +412,22 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
-  # A policy or per-person change commits while holding the scene lock, so the
-  # rule is read again once this write holds it. The first read takes the
-  # participant row lock first, which keeps the lock order of every other write.
   defp drawing_scene(connection, identity) do
-    with {:ok, _locked} <- authority(connection, identity),
-         {:ok, scene} <- current_scene(connection, identity),
-         {:ok, authority} <- authority(connection, identity),
+    with {:ok, authority, scene} <- locked_scene(connection, identity),
          :ok <- require_capability(authority, "drawWhiteboard") do
       {:ok, scene}
+    end
+  end
+
+  # A policy or per-person change commits while holding the scene lock, so the
+  # rule and the policy are read again once this transaction holds it. The
+  # first read takes the participant row lock first, which keeps the lock
+  # order of every other write.
+  defp locked_scene(connection, identity) do
+    with {:ok, _locked} <- authority(connection, identity),
+         {:ok, scene} <- current_scene(connection, identity),
+         {:ok, authority} <- authority(connection, identity) do
+      {:ok, authority, scene}
     end
   end
 

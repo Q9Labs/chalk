@@ -4,6 +4,7 @@ import { Schema } from "effect";
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
+import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 import type { ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport } from "./types";
 
 const sceneId = "10000000-0000-4000-8000-000000000001";
@@ -559,6 +560,85 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await expect(change).resolves.toBeUndefined();
     } finally {
       await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends a host's access changes one at a time in order, so a retried earlier change can't land after a later one", async () => {
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    const person = "20000000-0000-4000-8000-000000000002";
+    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy" || frame.type === "set_draw_permission");
+    const commitLast = async () => {
+      sockets[0]?.receive({ type: "commit", operation_id: sent().at(-1).operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      await settle();
+    };
+    try {
+      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+      await settle();
+      const changes = [client.setDrawPolicy("picked"), client.setDrawPermission(person, false), client.setDrawPolicy("everyone"), client.setDrawPermission(person, true)];
+      await settle();
+      expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked"]);
+
+      const [picked] = sent();
+      sockets[0]?.receive({ type: "operation_error", correlation_id: picked.operation_id, operation: "set_draw_policy", code: "storage_unavailable", recoverable: true, message: "Storage temporarily unavailable." });
+      await settle();
+      clock.advance(5_000);
+      await settle();
+      for (let index = 0; index < 4; index += 1) await commitLast();
+
+      expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked", "picked", false, "everyone", true]);
+      await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined, undefined, undefined]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends a held access change when a snapshot fails for good", async () => {
+    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy" || frame.type === "set_draw_permission");
+    try {
+      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+      await settle();
+      const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("everyone")];
+      await settle();
+      void client.requestSnapshot().catch(() => undefined);
+      await settle();
+      sockets[0]?.receive({ type: "commit", operation_id: sent()[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      await settle();
+      expect(sent()).toHaveLength(1);
+
+      sockets[0]?.receive({ type: "operation_error", correlation_id: sockets[0]?.requestId(), operation: "request_snapshot", code: "storage_unavailable", recoverable: false, message: "Storage failed." });
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "everyone"]);
+      sockets[0]?.receive({ type: "commit", operation_id: sent()[1].operation_id, outcome: "committed", scene_id: sceneId, revision: "2" });
+      await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("replays access changes made in the same millisecond in the order they were made", async () => {
+    const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    // Each id sorts before the one made just before it, so only createdAt can keep the order.
+    let made = 0;
+    const ids = { next: () => `ffffffff-ffff-4fff-8fff-${(0xffffffffffff - made++).toString(16)}` };
+    const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore, ids });
+    first.sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+    await settle();
+    void first.client.setDrawPolicy("hosts").catch(() => undefined);
+    void first.client.setDrawPolicy("picked").catch(() => undefined);
+    await settle();
+    await first.client.stopSceneSubscription();
+
+    const second = recoveryClient(new TestClock(), undefined, { pendingStore });
+    const startup = second.client.startSceneSubscription();
+    try {
+      await acceptSnapshot(second.sockets);
+      const replayed = (second.sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
+      expect(replayed.map((frame) => frame.policy)).toEqual(["hosts"]);
+    } finally {
+      void startup.catch(() => undefined);
+      await second.client.stopSceneSubscription();
     }
   });
 });

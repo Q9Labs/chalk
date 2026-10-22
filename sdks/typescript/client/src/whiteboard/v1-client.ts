@@ -67,6 +67,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #latestViews = new Map<string, Extract<ChalkWhiteboardV1Event, { readonly type: "view" }>>();
   readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
+  /** Strictly increasing, so a restore replays operations made in the same millisecond in the order they were made. */
+  #lastCreatedAt = 0;
   readonly #reservedOperationIds = new Set<string>();
   readonly #awaitingOperationIds = new Set<string>();
   readonly #pendingStoreWrites = new Set<Promise<void>>();
@@ -367,6 +369,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         continue;
       }
       if (this.#operations.size >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) return;
+      this.#lastCreatedAt = Math.max(this.#lastCreatedAt, pending.createdAt);
       this.#operations.set(pending.operationId, { pending, retries: 0 });
     }
   }
@@ -594,8 +597,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     this.#awaitingOperationIds.clear();
     this.#waitingForOperations = true;
-    for (const entry of pendingOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
-    for (const entry of pendingOperations) {
+    const sendable = pendingOperations.filter((entry) => this.#sendable(entry.pending.frame));
+    for (const entry of sendable) this.#awaitingOperationIds.add(entry.pending.operationId);
+    for (const entry of sendable) {
       this.#sendOperation(entry.pending.frame);
     }
     this.#requestSnapshotAfterOperations();
@@ -677,7 +681,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const pending = {
       operationId: frame.operation_id,
       frame,
-      createdAt: this.#now(),
+      createdAt: (this.#lastCreatedAt = Math.max(this.#now(), this.#lastCreatedAt + 1)),
       bytes: whiteboardV1PendingOperationBytes(frame),
     } satisfies ChalkWhiteboardV1PendingOperation;
     const queuedBytes = [...this.#operations.values()].reduce((total, entry) => total + entry.pending.bytes, 0);
@@ -705,7 +709,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       deferred = { resolve, reject, settled: false };
     });
     this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
-    if (this.#phase === "live" && this.#snapshots.size === 0) {
+    if (this.#phase === "live" && this.#snapshots.size === 0 && this.#sendable(frame)) {
       if (this.#waitingForOperations) this.#awaitingOperationIds.add(frame.operation_id);
       this.#sendOperation(frame);
     }
@@ -730,6 +734,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         revision: frame.revision,
       });
     void this.#store.remove(frame.operation_id).catch(() => undefined);
+    if (isAccessChange(entry.pending.frame)) this.#sendNextAccessChange();
     this.#requestSnapshotAfterOperations();
   }
 
@@ -747,6 +752,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       entry.deferred && rejectDeferred(entry.deferred, error(failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message)));
       this.#publishSummary("ready", failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message));
       void this.#store.remove(frame.correlation_id).catch(() => undefined);
+      if (isAccessChange(entry.pending.frame)) this.#sendNextAccessChange();
       this.#requestSnapshotAfterOperations();
       return;
     }
@@ -761,13 +767,34 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#initialSnapshot = null;
     }
     if (frame.recoverable) this.#flushQueuedOperations();
+    else this.#sendNextAccessChange();
   }
 
   #flushQueuedOperations(): void {
     if (this.#phase !== "live" || this.#snapshots.size > 0) return;
     for (const entry of this.#operations.values()) {
-      if (!this.#awaitingOperationIds.has(entry.pending.operationId)) this.#sendOperation(entry.pending.frame);
+      if (!this.#awaitingOperationIds.has(entry.pending.operationId) && this.#sendable(entry.pending.frame)) this.#sendOperation(entry.pending.frame);
     }
+  }
+
+  /**
+   * Access changes go out one at a time in the host's order, so a retried older change can't land after a newer one.
+   * Sync also stores a per-person choice according to the policy it lands under, so their order matters too.
+   */
+  #sendable(frame: ChalkWhiteboardV1PendingOperation["frame"]): boolean {
+    if (!isAccessChange(frame)) return true;
+    for (const entry of this.#operations.values()) {
+      if (isAccessChange(entry.pending.frame)) return entry.pending.operationId === frame.operation_id;
+    }
+    return true;
+  }
+
+  #sendNextAccessChange(): void {
+    if (this.#phase !== "live" || this.#snapshots.size > 0) return;
+    const next = [...this.#operations.values()].find((entry) => isAccessChange(entry.pending.frame));
+    if (!next) return;
+    if (this.#waitingForOperations) this.#awaitingOperationIds.add(next.pending.operationId);
+    this.#sendOperation(next.pending.frame);
   }
 
   #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
@@ -1199,6 +1226,10 @@ function failure(operation: ChalkWhiteboardV1Operation, code: ChalkWhiteboardV1F
 
 function error(value: ChalkWhiteboardV1Failure, cause?: unknown): ChalkWhiteboardV1Error {
   return new ChalkWhiteboardV1Error(value, cause === undefined ? undefined : { cause });
+}
+
+function isAccessChange(frame: ChalkWhiteboardV1PendingOperation["frame"]): boolean {
+  return frame.type === "set_draw_policy" || frame.type === "set_draw_permission";
 }
 
 function resolveDeferred<T>(deferred: Deferred<T>, value: T): void {
