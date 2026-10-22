@@ -46,7 +46,8 @@ function served() {
     // A rendered artifact expires with its source; a legacy one has no expiry and stays ready.
     export: sourceClosed && !(artifact === "ready" && legacyExport) ? "unavailable" : artifact,
     retryable: retryable && !sourceClosed,
-    transcription: preparation === "ready" && (closed(transcriptionExpiresAt) || sourceClosed) ? "expired" : preparation,
+    // A closed source window expires every preparation state except one with no source and no job (recording_pipeline.sql:673-684).
+    transcription: (preparation !== "none" && sourceClosed) || (preparation === "ready" && closed(transcriptionExpiresAt)) ? "expired" : preparation,
   };
 }
 
@@ -111,12 +112,14 @@ beforeEach(() => {
     if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
     if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
     if (body?.action === "export-recording" && exportHTTPStatus !== 202) return Response.json({ error: { code: "recording.not_ready" } }, { status: exportHTTPStatus });
+    // transcripts.go:218-231 refuses a source that isn't ready by the server's clock.
+    if (body?.action === "create-transcript" && served().transcription !== "ready" && transcriptStatus === "") return Response.json({ error: { code: "transcript.source_expired" } }, { status: 409 });
     if (body?.action === "create-transcript" && createHTTPStatus !== 200) return Response.json({ error: { code: "transcript.source_expired" } }, { status: createHTTPStatus });
     if (body?.action === "create-transcript") {
       transcriptStatus = "preparing";
       return Response.json({ transcript: { id, status: "preparing", languages: ["en"], createdAt: date } });
     }
-    if (body?.action === "export-recording" && (source === "expired" || artifact === "unavailable")) return Response.json({ recording: recording() });
+    if (body?.action === "export-recording" && (served().source === "expired" || served().export === "unavailable")) return Response.json({ recording: recording() });
     if (body?.action === "export-recording") {
       artifact = "pending";
       return Response.json({ recording: recording() });
@@ -685,4 +688,34 @@ it("asks the server at the page's own deadline when its clock runs behind and no
   expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+});
+
+it("closes the transcript action on the server's refusal when this page's clock runs behind", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  serverLagMs = -30_000;
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  await open();
+  await advance(40_000);
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
+  });
+  expect(requests.filter((request) => request.action === "create-transcript")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
+  expect(screen.queryByText("The transcript is being prepared.")).toBeNull();
+});
+
+it("moves a transcript still being prepared to closed when the server closes the source window", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptionSource = "pending";
+  transcriptStatus = "";
+  await open();
+  expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
+  await advance(65_000);
+  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
+  const reads = metadataReads();
+  await tick();
+  expect(metadataReads()).toBe(reads);
 });

@@ -297,7 +297,8 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
     if (!recheck || !recordingId) return;
     const timer = window.setTimeout(() => setCheck((value) => value + 1), TRANSCRIPT_CHECK_MS);
     return () => window.clearTimeout(timer);
-  }, [recheck, recordingId, check]);
+    // Keyed by the read itself, so the next check waits for the last one to settle and a slow read is never cut off.
+  }, [recheck, recordingId, read]);
   useEffect(() => {
     if (!recordingId) return;
     let current = true;
