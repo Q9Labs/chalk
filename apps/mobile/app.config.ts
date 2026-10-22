@@ -35,6 +35,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         // A8: the mark alone on the call background. `pnpm run brand-assets` renders it and the icons from `src/brand/mark.ts`.
         ["expo-splash-screen", { image: "./assets/splash-mark.png", imageWidth: 112, resizeMode: "contain", backgroundColor: SPLASH_BACKGROUND }],
         "./plugins/with-worklets-legacy-output.js",
+        "./plugins/with-ios-scene-lifecycle.js",
       ],
       ios: {
         jsEngine: "jsc",
