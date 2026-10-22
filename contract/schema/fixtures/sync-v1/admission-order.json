@@ -1,0 +1,134 @@
+{
+  "episode_id": "00000000-0000-4000-8000-000000000010",
+  "initial_snapshot": {
+    "admission_policy": "knock",
+    "admission_requests": [],
+    "control_revision": 0,
+    "deadline_at_ms": 1786278896789,
+    "deadline_generation": 1,
+    "participants": [],
+    "recording": null,
+    "role_capabilities": {
+      "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand", "sendChat"],
+      "observer": ["subscribe", "sendReaction"]
+    },
+    "state_schema_version": 1,
+    "status": "active",
+    "state_digest": "66a317eda731c760baa2d1ab482b86878427ea584883e4647cc445ad1b6a9b38"
+  },
+  "events": [
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_requested",
+      "event_id": "00000000-0000-4000-8000-000000000201",
+      "base_revision": 0,
+      "revision": 1,
+      "schema_version": 1,
+      "resulting_state_digest": "a51a8e075f18433257a8be8ebafd34c758e4d4885e58f3a48f76d27db47df673",
+      "payload": {
+        "admission_request_id": "00000000-0000-4000-8000-000000000090",
+        "participant_id": "00000000-0000-4000-8000-000000000101",
+        "display_name": "First",
+        "role": "facilitator",
+        "expires_at_ms": 1786278890000
+      },
+      "lifecycle_intent_id": "00000000-0000-4000-8000-000000000301"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_requested",
+      "event_id": "00000000-0000-4000-8000-000000000202",
+      "base_revision": 1,
+      "revision": 2,
+      "schema_version": 1,
+      "resulting_state_digest": "6d7ad4ab5eb0d3ea8bba4597f540eddac613f96c8f3ed69d5dd88a152e60154a",
+      "payload": {
+        "admission_request_id": "00000000-0000-4000-8000-000000000010",
+        "participant_id": "00000000-0000-4000-8000-000000000102",
+        "display_name": "Second",
+        "role": "facilitator",
+        "expires_at_ms": 1786278890000
+      },
+      "lifecycle_intent_id": "00000000-0000-4000-8000-000000000302"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_requested",
+      "event_id": "00000000-0000-4000-8000-000000000203",
+      "base_revision": 2,
+      "revision": 3,
+      "schema_version": 1,
+      "resulting_state_digest": "76e17303023664de86134eaa20e648dc5e54b2db7624f6173bcdfb630a353f50",
+      "payload": {
+        "admission_request_id": "00000000-0000-4000-8000-000000000050",
+        "participant_id": "00000000-0000-4000-8000-000000000103",
+        "display_name": "Third",
+        "role": "facilitator",
+        "expires_at_ms": 1786278890000
+      },
+      "lifecycle_intent_id": "00000000-0000-4000-8000-000000000303"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_expired",
+      "event_id": "00000000-0000-4000-8000-000000000204",
+      "base_revision": 3,
+      "revision": 4,
+      "schema_version": 1,
+      "resulting_state_digest": "4c087da44f2fa6f6d74ff464f1453aeeb5805292d91fb76e29f68dadf7e9109e",
+      "payload": {
+        "admission_request_id": "00000000-0000-4000-8000-000000000010"
+      },
+      "external_operation_id": "00000000-0000-4000-8000-000000000304"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "participant_joined",
+      "event_id": "00000000-0000-4000-8000-000000000205",
+      "base_revision": 4,
+      "revision": 5,
+      "schema_version": 1,
+      "resulting_state_digest": "433bcf1d0330f725de8cec6639d46c1f3b77298916e74426624cd9e27c828651",
+      "payload": {
+        "participant_id": "00000000-0000-4000-8000-000000000101",
+        "display_name": "First",
+        "role": "facilitator",
+        "admission_revision": 1
+      },
+      "lifecycle_intent_id": "00000000-0000-4000-8000-000000000305"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "admission_denied",
+      "event_id": "00000000-0000-4000-8000-000000000206",
+      "base_revision": 5,
+      "revision": 6,
+      "schema_version": 1,
+      "resulting_state_digest": "f2ee77b4a8433f17bc58b8d79fb6ad72c96d6b76413cf87a257fca1975611149",
+      "payload": {
+        "admission_request_id": "00000000-0000-4000-8000-000000000050"
+      },
+      "external_operation_id": "00000000-0000-4000-8000-000000000306"
+    },
+    {
+      "type": "event",
+      "stream": "control",
+      "name": "episode_ended",
+      "event_id": "00000000-0000-4000-8000-000000000207",
+      "base_revision": 6,
+      "revision": 7,
+      "schema_version": 1,
+      "resulting_state_digest": "01d96eac3f7c3a0909e858c69f4c4041b256989a866ee3c31ee31ffafa923787",
+      "payload": {
+        "reason": "ended_by_participant"
+      },
+      "external_operation_id": "00000000-0000-4000-8000-000000000307"
+    }
+  ]
+}
