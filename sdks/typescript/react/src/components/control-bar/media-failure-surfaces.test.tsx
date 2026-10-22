@@ -40,7 +40,7 @@ it("standalone ControlBar uses safe camera failure guidance", async () => {
     await act(async () => button?.click());
     const actual = container.querySelector('[role="alert"]')?.textContent;
 
-    expect(actual).toBe("Couldn’t change your camera settings. Try again.");
+    expect(actual).toBe("Couldn’t change your camera settings.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -72,7 +72,7 @@ it("stage screen-share stop uses safe media failure guidance", async () => {
     await act(async () => button?.click());
     const actual = container.querySelector('[role="alert"]')?.textContent;
 
-    expect(actual).toBe("That change was interrupted. Try again.");
+    expect(actual).toBe("That change was interrupted.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -98,7 +98,7 @@ it("standalone MediaRequestDialog uses safe camera failure guidance", async () =
     const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Allow"));
     expect(button).not.toBeUndefined();
     await act(async () => button?.click());
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("That change was interrupted. Try again.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("That change was interrupted.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -117,7 +117,7 @@ it.each(["Allow", "Not now"])("uses safe microphone guidance for standalone %s r
     const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === action);
     if (!button) throw new Error("Missing request action");
     await act(async () => button.click());
-    const safe = "Couldn’t change your microphone settings. Try again.";
+    const safe = "Couldn’t change your microphone settings.";
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(safe);
     expect(onActionError).toHaveBeenCalledWith(safe, action === "Allow" ? "allow" : "decline");
   } finally {
@@ -149,7 +149,7 @@ it("uses safe screen guidance when changing the shared surface", async () => {
     const tab = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent === "Browser tab");
     if (!(tab instanceof HTMLElement)) throw new Error("Missing Browser tab option");
     await act(async () => tab.click());
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Couldn’t change screen sharing. Try again.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Couldn’t change screen sharing.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -220,10 +220,91 @@ it.each(["camera", "microphone"] as const)("standalone %s disable failures use a
     const button = container.querySelector<HTMLButtonElement>(`[data-part="${source === "camera" ? "video" : "mic"}-split"] .chalk-shell-main`);
     expect(button?.getAttribute("aria-label")).toBe(source === "camera" ? "Turn off camera" : "Mute microphone");
     await act(async () => button?.click());
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(`Couldn’t change your ${source} settings. Check that it is connected and available, then try again.`);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(`Couldn’t change your ${source} settings. Try again.`);
   } finally {
     await act(async () => root.unmount());
     container.remove();
     preview.dispose();
+  }
+});
+
+it("screen Off capture failure does not suggest granting capture permission", async () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ScreenSharePresentation
+          sharedByName="You"
+          isLocal
+          media={null}
+          mediaVisible
+          state="live"
+          onStopSharing={async () => {
+            throw new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Could not pause screen" });
+          }}
+        />,
+      ),
+    );
+    const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "Stop sharing");
+    expect(button).toBeDefined();
+    await act(async () => button?.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Couldn’t stop screen sharing. Try again.");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+it.each(["camera", "microphone"] as const)("standalone %s Start capture failure keeps start guidance", async (source) => {
+  const snapshot = createSnapshot(["publishAudio", "publishVideo"]);
+  const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" } });
+  const fail = async () => {
+    throw new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Capture implementation details" });
+  };
+  const client = { ...preview, media: { ...preview.media, setCameraEnabled: fail, setMicrophoneEnabled: fail } };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <ControlBar buttons={[source === "camera" ? "video" : "mic"]} />
+        </ChalkProvider>,
+      ),
+    );
+    const button = container.querySelector<HTMLButtonElement>(`[data-part="${source === "camera" ? "video" : "mic"}-split"] .chalk-shell-main`);
+    expect(button?.getAttribute("aria-label")).toBe(source === "camera" ? "Turn on camera" : "Unmute microphone");
+    await act(async () => button?.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(`Your ${source} couldn’t start. Check that it is connected and available, then try again.`);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
+  }
+});
+
+it("withdrawn media requests show terminal guidance without retry advice", async () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <MediaRequestDialog
+          request={{ requestId: "withdrawn", kind: "start_camera", expiresAt: new Date(Date.now() + 60000).toISOString(), actorParticipantId: "host", actorDisplayName: "Host" }}
+          onDecline={() => {}}
+          onAllow={async () => {
+            throw new SpaceClientError({ code: "media.request_invalid", recoverable: false, message: "The media request is no longer active" });
+          }}
+        />,
+      ),
+    );
+    const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "Allow");
+    expect(button).toBeDefined();
+    await act(async () => button?.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("The media request is no longer active.");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
   }
 });

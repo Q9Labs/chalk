@@ -178,11 +178,11 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource } = useConnectedControlBarBehavior(props);
+  const { surfaceProps, commandError, commandSource, commandAction } = useConnectedControlBarBehavior(props);
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      {!props.onCommandError ? <CommandErrorAlert message={commandError ? commandFailureMessage(commandError, commandSource) : undefined} /> : null}
+      {!props.onCommandError ? <CommandErrorAlert message={commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined} /> : null}
     </>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { commandFailure, type MediaCommandSource } from "../control-bar/command-failure";
+import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { SpaceClientError, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -75,6 +75,7 @@ export interface SpaceViewProps {
   readonly generatedAvatars?: boolean;
   readonly commandError?: string | ClientFailure;
   readonly commandSource?: MediaCommandSource;
+  readonly commandAction?: MediaCommandAction;
   readonly onDismissCommandError?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
@@ -105,6 +106,7 @@ export function SpaceView({
   generatedAvatars = true,
   commandError: externalCommandError,
   commandSource: externalCommandSource,
+  commandAction: externalCommandAction,
   onDismissCommandError,
   onToggleWhiteboard,
   whiteboard,
@@ -136,10 +138,12 @@ export function SpaceView({
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
-  const onCommandError = (failure: ClientFailure | string | null, source?: MediaCommandSource, mediaSource?: MediaCommandSource) => {
+  const [commandAction, setCommandAction] = useState<MediaCommandAction>();
+  const onCommandError = (failure: ClientFailure | string | null, source?: MediaCommandSource, mediaSource?: MediaCommandSource, action?: MediaCommandAction) => {
     if (!failure && commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(failure);
     setCommandSource(mediaSource ?? source);
+    setCommandAction(action);
     if (failure && typeof failure !== "string") playSound("error", failure);
   };
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
@@ -176,30 +180,32 @@ export function SpaceView({
   const playSound = useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
-  const runCommand = useCallback(async (command: () => Promise<unknown>, source?: MediaCommandSource) => {
+  const runCommand = useCallback(async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
     try {
       await command();
       setCommandError(null);
       setCommandSource(undefined);
+      setCommandAction(undefined);
     } catch (cause) {
       setCommandError(commandFailure(cause));
       setCommandSource(source);
+      setCommandAction(action);
     }
   }, []);
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
   const displayedCommandSource = externalCommandError != null ? externalCommandSource : commandSource;
-  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, displayedCommandSource);
+  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, displayedCommandSource, externalCommandError != null ? externalCommandAction : commandAction);
   const retryMedia = async () => {
     try {
-      if (commandSource === "screen") await client.media.setScreenShareEnabled(true);
-      else if (commandSource === "camera") await client.media.setCameraEnabled(true);
-      else if (commandSource === "microphone") await client.media.setMicrophoneEnabled(true);
+      if (commandSource === "screen") await client.media.setScreenShareEnabled(commandAction !== "stop");
+      else if (commandSource === "camera") await client.media.setCameraEnabled(commandAction !== "stop");
+      else if (commandSource === "microphone") await client.media.setMicrophoneEnabled(commandAction !== "stop");
       onCommandError(null);
     } catch (cause) {
       if (cause instanceof SpaceClientError && cause.code === "connection.invalid_state") return;
-      onCommandError(cause instanceof SpaceClientError ? cause : { code: "client.internal_error", recoverable: true, message: "Your device couldn’t start. Try again." }, commandSource);
+      onCommandError(cause instanceof SpaceClientError ? cause : { code: "client.internal_error", recoverable: true, message: "Your device couldn’t start. Try again." }, commandSource, commandSource, commandAction);
     }
   };
   const retryableMedia = externalCommandError == null && commandSource && typeof displayedCommandError === "object" && displayedCommandError?.recoverable && (commandSource === "screen" || displayedCommandError.code === "media.device_busy");
@@ -247,8 +253,9 @@ export function SpaceView({
             diagnostics: callDiagnostics(connection, media),
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",
-              onToggleMute: connection.status === "live" || media.local.microphone.state === "enabled" ? () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled"), "microphone") : undefined,
-              onToggleVideo: connection.status === "live" || media.local.camera.state === "enabled" ? () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled"), "camera") : undefined,
+              onToggleMute:
+                connection.status === "live" || media.local.microphone.state === "enabled" ? () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled"), "microphone", media.local.microphone.state === "enabled" ? "stop" : "start") : undefined,
+              onToggleVideo: connection.status === "live" || media.local.camera.state === "enabled" ? () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled"), "camera", media.local.camera.state === "enabled" ? "stop" : "start") : undefined,
               onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
               onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
@@ -256,7 +263,7 @@ export function SpaceView({
               onClosePanel: () => setActivePanel(null),
               onPushToTalk: (enabled) => {
                 if (enabled && connection.status !== "live") return;
-                void runCommand(() => client.media.setMicrophoneEnabled(enabled), "microphone");
+                void runCommand(() => client.media.setMicrophoneEnabled(enabled), "microphone", enabled ? "start" : "stop");
               },
             },
             duration: episodeDuration,

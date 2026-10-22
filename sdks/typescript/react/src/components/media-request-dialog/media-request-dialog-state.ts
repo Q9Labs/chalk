@@ -63,7 +63,7 @@ export function useMediaRequestDialogState({ request, onDecline, onAllow, onActi
       .then(handler)
       .then(() => onActionError?.(null, action))
       .catch((cause: unknown) => {
-        const message = commandFailureMessage(commandFailure(cause), request.kind === "start_camera" ? "camera" : "microphone");
+        const message = commandFailureMessage(commandFailure(cause), request.kind === "start_camera" ? "camera" : "microphone", action === "allow" ? "start" : undefined);
         setErrorMessage(message);
         onActionError?.(message, action);
       })

@@ -1,12 +1,12 @@
-import { commandFailureMessage, type MediaCommandSource } from "../control-bar/command-failure";
+import { commandFailureMessage, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { CallEventIcon } from "./CallEventIcon";
 import { Avatar } from "../atomic/Avatar";
 import type { ClientFailure, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { Toast } from "./ToastStack";
 
-export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource): Omit<Toast, "id"> | null {
+export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource, action?: MediaCommandAction): Omit<Toast, "id"> | null {
   if (!failure) return null;
-  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: commandFailureMessage(failure, source) };
+  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: commandFailureMessage(failure, source, action) };
 }
 
 /** Snapshot changes, not initial history, are events for the person already in the call. */

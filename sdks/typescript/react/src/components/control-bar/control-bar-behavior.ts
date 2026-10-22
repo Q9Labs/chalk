@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { commandFailure, type MediaCommandSource } from "./command-failure";
+import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -106,7 +106,7 @@ export interface ControlBarProps {
   readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
   /** The second argument retains the published MediaSource contract; the third also identifies speaker commands. */
-  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource, commandSource?: MediaCommandSource) => void;
+  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource, commandSource?: MediaCommandSource, action?: MediaCommandAction) => void;
   readonly participantColorSeed?: string;
   readonly participantGradientPreference?: ParticipantGradientPreference;
   readonly className?: string;
@@ -228,6 +228,7 @@ interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
   readonly commandError: ClientFailure | null;
   readonly commandSource?: MediaCommandSource;
+  readonly commandAction?: MediaCommandAction;
 }
 
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
@@ -253,12 +254,14 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const [noiseSuppression, setNoiseSuppression] = useState(true);
   const [commandError, setCommandError] = useState<ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
+  const [commandAction, setCommandAction] = useState<MediaCommandAction>();
 
   const run = useCallback(
-    async (command: () => Promise<unknown>, source?: MediaCommandSource) => {
+    async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
       setCommandError(null);
       setCommandSource(undefined);
-      props.onCommandError?.(null, source === "speaker" ? undefined : source, source);
+      setCommandAction(undefined);
+      props.onCommandError?.(null, source === "speaker" ? undefined : source, source, action);
       try {
         await command();
       } catch (cause) {
@@ -266,8 +269,9 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         if (!props.onCommandError) {
           setCommandError(failure);
           setCommandSource(source);
+          setCommandAction(action);
         }
-        props.onCommandError?.(failure, source === "speaker" ? undefined : source, source);
+        props.onCommandError?.(failure, source === "speaker" ? undefined : source, source, action);
       }
     },
     [props.onCommandError],
@@ -315,9 +319,13 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           }, "microphone")
       : undefined,
     onStartScreenShare: (options) =>
-      void run(async () => {
-        await client.media.setScreenShareEnabled(true, options);
-      }, "screen"),
+      void run(
+        async () => {
+          await client.media.setScreenShareEnabled(true, options);
+        },
+        "screen",
+        "start",
+      ),
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
@@ -367,12 +375,12 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           await context.close();
         }
       }, "speaker"),
-    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone"),
-    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera"),
+    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone", microphoneEnabled ? "stop" : "start"),
+    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera", cameraEnabled ? "stop" : "start"),
     onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
-    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen"),
+    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
@@ -383,5 +391,5 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onEndForEveryone: props.onEndForEveryone,
   };
 
-  return { surfaceProps, commandError, commandSource };
+  return { surfaceProps, commandError, commandSource, commandAction };
 }
