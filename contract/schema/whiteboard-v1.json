@@ -14,7 +14,8 @@
     "view": {
       "name": "view_v1",
       "exactFields": ["name"],
-      "extendedExactFields": ["name", "origins"]
+      "extendedExactFields": ["name", "origins"],
+      "orderedExactFields": ["name", "origins", "connection_id"]
     }
   },
   "identity": {
@@ -115,13 +116,17 @@
       "maxCoordinate": 1000000,
       "maxExtent": 2000000,
       "epochField": "origin_epoch",
+      "proofField": "origin_proof",
       "originFields": ["origin_participant_id", "origin_sequence"],
       "clientExactFields": ["type", "x", "y", "width", "height", "bring"],
-      "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"]
+      "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"],
+      "leadFields": ["origin_connection_id", "origin_lead_stamp"],
+      "intentField": "lead"
     },
     "welcome": {
       "exactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"],
-      "extendedExactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"]
+      "extendedExactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"],
+      "leadershipField": "view_leadership"
     },
     "snapshotPage": {
       "exactFields": ["type", "request_id", "scene_id", "revision", "page", "page_count", "elements", "app_state"]
@@ -157,7 +162,7 @@
   "notifications": {
     "durableHeadChannel": "chalk_whiteboard_v1_heads",
     "transientCursorChannel": "chalk_whiteboard_v1_cursors",
-    "transientEnvelopeBytes": 1024,
+    "transientEnvelopeBytes": 1536,
     "durablePayloadContainsContent": false
   },
   "fileTransport": {

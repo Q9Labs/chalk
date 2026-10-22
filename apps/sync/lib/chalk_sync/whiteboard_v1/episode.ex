@@ -20,6 +20,7 @@ defmodule ChalkSync.WhiteboardV1.Episode do
          "protocol" => "whiteboard-v1",
          "participant_id" => identity.participant_id,
          "participant_generation" => identity.participant_generation,
+         "view_leadership" => true,
          "capabilities" => context.capabilities,
          "participant_capabilities" => context.participant_capabilities,
          "scene_id" => context.scene_id,

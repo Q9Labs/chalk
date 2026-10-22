@@ -279,6 +279,38 @@ replacement: reason, up to two measured round trips, up to two outstanding probe
 ages (not RTT estimates), and the next back-off. Consumer telemetry exceptions do
 not prevent recovery. Subscription stop detaches without waiting for socket close.
 
+### Board view ordering
+
+A participant's last real camera move or Follow-me start wins across tabs. The
+first Sync node receiving that intent stamps it with server Unix microseconds
+and authenticates the stamp for the origin connection. Within a tab, the SDK's
+sequence continues across socket reconnects. Relays preserve the authenticated
+origin stamp and geometry. Equal timestamps use the connection UUID as a stable
+tie-break. Sync nodes must have synchronized system clocks.
+
+Idle views (including two-second keep-alives), discovery and resize retain the
+tab's last stamp. They never take leadership from another tab. A returning tab
+leads immediately when the person moves or starts Follow-me, even after minutes
+of background throttling. Database restore does not change this order. There is
+no database incarnation, quiet timeout or permanently retired connection tuple.
+Unchanged views refresh ordering and relay metadata without camera writes or
+React commits. Legacy-only views retain per-epoch sequence deduplication.
+
+Production Sync requires `CHALK_SYNC_VIEW_ORIGIN_SECRET`: 32 random bytes encoded
+as unpadded base64url, shared by every node in the environment and retained across
+database restore. It derives domain-separated per-Episode proof keys without a
+database lookup. Configure it before deploying this release. Development and
+explicit localhost proof/parity modes use a local fixture key only. Never rotate
+it during a rolling deploy: existing view proofs would become invalid.
+
+Authoritative participant removal clears ordering and cached views. Temporary
+socket loss keeps both, so automatic recovery does not revive stale views.
+
+The transport delivers all live view observations, including enriched duplicates
+and retired views, so consumers can invalidate cached views before filtering.
+Use `ChalkWhiteboardViewVersions` to observe ordering before applying or caching a
+view; React Board does this automatically. Subscription replay omits retired views.
+
 ### Screen capture source hints
 
 ```ts

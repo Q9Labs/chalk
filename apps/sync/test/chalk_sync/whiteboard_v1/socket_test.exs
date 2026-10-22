@@ -3,6 +3,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Observability
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
@@ -17,6 +18,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   defmodule Repository do
     def connect(identity) do
       if hook = Process.get(:whiteboard_connect_hook), do: hook.()
+      if Process.get(:reject_view_db), do: raise("transient view queried the database")
 
       {:ok,
        %{
@@ -87,6 +89,364 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
            }
          ]}
     end
+  end
+
+  test "records each origin rejection reason once per socket without forwarding or leaking views" do
+    host = identity()
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    live =
+      Map.merge(initial, %{
+        phase: :live,
+        observability: Observability.context(%{"journey_id" => @scene_id}),
+        identity: host,
+        display_name: "Ada",
+        scene_id: @scene_id,
+        revision: 4,
+        view_negotiated: true,
+        view_origins_negotiated: true,
+        view_connection_id: @scene_id,
+        view_sequence: 1
+      })
+
+    Fanout.subscribe(host.episode)
+
+    forged = %{
+      "type" => "view",
+      "x" => 1,
+      "y" => 2,
+      "width" => 300,
+      "height" => 200,
+      "bring" => false,
+      "origin_participant_id" => @scene_id,
+      "origin_epoch" => @scene_id,
+      "origin_sequence" => 1,
+      "origin_connection_id" => @participant_id,
+      "origin_lead_stamp" => "9999999999999999:" <> String.duplicate("a", 64)
+    }
+
+    stale =
+      Map.merge(forged, %{
+        "origin_participant_id" => host.participant_id,
+        "origin_connection_id" => @scene_id,
+        "origin_lead_stamp" => "9:" <> String.duplicate("a", 64)
+      })
+
+    handler = "whiteboard-origin-rejection-#{System.unique_integer([:positive])}"
+    test_pid = self()
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _event, measure, metadata, _ ->
+        send(test_pid, {:origin_observed, measure, metadata})
+      end,
+      nil
+    )
+
+    previous = Application.get_env(:chalk_sync, :observability)
+    previous_log_level = Logger.level()
+
+    on_exit(fn ->
+      :telemetry.detach(handler)
+      Logger.configure(level: previous_log_level)
+
+      if is_nil(previous),
+        do: Application.delete_env(:chalk_sync, :observability),
+        else: Application.put_env(:chalk_sync, :observability, previous)
+    end)
+
+    Application.put_env(:chalk_sync, :observability, enabled: true)
+    Logger.configure(level: :info)
+
+    log =
+      ExUnit.CaptureLog.capture_log(
+        [level: :info, format: "$message $metadata\n", metadata: [:observability_event]],
+        fn ->
+          frames = [
+            forged,
+            Map.put(forged, "origin_proof", String.duplicate("a", 64)),
+            stale,
+            stale
+          ]
+
+          Enum.reduce(frames, live, fn frame, state ->
+            assert {:ok, next} = receive_frame(frame, state)
+            refute_received {:whiteboard_v1_frame, _}
+            next
+          end)
+        end
+      )
+
+    for reason <- ["invalid_origin_proof", "stale_origin_sequence"] do
+      assert_received {:origin_observed, %{count: 1},
+                       %{
+                         event: "sync.whiteboard.view_origin_rejected",
+                         journey_id: @scene_id,
+                         attributes: %{protocol: "whiteboard-v1", reason: ^reason}
+                       }}
+    end
+
+    refute_received {:origin_observed, _, _}
+    assert length(String.split(log, "sync.whiteboard.view_origin_rejected")) == 3
+    refute log =~ String.duplicate("a", 64)
+    refute log =~ forged["origin_lead_stamp"]
+    refute log =~ forged["origin_participant_id"]
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  test "fits a valid ordered view and its cross-node envelope within a bounded notification" do
+    coordinate = 0.00000012345678912345678
+
+    frame = %{
+      "type" => "view",
+      "participant_id" => @participant_id,
+      "display_name" => String.duplicate("a", 256),
+      "x" => -coordinate,
+      "y" => -coordinate,
+      "width" => coordinate,
+      "height" => coordinate,
+      "bring" => false,
+      "occurred_at" => "2026-10-23T00:00:00.000Z",
+      "origin_participant_id" => @participant_id,
+      "origin_epoch" => @scene_id,
+      "origin_sequence" => 9_007_199_254_740_991,
+      "origin_connection_id" => @scene_id,
+      "origin_lead_stamp" => "9999999999999999:" <> String.duplicate("a", 64),
+      "origin_proof" => String.duplicate("a", 64)
+    }
+
+    assert GeneratedWhiteboardV1.valid_server_frame?(frame)
+
+    assert {:ok, payload} =
+             Fanout.encode_transient(identity().episode, frame, String.duplicate("a", 64))
+
+    assert JSON.decode!(payload)["frame"] == frame
+    envelope_limit = GeneratedWhiteboardV1.metadata()["notifications"]["transientEnvelopeBytes"]
+    assert envelope_limit == 1_536
+    assert byte_size(payload) > 1_024
+    assert byte_size(payload) <= envelope_limit
+
+    bounded_frame =
+      Map.update!(frame, "display_name", fn name ->
+        name <> String.duplicate("b", envelope_limit - byte_size(payload))
+      end)
+
+    assert {:ok, bounded_payload} =
+             Fanout.encode_transient(identity().episode, bounded_frame, String.duplicate("a", 64))
+
+    assert byte_size(bounded_payload) == envelope_limit
+
+    assert :too_large =
+             Fanout.encode_transient(
+               identity().episode,
+               Map.update!(bounded_frame, "display_name", &(&1 <> "b")),
+               String.duplicate("a", 64)
+             )
+
+    assert :too_large =
+             Fanout.encode_transient(
+               identity().episode,
+               Map.put(frame, "display_name", String.duplicate("a", 2_000)),
+               String.duplicate("a", 64)
+             )
+  end
+
+  test "only welcomes negotiated ordered-view clients with leadership support" do
+    previous = Application.get_env(:chalk_sync, :token_verifier)
+    Application.put_env(:chalk_sync, :token_verifier, DevTokenVerifier)
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:chalk_sync, :token_verifier, previous),
+        else: Application.delete_env(:chalk_sync, :token_verifier)
+    end)
+
+    host = identity()
+
+    token =
+      DevTokenVerifier.token(%{
+        "tenant_id" => host.episode.tenant_id,
+        "space_id" => host.episode.space_id,
+        "episode_id" => host.episode.episode_id,
+        "participant_id" => host.participant_id,
+        "participant_generation" => 1,
+        "role" => "member",
+        "capabilities" => []
+      })
+
+    for ordered <- [false, true] do
+      {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+      extension =
+        if ordered,
+          do: %{"name" => "view_v1", "origins" => true, "connection_id" => @scene_id},
+          else: %{"name" => "view_v1", "origins" => true}
+
+      hello = %{
+        "type" => "hello",
+        "protocol" => "whiteboard-v1",
+        "token" => token,
+        "cursor" => nil,
+        "extensions" => [%{"name" => "presentation_v1"}, extension]
+      }
+
+      assert {:push, {:text, encoded}, _live} = receive_frame(hello, initial)
+      welcome = JSON.decode!(encoded)
+      assert Map.has_key?(welcome, "view_leadership") == ordered
+      refute Map.has_key?(welcome, "view_origin_key")
+      if ordered, do: assert(welcome["view_leadership"] == true)
+    end
+  after
+    Fanout.unsubscribe(identity().episode)
+  end
+
+  for direction <- [:surviving_to_new, :new_to_surviving] do
+    @direction direction
+    test "relays #{@direction} without consulting database-backed key state" do
+      surviving = ordered_view_socket(identity(), @scene_id)
+      Fanout.subscribe(identity().episode)
+
+      # Transient signing and verification must never consult the repository.
+      Process.put(:reject_view_db, true)
+
+      newcomer =
+        ordered_view_socket(%{identity() | participant_id: @scene_id}, @participant_id)
+
+      {publisher, relay} =
+        if @direction == :surviving_to_new,
+          do: {surviving, newcomer},
+          else: {newcomer, surviving}
+
+      view = %{
+        "type" => "view",
+        "x" => 1,
+        "y" => 2,
+        "width" => 300,
+        "height" => 200,
+        "bring" => false,
+        "origin_participant_id" => publisher.identity.participant_id,
+        "origin_epoch" => publisher.view_connection_id,
+        "origin_connection_id" => publisher.view_connection_id,
+        "origin_lead_stamp" => "0:" <> String.duplicate("0", 64),
+        "lead" => true,
+        "origin_sequence" => 1
+      }
+
+      assert {:ok, _} = receive_frame(view, publisher)
+      assert_received {:whiteboard_v1_frame, direct}
+      relay_view = Map.drop(direct, ["participant_id", "display_name", "occurred_at"])
+      assert {:ok, _} = receive_frame(relay_view, relay)
+      assert_received {:whiteboard_v1_frame, relayed}
+      assert relayed["origin_proof"] == direct["origin_proof"]
+      assert relayed["origin_lead_stamp"] == direct["origin_lead_stamp"]
+    end
+  end
+
+  defp ordered_view_socket(host, connection) do
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    Map.merge(initial, %{
+      phase: :live,
+      identity: host,
+      display_name: "Ada",
+      scene_id: @scene_id,
+      revision: 4,
+      view_negotiated: true,
+      view_origins_negotiated: true,
+      view_connection_id: connection
+    })
+  end
+
+  test "stamps real moves only, preserves relay proofs and reconnects without database state" do
+    host = %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]}
+    connection = "30000000-0000-4000-8000-000000000003"
+    live = ordered_view_socket(host, connection)
+    Fanout.subscribe(host.episode)
+
+    view = %{
+      "type" => "view",
+      "x" => 1,
+      "y" => 2,
+      "width" => 300,
+      "height" => 200,
+      "bring" => false,
+      "lead" => true,
+      "origin_participant_id" => host.participant_id,
+      "origin_sequence" => 1,
+      "origin_epoch" => @scene_id,
+      "origin_connection_id" => connection,
+      "origin_lead_stamp" => "0:" <> String.duplicate("0", 64)
+    }
+
+    assert {:ok, moved} = receive_frame(view, live)
+    assert_received {:whiteboard_v1_frame, direct}
+    assert {time, _} = Integer.parse(direct["origin_lead_stamp"])
+    assert time > 0
+    refute Map.has_key?(direct, "lead")
+
+    assert {:push, {:text, ack}, _} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, direct}, moved)
+
+    assert JSON.decode!(ack)["origin_lead_stamp"] == direct["origin_lead_stamp"]
+    assert {:ok, _} = receive_frame(view, moved)
+    refute_received {:whiteboard_v1_frame, _}
+
+    heartbeat =
+      Map.merge(view, %{
+        "lead" => false,
+        "origin_sequence" => 2,
+        "origin_lead_stamp" => direct["origin_lead_stamp"],
+        "x" => 1.0
+      })
+
+    assert {:ok, _} = receive_frame(heartbeat, moved)
+    assert_received {:whiteboard_v1_frame, idle}
+    assert idle["origin_lead_stamp"] == direct["origin_lead_stamp"]
+    # A reconnect keeps the tab's certified stamp and monotonic sequence.
+    reconnect = ordered_view_socket(host, connection)
+    assert {:ok, _} = receive_frame(heartbeat, reconnect)
+    assert_received {:whiteboard_v1_frame, resumed}
+    assert resumed["origin_lead_stamp"] == direct["origin_lead_stamp"]
+
+    other_tab = ordered_view_socket(host, @scene_id)
+    relay = Map.drop(direct, ["participant_id", "display_name", "occurred_at"])
+    assert {:ok, _} = receive_frame(relay, other_tab)
+    assert_received {:whiteboard_v1_frame, relayed}
+    assert relayed["origin_proof"] == direct["origin_proof"]
+    assert relayed["origin_lead_stamp"] == direct["origin_lead_stamp"]
+
+    for {field, value} <- [
+          {"origin_lead_stamp", "1:" <> String.duplicate("a", 64)},
+          {"origin_sequence", 999},
+          {"x", 999},
+          {"lead", true}
+        ] do
+      assert {:ok, _} = receive_frame(Map.put(relay, field, value), other_tab)
+      refute_received {:whiteboard_v1_frame, _}
+    end
+
+    foreign = %{other_tab | identity: %{host | episode: %{host.episode | episode_id: @scene_id}}}
+    assert {:ok, _} = receive_frame(relay, foreign)
+    refute_received {:whiteboard_v1_frame, _}
+    # A publisher cannot invent or borrow a leadership certificate.
+    assert {:ok, _} =
+             receive_frame(
+               Map.put(heartbeat, "origin_lead_stamp", "1:" <> String.duplicate("a", 64)),
+               reconnect
+             )
+
+    refute_received {:whiteboard_v1_frame, _}
+    peer = %{other_tab | view_connection_id: nil}
+
+    assert {:push, {:text, old_frame}, _} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, direct}, peer)
+
+    refute Map.has_key?(JSON.decode!(old_frame), "origin_lead_stamp")
+    assert JSON.decode!(old_frame)["origin_sequence"] == 1
+  after
+    Fanout.unsubscribe(identity().episode)
   end
 
   test "coalesces recovering Bring commands and delivers the latest after the final snapshot ACK" do

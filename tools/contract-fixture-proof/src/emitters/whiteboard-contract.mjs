@@ -35,8 +35,18 @@ function validateWhiteboardContract(contract) {
   }
   requireExactStrings(contract.extensions.view.exactFields, ["name"], "extensions.view.exactFields");
   requireExactStrings(contract.extensions.view.extendedExactFields, ["name", "origins"], "extensions.view.extendedExactFields");
-  if (contract.frames?.view?.epochField !== "origin_epoch" || !Number.isSafeInteger(contract.frames.view.maxCoordinate) || contract.frames.view.maxCoordinate <= 0 || !Number.isSafeInteger(contract.frames.view.maxExtent) || contract.frames.view.maxExtent <= 0)
+  if (
+    contract.frames?.view?.epochField !== "origin_epoch" ||
+    contract.frames?.view?.proofField !== "origin_proof" ||
+    !Number.isSafeInteger(contract.frames.view.maxCoordinate) ||
+    contract.frames.view.maxCoordinate <= 0 ||
+    !Number.isSafeInteger(contract.frames.view.maxExtent) ||
+    contract.frames.view.maxExtent <= 0
+  )
     throw new Error("Invalid whiteboard contract: views require an epoch field and bounded coordinates");
+  requireExactStrings(contract.extensions.view.orderedExactFields, ["name", "origins", "connection_id"], "extensions.view.orderedExactFields");
+  requireExactStrings(contract.frames.view.leadFields, ["origin_connection_id", "origin_lead_stamp"], "frames.view.leadFields");
+  if (contract.frames.welcome.leadershipField !== "view_leadership") throw new Error("Invalid whiteboard contract: welcome requires view_leadership");
   requireExactStrings(contract.frames?.view?.originFields, ["origin_participant_id", "origin_sequence"], "frames.view.originFields");
   requireExactStrings(contract.frames?.view?.clientExactFields, ["type", "x", "y", "width", "height", "bring"], "frames.view.clientExactFields");
   requireExactStrings(contract.frames?.view?.serverExactFields, ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"], "frames.view.serverExactFields");

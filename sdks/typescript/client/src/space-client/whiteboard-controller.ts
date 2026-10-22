@@ -36,15 +36,24 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   #connected = false;
   #summary: ChalkWhiteboardSummary = EMPTY_SUMMARY;
   #unsubscribe: (() => void) | null = null;
+  #unsubscribeRoster: (() => void) | null = null;
 
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkWhiteboardV1Transport | null) {
     this.#store = store;
     this.#transport = transport;
+    let roster = new Set(store.getSnapshot().participants.roster.map((person) => person.participantId));
+    this.#unsubscribeRoster = store.subscribe(() => {
+      const next = new Set(store.getSnapshot().participants.roster.map((person) => person.participantId));
+      for (const id of roster) if (!next.has(id)) transport?.forgetParticipant?.(id);
+      roster = next;
+    });
     this.#unsubscribe = connection.subscribePorts((ports) => this.#bind(ports));
   }
 
   transport = (): ChalkWhiteboardV1Transport | null => this.#transport;
   dispose(): void {
+    this.#unsubscribeRoster?.();
+    this.#unsubscribeRoster = null;
     this.#unsubscribe?.();
     this.#unsubscribe = null;
     this.#bind(null);

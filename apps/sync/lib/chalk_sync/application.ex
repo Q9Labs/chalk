@@ -21,6 +21,7 @@ defmodule ChalkSync.Application do
         collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
+        {ChalkSync.WhiteboardV1.ViewClock, []},
         whiteboard_fanout_child(),
         lifecycle_consumer_child(),
         external_operation_consumer_child(),

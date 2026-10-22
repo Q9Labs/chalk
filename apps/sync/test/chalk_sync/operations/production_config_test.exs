@@ -12,6 +12,8 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
       "CHALK_SYNC_TOKEN_AUDIENCE" => "chalk-sync",
       "CHALK_SYNC_TOKEN_PUBLIC_KEYS" =>
         JSON.encode!(%{"test" => Base.url_encode64(<<0::256>>, padding: false)}),
+      "CHALK_SYNC_VIEW_ORIGIN_SECRET" =>
+        Base.url_encode64(:binary.copy(<<7>>, 32), padding: false),
       "CHALK_SYNC_MAX_WAL_LAG_BYTES" => "0",
       "CHALK_SYNC_PROVIDER_BRIDGE_URL" => "https://example.test",
       "CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE" => "/test/client.crt",
@@ -35,6 +37,18 @@ defmodule ChalkSync.Operations.ProductionConfigTest do
     assert config[:require_production_auth]
     assert config[:stateholder] == ChalkSync.Stateholder.Postgres
     assert config[:token_verifier] == ChalkSync.Auth.JWTTokenVerifier
+  end
+
+  test "view proof keys are stable configured secrets, not database state" do
+    assert read_config()[:view_origin_secret] == :binary.copy(<<7>>, 32)
+
+    for value <- [nil, "", "not-a-32-byte-key"] do
+      if value,
+        do: System.put_env("CHALK_SYNC_VIEW_ORIGIN_SECRET", value),
+        else: System.delete_env("CHALK_SYNC_VIEW_ORIGIN_SECRET")
+
+      assert_raise RuntimeError, fn -> read_config() end
+    end
   end
 
   test "invalid standby settings fail closed" do

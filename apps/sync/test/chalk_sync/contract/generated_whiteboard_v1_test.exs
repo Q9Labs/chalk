@@ -8,6 +8,47 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
   @scene_id "10000000-0000-4000-8000-000000000001"
   @participant_id "20000000-0000-4000-8000-000000000002"
 
+  test "negotiates ordered origins and validates paired bounded incarnations" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "token",
+      "cursor" => nil,
+      "extensions" => [
+        %{"name" => "presentation_v1"},
+        %{"name" => "view_v1", "origins" => true, "connection_id" => @scene_id}
+      ]
+    }
+
+    assert {:ok, {:hello, _}} = GeneratedWhiteboardV1.decode_client_frame(hello)
+
+    view = %{
+      "type" => "view",
+      "x" => 1,
+      "y" => 2,
+      "width" => 300,
+      "height" => 200,
+      "bring" => false,
+      "origin_participant_id" => @participant_id,
+      "origin_sequence" => 1,
+      "origin_connection_id" => @scene_id,
+      "origin_epoch" => @scene_id,
+      "origin_lead_stamp" => "9007199254740993:" <> String.duplicate("a", 64)
+    }
+
+    assert {:ok, {:view, %{origin_lead_stamp: _stamp}}} =
+             GeneratedWhiteboardV1.decode_client_frame(view)
+
+    for bad <- [
+          Map.delete(view, "origin_connection_id"),
+          Map.delete(view, "origin_participant_id"),
+          Map.put(view, "origin_lead_stamp", "-1:" <> String.duplicate("a", 64)),
+          Map.put(view, "origin_lead_stamp", "18446744073709551616:" <> String.duplicate("a", 64))
+        ] do
+      assert {:error, :invalid_payload} = GeneratedWhiteboardV1.decode_client_frame(bad)
+    end
+  end
+
   test "decodes strict update and explicit clear operations" do
     element = %{
       "id" => "rectangle-1",

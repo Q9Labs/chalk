@@ -18,7 +18,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "view" => %{
         "name" => "view_v1",
         "exactFields" => ["name"],
-        "extendedExactFields" => ["name", "origins"]
+        "extendedExactFields" => ["name", "origins"],
+        "orderedExactFields" => ["name", "origins", "connection_id"]
       }
     },
     "identity" => %{
@@ -130,6 +131,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         "maxCoordinate" => 1_000_000,
         "maxExtent" => 2_000_000,
         "epochField" => "origin_epoch",
+        "proofField" => "origin_proof",
         "originFields" => ["origin_participant_id", "origin_sequence"],
         "clientExactFields" => ["type", "x", "y", "width", "height", "bring"],
         "serverExactFields" => [
@@ -142,7 +144,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           "height",
           "bring",
           "occurred_at"
-        ]
+        ],
+        "leadFields" => ["origin_connection_id", "origin_lead_stamp"],
+        "intentField" => "lead"
       },
       "welcome" => %{
         "exactFields" => [
@@ -167,7 +171,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           "revision",
           "can_draw",
           "presenting"
-        ]
+        ],
+        "leadershipField" => "view_leadership"
       },
       "snapshotPage" => %{
         "exactFields" => [
@@ -246,7 +251,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "notifications" => %{
       "durableHeadChannel" => "chalk_whiteboard_v1_heads",
       "transientCursorChannel" => "chalk_whiteboard_v1_cursors",
-      "transientEnvelopeBytes" => 1024,
+      "transientEnvelopeBytes" => 1536,
       "durablePayloadContainsContent" => false
     },
     "fileTransport" => %{"download" => "participant-bound-short-lived-url"},
@@ -391,16 +396,26 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   "cursor",
   "extensions"
 ]) and
-          frame["extensions"] in [
-            [%{"name" => "presentation_v1"}],
-            [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],
-            [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
-          ] ->
+          valid_extensions?(frame["extensions"]) ->
         {:ok, frame["extensions"]}
 
       true ->
         {:error, :invalid_hello}
     end
+  end
+
+  defp valid_extensions?(extensions) do
+    extensions in [
+            [%{"name" => "presentation_v1"}],
+            [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],
+            [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
+          ] or match?([%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true,
+              "connection_id" => _}], extensions) and
+            length(extensions) == 2 and exact?(List.last(extensions), [
+  "name",
+  "origins",
+  "connection_id"
+]) and uuid?(List.last(extensions)["connection_id"])
   end
 
   defp decode_submit_update(frame) do
@@ -528,7 +543,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp decode_view(frame) do
-    if view_fields?(frame, [
+    if (not Map.has_key?(frame, "lead") or is_boolean(frame["lead"])) and
+        view_fields?(Map.delete(frame, "lead"), [
   "type",
   "x",
   "y",
@@ -544,11 +560,27 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           y: frame["y"],
           width: frame["width"],
           height: frame["height"],
-          bring: frame["bring"]
+          bring: frame["bring"],
+          lead: frame["lead"] == true
         } |> Map.merge(view_origin(frame))}}
     else
       {:error, :invalid_payload}
     end
+  end
+
+  defp view_fields?(%{"origin_proof" => proof} = frame, fields) do
+    is_binary(proof) and Regex.match?(~r/^[a-f0-9]{64}$/, proof) and Map.has_key?(frame, "origin_connection_id") and
+      view_fields?(Map.delete(frame, "origin_proof"), fields)
+  end
+
+  defp view_fields?(%{"origin_connection_id" => connection,
+      "origin_lead_stamp" => incarnation} = frame, fields) do
+    uuid?(connection) and lead_stamp?(incarnation) and Map.has_key?(frame,
+        "origin_participant_id") and Map.has_key?(frame, "origin_epoch") and
+      view_fields?(Map.drop(frame, [
+  "origin_connection_id",
+  "origin_lead_stamp"
+]), fields)
   end
 
   defp view_fields?(frame, fields) do
@@ -564,6 +596,14 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
          frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991))
   end
 
+  defp view_origin(%{"origin_proof" => proof} = frame),
+    do: Map.put(view_origin(Map.delete(frame, "origin_proof")), :origin_proof, proof)
+  defp view_origin(%{"origin_connection_id" => connection,
+      "origin_lead_stamp" => incarnation} = frame),
+    do: Map.merge(view_origin(Map.drop(frame, [
+  "origin_connection_id",
+  "origin_lead_stamp"
+])), %{origin_connection_id: connection, origin_lead_stamp: incarnation})
   defp view_origin(%{"origin_epoch" => epoch} = frame),
     do: Map.put(view_origin(Map.delete(frame, "origin_epoch")), :origin_epoch, epoch)
   defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
@@ -576,6 +616,10 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0 and
       abs(frame["x"]) <= 1000000 and abs(frame["y"]) <= 1000000 and
       frame["width"] <= 2000000 and frame["height"] <= 2000000
+  end
+
+  defp valid_welcome?(%{"view_leadership" => incarnation} = frame) do
+    incarnation == true and valid_welcome?(Map.delete(frame, "view_leadership"))
   end
 
   defp valid_welcome?(frame) do
@@ -701,7 +745,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   "height",
   "bring",
   "occurred_at"
-]) and
+]) and (not Map.has_key?(frame, "origin_connection_id") or Map.has_key?(frame,
+    "origin_proof")) and
       uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1,
           @limits["displayNameMaxBytes"]) and
       view_rect?(frame) and is_boolean(frame["bring"]) and is_binary(frame["occurred_at"]) and
@@ -829,6 +874,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       Enum.all?(keys, &Map.has_key?(value, &1))
   defp exact?(_value, _keys), do: false
   defp uuid?(value), do: is_binary(value) and Regex.match?(@uuid, value)
+  defp lead_stamp?(value), do: is_binary(value) and Regex.match?(~r/^(0|[1-9][0-9]{0,15}):[a-f0-9]{64}$/, value)
   defp unsigned_decimal?(value), do: is_binary(value) and Regex.match?(@unsigned_decimal, value)
   defp operation_id?(value), do: bounded_string?(value, @limits["operationIdMinBytes"],
       @limits["operationIdMaxBytes"])

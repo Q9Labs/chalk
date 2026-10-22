@@ -11,6 +11,7 @@ defmodule ChalkSync.Operations.Readiness do
 
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Probe
+  alias ChalkSync.WhiteboardV1.Fanout, as: WhiteboardFanout
 
   @default_interval_ms 1_000
   @default_success_span_ms 5_000
@@ -62,12 +63,21 @@ defmodule ChalkSync.Operations.Readiness do
 
   @impl GenServer
   def handle_call(:ready, _from, state) do
-    ready = state.status == :ready and Operations.accepting_connections?()
+    ready =
+      state.status == :ready and Operations.accepting_connections?() and
+        WhiteboardFanout.origin_agreement() == :ok
+
     {:reply, ready, state}
   end
 
   def handle_call(:health, _from, state) do
-    {:reply, public_health(state), state}
+    health =
+      case WhiteboardFanout.origin_agreement() do
+        :ok -> public_health(state)
+        {:error, reason} -> %{status: "unready", reason: Atom.to_string(reason)}
+      end
+
+    {:reply, health, state}
   end
 
   def handle_call(:probe_now, from, state) do

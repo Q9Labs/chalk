@@ -1,3 +1,4 @@
+import { ManualClock } from "../test-support/manual-clock";
 import { describe, expect, it, vi } from "vitest";
 import { Schema } from "effect";
 
@@ -12,6 +13,49 @@ const files: ChalkWhiteboardV1FileTransport = {
 };
 
 describe("ChalkWhiteboardV1Client recovery summaries", () => {
+  it("marks only real leadership, keeps its authenticated stamp across reconnect, and preserves relay proof", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = recoveryClient(clock, 100);
+    const startup = client.startSceneSubscription();
+    const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
+    try {
+      await settle();
+      sockets[0]?.open();
+      sockets[0]?.receive({ ...welcome(), view_leadership: true });
+      await settle();
+      const request = sockets[0]?.sent.find((frame) => JSON.parse(frame).type === "request_snapshot");
+      sockets[0]?.receive(snapshotPage(JSON.parse(request ?? "{}").request_id));
+      await startup;
+      client.sendView({ ...view, lead: true });
+      const first = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+      expect(first).toMatchObject({ lead: true, origin_sequence: 1 });
+      const stamp = `123:${"a".repeat(64)}`;
+      sockets[0]?.receive({ ...first, lead: undefined, type: "view", participant_id: welcome().participant_id, display_name: "Self", occurred_at: "2026-10-23T00:00:00Z", origin_lead_stamp: stamp, origin_proof: "b".repeat(64) });
+      await settle();
+      client.sendView(view);
+      expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ lead: false, origin_lead_stamp: stamp, origin_sequence: 2 });
+      sockets[0]?.close(1006);
+      clock.advance(100);
+      await settle();
+      sockets[1]?.open();
+      sockets[1]?.receive({ ...welcome(), view_leadership: true });
+      await settle();
+      const nextRequest = sockets[1]?.sent.find((frame) => JSON.parse(frame).type === "request_snapshot");
+      sockets[1]?.receive(snapshotPage(JSON.parse(nextRequest ?? "{}").request_id));
+      await settle();
+      client.sendView(view);
+      expect(JSON.parse(sockets[1]?.sent.at(-1) ?? "{}")).toMatchObject({ lead: false, origin_lead_stamp: stamp, origin_sequence: 3, origin_connection_id: first.origin_connection_id });
+      client.sendView({ ...view, bring: true });
+      expect(JSON.parse(sockets[1]?.sent.at(-1) ?? "{}")).toMatchObject({ lead: true, bring: true, origin_sequence: 4 });
+      const relay = { ...view, originParticipantId: sceneId, originConnectionId: sceneId, originEpoch: sceneId, originSequence: 100, originLeadStamp: stamp, originProof: "c".repeat(64) };
+      client.sendView(relay);
+      expect(JSON.parse(sockets[1]?.sent.at(-1) ?? "{}")).toMatchObject({ origin_lead_stamp: stamp, origin_proof: relay.originProof, origin_sequence: 100 });
+      expect(JSON.parse(sockets[1]?.sent.at(-1) ?? "{}")).not.toHaveProperty("lead");
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("shares the active snapshot across callers until all pages arrive", async () => {
     const { client, sockets } = recoveryClient();
     const startup = client.startSceneSubscription();
@@ -54,7 +98,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("shares views only after the server accepts view_v1, and steps down for an older server", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     const view = { x: 1, y: 2, width: 300, height: 200, bring: false };
@@ -63,25 +107,31 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await settle();
       sockets[0]?.open();
       await settle();
-      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true, connection_id: expect.any(String) }]);
       sockets[0]?.close(1008);
       clock.advance(1_000);
       await settle();
       sockets[1]?.open();
       await settle();
-      expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
+      expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
       sockets[1]?.close(1008);
       clock.advance(1_000);
-      await acceptSnapshot(sockets, 2);
+      await settle();
+      sockets[2]?.open();
+      await settle();
+      expect(hello(2)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
+      sockets[2]?.close(1008);
+      clock.advance(1_000);
+      await acceptSnapshot(sockets, 3);
       await startup;
-      expect(hello(2)).toEqual([{ name: "presentation_v1" }]);
+      expect(hello(3)).toEqual([{ name: "presentation_v1" }]);
       expect(client.supportsViews).toBe(false);
       expect(client.sendView(view)).toBe(false);
     } finally {
       await client.stopSceneSubscription();
     }
 
-    const currentClock = new TestClock();
+    const currentClock = new ManualClock();
     const current = await startedRecoveryClient(currentClock);
     try {
       expect(current.client.supportsViews).toBe(true);
@@ -102,7 +152,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("originates monotonic versions, preserves relayed versions, and interoperates with an older view server", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
     const sent = () => JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
@@ -133,14 +183,14 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await startup;
       expect(older.client.supportsViews).toBe(true);
       older.client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
-      expect(JSON.parse(older.sockets[1]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      expect(JSON.parse(older.sockets[1]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view, origin_participant_id: sceneId, origin_sequence: 42 });
     } finally {
       await older.client.stopSceneSubscription();
     }
   });
 
   it("sends Bring as an unversioned command without consuming a view sequence", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const view = { x: 10, y: 20, width: 300, height: 200, bring: true };
     try {
       client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
@@ -155,7 +205,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   it("starts a fresh transport epoch when the same participant reconnects", async () => {
     const epochs = [];
     for (const _ of [0, 1]) {
-      const { client, sockets } = await startedRecoveryClient(new TestClock());
+      const { client, sockets } = await startedRecoveryClient(new ManualClock());
       try {
         client.sendView({ x: 10, y: 20, width: 300, height: 200, bring: false });
         const frame = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
@@ -170,23 +220,23 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("renegotiates view support on a later connection after a successful fallback", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     try {
-      for (const index of [0, 1]) {
+      for (const index of [0, 1, 2]) {
         await settle();
         sockets[index]?.open();
         await settle();
         sockets[index]?.close(1008);
         clock.advance(1_000);
       }
-      await acceptSnapshot(sockets, 2);
+      await acceptSnapshot(sockets, 3);
       await startup;
       expect(client.supportsViews).toBe(false);
-      sockets[2]?.close(1006);
+      sockets[3]?.close(1006);
       clock.advance(1_000);
-      await acceptSnapshot(sockets, 3);
+      await acceptSnapshot(sockets, 4);
       expect(client.supportsViews).toBe(true);
       expect(client.sendView({ x: 0, y: 0, width: 100, height: 100, bring: false })).toBe(true);
     } finally {
@@ -195,7 +245,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("bounds replay to the 256 most recently active peer views", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const events: ChalkWhiteboardV1Event[] = [];
     try {
       for (let index = 0; index < 300; index++) {
@@ -213,8 +263,28 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("upgrades cached legacy views with their authenticated duplicate without downgrading replay", async () => {
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
+    const legacy = { type: "view", participant_id: "20000000-0000-4000-8000-000000000001", display_name: "Omar", x: 10, y: 20, width: 300, height: 200, bring: false, occurred_at: "2026-10-21T04:00:00.000Z", origin_participant_id: sceneId, origin_epoch: sceneId, origin_sequence: 100 };
+    const enriched = { ...legacy, origin_connection_id: sceneId, origin_lead_stamp: "1168:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", origin_proof: "a".repeat(64) };
+    const replay: ChalkWhiteboardV1Event[] = [];
+    let unsubscribe = () => {};
+    try {
+      sockets[0]?.receive(legacy);
+      sockets[0]?.receive(enriched);
+      sockets[0]?.receive(legacy);
+      sockets[0]?.receive({ ...enriched, origin_sequence: 99, x: 999 });
+      await settle();
+      unsubscribe = client.subscribe((event) => replay.push(event));
+      expect(replay.filter((event) => event.type === "view")).toEqual([expect.objectContaining({ originConnectionId: sceneId, originLeadStamp: "1168:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", originProof: enriched.origin_proof, originSequence: 100, x: 10 })]);
+    } finally {
+      unsubscribe();
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("replays the latest ordinary peer view to a later board consumer", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const events: ChalkWhiteboardV1Event[] = [];
     const view = { type: "view", participant_id: "20000000-0000-4000-8000-000000000001", display_name: "Omar", x: 10, y: 20, width: 300, height: 200, bring: true, occurred_at: "2026-10-21T04:00:00.000Z" };
     let unsubscribe: () => void = () => undefined;
@@ -230,7 +300,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("sends views immediately after ready consumers subscribe and resubscribe", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const socket = sockets[0];
     const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
     const events: ChalkWhiteboardV1Event[] = [];
@@ -251,7 +321,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("flushes a recovering bring when a snapshot consumer resubscribes on completion", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const socket = sockets[0];
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     let unsubscribe: () => void = () => undefined;
@@ -295,48 +365,68 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
-  it("keeps only the latest accepted bring across a reconnect", async () => {
-    const clock = new TestClock();
+  it.each(["reconnect", "snapshot"] as const)("keeps the latest real leadership move through %s and ignores later idle views", async (phase) => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock);
+    try {
+      let recovery: Promise<unknown> | undefined;
+      if (phase === "reconnect") sockets[0]?.close(1006);
+      else {
+        recovery = client.requestSnapshot();
+        await settle();
+      }
+      const view = { x: 100, y: 20, width: 300, height: 200, bring: false, lead: true };
+      client.sendView(view);
+      client.sendView({ ...view, x: 200 });
+      client.sendView({ ...view, x: 999, lead: false });
+      if (phase === "reconnect") {
+        clock.advance(1000);
+        await acceptSnapshot(sockets, 1);
+      } else sockets[0]?.receive(snapshotPage(sockets[0].requestId()));
+      await recovery;
+      await settle();
+      const socket = sockets.at(-1);
+      const views = () => socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view");
+      expect(views()).toEqual([expect.objectContaining({ x: 200, bring: false })]);
+      // Repeated readiness notifications must not flush the intent twice.
+      client.sendCursor({ x: 1, y: 2 });
+      expect(views()).toHaveLength(1);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it.each([false, true])("keeps the latest queued Bring across reconnect, plain-view fallback %s", async (fallback) => {
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     try {
       sockets[0]?.close(1006);
       expect(client.sendView(bring)).toBe(true);
       expect(client.sendView({ ...bring, x: 40 })).toBe(true);
-      clock.advance(1_000);
-      await acceptSnapshot(sockets, 1);
+      clock.advance(1000);
+      let attempt = 1;
+      if (fallback) {
+        await settle();
+        sockets[1]?.open();
+        await settle();
+        sockets[1]?.close(1008);
+        clock.advance(1000);
+        attempt = 2;
+      }
+      await acceptSnapshot(sockets, attempt);
       await settle();
-      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
-    } finally {
-      await client.stopSceneSubscription();
-    }
-  });
-
-  it("preserves a queued Bring when origin negotiation falls back to plain views", async () => {
-    const clock = new TestClock();
-    const { client, sockets } = await startedRecoveryClient(clock);
-    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
-    try {
-      sockets[0]?.close(1006);
-      expect(client.sendView(bring)).toBe(true);
-      clock.advance(1_000);
-      await settle();
-      sockets[1]?.open();
-      await settle();
-      sockets[1]?.close(1008);
-      clock.advance(1_000);
-      await acceptSnapshot(sockets, 2);
       expect(client.supportsViews).toBe(true);
-      const frames = sockets[2]?.sent.map((wire) => JSON.parse(wire));
-      expect(frames?.find((frame) => frame.type === "hello").extensions).toContainEqual({ name: "view_v1" });
-      expect(frames?.filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+      const frames = sockets[attempt]?.sent.map((wire) => JSON.parse(wire));
+      if (fallback) expect(frames?.find((frame) => frame.type === "hello").extensions).toContainEqual({ name: "view_v1", origins: true });
+      expect(frames?.filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
     } finally {
       await client.stopSceneSubscription();
     }
   });
 
   it("does not carry an accepted bring into a restarted subscription", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     const snapshot = client.requestSnapshot();
     void snapshot.catch(() => undefined);
@@ -374,7 +464,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("holds cursors until the recovery snapshot is acknowledged", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
     const startup = client.startSceneSubscription();
     await acceptSnapshot(sockets);
@@ -422,7 +512,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
     const startup = client.startSceneSubscription();
     await acceptSnapshot(sockets);
@@ -466,7 +556,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("uses capped exponential reconnect backoff until a welcome is live", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
 
     const startup = client.startSceneSubscription();
@@ -512,7 +602,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 
 describe("whiteboard slow-connection watchdog", () => {
   it("rejects a legacy three-method clock instead of silently disabling recovery", () => {
-    const scheduler = new TestClock();
+    const scheduler = new ManualClock();
     const clock = {
       now: () => scheduler.now(),
       setTimeout: (callback: () => void, milliseconds: number) => scheduler.setTimeout(callback, milliseconds),
@@ -524,7 +614,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("replaces a silent socket within eight seconds without waiting for its close event", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
     const oldSocket = sockets[0];
     if (!oldSocket) throw new Error("missing socket");
@@ -539,7 +629,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("does not treat a late pong as the healthy reply to a newer ping", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     clock.advance(6_100);
     sockets[0]?.receive({ type: "pong" });
@@ -550,7 +640,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("accepts normal jitter and one isolated slow sample followed by recovery", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     for (const rtt of [110, 250, 1_000, 2_100, 250, 110, 1_000]) {
       const previousPings = sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping").length;
@@ -569,7 +659,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("backs off subsequent replacements even after a new welcome", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
     clock.advance(8_100);
     await acceptSnapshot(sockets, 1);
@@ -581,7 +671,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("caps recurrent probe back-off at four seconds and resets after healthy replies", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const telemetry = vi.fn();
     const { client, sockets } = await startedRecoveryClient(clock, 100, { onWatchdogReplacement: telemetry });
     for (const [index, backoff] of [0, 1_000, 2_000, 4_000, 4_000].entries()) {
@@ -616,7 +706,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("ignores extra pongs without shifting future probes", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     clock.advance(4_100);
     sockets[0]?.receive({ type: "pong" });
@@ -630,7 +720,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("catches up through the normal reconnect snapshot and ignores the retired socket", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
     const snapshots: ChalkWhiteboardV1Event[] = [];
     client.subscribe((event) => {
@@ -670,7 +760,7 @@ describe("whiteboard slow-connection watchdog", () => {
           clearTimeout: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
         }
       : undefined;
-    const { client, sockets } = recoveryClient(new TestClock(), 100, { clock });
+    const { client, sockets } = recoveryClient(new ManualClock(), 100, { clock });
     try {
       const startup = client.startSceneSubscription();
       await acceptSnapshot(sockets);
@@ -691,7 +781,7 @@ describe("whiteboard slow-connection watchdog", () => {
     const document = new EventTarget();
     vi.stubGlobal("document", document);
     const remove = vi.spyOn(document, "removeEventListener");
-    const first = recoveryClient(new TestClock(), undefined, {
+    const first = recoveryClient(new ManualClock(), undefined, {
       pendingStore: {
         load: async () => {
           throw new Error("store unavailable");
@@ -704,7 +794,7 @@ describe("whiteboard slow-connection watchdog", () => {
     try {
       await expect(first.client.startSceneSubscription()).rejects.toThrow("Unable to restore");
       expect(remove).toHaveBeenCalledTimes(1);
-      const connected = await startedRecoveryClient(new TestClock());
+      const connected = await startedRecoveryClient(new ManualClock());
       second = connected.client;
       connected.sockets[0]?.close(1008);
       expect(remove).toHaveBeenCalledTimes(2);
@@ -716,7 +806,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("qualifies late timers and pongs after a busy main thread", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     clock.advance(4_000);
     clock.stall(2_500);
@@ -735,7 +825,7 @@ describe("whiteboard slow-connection watchdog", () => {
     Object.defineProperty(document, "hidden", { get: () => state.hidden });
     vi.stubGlobal("document", document);
     const remove = vi.spyOn(document, "removeEventListener");
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     try {
       const startup = client.startSceneSubscription();
@@ -758,7 +848,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("counts snapshot pages as progress even with pongs queued behind replay", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     await settle();
@@ -777,7 +867,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("replaces after a dropped pong, then matches the fresh connection normally", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
     clock.advance(6_100);
     sockets[0]?.receive({ type: "pong" }); // The first reply is missing; FIFO intentionally reconnects.
@@ -790,7 +880,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("ignores unsolicited pongs and resets probes, and can disable replacements", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, undefined, { watchdog: false });
     sockets[0]?.receive({ type: "pong" });
     await settle();
@@ -801,7 +891,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("emits exactly one bounded replacement event", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const telemetry = vi.fn();
     const { client, sockets } = await startedRecoveryClient(clock, 100, { onWatchdogReplacement: telemetry });
     clock.advance(6_200);
@@ -813,7 +903,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("stops a slow socket immediately without waiting for the close handshake or reconnecting", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     const socket = sockets[0];
     if (!socket) throw new Error("missing socket");
@@ -830,7 +920,7 @@ function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
 }
 
-function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
+function recoveryClient(clock = new ManualClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
   const sockets: TestSocket[] = [];
   const client = new ChalkWhiteboardV1Client({
     url: "ws://sync.test/v1/whiteboard",
@@ -850,7 +940,7 @@ function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number, opti
   return { client, sockets };
 }
 
-async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
+async function startedRecoveryClient(clock: ManualClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
   const result = recoveryClient(clock, reconnectDelayMs, options);
   const startup = result.client.startSceneSubscription();
   await acceptSnapshot(result.sockets);
@@ -859,7 +949,7 @@ async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number
 }
 
 async function recoveringViewClient(phase: "initial" | "requested") {
-  const result = phase === "initial" ? recoveryClient() : await startedRecoveryClient(new TestClock());
+  const result = phase === "initial" ? recoveryClient() : await startedRecoveryClient(new ManualClock());
   const recovery = phase === "initial" ? result.client.startSceneSubscription() : result.client.requestSnapshot();
   return { ...result, recovery };
 }
@@ -903,7 +993,7 @@ function snapshotPage(requestId: string | undefined): Record<string, unknown> {
 }
 
 /** Answers each keepalive probe on time, starting with the first one five seconds in. */
-async function answerProbes(clock: TestClock, socket: TestSocket | undefined, probes: number) {
+async function answerProbes(clock: ManualClock, socket: TestSocket | undefined, probes: number) {
   for (let probe = 0; probe < probes; probe += 1) {
     clock.advance(probe === 0 ? 5_000 : 4_000);
     socket?.receive({ type: "pong" });
@@ -947,48 +1037,32 @@ class TestSocket implements SyncSocket {
   }
 }
 
-class TestClock {
-  #now = 0;
-  #nextHandle = 0;
-  readonly #timers = new Map<number, { readonly at: number; readonly callback: () => void }>();
 
-  now(): number {
-    return this.#now;
+it("JUDGE: recovery-time real movement is retained as leadership after reconnect", async () => {
+  const clock = new ManualClock();
+  const { client, sockets } = recoveryClient(clock, 100);
+  const startup = client.startSceneSubscription();
+  const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
+  try {
+    await settle();
+    sockets[0]?.open();
+    sockets[0]?.receive({ ...welcome(), view_leadership: true });
+    await settle();
+    sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+    await startup;
+    sockets[0]?.close(1006);
+    expect(client.sendView({ ...view, x: 432, lead: true })).toBe(true);
+    clock.advance(100);
+    await settle();
+    sockets[1]?.open();
+    sockets[1]?.receive({ ...welcome(), view_leadership: true });
+    await settle();
+    sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+    await settle();
+    client.sendView({ ...view, x: 432 });
+    const views = sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view");
+    expect(views).toContainEqual(expect.objectContaining({ x: 432, lead: true }));
+  } finally {
+    await client.stopSceneSubscription();
   }
-
-  monotonicNow(): number {
-    return this.#now;
-  }
-
-  setTimeout(callback: () => void, milliseconds: number): number {
-    const handle = this.#nextHandle++;
-    this.#timers.set(handle, { at: this.#now + milliseconds, callback });
-    return handle;
-  }
-
-  clearTimeout(handle: unknown): void {
-    if (typeof handle === "number") this.#timers.delete(handle);
-  }
-
-  stall(milliseconds: number): void {
-    this.#now += milliseconds;
-    const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= this.#now);
-    for (const [handle, timer] of due) {
-      this.#timers.delete(handle);
-      timer.callback();
-    }
-  }
-
-  advance(milliseconds: number): void {
-    const target = this.#now + milliseconds;
-    while (true) {
-      const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= target).sort(([leftHandle, left], [rightHandle, right]) => left.at - right.at || leftHandle - rightHandle)[0];
-      if (!due) break;
-      const [handle, timer] = due;
-      this.#timers.delete(handle);
-      this.#now = timer.at;
-      timer.callback();
-    }
-    this.#now = target;
-  }
-}
+});

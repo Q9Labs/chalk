@@ -44,6 +44,23 @@ if config_env() == :prod do
     raise "CHALK_SYNC_LOCAL_PARITY requires a localhost bind address"
   end
 
+  view_origin_secret =
+    case System.get_env("CHALK_SYNC_VIEW_ORIGIN_SECRET") do
+      nil when local_proof? or local_parity? ->
+        :binary.copy(<<7>>, 32)
+
+      value when is_binary(value) ->
+        case Base.url_decode64(value, padding: false) do
+          {:ok, secret} when byte_size(secret) == 32 -> secret
+          _ -> raise "CHALK_SYNC_VIEW_ORIGIN_SECRET must be 32 base64url-encoded bytes"
+        end
+
+      _ ->
+        raise "CHALK_SYNC_VIEW_ORIGIN_SECRET must be set in prod and shared by all Sync nodes"
+    end
+
+  config :chalk_sync, view_origin_secret: view_origin_secret
+
   listen_ip =
     if local_proof? or local_parity? do
       {127, 0, 0, 1}

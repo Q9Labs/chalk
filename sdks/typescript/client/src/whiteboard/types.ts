@@ -61,7 +61,12 @@ export type ChalkWhiteboardView = {
   readonly width: number;
   readonly height: number;
   readonly bring: boolean;
-} & ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never });
+  /** A real camera move or Follow-me start, never an idle refresh. */
+  readonly lead?: boolean;
+} & (
+  | { readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string; readonly originConnectionId?: string; readonly originLeadStamp?: string; readonly originProof?: string }
+  | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never; readonly originConnectionId?: never; readonly originLeadStamp?: never; readonly originProof?: never }
+);
 
 export type ChalkWhiteboardV1Commit = {
   readonly operationId: string;
@@ -112,6 +117,8 @@ export type ChalkWhiteboardV1Transport = {
   readonly supportsViews?: boolean;
   /** Accepts views while subscribed; keeps the latest bring through recovery. False means views are unavailable. */
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
+  /** Clear replay and ordering only after an authoritative participant departure. */
+  readonly forgetParticipant?: (participantId: string) => void;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
   readonly setDrawPermission: (participantId: string, canDraw: boolean) => Promise<void>;
@@ -153,6 +160,7 @@ export type ChalkWhiteboardV1ClientOptions = {
 };
 
 export type ChalkWhiteboardSummary = {
+  /** Cumulative quiet-fence recoveries, emitted through summary telemetry without participant identifiers. */
   readonly status: "unsubscribed" | "loading" | "ready" | "recovering" | "failed";
   readonly sceneId: string | null;
   readonly revision: string | null;

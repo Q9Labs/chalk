@@ -4,6 +4,31 @@ import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./
 const sceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 
 describe("whiteboard-v1 codec", () => {
+  it("carries authenticated leadership stamps and rejects incomplete or unbounded pairs", () => {
+    const view = {
+      type: "view",
+      x: 1,
+      y: 2,
+      width: 300,
+      height: 200,
+      bring: false,
+      origin_participant_id: sceneId,
+      origin_sequence: 1,
+      origin_connection_id: sceneId,
+      origin_lead_stamp: "9007199254740993:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      origin_epoch: sceneId,
+    } as const;
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame(view))).toEqual(view);
+    const remote = { ...view, origin_proof: "a".repeat(64), participant_id: sceneId, display_name: "Ada", occurred_at: "2026-10-21T00:00:00Z" };
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify(remote))).toEqual(remote);
+    for (const bad of [
+      { ...view, origin_connection_id: undefined },
+      { ...view, origin_lead_stamp: "-1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      { ...view, origin_lead_stamp: "18446744073709551616:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    ]) {
+      expect(() => encodeWhiteboardV1ClientFrame(bad)).toThrow();
+    }
+  });
   it("rejects overflowing view rectangles on both wire boundaries", () => {
     const view = { type: "view", x: 0, y: 0, width: 800, height: 600, bring: true } as const;
     for (const field of ["x", "y", "width", "height"]) {

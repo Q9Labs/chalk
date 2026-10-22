@@ -14,6 +14,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
+  alias ChalkSync.WhiteboardV1.ViewOrigin
   @hello_timeout_ms 5000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
@@ -41,6 +42,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        presentation_negotiated: false,
        view_negotiated: false,
        view_origins_negotiated: false,
+       view_connection_id: nil,
+       view_sequence: 0,
+       view_lead_stamp: nil,
+       view_origin_rejections: MapSet.new(),
        scene_id: nil,
        revision: 0,
        snapshot: nil,
@@ -133,10 +138,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_message(
-         {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
-         %{identity: %Identity{participant_id: participant_id}} = state
-       )
-       when type in ["cursor", "view"] do
+        {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
+        %{identity: %Identity{participant_id: participant_id}} = state
+      )
+      when type == "cursor" do
+    {:ok, state}
+  end
+
+  defp handle_message(
+        {:whiteboard_v1_frame, %{"type" => "view", "participant_id" => participant_id} = frame},
+        %{identity: %Identity{participant_id: participant_id}} = state
+      )
+      when not is_map_key(frame, "origin_connection_id") do
     {:ok, state}
   end
 
@@ -185,7 +198,24 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        ) do
     deliver_frame(
       state,
-      Map.drop(frame, ["origin_participant_id", "origin_sequence", "origin_epoch"])
+      Map.drop(frame, [
+        "origin_participant_id",
+        "origin_sequence",
+        "origin_epoch",
+        "origin_connection_id",
+        "origin_lead_stamp",
+        "origin_proof"
+      ])
+    )
+  end
+
+  def handle_info(
+        {:whiteboard_v1_frame, %{"type" => "view"} = frame},
+        %{phase: :live, view_connection_id: nil} = state
+      ) do
+    deliver_frame(
+      state,
+      Map.drop(frame, ["origin_connection_id", "origin_lead_stamp", "origin_proof"])
     )
   end
 
@@ -360,6 +390,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     view_origins_negotiated =
       Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
 
+    view_connection_id =
+      Enum.find_value(extensions, &(&1["name"] == "view_v1" && &1["connection_id"]))
+
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, welcome} <- Episode.connect(identity),
@@ -378,6 +411,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           Map.delete(welcome, "presenting")
         end
 
+      welcome = if view_connection_id, do: welcome, else: Map.delete(welcome, "view_leadership")
+
       next =
         %{
           state
@@ -389,6 +424,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             presentation_negotiated: presentation_negotiated,
             view_negotiated: view_negotiated,
             view_origins_negotiated: view_origins_negotiated,
+            view_connection_id: view_connection_id,
             scene_id: welcome["scene_id"],
             revision: String.to_integer(welcome["revision"])
         }
@@ -636,45 +672,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(
          {:view, view},
-         %{phase: :live, identity: identity, display_name: display_name} = state
+         %{phase: :live, identity: identity} = state
        ) do
     {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :view))
 
-    with :ok <- admit_view(view, identity, admission) do
-      frame = %{
-        "type" => "view",
-        "participant_id" => identity.participant_id,
-        "display_name" => display_name,
-        "x" => view.x,
-        "y" => view.y,
-        "width" => view.width,
-        "height" => view.height,
-        "bring" => view.bring,
-        "occurred_at" =>
-          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-      }
-
-      frame =
-        case view do
-          %{origin_participant_id: origin, origin_sequence: sequence} ->
-            Map.merge(frame, %{
-              "origin_participant_id" => origin,
-              "origin_sequence" => sequence
-            })
-
-          _ ->
-            frame
-        end
-
-      frame =
-        if Map.has_key?(view, :origin_epoch),
-          do: Map.put(frame, "origin_epoch", view.origin_epoch),
-          else: frame
-
-      Fanout.publish_transient(identity.episode, frame)
+    with :ok <- admit_view(view, identity, admission),
+         {:ok, admitted, next} <- admit_origin(view, next) do
+      Fanout.publish_transient(identity.episode, view_frame(admitted, next))
+      {:ok, next}
+    else
+      {:error, _reason, rejected} -> {:ok, rejected}
+      {:error, _reason} -> {:ok, next}
     end
-
-    {:ok, next}
   end
 
   defp handle_frame({:ping, _ping}, state) do
@@ -683,6 +692,115 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(_frame, state) do
     stop(state, 1008, "operation not available in this phase", :protocol_error)
+  end
+
+  defp view_frame(view, %{identity: identity, display_name: display_name} = state) do
+    frame = %{
+      "type" => "view",
+      "participant_id" => identity.participant_id,
+      "display_name" => display_name,
+      "x" => view.x,
+      "y" => view.y,
+      "width" => view.width,
+      "height" => view.height,
+      "bring" => view.bring,
+      "occurred_at" =>
+        DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+    }
+
+    frame =
+      case view do
+        %{origin_participant_id: origin, origin_sequence: sequence} ->
+          Map.merge(frame, %{
+            "origin_participant_id" => origin,
+            "origin_sequence" => sequence
+          })
+
+        _ ->
+          frame
+      end
+
+    frame =
+      if Map.has_key?(view, :origin_epoch),
+        do: Map.put(frame, "origin_epoch", view.origin_epoch),
+        else: frame
+
+    put_view_origin(frame, view, state)
+  end
+
+  defp put_view_origin(frame, %{origin_connection_id: connection} = view, _state) do
+    Map.merge(frame, %{
+      "origin_connection_id" => connection,
+      "origin_lead_stamp" => view.origin_lead_stamp,
+      "origin_proof" => view.origin_proof
+    })
+  end
+
+  defp put_view_origin(frame, _legacy, _state), do: frame
+
+  defp admit_origin(
+         %{origin_participant_id: participant, origin_connection_id: connection} = view,
+         %{identity: %Identity{participant_id: participant}, view_connection_id: connection} =
+           state
+       ) do
+    if view.origin_sequence > state.view_sequence do
+      admit_direct_origin(view, state)
+    else
+      {:error, :unauthorized, reject_view_origin(state, "stale_origin_sequence")}
+    end
+  end
+
+  defp admit_origin(%{origin_connection_id: _} = view, state) do
+    if not view.lead and ViewOrigin.valid?(view, state.identity.episode) do
+      {:ok, view, state}
+    else
+      {:error, :unauthorized, reject_view_origin(state, "invalid_origin_proof")}
+    end
+  end
+
+  defp admit_origin(legacy, state), do: {:ok, legacy, state}
+
+  defp admit_direct_origin(view, state) do
+    case ViewOrigin.lead(view, state.identity.episode) do
+      {:ok, ordered} ->
+        ordered = retain_lead_stamp(ordered, state.view_lead_stamp)
+        signed = Map.put(ordered, :origin_proof, ViewOrigin.sign(ordered, state.identity.episode))
+
+        {:ok, signed,
+         %{
+           state
+           | view_sequence: view.origin_sequence,
+             view_lead_stamp: ordered.origin_lead_stamp
+         }}
+
+      {:error, :view_clock_capacity} ->
+        {:error, :unauthorized, reject_view_origin(state, "view_clock_capacity")}
+
+      {:error, _reason} ->
+        {:error, :unauthorized, reject_view_origin(state, "invalid_origin_proof")}
+    end
+  end
+
+  defp retain_lead_stamp(view, nil), do: view
+
+  defp retain_lead_stamp(view, previous) do
+    {time, _} = Integer.parse(view.origin_lead_stamp)
+    {old, _} = Integer.parse(previous)
+    if time < old, do: %{view | origin_lead_stamp: previous}, else: view
+  end
+
+  # Only static rejection reasons are retained, once per socket.
+  defp reject_view_origin(state, reason) do
+    if MapSet.member?(state.view_origin_rejections, reason) do
+      state
+    else
+      Observability.phase(state.observability, "sync.whiteboard.view_origin_rejected", %{
+        protocol: "whiteboard-v1",
+        reason: reason
+      })
+
+      %{state | view_origin_rejections: MapSet.put(state.view_origin_rejections, reason)}
+    end
   end
 
   defp admit_view(_view, _identity, {:error, reason}), do: {:error, reason}
@@ -695,8 +813,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp authorized_view?(_bring, identity) do
     case Episode.connect(identity) do
-      {:ok, %{"capabilities" => capabilities}} -> "manageWhiteboard" in capabilities
-      _unavailable -> false
+      {:ok, %{"capabilities" => capabilities}} ->
+        "manageWhiteboard" in capabilities
+
+      _unavailable ->
+        false
     end
   end
 

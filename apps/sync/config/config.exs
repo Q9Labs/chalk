@@ -2,6 +2,8 @@ import Config
 
 config :chalk_sync,
   database_pool_size: 8,
+  # Local dev/test only; prod runtime requires a stable shared environment secret.
+  view_origin_secret: :binary.copy(<<7>>, 32),
   enforce_production_boot_checks: false,
   external_operation_adapter_timeout_ms: 35_000,
   external_operation_poll_interval_ms: 100,

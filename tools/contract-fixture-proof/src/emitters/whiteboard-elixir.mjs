@@ -88,16 +88,21 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
         {:ok, []}
 
       exact?(frame, ${render(contract.frames.hello.extendedExactFields)}) and
-          frame["extensions"] in [
-            [%{"name" => ${render(contract.extensions.presentation.name)}}],
-            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],
-            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}]
-          ] ->
+          valid_extensions?(frame["extensions"]) ->
         {:ok, frame["extensions"]}
 
       true ->
         {:error, :invalid_hello}
     end
+  end
+
+  defp valid_extensions?(extensions) do
+    extensions in [
+            [%{"name" => ${render(contract.extensions.presentation.name)}}],
+            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],
+            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}]
+          ] or match?([%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true, "connection_id" => _}], extensions) and
+            length(extensions) == 2 and exact?(List.last(extensions), ${render(contract.extensions.view.orderedExactFields)}) and uuid?(List.last(extensions)["connection_id"])
   end
 
   defp decode_submit_update(frame) do
@@ -177,7 +182,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp decode_view(frame) do
-    if view_fields?(frame, ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
+    if (not Map.has_key?(frame, "lead") or is_boolean(frame["lead"])) and view_fields?(Map.delete(frame, "lead"), ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
          is_boolean(frame["bring"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
       {:ok,
        {:view,
@@ -186,11 +191,22 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
           y: frame["y"],
           width: frame["width"],
           height: frame["height"],
-          bring: frame["bring"]
+          bring: frame["bring"],
+          lead: frame["lead"] == true
         } |> Map.merge(view_origin(frame))}}
     else
       {:error, :invalid_payload}
     end
+  end
+
+  defp view_fields?(%{"origin_proof" => proof} = frame, fields) do
+    is_binary(proof) and Regex.match?(~r/^[a-f0-9]{64}$/, proof) and Map.has_key?(frame, "origin_connection_id") and
+      view_fields?(Map.delete(frame, "origin_proof"), fields)
+  end
+
+  defp view_fields?(%{"origin_connection_id" => connection, "origin_lead_stamp" => incarnation} = frame, fields) do
+    uuid?(connection) and lead_stamp?(incarnation) and Map.has_key?(frame, "origin_participant_id") and Map.has_key?(frame, "origin_epoch") and
+      view_fields?(Map.drop(frame, ${render(contract.frames.view.leadFields)}), fields)
   end
 
   defp view_fields?(frame, fields) do
@@ -203,6 +219,10 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
          frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991))
   end
 
+  defp view_origin(%{"origin_proof" => proof} = frame),
+    do: Map.put(view_origin(Map.delete(frame, "origin_proof")), :origin_proof, proof)
+  defp view_origin(%{"origin_connection_id" => connection, "origin_lead_stamp" => incarnation} = frame),
+    do: Map.merge(view_origin(Map.drop(frame, ${render(contract.frames.view.leadFields)})), %{origin_connection_id: connection, origin_lead_stamp: incarnation})
   defp view_origin(%{"origin_epoch" => epoch} = frame),
     do: Map.put(view_origin(Map.delete(frame, "origin_epoch")), :origin_epoch, epoch)
   defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
@@ -214,6 +234,10 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0 and
       abs(frame["x"]) <= ${contract.frames.view.maxCoordinate} and abs(frame["y"]) <= ${contract.frames.view.maxCoordinate} and
       frame["width"] <= ${contract.frames.view.maxExtent} and frame["height"] <= ${contract.frames.view.maxExtent}
+  end
+
+  defp valid_welcome?(%{"view_leadership" => incarnation} = frame) do
+    incarnation == true and valid_welcome?(Map.delete(frame, "view_leadership"))
   end
 
   defp valid_welcome?(frame) do
@@ -263,7 +287,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp valid_server_view?(frame) do
-    view_fields?(frame, ${render(contract.frames.view.serverExactFields)}) and
+    view_fields?(frame, ${render(contract.frames.view.serverExactFields)}) and (not Map.has_key?(frame, "origin_connection_id") or Map.has_key?(frame, "origin_proof")) and
       uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1, @limits["displayNameMaxBytes"]) and
       view_rect?(frame) and is_boolean(frame["bring"]) and is_binary(frame["occurred_at"]) and
       encoded_bytes(frame) <= @limits["cursorFrameBytes"]
@@ -352,6 +376,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   defp exact?(value, keys) when is_map(value), do: map_size(value) == length(keys) and Enum.all?(keys, &Map.has_key?(value, &1))
   defp exact?(_value, _keys), do: false
   defp uuid?(value), do: is_binary(value) and Regex.match?(@uuid, value)
+  defp lead_stamp?(value), do: is_binary(value) and Regex.match?(~r/^(0|[1-9][0-9]{0,15}):[a-f0-9]{64}$/, value)
   defp unsigned_decimal?(value), do: is_binary(value) and Regex.match?(@unsigned_decimal, value)
   defp operation_id?(value), do: bounded_string?(value, @limits["operationIdMinBytes"], @limits["operationIdMaxBytes"])
   defp request_id?(value), do: bounded_string?(value, @limits["requestIdMinBytes"], @limits["requestIdMaxBytes"])
