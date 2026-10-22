@@ -5,13 +5,13 @@ import type { Authentication, Identity, IdentityProvider } from "./identity";
 import { binding, checkCsrf, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
 import { sealSession } from "./session";
 import { body, form, DashboardError, exactOrigin, json, redirect } from "./http";
-import { engine, resolveTenant, live } from "./engine";
-import { homeMutation, homePage, homeMetadata } from "./home";
+import { engine, resolveTenant } from "./engine";
+import { homeMutation, homePage, homeStatus } from "./home";
 import { ownerAccess, viewerSeat } from "./owner-access";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
 import { pastMutation, pastSessionPage } from "./past-session";
 import { developerMutation, developerPage } from "./developer";
-import { callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, homeMetadataQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
+import { callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
@@ -110,10 +110,8 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
         return json(await callInvite(client, callStatusQuery.parse(query(request)).spaceId));
       case "/dashboard-api/call-metadata":
         return json(await callMetadata(client, callMetadataQuery.parse(query(request))));
-      case "/dashboard-api/home-metadata":
-        return json(await homeMetadata(client, homeMetadataQuery.parse(query(request)).spaceIds));
       case "/dashboard-api/home-status":
-        return json({ live: await live(client, homeStatusQuery.parse(query(request)).spaceIds) });
+        return json(await homeStatus(client, homeStatusQuery.parse(query(request))));
       case "/dashboard-api/call": {
         const input = callQuery.parse(query(request));
         return json(await callPage(client, input.spaceId, input.cursor));

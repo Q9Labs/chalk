@@ -12,18 +12,17 @@ export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(10
 export const callStatusQuery = z.strictObject({ spaceId: id });
 export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
 export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
+/** The most rows Home lists. One status check covers them all with one engine read, and 300 ids fit in a GET URL. */
+export const HOME_STATUS_ROWS = 300;
 export const homeStatusQuery = z.strictObject({
   spaceIds: z
     .string()
     .transform((value) => value.split(","))
-    .pipe(z.array(id).min(1).max(30)),
+    .pipe(z.array(id).min(1).max(HOME_STATUS_ROWS))
+    .default([]),
+  home: z.literal("1").optional(),
 });
-export const homeMetadataQuery = z.strictObject({
-  spaceIds: z
-    .string()
-    .transform((value) => value.split(","))
-    .pipe(z.array(id).min(1).max(5)),
-});
+export type HomeStatusQuery = z.infer<typeof homeStatusQuery>;
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 export const homeAction = z.discriminatedUnion("action", [
@@ -142,7 +141,6 @@ export type DashboardErrorDTO = { error: { code: string; retryable?: true; retry
 export type OwnerAccessDTO = { access: AccessGrant };
 
 export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
-export type HomeStatusDTO = { live: LiveDTO[] };
-export type HomeMetadataDTO = { calls: Pick<HomeCallDTO, "id" | "lastActiveAt" | "recentPeople">[] };
+export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
 
 export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO & Required<Pick<RecordingDTO, "transcripts" | "transcriptsNextCursor">> } | { kind: "transcript"; transcript: TranscriptDTO };

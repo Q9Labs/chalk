@@ -79,7 +79,7 @@ try {
   }
   // Run the real named Pages route graph with a test-only composition root.
   for (const group of ["auth", "dashboard-api"]) {
-    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-invite", "call-status", "call-metadata", "home-status", "home-metadata", "past-session", "developer"];
+    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-invite", "call-status", "call-metadata", "home-status", "past-session", "developer"];
     await mkdir(resolve(sandbox, "functions", group));
     for (const name of names) {
       await mkdir(resolve(sandbox, "functions", group, name, ".."), { recursive: true });

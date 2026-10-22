@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
-import type { CallDTO, HomeCallDTO, HomeDTO, LiveDTO } from "../../lib/dashboard/contracts";
+import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO, type HomeDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Avatar, Faces } from "../site/Avatar";
@@ -19,11 +19,12 @@ async function inviteLink(call: HomeCallDTO): Promise<string> {
 /** A mutation returns the bare call; keep the row's link, activity and people. */
 const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...call });
 
-type HomeData = HomeDTO & { pendingMetadata: string[] };
+/** Home lists at most the 300 newest calls, so one status check covers every row. */
+const recent = (data: HomeDTO): HomeDTO => (data.calls.length > HOME_STATUS_ROWS ? { ...data, calls: data.calls.slice(0, HOME_STATUS_ROWS) } : data);
 
 export function HomePage() {
   const pages = useRef(1);
-  const { state, reload, update } = useLoad<HomeData>(
+  const { state, reload, update } = useLoad<HomeDTO>(
     async () => {
       let data = await readPage("home", {});
       // Keep expanded rows when a live call changes.
@@ -31,38 +32,27 @@ export function HomePage() {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
       }
-      return { ...data, pendingMetadata: [] };
+      return data;
     },
     "home",
     {
-      // Each batch costs one tenant read. Scale cadence to 12 steady-state reads/minute,
-      // regardless of how many live Spaces the person has loaded.
-      interval: (data) => {
-        const count = data.live.filter((call) => call.episode && data.calls.some((row) => row.id === call.spaceId)).length;
-        return count ? 5000 * Math.ceil(count / 30) : data.pendingMetadata.length ? 5000 : undefined;
-      },
+      // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
+      // every row: its live state, last active time and recent people, and the first page when a call was made
+      // elsewhere. Home replaces its rows with that answer, so a failed check keeps the old rows and the next one
+      // catches up.
+      interval: () => 5000,
       read: async (data) => {
-        const active = data.live.filter((call) => call.episode && data.calls.some((row) => row.id === call.spaceId));
-        const live: LiveDTO[] = [];
-        for (let start = 0; start < active.length; start += 30) {
-          const status = await readPage("home-status", {
-            spaceIds: active
-              .slice(start, start + 30)
-              .map((call) => call.spaceId)
-              .join(","),
-          });
-          live.push(...status.live);
-        }
-        // A failed batch rejects this tick; retained data retries all batches next tick.
-        const pending = new Set(data.pendingMetadata);
-        for (const call of active) if (live.find((item) => item.spaceId === call.spaceId)?.episode?.id !== call.episode?.id) pending.add(call.spaceId);
-        for (const id of pending) if (!data.calls.some((call) => call.id === id)) pending.delete(id);
-        // Drain at most five changed rows per tick: <=10 additional tenant reads,
-        // <=120/minute even after all live badges clear. Never reload all Home pages.
-        const ids = [...pending].slice(0, 5);
-        const metadata = ids.length ? await readPage("home-metadata", { spaceIds: ids.join(",") }) : { calls: [] };
-        for (const id of ids) pending.delete(id);
-        return { ...data, pendingMetadata: [...pending], calls: data.calls.map((call) => ({ ...call, ...metadata.calls.find((item) => item.id === call.id) })), live: data.live.map((call) => live.find((item) => item.spaceId === call.spaceId) ?? call) };
+        const ids = data.calls.map((call) => call.id);
+        const status = await readPage("home-status", { home: "1", ...(ids.length ? { spaceIds: ids.join(",") } : {}) });
+        const next = { ...data, calls: data.calls.map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })), live: data.live.map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item) };
+        if (!status.first) return next;
+        // A call made elsewhere (another tab, device or API client): put the first page's new calls on top, keeping
+        // the expanded history. With no overlap a gap could hide calls, so reload the list instead.
+        if (!ids.length) return status.first;
+        const fresh = status.first.calls.filter((call) => !ids.includes(call.id));
+        if (fresh.length === status.first.calls.length) return null;
+        const freshIds = fresh.map((call) => call.id);
+        return recent({ ...next, calls: [...fresh, ...next.calls], live: [...status.first.live.filter((item) => freshIds.includes(item.spaceId)), ...next.live] });
       },
     },
   );
@@ -80,7 +70,7 @@ export function HomePage() {
       const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
       startKey.current = intentKey();
       const row: HomeCallDTO = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [] };
-      update((data) => ({ ...data, calls: [row, ...data.calls], live: [{ spaceId: call.id, episode: null }, ...data.live] }));
+      update((data) => recent({ ...data, calls: [row, ...data.calls], live: [{ spaceId: call.id, episode: null }, ...data.live] }));
       const link = await inviteLink(row);
       update((data) => ({ ...data, calls: data.calls.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
       setDialog({ kind: "ready", call, link });
@@ -143,14 +133,23 @@ export function HomePage() {
               <CallRow key={call.id} call={call} live={liveFor(state.data, call.id)} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
             ))}
           </div>
-          {state.data.nextCursor ? (
+          {state.data.calls.length >= HOME_STATUS_ROWS ? (
+            <p className="help">Home shows your 300 most recent calls.</p>
+          ) : state.data.nextCursor ? (
             <MoreButton
               label="Show more calls"
               cursor={state.data.nextCursor}
               load={(cursor) => readPage("home", { cursor })}
               onLoaded={(page) => {
                 pages.current++;
-                update((data) => ({ ...data, calls: [...data.calls, ...page.calls], live: [...data.live, ...page.live], nextCursor: page.nextCursor }), { refresh: false });
+                // A call made elsewhere may already be on top, so skip calls the list already shows.
+                update(
+                  (data) => {
+                    const known = new Set(data.calls.map((call) => call.id));
+                    return recent({ ...data, calls: [...data.calls, ...page.calls.filter((call) => !known.has(call.id))], live: [...data.live, ...page.live.filter((item) => !known.has(item.spaceId))], nextCursor: page.nextCursor });
+                  },
+                  { refresh: false },
+                );
               }}
             />
           ) : null}

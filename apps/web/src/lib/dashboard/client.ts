@@ -8,7 +8,6 @@ import type {
   CallMetadataDTO,
   CallMetadataQuery,
   HomeStatusDTO,
-  HomeMetadataDTO,
   CueDTO,
   DeliveryDTO,
   DeveloperAction,
@@ -34,8 +33,7 @@ type Pages = {
   "call-metadata": { query: CallMetadataQuery; data: CallMetadataDTO; action: never };
   "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
   "call-invite": { query: { spaceId: string }; data: Pick<CallPageDTO, "inviteUrl">; action: never };
-  "home-metadata": { query: { spaceIds: string }; data: HomeMetadataDTO; action: never };
-  "home-status": { query: { spaceIds: string }; data: HomeStatusDTO; action: never };
+  "home-status": { query: { spaceIds?: string; home?: "1" }; data: HomeStatusDTO; action: never };
   home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
   call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };

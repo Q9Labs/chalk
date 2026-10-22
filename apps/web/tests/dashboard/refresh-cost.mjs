@@ -12,8 +12,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
   const joined = await post(client, "/dashboard-api/call", { action: "join", spaceId: call.id, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(joined.status, 200, await joined.clone().text());
   const episodeId = (await joined.json()).access.subject.episode_id;
-  assert.equal((await client.request(`/dashboard-api/home-status?spaceIds=${Array(31).fill(call.id).join(",")}`)).status, 400);
-  assert.equal((await client.request(`/dashboard-api/home-metadata?spaceIds=${Array(6).fill(call.id).join(",")}`)).status, 400);
+  assert.equal((await client.request(`/dashboard-api/home-status?spaceIds=${Array(301).fill(call.id).join(",")}`)).status, 400);
   const loadStart = engineRequests.length;
   const loaded = await client.request(`/dashboard-api/call?spaceId=${call.id}`);
   assert.equal(loaded.status, 200);
@@ -130,7 +129,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     await callPage.locator('.srow a[aria-label^="Session"]').waitFor({ state: "visible", timeout: 12000 });
     await homePage.locator(".live").waitFor({ state: "hidden", timeout: 12000 });
     assert.equal(navigations, 0, "Both pages update without navigation or reload");
-    const finalMetadata = await client.request(`/dashboard-api/home-metadata?spaceIds=${call.id}`);
+    const finalMetadata = await client.request(`/dashboard-api/home-status?home=1&spaceIds=${call.id}`);
     assert.equal(finalMetadata.status, 200);
     const endedRow = (await finalMetadata.json()).calls[0];
     assert.equal(Date.parse(endedRow.lastActiveAt), Date.parse(sql(`select ended_at from episodes where id='${episodeId}'`)), "End timestamp comes from the real Episode");
