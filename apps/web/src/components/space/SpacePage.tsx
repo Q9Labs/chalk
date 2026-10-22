@@ -517,13 +517,13 @@ export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin
   return (
     <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`}>
       <form
-        className="mt-6"
+        className="mt-4 flex w-[264px] max-w-full flex-col gap-2 text-left"
         onSubmit={(event) => {
           event.preventDefault();
           if (displayName.trim()) onJoin();
         }}
       >
-        <label htmlFor="join-display-name" className="mb-2 block text-sm text-[var(--chalk-app-text-muted)]">
+        <label htmlFor="join-display-name" className="text-[13px] font-semibold">
           Your name
         </label>
         <input
@@ -532,10 +532,10 @@ export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin
           autoFocus
           value={displayName}
           onChange={(event) => onDisplayNameChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3 text-center text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
         />
-        <ChalkButton type="submit" variant="outline" className="mt-4 !h-11" disabled={!displayName.trim()}>
-          Join
+        <ChalkButton type="submit" variant="solid" className="w-full" disabled={!displayName.trim()}>
+          Join call
         </ChalkButton>
       </form>
     </CallLimbo>

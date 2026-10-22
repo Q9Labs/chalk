@@ -258,7 +258,7 @@ describe("public Space entry", () => {
     await act(async () => resolveAccount?.({ name: "Ada" }));
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Your name").getAttribute("value")).toBe("Bea");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join call" })));
     expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Bea");
   });
 
@@ -322,7 +322,7 @@ async function leaveCall(): Promise<void> {
 
 function enterName(displayName: string): void {
   fireEvent.change(screen.getByLabelText("Your name"), { target: { value: displayName } });
-  fireEvent.click(screen.getByRole("button", { name: "Join" }));
+  fireEvent.click(screen.getByRole("button", { name: "Join call" }));
 }
 
 describe("reload rejoin", () => {

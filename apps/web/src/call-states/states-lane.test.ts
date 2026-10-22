@@ -44,6 +44,21 @@ it("joining exposes consent; the ready card copies the link and announces Copied
   expect(await page.getByRole("img", { name: "Scan to join this call" }).isVisible()).toBe(true);
 }, 30_000);
 
+it("asks for a name in a full-width form, and Join call waits for one", async () => {
+  await page.goto(`${origin}/call-states.html?state=name-needed`);
+  const name = page.getByLabel("Your name");
+  const join = page.getByRole("button", { name: "Join call", exact: true });
+  await name.fill("");
+  expect(await join.isDisabled()).toBe(true);
+  await name.fill("Nora");
+  expect(await join.isEnabled()).toBe(true);
+  // As in the mockup, the label, the field and the button share one left edge and one width.
+  const [label, field, button] = await Promise.all([page.locator('label[for="join-display-name"]'), name, join].map((element) => element.boundingBox()));
+  expect(field?.width).toBeGreaterThanOrEqual(264);
+  expect(button?.width).toBe(field?.width);
+  expect([label?.x, button?.x]).toEqual([field?.x, field?.x]);
+});
+
 it("announces a join, raised hand and recording through event toasts", async () => {
   await page.goto(`${origin}/call-states.html?state=states-events`);
   for (const event of [

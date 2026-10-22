@@ -63,7 +63,7 @@ it.each(["space_public_invite.unavailable", "arrival.unavailable"])("keeps the o
   render(<RouterProvider router={router} />);
   const name = await screen.findByLabelText("Your name");
   fireEvent.change(name, { target: { value: "Ada" } });
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join call" })));
   expect(await screen.findByText(code === "space_public_invite.unavailable" ? "This invite link is unavailable. Ask the host for a new link." : "Your request to join is no longer available. Open the invite link and join again.")).toBeDefined();
   expect(screen.queryByRole("button", { name: "Ask again" })).toBeNull();
   expect(screen.queryByText(/Check your connection/)).toBeNull();

@@ -24,7 +24,7 @@ export async function measureRouteBundle({ browser, web }) {
       return route.fulfill({ status: 200, contentType: "text/css", body: "" });
     });
     await page.goto(`${origin}/space/performance-budget`, { waitUntil: "load" });
-    await page.getByRole("button", { name: "Join", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Join call", exact: true }).waitFor();
     await page.waitForLoadState("networkidle");
     if (errors.length) throw new Error(`Production call route: ${errors.join("; ")}`);
     let routeJsGzipKiB = 0;
