@@ -273,6 +273,31 @@ class CutTests(unittest.TestCase):
         with patch.object(api, 'pages', return_value=[old, {**old, 'run_attempt': 2, 'conclusion': None}]):
             self.assertFalse(api.has_green_gate(SHA))
 
+    def test_fresh_release_needs_a_green_master_gate_for_the_exact_target(self):
+        master = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master', event='push', conclusion='success')
+        cases = [('green master Gate', [master], True),
+                 ('pull request Gate only', [{**master, 'event': 'pull_request'}], False),
+                 ('failed master Gate', [{**master, 'conclusion': 'failure'}], False),
+                 ('no Gate run', [], False)]
+        for name, runs, allowed in cases:
+            with self.subTest(name), patch.dict(os.environ, TARGET_SHA=SHA, MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID=''):
+                api = object.__new__(GitHub)
+                with patch.object(api, 'pages', return_value=runs) as pages:
+                    if allowed:
+                        release.require_gate(api, None)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'no successful Gate run on master'):
+                            release.require_gate(api, None)
+                self.assertIn(f'head_sha={SHA}&branch=master', pages.call_args.args[0])
+
+    def test_reuse_and_rollback_deploy_without_a_new_gate_check(self):
+        for reuse in (dict(MANIFEST_RUN_ID='123', PAGES_ROLLBACK_ID=''), dict(MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID='abc')):
+            with self.subTest(**reuse), patch.dict(os.environ, TARGET_SHA=SHA, **reuse):
+                api = object.__new__(GitHub)
+                with patch.object(api, 'pages', return_value=[]) as pages:
+                    release.require_gate(api, None)
+                pages.assert_not_called()
+
     @patch.dict(os.environ, TARGET_SHA=SHA, GITHUB_RUN_ID='1')
     def test_shared_invalidation_never_loses_the_completed_cut_baseline(self):
         item = held()

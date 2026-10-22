@@ -175,6 +175,19 @@ def plan(github, args):
     outputs(result)
 
 
+def require_gate(github, args):
+    # Reuse and Pages rollback deploy artifacts that an earlier, already gated run built.
+    if os.environ.get('MANIFEST_RUN_ID') or os.environ.get('PAGES_ROLLBACK_ID'):
+        print('Release reuses earlier artifacts; no fresh build needs a Gate run')
+        return
+    target = env('TARGET_SHA')
+    require(re.fullmatch('[0-9a-f]{40}', target), 'target_sha must be a full lowercase commit SHA')
+    require(github.has_green_gate(target),
+            f'{target} has no successful Gate run on master. Pull request Gate runs do not count: '
+            'merge the change, wait for its master Gate to pass, then release that commit.')
+    print(f'Release: latest master Gate for {target} passed')
+
+
 def validate_choice(github, item):
     info = payload(item)
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
@@ -332,7 +345,7 @@ def invalidate(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production'))
+    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')
