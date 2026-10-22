@@ -1,14 +1,14 @@
 defmodule ChalkSync.LifecycleConsumerPostgresTest do
   use ChalkSync.ServerCase, async: false
 
+  alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Operations.Probe
   alias ChalkSync.Operations.Readiness
   alias ChalkSync.Stateholder.Postgres
-  alias ChalkSync.TestWSClient, as: Client
-  alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
+  alias ChalkSync.TestWSClient, as: Client
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||

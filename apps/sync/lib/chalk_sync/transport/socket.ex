@@ -575,30 +575,30 @@ defmodule ChalkSync.Transport.SocketV1 do
          collaboration_negotiated,
          collaboration_version
        ) do
-    with :ok <-
-           Coordinator.activate_recovery(
-             coordinator,
-             recovery,
-             self(),
-             recovery_timeout()
-           ) do
-      Process.cancel_timer(state.hello_timer)
+    case Coordinator.activate_recovery(
+           coordinator,
+           recovery,
+           self(),
+           recovery_timeout()
+         ) do
+      :ok ->
+        Process.cancel_timer(state.hello_timer)
 
-      {:ok,
-       %{
-         state
-         | phase: :recovering,
-           hello_timer: nil,
-           identity: identity,
-           coordinator: coordinator,
-           collaboration_negotiated: collaboration_negotiated,
-           collaboration_version: collaboration_version
-       }
-       |> observe_collaboration(
-         "extension.negotiate",
-         negotiation_outcome(collaboration_negotiated)
-       )}
-    else
+        {:ok,
+         %{
+           state
+           | phase: :recovering,
+             hello_timer: nil,
+             identity: identity,
+             coordinator: coordinator,
+             collaboration_negotiated: collaboration_negotiated,
+             collaboration_version: collaboration_version
+         }
+         |> observe_collaboration(
+           "extension.negotiate",
+           negotiation_outcome(collaboration_negotiated)
+         )}
+
       {:error, reason} ->
         Coordinator.unsubscribe(coordinator, self())
         Logger.warning("sync v1 recovery failed: reason=#{reason}")
