@@ -23,8 +23,8 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 		ctx := t.Context()
 		connect := seatScratchSchema(t, pool)
 		holder, builder, writer := connect(), connect(), connect()
-		// An older open transaction makes a concurrent build wait before it can finish.
-		holding, err := holder.Begin(ctx)
+		// An older transaction that keeps its snapshot open makes a concurrent build wait before it can finish.
+		holding, err := holder.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +85,7 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 		ctx := t.Context()
 		connect := seatScratchSchema(t, pool)
 		holder, builder, checker := connect(), connect(), connect()
-		holding, err := holder.Begin(ctx)
+		holding, err := holder.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 		if err != nil {
 			t.Fatal(err)
 		}
