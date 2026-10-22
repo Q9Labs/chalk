@@ -69,6 +69,7 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
 }
 
 export async function refreshChecks({ open, fixture, check, CALL }) {
+  await missingMetadataChecks({ open, fixture, check, CALL });
   await archivedPollingChecks({ open, fixture, check });
   await pollingBackoffChecks({ open, fixture, check, CALL });
   await budgetChecks({ open, fixture, check, CALL });
@@ -290,6 +291,37 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
     check(`stale refresh cannot undo ${action}`, raced && kept);
     await context.close();
+  }
+}
+
+export async function missingMetadataChecks({ open, fixture, check, CALL }) {
+  for (const status of [403, 404, 410]) {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure", clock: true });
+    try {
+      await tab.getByText("Transcript processing", { exact: true }).waitFor();
+      await tab.getByRole("button", { name: "Ask to join", exact: true }).click();
+      await tab.waitForLoadState("networkidle");
+      const reads = async (page) => (await fixture("log")).filter((entry) => entry.path === `/dashboard-api/${page}`).length;
+      const full = await reads("call");
+      await tab.route("**/dashboard-api/call-metadata?*", (route) => route.fulfill({ status, json: { error: { code: "artifact_unavailable" } } }));
+      for (let tick = 0; tick < 2; tick++) {
+        const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+        await tab.clock.runFor(5000);
+        await response;
+        await tab.waitForLoadState("networkidle");
+      }
+      check(`metadata ${status} removes the transcript while keeping Call available`, (await tab.locator(".errp").count()) === 0 && (await tab.getByText("Transcript processing", { exact: true }).count()) === 0 && (await tab.locator(".srow").count()) > 0);
+      if (status === 404) {
+        await mkdir(resolve("artifacts/dashboard-followups"), { recursive: true });
+        await tab.screenshot({ path: resolve(`artifacts/dashboard-followups/metadata-${process.env.DASHBOARD_FOLLOWUP_PROOF ?? "after"}.png`), fullPage: true });
+      }
+      const before = await reads("call-status");
+      await tab.clock.runFor(5000);
+      await tab.waitForLoadState("networkidle");
+      check(`metadata ${status} keeps shared status polling without reloading history`, (await reads("call-status")) > before && (await reads("call")) === full);
+    } finally {
+      await context.close();
+    }
   }
 }
 

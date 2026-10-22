@@ -137,6 +137,26 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     console.log(
       `PASS: refresh-cost ${JSON.stringify({ rateLimits: "on", tenantReads: observed.length, minutes: Number(minutes.toFixed(3)), tenantReadsPerMinute: Number(perMinute.toFixed(2)), fullMinuteWindows: windows, initialCallReads, initialHomeReads, callStatusTicks: dashboardReads.filter((path) => path === "/dashboard-api/call-status").length, homeStatusTicks: dashboardReads.filter((path) => path === "/dashboard-api/home-status").length, liveToEndedWithoutReload: true })}`,
     );
+    // Delete a real pending transcript between browser ticks, without mocking success.
+    measuringNavigation = false;
+    await homePage.goto("about:blank");
+    const recordingId = crypto.randomUUID();
+    const transcriptId = crypto.randomUUID();
+    sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${recordingId}','${tenantId}','${call.id}','${episodeId}','completed','r2');
+      insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${transcriptId}','${tenantId}','${call.id}','${episodeId}','${recordingId}','pending','{en}');`);
+    await callPage.reload();
+    await callPage.getByText("Transcript processing", { exact: true }).waitFor();
+    const fullBeforeDeletion = dashboardReads.filter((path) => path === "/dashboard-api/call").length;
+    sql(`delete from transcriptions where id='${transcriptId}' and tenant_id='${tenantId}'`);
+    await callPage.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden", timeout: 20000 });
+    assert.equal(await callPage.locator(".errp").count(), 0);
+    assert.equal(await callPage.locator(".srow").count(), 1);
+    const ticksAfterDeletion = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length;
+    await delay(5500);
+    assert(dashboardReads.filter((path) => path === "/dashboard-api/call-status").length > ticksAfterDeletion);
+    assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, fullBeforeDeletion);
+    assert(engineRequests.some((entry) => entry.path.endsWith(`/transcripts/${transcriptId}`) && entry.status === 404));
+    console.log("PASS: real pending transcript deletion returns 404; browser removes it, retains Call and continues shared status polling without history reload");
   } finally {
     await browser?.close();
   }

@@ -241,6 +241,10 @@ async function dashboard(request, response, page, url, entry) {
       const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
       return send(response, 200, { calls: calls.map(homeCallDTO), live, nextCursor: null });
     }
+    if (page === "call-invite") {
+      const call = data.calls.find((item) => item.id === query.spaceId);
+      return call ? send(response, 200, { inviteUrl: inviteURL(call) }) : fail(response, 404, "not_found");
+    }
     if (page === "call") {
       const call = data.calls.find((item) => item.id === query.spaceId);
       if (!call) return fail(response, 404, "not_found");
