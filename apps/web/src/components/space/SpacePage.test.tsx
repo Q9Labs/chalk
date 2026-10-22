@@ -136,6 +136,38 @@ describe("public Space entry", () => {
     expect(screen.queryByText("Chalk could not connect. Check your connection and try entering again.")).toBeNull();
   });
 
+  it("keeps a lost Cancel from accepting admission until the guest joins again", async () => {
+    vi.useFakeTimers();
+    try {
+      window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+      mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-pending", retry_after: 1, space: { slug: "design-lab", name: "Design Lab" } });
+      mocks.publicClient.leaveSpacePublicInviteArrival.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue(undefined);
+      mocks.publicClient.getSpacePublicInviteArrival.mockResolvedValue(spacePageTestArrival);
+      render(<SpacePage slug="design-lab" />);
+      await act(async () => enterName("Ada"));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(mocks.createPreparedPublicSpace).not.toHaveBeenCalled();
+      expect(mocks.holder.chalkProps).toBeUndefined();
+
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+      expect(mocks.publicClient.leaveSpacePublicInviteArrival).toHaveBeenNthCalledWith(1, "arrival-pending");
+      expect(mocks.publicClient.leaveSpacePublicInviteArrival).toHaveBeenNthCalledWith(2, "arrival-pending");
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(mocks.createPreparedPublicSpace).not.toHaveBeenCalled();
+      expect(mocks.holder.chalkProps).toBeUndefined();
+
+      mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-next", retry_after: 1, space: { slug: "design-lab", name: "Design Lab" } });
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(mocks.publicClient.getSpacePublicInviteArrival).toHaveBeenLastCalledWith("arrival-next");
+      expect(mocks.holder.chalkProps).toBeDefined();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps best-effort unmount withdrawal while Cancel is in flight", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-pending", retry_after: 30, space: { slug: "design-lab", name: "Design Lab" } });

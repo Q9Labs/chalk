@@ -64,7 +64,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const active = useRef(true);
   const reloadAttempted = useRef(false);
   const pendingRef = useRef<PendingArrival | null>(null);
-  const cancelling = useRef(false);
+  const cancelRequested = useRef(false);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
@@ -117,6 +117,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
         setError({ message: neutralSpaceError, retryable: false });
         return;
       }
+      cancelRequested.current = false;
       setError(null);
       setPreparing(true);
       const preparation = arrive(client, normalizedDisplayName, slug, inviteToken);
@@ -174,7 +175,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     start({ displayName: automaticName, ...devicesOff });
   }, [automaticName, reloadMarker, start]);
   useEffect(() => {
-    if (preparing) return;
+    if (preparing || cancelRequested.current) return;
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
     let cancelled = false;
@@ -182,7 +183,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     const poll = async () => {
       try {
         const arrival = await client.getSpacePublicInviteArrival(pending.arrival.arrival_handle ?? "");
-        if (cancelled || cancelling.current || !active.current || pendingRef.current !== pending) return;
+        if (cancelled || cancelRequested.current || !active.current || pendingRef.current !== pending) return;
         if (arrival.state === "pending") {
           timer = globalThis.setTimeout(poll, retryDelay(arrival.retry_after));
           return;
@@ -190,13 +191,13 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
         if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
         const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
         const prepared = createPreparedPublicSpace(client, resumed);
-        if (cancelled || cancelling.current || !active.current || pendingRef.current !== pending) {
+        if (cancelled || cancelRequested.current || !active.current || pendingRef.current !== pending) {
           await prepared.finish().catch(() => undefined);
           return;
         }
         complete(prepared, pending.inviteLink, pending.spaceName);
       } catch (cause) {
-        if (!cancelled && !cancelling.current && active.current && pendingRef.current === pending) {
+        if (!cancelled && !cancelRequested.current && active.current && pendingRef.current === pending) {
           pendingRef.current = null;
           setPending(null);
           setError(neutralMessage(cause));
@@ -212,7 +213,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const cancel = useCallback(async () => {
     const arrivalHandle = pending?.arrival.arrival_handle;
     if (!arrivalHandle || preparing) return;
-    cancelling.current = true;
+    cancelRequested.current = true;
     setError(null);
     setPreparing(true);
     try {
@@ -222,7 +223,6 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     } catch (cause) {
       setError(neutralMessage(cause));
     } finally {
-      cancelling.current = false;
       if (active.current) setPreparing(false);
     }
   }, [client, pending, preparing]);
