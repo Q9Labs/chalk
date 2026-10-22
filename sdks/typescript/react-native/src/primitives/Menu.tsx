@@ -10,7 +10,7 @@ import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
 import { radii, sizes } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
-import { placeMenu, type MenuPlacement, type Rect } from "./menu-placement";
+import { normalizeMenuAnchor, placeMenu, type MenuPlacement, type Rect } from "./menu-placement";
 
 export type MenuProps = {
   readonly open: boolean;
@@ -55,7 +55,7 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
   }, [anchorRef, open, shown]);
 
   // Like iOS menus, an open menu closes when the screen rotates or resizes, because its trigger moved.
-  const viewport = `${layout.width}x${layout.height}`;
+  const viewport = `${layout.x},${layout.y}:${layout.width}x${layout.height}`;
   const openedIn = useRef(viewport);
   useEffect(() => {
     if (!open) openedIn.current = viewport;
@@ -75,7 +75,7 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
     (event: LayoutChangeEvent) => {
       if (!trigger || placement) return;
       const { width, height } = event.nativeEvent.layout;
-      setPlacement(placeMenu(trigger, { width, height }, layout, layout.insets, keyboardHeight));
+      setPlacement(placeMenu(normalizeMenuAnchor(trigger, layout), { width, height }, layout, layout.insets, keyboardHeight));
       shown.value = reduceMotion ? 1 : withTiming(1, timings.menu);
     },
     [keyboardHeight, layout, placement, reduceMotion, shown, trigger],

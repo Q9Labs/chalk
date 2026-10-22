@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeMenu } from "./menu-placement";
+import { normalizeMenuAnchor, placeMenu } from "./menu-placement";
 
 const iphone = { width: 393, height: 852 };
 const iphoneInsets = { top: 59, bottom: 34, left: 0, right: 0 };
@@ -46,5 +46,30 @@ describe("placeMenu", () => {
     const placement = placeMenu({ x: 100, y: 300, width: 44, height: 44 }, { width: 250, height: 2000 }, iphone, iphoneInsets);
     expect(placement.maxHeight).toBe(852 - 34 - 8 - (59 + 8));
     expect(placement.y).toBe(59 + 8);
+  });
+});
+
+describe("normalizeMenuAnchor", () => {
+  it("keeps an inset SDK menu next to the trigger measured in the native window", () => {
+    const frame = { x: 48, y: 96, width: 322, height: 746 };
+    const trigger = { x: 118, y: 124, width: 100, height: 44 };
+    const local = normalizeMenuAnchor(trigger, frame);
+    expect(local).toEqual({ x: 70, y: 28, width: 100, height: 44 });
+    const placement = placeMenu(local, { width: 180, height: 110 }, frame, { top: 0, bottom: 0, left: 0, right: 0 });
+    expect(placement.x + frame.x).toBe(trigger.x + trigger.width / 2 - 90);
+    expect(placement.y + frame.y).toBe(trigger.y + trigger.height + 6);
+  });
+
+  it("keeps a landscape menu inside its cutout-safe allocated frame", () => {
+    const frame = { x: 48, y: 96, width: 794, height: 274 };
+    const trigger = { x: 50, y: 124, width: 44, height: 44 };
+    const placement = placeMenu(normalizeMenuAnchor(trigger, frame), { width: 180, height: 110 }, frame, { top: 0, bottom: 0, left: 14, right: 0 });
+    expect(placement.x).toBe(14 + 8);
+    expect(placement.y + frame.y).toBe(trigger.y + trigger.height + 6);
+  });
+
+  it("leaves window-sized anchors unchanged after the external notice is dismissed", () => {
+    const trigger = { x: 70, y: 90, width: 100, height: 44 };
+    expect(normalizeMenuAnchor(trigger, { x: 0, y: 0, width: 402, height: 874 })).toEqual(trigger);
   });
 });

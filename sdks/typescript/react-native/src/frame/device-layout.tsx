@@ -6,6 +6,9 @@ export type DeviceLayout = {
   readonly arrangement: Arrangement;
   /** True for `portrait` and `landscape`: the phone look (bottom sheets, 52 pt dock, 48 pt menu rows). */
   readonly phone: boolean;
+  /** Window origin of the allocated SDK frame; portals use coordinates local to this frame. */
+  readonly x: number;
+  readonly y: number;
   readonly width: number;
   readonly height: number;
   readonly insets: EdgeInsets;
@@ -14,12 +17,12 @@ export type DeviceLayout = {
 const DeviceLayoutContext = createContext<DeviceLayout | null>(null);
 
 export function DeviceLayoutProvider({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  const { width, height } = useSafeAreaFrame();
+  const { x, y, width, height } = useSafeAreaFrame();
   const insets = useSafeAreaInsets();
   const value = useMemo<DeviceLayout>(() => {
     const arrangement = arrangementFor(width, height);
-    return { arrangement, phone: arrangement !== "pad", width, height, insets };
-  }, [height, insets, width]);
+    return { arrangement, phone: arrangement !== "pad", x, y, width, height, insets };
+  }, [height, insets, width, x, y]);
   return <DeviceLayoutContext.Provider value={value}>{children}</DeviceLayoutContext.Provider>;
 }
 
