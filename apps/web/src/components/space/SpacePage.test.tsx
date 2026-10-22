@@ -131,6 +131,30 @@ describe("public Space entry", () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
     expect(screen.getByText("Chalk could not connect. Check your connection and try entering again.")).toBeDefined();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+    mocks.publicClient.leaveSpacePublicInviteArrival.mockResolvedValue(undefined);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+    expect(screen.queryByText("Chalk could not connect. Check your connection and try entering again.")).toBeNull();
+  });
+
+  it("keeps best-effort unmount withdrawal while Cancel is in flight", async () => {
+    window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+    mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-pending", retry_after: 30, space: { slug: "design-lab", name: "Design Lab" } });
+    let finishCancel: () => void = () => {
+      throw new Error("Cancel has not started");
+    };
+    mocks.publicClient.leaveSpacePublicInviteArrival
+      .mockReturnValueOnce(
+        new Promise<undefined>((resolve) => {
+          finishCancel = () => resolve(undefined);
+        }),
+      )
+      .mockResolvedValue(undefined);
+    const view = render(<SpacePage slug="design-lab" />);
+    await act(async () => enterName("Ada"));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+    view.unmount();
+    expect(mocks.publicClient.leaveSpacePublicInviteArrival).toHaveBeenCalledTimes(2);
+    await act(async () => finishCancel());
   });
 
   it("ignores an admission response that arrives while Cancel is in flight", async () => {
@@ -150,8 +174,8 @@ describe("public Space entry", () => {
         throw new Error("Cancel has not started");
       };
       mocks.publicClient.leaveSpacePublicInviteArrival.mockReturnValue(
-        new Promise<void>((resolve) => {
-          resolveCancel = resolve;
+        new Promise<undefined>((resolve) => {
+          resolveCancel = () => resolve(undefined);
         }),
       );
       render(<SpacePage slug="design-lab" />);
