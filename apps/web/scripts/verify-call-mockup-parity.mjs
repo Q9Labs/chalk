@@ -27,7 +27,12 @@ try {
     assert.ok(toastBottom <= controlsTop - 8, `at ${viewport.width}px, toasts sit above the board's bottom controls (toasts end at ${toastBottom}px, controls start at ${controlsTop}px)`);
   }
 
-  console.log("PASS: rounded fields, toasts above the board island");
+  // A past-session recording smaller than the 16:9 player kept its own size in the corner. A video without a source is 300x150.
+  await page.setContent(`<link rel="stylesheet" href="${origin}/src/styles/dashboard.css"><div class="site"><div class="dash"><div class="player" style="width: 960px"><video></video></div></div></div>`, { waitUntil: "load" });
+  const [player, video] = await Promise.all([".player", ".player video"].map((selector) => page.locator(selector).evaluate((element) => [element.getBoundingClientRect().width, element.getBoundingClientRect().height])));
+  assert.deepEqual(video, player, `the recording fills the 16:9 player (video ${video}, player ${player})`);
+
+  console.log("PASS: rounded fields, toasts above the board island, recordings fill the player");
 } finally {
   try {
     await browser?.close();
