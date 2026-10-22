@@ -30,12 +30,18 @@ it("loads call, board, sticky note, text and math assets from our origin", async
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   const requests: { url: string; type: string }[] = [];
   const failed: string[] = [];
+  const pageErrors: string[] = [];
+  let fonts: { family: string; status: string }[] = [];
   context.on("request", (request) => requests.push({ url: request.url(), type: request.resourceType() }));
   context.on("response", (response) => {
     if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
   });
   try {
     const page = await context.newPage();
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") pageErrors.push(message.text());
+    });
     await page.goto(`${origin}/call-states.html?state=foundation-dark`);
     await page.getByTestId("stage").waitFor();
     await page.evaluate(() => document.fonts.ready);
@@ -59,30 +65,34 @@ it("loads call, board, sticky note, text and math assets from our origin", async
       await page.keyboard.type(text);
       await page.keyboard.press("Escape");
     }
+    await page.evaluate(() => document.fonts.ready);
+    fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, status: font.status })));
+    if (process.env.ASSET_PROOF_DIR) await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, "board.png") });
     const mathModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/react/mathjax-renderer.ts")}`;
     await page.addScriptTag({
       type: "module",
       content: `import { renderLatexToSvg } from ${JSON.stringify(mathModule)};
-        const result = await renderLatexToSvg(${JSON.stringify(String.raw`\require{color}\color{blue}{\mathbb{R} + \mathfrak{g} + \sum_{n=1}^{10} n^2}`)});
         const output = document.createElement("output");
         output.id = "math-assets-proof";
         output.hidden = true;
-        output.textContent = result.svg;
-        document.body.append(output);`,
+        document.body.append(output);
+        try {
+          const result = await renderLatexToSvg(${JSON.stringify(String.raw`\require{color}\color{blue}{\mathbb{R} + \mathfrak{g} + \sum_{n=1}^{10} n^2}`)});
+          output.textContent = result.svg;
+        } catch (error) { output.textContent = String(error); }
+        output.dataset.complete = "true";`,
     });
-    await expect.poll(() => page.locator("#math-assets-proof").textContent()).toContain("<svg");
-    await page.evaluate(() => document.fonts.ready);
-    const fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, status: font.status })));
+    await expect.poll(() => page.locator("#math-assets-proof").getAttribute("data-complete"), { timeout: 30_000 }).toBe("true");
+    expect(await page.locator("#math-assets-proof").textContent()).toContain("<svg");
     const external = requests.filter(({ url }) => /^https?:/.test(url) && new URL(url).origin !== origin);
-    if (process.env.ASSET_PROOF_DIR) {
-      await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, "board.png") });
-      await writeFile(resolve(process.env.ASSET_PROOF_DIR, "call-requests.json"), JSON.stringify({ requests, failed, fonts, external }, null, 2));
-    }
     expect(external, "external HTTP requests").toEqual([]);
     expect(failed).toEqual([]);
     expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
     expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
   } finally {
+    if (process.env.ASSET_PROOF_DIR) {
+      await writeFile(resolve(process.env.ASSET_PROOF_DIR, "call-requests.json"), JSON.stringify({ requests, failed, pageErrors, fonts, external: requests.filter(({ url }) => /^https?:/.test(url) && new URL(url).origin !== origin) }, null, 2));
+    }
     await context.close();
   }
 }, 90_000);
