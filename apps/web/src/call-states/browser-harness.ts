@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 export async function startCallHarness(): Promise<{ origin: string; stop: () => Promise<void> }> {
   const reservation = createServer();
-  reservation.listen(0, "127.0.0.1");
+  reservation.listen(Number(process.env.CHALK_CALL_HARNESS_PORT ?? 0), "127.0.0.1");
   await once(reservation, "listening");
   const address = reservation.address();
   await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
