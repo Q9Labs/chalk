@@ -594,6 +594,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#presenting = "presenting" in frame ? frame.presenting : false;
     this.#publishSummary("loading", null);
     this.#clearHeartbeat();
+    if (this.#hello !== "draw-policy") this.#dropPolicyChanges();
     const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     this.#awaitingOperationIds.clear();
     this.#waitingForOperations = true;
@@ -604,6 +605,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     this.#requestSnapshotAfterOperations();
     this.#startHeartbeat(HEARTBEAT_INTERVAL_MS + Math.max(0, this.#nextSlowConnectionReplacementAt - this.#elapsedNow()));
+  }
+
+  /** A Sync without draw_policy_v1 closes the socket on a policy change, so a change saved for a newer Sync is dropped, not replayed. */
+  #dropPolicyChanges(): void {
+    for (const [operationId, entry] of this.#operations) {
+      if (entry.pending.frame.type !== "set_draw_policy") continue;
+      this.#operations.delete(operationId);
+      this.#clearOperationRetryTimer(operationId);
+      entry.deferred && rejectDeferred(entry.deferred, error(failure("set_draw_policy", "unavailable", true, "The call-wide drawing policy is unavailable on this Sync server.")));
+      void this.#store.remove(operationId).catch(() => undefined);
+    }
   }
 
   #requestSnapshotAfterOperations(): void {
@@ -703,6 +715,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     } finally {
       this.#pendingStoreWrites.delete(storeWrite);
       this.#reservedOperationIds.delete(frame.operation_id);
+    }
+    if (frame.type === "set_draw_policy" && this.#phase === "live" && this.#hello !== "draw-policy") {
+      void this.#store.remove(frame.operation_id).catch(() => undefined);
+      throw error(failure("set_draw_policy", "unavailable", true, "The call-wide drawing policy is unavailable on this Sync server."));
     }
     let deferred!: Deferred<ChalkWhiteboardV1Commit>;
     const promise = new Promise<ChalkWhiteboardV1Commit>((resolve, reject) => {

@@ -644,11 +644,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   # Receipts are never evicted, so a retry from any time in the call stays a
-  # duplicate. New changes stop at the cap instead, as rate_limited.
+  # duplicate. New changes stop at the cap instead.
   defp draw_policy_capacity(connection, identity) do
     case Postgrex.query(connection, SQL.count_draw_policy_receipts(), context(identity)) do
       {:ok, %Postgrex.Result{rows: [[count]]}} when count < @max_draw_policy_receipts -> :ok
-      {:ok, _result} -> {:error, :rate_limited}
+      {:ok, _result} -> {:error, :draw_policy_limit}
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end

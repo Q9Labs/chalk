@@ -776,12 +776,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp operation_failure(correlation_id, operation, failure, state) do
-    {code, recoverable} =
+    {reason, recoverable} =
       case failure do
-        {:error, code} -> {normalize_error(code), false}
-        {:retryable, code} -> {normalize_error(code), true}
+        {:error, reason} -> {reason, false}
+        {:retryable, reason} -> {reason, true}
         _ -> {:unavailable, true}
       end
+
+    code = normalize_error(reason)
 
     state = observe_operation(state, operation, Atom.to_string(code))
 
@@ -792,7 +794,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         operation,
         code,
         recoverable,
-        error_message(code)
+        error_message(reason, code)
       )}, state}
   end
 
@@ -895,8 +897,20 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     code
   end
 
+  defp normalize_error(:draw_policy_limit) do
+    :rate_limited
+  end
+
   defp normalize_error(_code) do
     :unavailable
+  end
+
+  defp error_message(:draw_policy_limit, _code) do
+    "This Episode has reached its limit of drawing policy changes"
+  end
+
+  defp error_message(_reason, code) do
+    error_message(code)
   end
 
   defp error_message(:permission_denied) do

@@ -641,6 +641,88 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await second.client.stopSceneSubscription();
     }
   });
+
+  it("refuses a policy change whose save finishes after the client fell back to a Sync without draw_policy_v1", async () => {
+    const saved = Promise.withResolvers<void>();
+    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+      override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
+        await super.put(operation);
+        if (operation.frame.type === "set_draw_policy") await saved.promise;
+      }
+    })();
+    const clock = new TestClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { pendingStore });
+    try {
+      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+      await settle();
+      const change = client.setDrawPolicy("hosts");
+      void change.catch(() => undefined);
+      await settle();
+      sockets[0]?.close(1006);
+      clock.advance(5_000);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      sockets[1]?.close(1008);
+      clock.advance(5_000);
+      await settle();
+      sockets[2]?.open();
+      await settle();
+      sockets[2]?.receive(welcome());
+      await settle();
+      expect(JSON.parse(sockets[2]?.sent[0] ?? "{}").extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+
+      saved.resolve();
+      await settle();
+      sockets[2]?.receive(snapshotPage(sockets[2]?.requestId()));
+      await settle();
+      expect((sockets[2]?.sent ?? []).map((wire) => JSON.parse(wire).type)).not.toContain("set_draw_policy");
+      await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
+      expect(await pendingStore.load()).toEqual([]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("drops a saved policy change instead of replaying it to a Sync without draw_policy_v1", async () => {
+    const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const person = "20000000-0000-4000-8000-000000000002";
+    const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
+    first.sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+    await settle();
+    void first.client.setDrawPolicy("hosts").catch(() => undefined);
+    void first.client.setDrawPermission(person, false).catch(() => undefined);
+    await settle();
+    await first.client.stopSceneSubscription();
+
+    const clock = new TestClock();
+    const second = recoveryClient(clock, undefined, { pendingStore });
+    const startup = second.client.startSceneSubscription();
+    const sent = (index: number) => (second.sockets[index]?.sent ?? []).map((wire) => JSON.parse(wire));
+    try {
+      await settle();
+      second.sockets[0]?.open();
+      await settle();
+      second.sockets[0]?.close(1008);
+      clock.advance(1_000);
+      await settle();
+      second.sockets[1]?.open();
+      await settle();
+      second.sockets[1]?.receive(welcome());
+      await settle();
+      expect(sent(1)[0].extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      expect(sent(1).map((frame) => frame.type)).not.toContain("set_draw_policy");
+      const permissions = sent(1).filter((frame) => frame.type === "set_draw_permission");
+      expect(permissions.map((frame) => frame.can_draw)).toEqual([false]);
+      expect((await pendingStore.load()).map((pending) => pending.frame.type)).toEqual(["set_draw_permission"]);
+      second.sockets[1]?.receive({ type: "commit", operation_id: permissions[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      await settle();
+      second.sockets[1]?.receive(snapshotPage(second.sockets[1]?.requestId()));
+      await startup;
+    } finally {
+      await second.client.stopSceneSubscription();
+    }
+  });
 });
 
 describe("whiteboard slow-connection watchdog", () => {

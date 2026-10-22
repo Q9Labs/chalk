@@ -85,6 +85,10 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
          }}
     end
 
+    def set_draw_policy(_identity, _operation) do
+      Process.get(:whiteboard_draw_policy_failure)
+    end
+
     def read_after(_identity, scene_id, 4) do
       {:ok,
        Process.get(:whiteboard_events_after_four) ||
@@ -219,6 +223,27 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
              "code" => "unavailable"
            } =
              JSON.decode!(encoded)
+  end
+
+  test "names the policy cap when an Episode has used up its policy changes" do
+    Process.put(:whiteboard_draw_policy_failure, {:error, :draw_policy_limit})
+    state = %{live_access_state() | draw_policy_negotiated: true}
+
+    frame = %{
+      "type" => "set_draw_policy",
+      "operation_id" => "whiteboard-policy-00001",
+      "policy" => "hosts"
+    }
+
+    assert {:push, {:text, encoded}, _state} = receive_frame(frame, state)
+
+    assert %{
+             "type" => "operation_error",
+             "operation" => "set_draw_policy",
+             "code" => "rate_limited",
+             "recoverable" => false,
+             "message" => "This Episode has reached its limit of drawing policy changes"
+           } = JSON.decode!(encoded)
   end
 
   test "serializes overlapping snapshot requests without interrupting recovery" do

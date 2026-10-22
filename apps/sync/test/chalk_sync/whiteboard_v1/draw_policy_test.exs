@@ -159,7 +159,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
       set_policy(host, policy_at(index), "policy-bound-#{pad(index)}")
     end
 
-    assert {:error, :rate_limited} =
+    assert {:error, :draw_policy_limit} =
              PostgresRepository.set_draw_policy(host, %{
                operation_id: "policy-bound-#{pad(1025)}",
                policy: "picked"
