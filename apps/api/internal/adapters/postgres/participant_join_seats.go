@@ -51,5 +51,5 @@ func (r EpisodeLifecycleRepository) CancelParticipantJoin(ctx context.Context, i
 		}
 		return nil
 	})
-	return state == "cancelled" || state == "expired" || state == "left" || state == "stale", err
+	return state == "cancelled" || state == "expired" || state == "left", err
 }
