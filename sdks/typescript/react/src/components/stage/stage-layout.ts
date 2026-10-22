@@ -160,22 +160,27 @@ function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string
   const others = people.filter((id) => id !== speaker && id !== local);
   const ordered = [...(speaker ? [speaker] : []), ...others, ...(local ? [local] : [])];
   const fold = (max: number): readonly string[] => (ordered.length <= max ? ordered : [...(max > 1 ? [...ordered.slice(0, max - 2), ...ordered.slice(-1)] : []), MORE_TILE_ID]);
-  const stack = (ids: readonly string[]): StageFrame[] => {
-    let y = 56;
-    return ids.map((id) => {
-      const size = id === speaker || content.includes(id) ? FLOAT_SPEAKER : FLOAT_PERSON;
-      const frame: StageFrame = { id, role: "float", page: 0, x: box.width - 12 - size.width, y, ...size };
-      y += size.height + options.gap;
-      return frame;
-    });
-  };
+  const sizeOf = (id: string) => (id === speaker || content.includes(id) ? FLOAT_SPEAKER : FLOAT_PERSON);
+  const bottom = box.height - 8;
   // A short stage, such as a phone on its side, keeps fewer faces so the column stays over the board.
   let max = Math.max(1, Math.min(FLOAT_MAX, options.maxPerPage ?? FLOAT_MAX));
-  let floats = stack([...content, ...fold(max)]);
-  while (max > 1 && (floats.at(-1)?.y ?? 0) + (floats.at(-1)?.height ?? 0) > box.height - 8) {
-    max -= 1;
-    floats = stack([...content, ...fold(max)]);
-  }
+  while (max > 1 && [...content, ...fold(max)].reduce((y, id) => y + sizeOf(id).height + options.gap, 56) - options.gap > bottom) max -= 1;
+  // Content never folds, so what still runs past the bottom starts a new column to the left.
+  let y = 56;
+  let right = box.width - 12;
+  let column = 0;
+  const floats = [...content, ...fold(max)].map((id): StageFrame => {
+    const size = sizeOf(id);
+    if (y > 56 && y + size.height > bottom) {
+      right -= column + options.gap;
+      y = 56;
+      column = 0;
+    }
+    const frame: StageFrame = { id, role: "float", page: 0, x: right - size.width, y, ...size };
+    column = Math.max(column, size.width);
+    y += size.height + options.gap;
+    return frame;
+  });
   const shownPeople = floats.filter((frame) => frame.id !== MORE_TILE_ID && !content.includes(frame.id)).length;
   return { frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box }, ...floats], pageCount: 1, perPage: floats.length, overflowCount: ordered.length - shownPeople };
 }
