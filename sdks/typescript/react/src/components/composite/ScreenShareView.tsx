@@ -1,3 +1,4 @@
+import { commandFailure, commandFailureMessage, type MediaCommandSource } from "../control-bar/command-failure";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -47,14 +48,14 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
   const status = state ?? (mediaVisible ? "live" : "connecting");
   const name = isLocal ? "Your screen" : `${sharedByName}'s screen`;
   const source = capture?.surface === "window" ? "a window" : capture?.surface === "browser" ? "a tab" : capture?.surface === "monitor" ? "your screen" : null;
-  const run = async (command: () => Promise<unknown>) => {
+  const run = async (command: () => Promise<unknown>, source?: MediaCommandSource) => {
     if (pending) return;
     setPending(true);
     setError(null);
     try {
       await command();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The share could not be changed.");
+      setError(source ? commandFailureMessage(commandFailure(cause), source) : cause instanceof Error ? cause.message : "The share could not be changed.");
     } finally {
       setPending(false);
     }
@@ -169,14 +170,14 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
                     { surface: "browser", label: "Browser tab" },
                   ] as const
                 ).map((option) => (
-                  <ChalkMenuItem key={option.surface} onClick={() => void run(() => onChangeShare({ surface: option.surface, audio: option.surface === "browser" }))}>
+                  <ChalkMenuItem key={option.surface} onClick={() => void run(() => onChangeShare({ surface: option.surface, audio: option.surface === "browser" }), "screen")}>
                     {option.label}
                   </ChalkMenuItem>
                 ))}
               </ChalkMenu>
             ) : null}
             {onStopSharing ? (
-              <ChalkButton disabled={pending} tone="danger" className="!h-8 !bg-[var(--chalk-danger)] !px-3 !text-white hover:!bg-[var(--chalk-danger-hover)]" onClick={() => void run(onStopSharing)}>
+              <ChalkButton disabled={pending} tone="danger" className="!h-8 !bg-[var(--chalk-danger)] !px-3 !text-white hover:!bg-[var(--chalk-danger-hover)]" onClick={() => void run(onStopSharing, "screen")}>
                 Stop sharing
               </ChalkButton>
             ) : null}

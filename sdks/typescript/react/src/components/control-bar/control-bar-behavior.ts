@@ -226,6 +226,7 @@ export function useControlBarSurfaceBehavior({
 interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
   readonly commandError: ClientFailure | null;
+  readonly commandSource?: MediaCommandSource;
 }
 
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
@@ -250,16 +251,21 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
   const [noiseSuppression, setNoiseSuppression] = useState(true);
   const [commandError, setCommandError] = useState<ClientFailure | null>(null);
+  const [commandSource, setCommandSource] = useState<MediaCommandSource>();
 
   const run = useCallback(
     async (command: () => Promise<unknown>, source?: MediaCommandSource) => {
       setCommandError(null);
+      setCommandSource(undefined);
       props.onCommandError?.(null, source);
       try {
         await command();
       } catch (cause) {
         const failure = commandFailure(cause);
-        if (!props.onCommandError) setCommandError(failure);
+        if (!props.onCommandError) {
+          setCommandError(failure);
+          setCommandSource(source);
+        }
         props.onCommandError?.(failure, source);
       }
     },
@@ -376,5 +382,5 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onEndForEveryone: props.onEndForEveryone,
   };
 
-  return { surfaceProps, commandError };
+  return { surfaceProps, commandError, commandSource };
 }
