@@ -17,11 +17,12 @@ Pod::Spec.new do |spec|
   }
   spec.requires_arc = true
   spec.swift_version = "5.0"
-  spec.frameworks = ["AVFoundation", "AVKit", "CallKit"]
+  spec.frameworks = ["AVFoundation", "AVKit", "CallKit", "ReplayKit"]
   spec.pod_target_xcconfig = {
     "DEFINES_MODULE" => "YES",
     "SWIFT_COMPILATION_MODE" => "wholemodule"
   }
 
   spec.dependency "React-Core"
+  spec.dependency "react-native-webrtc"
 end

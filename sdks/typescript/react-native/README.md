@@ -86,6 +86,23 @@ export function ResumableCall({ client, resumed, saveResume, onLeave, onRejoin }
 
 Clear the stored call once you read it, so a later launch doesn't rejoin.
 
+## Screen sharing
+
+Callers select **More options → Share screen** and accept the system recording prompt. **Stop sharing screen** stops capture. `createNativeSpaceClient` opens the prompt; do not open a second ReplayKit picker from your app.
+
+Android uses the SDK's projection foreground service after the caller accepts capture. Keep `@cloudflare/react-native-webrtc` autolinked so the SDK can build its capture hooks. The SDK supplies the service and its manifest permissions.
+
+On iOS, embed a Broadcast Upload Extension and test on a physical device. Use the [Chalk broadcast handler](../../../apps/mobile/ios/ChalkScreenShare/SampleHandler.swift) as the socket protocol reference. Give the app and extension the same App Group entitlement, then set these app `Info.plist` keys to your extension and group:
+
+```xml
+<key>RTCScreenSharingExtension</key>
+<string>com.example.myapp.screenshare</string>
+<key>RTCAppGroupIdentifier</key>
+<string>group.com.example.myapp</string>
+```
+
+The extension must use that group for its `rtc_SSFD` socket. The client waits for the extension's first frame before publishing. If no frame arrives within 30 seconds, it rejects capture and releases the prepared stream.
+
 ## Before the call lets you in
 
 `ChalkArrival` draws the screens before `Chalk` joins, for a call that asks the host first. Render it in place of `Chalk` while the arrival is pending (`state="knocking"`), after the host denies it (`"refused"`), or when the call is full (`"full"`). Render `Chalk` once the person is let in.

@@ -17,6 +17,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
+import { getNativeDisplayMedia } from "../media/native-screen-capture";
 import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
@@ -57,7 +58,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
           throw toNativeCaptureError(cause);
         }
       },
-      getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
+      getDisplayMedia: getNativeDisplayMedia,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
     createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage),

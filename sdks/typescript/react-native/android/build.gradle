@@ -41,3 +41,5 @@ dependencies {
   implementation("com.facebook.react:react-android")
   implementation("androidx.core:core:1.16.0")
 }
+
+apply from: "webrtc-screen-capture.gradle"

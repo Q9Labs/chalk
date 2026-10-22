@@ -20,6 +20,7 @@ import { playSound } from "../sounds/sounds";
 import { useStageView, type StageLayoutChoice } from "../stage/stage-view";
 import { useTheme } from "../theme/theme";
 import { durations, fixed } from "../theme/tokens";
+import { ScreenShareRow } from "./ScreenShareRow";
 
 export type MoreSheetProps = {
   readonly open: boolean;
@@ -85,6 +86,7 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
       <SheetGroup>
         {inviteLink ? <CopyLinkRow link={inviteLink} /> : null}
         {inviteLink ? <SheetRow icon="iosShare" label="Share link" onPress={() => shareLink(inviteLink)} testID="more.share" /> : null}
+        <ScreenShareRow onDone={onClose} />
         <RecordingRow onDone={onClose} />
         <ChatRow onPress={onOpenChat} />
         <SheetRow end={<PeopleCount count={people} />} icon="users" label="People" onPress={onOpenPeople} testID="more.people" />

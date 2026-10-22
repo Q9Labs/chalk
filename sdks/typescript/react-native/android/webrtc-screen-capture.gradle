@@ -1,0 +1,62 @@
+// Build the projection-service hooks with WebRTC, without changing node_modules.
+// This file and the service are shipped in the SDK's android/ package.
+def hooks = file("webrtc-screen-capture.gradle")
+def service = file("webrtc/ScreenCaptureService.java")
+def output = layout.buildDirectory.dir("generated/webrtcScreenCapture")
+def sourcePath = "src/main/java/com/cloudflare/realtimekit/WebRTCModule"
+
+gradle.projectsEvaluated {
+  def webrtc = rootProject.allprojects.find { new File(it.projectDir, "${sourcePath}/GetUserMediaImpl.java").isFile() }
+  if (webrtc == null) throw new GradleException("Chalk screen sharing requires an autolinked @cloudflare/react-native-webrtc project.")
+  def originals = ["GetUserMediaImpl.java", "ScreenCaptureController.java"].collect { new File(webrtc.projectDir, "${sourcePath}/${it}") }
+  def prepare = tasks.register("prepareChalkScreenCapture", Sync) {
+    inputs.file(hooks)
+    from(originals)
+    from(service)
+    into(output)
+    doLast {
+      def replace = { File target, String before, String after ->
+        def text = target.getText("UTF-8")
+        if (text.count(before) != 1) throw new GradleException("Unsupported WebRTC screen capture source: ${target.name}. Update Chalk's projection hooks before upgrading WebRTC.")
+        target.setText(text.replace(before, after), "UTF-8")
+      }
+      replace(new File(output.get().asFile, "GetUserMediaImpl.java"),
+        '''                    mediaProjectionPermissionResultData = data;
+                    createScreenStream();''',
+        '''                    mediaProjectionPermissionResultData = data;
+                    ScreenCaptureService.start(reactContext, () -> createScreenStream(), error -> {
+                        displayMediaPromise.reject(error);
+                        displayMediaPromise = null;
+                        mediaProjectionPermissionResultData = null;
+                    });''')
+      def controller = new File(output.get().asFile, "ScreenCaptureController.java")
+      replace(controller, "    private final Intent mediaProjectionPermissionResultData;", "    private final Intent mediaProjectionPermissionResultData;\n    private final Context context;")
+      replace(controller, "        this.mediaProjectionPermissionResultData = mediaProjectionPermissionResultData;", "        this.mediaProjectionPermissionResultData = mediaProjectionPermissionResultData;\n        this.context = context.getApplicationContext();")
+      replace(controller, "    @Override\n    protected VideoCapturer createVideoCapturer()", '''    @Override
+    public boolean stopCapture() {
+        try {
+            return super.stopCapture();
+        } finally {
+            ScreenCaptureService.stop(context);
+        }
+    }
+
+    @Override
+    public void dispose() {
+        try {
+            super.dispose();
+        } finally {
+            ScreenCaptureService.stop(context);
+        }
+    }
+
+    @Override
+    protected VideoCapturer createVideoCapturer()''')
+    }
+  }
+  webrtc.tasks.withType(JavaCompile).configureEach {
+    dependsOn(prepare)
+    source(output)
+    exclude { detail -> originals.any { it.canonicalFile == detail.file.canonicalFile } }
+  }
+}
