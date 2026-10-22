@@ -9,11 +9,13 @@ done
 exec python3 - <<'PY'
 import json, os, pathlib, secrets, signal, socket, subprocess, tempfile, time
 
+port = int(os.environ.get("CHALK_OAUTH_PORT", "8788"))
+api_port = int(os.environ.get("CHALK_DASHBOARD_API_PORT", "18080"))
 seconds = int(os.environ.get("DASHBOARD_OAUTH_SMOKE_SECONDS", "1800"))
 if seconds <= 0:
     raise SystemExit("DASHBOARD_OAUTH_SMOKE_SECONDS must be positive")
 with socket.socket() as probe:
-    probe.bind(("127.0.0.1", 8788))
+    probe.bind(("127.0.0.1", port))
 web = pathlib.Path("apps/web").resolve()
 if not (web / "dist/client/index.html").exists():
     raise SystemExit("Build apps/web first: pnpm exec turbo run build --filter=web...")
@@ -38,9 +40,9 @@ try:
     bindings = {
         "DASHBOARD_IDENTITY_PROVIDER": "oauth",
         "CHALK_ENVIRONMENT": "local",
-        "DASHBOARD_ORIGIN": "http://localhost:8788",
+        "DASHBOARD_ORIGIN": f"http://localhost:{port}",
         **{name: os.environ.pop(name) for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "APPLE_SERVICES_ID", "APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_PRIVATE_KEY")},
-        "CHALK_API_ORIGIN": "http://127.0.0.1:18080",
+        "CHALK_API_ORIGIN": f"http://127.0.0.1:{api_port}",
         "DASHBOARD_SERVICE_TOKEN": os.environ["CHALK_API_SERVICE_SECRETS"],
         "SESSION_SECRET": os.environ.pop("SESSION_SECRET", secrets.token_urlsafe(48)),
     }
@@ -48,7 +50,7 @@ try:
     del bindings
     pages = subprocess.Popen([
         "pnpm", "exec", "wrangler", "pages", "dev", "public", "--cwd", str(sandbox),
-        "--ip", "127.0.0.1", "--port", "8788", "--inspector-port", "0",
+        "--ip", "127.0.0.1", "--port", str(port), "--inspector-port", "0",
         "--compatibility-date", "2024-12-01", "--compatibility-flags", "nodejs_compat",
     ], cwd=web, env={**os.environ, "CI": "true", "WRANGLER_SEND_METRICS": "false"}, start_new_session=True)
     owner, upstream, group = os.getpid(), os.getppid(), pages.pid

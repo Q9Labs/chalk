@@ -7,7 +7,7 @@ usage() {
 Run a Chalk gate on the M4 (ssh agents-macmini) in a throwaway checkout.
 
 Usage:
-  scripts/gates/remote.sh [--dry-run] [--priority] [--run-id ID] <gate> [gate args...]
+  scripts/gates/remote.sh [--dry-run] [--priority] [--exclusive] [--run-id ID] <gate> [gate args...]
   scripts/gates/remote.sh [--dry-run] -- <command> [args...]
   scripts/gates/remote.sh --attach ID
 
@@ -37,6 +37,7 @@ Environment:
   CHALK_REMOTE_HOST                  SSH host (default agents-macmini)
   CHALK_REMOTE_BASE_REF              base ref for branch scope (default origin/master)
   CHALK_REMOTE_MIN_FREE_GIB          refuse to start below this much free disk (default 8)
+  CHALK_REMOTE_SLOTS                concurrent slots (default 3); --exclusive runs alone
   CHALK_REMOTE_RUN_ID                reuse an existing run ID (also --run-id ID)
   CHALK_REMOTE_GATE_TIMEOUT_SECONDS  limit for each setup step and the gate (default 3600)
   CHALK_REMOTE_TAIL_LINES            lines printed at the end (default 60)
@@ -50,11 +51,13 @@ EOF
 
 dry_run=0
 priority=0
+exclusive=0
 attach=0
 run_id="${CHALK_REMOTE_RUN_ID:-}"
 while (($#)); do
   case "$1" in
     --dry-run) dry_run=1; shift ;;
+    --exclusive) exclusive=1; shift ;;
     --priority) priority=1; shift ;;
     --run-id|--attach)
       option="$1"
@@ -114,6 +117,8 @@ min_free_gib="${CHALK_REMOTE_MIN_FREE_GIB:-8}"
 gate_timeout="${CHALK_REMOTE_GATE_TIMEOUT_SECONDS:-3600}"
 tail_lines="${CHALK_REMOTE_TAIL_LINES:-60}"
 queue_timeout="${CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS:-0}"
+slots="${CHALK_REMOTE_SLOTS:-3}"
+[[ "$slots" =~ ^[1-9][0-9]?$|^100$ ]] || { echo "CHALK_REMOTE_SLOTS must be 1..100" >&2; exit 2; }
 if [[ ! "$tail_lines" =~ ^[1-9][0-9]*$ ]]; then
   echo "CHALK_REMOTE_TAIL_LINES must be a positive integer" >&2
   exit 2
@@ -182,7 +187,7 @@ while :; do
   sleep 2
 done
 remote() {
-  ssh "${ssh_options[@]}" "${host}" "zsh -lc 'exec python3 ${remote_helper} $*'"
+  ssh "${ssh_options[@]}" "${host}" "zsh -lc 'exec env CHALK_REMOTE_SLOTS=${slots} python3 ${remote_helper} $*'"
 }
 
 mkdir -p "${log_dir}"
@@ -292,7 +297,9 @@ PYTHON
 tar -cf "${scratch}/submission.tar" -C "${scratch}" repo.bundle runner.sh request.json
 # Retrying an ambiguous SSH result with this ID reuses its original ticket.
 while :; do
-  if remote submit "$run_id" --priority "$priority" --wait-seconds "$queue_timeout" <"${scratch}/submission.tar"; then
+  submit_options=(--priority "$priority" --wait-seconds "$queue_timeout")
+  ((exclusive == 0)) || submit_options+=(--exclusive)
+  if remote submit "$run_id" "${submit_options[@]}" <"${scratch}/submission.tar"; then
     break
   else
     status=$?

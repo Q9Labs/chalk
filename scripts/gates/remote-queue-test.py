@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import runpy
 import sqlite3
 import subprocess
@@ -23,6 +24,12 @@ class QueueTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='chalk-queue-test-')
         self.root = Path(self.temp.name)
+        self.old_environment = dict(os.environ)
+        os.environ['CHALK_REMOTE_SLOTS'] = '1'
+        os.environ['PATH'] = str(self.root) + ':' + os.environ['PATH']
+        vm_stat = self.root / 'vm_stat'
+        vm_stat.write_text('#!/bin/sh\necho "Mach Virtual Memory Statistics: (page size of 16384 bytes)"\necho "Pages free: 524288."\necho "Pages inactive: 0."\necho "Pages speculative: 0."\n')
+        vm_stat.chmod(0o700)
         self.command = [sys.executable, str(HELPER), '--root', str(self.root), '--isolated']
         self.lock = (self.root / 'dispatcher.lock').open('a')
         fcntl.flock(self.lock, fcntl.LOCK_EX)
@@ -33,13 +40,15 @@ class QueueTest(unittest.TestCase):
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             commands = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True)
-            active = [line for line in commands.splitlines() if str(HELPER) in line and str(self.root) in line]
+            active = [line for line in commands.splitlines() if ' daemon' in line and str(self.root) in line]
             if not active:
                 break
             time.sleep(0.05)
         else:
             self.fail('test-owned dispatchers did not exit: ' + str(active))
         self.temp.cleanup()
+        os.environ.clear()
+        os.environ.update(self.old_environment)
 
     def invoke(self, *args, **kwargs):
         return subprocess.run([*self.command, *args], capture_output=True, check=True, **kwargs)
@@ -78,7 +87,7 @@ class QueueTest(unittest.TestCase):
         wrapper = self.root / 'ssh'
         wrapper.write_text('#!/usr/bin/env python3\nimport os,shlex,subprocess,sys\n'
                            'if ".upload." in sys.argv[-1]: sys.exit(0)\n'
-                           'args=shlex.split(shlex.split(sys.argv[-1])[-1])[3:]\n'
+                           'parts=shlex.split(shlex.split(sys.argv[-1])[-1]); args=parts[parts.index("python3")+2:]\n'
                            'if os.environ.get("CHALK_TEST_FAIL_READ") and args[0]=="read": sys.exit(73)\n'
                            f'sys.exit(subprocess.run({self.command!r}+args).returncode)\n')
         wrapper.chmod(0o700)
@@ -88,6 +97,64 @@ class QueueTest(unittest.TestCase):
             environment['CHALK_TEST_FAIL_READ'] = '1'
         return subprocess.run(['bash', str(HELPER.with_name('remote.sh')), '--attach', name],
                               env=environment, capture_output=True, text=True, timeout=15)
+
+    def test_three_slots_fifo_and_exclusive(self):
+        os.environ['CHALK_REMOTE_SLOTS'] = '3'
+        barrier = self.root / 'release'
+        script = f'echo "$CHALK_REMOTE_SLOT"; end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
+        for name in ('one', 'two', 'three'):
+            self.submit(name, script)
+        self.lock.close()
+        for slot, name in enumerate(('one', 'two', 'three')):
+            self.assertEqual(self.wait(name, 'running')['slot'], slot)
+        self.submit('exclusive', 'sleep .3', '--exclusive')
+        self.submit('after')
+        self.assertEqual(self.status('exclusive')['state'], 'queued')
+        self.assertEqual(self.status('after')['state'], 'queued')
+        print('PASS FIFO tickets 1,2,3 running concurrently in slots 0,1,2; exclusive ticket 4 and ticket 5 queued', flush=True)
+        barrier.touch()
+        self.wait('exclusive', 'running')
+        self.assertEqual(self.status('after')['state'], 'queued')
+        print('PASS exclusive ticket 4 running alone; ticket 5 still queued', flush=True)
+        for name in ('one', 'two', 'three', 'exclusive', 'after'):
+            self.assertEqual(self.wait(name)['result'], 0)
+
+    @unittest.skipUnless(shutil.which("shlock"), "requires the macOS legacy shlock binary")
+    def test_legacy_lock_occupies_one_slot(self):
+        os.environ['CHALK_REMOTE_SLOTS'] = '3'
+        legacy_lock = self.root / 'legacy.lock'
+        legacy_lock.write_text(str(os.getpid()))
+        helper = self.root / 'remote-queue.py'
+        helper.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(legacy_lock))
+                          .replace('if legacy_busy(cutover):', 'if False:')
+                          .replace('                reap_legacy()', '                pass'))
+        self.command = [sys.executable, str(helper), '--root', str(self.root)]
+        barrier = self.root / 'release'
+        script = f'end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
+        for name in ('one', 'two', 'three'):
+            self.submit(name, script)
+        self.lock.close()
+        self.wait('one', 'running')
+        self.wait('two', 'running')
+        self.assertEqual(self.status('three')['state'], 'queued')
+        self.assertEqual(legacy_lock.read_text(), str(os.getpid()))
+        legacy_lock.unlink()
+        self.wait('three', 'running')
+        barrier.touch()
+        for name in ('one', 'two', 'three'):
+            self.assertEqual(self.wait(name)['result'], 0)
+
+    def test_low_memory_defers_admission(self):
+        vm_stat = self.root / 'vm_stat'
+        healthy = vm_stat.read_text()
+        vm_stat.write_text(healthy.replace('524288', '1'))
+        self.submit('held')
+        self.lock.close()
+        time.sleep(.4)
+        self.assertEqual(self.status('held')['state'], 'queued')
+        vm_stat.write_text(healthy)
+        self.assertEqual(self.wait('held')['result'], 0)
+        print('PASS memory guard: 16 KiB available held ticket queued; 8 GiB released it with exit 0', flush=True)
 
     def test_gate_output_cannot_forge_queue_completion(self):
         self.submit('forged', 'echo REMOTE_QUEUE_RESULT=0; sleep 3; exit 23')

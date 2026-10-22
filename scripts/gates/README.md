@@ -129,11 +129,13 @@ Network drops automatically retry log reads from the last confirmed byte. After
 Air sleep, a T3 restart, or Ctrl-C, run `scripts/gates/remote.sh --attach ID`.
 Ctrl-C detaches; it does not cancel the ticket. There is no default queue expiry.
 An explicit `CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` retains its old meaning (exit 76).
-The M4 checks free disk at admission and bounds setup and gate runtime as before.
+The M4 waits for at least 3 GiB of free + inactive + speculative memory and
+the configured free disk floor before admission. Setup and gate runtime remain
+bounded as before.
 
 State lives under `~/.local/share/chalk-remote/v1` on the M4. A dispatcher owns
-the admission lock and reaps dead worker descendants and their queue-owned
-`/tmp/chalk-remote-queue-*` checkouts before admitting the next ticket. It exits
+admissions and reaps dead worker descendants and their queue-owned
+`/tmp/chalk-queue-work-*` checkouts when each ticket finishes. It exits
 when idle. A later submission or attach restarts it; live log reads also restart a
 dead dispatcher and record exit 137 for interrupted work. Logs and submission
 files expire after seven days, on the next dispatcher start. Small result
@@ -142,22 +144,31 @@ expire after an hour; an active upload holds a lease and cannot be reaped.
 
 ### Cut-over and undo
 
+New submissions use three FIFO slots (`CHALK_REMOTE_SLOTS`, 1–100). Each job
+receives `CHALK_REMOTE_SLOT`; the worker assigns distinct ports in blocks
+`21000 + slot * 100 + role` and a private temp/state directory. PostgreSQL gate
+and topology wrappers already allocate ephemeral ports and unique databases.
+`--exclusive`, root/full gates, call-performance and performance-budget commands
+wait for running slots to drain, then hold admission alone. A queued exclusive
+ticket blocks later tickets; priority only changes waiting ticket order.
+
 The client installs helpers by content hash and verifies the transfer before an
 atomic rename. Each ticket carries its own worker script; deployment does not
-rewrite running code. The new dispatcher first drains legacy run IDs created
-before the earliest durable ticket, then uses their
-`/tmp/chalk-remote-admission.lock` PID lock for mutual exclusion. Later legacy
-arrivals cannot extend that cut-over barrier; active legacy jobs always finish.
-It keeps the old checkout-process signal too, so old clients wait for surviving
-workers after a dispatcher crash. It never cancels or changes a legacy ticket.
-FIFO starts at registration in the new queue. Legacy clients keep their existing
-lock admission behavior.
+rewrite running code. Legacy waiters keep their old shlock and drain one at a
+time. The dispatcher leaves one slot available to them, acquiring the old lock
+only to fill the last slot or run exclusively. Its bounded cut-over guard waits
+for legacy tickets created before the first durable ticket before taking that
+lock; later legacy arrivals cannot extend the barrier. Active legacy work always
+finishes. New checkout names and port blocks avoid the old harness's process
+veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
+FIFO applies among new tickets. After merge, lanes may voluntarily resubmit
+legacy waiters through the new client to use the slots sooner.
 
 To undo, restore the old client for future submissions. Let new tickets finish or
 reattach with this revision; keep their state and helpers until they drain. No
 shared runner or launchd service is replaced.
 
-Tiny proofs (no dependency installs or heavy admission):
+Tiny proofs (isolated queues; no shared heavy admission):
 
 ```sh
 node --test scripts/gates/remote-queue.test.mjs

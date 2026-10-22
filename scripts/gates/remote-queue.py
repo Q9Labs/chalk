@@ -28,6 +28,12 @@ def database(root):
         ticket INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
         priority INTEGER NOT NULL, submitted REAL NOT NULL, wait_seconds INTEGER NOT NULL,
         state TEXT NOT NULL, pid INTEGER, started TEXT, result INTEGER, finished REAL)''')
+    db.execute('BEGIN IMMEDIATE')
+    columns = {row[1] for row in db.execute('PRAGMA table_info(jobs)')}
+    for name, definition in [('exclusive', 'INTEGER NOT NULL DEFAULT 0'), ('slot', 'INTEGER')]:
+        if name not in columns:
+            db.execute(f'ALTER TABLE jobs ADD COLUMN {name} {definition}')
+    db.commit()
     return db
 
 
@@ -67,8 +73,8 @@ def submit(root, db, args):
                     if destination.exists():
                         shutil.rmtree(destination)
                     incoming.rename(destination)
-                    db.execute('INSERT INTO jobs(id,priority,submitted,wait_seconds,state) VALUES(?,?,?,?,?)',
-                               (args.id, args.priority, time.time(), args.wait_seconds, 'queued'))
+                    db.execute('INSERT INTO jobs(id,priority,submitted,wait_seconds,state,exclusive) VALUES(?,?,?,?,?,?)',
+                               (args.id, args.priority, time.time(), args.wait_seconds, 'queued', int(args.exclusive or exclusive_request(request))))
                     row = db.execute('SELECT * FROM jobs WHERE id=?', (args.id,)).fetchone()
         wake(root, args.isolated)
         print(json.dumps(dict(row)), flush=True)
@@ -150,7 +156,7 @@ def finish(root, db, row, result, reason):
     work = job / 'work'
     if work.is_symlink():
         target = work.resolve()
-        if target.parent != Path('/tmp').resolve() or not target.name.startswith('chalk-remote-queue-'):
+        if target.parent != Path('/tmp').resolve() or not target.name.startswith(('chalk-remote-queue-', 'chalk-queue-work-')):
             raise ValueError('refusing unexpected checkout path: ' + str(target))
         if target.exists():
             shutil.rmtree(target)
@@ -179,12 +185,35 @@ def legacy_busy(cutover=None):
     return bool(re.search(r'^n(/private)?/tmp/chalk-remote-', result.stdout, re.M))
 
 
+def exclusive_request(request):
+    return any(value in ('gate', '--full') or re.search(r'gate:full|call-performance|performance[-:]|perf[-:]budget|check-call-performance', value)
+               for value in request)
+
+
+def resources_available(root, request):
+    minimum_disk = int(request[2]) if len(request) >= 4 else 8
+    if shutil.disk_usage(root).free < minimum_disk * 1024 ** 3:
+        return False
+    try:
+        stats = subprocess.check_output(['vm_stat'], text=True)
+        page_size = int(re.search(r'page size of (\d+) bytes', stats)[1])
+        pages = sum(int(re.search(r'^' + label + r':\s+(\d+)', stats, re.M)[1])
+                    for label in ('Pages free', 'Pages inactive', 'Pages speculative'))
+        return pages * page_size >= 3 * 1024 ** 3
+    except (OSError, subprocess.SubprocessError, TypeError, ValueError):
+        return False
+
+
 def admission(isolated, cutover):
     if isolated:
         return True
     if legacy_busy(cutover):
         return False
-    return subprocess.run(['shlock', '-p', str(os.getpid()), '-f', '/tmp/chalk-remote-admission.lock']).returncode == 0
+    lock = Path('/tmp/chalk-remote-admission.lock')
+    if lock.exists() and lock.read_text().strip() == str(os.getpid()):
+        return True
+    return subprocess.run(['shlock', '-p', str(os.getpid()), '-f', str(lock)]).returncode == 0
+
 
 
 def release(isolated):
@@ -250,10 +279,14 @@ def expire_waiters(root, db):
 
 
 def daemon(root, db, isolated):
-    # Blocking flock makes a wake racing an idle dispatcher's exit take over after it exits.
+    slots = int(os.environ.get('CHALK_REMOTE_SLOTS', '3'))
+    if not 1 <= slots <= 100:
+        raise ValueError('CHALK_REMOTE_SLOTS must be between 1 and 100')
+    # Only this process writes admissions. Additional wakes take over after its idle exit.
     with (root / 'dispatcher.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         (root / 'dispatcher.pid').write_text(str(os.getpid()))
+        running = {}
         try:
             for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
                 stop_job(root / 'jobs' / row['id'], row['pid'], row['started'])
@@ -263,56 +296,61 @@ def daemon(root, db, isolated):
                 reap_legacy()
             cutover = db.execute('SELECT MIN(submitted) FROM jobs').fetchone()[0]
             while True:
+                for ticket, (row, child, started) in list(running.items()):
+                    result = child.poll()
+                    if result is not None:
+                        stop_job(root / 'jobs' / row['id'], child.pid, started)
+                        finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
+                        del running[ticket]
+                if len(running) < slots and not any(row['exclusive'] for row, _, _ in running.values()):
+                    release(isolated)
                 expire_waiters(root, db)
                 row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
-                if row is None:
+                if row is None and not running:
                     return
-                if not admission(isolated, cutover):
-                    time.sleep(2)
+                if row is None or len(running) >= slots or any(r['exclusive'] for r, _, _ in running.values()):
+                    time.sleep(0.2)
                     continue
+                job = root / 'jobs' / row['id']
+                request = json.loads((job / 'request.json').read_text())
+                exclusive = bool(row['exclusive'] or exclusive_request(request))
+                # Reserve capacity for the unmodified legacy harness. Taking its lock closes
+                # the race between checking capacity and starting the final slot/exclusive job.
+                needs_lock = exclusive or len(running) == slots - 1
+                if (exclusive and running) or not resources_available(root, request) or (needs_lock and not admission(isolated, cutover)):
+                    time.sleep(0.2)
+                    continue
+                slot = next(i for i in range(slots) if i not in {r['slot'] for r, _, _ in running.values()})
                 child = None
                 started = None
-                job = root / 'jobs' / row['id']
                 try:
                     with db:
-                        db.execute("UPDATE jobs SET state='running' WHERE id=?", (row['id'],))
-                    # Old clients also inspect /tmp/chalk-remote-* processes/cwds. Preserve that
-                    # signal if the dispatcher dies while a worker still holds the machine.
-                    work = Path('/tmp') / ('chalk-remote-queue-' + hashlib.sha256(str(job).encode()).hexdigest()[:24])
+                        db.execute("UPDATE jobs SET state='running',slot=?,exclusive=? WHERE id=?", (slot, int(exclusive), row['id']))
+                    row = db.execute('SELECT * FROM jobs WHERE id=?', (row['id'],)).fetchone()
+                    work = Path('/tmp') / ('chalk-queue-work-' + hashlib.sha256(str(job).encode()).hexdigest()[:24])
                     (job / 'work').symlink_to(work)
                     work.mkdir()
                     (job / 'repo.bundle').rename(work / 'repo.bundle')
-                    request = json.loads((job / 'request.json').read_text())
                     with (job / 'output.log').open('ab') as log:
-                        log.write(f"[remote] ticket {row['ticket']} running: {row['id']}\n".encode())
+                        log.write(f"[remote] ticket {row['ticket']} running: {row['id']} slot={slot} exclusive={exclusive}\n".encode())
                         log.flush()
-                        # The pipe closes on dispatcher death. No job starts before its PID receipt commits.
                         login_shell = '/bin/zsh' if sys.platform == 'darwin' else '/bin/bash'
                         child = subprocess.Popen(['/bin/bash', '-ec',
                                                   'read -r ready; shell="$1"; shift; exec "$shell" -lc \'exec bash "$@"\' chalk-queue "$@"', 'chalk-queue', login_shell,
                                                   str(job / 'runner.sh'), str(work), *request],
+                                                 env={**os.environ, 'CHALK_REMOTE_SLOT': str(slot)},
                                                  stdin=subprocess.PIPE, stdout=log, stderr=log,
                                                  start_new_session=True, close_fds=True)
                         started = process_start(child.pid)
                         with db:
-                            db.execute("UPDATE jobs SET state='running',pid=?,started=? WHERE id=?",
-                                       (child.pid, started, row['id']))
+                            db.execute('UPDATE jobs SET pid=?,started=? WHERE id=?', (child.pid, started, row['id']))
                         child.stdin.write(b'run\n')
                         child.stdin.close()
-                        while True:
-                            try:
-                                result = child.wait(timeout=0.5)
-                                break
-                            except subprocess.TimeoutExpired:
-                                expire_waiters(root, db)
-                    stop_job(job, child.pid, started)
-                    finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
+                    running[row['ticket']] = (row, child, started)
                 except Exception as error:
                     if child:
                         stop_job(job, child.pid, started)
                     finish(root, db, row, 70, f'queue failed: {error}')
-                finally:
-                    release(isolated)
         finally:
             release(isolated)
 
@@ -324,6 +362,7 @@ def main():
     sub = parser.add_subparsers(dest='action', required=True)
     submit_parser = sub.add_parser('submit')
     submit_parser.add_argument('id')
+    submit_parser.add_argument('--exclusive', action='store_true')
     submit_parser.add_argument('--priority', type=int, choices=(0, 1), default=0)
     submit_parser.add_argument('--wait-seconds', type=int, default=0)
     for action in ('read', 'status', 'attach'):

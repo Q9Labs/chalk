@@ -13,12 +13,13 @@ import time
 import uuid
 
 host = sys.argv[1] if len(sys.argv) > 1 else 'agents-macmini'
-ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', host]
+ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', '-o', 'ControlPath=none',
+       '-o', 'ConnectTimeout=20', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2', host]
 home = subprocess.check_output([*ssh, 'printf %s "$HOME"'], text=True)
 lane = home + '/lanes/remote-queue-' + uuid.uuid4().hex
 helper = lane + '/remote-queue.py'
 root = lane + '/state'
-command = f'python3 {shlex.quote(helper)} --root {shlex.quote(root)} --isolated'
+command = f'env CHALK_REMOTE_SLOTS=1 python3 {shlex.quote(helper)} --root {shlex.quote(root)} --isolated'
 client = None
 
 
@@ -88,7 +89,7 @@ try:
                            ' p.touch(); print("PARTIAL_FAILED_READ"); sys.exit(255)\n'
                            'os.execv("/usr/bin/ssh", ["ssh", *sys.argv[1:]])\n')
         wrapper.chmod(0o700)
-        environment = {**os.environ, 'PATH': str(local) + ':' + os.environ['PATH'],
+        environment = {**os.environ, 'CHALK_REMOTE_SLOTS': '1', 'PATH': str(local) + ':' + os.environ['PATH'],
                        'CHALK_REMOTE_HOST': host, 'CHALK_REMOTE_REPO': str(source.parent.parent),
                        'CHALK_REMOTE_LOG_DIR': str(local / 'logs')}
         failed = subprocess.run(['bash', str(scripts / 'remote.sh'), '--attach', 'queued'],

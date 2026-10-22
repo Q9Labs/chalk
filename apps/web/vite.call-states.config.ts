@@ -8,7 +8,7 @@ import { sourceAliases } from "./vite.aliases";
 // fixtures, so screenshots compare before and after without a live call.
 export default defineConfig({
   cacheDir: process.env.CHALK_CALL_HARNESS_CACHE_DIR,
-  server: { host: "127.0.0.1", port: 3071, strictPort: true },
+  server: { host: "127.0.0.1", port: Number(process.env.CHALK_CALL_STATES_PORT || 3071), strictPort: true },
   resolve: {
     // The app build uses the board package's compiled output; the harness skips that build step.
     alias: [

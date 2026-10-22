@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 
-const port = "3072";
+const port = process.env.CHALK_CALL_LAYOUT_PORT || "3072";
 const origin = `http://127.0.0.1:${port}`;
 const server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", port], { cwd: resolve(import.meta.dirname, ".."), stdio: "ignore", detached: true });
 let browser;

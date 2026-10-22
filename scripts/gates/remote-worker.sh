@@ -15,6 +15,7 @@ cd "${work}/repo"
 git fetch -q "${work}/repo.bundle" refs/chalk-remote/base:refs/remotes/origin/master refs/chalk-remote/head:refs/heads/chalk-gate
 git checkout -q chalk-gate
 rm -f "${work}/repo.bundle"
+source scripts/gates/remote-slot-env.sh
 echo "[remote] checked out $(git rev-parse --short HEAD)"
 echo "==> pnpm install (shared store)"
 scripts/gates/with-timeout.sh "$timeout_seconds" "dependency setup" -- pnpm install --frozen-lockfile --prefer-offline

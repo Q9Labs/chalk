@@ -115,7 +115,7 @@ function userStateRoot({ env, platform, home }) {
 export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
   if (profile !== "core" && profile !== "mobile") throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
   const checkoutRoot = resolve(root);
-  const stateRoot = userStateRoot({ env, platform, home });
+  const stateRoot = env.CHALK_DEV_STATE_ROOT || userStateRoot({ env, platform, home });
   const runtimeRoot = join(checkoutRoot, ".private", "chalk-dev");
   const logRoot = join(checkoutRoot, ".logs", "dev");
   const redisPort = env.CHALK_REDIS_PORT ? numberFromEnv(env, "CHALK_REDIS_PORT", 6380) : numberFromEnv(env, "CHALK_DEV_REDIS_PORT", 6380);

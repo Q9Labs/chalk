@@ -14,7 +14,7 @@ const server = createServer((request, response) => {
   if (request.method !== "POST" || request.url !== "/apps/dashboard-proof/sessions/new") return response.writeHead(404).end();
   response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ sessionId: randomUUID() }));
 });
-server.listen(18081, "127.0.0.1");
+server.listen(Number(process.env.CHALK_DASHBOARD_VENDOR_PORT || 18081), "127.0.0.1");
 const owner = Number(process.argv[2]);
 const watchdog = setInterval(() => {
   try {
