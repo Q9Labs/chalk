@@ -189,6 +189,18 @@ type Participant struct {
 	LastLeftReason            pgtype.Text        `json:"last_left_reason"`
 }
 
+type ParticipantMediaRefresh struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	RequestHash           []byte             `json:"request_hash"`
+	ConnectionID          string             `json:"connection_id"`
+	ResponseCiphertext    []byte             `json:"response_ciphertext"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
 type PasswordReset struct {
 	AccountID pgtype.UUID        `json:"account_id"`
 	TokenHash string             `json:"token_hash"`

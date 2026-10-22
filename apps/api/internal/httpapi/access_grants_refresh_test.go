@@ -37,6 +37,8 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 	}{
 		{name: "current token resumes", status: 201},
 		{name: "expired token replaces", age: 6 * time.Minute, status: 201, replacement: true},
+		{name: "sync issuance failure releases expired refresh", age: 6 * time.Minute, change: "failure_sync", status: 201, replacement: true},
+		{name: "media issuance failure releases expired refresh", age: 6 * time.Minute, change: "failure_media", status: 201, replacement: true},
 		{name: "overlapping expired refresh is fenced before SFU join", age: 6 * time.Minute, change: "overlap", status: 201, replacement: true},
 		{name: "long expired token replaces", age: 24 * time.Hour, status: 201, replacement: true},
 		{name: "explicit replacement", change: "replace", status: 201, replacement: true},
@@ -65,7 +67,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 		{name: "expired invalid subject", age: time.Hour, change: "subject", status: 400, code: "media_token.invalid_subject"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
+			now := time.Now().UTC().Truncate(time.Second)
 			subject := participantMediaSubject(t)
 			subject.CloudflareConnectionID = "original"
 			public, private, err := ed25519.GenerateKey(rand.Reader)
@@ -194,6 +196,17 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 			logged := observability.RequestMiddleware(logger)(router)
+			if strings.HasPrefix(tc.change, "failure_") {
+				fixture.failure = strings.TrimPrefix(tc.change, "failure_")
+				failed := httptest.NewRecorder()
+				logged.ServeHTTP(failed, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)).WithContext(request.Context()))
+				fixture.failure = ""
+				if failed.Code != 500 || repo.connection != "original" {
+					t.Fatalf("issuance failure stranded refresh: status=%d connection=%s", failed.Code, repo.connection)
+				}
+				fixture.created = 0
+				logs.Reset()
+			}
 			logged.ServeHTTP(response, request)
 			if response.Code != tc.status {
 				t.Fatalf("status=%d want=%d body=%s", response.Code, tc.status, response.Body.String())
@@ -244,12 +257,16 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 				t.Fatalf("issued subject=%+v err=%v", issued, err)
 			}
 			if tc.replacement && tc.change != "replace" {
+				// A new endpoint instance must recover from durable state alone.
+				restarted := chi.NewRouter()
+				restartedActive := accessgrants.NewActiveAuthorizer(repo)
+				issueAccessGrantEndpoint(fixture, fixture, observed, restartedActive, restartedActive, fixture, fixture, fixture, fixture).Mount(restarted, RateLimitOptions{})
 				retry := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)).WithContext(request.Context())
 				retry.Header.Set("Content-Type", "application/json")
 				retried := httptest.NewRecorder()
-				router.ServeHTTP(retried, retry)
-				if retried.Code != 409 || !strings.Contains(retried.Body.String(), "participant.connection_superseded") || fixture.created != 1 || repo.connection != wantConnection {
-					t.Fatalf("expired replay displaced replacement: status=%d body=%s created=%d connection=%s", retried.Code, retried.Body.String(), fixture.created, repo.connection)
+				restarted.ServeHTTP(retried, retry)
+				if retried.Code != 201 || retried.Body.String() != response.Body.String() || fixture.created != 1 || repo.connection != wantConnection {
+					t.Fatalf("lost success did not replay winning grant: status=%d same_grant=%v created=%d connection=%s", retried.Code, retried.Body.String() == response.Body.String(), fixture.created, repo.connection)
 				}
 				if !strings.Contains(logs.String(), `"reason":"expired_recovered"`) {
 					t.Fatalf("missing recovered authentication reason: %s", logs.String())
@@ -295,6 +312,31 @@ type refreshGrantRepository struct {
 	current    synctokens.Input
 	inactive   bool
 	connection string
+	replays    map[[32]byte]refreshReplayRecord
+}
+
+type refreshReplayRecord struct {
+	connection string
+	ciphertext []byte
+}
+
+func (r *refreshGrantRepository) LoadParticipantMediaRefresh(_ context.Context, _ synctokens.SubjectKey, _ int64, requestHash [32]byte) ([]byte, error) {
+	record := r.replays[requestHash]
+	if record.connection != r.connection {
+		return nil, nil
+	}
+	return append([]byte(nil), record.ciphertext...), nil
+}
+
+func (r *refreshGrantRepository) CompleteParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, next string, replay accessgrants.RefreshReplay) error {
+	if err := r.ReplaceParticipantMediaConnection(ctx, key, generation, previous, next); err != nil {
+		return err
+	}
+	if r.replays == nil {
+		r.replays = make(map[[32]byte]refreshReplayRecord)
+	}
+	r.replays[replay.RequestHash] = refreshReplayRecord{connection: next, ciphertext: append([]byte(nil), replay.Ciphertext...)}
+	return nil
 }
 
 func (r *refreshGrantRepository) GetSyncTokenSubject(context.Context, synctokens.SubjectKey) (synctokens.Input, error) {
@@ -321,18 +363,35 @@ func (f *refreshGrantPlane) CreateJoin(ctx context.Context, input mediaplane.Cre
 		f.beforeCreate()
 	}
 	f.created++
-	return f.replacementGrantFixture.CreateJoin(ctx, input)
+	join, err := f.replacementGrantFixture.CreateJoin(ctx, input)
+	if err == nil {
+		join.ClientPayload["stunServer"] = "stun:stun.cloudflare.com:3478"
+	}
+	return join, err
 }
 func (f *refreshGrantPlane) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	f.resumed++
-	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": input.ConnectionRef}}, nil
+	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:stun.cloudflare.com:3478"}}, nil
 }
 func (f *refreshGrantPlane) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }
 func (f *refreshGrantPlane) Issue(_ context.Context, subject accessgrants.Subject) (accessgrants.MediaCredential, error) {
+	if f.failure == "media" {
+		return accessgrants.MediaCredential{}, errReplacementCredential
+	}
 	return f.issuer.Issue(context.Background(), subject)
+}
+
+func (f *refreshGrantPlane) IssueForParticipant(ctx context.Context, key synctokens.SubjectKey) (synctokens.Token, error) {
+	token, err := f.replacementGrantFixture.IssueForParticipant(ctx, key)
+	if err != nil {
+		return synctokens.Token{}, err
+	}
+	token.Value = "e30.eyJhdWQiOiJjaGFsay1zeW5jIn0.fixture"
+	token.ExpiresAt = time.Now().UTC().Add(5 * time.Minute)
+	return token, nil
 }
 
 func TestParticipantMediaStaleGenerationStillForbidden(t *testing.T) {

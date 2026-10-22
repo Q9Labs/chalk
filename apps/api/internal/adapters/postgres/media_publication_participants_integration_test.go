@@ -74,14 +74,36 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "initial-join", "racing-retry"); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
 		t.Fatalf("concurrent expired replay replaced current binding: %v", err)
 	}
-	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "replacement:reservation", "recovered"); err != nil {
+	replay, err := accessgrants.SealRefreshReplay("signed-expired-request", []byte(`{"winning":"grant"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "replacement:reservation", "recovered", replay); err != nil {
 		t.Fatalf("complete reserved replacement: %v", err)
+	}
+	reader := NewEpisodeLifecycleRepository(lingerTestTransactor{tx})
+	ciphertext, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	winning, err := accessgrants.OpenRefreshReplay("signed-expired-request", ciphertext)
+	if err != nil || string(winning) != `{"winning":"grant"}` {
+		t.Fatalf("committed refresh did not retain its grant: %v", err)
+	}
+	if _, err := accessgrants.OpenRefreshReplay("other-request", ciphertext); err == nil {
+		t.Fatal("another request decrypted the retained grant")
+	}
+	if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "replacement:reservation", "losing-retry", replay); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("lost reservation overwrote winning replay: %v", err)
 	}
 	if err := tx.QueryRow(ctx, `select media_connection_id from participants where id=$1`, uuid(participantID)).Scan(&initialConnection); err != nil || initialConnection != "recovered" {
 		t.Fatalf("expired replay displaced recovered seat: %q, %v", initialConnection, err)
 	}
 	if err := repository.SetParticipantMediaConnection(ctx, key, 1, "authenticated-replacement"); err != nil {
 		t.Fatal(err)
+	}
+	if ciphertext, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash); err != nil || ciphertext != nil {
+		t.Fatalf("replay revived a displaced connection: found=%v err=%v", ciphertext != nil, err)
 	}
 	query := newProviderOperationQueries(tx)
 	participants, err := query.ListPublicationParticipants(ctx, providerObservationIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID)})

@@ -32,13 +32,19 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
     if (seat.userId !== person.userId || seat.sessionId !== person.sessionId || seat.spaceId !== action.spaceId || seat.expiresAt <= Date.now()) throw new DashboardError(401, "join_required");
     const grantParams = { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(seat.episodeId), participant_id: Schema.decodeUnknownSync(ParticipantIdSchema)(seat.participantId) };
     const access = await run(
-      engine.api.default.issueAccessGrant({
-        params: grantParams,
-        payload: { participant_generation: seat.generation, replace_media_connection: action.currentMediaToken === undefined, current_media_token: action.currentMediaToken },
-      }).pipe(Effect.catchTag("ParticipantConnectionSupersededError", () => engine.api.default.issueAccessGrant({
-        params: grantParams,
-        payload: { participant_generation: seat.generation, replace_media_connection: true },
-      }))),
+      engine.api.default
+        .issueAccessGrant({
+          params: grantParams,
+          payload: { participant_generation: seat.generation, replace_media_connection: action.currentMediaToken === undefined, current_media_token: action.currentMediaToken },
+        })
+        .pipe(
+          Effect.catchTag("ParticipantConnectionSupersededError", () =>
+            engine.api.default.issueAccessGrant({
+              params: grantParams,
+              payload: { participant_generation: seat.generation, replace_media_connection: true },
+            }),
+          ),
+        ),
     );
     return json({ access } satisfies OwnerAccessDTO);
   }

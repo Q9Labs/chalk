@@ -11,9 +11,18 @@ afterEach(() => vi.restoreAllMocks());
 it.each([false, true])("recovers a superseded owner grant once (recovery also superseded: %s)", async (recoveryFails) => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const env = configuration({
-    CHALK_ENVIRONMENT: "test", CHALK_API_ORIGIN: "https://engine.example.test", DASHBOARD_ORIGIN: "https://dashboard.example.test",
-    GOOGLE_CLIENT_ID: "google", GOOGLE_CLIENT_SECRET: "secret", APPLE_SERVICES_ID: "apple", APPLE_TEAM_ID: "team", APPLE_KEY_ID: "key", APPLE_PRIVATE_KEY: "key",
-    SESSION_SECRET: "a-session-secret-with-at-least-32-characters", DASHBOARD_SERVICE_TOKEN: "service", DASHBOARD_IDENTITY_PROVIDER: "fixture",
+    CHALK_ENVIRONMENT: "test",
+    CHALK_API_ORIGIN: "https://engine.example.test",
+    DASHBOARD_ORIGIN: "https://dashboard.example.test",
+    GOOGLE_CLIENT_ID: "google",
+    GOOGLE_CLIENT_SECRET: "secret",
+    APPLE_SERVICES_ID: "apple",
+    APPLE_TEAM_ID: "team",
+    APPLE_KEY_ID: "key",
+    APPLE_PRIVATE_KEY: "key",
+    SESSION_SECRET: "a-session-secret-with-at-least-32-characters",
+    DASHBOARD_SERVICE_TOKEN: "service",
+    DASHBOARD_IDENTITY_PROVIDER: "fixture",
   });
   const tenantId = Schema.decodeUnknownSync(TenantIdSchema)("11111111-1111-4111-8111-111111111111");
   const spaceId = "22222222-2222-4222-8222-222222222222";
@@ -29,11 +38,16 @@ it.each([false, true])("recovers a superseded owner grant once (recovery also su
     media: { token: "recovered", expires_at: "2026-10-22T15:00:00Z", provider: "cf_sfu", client_payload: { connectionId: "replacement" } },
   };
   const payloads: unknown[] = [];
-  const api = await Effect.runPromise(createChalkEffectClient({ baseUrl: env.CHALK_API_ORIGIN, fetch: async (input, init) => {
-    payloads.push(await new Request(input, init).json());
-    const failed = payloads.length === 1 || recoveryFails;
-    return Response.json(failed ? { error: { code: "participant.connection_superseded", message: "Superseded" } } : access, { status: failed ? 409 : 201 });
-  } }));
+  const api = await Effect.runPromise(
+    createChalkEffectClient({
+      baseUrl: env.CHALK_API_ORIGIN,
+      fetch: async (input, init) => {
+        payloads.push(await new Request(input, init).json());
+        const failed = payloads.length === 1 || recoveryFails;
+        return Response.json(failed ? { error: { code: "participant.connection_superseded", message: "Superseded" } } : access, { status: failed ? 409 : 201 });
+      },
+    }),
+  );
   const result = ownerAccess(request, env, { api, tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN }, identity, { action: "refresh-access", spaceId, currentMediaToken: "lost-response-old-token" });
   if (recoveryFails) await expect(result).rejects.toMatchObject({ status: 409 });
   else expect(await (await result).json()).toEqual({ access });

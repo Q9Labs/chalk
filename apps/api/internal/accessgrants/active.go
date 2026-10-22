@@ -14,6 +14,8 @@ type ActiveRepository interface {
 	SetParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
 	CheckParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
 	ReplaceParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string, string) error
+	LoadParticipantMediaRefresh(context.Context, synctokens.SubjectKey, int64, [32]byte) ([]byte, error)
+	CompleteParticipantMediaRefresh(context.Context, synctokens.SubjectKey, int64, string, string, RefreshReplay) error
 }
 
 type ActiveAuthorizer struct {
@@ -78,4 +80,16 @@ func (a ActiveAuthorizer) ReplaceParticipantMediaConnection(ctx context.Context,
 	return a.repository.ReplaceParticipantMediaConnection(ctx, synctokens.SubjectKey{
 		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
 	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, next.CloudflareConnectionID)
+}
+
+func (a ActiveAuthorizer) LoadParticipantMediaRefresh(ctx context.Context, subject Subject, requestHash [32]byte) ([]byte, error) {
+	return a.repository.LoadParticipantMediaRefresh(ctx, synctokens.SubjectKey{
+		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
+	}, subject.ParticipantGeneration, requestHash)
+}
+
+func (a ActiveAuthorizer) CompleteParticipantMediaRefresh(ctx context.Context, previous, next Subject, replay RefreshReplay) error {
+	return a.repository.CompleteParticipantMediaRefresh(ctx, synctokens.SubjectKey{
+		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
+	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, next.CloudflareConnectionID, replay)
 }

@@ -69,15 +69,62 @@ func (r EpisodeLifecycleRepository) CheckParticipantMediaConnection(ctx context.
 
 func (r EpisodeLifecycleRepository) ReplaceParticipantMediaConnection(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, next string) error {
 	return r.transaction(ctx, func(_ *sqlc.Queries, tx pgx.Tx) error {
-		result, err := tx.Exec(ctx, `update participants set media_connection_id = $7, media_connection_generation = $5
+		return replaceParticipantMediaConnection(ctx, tx, key, generation, previous, next)
+	})
+}
+
+func replaceParticipantMediaConnection(ctx context.Context, tx pgx.Tx, key synctokens.SubjectKey, generation int64, previous, next string) error {
+	result, err := tx.Exec(ctx, `update participants set media_connection_id = $7, media_connection_generation = $5
  where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4 and generation = $5 and status = 'active'
  and (media_connection_generation is distinct from generation or media_connection_id is null or media_connection_id = $6)`,
-			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, previous, next)
-		if err != nil {
-			return fmt.Errorf("replace current participant media connection: %w", err)
+		uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, previous, next)
+	if err != nil {
+		return fmt.Errorf("replace current participant media connection: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return accessgrants.ErrConnectionSuperseded
+	}
+	return nil
+}
+
+func (r EpisodeLifecycleRepository) LoadParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, requestHash [32]byte) ([]byte, error) {
+	var ciphertext []byte
+	err := r.transaction(ctx, func(_ *sqlc.Queries, tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `select r.response_ciphertext from participant_media_refreshes r
+ join participants p on p.tenant_id=r.tenant_id and p.space_id=r.space_id and p.episode_id=r.episode_id and p.id=r.participant_id
+ where r.tenant_id=$1 and r.space_id=$2 and r.episode_id=$3 and r.participant_id=$4 and r.participant_generation=$5 and r.request_hash=$6
+ and p.generation=$5 and p.status='active' and p.media_connection_generation=$5 and p.media_connection_id=r.connection_id`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, requestHash[:]).Scan(&ciphertext)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
 		}
-		if result.RowsAffected() != 1 {
-			return accessgrants.ErrConnectionSuperseded
+		if err != nil {
+			return fmt.Errorf("load participant media refresh: %w", err)
+		}
+		return nil
+	})
+	return ciphertext, err
+}
+
+func (r EpisodeLifecycleRepository) CompleteParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, next string, replay accessgrants.RefreshReplay) error {
+	return r.transaction(ctx, func(_ *sqlc.Queries, tx pgx.Tx) error {
+		if err := replaceParticipantMediaConnection(ctx, tx, key, generation, previous, next); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `delete from participant_media_refreshes
+ where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4
+ and (participant_generation<>$5 or request_hash<>$6)`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, replay.RequestHash[:]); err != nil {
+			return fmt.Errorf("remove displaced participant media refreshes: %w", err)
+		}
+		_, err := tx.Exec(ctx, `insert into participant_media_refreshes
+ (tenant_id,space_id,episode_id,participant_id,participant_generation,request_hash,connection_id,response_ciphertext)
+ values($1,$2,$3,$4,$5,$6,$7,$8)
+ on conflict (tenant_id,space_id,episode_id,participant_id,participant_generation,request_hash)
+ do update set connection_id=excluded.connection_id,response_ciphertext=excluded.response_ciphertext`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, replay.RequestHash[:], next, replay.Ciphertext)
+		if err != nil {
+			return fmt.Errorf("save participant media refresh: %w", err)
 		}
 		return nil
 	})
