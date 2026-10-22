@@ -1,4 +1,24 @@
-export type ChalkAPIErrorCode = "network_error" | "invalid_response" | "request_failed" | (string & {});
+const accessGrantErrorCodes = [
+  "media_token.required",
+  "media_token.malformed",
+  "media_token.invalid_header",
+  "media_token.unknown_key",
+  "media_token.invalid_signature",
+  "media_token.invalid_issuer",
+  "media_token.invalid_audience",
+  "media_token.invalid_time_claims",
+  "media_token.not_yet_valid",
+  "media_token.expired",
+  "media_token.lifetime_exceeded",
+  "media_token.invalid_subject",
+  "media_token.subject_mismatch",
+  "participant.generation_mismatch",
+  "access.forbidden",
+] as const;
+
+export type ChalkAccessGrantErrorCode = (typeof accessGrantErrorCodes)[number];
+
+export type ChalkAPIErrorCode = ChalkAccessGrantErrorCode | "network_error" | "invalid_response" | "request_failed" | (string & {});
 
 const safeCodePattern = /^[a-z][a-z0-9_.-]{0,63}$/u;
 const safeRequestIdPattern = /^[A-Za-z0-9._:-]{1,128}$/u;
@@ -17,6 +37,11 @@ export class ChalkAPIError extends Error {
     this.retryable = input.retryable;
     this.requestId = input.requestId;
   }
+}
+
+/** Narrows known access-grant failures while preserving their status and request ID. */
+export function isChalkAccessGrantError(error: unknown): error is ChalkAPIError & { readonly code: ChalkAccessGrantErrorCode } {
+  return error instanceof ChalkAPIError && accessGrantErrorCodes.some((code) => code === error.code);
 }
 
 export class ChalkServerOnlyError extends Error {

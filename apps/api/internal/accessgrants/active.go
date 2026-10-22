@@ -43,6 +43,9 @@ func (a ActiveAuthorizer) AuthorizeActiveParticipantGeneration(ctx context.Conte
 	if err != nil {
 		return false, err
 	}
+	if current.ParticipantGeneration != generation {
+		return false, ErrGenerationMismatch
+	}
 	return current.TenantID == key.TenantID &&
 		current.SpaceID == key.SpaceID &&
 		current.EpisodeID == key.EpisodeID &&

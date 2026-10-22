@@ -72,6 +72,8 @@ func NewVerifier(config VerifierConfig) (Verifier, error) {
 	return Verifier{issuer: issuer, keys: keys, now: config.Now}, nil
 }
 
+// Verify rejects expired credentials. Only ErrExpired returns the authenticated
+// subject, so tenant-authorized refresh can validate it before replacing media.
 func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) {
 	return v.verify(credential, false)
 }
@@ -116,6 +118,13 @@ func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
 		return Subject{}, ErrInvalidAudience
 	}
 	if err := v.verifyTimeClaims(claims, recovery); err != nil {
+		if err == ErrExpired {
+			subject, subjectErr := subjectFromClaims(claims)
+			if subjectErr != nil {
+				return Subject{}, subjectErr
+			}
+			return subject, err
+		}
 		return Subject{}, err
 	}
 	return subjectFromClaims(claims)

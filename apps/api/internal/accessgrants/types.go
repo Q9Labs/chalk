@@ -22,6 +22,7 @@ var (
 	ErrNotYetValid         = errors.New("participant media credential is not yet valid")
 	ErrExpired             = errors.New("participant media credential expired")
 	ErrLifetimeExceeded    = errors.New("participant media credential lifetime exceeded")
+	ErrGenerationMismatch  = errors.New("participant media generation mismatch")
 	ErrSubjectMismatch     = errors.New("participant media credential subject mismatch")
 )
 

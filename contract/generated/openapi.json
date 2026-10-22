@@ -5976,7 +5976,19 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["episode.invalid_id", "participant.invalid_id", "request.invalid", "space.invalid_id", "tenant.invalid_id"]
+            "x-chalk-error-codes": [
+              "episode.invalid_id",
+              "media_token.invalid_header",
+              "media_token.invalid_subject",
+              "media_token.invalid_time_claims",
+              "media_token.lifetime_exceeded",
+              "media_token.malformed",
+              "media_token.required",
+              "participant.invalid_id",
+              "request.invalid",
+              "space.invalid_id",
+              "tenant.invalid_id"
+            ]
           },
           "401": {
             "content": {
@@ -5987,7 +5999,7 @@
               }
             },
             "description": "Unauthorized",
-            "x-chalk-error-codes": ["access.unauthenticated"]
+            "x-chalk-error-codes": ["access.unauthenticated", "media_token.expired", "media_token.invalid_audience", "media_token.invalid_issuer", "media_token.invalid_signature", "media_token.not_yet_valid", "media_token.unknown_key"]
           },
           "403": {
             "content": {
@@ -5998,7 +6010,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "media_token.subject_mismatch"]
           },
           "404": {
             "content": {
