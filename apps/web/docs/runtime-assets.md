@@ -1,6 +1,6 @@
 # Runtime asset inventory
 
-Base: `728c37268` (origin/master). This inventory covers assets requested by Chalk code, rather than outgoing links or user-provided content.
+Base: `c27d762f7` (the merged privacy policy; asset requests are unchanged from `728c37268`). This inventory covers assets requested by Chalk code, rather than outgoing links or user-provided content.
 
 | Runtime source at base                                                  | Request                                                                                                                                                                                                           | Replacement                                                                                                  |
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |

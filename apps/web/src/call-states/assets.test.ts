@@ -87,6 +87,7 @@ it("loads call, board, sticky note, text and math assets from our origin", async
     const external = requests.filter(({ url }) => /^https?:/.test(url) && new URL(url).origin !== origin);
     expect(external, "external HTTP requests").toEqual([]);
     expect(failed).toEqual([]);
+    expect(pageErrors).toEqual([]);
     expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
     expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
   } finally {
