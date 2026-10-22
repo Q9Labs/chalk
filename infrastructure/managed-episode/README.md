@@ -257,7 +257,7 @@ node --test scripts/deploy/deploy-managed-release.test.mjs
 ```
 
 The controller harness runs every group by default. Use `--group validation`,
-`adoption`, `inputs`, `healthy`, `rollback`, `restore`, or `ssm-contract` for a
+`adoption`, `inputs`, `healthy`, `rollback`, `restore`, `image-cleanup`, or `ssm-contract` for a
 focused check. `rollback` includes the healthy deployment setup, and `restore`
 includes both earlier groups because those checks need the durable stable
 release.
@@ -266,11 +266,26 @@ The controller runs this validator against its private `/run` stage. It removes
 the transient secret inputs after Podman registration, so they are not kept in
 the promoted release directory.
 
-Before pulling release images, the controller removes unused rootless Podman
-images under the deployment lock. Images referenced by running or stopped
-containers remain; volumes, recordings, and database data are never pruned.
-Cleanup must succeed before runtime cutover. A later rollback may need to
-download its digest-pinned images again from the registry.
+Before pulling release images, the controller lists rootless Podman images
+under the deployment lock and removes only unprotected, containerless images
+by digest (`image rm --no-prune`, never `--force`). It explicitly retains images
+from the live manifest, the durable active/rollback manifest, the previous
+successful release in the deployment ledger, and the candidate manifest. Local
+image IDs also protect alternate digest aliases of those images. This does not
+depend on a container existing for a protected image. Images without a known
+digest remain; containers, volumes, recordings, and database data remain untouched.
+
+Cleanup is best effort: failures print diagnostics and a warning. After cleanup
+and all image pulls, the controller requires disk usage below 90% on the root,
+Podman image-store, and controller-state filesystems, matching the runtime health
+limit. A failed or unreadable space check rejects the deployment before runtime
+cutover, secret replacement, migrations, or fencing. Sufficient space permits a
+deployment even when cleanup failed.
+
+`--group image-cleanup` runs stateful image-cache and disk-pressure regressions,
+including rollback with no baseline container. Set `CHALK_TEST_IMAGE_CASE` to
+`active`, `rollback`, `previous`, `candidate`, `space`, `image-space`, `boundary`,
+`cleanup-error`, `cleanup-error-space`, or `rollback-health` for one case.
 
 The host-side `chalk-runtime-watchdog` checks user-unit activity, local API and
 Sync readiness, cloudflared's `/ready` endpoint, release-manifest integrity,

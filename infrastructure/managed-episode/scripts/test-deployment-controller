@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|all]\n' "$0"
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|all]\n' "$0"
 }
 
 test_group="all"
@@ -24,20 +24,21 @@ if [[ $# -gt 0 ]]; then
   test_group="$2"
 fi
 case "${test_group}" in
-  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract) ;;
+  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup) ;;
   *) fail "unknown test group: ${test_group}" ;;
 esac
 
 group_enabled() {
   local group="$1"
   case "${test_group}:${group}" in
-    all:*) return 0 ;;
+    all:*|image-cleanup:image-cleanup) return 0 ;;
     validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract|source-reuse:source-reuse) return 0 ;;
     rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
     *) return 1 ;;
   esac
 }
 
+if [[ "$test_group" != image-cleanup ]]; then
 planner="${managed_root}/scripts/plan-release-components"
 "$planner" apps/api/internal/recordernodebootstrap/attestation.go | jq -e '.classification == "none" and .build_set == [] and .affected_components == [] and .recorder_image_affected == true' >/dev/null || fail "recorder bootstrap source did not plan a recorder image"
 "$planner" apps/api/internal/recordernodebootstrap/attestation_test.go | jq -e '.classification == "none" and .build_set == [] and .affected_components == [] and .recorder_image_affected == false' >/dev/null || fail "recorder bootstrap test incorrectly planned an image"
@@ -66,6 +67,8 @@ for recorder_image_path in \
   "$planner" "$recorder_image_path" | jq -e '.recorder_image_affected == true' >/dev/null || fail "shared recorder image input was not flagged: $recorder_image_path"
 done
 "$planner" scripts/deploy/deploy-managed-release.test.mjs | jq -e '.classification == "none" and .build_set == [] and .affected_components == []' >/dev/null || fail "managed release contract tests were incorrectly planned as application image changes"
+
+fi
 
 tmp_root="${TMPDIR:-/tmp}"
 if [[ "$(uname -s)" == Darwin ]]; then
@@ -181,8 +184,41 @@ set -euo pipefail
 printf 'podman %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 state="${FAKE_SECRET_STATE:?}"
 case "${1:-} ${2:-}" in
+  "info --format") printf '%s\n' "${CHALK_CONTROLLER_STATE_ROOT:?}" ;;
+  "image list")
+    [[ "$*" == 'image list --all --no-trunc --format {{.Id}} {{.Containers}} {{range .RepoDigests}}{{.}} {{end}}' ]]
+    [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" != true ]] || { echo 'test-only image storage permission denied' >&2; exit 125; }
+    if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
+      jq -r '.[] | .id + " " + (.containers|tostring) + " " + (.refs|join(" "))' "$FAKE_IMAGE_STATE"
+    fi
+    ;;
+  "image exists")
+    [[ -n "${FAKE_IMAGE_STATE:-}" ]] || exit 1
+    jq -e --arg ref "$3" 'any(.[]; .refs | index($ref))' "$FAKE_IMAGE_STATE" >/dev/null
+    ;;
+  "image rm")
+    [[ "$3" == --no-prune && "$4" == *@sha256:* && $# == 4 ]]
+    [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" != true ]] || { echo 'test-only image storage permission denied' >&2; exit 125; }
+    jq --arg ref "$4" '[.[] | if (.refs|index($ref)) then .refs -= [$ref] else . end | select(.refs|length>0)]' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+    mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+    printf '%s\n' "$4" >>"${FAKE_IMAGE_STATE}.removed"
+    ;;
+  "pull "*)
+    if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
+      if ! jq -e --arg ref "$2" 'any(.[]; .refs | index($ref))' "$FAKE_IMAGE_STATE" >/dev/null; then
+        [[ "${FAKE_PULL_CACHE_ONLY:-false}" != true ]] || exit 125
+        jq --arg ref "$2" '. + [{id:($ref|split("@")[1]),refs:[$ref],containers:0}]' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+        mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+      fi
+    fi
+    ;;
   "image prune")
     [[ "$*" == 'image prune --all --force' ]]
+    if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
+      jq -r '.[] | select(.containers == 0) | .refs[]' "$FAKE_IMAGE_STATE" >>"${FAKE_IMAGE_STATE}.removed"
+      jq '[.[] | select(.containers > 0)]' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+      mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+    fi
     if [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" == true ]]; then
       printf 'test-only image storage permission denied\n' >&2
       exit 125
@@ -223,6 +259,10 @@ case "${1:-} ${2:-}" in
     mv "$temporary" "$state"
     ;;
   "image inspect")
+    if [[ "$4" == '{{.Id}}' ]]; then
+      jq -er --arg ref "$5" '.[] | select(.refs|index($ref)) | .id' "$FAKE_IMAGE_STATE"
+      exit
+    fi
     case "$(uname -m)" in
       aarch64 | arm64) echo arm64 ;;
       x86_64 | amd64) echo amd64 ;;
@@ -263,6 +303,16 @@ set -euo pipefail
 printf 'loginctl %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 LOGINCTL
 chmod 0755 "${fixture_root}/bin/loginctl"
+cat >"${fixture_root}/bin/df" <<'DF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'df %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
+used="${FAKE_DISK_USED:-50}"
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf 'root 10000000 5000000 5000000 %s%% /\n' "$used"
+printf 'images 10000000 5000000 5000000 %s%% /images\n' "${FAKE_IMAGE_DISK_USED:-$used}"
+DF
+chmod 0755 "${fixture_root}/bin/df"
 
 cat >"${fixture_root}/health" <<'HEALTH'
 #!/usr/bin/env bash
@@ -274,6 +324,11 @@ sequence="${FAKE_HEALTH_SEQUENCE:-ok}"
 run_root="${CHALK_CONTROLLER_RUN_ROOT:?}"
 [[ -s "${run_root}/release/release-manifest.json" ]]
 [[ -s "${run_root}/release/release-manifest.sha256" ]]
+if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
+  while IFS= read -r image; do
+    jq -e --arg ref "$image" 'any(.[]; .refs|index($ref))' "$FAKE_IMAGE_STATE" >/dev/null || exit 1
+  done < <(jq -r '.images[]' "${run_root}/release/release-manifest.json")
+fi
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "${run_root}/release" && sha256sum --check --status release-manifest.sha256)
 else
@@ -351,7 +406,7 @@ run_controller() {
   api_release_id="${FAKE_API_RELEASE_ID_OVERRIDE:-$api_release_id}"
   sync_release_id="${FAKE_SYNC_RELEASE_ID_OVERRIDE:-$sync_release_id}"
   sync_source_commit="${FAKE_SYNC_SOURCE_COMMIT_OVERRIDE:-$sync_source_commit}"
-  FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
+  PATH="${fixture_root}/bin:${PATH}" FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
   FAKE_API_RELEASE_ID="$api_release_id" FAKE_SYNC_RELEASE_ID="$sync_release_id" FAKE_SYNC_SOURCE_COMMIT="$sync_source_commit" FAKE_VALIDATION_ENVIRONMENT="$(jq -er '.environment' "$request")" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
@@ -363,7 +418,7 @@ run_controller() {
 run_restore() {
   local state="$1"
   local mode="${2:-ok}"
-  FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
+  PATH="${fixture_root}/bin:${PATH}" FAKE_AWS_LOG="${fixture_root}/aws.log" FAKE_COMMAND_LOG="${fixture_root}/commands.log" FAKE_SECRET_STATE="${fixture_root}/secret-state" FAKE_SYSTEMCTL_FAILURE_STATE="${fixture_root}/systemctl-failed" FAKE_RESTORE_ENABLED_STATE="${fixture_root}/restore-unit-enabled" FAKE_HEALTH_INDEX="${fixture_root}/health-index" FAKE_HEALTH_SEQUENCE="$mode" \
   CHALK_CONTROLLER_STATE_ROOT="$state" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/run" CHALK_CONTROLLER_LOCK_FILE="${state}/lock" CHALK_ACTIVE_RELEASE_POINTER="${state}/active-release.json" CHALK_DEPLOYMENT_LEDGER="${state}/ledger.jsonl" \
   CHALK_CONTROLLER_SYSTEMD_ROOT="${fixture_root}/systemd" CHALK_CONTROLLER_INSTALL_DIR="${fixture_root}/install" CHALK_RUNTIME_QUADLET_DIR="${fixture_root}/user-quadlet" CHALK_RUNTIME_SYSTEMD_DIR="${fixture_root}/user-systemd" \
   CHALK_AWS_BIN="${fixture_root}/bin/aws" CHALK_PODMAN_BIN="${fixture_root}/bin/podman" CHALK_SYSTEMCTL_BIN="${fixture_root}/bin/systemctl" CHALK_HEALTH_ATTEMPTS=1 CHALK_HEALTH_INTERVAL_SECONDS=1 CHALK_CONTROLLER_DIRECT_USER_COMMANDS=true \
@@ -375,6 +430,100 @@ invalid_request="${fixture_root}/invalid-request.json"
 manifest="${fixture_root}/manifest.json"
 make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
+if [[ "$test_group" == all ]]; then
+  "$0" --group image-cleanup
+fi
+if [[ "$test_group" == image-cleanup ]]; then
+  image_state="${fixture_root}/images.json"
+  export FAKE_IMAGE_STATE="$image_state"
+  printf '[]\n' >"$image_state"
+  cleanup_state="${fixture_root}/cleanup-state"
+  mkdir -p "$cleanup_state"
+  run_controller "$cleanup_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
+  baseline_image="$(jq -r '.images.api' "$manifest")"
+  make_manifest candidate | jq '.images.api |= sub("a{64}$"; "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")' >"${fixture_root}/candidate-manifest.json"
+  make_request candidate "${fixture_root}/candidate-request.json"
+  candidate_image="$(jq -r '.images.api' "${fixture_root}/candidate-manifest.json")"
+  stale_image="example.com/unused@sha256:$(printf 'd%.0s' {1..64})"
+  live_image="example.com/active@sha256:$(printf 'e%.0s' {1..64})"
+  previous_image="example.com/previous@sha256:$(printf 'f%.0s' {1..64})"
+  # A live /run release and the durable rollback pointer can differ after a failed activation.
+  jq --arg image "$live_image" '.images.api=$image' "$manifest" >"${fixture_root}/run/release/release-manifest.json"
+  mkdir -p "${cleanup_state}/releases/previous"
+  jq --arg image "$previous_image" '.release_id="previous" | .images.api=$image' "$manifest" >"${cleanup_state}/releases/previous/release-manifest.json"
+  { printf '{"outcome":"healthy","release_id":"previous"}\n'; cat "${cleanup_state}/ledger.jsonl"; } >"${fixture_root}/ledger.tmp"
+  mv "${fixture_root}/ledger.tmp" "${cleanup_state}/ledger.jsonl"
+  for image in "$candidate_image" "$stale_image" "$live_image" "$previous_image"; do
+    jq --arg ref "$image" '. + [{id:($ref|split("@")[1]),refs:[$ref],containers:0}]' "$image_state" >"${image_state}.tmp"
+    mv "${image_state}.tmp" "$image_state"
+  done
+  # An alternate digest alias of the same image ID must not bypass protection.
+  jq --arg ref "$baseline_image" --arg alias "example.com/alias@sha256:$(printf '1%.0s' {1..64})" 'map(if (.refs|index($ref)) then .refs += [$alias] else . end)' "$image_state" >"${image_state}.tmp"
+  mv "${image_state}.tmp" "$image_state"
+  cp "$image_state" "${fixture_root}/initial-images.json"
+  : >"${image_state}.removed"
+  : >"${fixture_root}/commands.log"
+  image_case="${CHALK_TEST_IMAGE_CASE:-all}"
+  case "$image_case" in
+    active|rollback|previous|candidate|all)
+      run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >/dev/null
+      for protected_class in active rollback previous candidate; do
+        [[ "$image_case" == all || "$image_case" == "$protected_class" ]] || continue
+        case "$protected_class" in
+          active) protected_image="$live_image" ;;
+          rollback) protected_image="$baseline_image" ;;
+          previous) protected_image="$previous_image" ;;
+          candidate) protected_image="$candidate_image" ;;
+        esac
+        ! grep -Fxq "$protected_image" "${image_state}.removed" || fail "$protected_class image was deleted without a container"
+        jq -e --arg ref "$protected_image" 'any(.[]; .refs|index($ref))' "$image_state" >/dev/null || fail "$protected_class image is missing"
+        printf 'PASS %s image survives cleanup without a container\n' "$protected_class"
+      done
+      ! grep -Fq 'podman image rm --no-prune example.com/alias@' "${fixture_root}/commands.log" || fail "protected image ID was removed through another digest alias"
+      grep -Fxq "$stale_image" "${image_state}.removed" || fail "unprotected image was not reclaimed"
+      ;;
+    space|image-space|boundary|cleanup-error|cleanup-error-space|rollback-health)
+      cp "${cleanup_state}/active-release.json" "${fixture_root}/before-pointer.json"
+      cp "${fixture_root}/run/release/release-manifest.json" "${fixture_root}/before-live.json"
+      case "$image_case" in
+        space) export FAKE_DISK_USED=96 ;;
+        boundary) export FAKE_DISK_USED=90 ;;
+        image-space) export FAKE_IMAGE_DISK_USED=96 ;;
+        cleanup-error) export FAKE_IMAGE_PRUNE_FAILURE=true FAKE_DISK_USED=89 ;;
+        cleanup-error-space) export FAKE_IMAGE_PRUNE_FAILURE=true FAKE_DISK_USED=96 ;;
+      esac
+      if [[ "$image_case" == cleanup-error ]]; then
+        run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/cleanup.log" 2>&1 || fail "cleanup error blocked a release with sufficient space"
+        grep -Fq 'test-only image storage permission denied' "${fixture_root}/cleanup.log" || fail "cleanup diagnostics disappeared"
+      elif [[ "$image_case" == rollback-health ]]; then
+        printf '0' >"${fixture_root}/health-index"
+        if run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" fail,ok >"${fixture_root}/rollback-health.log" 2>&1; then
+          fail "unhealthy candidate unexpectedly succeeded"
+        fi
+        sed -n 's/^RESULT //p' "${fixture_root}/rollback-health.log" | jq -e '.status == "rolled_back" and .rolled_back == true' >/dev/null || fail "rollback could not start its containerless baseline image"
+      else
+        expect_failure run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok
+        last_pull="$(grep -n '^podman pull ' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
+        space_check="$(grep -n '^df -Pk ' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
+        [[ -n "$last_pull" && "$space_check" -gt "$last_pull" ]] || fail "space gate did not run after pulls"
+        grep -Fq 'insufficient disk space before runtime cutover' "${fixture_root}/expected-failure.log" || fail "space gate did not explain rejection"
+        cmp -s "${fixture_root}/before-pointer.json" "${cleanup_state}/active-release.json" || fail "space gate changed active pointer"
+        cmp -s "${fixture_root}/before-live.json" "${fixture_root}/run/release/release-manifest.json" || fail "space gate changed live manifest"
+        ! grep -Eq 'systemctl .* (stop|start chalk-api-migrate|start chalk-runtime|disable)|podman secret (rm|create)' "${fixture_root}/commands.log" || fail "space gate rejected after fencing or runtime mutation"
+      fi
+      printf 'PASS %s\n' "$image_case"
+      ;;
+    *) fail "unknown image cleanup case" ;;
+  esac
+  unset FAKE_IMAGE_STATE
+  if [[ "$image_case" == all ]]; then
+    for image_case in space image-space boundary cleanup-error cleanup-error-space rollback-health; do
+      CHALK_TEST_IMAGE_CASE="$image_case" "$0" --group image-cleanup
+    done
+  fi
+  exit 0
+fi
+
 if group_enabled source-reuse; then
   # Model SSM's source archive: the old controller, helper and policy differ
   # from the workflow checkout used by the current manifest generator.
@@ -606,9 +755,9 @@ make_request stable "${fixture_root}/request.json"
 : >"${fixture_root}/secret-state"
 : >"${fixture_root}/aws.log"
 run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
-prune_line="$(grep -nFx 'podman image prune --all --force' "${fixture_root}/commands.log" | cut -d: -f1)"
+list_line="$(grep -n '^podman image list ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
 pull_line="$(grep -n '^podman pull ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
-[[ -n "$prune_line" && "$prune_line" -lt "$pull_line" ]] || fail "unused images were not cleaned before pulling the release"
+[[ -n "$list_line" && "$list_line" -lt "$pull_line" ]] || fail "unused images were not listed before pulling the release"
 for alert_unit in chalk-alert-state.service chalk-alert-state.timer; do
   grep -Fxq 'alert unit preservation sentinel' "${fixture_root}/systemd/${alert_unit}" || fail "managed deployment replaced ${alert_unit}"
 done
@@ -646,15 +795,6 @@ grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-s
 if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"
 fi
-
-make_request prune-failure "${fixture_root}/prune-failure-request.json"
-make_manifest prune-failure >"${fixture_root}/prune-failure-manifest.json"
-: >"${fixture_root}/commands.log"
-FAKE_IMAGE_PRUNE_FAILURE=true expect_failure run_controller "$stable_state" "${fixture_root}/prune-failure-request.json" "${fixture_root}/prune-failure-manifest.json" ok
-grep -Fq 'test-only image storage permission denied' "${fixture_root}/expected-failure.log" || fail "cleanup failure lost its storage diagnostic"
-! grep -q '^podman pull ' "${fixture_root}/commands.log" || fail "a release image was pulled after cleanup failed"
-! grep -q '^systemctl --user stop ' "${fixture_root}/commands.log" || fail "running services were stopped after cleanup failed"
-jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "cleanup failure changed the active release"
 
 runtime_only_state="${fixture_root}/runtime-only-state"
 mkdir -p "$runtime_only_state"
