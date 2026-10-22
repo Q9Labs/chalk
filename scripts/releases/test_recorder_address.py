@@ -21,11 +21,13 @@ class EC2:
         self.lose_response = False
         self.delay_visibility = False
         self.moves = []
+        self.calls = []
 
     def parameter(self, name):
         return dict(Value='CHALK_RECORDER_FLEET_REGION=blr1\nCHALK_RECORDER_FLEET_SIZE=c-2\n')
 
     def aws(self, service, operation, *arguments):
+        self.calls.append((service, operation))
         if service != 'ec2':
             raise AssertionError((service, operation))
         if operation == 'describe-instances':
@@ -53,6 +55,13 @@ class RecorderAddress(unittest.TestCase):
         self.ec2 = EC2()
         self.config = dict(runtime=dict(instance_id='i-old', user_id=1000,
                                         parameter_prefix='/chalk/nightly/managed-episode'), do_context='nightly')
+        environment = patch.dict(media.os.environ, CHALK_MANAGED_INSTANCE_ID='i-old')
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def select_host(self, instance_id):
+        self.ec2.instance = self.config['runtime']['instance_id'] = instance_id
+        media.os.environ['CHALK_MANAGED_INSTANCE_ID'] = instance_id
 
     def reconcile(self):
         media.reconcile_nightly_address(self.ec2, self.config)
@@ -61,7 +70,7 @@ class RecorderAddress(unittest.TestCase):
         original = copy.deepcopy(self.ec2.allocation)
         self.reconcile()
         self.assertEqual(self.ec2.moves, [])
-        self.ec2.instance = self.config['runtime']['instance_id'] = 'i-replacement'
+        self.select_host('i-replacement')
         self.ec2.lose_response = True
         with self.assertRaisesRegex(RuntimeError, 'response was lost'):
             self.reconcile()
@@ -73,7 +82,7 @@ class RecorderAddress(unittest.TestCase):
 
     def test_unattached_retained_address_moves_once_and_retries_without_remapping(self):
         self.ec2.allocation.pop('InstanceId')
-        self.ec2.instance = self.config['runtime']['instance_id'] = 'i-replacement'
+        self.select_host('i-replacement')
         self.reconcile()
         self.reconcile()
         self.assertEqual(self.ec2.moves, [('eipalloc-retained', 'i-replacement')])
@@ -83,7 +92,7 @@ class RecorderAddress(unittest.TestCase):
             args = SimpleNamespace(environment='nightly', config_parameter='/chalk/nightly/release/recorder.json',
                                    output=Path(directory, 'media.json'), directory=Path(directory), region='ap-southeast-1')
             args.output.write_text(json.dumps(members()))
-            self.ec2.instance = self.config['runtime']['instance_id'] = 'i-replacement'
+            self.select_host('i-replacement')
             self.ec2.lose_response = True
             with patch.object(media, 'settings', return_value=(self.ec2, self.config)), patch.object(media.subprocess, 'run') as boot:
                 with self.assertRaisesRegex(RuntimeError, 'response was lost'):
@@ -122,12 +131,24 @@ class RecorderAddress(unittest.TestCase):
         self.assertEqual(self.ec2.moves, [])
 
     def test_waits_for_association_visibility_then_refuses_cold_boot(self):
-        self.ec2.instance = self.config['runtime']['instance_id'] = 'i-replacement'
+        self.select_host('i-replacement')
         self.ec2.delay_visibility = True
         with patch.object(media.time, 'sleep') as sleep:
             with self.assertRaisesRegex(RuntimeError, 'cold boot refused'):
                 self.reconcile()
         self.assertEqual(sleep.call_count, 11)
+
+    def test_rejects_mismatched_or_missing_deployed_target_before_any_aws_call(self):
+        self.ec2.allocation.pop('InstanceId')
+        for deployed in ('i-other-nightly-host', None):
+            with self.subTest(deployed=deployed), patch.dict(media.os.environ):
+                if deployed is None:
+                    media.os.environ.pop('CHALK_MANAGED_INSTANCE_ID', None)
+                else:
+                    media.os.environ['CHALK_MANAGED_INSTANCE_ID'] = deployed
+                with self.assertRaisesRegex(ValueError, 'must match the deployed instance'):
+                    self.reconcile()
+        self.assertEqual(self.ec2.calls, [])
 
 
 if __name__ == '__main__':

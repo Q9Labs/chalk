@@ -71,7 +71,6 @@ host is replaced; only the association moves. Do not destroy or recreate the
 allocation during host replacement.
 
 ```sh
-export AWS_PROFILE=q9labs
 tofu -chdir=infrastructure/nightly/recording-control-address init -backend-config=/absolute/path/to/nightly-backend.hcl
 tofu -chdir=infrastructure/nightly/recording-control-address plan -out=address.plan
 tofu -chdir=infrastructure/nightly/recording-control-address apply address.plan
@@ -84,23 +83,18 @@ root. If that saved ID is lost, recover it read-only by its tags, then match the
 returned public IP to `nightly-recording-control.chalkmeet.com` before importing:
 
 ```sh
-AWS_PROFILE=q9labs aws ec2 describe-addresses --region ap-southeast-1 --filters Name=tag:Name,Values=chalk-nightly-recording-control Name=tag:chalk:environment,Values=nightly --query 'Addresses[].{AllocationId:AllocationId,PublicIp:PublicIp}'
+aws ec2 describe-addresses --region ap-southeast-1 --filters Name=tag:Name,Values=chalk-nightly-recording-control Name=tag:chalk:environment,Values=nightly --query 'Addresses[].{AllocationId:AllocationId,PublicIp:PublicIp}'
 ```
 
-The lead must install [release-policy.json](recording-control-address/release-policy.json)
-on **only** `chalk-nightly-github-deploy` before deploying this release code.
-The existing role lacks address-read and reassociation permission. Save any
-existing inline policy of the same name as the undo first, then install:
-
-```sh
-AWS_PROFILE=q9labs aws iam put-role-policy --role-name chalk-nightly-github-deploy --policy-name chalk-nightly-recorder-address --policy-document file://infrastructure/nightly/recording-control-address/release-policy.json
-```
-
-This policy allows address/instance reads and association of only the
-allocation with both nightly recorder tags. The caller also rejects a target
-without `chalk:environment=nightly`. It grants no allocate, release, disassociate,
-DNS, or IAM-write permissions. Do not attach it to a production role. Restore the
-saved inline policy (or delete this inline policy if newly added) to undo it.
+The release requires [release-policy.json](recording-control-address/release-policy.json).
+Use the private **Nightly recorder address permissions** operator runbook in the
+repo's ignored `.private/` workspace for account-specific installation and undo.
+Select credentials through that runbook, not through public documentation.
+The policy allows address/instance reads and association of only the allocation
+with both nightly recorder tags. The caller requires the SSM target to match
+`CHALK_MANAGED_INSTANCE_ID` and rejects a target without
+`chalk:environment=nightly`. The policy grants no allocate, release, disassociate,
+DNS, or IAM-write permissions. No instance-profile change is required.
 
 The backend file supplies the existing nightly state bucket, as in
 `backend.hcl.example`. On the first install only, save the full Cloudflare record

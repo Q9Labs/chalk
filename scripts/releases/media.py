@@ -392,6 +392,8 @@ def deploy_dispatcher(args):
 def reconcile_nightly_address(provider, config):
     """Move the existing allocation; never allocate, release, or change DNS."""
     instance_id = config['runtime']['instance_id']
+    require(instance_id == os.environ.get('CHALK_MANAGED_INSTANCE_ID'),
+            'nightly recorder SSM target must match the deployed instance')
     instances = provider.aws('ec2', 'describe-instances', '--instance-ids', instance_id)
     hosts = [host for reservation in instances['Reservations'] for host in reservation['Instances']]
     require(len(hosts) == 1 and hosts[0]['InstanceId'] == instance_id, 'nightly address target is ambiguous')
