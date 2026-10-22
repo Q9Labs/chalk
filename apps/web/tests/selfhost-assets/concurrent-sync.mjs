@@ -9,7 +9,7 @@ import { test } from "node:test";
 const webRoot = resolve(import.meta.dirname, "../..");
 const repoRoot = resolve(webRoot, "../..");
 
-test("parallel Vite servers publish whiteboard assets without racing each other", async () => {
+test("parallel Vite starts publish public assets once, without racing or rewriting served files", async () => {
   const fixture = await mkdtemp(join(tmpdir(), "chalk-asset-race-"));
   try {
     const script = join(fixture, "apps/web/scripts/sync-public-assets.ts");
@@ -48,10 +48,11 @@ test("parallel Vite servers publish whiteboard assets without racing each other"
 
     const publicDir = join(fixture, "apps/web/public");
     // A later server start must not rewrite files an earlier server is already serving.
-    const served = join(publicDir, "chalk-whiteboard/0.18.1/fonts/0.woff2");
-    const before = (await stat(served)).mtimeMs;
+    // Vite reloads every open page when a public HTML file is rewritten.
+    const served = ["chalk-whiteboard/0.18.1/fonts/0.woff2", "privacy-policy/index.html"].map((path) => join(publicDir, path));
+    const before = await Promise.all(served.map(async (path) => (await stat(path)).mtimeMs));
     await sync(2);
-    assert.equal((await stat(served)).mtimeMs, before);
+    assert.deepEqual(await Promise.all(served.map(async (path) => (await stat(path)).mtimeMs)), before);
     assert.deepEqual((await readdir(join(publicDir, "chalk-whiteboard"))).sort(), ["0.18.1"]);
     assert.deepEqual((await readdir(join(publicDir, "chalk-mathjax"))).sort(), ["4.1.3"]);
     assert.equal((await readdir(join(publicDir, "chalk-whiteboard/0.18.1/fonts"), { recursive: true })).length, 200);
