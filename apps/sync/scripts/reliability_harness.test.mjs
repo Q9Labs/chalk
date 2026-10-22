@@ -107,4 +107,6 @@ test("strict Sync tests stop a mix that ignores TERM, remove their output and ex
   assert.ok(stopped.seconds < 6, `the wrapper took ${stopped.seconds} seconds to stop`);
   await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
   assert.deepEqual(readdirSync(env.TMPDIR), []);
+  assert.match(stopped.stderr, /^test-strict: stopped by TERM after \d+s; it cleans up and exits 143$/mu);
+  assert.match(stopped.stderr, /^test-strict: still running 1s after TERM, so it gets KILL$/mu);
 });

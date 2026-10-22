@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { assertStopped, signalWhenReady, stubbornCommand } from "./signal-test.mjs";
+import { assertStopped, signalWhenReady, stubbornCommand, zombieCommand } from "./signal-test.mjs";
 
 for (const firstExit of [0, 17]) {
   test(`service gates use fresh databases and stop on exit ${firstExit}`, () => {
@@ -96,5 +96,26 @@ for (const { name, args, cleanup, cleanups, signal, code } of stubbornCases) {
     await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
     const services = readFileSync(env.TEST_SERVICE_LOG, "utf8").trim().split("\n");
     assert.equal(services.filter((line) => cleanup.test(line)).length, cleanups);
+    // The stop reads differently from a failed test: it names the gate, the signal and the time.
+    const gate = `${path.basename(args[0])} ./gate.sh`;
+    const name = signal.replace(/^SIG/u, "");
+    assert.match(stopped.stderr, new RegExp(`^${escape(gate)}: stopped by ${name} after \\d+s; it cleans up and exits ${code}$`, "mu"));
+    assert.match(stopped.stderr, new RegExp(`^${escape(gate)}: still running 1s after ${name}, so it gets KILL$`, "mu"));
   });
+}
+
+test("a command whose process group holds only a zombie stops without waiting out the grace period", async (context) => {
+  const { root, write, env } = scratchRoot(context, "chalk-gate-zombie-");
+  write("gate.pl", zombieCommand);
+  const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "--", "./gate.pl"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "5" }, ready: env.TEST_READY, signal: "SIGTERM" });
+  // The holder is outside the group the wrapper stops; ending it lets the zombie be reaped.
+  const [holder] = readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number);
+  context.after(() => process.kill(holder, "SIGKILL"));
+  assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+  assert.ok(stopped.seconds < 3, `the wrapper waited ${stopped.seconds} seconds for a zombie`);
+  assert.doesNotMatch(stopped.stderr, /gets KILL/u);
+});
+
+function escape(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
