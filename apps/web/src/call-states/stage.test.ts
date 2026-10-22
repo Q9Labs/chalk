@@ -327,7 +327,7 @@ it("still zooms out to fit a drawing larger than the board", async () => {
 });
 
 it("brings a typed text back for both people after Undo and Redo", async () => {
-  const context = await browser.newContext({ viewport: { width: 1100, height: 760 }, reducedMotion: "reduce" });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
   try {
     const [writer, viewer] = await Promise.all([context.newPage(), context.newPage()]);
     for (const each of [writer, viewer]) {
