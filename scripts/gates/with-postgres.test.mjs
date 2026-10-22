@@ -62,7 +62,14 @@ test("a gate stopped with TERM exits 143 even when its command exits 0 on TERM",
       env: { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, TEST_READY: ready },
     });
     const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
-    while (!existsSync(ready)) await new Promise((resolve) => setTimeout(resolve, 20));
+    let early;
+    exited.then((result) => (early = result));
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(ready)) {
+      assert.equal(early, undefined, "the wrapper exited before its command started");
+      assert.ok(Date.now() < deadline, "the wrapper's command did not start within 10 seconds");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     process.kill(-child.pid, "SIGTERM");
     assert.deepEqual(await exited, { code: 143, signal: null });
   } finally {

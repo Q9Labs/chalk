@@ -19,7 +19,7 @@ regexes = ['''^\s*export const spacePageTestToken = "cspi1\.test-capability";$''
 [[allowlists]]
 description = "Postgres integration tests use a fixture object key and a fixture idempotency key."
 regexTarget = "line"
-regexes = ['''^\s*key := "tenants/fixture/recordings/" \+ fixture\.recordingID\.String\(\) \+ "/capture/1/bundles/0"$''', '''IdempotencyKey: "disable-fence-0001"''']
+regexes = ['''^\s*key := "tenants/fixture/recordings/" \+ fixture\.recordingID\.String\(\) \+ "/capture/1/bundles/0"$''', '''^\s*if _, err := repository\.Patch\(ctx, tenantID, created\.Endpoint\.ID, webhooks\.PatchInput\{Enabled: &enabled, ExpectedRevision: immediate\.Revision, IdempotencyKey: "disable-fence-0001"\}, "", ""\); err != nil \{$''']
 
 [[allowlists]]
 description = "The invalid-invite Space test uses one placeholder invitation URL."
