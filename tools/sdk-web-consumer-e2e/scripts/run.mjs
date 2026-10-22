@@ -1,4 +1,5 @@
 import { checkDocExamples } from "./docs-examples.mjs";
+import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
@@ -88,6 +89,7 @@ try {
         const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
         const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
         try {
+          await proveToastLayering(browser, await readFile(join(repositoryDirectory, "packages/ui/src/styles/index.css"), "utf8"));
           if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
           else await runLaunchSmoke(browser, browserName, baseURL);
         } finally {
