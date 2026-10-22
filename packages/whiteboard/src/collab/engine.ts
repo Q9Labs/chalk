@@ -500,8 +500,8 @@ export class ExcalidrawCollabEngine {
     // disagrees with it. Sync lists a board by order key in its database's collation, not in the keys' own order.
     const remoteElements = [...(args.remoteElements as readonly ExcalidrawElement[])].sort(compareElementOrder);
     const received = new Map(remoteElements.map((element) => [element.id, element]));
-    // Excalidraw's restore deletes an empty text and bumps its version. A peer's undone text is empty but live,
-    // and deleting it here would send back an edit this viewer never made, so keep what arrived.
+    // Excalidraw's restore deletes an empty text and bumps its version. A peer's undone text is empty but live, and
+    // a deleted copy here would be as new as the peer's Redo, so the Redo could lose the tie. Keep what arrived.
     const restoredRemote = restoreElements(remoteElements, null).map((element) => {
       const remote = received.get(element.id);
       return remote && !remote.isDeleted && element.isDeleted ? { ...element, isDeleted: false, version: remote.version, versionNonce: remote.versionNonce } : element;

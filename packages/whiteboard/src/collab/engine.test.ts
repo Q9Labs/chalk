@@ -165,7 +165,7 @@ it("keeps a received empty text live, so a peer's undone text can be redone", as
     engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
     await vi.advanceTimersByTimeAsync(1000);
     expect(api.getSceneElementsIncludingDeleted()).toEqual([expect.objectContaining({ id: "qa-text", isDeleted: false, version: 3, versionNonce: 3 })]);
-    // A viewer never writes back an element it only received; that echoed deletion is what made Redo lose the text.
+    // A viewer sends nothing back for an element it only received.
     expect(submitUpdate).not.toHaveBeenCalled();
   } finally {
     engine.dispose();
