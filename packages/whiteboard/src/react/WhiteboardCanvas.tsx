@@ -176,7 +176,7 @@ function valueOr<T>(value: T | undefined, fallback: T): T {
 const STYLESHEET_ID = "chalk-excalidraw-styles";
 
 /** Starts loading the board's stylesheet before anyone opens the board, so the board opens without waiting for it. */
-export function preloadWhiteboardStylesheet(href: string = DEFAULT_EXCALIDRAW_CSS): void {
+export function preloadWhiteboardStylesheet(href: string = getWhiteboardAssets()?.excalidrawCssPath ?? DEFAULT_EXCALIDRAW_CSS): void {
   if (typeof document !== "undefined") boardStylesheet(href);
 }
 
