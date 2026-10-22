@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"net/http"
 	"os"
@@ -116,6 +117,7 @@ func run() error {
 		Version:              cfg.Observability.Version,
 	}, os.Stdout)
 	logger := diagnostics.Logger()
+	slog.SetDefault(logger)
 	launchTelemetry := observability.NewLaunchTelemetry(logger)
 	logger.Info("api starting",
 		"event", "api.starting",
@@ -476,7 +478,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure cspi1 public invite keyring: %w", err)
 		}
-		publicInviteRepository := postgres.NewPublicInviteRepositoryWithPool(pool)
+		publicInviteRepository := postgres.NewPublicInviteRepositoryWithPool(pool).WithEpisodeLifecycle(episodeRepository)
 		service, err := publicinvites.NewServiceWithLifecycle(publicInviteRepository, publicInviteRepository, signer)
 		if err != nil {
 			return fmt.Errorf("configure public invite service: %w", err)

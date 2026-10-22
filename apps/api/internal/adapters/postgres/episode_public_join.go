@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
@@ -23,6 +24,17 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 		if r.tenantLimits.AppliesTo(input.TenantID) && r.tenantLimits.MaxLiveEpisodes > 0 {
 			if _, err := queries.LockTenantMediaLimits(ctx, uuid(input.TenantID)); err != nil {
 				return fmt.Errorf("lock tenant media limits: %w", err)
+			}
+		}
+		var invite sqlc.SpacePublicInvite
+		if !input.KnockArrivalID.IsZero() {
+			var err error
+			invite, err = queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID)})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			if err != nil {
+				return fmt.Errorf("lock legacy knock invite: %w", err)
 			}
 		}
 		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
@@ -45,8 +57,25 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 		if episode.Status != episodes.EpisodeStatusActive {
 			return episodes.ErrEpisodeNotActive
 		}
-		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, utilities.IDFromBytes(episode.ID.Bytes)); err != nil {
-			return err
+
+		if !input.KnockArrivalID.IsZero() {
+			arrival, err := queries.LockSpacePublicArrival(ctx, uuid(input.KnockArrivalID))
+			if errors.Is(err, pgx.ErrNoRows) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			if err != nil {
+				return fmt.Errorf("lock legacy knock arrival: %w", err)
+			}
+			if arrival.TenantID != uuid(input.TenantID) || arrival.SpaceID != uuid(input.SpaceID) {
+				return publicinvites.ErrArrivalUnavailable
+			}
+			valid, err := publicAdmissionProvenanceValid(space, invite, arrival, episode, time.Now())
+			if err != nil {
+				return err
+			}
+			if !valid {
+				return publicinvites.ErrArrivalUnavailable
+			}
 		}
 
 		intent, err := queries.LockLifecycleIntentForRequestForUpdate(ctx, sqlc.LockLifecycleIntentForRequestForUpdateParams{
@@ -300,6 +329,16 @@ func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episo
 }
 
 func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space) (sqlc.Episode, bool, webhookCommitMetric, error) {
+	// Read the ID without locking the Episode, then follow Sync's order:
+	// control before Episode. The caller's Space lock serializes creation.
+	candidate, err := queries.GetLiveEpisodeForPublicJoin(ctx, sqlc.GetLiveEpisodeForPublicJoinParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
+	if err == nil {
+		if _, err := lockLifecycleControlRow(ctx, queries, tenantID, spaceID, utilities.IDFromBytes(candidate.ID.Bytes)); err != nil {
+			return sqlc.Episode{}, false, webhookCommitMetric{}, err
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.Episode{}, false, webhookCommitMetric{}, err
+	}
 	episode, err := queries.LockLiveEpisodeForUpdate(ctx, sqlc.LockLiveEpisodeForUpdateParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
 	if err == nil {
 		return episode, false, webhookCommitMetric{}, nil

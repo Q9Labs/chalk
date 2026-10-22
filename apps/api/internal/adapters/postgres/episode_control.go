@@ -158,6 +158,25 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 		}
 		return nil
 	})
+	if err != nil {
+		return count, err
+	}
+	// Deadline claims lock Episodes first. Release those locks before admission
+	// expiry takes Sync's canonical control-before-Episode lock order.
+	var outcomes []uncollectedAdmissionOutcome
+	err = r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		expired, committedOutcomes, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(count))
+		if err == nil {
+			count += expired
+			outcomes = committedOutcomes
+		}
+		return err
+	})
+	if err == nil {
+		for _, outcome := range outcomes {
+			outcome.record()
+		}
+	}
 	return count, err
 }
 

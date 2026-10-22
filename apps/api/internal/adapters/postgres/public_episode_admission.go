@@ -1,0 +1,266 @@
+package postgres
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
+
+// Public admission records only associate an authenticated arrival with the
+// canonical Episode request. Sync owns admission, denial, and expiry.
+func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
+	arrival, err := r.GetArrival(ctx, request.ArrivalHandle)
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, err
+	}
+	var result publicinvites.AdmissionRequest
+	var commitMetric webhookCommitMetric
+	err = r.lifecycle.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		if r.lifecycle.tenantLimits.AppliesTo(arrival.TenantID) && r.lifecycle.tenantLimits.MaxLiveEpisodes > 0 {
+			if _, err := queries.LockTenantMediaLimits(ctx, uuid(arrival.TenantID)); err != nil {
+				return fmt.Errorf("lock public admission tenant limits: %w", err)
+			}
+		}
+		invite, err := queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: uuid(arrival.TenantID), SpaceID: uuid(arrival.SpaceID)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return publicinvites.ErrArrivalUnavailable
+		}
+		if err != nil {
+			return fmt.Errorf("lock public admission invite: %w", err)
+		}
+		space, err := queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: uuid(arrival.TenantID), ID: uuid(arrival.SpaceID)})
+		if err != nil {
+			return fmt.Errorf("lock public admission Space: %w", err)
+		}
+		if space.ArchivedAt.Valid {
+			return publicinvites.ErrInviteUnavailable
+		}
+		// The Space lock serializes creation. Resolve a retry before ensuring a
+		// live Episode: its original Episode may already have ended.
+		existing, err := queries.GetSpacePublicAdmissionRequestForArrival(ctx, sqlc.GetSpacePublicAdmissionRequestForArrivalParams{TenantID: uuid(arrival.TenantID), SpaceID: uuid(arrival.SpaceID), ArrivalHandle: uuid(arrival.ArrivalHandle)})
+		if err == nil {
+			result = mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(existing))
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		episode, _, metric, err := r.lifecycle.ensurePublicLiveEpisode(ctx, queries, tx, arrival.TenantID, arrival.SpaceID, space)
+		if err != nil {
+			return err
+		}
+		commitMetric = metric
+		if episode.Status != episodes.EpisodeStatusActive {
+			return episodes.ErrEpisodeNotActive
+		}
+		current, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
+		if err != nil {
+			return fmt.Errorf("lock public admission arrival: %w", err)
+		}
+		// A previous API can commit its arrival-first INSERT while we wait on
+		// this arrival. Recheck before creating an unbound canonical request.
+		existing, err = queries.GetSpacePublicAdmissionRequestForArrival(ctx, sqlc.GetSpacePublicAdmissionRequestForArrivalParams{TenantID: current.TenantID, SpaceID: current.SpaceID, ArrivalHandle: current.ArrivalHandle})
+		if err == nil {
+			result = mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(existing))
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return publicinvites.ErrArrivalUnavailable
+		}
+		config, err := episodeConfig(episode.ConfigSnapshot)
+		if err != nil {
+			return err
+		}
+		capabilities, ok := config.Roles[publicinvites.PublicRoleCollaborator]
+		if !ok {
+			return episodes.ErrInvalidRole
+		}
+		participantID, err := utilities.NewID()
+		if err != nil {
+			return err
+		}
+		input := episodes.AdmitParticipantInput{
+			TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: utilities.IDFromBytes(episode.ID.Bytes),
+			ParticipantID: participantID, Name: arrival.DisplayName, Role: publicinvites.PublicRoleCollaborator,
+			Request: episodes.Request{Key: arrival.IdempotencyKey, Fingerprint: arrival.IdempotencyFingerprint},
+		}
+		var admission episodes.Admission
+		if err := createKnockAdmission(ctx, queries, tx, input, episode, capabilities, episodes.ParticipantJoinedPayload(participantID, arrival.DisplayName, input.Role), &admission); err != nil {
+			return err
+		}
+		row, err := queries.CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{
+			RequestHandle: uuid(admission.AdmissionRequest.ID), ArrivalHandle: current.ArrivalHandle,
+			TenantID: current.TenantID, SpaceID: current.SpaceID, DisplayName: arrival.DisplayName,
+			RequestedAt: timestamptz(&request.RequestedAt), ExpiresAt: timestamptz(&admission.AdmissionRequest.ExpiresAt),
+		})
+		if err != nil {
+			return fmt.Errorf("associate public arrival with Episode admission: %w", err)
+		}
+		result = mapPublicAdmissionRequest(row)
+		return nil
+	})
+	if err == nil {
+		commitMetric.Record(ctx)
+	}
+	return result, err
+}
+
+func (r PublicInviteRepository) GetAdmissionRequestForArrival(ctx context.Context, arrival publicinvites.Arrival) (publicinvites.AdmissionRequest, error) {
+	row, err := r.queries.GetSpacePublicAdmissionRequestForArrival(ctx, sqlc.GetSpacePublicAdmissionRequestForArrivalParams{TenantID: uuid(arrival.TenantID), SpaceID: uuid(arrival.SpaceID), ArrivalHandle: uuid(arrival.ArrivalHandle)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return publicinvites.AdmissionRequest{}, publicinvites.ErrAdmissionRequestNotFound
+	}
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public arrival admission: %w", err)
+	}
+	return r.withAdmissionBinding(ctx, mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(row)))
+}
+
+func (r PublicInviteRepository) withAdmissionBinding(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
+	binding, err := r.queries.GetPublicAdmissionBinding(ctx, sqlc.GetPublicAdmissionBindingParams{TenantID: uuid(request.TenantID), SpaceID: uuid(request.SpaceID), RequestHandle: uuid(request.RequestHandle)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return request, nil // A request created before canonical admission was wired.
+	}
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, fmt.Errorf("get public admission binding: %w", err)
+	}
+	request.Binding = &publicinvites.AdmissionBinding{EpisodeID: utilities.IDFromBytes(binding.EpisodeID.Bytes), ParticipantID: utilities.IDFromBytes(binding.ParticipantID.Bytes), ParticipantGeneration: binding.Generation}
+	return request, nil
+}
+
+func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, input publicinvites.DecideAdmissionRequestInput) (publicinvites.AdmissionRequest, publicinvites.Arrival, error) {
+	request, err := r.GetAdmissionRequest(ctx, input.TenantID, input.SpaceID, input.RequestHandle)
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, publicinvites.Arrival{}, err
+	}
+	arrival, err := r.GetArrival(ctx, request.ArrivalHandle)
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, publicinvites.Arrival{}, err
+	}
+	var legacy bool
+	err = r.lifecycle.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		// Match Sync's lock order: control, Episode, admission request.
+		live, err := queries.GetPublicEpisodeAdmission(ctx, sqlc.GetPublicEpisodeAdmissionParams{TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			legacy = true
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		episodeID := utilities.IDFromBytes(live.EpisodeID.Bytes)
+		// Arrival creation holds the invite while its Space foreign key is
+		// checked, so take the invite before the Space here too.
+		invite, err := queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: live.TenantID, SpaceID: live.SpaceID})
+		if err != nil {
+			return err
+		}
+		space, err := queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: live.TenantID, ID: live.SpaceID})
+		if err != nil {
+			return err
+		}
+		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, episodeID); err != nil {
+			return err
+		}
+		episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, episodeID)
+		if err != nil {
+			return err
+		}
+		live, err = queries.LockPublicEpisodeAdmission(ctx, sqlc.LockPublicEpisodeAdmissionParams{TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle)})
+		if err != nil {
+			return err
+		}
+		if live.Status != "pending" {
+			if (live.Status == "admitted" && input.Decision == publicinvites.DecisionApprove) || (live.Status == "denied" && input.Decision == publicinvites.DecisionDeny) {
+				return nil
+			}
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+		operationName := "admit_participant"
+		if input.Decision == publicinvites.DecisionDeny {
+			operationName = "deny_admission"
+		}
+		if live.DecisionExternalOperationID.Valid {
+			name, err := queries.GetAdmissionDecisionOperationName(ctx, sqlc.GetAdmissionDecisionOperationNameParams{TenantID: live.TenantID, EpisodeID: live.EpisodeID, ExternalOperationID: live.DecisionExternalOperationID})
+			if err != nil {
+				return err
+			}
+			if name != operationName {
+				return publicinvites.ErrAdmissionRequestTerminal
+			}
+			return nil
+		}
+		// Previous APIs lock the public request before the arrival when deciding.
+		if _, err := queries.LockSpacePublicAdmissionRequest(ctx, sqlc.LockSpacePublicAdmissionRequestParams{TenantID: live.TenantID, SpaceID: live.SpaceID, RequestHandle: uuid(input.RequestHandle)}); err != nil {
+			return err
+		}
+		currentArrival, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
+		if err != nil {
+			return err
+		}
+		valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, episode, time.Now())
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+
+		if !live.ExpiresAt.Time.After(time.Now()) {
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+		payload, err := json.Marshal(struct {
+			ID string `json:"admissionRequestId"`
+		}{input.RequestHandle.String()})
+		if err != nil {
+			return err
+		}
+		key := input.RequestKey
+		if key == "" {
+			key = input.RequestHandle.String()
+		}
+		operation, err := createOrRetryAdmissionDecision(ctx, queries, tx, tenantExternalOperationInput{
+			TenantID: input.TenantID, SpaceID: input.SpaceID, EpisodeID: episodeID, OperationName: operationName,
+			Request: episodes.Request{Key: key, Fingerprint: sha256.Sum256(payload)}, Payload: payload,
+			JourneyName: "participant.public_admission_decided",
+		})
+		if err != nil {
+			return err
+		}
+		reserved, err := queries.ReserveEpisodeAdmissionDecision(ctx, sqlc.ReserveEpisodeAdmissionDecisionParams{TenantID: live.TenantID, SpaceID: live.SpaceID, EpisodeID: live.EpisodeID, AdmissionRequestID: live.AdmissionRequestID, ExternalOperationID: operation.ExternalOperationID})
+		if err != nil {
+			return err
+		}
+		if reserved != 1 {
+			return publicinvites.ErrAdmissionRequestTerminal
+		}
+		return queries.RecordPublicAdmissionDecision(ctx, sqlc.RecordPublicAdmissionDecisionParams{
+			TenantID: live.TenantID, SpaceID: live.SpaceID, RequestHandle: uuid(input.RequestHandle),
+			DecidedBy: uuid(input.ActorID), DecisionRequestKey: optionalText(key),
+		})
+	})
+	if err != nil {
+		return publicinvites.AdmissionRequest{}, publicinvites.Arrival{}, err
+	}
+	if legacy {
+		return r.decideLegacyAdmissionRequest(ctx, input)
+	}
+	request, err = r.GetAdmissionRequest(ctx, input.TenantID, input.SpaceID, input.RequestHandle)
+	return request, arrival, err
+}

@@ -13034,6 +13034,12 @@
       "PublicAdmissionRequest": {
         "additionalProperties": false,
         "properties": {
+          "decision_action": {
+            "type": "string"
+          },
+          "decision_state": {
+            "type": "string"
+          },
           "display_name": {
             "type": "string"
           },
@@ -13050,7 +13056,7 @@
             "type": "string"
           }
         },
-        "required": ["display_name", "expires_at", "request_handle", "requested_at", "state"],
+        "required": ["decision_state", "display_name", "expires_at", "request_handle", "requested_at", "state"],
         "type": "object"
       },
       "PublicAdmissionRequestPage": {

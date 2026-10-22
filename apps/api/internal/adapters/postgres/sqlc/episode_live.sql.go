@@ -77,6 +77,40 @@ func (q *Queries) CreateDashboardLifecycleParticipant(ctx context.Context, arg C
 	return i, err
 }
 
+const getLiveEpisodeForPublicJoin = `-- name: GetLiveEpisodeForPublicJoin :one
+select id, status, metadata, space_id, tenant_id, created_by_user_id, started_at, ended_at, config_snapshot, end_reason, deadline_at, deadline_generation, updated_at, created_at from episodes
+where tenant_id = $1 and space_id = $2
+  and status in ('active', 'ending')
+order by created_at desc, id desc limit 1
+`
+
+type GetLiveEpisodeForPublicJoinParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	SpaceID  pgtype.UUID `json:"space_id"`
+}
+
+func (q *Queries) GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEpisodeForPublicJoinParams) (Episode, error) {
+	row := q.db.QueryRow(ctx, getLiveEpisodeForPublicJoin, arg.TenantID, arg.SpaceID)
+	var i Episode
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.Metadata,
+		&i.SpaceID,
+		&i.TenantID,
+		&i.CreatedByUserID,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.ConfigSnapshot,
+		&i.EndReason,
+		&i.DeadlineAt,
+		&i.DeadlineGeneration,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const lockDashboardJoinIntentForUpdate = `-- name: LockDashboardJoinIntentForUpdate :one
 select tenant_id, space_id, episode_id, lifecycle_intent_id, request_key, request_fingerprint, intent_name, participant_id, participant_generation, payload, status, terminal_reason, applied_event_id, applied_revision, attempt_count, last_error_code, next_attempt_at, created_at, completed_at, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id
 from sync_lifecycle_intents

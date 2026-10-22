@@ -31,12 +31,23 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
 
   def finalize_admission_request do
     """
-    update sync_admission_requests
-    set status = $5, completed_at = now()
-    where tenant_id = $1 and space_id = $2 and episode_id = $3
-      and admission_request_id = $4 and status = 'pending'
-      and decision_external_operation_id = $6
-    returning participant_id
+    with decided as (
+      update sync_admission_requests
+      set status = $5, completed_at = now()
+      where tenant_id = $1 and space_id = $2 and episode_id = $3
+        and admission_request_id = $4 and status = 'pending'
+        and decision_external_operation_id = $6
+      returning admission_request_id, participant_id, status, completed_at
+    ), projected as (
+      update space_public_admission_requests public
+      set state = case when decided.status = 'admitted' then 'approved' else decided.status end,
+          decided_at = decided.completed_at
+      from decided
+      where public.tenant_id = $1 and public.space_id = $2
+        and public.request_handle = decided.admission_request_id and public.state = 'pending'
+      returning public.request_handle
+    )
+    select participant_id from decided
     """
   end
 
@@ -101,9 +112,17 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
 
   def complete_external_episode_admissions do
     """
-    update sync_admission_requests
-    set status = 'expired', decision_external_operation_id = $4, completed_at = now()
-    where tenant_id = $1 and space_id = $2 and episode_id = $3 and status = 'pending'
+    with expired as (
+      update sync_admission_requests
+      set status = 'expired', decision_external_operation_id = $4, completed_at = now()
+      where tenant_id = $1 and space_id = $2 and episode_id = $3 and status = 'pending'
+      returning admission_request_id, completed_at
+    )
+    update space_public_admission_requests public
+    set state = 'expired', decided_at = expired.completed_at
+    from expired
+    where public.tenant_id = $1 and public.space_id = $2
+      and public.request_handle = expired.admission_request_id and public.state = 'pending'
     """
   end
 

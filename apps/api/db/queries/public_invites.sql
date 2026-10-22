@@ -1,3 +1,10 @@
+-- name: LockTenantSpaceForAdmission :one
+-- Serialize admission and policy changes without blocking the previous API's
+-- arrival-first INSERT, which needs a foreign-key KEY SHARE lock on this Space.
+select * from spaces
+where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id)
+for no key update;
+
 -- name: GetSpacePublicInvite :one
 select tenant_id, space_id, handle, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
@@ -167,23 +174,53 @@ returning arrival_handle, tenant_id, space_id, invite_handle, invite_generation,
        terminal_reason, created_at, updated_at, terminal_at;
 
 -- name: ListPendingSpacePublicAdmissionRequests :many
-select request_handle, arrival_handle, tenant_id, space_id, display_name, state,
-       requested_at, expires_at, decided_at, decided_by, decision_request_key
-from space_public_admission_requests
-where tenant_id = sqlc.arg(tenant_id)
-  and space_id = sqlc.arg(space_id)
-  and (not sqlc.arg(state_set)::boolean or state = sqlc.arg(state)::text)
-  and (not sqlc.arg(state_set)::boolean or state <> 'pending' or expires_at > now())
-order by requested_at, request_handle
+
+select sqlc.embed(public),
+       (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
+from space_public_admission_requests public
+left join sync_admission_requests live
+  on live.tenant_id = public.tenant_id and live.space_id = public.space_id
+  and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
+where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
+  and (not sqlc.arg(state_set)::boolean or public.state = 'pending')
+  and (not sqlc.arg(state_set)::boolean or sqlc.arg(state)::text <> 'pending' or public.expires_at > now())
+  and (not sqlc.arg(state_set)::boolean or (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text = sqlc.arg(state)::text)
+order by public.requested_at, public.request_handle
 limit sqlc.arg(page_size)::integer;
 
 -- name: GetSpacePublicAdmissionRequest :one
-select request_handle, arrival_handle, tenant_id, space_id, display_name, state,
-       requested_at, expires_at, decided_at, decided_by, decision_request_key
-from space_public_admission_requests
-where tenant_id = sqlc.arg(tenant_id)
-  and space_id = sqlc.arg(space_id)
-  and request_handle = sqlc.arg(request_handle);
+select sqlc.embed(public),
+       (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
+from space_public_admission_requests public
+left join sync_admission_requests live
+  on live.tenant_id = public.tenant_id and live.space_id = public.space_id
+  and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
+where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
+  and public.request_handle = sqlc.arg(request_handle);
 
 -- name: LockSpacePublicAdmissionRequest :one
 select request_handle, arrival_handle, tenant_id, space_id, display_name, state,
@@ -218,6 +255,12 @@ where tenant_id = sqlc.arg(tenant_id)
   and request_handle = sqlc.arg(request_handle)
 returning request_handle, arrival_handle, tenant_id, space_id, display_name, state,
           requested_at, expires_at, decided_at, decided_by, decision_request_key;
+
+-- name: RecordPublicAdmissionDecision :exec
+update space_public_admission_requests
+set decided_by = sqlc.narg(decided_by), decision_request_key = sqlc.narg(decision_request_key)
+where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
+  and request_handle = sqlc.arg(request_handle) and state = 'pending';
 
 -- name: ListDueAutoSpaceLifecycles :many
 with reclaim_expired_claims as (
@@ -335,3 +378,50 @@ where tenant_id = sqlc.arg(tenant_id)
 returning tenant_id, space_id, deadline_at, creator_arrival_handle, state,
           claim_expires_at, next_retry_at, retry_count, last_error_family, archive_completed_at, journey_id,
           created_at, updated_at;
+
+-- name: GetSpacePublicAdmissionRequestForArrival :one
+select sqlc.embed(public),
+       (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
+from space_public_admission_requests public
+left join sync_admission_requests live
+  on live.tenant_id = public.tenant_id and live.space_id = public.space_id
+  and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
+where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
+  and public.arrival_handle = sqlc.arg(arrival_handle);
+
+-- name: LockPublicEpisodeAdmission :one
+select live.*
+from sync_admission_requests live
+join space_public_admission_requests public
+  on public.tenant_id = live.tenant_id and public.space_id = live.space_id
+  and public.request_handle = live.admission_request_id
+where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
+  and public.request_handle = sqlc.arg(request_handle)
+for update of live;
+
+-- name: GetPublicEpisodeAdmission :one
+select live.*
+from sync_admission_requests live
+join space_public_admission_requests public
+  on public.tenant_id = live.tenant_id and public.space_id = live.space_id
+  and public.request_handle = live.admission_request_id
+where public.tenant_id = sqlc.arg(tenant_id) and public.space_id = sqlc.arg(space_id)
+  and public.request_handle = sqlc.arg(request_handle);
+
+-- name: GetPublicAdmissionBinding :one
+select live.episode_id, live.participant_id, participants.generation
+from sync_admission_requests live
+join participants on participants.tenant_id = live.tenant_id and participants.space_id = live.space_id
+  and participants.episode_id = live.episode_id and participants.id = live.participant_id
+where live.tenant_id = sqlc.arg(tenant_id) and live.space_id = sqlc.arg(space_id)
+  and live.admission_request_id = sqlc.arg(request_handle);

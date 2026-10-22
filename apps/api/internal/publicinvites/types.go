@@ -160,7 +160,25 @@ const (
 	AdmissionRequestInvalidated AdmissionRequestState = "invalidated"
 )
 
+type AdmissionBinding struct {
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+}
+
+type AdmissionDecisionState string
+
+const (
+	AdmissionDecisionNone      AdmissionDecisionState = "none"
+	AdmissionDecisionInFlight  AdmissionDecisionState = "in_flight"
+	AdmissionDecisionRetryable AdmissionDecisionState = "retryable"
+)
+
 type AdmissionRequest struct {
+	DecisionState  AdmissionDecisionState
+	DecisionAction AdmissionDecision
+
+	Binding       *AdmissionBinding
 	RequestHandle utilities.ID
 	ArrivalHandle utilities.ID
 	TenantID      utilities.ID
@@ -234,6 +252,7 @@ type CreateArrivalResult struct {
 }
 
 type UpdateArrivalStateInput struct {
+	RequirePending          bool
 	TenantID                utilities.ID
 	ArrivalHandle           utilities.ID
 	State                   ArrivalState
@@ -303,6 +322,8 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
+	RequireKnock           bool
+	Admission              *AdmissionBinding
 	Arrival                Arrival
 	MediaProof             string
 	ReplaceMediaConnection bool

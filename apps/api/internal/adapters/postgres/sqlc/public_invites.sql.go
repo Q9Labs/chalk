@@ -307,13 +307,91 @@ func (q *Queries) GetAutoSpaceLifecycle(ctx context.Context, arg GetAutoSpaceLif
 	return i, err
 }
 
+const getPublicAdmissionBinding = `-- name: GetPublicAdmissionBinding :one
+select live.episode_id, live.participant_id, participants.generation
+from sync_admission_requests live
+join participants on participants.tenant_id = live.tenant_id and participants.space_id = live.space_id
+  and participants.episode_id = live.episode_id and participants.id = live.participant_id
+where live.tenant_id = $1 and live.space_id = $2
+  and live.admission_request_id = $3
+`
+
+type GetPublicAdmissionBindingParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	RequestHandle pgtype.UUID `json:"request_handle"`
+}
+
+type GetPublicAdmissionBindingRow struct {
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+	Generation    int64       `json:"generation"`
+}
+
+func (q *Queries) GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error) {
+	row := q.db.QueryRow(ctx, getPublicAdmissionBinding, arg.TenantID, arg.SpaceID, arg.RequestHandle)
+	var i GetPublicAdmissionBindingRow
+	err := row.Scan(&i.EpisodeID, &i.ParticipantID, &i.Generation)
+	return i, err
+}
+
+const getPublicEpisodeAdmission = `-- name: GetPublicEpisodeAdmission :one
+select live.tenant_id, live.space_id, live.episode_id, live.admission_request_id, live.request_key, live.request_fingerprint, live.participant_id, live.display_name, live.role, live.status, live.decision_external_operation_id, live.requested_at, live.expires_at, live.completed_at
+from sync_admission_requests live
+join space_public_admission_requests public
+  on public.tenant_id = live.tenant_id and public.space_id = live.space_id
+  and public.request_handle = live.admission_request_id
+where public.tenant_id = $1 and public.space_id = $2
+  and public.request_handle = $3
+`
+
+type GetPublicEpisodeAdmissionParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	RequestHandle pgtype.UUID `json:"request_handle"`
+}
+
+func (q *Queries) GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error) {
+	row := q.db.QueryRow(ctx, getPublicEpisodeAdmission, arg.TenantID, arg.SpaceID, arg.RequestHandle)
+	var i SyncAdmissionRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AdmissionRequestID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.ParticipantID,
+		&i.DisplayName,
+		&i.Role,
+		&i.Status,
+		&i.DecisionExternalOperationID,
+		&i.RequestedAt,
+		&i.ExpiresAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const getSpacePublicAdmissionRequest = `-- name: GetSpacePublicAdmissionRequest :one
-select request_handle, arrival_handle, tenant_id, space_id, display_name, state,
-       requested_at, expires_at, decided_at, decided_by, decision_request_key
-from space_public_admission_requests
-where tenant_id = $1
-  and space_id = $2
-  and request_handle = $3
+select public.request_handle, public.arrival_handle, public.tenant_id, public.space_id, public.display_name, public.state, public.requested_at, public.expires_at, public.decided_at, public.decided_by, public.decision_request_key,
+       (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
+from space_public_admission_requests public
+left join sync_admission_requests live
+  on live.tenant_id = public.tenant_id and live.space_id = public.space_id
+  and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
+where public.tenant_id = $1 and public.space_id = $2
+  and public.request_handle = $3
 `
 
 type GetSpacePublicAdmissionRequestParams struct {
@@ -322,21 +400,91 @@ type GetSpacePublicAdmissionRequestParams struct {
 	RequestHandle pgtype.UUID `json:"request_handle"`
 }
 
-func (q *Queries) GetSpacePublicAdmissionRequest(ctx context.Context, arg GetSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error) {
+type GetSpacePublicAdmissionRequestRow struct {
+	SpacePublicAdmissionRequest SpacePublicAdmissionRequest `json:"space_public_admission_request"`
+	EffectiveState              string                      `json:"effective_state"`
+	AdmissionStatus             string                      `json:"admission_status"`
+	DecisionExternalOperationID pgtype.UUID                 `json:"decision_external_operation_id"`
+	DecisionOperation           string                      `json:"decision_operation"`
+}
+
+func (q *Queries) GetSpacePublicAdmissionRequest(ctx context.Context, arg GetSpacePublicAdmissionRequestParams) (GetSpacePublicAdmissionRequestRow, error) {
 	row := q.db.QueryRow(ctx, getSpacePublicAdmissionRequest, arg.TenantID, arg.SpaceID, arg.RequestHandle)
-	var i SpacePublicAdmissionRequest
+	var i GetSpacePublicAdmissionRequestRow
 	err := row.Scan(
-		&i.RequestHandle,
-		&i.ArrivalHandle,
-		&i.TenantID,
-		&i.SpaceID,
-		&i.DisplayName,
-		&i.State,
-		&i.RequestedAt,
-		&i.ExpiresAt,
-		&i.DecidedAt,
-		&i.DecidedBy,
-		&i.DecisionRequestKey,
+		&i.SpacePublicAdmissionRequest.RequestHandle,
+		&i.SpacePublicAdmissionRequest.ArrivalHandle,
+		&i.SpacePublicAdmissionRequest.TenantID,
+		&i.SpacePublicAdmissionRequest.SpaceID,
+		&i.SpacePublicAdmissionRequest.DisplayName,
+		&i.SpacePublicAdmissionRequest.State,
+		&i.SpacePublicAdmissionRequest.RequestedAt,
+		&i.SpacePublicAdmissionRequest.ExpiresAt,
+		&i.SpacePublicAdmissionRequest.DecidedAt,
+		&i.SpacePublicAdmissionRequest.DecidedBy,
+		&i.SpacePublicAdmissionRequest.DecisionRequestKey,
+		&i.EffectiveState,
+		&i.AdmissionStatus,
+		&i.DecisionExternalOperationID,
+		&i.DecisionOperation,
+	)
+	return i, err
+}
+
+const getSpacePublicAdmissionRequestForArrival = `-- name: GetSpacePublicAdmissionRequestForArrival :one
+select public.request_handle, public.arrival_handle, public.tenant_id, public.space_id, public.display_name, public.state, public.requested_at, public.expires_at, public.decided_at, public.decided_by, public.decision_request_key,
+       (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
+from space_public_admission_requests public
+left join sync_admission_requests live
+  on live.tenant_id = public.tenant_id and live.space_id = public.space_id
+  and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
+where public.tenant_id = $1 and public.space_id = $2
+  and public.arrival_handle = $3
+`
+
+type GetSpacePublicAdmissionRequestForArrivalParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	ArrivalHandle pgtype.UUID `json:"arrival_handle"`
+}
+
+type GetSpacePublicAdmissionRequestForArrivalRow struct {
+	SpacePublicAdmissionRequest SpacePublicAdmissionRequest `json:"space_public_admission_request"`
+	EffectiveState              string                      `json:"effective_state"`
+	AdmissionStatus             string                      `json:"admission_status"`
+	DecisionExternalOperationID pgtype.UUID                 `json:"decision_external_operation_id"`
+	DecisionOperation           string                      `json:"decision_operation"`
+}
+
+func (q *Queries) GetSpacePublicAdmissionRequestForArrival(ctx context.Context, arg GetSpacePublicAdmissionRequestForArrivalParams) (GetSpacePublicAdmissionRequestForArrivalRow, error) {
+	row := q.db.QueryRow(ctx, getSpacePublicAdmissionRequestForArrival, arg.TenantID, arg.SpaceID, arg.ArrivalHandle)
+	var i GetSpacePublicAdmissionRequestForArrivalRow
+	err := row.Scan(
+		&i.SpacePublicAdmissionRequest.RequestHandle,
+		&i.SpacePublicAdmissionRequest.ArrivalHandle,
+		&i.SpacePublicAdmissionRequest.TenantID,
+		&i.SpacePublicAdmissionRequest.SpaceID,
+		&i.SpacePublicAdmissionRequest.DisplayName,
+		&i.SpacePublicAdmissionRequest.State,
+		&i.SpacePublicAdmissionRequest.RequestedAt,
+		&i.SpacePublicAdmissionRequest.ExpiresAt,
+		&i.SpacePublicAdmissionRequest.DecidedAt,
+		&i.SpacePublicAdmissionRequest.DecidedBy,
+		&i.SpacePublicAdmissionRequest.DecisionRequestKey,
+		&i.EffectiveState,
+		&i.AdmissionStatus,
+		&i.DecisionExternalOperationID,
+		&i.DecisionOperation,
 	)
 	return i, err
 }
@@ -644,14 +792,32 @@ func (q *Queries) ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAut
 }
 
 const listPendingSpacePublicAdmissionRequests = `-- name: ListPendingSpacePublicAdmissionRequests :many
-select request_handle, arrival_handle, tenant_id, space_id, display_name, state,
-       requested_at, expires_at, decided_at, decided_by, decision_request_key
-from space_public_admission_requests
-where tenant_id = $1
-  and space_id = $2
-  and (not $3::boolean or state = $4::text)
-  and (not $3::boolean or state <> 'pending' or expires_at > now())
-order by requested_at, request_handle
+
+select public.request_handle, public.arrival_handle, public.tenant_id, public.space_id, public.display_name, public.state, public.requested_at, public.expires_at, public.decided_at, public.decided_by, public.decision_request_key,
+       (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text as effective_state,
+       coalesce(live.status, '')::text as admission_status,
+       live.decision_external_operation_id,
+       coalesce(operation.operation_name, '')::text as decision_operation
+from space_public_admission_requests public
+left join sync_admission_requests live
+  on live.tenant_id = public.tenant_id and live.space_id = public.space_id
+  and live.admission_request_id = public.request_handle
+left join sync_external_operations operation
+  on operation.tenant_id = live.tenant_id and operation.episode_id = live.episode_id
+  and operation.external_operation_id = live.decision_external_operation_id
+where public.tenant_id = $1 and public.space_id = $2
+  and (not $3::boolean or public.state = 'pending')
+  and (not $3::boolean or $4::text <> 'pending' or public.expires_at > now())
+  and (not $3::boolean or (case when live.status = 'admitted' then 'approved'
+             when live.status = 'denied' then 'denied'
+             when live.status = 'expired' then 'expired'
+             when live.admission_request_id is null and public.state = 'pending' and public.expires_at <= now() then 'expired'
+             else public.state end)::text = $4::text)
+order by public.requested_at, public.request_handle
 limit $5::integer
 `
 
@@ -663,7 +829,15 @@ type ListPendingSpacePublicAdmissionRequestsParams struct {
 	PageSize int32       `json:"page_size"`
 }
 
-func (q *Queries) ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]SpacePublicAdmissionRequest, error) {
+type ListPendingSpacePublicAdmissionRequestsRow struct {
+	SpacePublicAdmissionRequest SpacePublicAdmissionRequest `json:"space_public_admission_request"`
+	EffectiveState              string                      `json:"effective_state"`
+	AdmissionStatus             string                      `json:"admission_status"`
+	DecisionExternalOperationID pgtype.UUID                 `json:"decision_external_operation_id"`
+	DecisionOperation           string                      `json:"decision_operation"`
+}
+
+func (q *Queries) ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]ListPendingSpacePublicAdmissionRequestsRow, error) {
 	rows, err := q.db.Query(ctx, listPendingSpacePublicAdmissionRequests,
 		arg.TenantID,
 		arg.SpaceID,
@@ -675,21 +849,25 @@ func (q *Queries) ListPendingSpacePublicAdmissionRequests(ctx context.Context, a
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SpacePublicAdmissionRequest
+	var items []ListPendingSpacePublicAdmissionRequestsRow
 	for rows.Next() {
-		var i SpacePublicAdmissionRequest
+		var i ListPendingSpacePublicAdmissionRequestsRow
 		if err := rows.Scan(
-			&i.RequestHandle,
-			&i.ArrivalHandle,
-			&i.TenantID,
-			&i.SpaceID,
-			&i.DisplayName,
-			&i.State,
-			&i.RequestedAt,
-			&i.ExpiresAt,
-			&i.DecidedAt,
-			&i.DecidedBy,
-			&i.DecisionRequestKey,
+			&i.SpacePublicAdmissionRequest.RequestHandle,
+			&i.SpacePublicAdmissionRequest.ArrivalHandle,
+			&i.SpacePublicAdmissionRequest.TenantID,
+			&i.SpacePublicAdmissionRequest.SpaceID,
+			&i.SpacePublicAdmissionRequest.DisplayName,
+			&i.SpacePublicAdmissionRequest.State,
+			&i.SpacePublicAdmissionRequest.RequestedAt,
+			&i.SpacePublicAdmissionRequest.ExpiresAt,
+			&i.SpacePublicAdmissionRequest.DecidedAt,
+			&i.SpacePublicAdmissionRequest.DecidedBy,
+			&i.SpacePublicAdmissionRequest.DecisionRequestKey,
+			&i.EffectiveState,
+			&i.AdmissionStatus,
+			&i.DecisionExternalOperationID,
+			&i.DecisionOperation,
 		); err != nil {
 			return nil, err
 		}
@@ -732,6 +910,45 @@ func (q *Queries) LockAutoSpaceLifecycle(ctx context.Context, arg LockAutoSpaceL
 		&i.JourneyID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockPublicEpisodeAdmission = `-- name: LockPublicEpisodeAdmission :one
+select live.tenant_id, live.space_id, live.episode_id, live.admission_request_id, live.request_key, live.request_fingerprint, live.participant_id, live.display_name, live.role, live.status, live.decision_external_operation_id, live.requested_at, live.expires_at, live.completed_at
+from sync_admission_requests live
+join space_public_admission_requests public
+  on public.tenant_id = live.tenant_id and public.space_id = live.space_id
+  and public.request_handle = live.admission_request_id
+where public.tenant_id = $1 and public.space_id = $2
+  and public.request_handle = $3
+for update of live
+`
+
+type LockPublicEpisodeAdmissionParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	RequestHandle pgtype.UUID `json:"request_handle"`
+}
+
+func (q *Queries) LockPublicEpisodeAdmission(ctx context.Context, arg LockPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error) {
+	row := q.db.QueryRow(ctx, lockPublicEpisodeAdmission, arg.TenantID, arg.SpaceID, arg.RequestHandle)
+	var i SyncAdmissionRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AdmissionRequestID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.ParticipantID,
+		&i.DisplayName,
+		&i.Role,
+		&i.Status,
+		&i.DecisionExternalOperationID,
+		&i.RequestedAt,
+		&i.ExpiresAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -932,6 +1149,44 @@ func (q *Queries) LockSpacePublicInviteByHandle(ctx context.Context, handle []by
 	return i, err
 }
 
+const lockTenantSpaceForAdmission = `-- name: LockTenantSpaceForAdmission :one
+select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at from spaces
+where tenant_id = $1 and id = $2
+for no key update
+`
+
+type LockTenantSpaceForAdmissionParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+// Serialize admission and policy changes without blocking the previous API's
+// arrival-first INSERT, which needs a foreign-key KEY SHARE lock on this Space.
+func (q *Queries) LockTenantSpaceForAdmission(ctx context.Context, arg LockTenantSpaceForAdmissionParams) (Space, error) {
+	row := q.db.QueryRow(ctx, lockTenantSpaceForAdmission, arg.TenantID, arg.ID)
+	var i Space
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.TenantID,
+		&i.Slug,
+		&i.MediaPlane,
+		&i.Metadata,
+		&i.RecurringPolicy,
+		&i.AdmissionPolicy,
+		&i.RecordingPolicy,
+		&i.TranscriptionPolicy,
+		&i.DefaultEpisodeDurationSeconds,
+		&i.MaximumEpisodeDurationSeconds,
+		&i.LingerWindowSeconds,
+		&i.CreatedByUserID,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const markAutoSpaceLifecycleArchived = `-- name: MarkAutoSpaceLifecycleArchived :one
 update auto_space_lifecycles
 set state = 'archived', claim_expires_at = null, archive_completed_at = now(), next_retry_at = null,
@@ -1002,6 +1257,32 @@ func (q *Queries) MarkAutoSpaceLifecycleArchiving(ctx context.Context, arg MarkA
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const recordPublicAdmissionDecision = `-- name: RecordPublicAdmissionDecision :exec
+update space_public_admission_requests
+set decided_by = $1, decision_request_key = $2
+where tenant_id = $3 and space_id = $4
+  and request_handle = $5 and state = 'pending'
+`
+
+type RecordPublicAdmissionDecisionParams struct {
+	DecidedBy          pgtype.UUID `json:"decided_by"`
+	DecisionRequestKey pgtype.Text `json:"decision_request_key"`
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	RequestHandle      pgtype.UUID `json:"request_handle"`
+}
+
+func (q *Queries) RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error {
+	_, err := q.db.Exec(ctx, recordPublicAdmissionDecision,
+		arg.DecidedBy,
+		arg.DecisionRequestKey,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.RequestHandle,
+	)
+	return err
 }
 
 const retryAutoSpaceLifecycle = `-- name: RetryAutoSpaceLifecycle :one

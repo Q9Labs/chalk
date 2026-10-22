@@ -33,6 +33,7 @@ type Repository interface {
 
 	CreateAdmissionRequest(context.Context, AdmissionRequest) (AdmissionRequest, error)
 	GetAdmissionRequest(context.Context, utilities.ID, utilities.ID, utilities.ID) (AdmissionRequest, error)
+	GetAdmissionRequestForArrival(context.Context, Arrival) (AdmissionRequest, error)
 	ListAdmissionRequests(context.Context, utilities.ID, utilities.ID, AdmissionRequestState, int32) ([]AdmissionRequest, error)
 	DecideAdmissionRequest(context.Context, DecideAdmissionRequestInput) (AdmissionRequest, Arrival, error)
 }
@@ -698,8 +699,13 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 	if err != nil {
 		return AdmissionRequest{}, err
 	}
+	if request.Binding != nil || request.State == AdmissionRequestPending {
+		// New requests use Sync's durable decision operation. The guest collects
+		// access only after that operation commits the canonical admission.
+		return request, nil
+	}
 	if decision == DecisionDeny {
-		if arrival.State != ArrivalRejected {
+		if request.State != AdmissionRequestDenied {
 			return AdmissionRequest{}, ErrAdmissionRequestTerminal
 		}
 		return request, nil
@@ -710,6 +716,8 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 	if arrival.State != ArrivalPending {
 		return AdmissionRequest{}, ErrAdmissionRequestTerminal
 	}
+	// Legacy approval allocates a seat, unlike canonical credential collection.
+	// Reject already-revoked requests before that allocation as well as at commit.
 	space, err := r.space.GetPublicSpace(ctx, arrival.TenantID, arrival.SpaceID)
 	if err != nil {
 		return AdmissionRequest{}, err
@@ -727,7 +735,7 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 		}
 		return AdmissionRequest{}, ErrInviteUnavailable
 	}
-	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, RequireKnock: true})
 	if err != nil {
 		return AdmissionRequest{}, err
 	}
@@ -738,12 +746,14 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 		TenantID:              arrival.TenantID,
 		ArrivalHandle:         arrival.ArrivalHandle,
 		State:                 ArrivalAdmitted,
+		RequirePending:        true,
 		EpisodeID:             grant.EpisodeID,
 		ParticipantID:         grant.ParticipantID,
 		ParticipantGeneration: grant.ParticipantGeneration,
 		Provider:              grant.Provider,
 		ProviderSubject:       grant.ProviderSubject,
 	}); err != nil {
+		_ = r.access.DiscardPublicAccess(ctx, grant)
 		return AdmissionRequest{}, err
 	}
 	return request, nil
@@ -1058,19 +1068,39 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		return result, nil
 	}
 	if space.AdmissionMode == AdmissionKnock {
-		request, requestErr := r.service.CreateAdmissionRequest(ctx, CreateAdmissionRequestInput{ArrivalHandle: arrivalResult.Arrival.ArrivalHandle, DisplayName: name})
+		if arrivalResult.Arrival.State != ArrivalPending {
+			result := r.arrivalResult(space, arrivalResult.Arrival)
+			if arrivalResult.Arrival.State == ArrivalAdmitted {
+				result, err = r.resumeAdmittedArrival(ctx, space, arrivalResult.Arrival)
+				if err != nil {
+					return PublicSpaceArrival{}, err
+				}
+			}
+			result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
+			return result, nil
+		}
+		_, requestErr := r.service.CreateAdmissionRequest(ctx, CreateAdmissionRequestInput{ArrivalHandle: arrivalResult.Arrival.ArrivalHandle, DisplayName: name})
+		if errors.Is(requestErr, ErrArrivalUnavailable) {
+			terminal, terminalErr := r.invalidatePendingArrival(ctx, arrivalResult.Arrival)
+			if terminalErr != nil {
+				return PublicSpaceArrival{}, terminalErr
+			}
+			result := r.arrivalResult(space, terminal)
+			result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
+			return result, nil
+		}
 		if requestErr != nil {
 			return PublicSpaceArrival{}, requestErr
 		}
 		result := r.arrivalResult(space, arrivalResult.Arrival)
-		result.RetryAfter = maxRetryAfter(request.ExpiresAt, r.service.now())
+		result.RetryAfter = 2
 		result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
 		return result, nil
 	}
 	return PublicSpaceArrival{}, ErrInviteUnavailable
 }
 
-func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalStatusInput, beforeInvalidate func() error) (PublicSpaceArrival, error) {
+func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalStatusInput, beforeWrite func() error) (PublicSpaceArrival, error) {
 	arrival, err := r.authenticateArrival(ctx, input.ArrivalHandle, input.GuestCredential, input.AccountID)
 	if err != nil {
 		return PublicSpaceArrival{}, err
@@ -1083,12 +1113,15 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	if arrival.State == ArrivalPending && arrival.IdentityMode == IdentityGuest {
+		if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival, beforeWrite); resolved || err != nil {
+			return result, err
+		}
 		valid, validationErr := r.pendingGuestArrivalValid(ctx, arrival, space)
 		if validationErr != nil {
 			return PublicSpaceArrival{}, validationErr
 		}
 		if !valid {
-			if err := beforeInvalidate(); err != nil {
+			if err := beforeWrite(); err != nil {
 				return PublicSpaceArrival{}, err
 			}
 			arrival, validationErr = r.invalidatePendingArrival(ctx, arrival)
@@ -1097,7 +1130,97 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 			}
 		}
 	}
+	if arrival.State == ArrivalAdmitted {
+		if err := beforeWrite(); err != nil {
+			return PublicSpaceArrival{}, err
+		}
+		return r.resumeAdmittedArrival(ctx, space, arrival)
+	}
 	return r.arrivalResult(space, arrival), nil
+}
+
+func (r Runtime) resumeAdmittedArrival(ctx context.Context, space PublicSpace, arrival Arrival) (PublicSpaceArrival, error) {
+	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+	if err != nil {
+		return PublicSpaceArrival{}, err
+	}
+	if err := validateAccessGrant(grant, arrival); err != nil {
+		return PublicSpaceArrival{}, err
+	}
+	result := r.arrivalResult(space, arrival)
+	result.Access = &grant
+	return result, nil
+}
+
+func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace, arrival Arrival, beforeWrite func() error) (PublicSpaceArrival, bool, error) {
+	request, err := r.service.repository.GetAdmissionRequestForArrival(ctx, arrival)
+	if errors.Is(err, ErrAdmissionRequestNotFound) {
+		return PublicSpaceArrival{}, false, nil
+	}
+	if err != nil {
+		return PublicSpaceArrival{}, false, err
+	}
+	switch request.State {
+	case AdmissionRequestApproved, AdmissionRequestDenied, AdmissionRequestExpired, AdmissionRequestInvalidated:
+		if err := beforeWrite(); err != nil {
+			return PublicSpaceArrival{}, false, err
+		}
+	default:
+		return PublicSpaceArrival{}, false, nil
+	}
+	state, reason := ArrivalPending, ""
+	switch request.State {
+	case AdmissionRequestApproved:
+		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding, RequireKnock: true})
+		if errors.Is(err, ErrArrivalUnavailable) {
+			state, reason = ArrivalUnavailable, "admission_episode_ended"
+			break
+		}
+		if err != nil {
+			return PublicSpaceArrival{}, false, err
+		}
+		if err := validateAccessGrant(grant, arrival); err != nil {
+			_ = r.access.DiscardPublicAccess(ctx, grant)
+			return PublicSpaceArrival{}, false, err
+		}
+		admitted, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
+			TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: ArrivalAdmitted, RequirePending: true,
+			EpisodeID: grant.EpisodeID, ParticipantID: grant.ParticipantID, ParticipantGeneration: grant.ParticipantGeneration,
+			Provider: grant.Provider, ProviderSubject: grant.ProviderSubject,
+		})
+		if err != nil {
+			current, readErr := r.service.GetArrival(ctx, arrival.ArrivalHandle)
+			if readErr != nil || current.State != ArrivalAdmitted || current.Provider != grant.Provider || current.ProviderSubject != grant.ProviderSubject {
+				_ = r.access.DiscardPublicAccess(ctx, grant)
+			}
+			if readErr == nil && current.State != ArrivalPending {
+				return r.arrivalResult(space, current), true, nil
+			}
+			if readErr == nil && errors.Is(err, ErrArrivalUnavailable) {
+				state, reason = ArrivalUnavailable, "public_arrival_invalidated"
+				break
+			}
+			return PublicSpaceArrival{}, false, err
+		}
+		RecordAdmissionOutcome(ctx, admitted, "approved")
+		result := r.arrivalResult(space, admitted)
+		result.Access = &grant
+		return result, true, nil
+	case AdmissionRequestDenied:
+		state, reason = ArrivalRejected, "admission_denied"
+	case AdmissionRequestExpired:
+		state, reason = ArrivalUnavailable, "admission_request_expired"
+	case AdmissionRequestInvalidated:
+		state, reason = ArrivalUnavailable, "public_arrival_invalidated"
+	}
+	if state == ArrivalPending {
+		return PublicSpaceArrival{}, false, nil
+	}
+	terminal, err := r.finishPendingArrival(ctx, arrival, state, reason)
+	if err != nil {
+		return PublicSpaceArrival{}, false, err
+	}
+	return r.arrivalResult(space, terminal), true, nil
 }
 
 func (r Runtime) pendingGuestArrivalValid(ctx context.Context, arrival Arrival, space PublicSpace) (bool, error) {
@@ -1121,14 +1244,28 @@ func (r Runtime) pendingGuestArrivalValid(ctx context.Context, arrival Arrival, 
 }
 
 func (r Runtime) invalidatePendingArrival(ctx context.Context, arrival Arrival) (Arrival, error) {
-	updated, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
-		TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle,
-		State: ArrivalUnavailable, Reason: "public_arrival_invalidated",
-	})
-	if err != nil {
-		return Arrival{}, err
+	reason := "public_arrival_invalidated"
+	if !arrival.ExpiresAt.IsZero() && !arrival.ExpiresAt.After(r.service.now()) {
+		reason = "admission_request_expired"
 	}
-	return updated, nil
+	return r.finishPendingArrival(ctx, arrival, ArrivalUnavailable, reason)
+}
+
+func (r Runtime) finishPendingArrival(ctx context.Context, arrival Arrival, state ArrivalState, reason string) (Arrival, error) {
+	updated, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: state, Reason: reason, RequirePending: true})
+	if errors.Is(err, ErrArrivalUnavailable) {
+		current, readErr := r.service.GetArrival(ctx, arrival.ArrivalHandle)
+		if readErr != nil {
+			return Arrival{}, readErr
+		}
+		if current.State != ArrivalPending {
+			return current, nil
+		}
+	}
+	if err == nil {
+		RecordAdmissionOutcome(ctx, updated, reason)
+	}
+	return updated, err
 }
 
 func (r Runtime) Status(ctx context.Context, input PublicInviteArrivalStatusInput, beforeInvalidate func() error) (PublicSpaceArrival, error) {
@@ -1277,6 +1414,9 @@ func (r Runtime) arrivalResult(space PublicSpace, arrival Arrival) PublicSpaceAr
 		Identity:      arrival.IdentityMode,
 		ArrivalHandle: arrival.ArrivalHandle.String(),
 	}
+	if arrival.State == ArrivalPending {
+		result.RetryAfter = 2
+	}
 	presentation := publicSpacePresentation(space)
 	result.Presentation = &presentation
 	return result
@@ -1342,14 +1482,6 @@ func validErrorFamily(value string) bool {
 		}
 	}
 	return true
-}
-
-func maxRetryAfter(deadline, now time.Time) int {
-	remaining := deadline.Sub(now)
-	if remaining <= 0 {
-		return 0
-	}
-	return int((remaining + time.Second - 1) / time.Second)
 }
 
 func decodeGuestCredential(value string) ([]byte, error) {

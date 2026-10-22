@@ -909,6 +909,24 @@ func (q *Queries) EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerSt
 	return i, err
 }
 
+const expireUncollectedPublicArrival = `-- name: ExpireUncollectedPublicArrival :exec
+update space_public_arrivals
+set state = 'unavailable', terminal_at = now(), updated_at = now(),
+    terminal_reason = 'admission_not_collected'
+where tenant_id = $1 and arrival_handle = $2
+  and state = 'pending'
+`
+
+type ExpireUncollectedPublicArrivalParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	ArrivalHandle pgtype.UUID `json:"arrival_handle"`
+}
+
+func (q *Queries) ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error {
+	_, err := q.db.Exec(ctx, expireUncollectedPublicArrival, arg.TenantID, arg.ArrivalHandle)
+	return err
+}
+
 const failPendingTenantControlOperationsForEnd = `-- name: FailPendingTenantControlOperationsForEnd :execrows
 update sync_external_operations
 set
@@ -936,6 +954,25 @@ func (q *Queries) FailPendingTenantControlOperationsForEnd(ctx context.Context, 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getAdmissionDecisionOperationName = `-- name: GetAdmissionDecisionOperationName :one
+select operation_name from sync_external_operations
+where tenant_id = $1 and episode_id = $2
+  and external_operation_id = $3
+`
+
+type GetAdmissionDecisionOperationNameParams struct {
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
+}
+
+func (q *Queries) GetAdmissionDecisionOperationName(ctx context.Context, arg GetAdmissionDecisionOperationNameParams) (string, error) {
+	row := q.db.QueryRow(ctx, getAdmissionDecisionOperationName, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
+	var operation_name string
+	err := row.Scan(&operation_name)
+	return operation_name, err
 }
 
 const getEpisodeCreateRequest = `-- name: GetEpisodeCreateRequest :one
@@ -1054,6 +1091,132 @@ func (q *Queries) GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubje
 		&i.AdmissionLifecycleIntentID,
 	)
 	return i, err
+}
+
+const isAdmissionRequestExpiryDue = `-- name: IsAdmissionRequestExpiryDue :one
+select sync_admission_expiry_due($1::timestamptz, $2::text, now())::boolean as due
+`
+
+type IsAdmissionRequestExpiryDueParams struct {
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	ArrivalState pgtype.Text        `json:"arrival_state"`
+}
+
+func (q *Queries) IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isAdmissionRequestExpiryDue, arg.ExpiresAt, arg.ArrivalState)
+	var due bool
+	err := row.Scan(&due)
+	return due, err
+}
+
+const listDueAdmissionRequests = `-- name: ListDueAdmissionRequests :many
+with candidates as materialized (
+    select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from sync_admission_requests requests
+    left join space_public_admission_requests public
+      on public.tenant_id = requests.tenant_id and public.space_id = requests.space_id
+      and public.request_handle = requests.admission_request_id
+    left join space_public_arrivals arrivals
+      on arrivals.tenant_id = public.tenant_id and arrivals.arrival_handle = public.arrival_handle
+    where requests.status = 'pending' and requests.decision_external_operation_id is null
+      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now())
+    union all
+    select request.tenant_id, request.space_id, request.episode_id, request.admission_request_id, request.request_key, request.request_fingerprint, request.participant_id, request.display_name, request.role, request.status, request.decision_external_operation_id, request.requested_at, request.expires_at, request.completed_at from participants participant
+    cross join lateral (
+        select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from sync_admission_requests requests
+        join space_public_admission_requests public
+          on public.tenant_id = requests.tenant_id and public.space_id = requests.space_id
+          and public.request_handle = requests.admission_request_id
+        join space_public_arrivals arrivals
+          on arrivals.tenant_id = public.tenant_id and arrivals.arrival_handle = public.arrival_handle
+        where requests.tenant_id = participant.tenant_id
+          and requests.episode_id = participant.episode_id
+          and requests.participant_id = participant.id and requests.status = 'admitted'
+          and ((arrivals.state = 'pending'
+            and requests.expires_at <= now() and requests.completed_at <= now() - interval '1 minute')
+            or arrivals.state in ('unavailable', 'rejected'))
+        limit 1
+    ) request
+    where participant.status = 'active'
+)
+select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at, arrivals.arrival_handle as public_arrival_handle,
+       intent.journey_id, intent.producing_trace_id, intent.producing_span_id
+from candidates requests
+left join sync_lifecycle_intents intent on intent.tenant_id = requests.tenant_id
+  and intent.episode_id = requests.episode_id and intent.request_key = requests.request_key
+  and intent.intent_name = 'admission_requested'
+left join space_public_admission_requests public on public.tenant_id = requests.tenant_id
+  and public.space_id = requests.space_id and public.request_handle = requests.admission_request_id
+left join space_public_arrivals arrivals on arrivals.tenant_id = public.tenant_id
+  and arrivals.arrival_handle = public.arrival_handle
+join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id = requests.space_id
+  and episodes.id = requests.episode_id
+join participants on participants.tenant_id = requests.tenant_id and participants.episode_id = requests.episode_id
+  and participants.id = requests.participant_id
+where episodes.status = 'active'
+order by requests.expires_at, requests.admission_request_id
+limit $1::integer
+`
+
+type ListDueAdmissionRequestsRow struct {
+	TenantID                    pgtype.UUID        `json:"tenant_id"`
+	SpaceID                     pgtype.UUID        `json:"space_id"`
+	EpisodeID                   pgtype.UUID        `json:"episode_id"`
+	AdmissionRequestID          pgtype.UUID        `json:"admission_request_id"`
+	RequestKey                  string             `json:"request_key"`
+	RequestFingerprint          []byte             `json:"request_fingerprint"`
+	ParticipantID               pgtype.UUID        `json:"participant_id"`
+	DisplayName                 string             `json:"display_name"`
+	Role                        string             `json:"role"`
+	Status                      string             `json:"status"`
+	DecisionExternalOperationID pgtype.UUID        `json:"decision_external_operation_id"`
+	RequestedAt                 pgtype.Timestamptz `json:"requested_at"`
+	ExpiresAt                   pgtype.Timestamptz `json:"expires_at"`
+	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
+	PublicArrivalHandle         pgtype.UUID        `json:"public_arrival_handle"`
+	JourneyID                   pgtype.UUID        `json:"journey_id"`
+	ProducingTraceID            pgtype.Text        `json:"producing_trace_id"`
+	ProducingSpanID             pgtype.Text        `json:"producing_span_id"`
+}
+
+// Separate pending expiry from admitted cleanup. The lateral lookup starts
+// cleanup at current active seats, never at retained admitted-request history.
+func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listDueAdmissionRequests, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueAdmissionRequestsRow
+	for rows.Next() {
+		var i ListDueAdmissionRequestsRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SpaceID,
+			&i.EpisodeID,
+			&i.AdmissionRequestID,
+			&i.RequestKey,
+			&i.RequestFingerprint,
+			&i.ParticipantID,
+			&i.DisplayName,
+			&i.Role,
+			&i.Status,
+			&i.DecisionExternalOperationID,
+			&i.RequestedAt,
+			&i.ExpiresAt,
+			&i.CompletedAt,
+			&i.PublicArrivalHandle,
+			&i.JourneyID,
+			&i.ProducingTraceID,
+			&i.ProducingSpanID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockActiveParticipantsForTenantEnd = `-- name: LockActiveParticipantsForTenantEnd :many
@@ -1202,6 +1365,47 @@ func (q *Queries) LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDead
 		&i.DeadlineGeneration,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockEpisodeAdmissionRequest = `-- name: LockEpisodeAdmissionRequest :one
+select tenant_id, space_id, episode_id, admission_request_id, request_key, request_fingerprint, participant_id, display_name, role, status, decision_external_operation_id, requested_at, expires_at, completed_at from sync_admission_requests
+where tenant_id = $1 and space_id = $2
+  and episode_id = $3 and admission_request_id = $4
+for update
+`
+
+type LockEpisodeAdmissionRequestParams struct {
+	TenantID           pgtype.UUID `json:"tenant_id"`
+	SpaceID            pgtype.UUID `json:"space_id"`
+	EpisodeID          pgtype.UUID `json:"episode_id"`
+	AdmissionRequestID pgtype.UUID `json:"admission_request_id"`
+}
+
+func (q *Queries) LockEpisodeAdmissionRequest(ctx context.Context, arg LockEpisodeAdmissionRequestParams) (SyncAdmissionRequest, error) {
+	row := q.db.QueryRow(ctx, lockEpisodeAdmissionRequest,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.AdmissionRequestID,
+	)
+	var i SyncAdmissionRequest
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.AdmissionRequestID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.ParticipantID,
+		&i.DisplayName,
+		&i.Role,
+		&i.Status,
+		&i.DecisionExternalOperationID,
+		&i.RequestedAt,
+		&i.ExpiresAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -1827,6 +2031,92 @@ func (q *Queries) MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkT
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const requeueFailedAdmissionDecision = `-- name: RequeueFailedAdmissionDecision :one
+update sync_external_operations
+set status = 'pending', completed_at = null, last_error_code = null,
+    next_attempt_at = now(), attempt_count = 0
+where tenant_id = $1 and episode_id = $2
+  and external_operation_id = $3
+  and operation_name in ('admit_participant', 'deny_admission', 'admission_request_expired')
+  and status = 'failed'
+returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+`
+
+type RequeueFailedAdmissionDecisionParams struct {
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
+}
+
+func (q *Queries) RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error) {
+	row := q.db.QueryRow(ctx, requeueFailedAdmissionDecision, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
+	var i SyncExternalOperation
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.ExternalOperationID,
+		&i.ParentExternalOperationID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.OperationName,
+		&i.ActorParticipantID,
+		&i.ActorGeneration,
+		&i.TargetParticipantID,
+		&i.TargetParticipantGeneration,
+		&i.Source,
+		&i.RecordingID,
+		&i.DeadlineGeneration,
+		&i.JourneyID,
+		&i.ParentJourneyEventID,
+		&i.ProducingTraceID,
+		&i.ProducingSpanID,
+		&i.Payload,
+		&i.Status,
+		&i.FenceActive,
+		&i.AttemptCount,
+		&i.NextAttemptAt,
+		&i.LastErrorCode,
+		&i.AppliedEventID,
+		&i.AppliedRevision,
+		&i.CreatedAt,
+		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
+	)
+	return i, err
+}
+
+const reserveEpisodeAdmissionDecision = `-- name: ReserveEpisodeAdmissionDecision :execrows
+update sync_admission_requests
+set decision_external_operation_id = $1
+where tenant_id = $2 and space_id = $3
+  and episode_id = $4 and admission_request_id = $5
+  and status = 'pending' and decision_external_operation_id is null
+`
+
+type ReserveEpisodeAdmissionDecisionParams struct {
+	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
+	TenantID            pgtype.UUID `json:"tenant_id"`
+	SpaceID             pgtype.UUID `json:"space_id"`
+	EpisodeID           pgtype.UUID `json:"episode_id"`
+	AdmissionRequestID  pgtype.UUID `json:"admission_request_id"`
+}
+
+func (q *Queries) ReserveEpisodeAdmissionDecision(ctx context.Context, arg ReserveEpisodeAdmissionDecisionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveEpisodeAdmissionDecision,
+		arg.ExternalOperationID,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.AdmissionRequestID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const reserveEpisodeCreateRequest = `-- name: ReserveEpisodeCreateRequest :one

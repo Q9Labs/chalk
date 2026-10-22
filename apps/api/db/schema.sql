@@ -518,6 +518,9 @@ create table participants (
 create index participants_sync_active_episode_capacity_idx
     on participants(tenant_id, space_id, episode_id)
     where status in ('joining', 'active', 'leaving');
+create index participants_admission_cleanup_active_idx
+    on participants(tenant_id, episode_id, id)
+    where status = 'active';
 create unique index participants_dashboard_account_episode_idx
     on participants(tenant_id, episode_id, account_id)
     where account_id is not null and status in ('joining', 'active');
@@ -1844,6 +1847,10 @@ create table sync_admission_requests (
 create index sync_admission_requests_pending_idx
     on sync_admission_requests(expires_at, admission_request_id)
     where status = 'pending';
+
+create index sync_admission_requests_admitted_participant_idx
+    on sync_admission_requests(tenant_id, episode_id, participant_id)
+    where status = 'admitted';
 
 create table sync_screen_share_leases (
     tenant_id uuid not null,
@@ -4239,3 +4246,36 @@ create table sync_chat_message_reactions (
         references sync_chat_messages(tenant_id, space_id, message_id) on delete cascade,
     check (emoji in ('👍', '❤️', '😂', '😮', '🎉', '👏', '😀', '😅', '🙏', '🔥', '✅', '👀', '💯', '🤔', '😢', '🙌', '🚀', '👌', '😍', '🤝', '💡', '⭐', '😎', '🥳'))
 );
+
+create function sync_admission_expiry_due(request_expires_at timestamptz, arrival_state text, as_of timestamptz)
+returns boolean
+language sql immutable parallel safe
+as $$
+    select request_expires_at <= as_of
+        or coalesce(arrival_state in ('unavailable', 'rejected', 'left'), false);
+$$;
+
+create function guard_canonical_public_admission_decision()
+returns trigger
+language plpgsql
+as $$
+declare
+    canonical_state text;
+begin
+    select case when status = 'admitted' then 'approved' else status end
+      into canonical_state
+      from sync_admission_requests
+      where tenant_id = new.tenant_id and space_id = new.space_id
+        and admission_request_id = new.request_handle;
+    if found and new.state <> canonical_state then
+        raise exception 'canonical admission decisions are owned by Sync'
+            using errcode = '23514';
+    end if;
+    return new;
+end;
+$$;
+
+create trigger space_public_admission_requests_canonical_decision
+before update of state on space_public_admission_requests
+for each row when (old.state is distinct from new.state)
+execute function guard_canonical_public_admission_decision();

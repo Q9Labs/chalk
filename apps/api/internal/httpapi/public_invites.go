@@ -76,6 +76,9 @@ type publicInviteResponse struct {
 }
 
 type publicAdmissionRequestResponse struct {
+	DecisionState  publicinvites.AdmissionDecisionState `json:"decision_state"`
+	DecisionAction publicinvites.AdmissionDecision      `json:"decision_action,omitempty"`
+
 	RequestHandle string    `json:"request_handle"`
 	DisplayName   string    `json:"display_name"`
 	RequestedAt   time.Time `json:"requested_at"`
@@ -896,7 +899,11 @@ func newPublicInviteResponse(managed publicinvites.ManagedInvite) publicInviteRe
 }
 
 func newPublicAdmissionRequestResponse(request publicinvites.AdmissionRequest) publicAdmissionRequestResponse {
-	return publicAdmissionRequestResponse{RequestHandle: request.RequestHandle.String(), DisplayName: request.DisplayName, RequestedAt: request.RequestedAt, ExpiresAt: request.ExpiresAt, State: string(request.State)}
+	state := request.DecisionState
+	if state == "" {
+		state = publicinvites.AdmissionDecisionNone
+	}
+	return publicAdmissionRequestResponse{DecisionState: state, DecisionAction: request.DecisionAction, RequestHandle: request.RequestHandle.String(), DisplayName: request.DisplayName, RequestedAt: request.RequestedAt, ExpiresAt: request.ExpiresAt, State: string(request.State)}
 }
 
 func newPublicAdmissionRequestPageResponse(page publicinvites.AdmissionRequestPage) publicAdmissionRequestPageResponse {
