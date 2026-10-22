@@ -257,6 +257,8 @@ export function bindFixtureSyncClient(client: FixtureSyncClient) {
     getSnapshot: client.getSnapshot,
     subscribe: client.subscribe,
     start: client.start.bind(client),
+    // The fixture server admits on socket open rather than leasing a seat.
+    confirmEntered: async () => undefined,
     stop: client.stop,
     leave: client.leave,
     setHandRaised: client.setHandRaised,
