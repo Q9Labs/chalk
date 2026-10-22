@@ -291,6 +291,26 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp handle_frame({:hello, _hello}, state), do: protocol_error(:already_authenticated, state)
 
+  defp handle_frame(:entered, %{phase: :live, identity: identity} = state) do
+    case Stateholder.confirm_admission(identity) do
+      {:ok, %{result: result}} when result in [:applied, :already_applied] ->
+        {:push, {:text, encode_with_context(state, ProtocolV1.entered_ack())}, state}
+
+      {:ok, %{result: :superseded}} ->
+        stop(state, 1008, "policy violation", :admission_rejected)
+
+      {:error, reason}
+      when reason in [:stale_participant_generation, :invalid_admission_intent] ->
+        stop(state, 1008, "invalid token", :admission_rejected)
+
+      {outcome, reason} when outcome in [:error, :retryable] ->
+        Logger.warning("sync v1 entered failed: reason=#{reason}")
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+    end
+  end
+
+  defp handle_frame(:entered, state), do: protocol_error(:recovery_required, state)
+
   defp handle_frame(
          {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
          %{
@@ -540,13 +560,12 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp start_registered_recovery(
          state,
          identity,
-         cursor,
+         recovery,
          coordinator,
          collaboration_negotiated,
          collaboration_version
        ) do
-    with {:ok, recovery} <- Stateholder.recover(identity, cursor),
-         :ok <-
+    with :ok <-
            Coordinator.activate_recovery(
              coordinator,
              recovery,
@@ -829,8 +848,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, %{result: result}} when result in [:applied, :already_applied] <-
-           Stateholder.confirm_admission(identity),
+    with {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
@@ -842,14 +860,14 @@ defmodule ChalkSync.Transport.SocketV1 do
       start_registered_recovery(
         state,
         identity,
-        cursor,
+        recovery,
         coordinator,
         negotiated?,
         collaboration_version
       )
     else
-      {:ok, %{result: :superseded}} ->
-        stop(state, 1008, "policy violation", :admission_rejected)
+      {:error, :stale_participant_generation} ->
+        stop(state, 1008, "invalid token", :admission_rejected)
 
       {:error, :invalid_admission_intent} ->
         stop(state, 1008, "policy violation", :admission_rejected)

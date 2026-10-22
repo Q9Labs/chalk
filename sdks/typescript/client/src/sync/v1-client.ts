@@ -76,6 +76,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #snapshotRevision: number | null = null;
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
+  #entryPending = false;
   readonly #requests = new Map<string, RequestDeferred>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
@@ -179,6 +180,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   stop(): void {
     this.#started = false;
+    this.#entryPending = false;
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
@@ -197,6 +199,12 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#remotePublications = [];
     this.#liveTargets.resetLocalMedia();
     this.#emit();
+  }
+  /** Announces completed startup; transport recovery resends until acknowledged. */
+  async confirmEntered(): Promise<void> {
+    this.#requireLive();
+    this.#entryPending = true;
+    this.#send({ type: "entered" });
   }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
@@ -398,7 +406,13 @@ export class V1SyncClient implements V1CollaborationClient {
       }
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
-        this.#inbound = this.#inbound.then(() => this.#disconnected(socket));
+        this.#inbound = this.#inbound.then(() => {
+          if (socket === this.#socket && event.code === 1008) {
+            this.#phase = { phase: "terminal", terminalReason: "access_rejected" };
+            this.#emit();
+          }
+          this.#disconnected(socket);
+        });
       }, 0);
     };
     socket.onerror = () => {
@@ -536,6 +550,10 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "error":
         throw new V1ReplicaError(frame.code);
+      case "entered_ack":
+        this.#requireLive();
+        this.#entryPending = false;
+        return;
       case "pong": {
         this.#requireLive();
         this.#missedHeartbeats = 0;
@@ -706,6 +724,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
+    if (this.#entryPending) this.#send({ type: "entered" });
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();

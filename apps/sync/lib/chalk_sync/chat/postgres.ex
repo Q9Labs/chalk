@@ -268,7 +268,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   defp participant_capabilities_transaction(connection, identity) do
     configure_transaction(connection)
 
-    case lock_authority(connection, identity) do
+    case lock_authority(connection, identity, true) do
       {:ok, profile} -> capability_state(connection, identity, profile)
       {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
     end
@@ -589,13 +589,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     :exit, _reason -> {:error, :dependency_unavailable}
   end
 
-  defp lock_authority(connection, identity) do
+  defp lock_authority(connection, identity, allow_pending \\ false) do
     params =
       episode_params(identity.episode) ++ [uuid(identity.participant_id)]
 
     case Postgrex.query!(connection, SQL.lock_authority(), params).rows do
-      [["active", generation, "active", display_name, _role, capabilities]]
-      when generation == identity.participant_generation and is_binary(display_name) ->
+      [["active", generation, status, display_name, _role, capabilities]]
+      when generation == identity.participant_generation and is_binary(display_name) and
+             (status == "active" or (allow_pending and status == "joining")) ->
         {:ok,
          %{
            display_name: display_name,

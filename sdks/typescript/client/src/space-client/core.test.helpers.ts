@@ -59,6 +59,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       syncSnapshot = { ...syncSnapshot, connection: { phase: "live" }, participantId: "participant-1", participantGeneration: 1 };
       for (const listener of syncListeners) listener(syncSnapshot);
     },
+    confirmEntered: async () => undefined,
     stop: () => undefined,
     leave: async () => ({ type: "ack", command_id: "command-1", outcome: "satisfied", revision: 1, state_digest: "digest" }),
     getSnapshot: () => syncSnapshot,

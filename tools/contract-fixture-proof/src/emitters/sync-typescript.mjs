@@ -124,6 +124,7 @@ function renderTypeScript(contract) {
     "    case 'chat_read_set': return exactObject(value, " + JSON.stringify(contract.collaboration.clientFrames.setChatRead.exactFields) + ");",
     "    case 'delivery_ack': return exactObject(value, ['type', 'stream', 'revision', 'state_digest']);",
     "    case 'recovery_ack': return exactObject(value, ['type', 'recovery_id', 'revision', 'state_digest']);",
+    "    case 'entered': return exactObject(value, ['type']);",
     "    case 'ping': return exactObject(value, ['type']);",
     "    default: return false;",
     "  }",
@@ -243,6 +244,7 @@ function renderTypeScript(contract) {
       ");",
     "    case 'retryable_error': return exactObjectWithCorrelation(value, ['type', 'command_id', 'code']);",
     "    case 'error': return exactObjectWithCorrelation(value, ['type', 'code', 'detail']);",
+    "    case 'entered_ack': return exactObjectWithCorrelation(value, ['type']);",
     "    case 'pong': return exactObjectWithCorrelation(value, ['type']);",
     "    default: return false;",
     "  }",
@@ -476,15 +478,17 @@ function renderTypeScript(contract) {
   lines.push("export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);");
   lines.push("export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal('retryable_error'), command_id: CommandIdSchema, code: RetryableErrorCodeSchema, ...ServerCorrelationFields });");
   lines.push(`export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal('error'), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(${limits.protocolErrorDetailBytes}), ...ServerCorrelationFields });`);
+  lines.push("export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal('entered') });");
+  lines.push("export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal('entered_ack'), ...ServerCorrelationFields });");
   lines.push("export const PingFrameSchema = Schema.Struct({ type: Schema.Literal('ping') });");
   lines.push("export const PongFrameSchema = Schema.Struct({ type: Schema.Literal('pong'), ...ServerCorrelationFields });");
   lines.push("");
   lines.push(
-    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
+    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
   );
   lines.push("export type SyncV1ClientFrame = typeof SyncV1ClientFrameSchema.Type;");
   lines.push(
-    `export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, ReactionEventFrameSchema, ReactionResultFrameSchema, ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, ChatReadReceiptFrameSchema, ChatReadResultFrameSchema, ChatReactionsFrameSchema, ChatReactionResultFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, PongFrameSchema]))).check(Schema.makeFilter((frame) => serverFrameWithinLimit(frame) ? undefined : { path: [], issue: 'must fit the encoded byte limit including correlation reserve' }));`,
+    `export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictServerFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([WelcomeFrameSchema, ReplayPageFrameSchema, RecoveryCompleteFrameSchema, EventFrameSchema, CommittedAckFrameSchema, SatisfiedAckFrameSchema, RejectedAckFrameSchema, CommandIdConflictAckFrameSchema, ProjectionFrameSchema, LiveTargetResultFrameSchema, DirectedRequestDeliverFrameSchema, DirectedRequestResultFrameSchema, ReactionEventFrameSchema, ReactionResultFrameSchema, ChatMessageFrameSchema, ChatSendResultFrameSchema, ChatPageFrameSchema, ChatHeadFrameSchema, ChatReadReceiptFrameSchema, ChatReadResultFrameSchema, ChatReactionsFrameSchema, ChatReactionResultFrameSchema, RetryableErrorFrameSchema, ErrorFrameSchema, EnteredAckFrameSchema, PongFrameSchema]))).check(Schema.makeFilter((frame) => serverFrameWithinLimit(frame) ? undefined : { path: [], issue: 'must fit the encoded byte limit including correlation reserve' }));`,
   );
   lines.push("export type SyncV1ServerFrame = typeof SyncV1ServerFrameSchema.Type;");
   lines.push("export function encodeSyncFrame(frame: SyncV1ClientFrame | SyncV1ServerFrame): string { return JSON.stringify(frame); }");

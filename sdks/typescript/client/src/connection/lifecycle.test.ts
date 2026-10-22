@@ -297,10 +297,10 @@ describe("failed join admission cleanup", () => {
     );
   });
 
-  it("can retry the same confirmed seat when media fails after hello", async () => {
+  it("cancels failed SFU entry after hello and confirms only the successful retry", async () => {
     const platform = createCoreTestPlatform();
     const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
-    let seat: "pending" | "joined" | "left" = "pending";
+    let seat: "pending" | "joined" | "cancelled" | "left" = "pending";
     let attempts = 0;
     let confirmHello!: () => void;
     const hello = new Promise<void>((resolve) => {
@@ -309,17 +309,24 @@ describe("failed join admission cleanup", () => {
     const layer = admissionLayer({
       access: async () => {
         if (seat === "left") throw new Error("The idempotent join is terminal");
+        if (seat === "cancelled") seat = "pending";
         return grant;
       },
       dependencies: {
         ...platform.dependencies,
-        cancelPendingAdmission: async () => seat !== "joined",
+        cancelPendingAdmission: async () => {
+          if (seat !== "pending") return false;
+          seat = "cancelled";
+          return true;
+        },
         createSyncClient: () => ({
           ...platform.sync,
           start: async () => {
-            seat = "joined";
             await platform.sync.start();
             confirmHello();
+          },
+          confirmEntered: async () => {
+            seat = "joined";
           },
           leave: async () => {
             seat = "left";
@@ -338,7 +345,9 @@ describe("failed join admission cleanup", () => {
     await exerciseAdmission(layer, (lifecycle) =>
       Effect.gen(function* () {
         expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Failure");
+        expect(seat).toBe("cancelled");
         expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Success");
+        expect(seat).toBe("joined");
         yield* lifecycle.leave();
         expect(seat).toBe("left");
       }),
@@ -388,6 +397,81 @@ it("keeps failed HTTP cleanup unconfirmed so local Leave cannot clear a retry id
       expect((yield* Effect.exit(lifecycle.leave()))._tag).toBe("Failure");
       expect((yield* Effect.exit(lifecycle.leave()))._tag).toBe("Failure");
       expect(lifecycle.getSnapshot().failure?.code).toBe("leave_unconfirmed");
+    }),
+  );
+});
+
+it("confirms entry only after Sync is live and SFU startup has completed", async () => {
+  const platform = createCoreTestPlatform();
+  let releaseMedia!: () => void;
+  const mediaReady = new Promise<void>((resolve) => {
+    releaseMedia = resolve;
+  });
+  let entered = 0;
+  const layer = makeConnectionLifecycleLayer({
+    apiBaseURL: "https://api.chalk.test",
+    syncURL: "wss://sync.chalk.test/v1/sync",
+    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+    dependencies: {
+      ...platform.dependencies,
+      createMediaClient: (input) => ({
+        ...platform.dependencies.createMediaClient(input),
+        start: async () => {
+          await mediaReady;
+        },
+      }),
+      createSyncClient: () => ({
+        ...platform.sync,
+        confirmEntered: async () => {
+          expect(platform.sync.getSnapshot().connection.phase).toBe("live");
+          entered += 1;
+        },
+      }),
+    },
+  });
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const lifecycle = yield* Effect.service(ConnectionLifecycleService);
+      const joining = Effect.runPromise(lifecycle.join());
+      for (let i = 0; i < 50; i++) {
+        if (platform.sync.getSnapshot().connection.phase === "live") break;
+        yield* Effect.sleep("1 millis");
+      }
+      expect(platform.sync.getSnapshot().connection.phase).toBe("live");
+      expect(entered).toBe(0);
+      releaseMedia();
+      yield* Effect.promise(() => joining);
+      expect(entered).toBe(1);
+      expect(lifecycle.getSnapshot().state).toBe("live");
+    }).pipe(Effect.provide(layer), Effect.scoped),
+  );
+});
+
+it("refreshes rejected access during entry confirmation instead of retrying the old credential", async () => {
+  const platform = createCoreTestPlatform();
+  const reasons: string[] = [];
+  let attempts = 0;
+  const layer = admissionLayer({
+    access: async ({ reason }) => {
+      reasons.push(reason);
+      return parseParsedAccessGrant(opaqueAccessGrant(reasons.length));
+    },
+    dependencies: {
+      ...platform.dependencies,
+      cancelPendingAdmission: async () => false,
+      createSyncClient: () => ({
+        ...platform.sync,
+        confirmEntered: async () => {
+          if (attempts++ === 0) throw Object.assign(new Error("Policy rejected"), { code: "access.invalid" });
+        },
+      }),
+    },
+  });
+  await exerciseAdmission(layer, (lifecycle) =>
+    Effect.gen(function* () {
+      yield* lifecycle.join();
+      expect(reasons).toEqual(["join", "access_retry"]);
+      expect(lifecycle.getSnapshot().state).toBe("live");
     }),
   );
 });

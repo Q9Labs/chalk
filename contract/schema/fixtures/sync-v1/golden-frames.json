@@ -1,5 +1,6 @@
 {
   "client_frames": [
+    { "type": "entered" },
     {
       "type": "hello",
       "protocol": 1,
@@ -196,6 +197,7 @@
     }
   ],
   "server_frames": [
+    { "type": "entered_ack" },
     {
       "type": "welcome",
       "protocol": 1,

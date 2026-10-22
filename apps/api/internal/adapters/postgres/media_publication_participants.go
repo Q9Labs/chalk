@@ -8,6 +8,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+const publicationParticipantEligible = `(participants.status = 'active' or
+  (participants.status = 'joining' and exists (
+    select 1 from participant_join_seats seat
+    where seat.participant_id = participants.id
+      and seat.generation = participants.generation
+      and seat.state = 'pending' and seat.expires_at > now()
+  )))`
+
 func (r ProviderOperationRepository) ListPublicationParticipants(ctx context.Context, tenantID, episodeID utilities.ID) ([]mediapublications.PublicationParticipant, error) {
 	return r.queries.ListPublicationParticipants(ctx, providerObservationIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID)})
 }
@@ -18,7 +26,7 @@ coalesce(case when participants.media_connection_generation = participants.gener
 from participants
 join episodes on episodes.tenant_id = participants.tenant_id and episodes.id = participants.episode_id
 where participants.tenant_id = $1 and participants.episode_id = $2
-  and participants.status = 'active' and episodes.status = 'active'`
+  and ` + publicationParticipantEligible + ` and episodes.status = 'active'`
 	rows, err := q.db.Query(ctx, query, arg.TenantID, arg.EpisodeID)
 	if err != nil {
 		return nil, err
@@ -54,7 +62,7 @@ coalesce(case when participants.media_connection_generation = participants.gener
 from participants
 join episodes on episodes.tenant_id = participants.tenant_id and episodes.id = participants.episode_id
 where participants.tenant_id = $1 and participants.episode_id = $2 and participants.id = $3
- and participants.status = 'active' and episodes.status = 'active'
+ and ` + publicationParticipantEligible + ` and episodes.status = 'active'
 for update of participants`
 	var id pgtype.UUID
 	var participant mediapublications.PublicationParticipant

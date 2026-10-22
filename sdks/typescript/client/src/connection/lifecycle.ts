@@ -211,7 +211,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       };
       const mediaAttempt: MediaRecoveryAttempt = { expiresAt: null };
       const foreign = <A>(operation: () => Promise<A>, code: LifecycleFailureCode = "internal_error", message = "A browser transport operation failed"): Effect.Effect<A, ConnectionLifecycleFailure> =>
-        Effect.tryPromise({ try: operation, catch: (cause) => lifecycleFailure(code, true, message, cause) });
+        Effect.tryPromise({ try: operation, catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause)) });
       const withinForegroundBudget = <A, E>(effect: Effect.Effect<A, E>, milliseconds: number, failure: ConnectionLifecycleFailure | (() => ConnectionLifecycleFailure)): Effect.Effect<A, E | ConnectionLifecycleFailure> =>
         Effect.raceFirst(
           effect,
@@ -503,6 +503,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 ),
               ],
               { concurrency: "unbounded", discard: true },
+            );
+            if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            yield* trace(
+              "confirm_entered",
+              foreign(() => sync.confirmEntered(), "sync_start_failed", "Entry could not be confirmed"),
             );
           }).pipe(
             Effect.matchEffect({
@@ -1231,7 +1236,7 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
   const reason = snapshot.connection.terminalReason;
   if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
-  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
 }
 

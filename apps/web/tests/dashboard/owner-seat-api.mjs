@@ -128,7 +128,11 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
           if (frame.type === "welcome" && frame.mode === "snapshot") {
             ws.send(JSON.stringify({ type: "recovery_ack", recovery_id: frame.recovery_id, revision: frame.head.revision, state_digest: frame.head.state_digest }));
           }
-          if (frame.type === "projection_snapshot" && frame.stream === "presence") resolve();
+          if (frame.type === "recovery_complete") {
+            assert.equal(state(id), "joining:pending:false", "hello must not confirm entry or attendance");
+            ws.send(JSON.stringify({ type: "entered" }));
+          }
+          if (frame.type === "entered_ack") resolve();
           if (frame.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
         });
         ws.addEventListener("error", reject, { once: true });
@@ -138,8 +142,8 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
         ws.addEventListener("error", reject, { once: true });
       });
       ws.send(JSON.stringify({ type: "hello", protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
-      await waitFor("active:joined:true", () => state(id));
       await ready;
+      await waitFor("active:joined:true", () => state(id));
       assert.equal(sql(`select count(*) from sync_control_events where episode_id='${episodeId}' and event_name='participant_joined' and payload->>'participant_id'='${id}'`), "1");
       assert.equal((await cancel(joined.access)).status, 200, "pending cancellation cannot remove a confirmed join");
       assert.equal(state(id), "active:joined:true");

@@ -129,6 +129,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       %{
         "id" => "live",
         "accepts" => [
+          "entered",
           "command",
           "live_target",
           "directed_request",
@@ -648,6 +649,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "chat_read_set" -> decode_chat_read_set(frame)
         "delivery_ack" -> decode_delivery_ack(frame)
         "recovery_ack" -> decode_recovery_ack(frame)
+        "entered" -> if(exact_keys?(frame, ["type"]), do: {:ok, :entered}, else: {:error,
+            :invalid_entered})
         "ping" -> if(exact_keys?(frame, ["type"]), do: {:ok, :ping}, else: {:error,
             :invalid_ping})
         nil -> {:error, :missing_type}
@@ -943,6 +946,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       do: correlation_exact_keys?(frame, ["type", "code", "detail"]) and
       code in @protocol_error_codes and bounded_string?(detail, 0,
       @limits["protocolErrorDetailBytes"])
+  def valid_server_frame?(%{"type" => "entered_ack"} = frame), do: correlation_exact_keys?(frame,
+      ["type"])
   def valid_server_frame?(%{"type" => "pong"} = frame), do: correlation_exact_keys?(frame,
       ["type"])
   def valid_server_frame?(_frame), do: false

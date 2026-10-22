@@ -132,7 +132,7 @@
     },
     {
       "id": "live",
-      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
+      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       "heartbeat": {
         "intervalMs": 20000,
         "missedDeadlinesBeforeClose": 2
@@ -1161,6 +1161,14 @@
       "kind": "string",
       "maxBytes": 1024
     }
+  },
+  "entered": {
+    "direction": "client-to-server",
+    "type": "entered"
+  },
+  "enteredAck": {
+    "direction": "server-to-client",
+    "type": "entered_ack"
   },
   "ping": {
     "direction": "client-to-server",

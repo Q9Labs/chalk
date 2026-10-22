@@ -1,9 +1,11 @@
 defmodule ChalkSync.LifecycleConsumerPostgresTest do
-  use ExUnit.Case, async: false
+  use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Operations.Probe
   alias ChalkSync.Operations.Readiness
   alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.TestWSClient, as: Client
+  alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -127,6 +129,129 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
              ).rows
 
     assert reservations.() == before_retry
+  end
+
+  @tag :entered_admission
+  test "legacy pending admission can recover without confirming attendance", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    assert {:ok, recovery} = Postgres.recover(fixture.identity, nil)
+    refute recovery.mode == :terminal
+
+    assert [["joining", false]] =
+             Postgrex.query!(
+               connection,
+               "select status, first_joined_at is not null from participants where id=$1",
+               [UUID.dump!(fixture.identity.participant_id)]
+             ).rows
+  end
+
+  @tag :entered_admission
+  test "hello is cancellable after Sync recovery without attendance, entered confirms exactly once",
+       %{connections: connections, port: port} do
+    connection = hd(connections)
+
+    for entered <- [false, true] do
+      fixture = managed_pending_join(connection)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+      {:ok, client} = Client.connect(port, "/v1/sync")
+      on_exit(fn -> Client.close_tcp(client) end)
+      client = Client.send_json(client, hello(fixture.identity))
+      assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+      client = Client.acknowledge_recovery(client, welcome)
+      assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+      assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
+      assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
+      assert [["joining", "pending", false]] = entry_row(connection, fixture)
+
+      if entered do
+        client = Client.send_json(client, %{"type" => "entered"})
+        client = receive_entered_ack(client)
+        assert [["active", "joined", true]] = entry_row(connection, fixture)
+        client = Client.send_json(client, %{"type" => "entered"})
+        receive_entered_ack(client)
+
+        assert [[1]] =
+                 Postgrex.query!(
+                   connection,
+                   "select count(*) from sync_control_events where lifecycle_intent_id=$1",
+                   [UUID.dump!(fixture.lifecycle_intent_id)]
+                 ).rows
+      else
+        assert [["cancelled"]] = seat_transition(connection, fixture, "cancel")
+        assert [["left", "cancelled", false]] = entry_row(connection, fixture)
+      end
+    end
+  end
+
+  @tag :entered_admission
+  test "a stale-generation hello closes as rejected access rather than dependency outage", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    assert [["pending"]] = seat_transition(connection, fixture, "retry")
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    on_exit(fn -> Client.close_tcp(client) end)
+    client = Client.send_json(client, hello(fixture.identity))
+    assert {:closed, 1008, _reason, _client} = Client.recv(client)
+    assert [["joining", "pending", false]] = entry_row(connection, fixture)
+  end
+
+  defp receive_entered_ack(client, remaining \\ 8)
+
+  defp receive_entered_ack(client, remaining) when remaining > 0 do
+    case Client.recv(client) do
+      {:json, %{"type" => "entered_ack"}, client} -> client
+      {:json, _frame, client} -> receive_entered_ack(client, remaining - 1)
+    end
+  end
+
+  defp entry_row(connection, fixture) do
+    Postgrex.query!(
+      connection,
+      "select p.status,s.state,p.first_joined_at is not null from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1",
+      [UUID.dump!(fixture.identity.participant_id)]
+    ).rows
+  end
+
+  defp hello(identity) do
+    token =
+      DevTokenVerifier.token(%{
+        "tenant_id" => identity.episode.tenant_id,
+        "space_id" => identity.episode.space_id,
+        "episode_id" => identity.episode.episode_id,
+        "participant_id" => identity.participant_id,
+        "participant_generation" => identity.participant_generation,
+        "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
+        "role" => identity.role || "owner",
+        "capabilities" => identity.capabilities,
+        "issued_at" => 1,
+        "expires_at" => 4_102_444_800
+      })
+
+    %{
+      "type" => "hello",
+      "protocol" => 1,
+      "extensions" => [
+        %{
+          "name" => "collaboration_v2",
+          "chat_cursor" => %{"after_sequence" => nil, "retained_floor_sequence" => nil}
+        }
+      ],
+      "token" => token,
+      "streams" => %{
+        "control" => %{"cursor" => nil},
+        "media" => %{"cursor" => nil},
+        "presence" => %{"cursor" => nil},
+        "requests" => %{"cursor" => nil}
+      }
+    }
   end
 
   defp managed_pending_join(connection) do

@@ -398,6 +398,44 @@ describe("V1SyncClient", () => {
       sync.stop();
     }
   });
+  it("treats policy rejection as rejected access instead of reconnecting with the stale credential", async () => {
+    const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
+    try {
+      socket.close(1008);
+      await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "access_rejected" }));
+    } finally {
+      client.stop();
+    }
+  });
+  it("does not turn fully entered readiness into failed startup when the entry acknowledgement is lost", async () => {
+    const { client, socket } = await liveClient();
+    try {
+      await expect(client.confirmEntered()).resolves.toBeUndefined();
+      expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: "entered" }));
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+  it("resends unacknowledged entry after transport recovery", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      await client.confirmEntered();
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date");
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(2);
+      socket.receive({ type: "entered_ack" });
+      await settle();
+    } finally {
+      client.stop();
+    }
+  });
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",

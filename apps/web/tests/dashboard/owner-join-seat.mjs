@@ -22,6 +22,63 @@ try {
         evidence.push({ event: "admitted", at: new Date().toISOString(), subject: grant.subject });
       }
     });
+    const mediaFailurePage = await context.newPage();
+    fixture.recordPage(mediaFailurePage);
+    await mediaFailurePage.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const audio = new AudioContext();
+        const source = audio.createOscillator();
+        const output = audio.createMediaStreamDestination();
+        source.connect(output);
+        source.start();
+        return output.stream;
+      };
+    });
+    let syncRecovered;
+    const recovered = new Promise((resolve) => {
+      syncRecovered = resolve;
+    });
+    let helloObserved = false;
+    let recoveredObserved = false;
+    let enteredObserved = false;
+    let failedSignaling = 0;
+    await mediaFailurePage.routeWebSocket(`${syncOrigin}*`, (socket) => {
+      const server = socket.connectToServer();
+      socket.onMessage((message) => {
+        const frame = JSON.parse(String(message));
+        if (frame.type === "hello") helloObserved = true;
+        if (frame.type === "entered") enteredObserved = true;
+        server.send(message);
+      });
+      server.onMessage((message) => {
+        if (JSON.parse(String(message)).type === "recovery_complete") {
+          recoveredObserved = true;
+          syncRecovered();
+        }
+        socket.send(message);
+      });
+    });
+    await mediaFailurePage.route("**/media/sfu/tracks", async (route) => {
+      await recovered;
+      failedSignaling += 1;
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "synthetic SFU startup failure after Sync recovery" }) });
+    });
+    await mediaFailurePage.goto(`${origin}/dashboard`);
+    await mediaFailurePage.getByRole("button", { name: "Start a call", exact: true }).click();
+    await mediaFailurePage.getByRole("button", { name: "Join call", exact: true }).click();
+    await mediaFailurePage.getByRole("button", { name: "Try again", exact: true }).waitFor({ timeout: 65000 });
+    assert(helloObserved && recoveredObserved && failedSignaling > 0, "SFU must fail only after a real Sync hello and recovery");
+    assert.equal(enteredObserved, false, "failed SFU must never send entered");
+    const failedMediaSpace = new URL(mediaFailurePage.url()).pathname.split("/").at(-2);
+    const failedMediaCall = await (await context.request.get(`${origin}/dashboard-api/call?spaceId=${failedMediaSpace}`)).json();
+    assert.equal(failedMediaCall.live?.count ?? 0, 0);
+    assert.equal(failedMediaCall.episodes.find((episode) => episode.id === failedMediaCall.live.id)?.participantCount, 0);
+    assert.equal(sql(`select count(*) from participants where space_id='${failedMediaSpace}' and (status='active' or first_joined_at is not null)`), "0");
+    assert.equal(sql(`select p.status||':'||s.state from participants p join participant_join_seats s on s.participant_id=p.id where p.space_id='${failedMediaSpace}'`), "left:cancelled");
+    await mediaFailurePage.screenshot({ path: resolve(repository, "artifacts/owner-seat-sfu-after-hello.png") });
+    evidence.push({ event: "sfu-failed-after-hello", helloObserved, recoveredObserved, enteredObserved, failedSignaling, call: failedMediaCall });
+    console.log("PASS dashboard SFU failed after real Sync hello/recovery: no active seat, attendance 0");
+    await mediaFailurePage.close();
     let blockSync = true;
     await page.routeWebSocket(`${syncOrigin}*`, (socket) => {
       // Retained incident evidence: HTTP admission succeeded, but no hello
@@ -58,8 +115,8 @@ try {
     const callAfter = await context.request.get(`${origin}/dashboard-api/call?spaceId=${spaceId}`);
     evidence.push({ event: "call-after-tab-reopen", data: await callAfter.json(), capture: await page.evaluate(() => globalThis.__captureCalls), body: await page.locator("body").innerText() });
     await writeFile(resolve(repository, "artifacts/owner-seat-repro.json"), JSON.stringify(evidence, null, 2));
-    assert.equal(evidence.filter((e) => e.event === "admitted").length, 3);
-    const seats = evidence.filter((e) => e.event === "admitted").map((e) => e.subject.participant_id);
+    assert.equal(evidence.filter((e) => e.event === "admitted").length, 4);
+    const seats = evidence.filter((e) => e.event === "admitted" && e.subject.space_id === spaceId).map((e) => e.subject.participant_id);
     assert.equal(seats[0], seats[1]);
     assert.equal(seats[0], seats[2], "reopen in the same tab must retain the unresolved join identity");
     assert.equal(execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-Atc", `select count(*) from participants where space_id='${spaceId}'`], { encoding: "utf8" }).trim(), "1");

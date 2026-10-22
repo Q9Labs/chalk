@@ -203,6 +203,8 @@ defmodule ChalkSync.ProtocolV1 do
         "detail" => binary_part(detail, 0, min(byte_size(detail), @error_detail_bytes))
       })
 
+  def entered_ack, do: encode!(%{"type" => "entered_ack"})
+
   def pong, do: encode!(%{"type" => "pong"})
 
   def encode!(frame) do

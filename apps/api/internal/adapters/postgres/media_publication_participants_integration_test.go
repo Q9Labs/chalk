@@ -59,6 +59,33 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	if err := tx.QueryRow(ctx, `select media_connection_id from participants where id=$1`, uuid(participantID)).Scan(&initialConnection); err != nil || initialConnection != "initial-join" {
 		t.Fatalf("joining participant connection: %q, %v", initialConnection, err)
 	}
+	query := newProviderOperationQueries(tx)
+	if _, err := query.LockPublicationParticipant(ctx, publicationParticipantIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), ParticipantID: uuid(participantID)}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("unleased pending participant must not publish: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `insert into participant_join_seats(tenant_id,space_id,episode_id,participant_id,generation,state,expires_at) values($1,$2,$3,$4,1,'pending',$5)`, uuid(tenantID), uuid(spaceID), uuid(episodeID), uuid(participantID), deadline); err != nil {
+		t.Fatal(err)
+	}
+	publications := NewProviderOperationRepository(newProviderOperationQueries(tx), lingerTestTransactor{tx})
+	registry := mediapublications.NewService(publications)
+	if _, err := registry.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "initial-join", Tracks: []mediapublications.PublishedTrack{{Source: "microphone", MID: "0", TrackName: "initial-microphone"}}}); err != nil {
+		t.Fatalf("valid pending lease must permit SFU startup: %v", err)
+	}
+	snapshot, err := registry.Latest(ctx, tenantID, episodeID)
+	if err != nil || len(snapshot.Publications) != 1 || !snapshot.Publications[0].Enabled {
+		t.Fatalf("pending startup publication was pruned: %#v, %v", snapshot, err)
+	}
+	var status string
+	var attended bool
+	if err := tx.QueryRow(ctx, `select status, first_joined_at is not null from participants where id=$1`, uuid(participantID)).Scan(&status, &attended); err != nil || status != "joining" || attended {
+		t.Fatalf("SFU startup confirmed admission: %q, %v, %v", status, attended, err)
+	}
+	if _, err := tx.Exec(ctx, `update participant_join_seats set expires_at=now()-interval '1 second' where participant_id=$1`, uuid(participantID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := query.LockPublicationParticipant(ctx, publicationParticipantIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID), ParticipantID: uuid(participantID)}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("expired pending lease must not publish: %v", err)
+	}
 	if _, err := tx.Exec(ctx, `update participants set status='active' where id=$1`, uuid(participantID)); err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +158,6 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	if stored, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash); err != nil || stored != nil {
 		t.Fatalf("replay revived a displaced connection: found=%v err=%v", stored != nil, err)
 	}
-	query := newProviderOperationQueries(tx)
 	participants, err := query.ListPublicationParticipants(ctx, providerObservationIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID)})
 	if err != nil || len(participants) != 1 || participants[0].ConnectionID != "authenticated-replacement" {
 		t.Fatalf("current session without a public arrival or republish: %#v, %v", participants, err)

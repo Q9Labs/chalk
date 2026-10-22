@@ -33,7 +33,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
+      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 2,
@@ -511,6 +511,8 @@ function strictClientFrame(value: unknown): boolean {
       return exactObject(value, ["type", "stream", "revision", "state_digest"]);
     case "recovery_ack":
       return exactObject(value, ["type", "recovery_id", "revision", "state_digest"]);
+    case "entered":
+      return exactObject(value, ["type"]);
     case "ping":
       return exactObject(value, ["type"]);
     default:
@@ -686,6 +688,8 @@ function strictServerFrame(value: unknown): boolean {
       return exactObjectWithCorrelation(value, ["type", "command_id", "code"]);
     case "error":
       return exactObjectWithCorrelation(value, ["type", "code", "detail"]);
+    case "entered_ack":
+      return exactObjectWithCorrelation(value, ["type"]);
     case "pong":
       return exactObjectWithCorrelation(value, ["type"]);
     default:
@@ -1436,6 +1440,8 @@ export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Li
 export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);
 export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("retryable_error"), command_id: CommandIdSchema, code: RetryableErrorCodeSchema, ...ServerCorrelationFields });
 export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024), ...ServerCorrelationFields });
+export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal("entered") });
+export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal("entered_ack"), ...ServerCorrelationFields });
 export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
 export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong"), ...ServerCorrelationFields });
 
@@ -1471,6 +1477,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         ChatReactionSetFrameSchema,
         DeliveryAckFrameSchema,
         RecoveryAckFrameSchema,
+        EnteredFrameSchema,
         PingFrameSchema,
       ]),
     ),
@@ -1505,6 +1512,7 @@ export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         ChatReactionResultFrameSchema,
         RetryableErrorFrameSchema,
         ErrorFrameSchema,
+        EnteredAckFrameSchema,
         PongFrameSchema,
       ]),
     ),

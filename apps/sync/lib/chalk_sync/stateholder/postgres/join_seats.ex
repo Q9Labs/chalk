@@ -1,6 +1,7 @@
 defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   @moduledoc """
-  Pending -> joined on an authenticated hello, or cancelled/expired before hello.
+  Pending -> joined only on explicit entry after Sync and SFU startup.
+  Failed startup remains cancellable until then.
   The Episode authority lock serializes each transition with lifecycle events.
   Absence of a seat row retains the previous admission protocol during rollout.
   """
