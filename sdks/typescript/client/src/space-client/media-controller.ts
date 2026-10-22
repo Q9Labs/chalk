@@ -401,8 +401,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.suspend(() => {
         this.#assertCurrentIntent(source, intent.revision);
         ports.media.setLocalSourceIntent?.(source, true);
-        const acquire =
-          (source === "camera" && !intent.previousEnabled) || !this.#hasTrack(source)
+        const retire = source === "microphone" ? this.#retireEndedMicrophone(ports.media) : Effect.void;
+        const acquire = Effect.suspend(() => {
+          this.#assertActivePorts(ports, action);
+          this.#assertCurrentIntent(source, intent.revision);
+          return (source === "camera" && !intent.previousEnabled) || !this.#hasTrack(source)
             ? this.#captureForPublish(source, ports.media, (track) =>
                 Effect.try({
                   try: () => {
@@ -418,7 +421,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
                 }),
               )
             : Effect.void;
-        return acquire.pipe(Effect.andThen(this.#send(ports, source, intent, true)));
+        });
+        return retire.pipe(Effect.andThen(acquire), Effect.andThen(this.#send(ports, source, intent, true)));
       }),
     ).pipe(Effect.catch((cause) => this.#rollbackCapture({ action, cause, fallback: Effect.void, media: ports.media, permissionMessage: `${source} permission was denied`, prepared, source, track: captured })));
   }
@@ -671,6 +675,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #discardEndedCamera(): void {
     if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" });
+  }
+  #retireEndedMicrophone(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
+    const track = this.#tracks.get("microphone");
+    if (track?.readyState !== "ended") return Effect.void;
+    // The media client refuses to prepare a source that still holds the ended track.
+    return foreign(() => media.clearPreparedLocalTrack("microphone", { stopTrack: false })).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          if (this.#tracks.get("microphone") === track) this.#tracks.delete("microphone");
+        }),
+      ),
+    );
   }
   #liveCameraSource(current: CameraState & { readonly status: "live" }, purpose: "preview" | "publication"): Effect.Effect<CameraPreview, unknown> {
     if (current.publication !== null && !current.track.enabled && purpose === "preview") {
