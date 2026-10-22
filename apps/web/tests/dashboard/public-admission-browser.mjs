@@ -73,7 +73,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     try {
       await guest.goto(guestUrl);
       await guest.getByLabel("Your name").fill(name);
-      await guest.getByRole("button", { name: "Join", exact: true }).click();
+      await guest.getByRole("button", { name: "Join call", exact: true }).click();
       await guest.getByText(/Asking to join/).waitFor();
       if (before || dashboard) return { context, guest, failures };
       await page.getByRole("button", { name: `Admit ${name}`, exact: true }).waitFor({ timeout: 15000 });

@@ -1,5 +1,6 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
+import type { ThemeMode } from "../../lib/theme";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ErrorCode, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -296,14 +297,15 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     <main data-chalk data-chalk-theme={mode} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="min-h-0 flex-1">
         {pending ? (
-          <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
         ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-          <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName}…`} />
         ) : error ? (
-          <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
         ) : (
           <NameNeeded
             spaceName={callName}
+            theme={mode}
             displayName={displayName}
             onDisplayNameChange={(name) => {
               nameEdited.current = true;
@@ -513,17 +515,17 @@ function LocalSpace({
   );
 }
 /** The web asks only for identity. Devices are requested inside the admitted call. */
-export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
+export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly theme: ThemeMode; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
   return (
-    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`}>
+    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
       <form
-        className="mt-6"
+        className="mt-4 flex w-full flex-col gap-2 text-left"
         onSubmit={(event) => {
           event.preventDefault();
           if (displayName.trim()) onJoin();
         }}
       >
-        <label htmlFor="join-display-name" className="mb-2 block text-sm text-[var(--chalk-app-text-muted)]">
+        <label htmlFor="join-display-name" className="text-[13px] font-semibold">
           Your name
         </label>
         <input
@@ -532,10 +534,10 @@ export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin
           autoFocus
           value={displayName}
           onChange={(event) => onDisplayNameChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3 text-center text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
         />
-        <ChalkButton type="submit" variant="outline" className="mt-4 !h-11" disabled={!displayName.trim()}>
-          Join
+        <ChalkButton type="submit" variant="solid" className="mt-1.5 !h-11 w-full" disabled={!displayName.trim()}>
+          Join call
         </ChalkButton>
       </form>
     </CallLimbo>

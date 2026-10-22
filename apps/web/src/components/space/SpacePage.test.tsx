@@ -158,7 +158,7 @@ describe("public Space entry", () => {
       expect(mocks.holder.chalkProps).toBeUndefined();
 
       mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-next", retry_after: 1, space: { slug: "design-lab", name: "Design Lab" } });
-      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join call" })));
       await act(async () => vi.advanceTimersByTimeAsync(1_000));
       expect(mocks.publicClient.getSpacePublicInviteArrival).toHaveBeenLastCalledWith("arrival-next");
       expect(mocks.holder.chalkProps).toBeDefined();
@@ -258,7 +258,7 @@ describe("public Space entry", () => {
     await act(async () => resolveAccount?.({ name: "Ada" }));
     expect(mocks.publicClient.arriveBySpacePublicInvite).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Your name").getAttribute("value")).toBe("Bea");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join call" })));
     expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith(spacePageTestToken, "Bea");
   });
 
@@ -322,7 +322,7 @@ async function leaveCall(): Promise<void> {
 
 function enterName(displayName: string): void {
   fireEvent.change(screen.getByLabelText("Your name"), { target: { value: displayName } });
-  fireEvent.click(screen.getByRole("button", { name: "Join" }));
+  fireEvent.click(screen.getByRole("button", { name: "Join call" }));
 }
 
 describe("reload rejoin", () => {
