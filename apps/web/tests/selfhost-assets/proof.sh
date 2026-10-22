@@ -5,6 +5,7 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 proof_dir="${ASSET_PROOF_ROOT:-/Users/agents/lanes/selfhost-assets/evidence}"
 mkdir -p "$proof_dir"
+export VITE_PORT=3470 FIXTURE_PORT=3471
 for label in before after; do
   if [[ -d "$proof_dir/$label" ]]; then rm -r "$proof_dir/$label"; fi
   rm -f "$proof_dir/$label-sizes.json" "$proof_dir/$label-web.log" "$proof_dir/$label-call.log"
