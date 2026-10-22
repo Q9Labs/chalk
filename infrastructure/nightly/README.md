@@ -46,6 +46,45 @@ Ubuntu 24.04 arm64 host. The script checks cgroups v2, Quadlet and the rootless
 user manager, then runs a disposable rootless smoke container. It contains no
 runtime secrets. Verify SSM Online and a successful reboot before deployment.
 
+### Stable recorder address
+
+The nightly Spot host must use the Elastic IP owned by
+[`recording-control-address`](recording-control-address/main.tf). An automatically
+assigned public IP changes after a Spot stop/start, leaving the recorder's direct
+TLS hostname pointing at the previous address. The API tunnel does not replace
+this direct listener.
+
+Apply this root after provisioning a host or changing the nightly release
+configuration's `runtime.instance_id`, before running Release. It reads only
+`/chalk/nightly/release/recorder.json` and refuses a host without the
+`chalk:environment=nightly` tag. Its separate state keeps the allocation when the
+host is replaced; only the association moves. Do not destroy or recreate the
+allocation during host replacement.
+
+```sh
+export AWS_PROFILE=q9labs
+tofu -chdir=infrastructure/nightly/recording-control-address init -backend-config=/absolute/path/to/nightly-backend.hcl
+tofu -chdir=infrastructure/nightly/recording-control-address plan -out=address.plan
+tofu -chdir=infrastructure/nightly/recording-control-address apply address.plan
+tofu -chdir=infrastructure/nightly/recording-control-address output -raw public_ip
+```
+
+The backend file supplies the existing nightly state bucket, as in
+`backend.hcl.example`. On the first install only, save the full Cloudflare record
+as the undo and set **only** the DNS-only A record
+`nightly-recording-control.chalkmeet.com` to this output, preserving its TTL and
+other fields. Keep that record unchanged across later host replacements.
+Confirm its public DNS answer matches the output before the signed recorder
+cold-boot check. The output `allocation_id` identifies the same allocation for
+read-only association checks and recovery. Reverting code does not release the
+live address; move the retained allocation back to the previous nightly host to
+undo an association change.
+
+Run `tofu test` in this root with OpenTofu 1.12.3 to exercise first installation,
+association with a replacement host, and rejection of a production host.
+The tests mock AWS and do not create cloud resources. Production's recorder
+address is not managed by this root.
+
 `render-runtime <manifest> <output> nightly` selects the following caps.
 Production rendering remains unchanged.
 
