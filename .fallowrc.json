@@ -46,6 +46,8 @@
     "scripts/transcription-dispatcher/source-state.mjs",
     "scripts/deploy/verify-web-deploy.mjs",
     "apps/web/tests/dashboard-ui/*.mjs",
+    "apps/web/tests/selfhost-assets/*.mjs",
+    "apps/web/public/fonts/*.css",
     "apps/web/functions/**/*.ts",
     "apps/web/tests/dashboard/fixture-entry.ts",
     "apps/web/vitest.oauth.config.ts",
@@ -60,6 +62,7 @@
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": ["scripts/gates/fixtures/package-boundaries/**"],
   "ignoreUnresolvedImports": [
+    "/fonts/site.css",
     "../../../sdks/typescript/client/dist/effect.js",
     "../../../sdks/typescript/client/dist/index.js",
     "../../../sdks/typescript/client/dist/telemetry/index.js",

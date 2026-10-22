@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { EXCALIDRAW_ASSET_VERSION, MATHJAX_ASSET_VERSION } from "../src/lib/whiteboard-asset-versions";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(scriptDir, "../public");
@@ -22,19 +23,30 @@ const mathJaxRoot = dirname(whiteboardRequire.resolve("mathjax"));
 const mathJaxRequire = createRequire(join(mathJaxRoot, "package.json"));
 const mathFontRoot = dirname(mathJaxRequire.resolve("@mathjax/mathjax-newcm-font/package.json"));
 
+function assertAssetVersion(packagePath: string, expected: string) {
+  const manifest: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
+  if (typeof manifest !== "object" || manifest === null || !("version" in manifest) || manifest.version !== expected) {
+    throw new Error(`Asset version mismatch: ${packagePath}; update the immutable asset version from ${expected} before building`);
+  }
+}
+
+assertAssetVersion(resolve(excalidrawRoot, "../../package.json"), EXCALIDRAW_ASSET_VERSION);
+assertAssetVersion(join(mathJaxRoot, "package.json"), MATHJAX_ASSET_VERSION);
+assertAssetVersion(join(mathFontRoot, "package.json"), MATHJAX_ASSET_VERSION);
+
 function copyAsset(source: string, relativePath: string) {
   const destination = resolve(publicDir, relativePath);
   mkdirSync(dirname(destination), { recursive: true });
   cpSync(source, destination, { recursive: true });
 }
 
-copyAsset(join(excalidrawRoot, "index.css"), "chalk-whiteboard/0.18.1/index.css");
-copyAsset(join(excalidrawRoot, "fonts"), "chalk-whiteboard/0.18.1/fonts");
+copyAsset(join(excalidrawRoot, "index.css"), `chalk-whiteboard/${EXCALIDRAW_ASSET_VERSION}/index.css`);
+copyAsset(join(excalidrawRoot, "fonts"), `chalk-whiteboard/${EXCALIDRAW_ASSET_VERSION}/fonts`);
 for (const directory of ["input", "output", "a11y", "ui", "sre"]) {
-  copyAsset(join(mathJaxRoot, directory), `chalk-mathjax/4.1.3/${directory}`);
+  copyAsset(join(mathJaxRoot, directory), `chalk-mathjax/${MATHJAX_ASSET_VERSION}/${directory}`);
 }
 for (const file of ["tex-svg.js", "LICENSE"]) {
-  copyAsset(join(mathJaxRoot, file), `chalk-mathjax/4.1.3/${file}`);
+  copyAsset(join(mathJaxRoot, file), `chalk-mathjax/${MATHJAX_ASSET_VERSION}/${file}`);
 }
-copyAsset(join(mathFontRoot, "svg"), "chalk-mathjax/4.1.3/fonts/mathjax-newcm-font/svg");
-copyAsset(join(mathFontRoot, "svg.js"), "chalk-mathjax/4.1.3/fonts/mathjax-newcm-font/svg.js");
+copyAsset(join(mathFontRoot, "svg"), `chalk-mathjax/${MATHJAX_ASSET_VERSION}/fonts/mathjax-newcm-font/svg`);
+copyAsset(join(mathFontRoot, "svg.js"), `chalk-mathjax/${MATHJAX_ASSET_VERSION}/fonts/mathjax-newcm-font/svg.js`);

@@ -14,6 +14,8 @@ let browser: Browser;
 
 beforeAll(async () => {
   await promisify(execFile)(process.execPath, [resolve(import.meta.dirname, "../../../../packages/whiteboard/scripts/build-embedded.mjs")]);
+  // Each browser suite owns its harness and cleanup independently.
+  // fallow-ignore-next-line code-duplication
   ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({ headless: true });
 }, 60_000);
@@ -31,6 +33,8 @@ it("loads call, board, sticky note, text and math assets from our origin", async
   const requests: { url: string; type: string }[] = [];
   const failed: string[] = [];
   const pageErrors: string[] = [];
+  // Keep the request trace local to the browser context that owns it.
+  // fallow-ignore-next-line code-duplication
   let fonts: { family: string; status: string }[] = [];
   context.on("request", (request) => requests.push({ url: request.url(), type: request.resourceType() }));
   context.on("response", (response) => {
@@ -63,11 +67,13 @@ it("loads call, board, sticky note, text and math assets from our origin", async
       await target.click({ position: { x, y: 320 } });
       await page.locator("textarea.excalidraw-wysiwyg").waitFor();
       await page.keyboard.type(text);
-      await page.keyboard.press("Escape");
+      expect(await page.locator("textarea.excalidraw-wysiwyg").inputValue()).toBe(text);
+      if (tool === "Sticky note") await page.keyboard.press("Escape");
     }
     await page.evaluate(() => document.fonts.ready);
     fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, status: font.status })));
     if (process.env.ASSET_PROOF_DIR) await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, "board.png") });
+    await page.keyboard.press("Escape");
     const mathModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/react/mathjax-renderer.ts")}`;
     const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
     await page.addScriptTag({
