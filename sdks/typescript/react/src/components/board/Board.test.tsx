@@ -815,6 +815,8 @@ it("preserves redo and disabled Undo when text editing makes no scene change", a
 });
 
 beforeEach(async () => {
+  vi.stubGlobal("localStorage", window.localStorage);
+  window.localStorage.clear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
