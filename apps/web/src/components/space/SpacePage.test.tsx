@@ -158,7 +158,7 @@ describe("public Space entry", () => {
       expect(mocks.holder.chalkProps).toBeUndefined();
 
       mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-next", retry_after: 1, space: { slug: "design-lab", name: "Design Lab" } });
-      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join" })));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join call" })));
       await act(async () => vi.advanceTimersByTimeAsync(1_000));
       expect(mocks.publicClient.getSpacePublicInviteArrival).toHaveBeenLastCalledWith("arrival-next");
       expect(mocks.holder.chalkProps).toBeDefined();
