@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -127,7 +126,7 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`${origin}/asset-font-probe`);
     const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
-    const excalidrawModule = `/@fs/${realpathSync(resolve(import.meta.dirname, "../../../../packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.js"))}`;
+    const excalidrawModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/tests/font-export.fixture.ts")}`;
     await page.addScriptTag({
       type: "module",
       content: `import { configureWhiteboardAssets } from ${JSON.stringify(assetsModule)};

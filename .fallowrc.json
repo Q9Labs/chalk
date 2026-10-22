@@ -25,6 +25,7 @@
     "apps/sync/scripts/reliability_harness.test.mjs",
     "sdks/typescript/client/test/fixtures/entry-interleaving-client.mjs",
     "packages/whiteboard/src/embedded/renderer.tsx",
+    "packages/whiteboard/tests/font-export.fixture.ts",
     "sdks/typescript/client/src/generated/http-api.ts",
     "sdks/typescript/client/src/generated/openapi-types.d.ts",
     "sdks/typescript/client/src/generated/schemas.ts",
