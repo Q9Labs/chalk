@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { sourceAliases } from "./vite.aliases";
+import { selfHostedExcalidraw } from "./scripts/self-hosted-excalidraw";
 
 // Dev server for the call-state harness: every call page state rendered from
 // fixtures, so screenshots compare before and after without a live call.
@@ -19,5 +20,5 @@ export default defineConfig({
     ],
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
-  plugins: [tailwindcss(), viteReact()],
+  plugins: [selfHostedExcalidraw(), tailwindcss(), viteReact()],
 });

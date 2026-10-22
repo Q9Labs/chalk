@@ -43,6 +43,7 @@ for label in before after; do
       echo 'Expected the original board CDN requests to fail the new assertion' >&2; exit 1
     fi
     rg 'external HTTP requests' "$proof_dir/before-call.log"
+    rg 'external font fallback requests' "$proof_dir/before-call.log"
   else
     ASSET_PROOF_ONLY=1 node apps/web/tests/dashboard-ui/run.mjs
     # Prove Vite generates ignored assets from a clean development checkout.
