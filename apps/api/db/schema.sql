@@ -1392,6 +1392,7 @@ create table sync_lifecycle_intents (
     foreign key (tenant_id, space_id, episode_id, participant_id)
         references participants(tenant_id, space_id, episode_id, id)
         on delete restrict,
+    constraint sync_lifecycle_intents_sync_v3_generation_fkey
     foreign key (
         tenant_id, space_id, episode_id,
         participant_id, participant_generation
@@ -4404,6 +4405,10 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
 $$;
 
 -- Absence of a seat row means the legacy protocol. No historical rows change.
+-- Retry rotates the participant and intent together in the authority transaction.
+alter table sync_lifecycle_intents
+    alter constraint sync_lifecycle_intents_sync_v3_generation_fkey deferrable initially deferred;
+
 create table participant_join_seats (
     tenant_id uuid not null,
     space_id uuid not null,
@@ -4457,9 +4462,9 @@ begin
         update participants set generation=generation+1, media_connection_id=null,
             media_connection_generation=null, updated_at=now() where id=seat_participant;
         update participant_join_seats set generation=generation+1,
-            expires_at=now()+interval '1 minute', updated_at=now() where participant_id=seat_participant;
+            expires_at=now()+interval '2 minutes', updated_at=now() where participant_id=seat_participant;
         update sync_lifecycle_intents set participant_generation=seat_generation+1,
-            next_attempt_at=now()+interval '1 minute'
+            next_attempt_at=now()+interval '2 minutes'
         where tenant_id=seat_tenant and space_id=seat_space and episode_id=seat_episode
           and participant_id=seat_participant and participant_generation=seat_generation
           and intent_name='participant_joined' and status='pending';
@@ -4537,10 +4542,10 @@ begin
         if not found then return 'capacity_exceeded'; end if;
         update participants set status='joining', generation=generation+1, left_at=null, media_connection_id=null,
             media_connection_generation=null, updated_at=now() where id=seat_participant;
-        update participant_join_seats set state='pending', generation=generation+1, expires_at=now()+interval '1 minute', updated_at=now()
+        update participant_join_seats set state='pending', generation=generation+1, expires_at=now()+interval '2 minutes', updated_at=now()
         where participant_id=seat_participant;
         update sync_lifecycle_intents set status='pending', participant_generation=seat_generation+1, terminal_reason=null, completed_at=null,
-            attempt_count=0, last_error_code=null, next_attempt_at=now()+interval '1 minute'
+            attempt_count=0, last_error_code=null, next_attempt_at=now()+interval '2 minutes'
         where tenant_id=seat_tenant and space_id=seat_space and episode_id=seat_episode
           and participant_id=seat_participant and participant_generation=seat_generation
           and intent_name='participant_joined' and status='superseded'

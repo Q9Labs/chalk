@@ -77,7 +77,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     const pending = await admit();
     assert(pending.access, "open admission must return a participant access grant");
     const id = pending.participant.id;
-    assert.equal(sql(`select (expires_at > now() and expires_at <= now()+interval '1 minute')::text from participant_join_seats where participant_id='${id}'`), "true", "pending admission has a bounded lease");
+    assert.equal(sql(`select (expires_at > now()+interval '60 seconds' and expires_at <= now()+interval '2 minutes')::text from participant_join_seats where participant_id='${id}'`), "true", "pending admission has a bounded lease");
     assert(!(await attendance()).some((person) => person.participant_id === id));
     await delay(300);
     assert.equal(state(id), "joining:pending:false", "admission with no socket must not become attendance");
@@ -85,7 +85,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     const pendingRetry = await admit();
     assert.equal(pendingRetry.participant.id, id, "same-page Retry must reuse one seat");
     assert.equal(
-      sql(`select (s.expires_at > now()+interval '55 seconds' and i.next_attempt_at=s.expires_at)::text from participant_join_seats s join sync_lifecycle_intents i using(participant_id) where s.participant_id='${id}' and i.intent_name='participant_joined'`),
+      sql(`select (s.expires_at > now()+interval '60 seconds' and i.next_attempt_at=s.expires_at)::text from participant_join_seats s join sync_lifecycle_intents i using(participant_id) where s.participant_id='${id}' and i.intent_name='participant_joined'`),
       "true",
       "Retry renews the seat and reaper deadlines",
     );

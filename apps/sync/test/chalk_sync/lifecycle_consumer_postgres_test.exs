@@ -118,7 +118,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
              Postgrex.query!(
                connection,
                """
-               select s.expires_at between now()+interval '55 seconds' and now()+interval '1 minute',
+               select s.expires_at between now()+interval '115 seconds' and now()+interval '2 minutes',
                  i.next_attempt_at=s.expires_at
                from participant_join_seats s join sync_lifecycle_intents i using(participant_id)
                where s.participant_id=$1 and i.intent_name='participant_joined'
@@ -136,7 +136,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       connection,
       """
       insert into participant_join_seats(tenant_id,space_id,episode_id,participant_id,generation,state,expires_at)
-      values($1,$2,$3,$4,1,'pending',now()+interval '1 minute')
+      values($1,$2,$3,$4,1,'pending',now()+interval '2 minutes')
       """,
       Scope.participant(fixture.identity)
     )
