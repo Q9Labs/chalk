@@ -12,6 +12,7 @@ it("preloads configured local styles while retaining the SDK host default", () =
   defaultLink?.remove();
 
   configureWhiteboardAssets({ excalidrawCssPath: "/chalk-whiteboard/0.18.1/index.css", mathJaxBasePath: "/chalk-mathjax/4.1.3" });
+  expect(window.EXCALIDRAW_ASSET_PATH).toBe(new URL("/chalk-whiteboard/0.18.1/", window.location.href).href);
   preloadWhiteboardStylesheet();
   expect(document.querySelector<HTMLLinkElement>("#chalk-excalidraw-styles")?.getAttribute("href")).toBe("/chalk-whiteboard/0.18.1/index.css");
 });
