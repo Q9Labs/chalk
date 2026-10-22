@@ -333,6 +333,16 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		proveAdmissionProvenanceCollection(t, ctx, pool, service, episodeRepository, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
 	})
 
+	t.Run("cleanup query retained history", func(t *testing.T) {
+		if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") != "1" {
+			t.Skip("opt-in seeded EXPLAIN proof")
+		}
+		_, request := newKnock("Cleanup EXPLAIN fixture")
+		planCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		proveAdmissionCleanupPlan(t, planCtx, pool, request.RequestHandle)
+	})
+
 	_, disabled := newKnock("Disabled invite guest")
 	if _, err := service.SetInviteEnabled(ctx, tenantID, space.ID, false, accountID); err != nil {
 		t.Fatal(err)
@@ -350,14 +360,5 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	if err := pool.QueryRow(ctx, `select count(*) from episodes where tenant_id=$1 and space_id=$2`, uuid(tenantID), uuid(space.ID)).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("retry created an empty replacement Episode: count=%d, %v", count, err)
 	}
-	t.Run("cleanup query retained history", func(t *testing.T) {
-		if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") != "1" {
-			t.Skip("opt-in seeded EXPLAIN proof")
-		}
-		_, request := newKnock("Cleanup EXPLAIN fixture")
-		planCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		proveAdmissionCleanupPlan(t, planCtx, pool, request.RequestHandle)
-	})
 
 }

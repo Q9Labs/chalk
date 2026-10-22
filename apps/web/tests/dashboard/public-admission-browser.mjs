@@ -67,12 +67,15 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     guest.on("pageerror", (error) => {
       if (failures.length < 100) failures.push({ error: error.message });
     });
+    guest.on("response", (response) => {
+      if (response.status() >= 400 && failures.length < 100) failures.push({ path: new URL(response.url()).pathname, status: response.status() });
+    });
     try {
       await guest.goto(guestUrl);
       await guest.getByLabel("Your name").fill(name);
       await guest.getByRole("button", { name: "Join", exact: true }).click();
       await guest.getByText(/Asking to join/).waitFor();
-      if (before || dashboard) return { context, guest };
+      if (before || dashboard) return { context, guest, failures };
       await page.getByRole("button", { name: `Admit ${name}`, exact: true }).waitFor({ timeout: 15000 });
       const badge = page.getByLabel("1 waiting to join", { exact: true });
       await badge.waitFor();
@@ -85,7 +88,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
         "The HTTP journey and W3C trace reach the durable admission intent and ledger root",
       );
       journeys.push({ name, journeyId, traceId });
-      return { context, guest };
+      return { context, guest, failures };
     } catch (error) {
       await writeFile(resolve(out, "failure-guest-network.json"), JSON.stringify(failures, null, 2));
       await page.screenshot({ path: resolve(out, "failure-host.png") });
@@ -280,8 +283,17 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
         page.off("request", countDecision);
         await release();
       }
-      await pending.guest.getByTestId("stage").waitFor({ timeout: 20000 });
-      await pending.guest.getByRole("group", { name: "Stage with 1 participant", exact: true }).waitFor({ timeout: 15000 });
+      try {
+        await pending.guest.getByTestId("stage").waitFor({ timeout: 20000 });
+        await pending.guest.getByRole("group", { name: "Stage with 1 participant", exact: true }).waitFor({ timeout: 15000 });
+      } catch (error) {
+        await pending.guest.screenshot({ path: resolve(out, "hostless-failure-guest.png") });
+        const state = await sql(
+          `select json_agg(json_build_object('admission', r.status, 'participant', p.status, 'arrival', a.state, 'public', public.state, 'operation', op.status, 'attempts', op.attempt_count, 'error', op.last_error_code)) from sync_admission_requests r join participants p on p.id=r.participant_id join space_public_admission_requests public on public.request_handle=r.admission_request_id join space_public_arrivals a on a.arrival_handle=public.arrival_handle left join sync_external_operations op on op.external_operation_id=r.decision_external_operation_id where r.tenant_id='${tenantId}' and r.space_id='${spaceId}' and r.display_name='Hostless dashboard guest'`,
+        );
+        await writeFile(resolve(out, "hostless-failure.json"), JSON.stringify({ body: await pending.guest.locator("body").innerText(), failures: pending.failures, state: JSON.parse(state) }, null, 2));
+        throw error;
+      }
       assert.equal(await pending.guest.evaluate(() => window.admissionProofDocument), guestDocument, "Guest entered automatically without document reload");
       assert.equal(await page.evaluate(() => window.admissionProofDocument), dashboardDocument);
       await row.waitFor({ state: "hidden" });
@@ -303,7 +315,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     await proveInvalidationTick();
     return;
   }
-  if (process.argv.includes("--admission-dashboard-before") || process.argv.includes("--admission-dashboard-readded-before")) {
+  if (process.argv.includes("--admission-dashboard-before") || process.argv.includes("--admission-dashboard-readded-before") || process.argv.includes("--admission-dashboard")) {
     await proveDashboardWithoutHost();
     return;
   }
