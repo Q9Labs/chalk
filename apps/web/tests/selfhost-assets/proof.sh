@@ -36,6 +36,8 @@ for label in before after; do
     rg 'external HTTP requests' "$proof_dir/before-call.log"
   else
     ASSET_PROOF_ONLY=1 node apps/web/tests/dashboard-ui/run.mjs
+    # Prove Vite generates ignored assets from a clean development checkout.
+    rm -r apps/web/public/chalk-whiteboard apps/web/public/chalk-mathjax
     pnpm --filter web exec vitest run src/call-states/assets.test.ts
   fi
 done

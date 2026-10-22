@@ -135,19 +135,14 @@ describe("Privacy Policy advance notice", () => {
     expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("Endpoint settings and revision history");
     expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("tenant is purged");
   });
-  it("discloses Google Fonts request data and transfer safeguards", () => {
+  it("keeps sign-in safeguards without listing self-hosted assets as recipients", () => {
     render(<LegalPage kind="privacy" />);
-    const provider = screen.getByText("Google Fonts").closest("li");
-    expect(provider?.textContent).toContain("IP address and user agent");
-    expect(provider?.textContent).toContain("fonts.googleapis.com");
-    expect(provider?.textContent).toContain("fonts.gstatic.com");
+    for (const name of ["Google Fonts", "jsDelivr", "esm.sh"]) expect(screen.queryByText(name)).toBeNull();
     expect(screen.getByText(/Google relies on the EU-US Data Privacy Framework/).textContent).toContain("EU Standard Contractual Clauses");
   });
   it.each([
     ["Google sign-in", "authorization code", "IP address", "authenticate"],
     ["Apple sign-in", "authorization code", "user agent", "authenticate"],
-    ["jsDelivr", "cdn.jsdelivr.net", "IP address", "MathJax"],
-    ["esm.sh", "whiteboard fonts", "user agent", "request URL"],
   ])("discloses %s and its request data and purpose", (name, ...details) => {
     render(<LegalPage kind="privacy" />);
     const recipient = screen.getByText(name).closest("li");

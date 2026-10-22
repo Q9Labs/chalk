@@ -33,7 +33,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "International transfers",
     content:
-      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Google relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Apple describes EU Standard Contractual Clauses for international transfers of EEA personal data in its Privacy Policy. jsDelivr is operated by Volentio JSD Limited in the UK and uses global CDN providers; jsDelivr and esm.sh can process asset-request data internationally under their own terms. External content hosts and sign-in providers also apply their own privacy terms to their services. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
+      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Google relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Apple describes EU Standard Contractual Clauses for international transfers of EEA personal data in its Privacy Policy. External content hosts and sign-in providers also apply their own privacy terms to their services. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
   },
   {
     heading: "Children",
@@ -249,22 +249,9 @@ function PrivacyPolicy() {
           governs its sign-in service.
         </li>
         <li>
-          <strong>jsDelivr</strong> (Volentio JSD Limited) supplies Excalidraw styles and MathJax scripts and font data through cdn.jsdelivr.net for web calls and whiteboards. Your browser contacts it directly, including when the call UI preloads whiteboard styles. It and its CDN providers
-          (Cloudflare, Fastly, and Gcore) receive your IP address, user agent, requested asset URL, request time, and any referrer your browser sends. These requests load library assets; Chalk does not send your call audio, chat, or whiteboard text as part of the asset request. See jsDelivr's{" "}
-          <a href="https://www.jsdelivr.com/terms/privacy-policy">Privacy Policy</a> and <a href="https://github.com/jsdelivr/jsdelivr/blob/master/Sub-Processors.md">CDN provider list</a>.
-        </li>
-        <li>
-          <strong>esm.sh</strong> supplies whiteboard fonts through Excalidraw's external asset loader or fallback in the web app. The CDN receives your IP address, user agent, request URL, and any referrer your browser sends to deliver those font files. The mobile app bundles its whiteboard fonts
-          and scripts locally and blocks external whiteboard network requests.
-        </li>
-        <li>
           <strong>External whiteboard content.</strong> If you add or open an external embed or link in a web whiteboard, its host can receive your IP address, user agent, requested URL, and any referrer your browser sends. Excalidraw supports hosts including YouTube (Google), Vimeo, Figma, GitHub
           Gist, X/Twitter, Reddit, Giphy, SimplePDF, StackBlitz, Val Town, and Excalidraw's link service. Those hosts use this data to serve the content you selected under their own privacy terms. This is separate from Chalk's call-media processing; the mobile whiteboard blocks external embeds and
           network requests.
-        </li>
-        <li>
-          <strong>Google Fonts</strong> supplies the web app's fonts through fonts.googleapis.com and fonts.gstatic.com. Your browser requests these files directly from Google, which receives your IP address and user agent. Google handles this request data under its{" "}
-          <a href="https://policies.google.com/privacy">Privacy Policy</a>.
         </li>
       </ul>
       <p>We do not sell personal data or share it for advertising or tracking. Apart from the providers and third-party services listed above, content you send to other participants, and integrations your tenant chooses, we disclose data only when the law requires it.</p>
