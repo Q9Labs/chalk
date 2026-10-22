@@ -12,7 +12,10 @@
     "CHANGELOG.md"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/embedded/renderer-assets.ts",
+    "./src/embedded/renderer.tsx"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
