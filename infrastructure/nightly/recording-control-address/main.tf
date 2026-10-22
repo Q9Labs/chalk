@@ -42,7 +42,7 @@ resource "aws_eip" "control" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    destroy = false
   }
 }
 

@@ -73,12 +73,16 @@ The backend file supplies the existing nightly state bucket, as in
 `backend.hcl.example`. On the first install only, save the full Cloudflare record
 as the undo and set **only** the DNS-only A record
 `nightly-recording-control.chalkmeet.com` to this output, preserving its TTL and
-other fields. Keep that record unchanged across later host replacements.
+other fields. Update the capture and render recorder policies' `control_addresses`
+to include this address and apply both firewalls before the cold-boot check.
+The current nightly firewalls already allow this destination. Keep that record
+unchanged across later host replacements.
 Confirm its public DNS answer matches the output before the signed recorder
 cold-boot check. The output `allocation_id` identifies the same allocation for
-read-only association checks and recovery. Reverting code does not release the
-live address; move the retained allocation back to the previous nightly host to
-undo an association change.
+read-only association checks and recovery. The allocation uses
+`lifecycle.destroy = false`, which persists its retention policy in state even if
+the block is removed. Reverting code does not release the live address; move the
+retained allocation back to the previous nightly host to undo an association change.
 
 Run `tofu test` in this root with OpenTofu 1.12.3 to exercise first installation,
 association with a replacement host, and rejection of a production host.
