@@ -269,6 +269,34 @@ it("keeps every expanded row when more than a page of calls is made elsewhere", 
   expect(screen.getAllByText(/^Paged \d+$/)).toHaveLength(100);
 });
 
+it("keeps the last row when more calls are made elsewhere than a page holds", async () => {
+  const history = Array.from({ length: 5 }, (_, index) => row(uuid(0x100 + index), `Old ${index}`));
+  const truth: Truth = { calls: history, live: {} };
+  serve(truth);
+  await open();
+  // Six new calls push Old 4, the last row Home showed, onto the third page.
+  const fresh = Array.from({ length: 6 }, (_, index) => row(uuid(0x50 + index), `New ${index}`));
+  truth.calls = [...fresh, ...history];
+  await tick();
+  expect(screen.getAllByText(/^(New|Old) \d$/).map((item) => item.textContent)).toEqual([...fresh, ...history].map((call) => call.name));
+});
+
+it("reads on to 300 calls to keep the last row when a burst of calls is made elsewhere", async () => {
+  const history = Array.from({ length: 50 }, (_, index) => row(uuid(0x1000 + index), `Old ${index}`));
+  const truth: Truth = { calls: history, live: {}, pageSize: 50 };
+  serve(truth);
+  await open();
+  // 250 new calls push Old 49 to the 300th row, six pages down.
+  const fresh = Array.from({ length: 250 }, (_, index) => row(uuid(0x2000 + index), `New ${index}`));
+  truth.calls = [...fresh, ...history];
+  const before = requests().length;
+  await tick();
+  expect(screen.getAllByText(/^New \d+$/)).toHaveLength(250);
+  expect(screen.getAllByText(/^Old \d+$/)).toHaveLength(50);
+  expect(screen.getByText("Old 49")).toBeTruthy();
+  expect(requests().slice(before).filter(([name]) => name === "home")).toHaveLength(6);
+}, 20_000);
+
 it("ends a live call in the same check that finds a call made elsewhere", async () => {
   const truth: Truth = { calls: [planning], live: { [planning.id]: first } };
   serve(truth);

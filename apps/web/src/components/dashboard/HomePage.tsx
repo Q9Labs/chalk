@@ -32,11 +32,11 @@ export function HomePage() {
     async () => {
       let data = await readPage("home", {});
       // Keep expanded rows when the list reloads, up to Home's 300 calls: read as many pages as before, and on until
-      // the last row Home showed is back, since new calls on top push it onto a later page. A row that is gone stops
-      // that search at twice the pages.
+      // the last row Home showed is back, since new calls on top push it onto a later page. However many calls came
+      // in, and even if that row is gone, the 300-call limit ends the search.
       const reached = () => !last.current || data.calls.some((call) => call.id === last.current);
       let read = 1;
-      while (data.nextCursor && data.calls.length < HOME_STATUS_ROWS && (read < pages.current || (!reached() && read < 2 * pages.current))) {
+      while (data.nextCursor && data.calls.length < HOME_STATUS_ROWS && (read < pages.current || !reached())) {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
         read++;
