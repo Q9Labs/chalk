@@ -146,6 +146,10 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-tool[aria-pressed="true"]:hover {background:var(--chalk-text-strong);}
 .chalk-board-tool:disabled {opacity:.35; cursor:default; transform:none; background:none;}
 .chalk-board[data-compact] .chalk-board-tool {width:44px; height:44px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-tool {width:44px; height:44px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-zoom {height:52px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-zoom button {height:44px; min-width:44px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-menu-button {width:44px; height:44px;}
 @media (pointer:coarse) {.chalk-board-tool {width:44px; height:44px;}}
 .chalk-board-tool-caret {position:absolute; right:3px; bottom:3px;}
 .chalk-board-tool-swatch {width:22px; height:22px; border-radius:50%; box-shadow:0 0 0 2px var(--chalk-surface), 0 0 0 3.5px var(--chalk-muted-text);}

@@ -11,7 +11,7 @@ declare global {
 type PendingRequest = {
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: Error) => void;
-  readonly timer: ReturnType<typeof setTimeout>;
+  readonly timer: ReturnType<typeof setTimeout> | undefined;
 };
 
 type HostListener = (message: ChalkEmbeddedWhiteboardHostEnvelope) => void;
@@ -74,7 +74,7 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
   }
 
   exportImage(payload: { readonly format: "png"; readonly mimeType: "image/png"; readonly dataURL: string; readonly action: "download" | "copy" }): Promise<void> {
-    return this.#request<void>("user_export", payload);
+    return this.#request<void>("user_export", payload, payload.action === "download" ? null : undefined);
   }
 
   requestSnapshot(): Promise<void> {
@@ -89,13 +89,16 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request("file_read", { fileId });
   }
 
-  #request<T>(type: "view" | "user_export" | "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>): Promise<T> {
+  #request<T>(type: "view" | "user_export" | "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>, timeoutMs: number | null = 20_000): Promise<T> {
     const requestId = this.#context.nextMessageId();
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.#pending.delete(requestId);
-        reject(new Error(`embedded whiteboard ${type} timed out`));
-      }, 20_000);
+      const timer =
+        timeoutMs === null
+          ? undefined
+          : setTimeout(() => {
+              this.#pending.delete(requestId);
+              reject(new Error(`embedded whiteboard ${type} timed out`));
+            }, timeoutMs);
       this.#pending.set(requestId, { resolve: (value) => resolve(value as T), reject, timer });
       this.post({ type, payload: { requestId, ...payload } } as ChalkEmbeddedWhiteboardRendererMessage);
     });

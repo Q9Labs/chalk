@@ -165,7 +165,7 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
   ));
   return (
     <>
-      {phone
+      {primaryToolsFirst
         ? entries
             .filter((entry) => primaryTools.includes(entry.tool))
             .map((entry) => (
@@ -176,7 +176,7 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
             ))
         : groups.flatMap((group, index) => [index > 0 ? <Separator key={`s${index}`} /> : null, group])}
       <Separator />
-      {phone ? (
+      {primaryToolsFirst ? (
         <>
           <ColorButton {...colors} />
           <Separator />
@@ -192,8 +192,17 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
           <BoardIcon name="redo" />
         </button>
       </Tip>
-      <Separator />
-      {phone ? entries.filter((entry) => !primaryTools.includes(entry.tool)).map(button) : <ColorButton {...colors} />}
+      {phone ? (
+        <>
+          <Separator />
+          {entries.filter((entry) => !primaryTools.includes(entry.tool)).map(button)}
+        </>
+      ) : primaryToolsFirst ? null : (
+        <>
+          <Separator />
+          <ColorButton {...colors} />
+        </>
+      )}
     </>
   );
 }
@@ -348,13 +357,13 @@ export function BoardIsland(props: IslandProps) {
             </button>
             <Separator />
           </>
-        ) : (
+        ) : !props.primaryToolsFirst ? (
           <Tip label="Move the tools">
             <button type="button" className="chalk-board-grip" aria-label="Move the tools. Use Alt and the arrow keys to dock them left, bottom or top." onPointerDown={startDrag} onKeyDown={gripKeys}>
               <GripIcon />
             </button>
           </Tip>
-        )}
+        ) : null}
         <ToolRow {...props} place={compact ? "bottom" : place} />
       </div>
     </>
