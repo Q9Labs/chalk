@@ -17,6 +17,9 @@ const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
 const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+// API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
+// proof validator. No workspace reads them, so they select those gates instead of a full gate.
+const deploymentRoots = ["infrastructure/managed-episode", "infrastructure/nightly"];
 // Their tests drive a real browser, so CI runs them in their own job with the browser installed.
 const browserTestWorkspaceNames = new Set(["web", "@chalk/sdk-web-consumer-e2e"]);
 const targetRoots = {
@@ -86,7 +89,7 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder"])) return true;
+  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/") || file.startsWith(".semgrep/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
@@ -337,10 +340,10 @@ export function createGatePlan(files, options = {}) {
   const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
-  const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
+  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", ...deploymentRoots]));
+  const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
-  const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder"]));
+  const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
   const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));

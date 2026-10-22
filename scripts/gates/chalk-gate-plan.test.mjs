@@ -188,6 +188,16 @@ test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
 });
 
+test("deployment tree changes run the gates that read them, not a full gate", () => {
+  for (const file of ["infrastructure/managed-episode/env/api.nightly.env.example", "infrastructure/nightly/transcription/main.tf"]) {
+    const plan = createGatePlan([file]);
+    assert.equal(plan.full, false, file);
+    assert.equal(plan.tasks.find((task) => task.id === "recorder")?.selected, true, file);
+    assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks"] }, file);
+  }
+  assert.equal(createGatePlan(["infrastructure/observability/new.yaml"]).full, true);
+});
+
 test("browser CI groups each run only their own selected lane", () => {
   const plan = createGatePlan(["apps/web/src/components/space/SpacePage.tsx"]);
   for (const group of ["browser-tests", "call-performance", "call-leaks"]) {

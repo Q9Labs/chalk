@@ -42,34 +42,8 @@ env:
   CI: "true"
 
 jobs:
-  quality:
-    name: Mobile type checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 12.8.1
-
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Prepare mobile workspace dependencies
-        run: pnpm --filter @q9labsai/chalk-mobile run prepare:native-dependencies
-
-      - name: Check mobile types
-        run: pnpm --filter @q9labsai/chalk-mobile run check-types
-
+  # The gate's types lane checks @q9labsai/chalk-mobile whenever it or a package it uses changes, and its build lane
+  # exports the Metro bundles. This workflow only adds the native compiles.
   fingerprint:
     name: Mobile native fingerprint
     runs-on: ubuntu-latest
