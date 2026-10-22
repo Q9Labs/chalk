@@ -13,3 +13,6 @@ media requests and other non-recoverable failures.
 Distinguish device selection, speaker tests, and incoming requests in media error
 guidance. Cover every client failure code with an operation-aware policy and only
 offer retry when the exact failed media command can be replayed.
+
+Preserve request context in the integrated Chalk dialog and show safe terminal
+guidance without retry for unknown runtime failure codes.

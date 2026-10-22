@@ -108,6 +108,7 @@ export const MEDIA_FAILURE_POLICY = {
 } satisfies Record<ErrorCode, Rule>;
 
 export function commandFailurePresentation(failure: ClientFailure, source?: MediaCommandSource, operation: Operation = "change", hasExactRetry = false): { readonly message: string; readonly retry: boolean } {
+  if (!Object.hasOwn(MEDIA_FAILURE_POLICY, failure.code)) return { message: "This media action couldn’t be completed.", retry: false };
   if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: failure.message, retry: false };
   const rule: Rule = MEDIA_FAILURE_POLICY[failure.code];
   const context = { source, recoverable: failure.recoverable };

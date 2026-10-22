@@ -6,6 +6,7 @@ import { SpaceClientError, type ErrorCode } from "@q9labsai/chalk-client";
 import { commandFailurePresentation, MEDIA_FAILURE_POLICY, type MediaCommandAction, type MediaCommandSource } from "./command-failure";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
+import { Chalk } from "../chalk/Chalk";
 import { SpaceView } from "../space-view/SpaceView";
 
 type Family = "access" | "generic" | "interrupted" | "unsupported" | "ended" | "permission" | "missing" | "busy" | "constraint" | "capture" | "invalid";
@@ -167,4 +168,50 @@ it("walks every actionable policy row through SpaceView and replays the exact fa
       }
   }
   expect(rows).toBe(42);
+});
+
+it("uses safe terminal copy for unknown runtime codes in every media context", () => {
+  for (const code of ["media.new_capture_failure", "future.failure", "__proto__", "toString"])
+    for (const source of sources)
+      for (const operation of operations)
+        for (const recoverable of [false, true]) {
+          const failure = { code: "client.internal_error", recoverable, message: "setCameraEnabled belongs to private internals" } satisfies import("@q9labsai/chalk-client").ClientFailure;
+          // Simulate a newer dependency/server value crossing the older package's typed boundary.
+          Reflect.set(failure, "code", code);
+          expect(commandFailurePresentation(failure, source, operation, true)).toEqual({ message: "This media action couldn’t be completed.", retry: false });
+        }
+});
+
+it("walks every request policy row through integrated Chalk Allow and Decline", async () => {
+  let rows = 0;
+  for (const { code, family } of Object.values(CASES))
+    for (const source of ["camera", "microphone"] as const)
+      for (const action of ["Allow", "Not now"])
+        for (const recoverable of [false, true]) {
+          const snapshot = createSnapshot(["publishAudio", "publishVideo"]);
+          const request = { requestId: "policy-request", kind: source === "camera" ? "start_camera" : "unmute", actorParticipantId: "requester", actorDisplayName: "Requester", expiresAt: new Date(Date.now() + 60_000).toISOString() } as const;
+          const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" }, media: { ...snapshot.media, incomingRequests: [request] } });
+          const command = vi.fn(async (_requestId: string) => {
+            throw new SpaceClientError({ code, recoverable, message: "Private implementation details" });
+          });
+          const client = { ...preview, media: { ...preview.media, acceptRequest: command, declineRequest: command } };
+          const container = document.body.appendChild(document.createElement("div"));
+          const root = createRoot(container);
+          try {
+            await act(async () => root.render(<Chalk client={client} features={{ sounds: false, whiteboard: false }} />));
+            const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === action);
+            expect(button, `${code}/${source}/${action}`).toBeDefined();
+            await act(async () => button?.click());
+            expect(command).toHaveBeenCalledWith("policy-request");
+            expect(container.textContent, `${code}/${source}/${action}/${recoverable}`).toContain(expectedMessage(family, source, "request", recoverable));
+            expect(container.textContent).not.toContain("Private implementation details");
+            expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Try again")).toBe(false);
+            rows++;
+          } finally {
+            await act(async () => root.unmount());
+            container.remove();
+            preview.dispose();
+          }
+        }
+  expect(rows).toBe(240);
 });
