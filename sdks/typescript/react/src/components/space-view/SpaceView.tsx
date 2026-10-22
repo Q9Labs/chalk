@@ -136,10 +136,10 @@ export function SpaceView({
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
-  const onCommandError = (failure: ClientFailure | string | null, source?: MediaCommandSource) => {
+  const onCommandError = (failure: ClientFailure | string | null, source?: MediaCommandSource, mediaSource?: MediaCommandSource) => {
     if (!failure && commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(failure);
-    setCommandSource(source);
+    setCommandSource(mediaSource ?? source);
     if (failure && typeof failure !== "string") playSound("error", failure);
   };
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;

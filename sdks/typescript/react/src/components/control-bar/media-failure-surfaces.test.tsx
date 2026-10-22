@@ -198,3 +198,32 @@ it.each(["fullscreen", "picture-in-picture"])("preserves %s errors", async (oper
     Reflect.deleteProperty(document, "pictureInPictureEnabled");
   }
 });
+
+it.each(["camera", "microphone"] as const)("standalone %s disable failures use action-neutral guidance", async (source) => {
+  const preview = createPreviewClient(createSnapshot(["publishAudio", "publishVideo"]));
+  await preview.media.setCameraEnabled(true);
+  await preview.media.setMicrophoneEnabled(true);
+  const failure = async () => {
+    throw new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: `Could not pause ${source}` });
+  };
+  const client = { ...preview, media: { ...preview.media, setCameraEnabled: failure, setMicrophoneEnabled: failure } };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <ControlBar buttons={[source === "camera" ? "video" : "mic"]} />
+        </ChalkProvider>,
+      ),
+    );
+    const button = container.querySelector<HTMLButtonElement>(`[data-part="${source === "camera" ? "video" : "mic"}-split"] .chalk-shell-main`);
+    expect(button?.getAttribute("aria-label")).toBe(source === "camera" ? "Turn off camera" : "Mute microphone");
+    await act(async () => button?.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(`Couldn’t change your ${source} settings. Check that it is connected and available, then try again.`);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
+  }
+});

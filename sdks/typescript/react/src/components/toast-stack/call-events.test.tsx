@@ -86,3 +86,8 @@ it.each([undefined, "camera", "microphone", "screen"] as const)("hides unhandled
   expect(text).not.toContain("setCameraEnabled");
   expect(text).not.toContain("inactive connection");
 });
+
+it("gives unsupported speaker selection safe non-retry guidance", () => {
+  const toast = mediaFailureToast({ code: "environment.unsupported", recoverable: false, message: "selectSpeaker internal implementation details" }, "speaker");
+  expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("This browser can’t change your speaker. Use your system sound settings to choose an output device.");
+});

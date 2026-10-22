@@ -87,7 +87,7 @@ describe("media command failures", () => {
         const button = container.querySelector(`[data-part="${part}-split"] .chalk-shell-main`);
         if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing ${part} control`);
         await act(async () => button.click());
-        expect(onCommandError).toHaveBeenLastCalledWith(expect.objectContaining({ code }), source);
+        expect(onCommandError).toHaveBeenLastCalledWith(expect.objectContaining({ code }), source, source);
       }
     } finally {
       await act(async () => root.unmount());
@@ -241,5 +241,41 @@ it.each([false, true])("keeps hand controls available while reactions are gated 
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Reactions"]')?.disabled).toBe(true);
   } finally {
     await act(async () => root.unmount());
+  }
+});
+
+it("keeps the legacy speaker callback source empty while providing optional media context", async () => {
+  const preview = createPreviewClient(createSnapshot(["publishAudio"]));
+  const failure = new SpaceClientError({ code: "environment.unsupported", recoverable: false, message: "Speaker selection is not supported" });
+  const client = {
+    ...preview,
+    media: {
+      ...preview.media,
+      selectSpeaker: async () => {
+        throw failure;
+      },
+    },
+  };
+  const onCommandError = vi.fn();
+  function SpeakerSelection() {
+    const { surfaceProps } = useConnectedControlBarBehavior({ onCommandError });
+    return <button onClick={() => surfaceProps.onAudioOutputChange?.("speaker")}>Choose speaker</button>;
+  }
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpeakerSelection />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => container.querySelector("button")?.click());
+    expect(onCommandError).toHaveBeenLastCalledWith(failure, undefined, "speaker");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
   }
 });

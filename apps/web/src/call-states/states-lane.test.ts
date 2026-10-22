@@ -149,7 +149,7 @@ it("maps typed command failures to source-specific recovery guidance", async () 
       ["media.device_not_found", `No ${source} found`],
       ["media.device_busy", `Your ${source} is being used by another app`],
       ["media.device_constraint_invalid", `Your ${source} doesn’t support these settings`],
-      ["media.capture_failed", `Your ${source} couldn’t start`],
+      ["media.capture_failed", `Couldn’t change your ${source} settings`],
       ["client.internal_error", `Couldn’t change your ${source} settings. Try again.`],
     ]) {
       await page.getByRole("button", { name: code, exact: true }).click();

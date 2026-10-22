@@ -1,5 +1,6 @@
 {
   "extends": "./tsconfig.json",
+  "include": ["src/**/*", "type-tests/**/*.ts"],
   "compilerOptions": {
     "composite": false,
     "noEmit": true,
