@@ -491,6 +491,11 @@ it.each(noticeCases)("shows notices whole and off every control: $name, $scheme,
         if (box.top < frame.top - 0.5 || box.bottom > frame.bottom + 0.5) found.push("a notice leaves the call");
         if (text && (text.scrollHeight > text.clientHeight + 1 || text.scrollWidth > text.clientWidth + 1 || getComputedStyle(text).textOverflow === "ellipsis")) found.push("a notice cuts its message");
       }
+      for (const control of document.querySelectorAll<HTMLElement>(".chalk-toast[data-folded] :is(button, a)")) {
+        control.focus();
+        if (document.activeElement === control) found.push(`a hidden notice's ${control.getAttribute("aria-label") ?? control.textContent?.trim()} takes keyboard focus`);
+      }
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       const button = document.querySelector("[data-part='notice-button']");
       const place = button?.getBoundingClientRect();
       const reachable = Boolean(button && place && place.width > 0 && button.contains(document.elementFromPoint(place.left + place.width / 2, place.top + place.height / 2)));
@@ -504,14 +509,25 @@ it.each(noticeCases)("shows notices whole and off every control: $name, $scheme,
   }
 });
 
-it.each(["dark", "light"])("opens every folded notice whole from the header of a 320px-tall embedded call in %s", async (scheme) => {
+it.each(["dark", "light"])("opens every folded notice whole from the header of a 320px-tall embedded call by keyboard in %s", async (scheme) => {
   await page.setViewportSize({ width: 390, height: 844 });
   try {
     await open(`board-notices-${scheme}&notices=3&embed=320`);
     await page.locator(".chalk-board[data-primary] .chalk-board-zoom").waitFor();
     await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
     const button = page.getByRole("button", { name: "Show 3 notices" });
-    await button.click();
+    await button.waitFor();
+    // Walk the whole Tab order: it reaches the notice button and never a hidden notice's controls.
+    const stops = await page.locator("button, a[href], [tabindex]").count();
+    const reached: { readonly folded: boolean; readonly notices: boolean }[] = [];
+    for (let step = 0; step < stops + 2; step += 1) {
+      await page.keyboard.press("Tab");
+      reached.push(await page.evaluate(() => ({ folded: Boolean(document.activeElement?.closest(".chalk-toast[data-folded]")), notices: document.activeElement?.getAttribute("data-part") === "notice-button" })));
+    }
+    expect(reached.filter((stop) => stop.folded)).toEqual([]);
+    expect(reached.some((stop) => stop.notices)).toBe(true);
+    await button.focus();
+    await page.keyboard.press("Enter");
     const list = page.getByRole("dialog", { name: "Notices" });
     await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(3);
     const messages = await list.locator("[data-part='notice'] > span").evaluateAll((spans) => spans.map((span) => ({ text: span.textContent ?? "", whole: span.scrollHeight <= span.clientHeight + 1 && span.scrollWidth <= span.clientWidth + 1 })));

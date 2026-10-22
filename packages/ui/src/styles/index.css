@@ -1296,6 +1296,10 @@
   white-space: nowrap;
   pointer-events: none;
 }
+/* Its text stays for screen readers, but its controls leave the Tab order, since the notice button's list offers them. */
+.chalk-toast[data-folded] :is(button, a) {
+  visibility: hidden;
+}
 /* The header's notice button stays when a phone hides the header's other controls. */
 .chalk-notice-button {
   margin: 0 8px 0 auto;
