@@ -66,6 +66,16 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if err != nil {
 			return fmt.Errorf("lock public admission arrival: %w", err)
 		}
+		// A previous API can commit its arrival-first INSERT while we wait on
+		// this arrival. Recheck before creating an unbound canonical request.
+		existing, err = queries.GetSpacePublicAdmissionRequestForArrival(ctx, sqlc.GetSpacePublicAdmissionRequestForArrivalParams{TenantID: current.TenantID, SpaceID: current.SpaceID, ArrivalHandle: current.ArrivalHandle})
+		if err == nil {
+			result = mapPublicAdmissionProjection(sqlc.ListPendingSpacePublicAdmissionRequestsRow(existing))
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
 		valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
 		if err != nil {
 			return err

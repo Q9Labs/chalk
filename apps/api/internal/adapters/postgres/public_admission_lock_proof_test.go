@@ -99,10 +99,14 @@ func proveAdmissionRolloutLockOrder(t *testing.T, ctx context.Context, pool *pgx
 	if err := creator.QueryRow(ctx, `select pg_backend_pid()`).Scan(&pid); err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
+	type rolloutResult struct {
+		request publicinvites.AdmissionRequest
+		err     error
+	}
+	done := make(chan rolloutResult, 1)
 	go func() {
-		_, err := publicinvites.NewService(NewPublicInviteRepositoryWithPool(creator)).CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrivalID, DisplayName: "Rollout guest"})
-		done <- err
+		request, err := publicinvites.NewService(NewPublicInviteRepositoryWithPool(creator)).CreateAdmissionRequest(ctx, publicinvites.CreateAdmissionRequestInput{ArrivalHandle: arrivalID, DisplayName: "Rollout guest"})
+		done <- rolloutResult{request: request, err: err}
 	}()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
@@ -115,8 +119,8 @@ func proveAdmissionRolloutLockOrder(t *testing.T, ctx context.Context, pool *pgx
 			break
 		}
 		select {
-		case err := <-done:
-			t.Fatalf("new admission did not wait for old arrival: %v", err)
+		case result := <-done:
+			t.Fatalf("new admission did not wait for old arrival: %v", result.err)
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		case <-ticker.C:
@@ -127,16 +131,25 @@ func proveAdmissionRolloutLockOrder(t *testing.T, ctx context.Context, pool *pgx
 	}
 	now := time.Now()
 	expires := now.Add(5 * time.Minute)
-	_, err = queries.CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{RequestHandle: uuid(accountTenantIntegrationID(t)), ArrivalHandle: arrival.ArrivalHandle, TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, DisplayName: "Rollout guest", RequestedAt: timestamptz(&now), ExpiresAt: timestamptz(&expires)})
-	// Release before checking the error so a failed regression cannot strand the creator.
-	if rollbackErr := old.Rollback(ctx); rollbackErr != nil {
-		t.Fatal(rollbackErr)
-	}
+	oldHandle := accountTenantIntegrationID(t)
+	_, err = queries.CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{RequestHandle: uuid(oldHandle), ArrivalHandle: arrival.ArrivalHandle, TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, DisplayName: "Rollout guest", RequestedAt: timestamptz(&now), ExpiresAt: timestamptz(&expires)})
 	if err != nil {
+		_ = old.Rollback(ctx)
 		t.Fatalf("mixed-version admission INSERT blocked by new Space lock: %v", err)
 	}
-	if err := <-done; err != nil {
-		t.Fatalf("new admission after old arrival release: %v", err)
+	if err := old.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	result := <-done
+	if result.err != nil || result.request.RequestHandle != oldHandle {
+		t.Fatalf("new admission after old arrival commit: handle=%s err=%v", result.request.RequestHandle, result.err)
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `select count(*) from sync_admission_requests where tenant_id=$1 and request_key=$2`, arrival.TenantID, arrival.IdempotencyKey).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("mixed-version replay created %d unbound canonical admissions", count)
 	}
 	t.Log("previous arrival-first INSERT and current admission creation both completed without a lock cycle")
 }
