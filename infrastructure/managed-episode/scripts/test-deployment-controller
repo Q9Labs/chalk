@@ -206,12 +206,25 @@ case "${1:-} ${2:-}" in
     if [[ "$1" == --force ]]; then force=true; shift; fi
     [[ $# == 1 ]]
     [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" != true ]] || { echo 'test-only image storage permission denied' >&2; exit 125; }
-    removed_id="$(jq -er --arg ref "$1" '.[] | select(.id == $ref or (.refs|index($ref))) | .id' "$FAKE_IMAGE_STATE")" || exit 1
+    removed_id="$(jq -er --arg ref "$1" '.[] | select(.id == $ref or (.refs|index($ref)) or ((.names // [])|index($ref))) | .id' "$FAKE_IMAGE_STATE")" || exit 1
+    if [[ "$removed_id" == "${FAKE_LATE_CONTAINER_IMAGE_ID:-}" ]]; then
+      jq --arg id "$removed_id" 'map(if .id == $id then .containers=1 else . end)' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+      mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+    fi
     # Podman 4.9 libimage/image.go refuses multi-name IDs without force.
     # Names (tags) are distinct from RepoDigests in the inventory.
-    if [[ "$force" == false ]] && jq -e --arg id "$removed_id" 'any(.[]; .id == $id and ((.names // [])|length) > 1)' "$FAKE_IMAGE_STATE" >/dev/null; then
+    if [[ "$force" == false && "$1" == "$removed_id" ]] && jq -e --arg id "$removed_id" 'any(.[]; .id == $id and ((.names // [])|length) > 1)' "$FAKE_IMAGE_STATE" >/dev/null; then
       printf 'Error: unable to delete image %s by ID with more than one tag: please force removal\n' "$removed_id" >&2
       exit 125
+    fi
+    if [[ "$1" != "$removed_id" ]] && jq -e --arg id "$removed_id" 'any(.[]; .id == $id and ((.names // [])|length) > 1)' "$FAKE_IMAGE_STATE" >/dev/null; then
+      jq --arg id "$removed_id" --arg name "$1" 'map(if .id == $id then .names -= [$name] else . end)' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+      mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+      exit 0
+    fi
+    if [[ "$force" == false ]] && jq -e --arg id "$removed_id" 'any(.[]; .id == $id and .containers > 0)' "$FAKE_IMAGE_STATE" >/dev/null; then
+      printf 'Error: image %s is in use by a container\n' "$removed_id" >&2
+      exit 2
     fi
     # podman-rmi(1) exit 2: dependent children prevent parent removal, even with force.
     if jq -e --arg id "$removed_id" 'any(.[]; .parent == $id)' "$FAKE_IMAGE_STATE" >/dev/null; then
@@ -279,6 +292,10 @@ case "${1:-} ${2:-}" in
     mv "$temporary" "$state"
     ;;
   "image inspect")
+    if [[ "$4" == '{{range .RepoTags}}{{.}} {{end}}' ]]; then
+      jq -r --arg id "$5" '.[] | select(.id == $id) | (.names // [])[]' "$FAKE_IMAGE_STATE"
+      exit
+    fi
     if [[ "$4" == '{{.Id}}' ]]; then
       jq -er --arg ref "$5" '.[] | select(.refs|index($ref)) | .id' "$FAKE_IMAGE_STATE"
       exit
@@ -493,7 +510,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   dangling_id="sha256:$(printf '2%.0s' {1..64})"
   later_image="example.com/later@sha256:$(printf '3%.0s' {1..64})"
   case "$image_case" in
-    multi-digest|multi-name|parent-refusal|dangling|ledger-missing|ledger-tampered|ledger-invalid-id)
+    multi-digest|multi-name|parent-refusal|late-container|dangling|ledger-missing|ledger-tampered|ledger-invalid-id)
       case "$image_case" in
         multi-digest)
           export FAKE_DUPLICATE_IMAGE_ID="${stale_image##*@}"
@@ -507,6 +524,10 @@ if [[ "$test_group" == image-cleanup ]]; then
           export FAKE_PRESSURE_IMAGE_ID="${later_image##*@}"
           # The protected rollback image depends on an untagged intermediate parent.
           jq --arg parent "$dangling_id" --arg rollback "$baseline_image" --arg later "$later_image" '[{id:$parent,refs:[],containers:0}] + map(if (.refs|index($rollback)) then .parent=$parent else . end) + [{id:($later|split("@")[1]),refs:[$later],containers:0}]' "$image_state" >"${image_state}.tmp"
+          ;;
+        late-container)
+          export FAKE_LATE_CONTAINER_IMAGE_ID="${stale_image##*@}" FAKE_PRESSURE_IMAGE_ID="${later_image##*@}"
+          jq --arg stale "$stale_image" --arg later "$later_image" 'map(if (.refs|index($stale)) then .names=["example.com/unused:old", "example.com/unused:older"] else . end) + [{id:($later|split("@")[1]),refs:[$later],containers:0}]' "$image_state" >"${image_state}.tmp"
           ;;
         dangling)
           jq --arg id "$dangling_id" '. + [{id:$id,refs:[],containers:0}]' "$image_state" >"${image_state}.tmp"
@@ -531,7 +552,7 @@ if [[ "$test_group" == image-cleanup ]]; then
       ;;
   esac
   case "$image_case" in
-    active|rollback|previous|candidate|multi-digest|multi-name|parent-refusal|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|all)
+    active|rollback|previous|candidate|multi-digest|multi-name|parent-refusal|late-container|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|all)
       run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/cleanup-case.log" 2>&1 || { tail -n 20 "${fixture_root}/cleanup-case.log" >&2; fail "image cleanup deployment failed"; }
       for protected_class in active rollback previous candidate; do
         case "$image_case" in
@@ -561,7 +582,13 @@ if [[ "$test_group" == image-cleanup ]]; then
           ;;
         dangling) ! jq -e --arg id "$dangling_id" 'any(.[]; .id == $id)' "$image_state" >/dev/null || fail "dangling image with no RepoDigests survived cleanup" ;;
       esac
-      grep -Fxq "$stale_image" "${image_state}.removed" || fail "unprotected image was not reclaimed"
+      if [[ "$image_case" == late-container ]]; then
+        jq -e --arg id "$FAKE_LATE_CONTAINER_IMAGE_ID" 'any(.[]; .id == $id and .containers == 1)' "$image_state" >/dev/null || fail "cleanup deleted an image and container created after inventory"
+        ! jq -e --arg ref "$later_image" 'any(.[]; .refs|index($ref))' "$image_state" >/dev/null || fail "container refusal left later unused images behind"
+        grep -Fq 'is in use by a container' "${fixture_root}/cleanup-case.log" || fail "late container refusal diagnostics disappeared"
+      else
+        grep -Fxq "$stale_image" "${image_state}.removed" || fail "unprotected image was not reclaimed"
+      fi
       printf 'PASS %s reclamation\n' "$image_case"
       ;;
     space|image-space|boundary|cleanup-error|cleanup-error-space|rollback-health)
@@ -599,7 +626,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   esac
   unset FAKE_IMAGE_STATE
   if [[ "$image_case" == all ]]; then
-    for image_case in multi-digest multi-name parent-refusal dangling ledger-missing ledger-tampered ledger-invalid-id space image-space boundary cleanup-error cleanup-error-space rollback-health; do
+    for image_case in multi-digest multi-name parent-refusal late-container dangling ledger-missing ledger-tampered ledger-invalid-id space image-space boundary cleanup-error cleanup-error-space rollback-health; do
       CHALK_TEST_IMAGE_CASE="$image_case" "$0" --group image-cleanup
     done
   fi
