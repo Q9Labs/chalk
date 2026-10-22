@@ -157,7 +157,7 @@ defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
     input = %{chat("file-retry-1") | attachment_ids: [attachment_id]}
     test = self()
 
-    # The retry stops after its first duplicate lookup, just before it checks the file.
+    # The retry stops after its first duplicate lookup, just before the early checks.
     paused = fn ->
       send(test, :retry_paused)
       receive do: (:check -> :ok)
@@ -167,7 +167,34 @@ defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
     retry =
       Task.async(fn ->
         Process.put(:sync_test_node, :second)
-        Repository.append(first, Map.put(input, :attachment_check_observer, paused))
+        Repository.append(first, Map.put(input, :early_check_observer, paused))
+      end)
+
+    assert_receive :retry_paused
+    assert {:ok, %{outcome: :committed, message: message}} = Repository.append(first, input)
+    send(retry.pid, :check)
+
+    assert {:ok, %{outcome: :duplicate, message: ^message}} = Task.await(retry)
+  end
+
+  test "a retry whose original fills the window while the retry waits gets the original message",
+       %{fixture: fixture} do
+    [first, _second] = fixture.identities
+    limit(window_messages: 1)
+    input = chat("window-retry-1")
+    test = self()
+
+    # The retry stops after its first duplicate lookup, just before the early checks.
+    paused = fn ->
+      send(test, :retry_paused)
+      receive do: (:check -> :ok)
+    end
+
+    # The retry runs on another Sync node, so it has its own database connection.
+    retry =
+      Task.async(fn ->
+        Process.put(:sync_test_node, :second)
+        Repository.append(first, Map.put(input, :early_check_observer, paused))
       end)
 
     assert_receive :retry_paused

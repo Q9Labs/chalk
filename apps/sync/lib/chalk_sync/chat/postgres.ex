@@ -316,8 +316,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   defp append_after_authorization(connection, identity, input, fingerprint) do
     with {:ok, profile} <- lock_authority(connection, identity),
          :ok <- require_capability(profile, "sendChat"),
-         :ok <- within_person_rate(connection, identity, input.client_message_id),
-         :ok <- check_attachments(connection, identity, input) do
+         :ok <- early_checks(connection, identity, input) do
       params = space_params(identity.episode)
       Postgrex.query!(connection, SQL.insert_stream(), params)
 
@@ -415,22 +414,13 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  # A cheap first check before the Space stream lock, so a refused flood never holds it. A retry of a
-  # stored message skips it and gets its original result under the lock.
-  defp within_person_rate(connection, identity, client_message_id) do
+  defp within_person_rate(connection, identity) do
     limits = person_limits()
 
-    cond do
-      select_idempotent(connection, identity, client_message_id) != nil ->
-        :ok
-
-      person_count(connection, identity, SQL.person_recent_messages(), [limits.window_ms]) <
-          limits.window_messages ->
-        :ok
-
-      true ->
-        {:error, :rate_limited}
-    end
+    if person_count(connection, identity, SQL.person_recent_messages(), [limits.window_ms]) <
+         limits.window_messages,
+       do: :ok,
+       else: {:error, :rate_limited}
   end
 
   # The Space stream lock is held here, so two sends from one person, even on two Sync nodes,
@@ -513,18 +503,22 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  # A send with a missing or unusable file fails here, without the Space stream lock. A retry
-  # whose original committed after the first duplicate lookup finds its files attached, so it
-  # goes on to the duplicate lookup under the lock instead.
-  defp check_attachments(connection, identity, input) do
-    observe(input, :attachment_check_observer)
+  # Cheap checks before the Space stream lock, so a refused flood or a missing file never holds
+  # it. A retry whose original committed after the first duplicate lookup can fail them, because
+  # the original now fills the window and holds its files, so it goes on to the duplicate lookup
+  # under the lock instead.
+  defp early_checks(connection, identity, input) do
+    observe(input, :early_check_observer)
 
-    with {:error, reason} <-
-           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()),
-         nil <- select_idempotent(connection, identity, input.client_message_id) do
-      {:error, reason}
+    with :ok <- within_person_rate(connection, identity),
+         {:ok, _attachments} <-
+           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()) do
+      :ok
     else
-      _ok_or_existing -> :ok
+      {:error, reason} ->
+        if select_idempotent(connection, identity, input.client_message_id),
+          do: :ok,
+          else: {:error, reason}
     end
   end
 
