@@ -258,8 +258,9 @@ def cleanup_resources(job, slot):
             if found.returncode == 0:
                 command = [docker, 'rm', '-f', '--volumes', name] if kind == 'container' else [docker, 'volume', 'rm', name]
                 subprocess.run(command, check=True, capture_output=True, timeout=10)
-            elif found.returncode != 1:
-                raise RuntimeError('could not inspect owned ' + kind)
+            elif found.returncode != 1 or f'no such {kind}'.encode() not in found.stderr.lower():
+                evidence = bounded_text(found.stderr.decode(errors='replace'), 1024).strip()
+                raise RuntimeError(f'could not inspect owned {kind} {name} (exit {found.returncode}): {evidence}')
 
 
 

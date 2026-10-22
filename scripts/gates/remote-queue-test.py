@@ -431,7 +431,7 @@ class QueueTest(unittest.TestCase):
             self.assertEqual(self.wait('after')['result'], 9)
             self.assertEqual(self.status('after')['slot'], 1, 'quarantined slot was reused')
             receipt.write_text(name + '\n' + name + '\n')
-            docker.write_text('#!/bin/sh\nif [ "$1" = info ]; then exit 0; fi\nexit 1\n')
+            docker.write_text('#!/bin/sh\nif [ "$1" = info ]; then exit 0; fi\necho "Error: No such $1: $3" >&2\nexit 1\n')
             with sqlite3.connect(self.root / 'queue.sqlite') as db:
                 db.execute('UPDATE jobs SET cleanup_after=0 WHERE id="bad"')
             self.assertEqual(self.wait('bad')['result'], 0)
@@ -510,6 +510,77 @@ class QueueTest(unittest.TestCase):
                 except ProcessLookupError:
                     pass
 
+    def test_docker_disconnect_after_info_quarantines_and_retries_owned_resources(self):
+        os.environ['CHALK_REMOTE_SLOTS'] = '2'
+        state = self.root / 'docker-state.json'
+        recovered = self.root / 'docker-recovered'
+        docker = self.root / 'docker'
+        docker.write_text('#!/usr/bin/env python3\n' + f'''
+import json,sys,pathlib
+path=pathlib.Path({str(state)!r}); data=json.loads(path.read_text()); args=sys.argv[1:]
+data['calls'].append(args); result=0
+if len(args)>1 and args[1]=='inspect':
+    kind=args[0]
+    if kind==data['failure'] and not pathlib.Path({str(recovered)!r}).exists():
+        print('failed to connect to the docker API: ' + 'x'*4096, file=sys.stderr); result=1
+    elif not data[kind]:
+        print('Error: No such '+kind+': '+args[2], file=sys.stderr); result=1
+elif args[0]=='rm': data['container']=False
+elif args[:2]==['volume','rm']: data['volume']=False
+path.write_text(json.dumps(data)); sys.exit(result)
+''')
+        docker.chmod(0o700)
+        self.lock.close()
+        for kind in ('container', 'volume'):
+            with self.subTest(inspection=kind):
+                recovered.unlink(missing_ok=True)
+                state.write_text(json.dumps({'container': {'running': False}, 'volume': True, 'failure': kind, 'calls': []}))
+                name = 'disconnect-' + kind
+                release = self.root / ('release-' + kind)
+                self.submit(name, f'while [ ! -f "{release}" ]; do sleep .05; done')
+                row = self.wait(name, 'running')
+                job = self.root.resolve() / 'jobs' / name
+                resources = job / 'resources'
+                resources.mkdir()
+                owned = f'chalk-postgres-slot-{row["slot"]}-' + runpy.run_path(str(HELPER))['job_token'](job)
+                receipt = resources / 'postgres'
+                receipt.write_text(owned + '\n' + owned + '\n')
+                (resources / 'slot').write_text(str(row['slot']))
+                try:
+                    release.touch()
+                    blocked = self.wait(name, 'quarantined')
+                    self.assertIn('failed to connect to the docker API', blocked['cleanup_error'])
+                    self.assertLessEqual(len(blocked['cleanup_error'].encode()), 2048)
+                    self.assertGreater(blocked['cleanup_after'], time.time())
+                    calls = json.loads(state.read_text())['calls']
+                    self.assertEqual(calls[0], ['info'])
+                    self.assertNotIn(['volume', 'rm', owned], calls)
+                    self.assertTrue(json.loads(state.read_text())[kind])
+                    if kind == 'container':
+                        self.assertEqual(json.loads(state.read_text())['container'], {'running': False})
+                    self.submit('healthy-' + kind, 'exit 19')
+                    healthy = self.wait('healthy-' + kind)
+                    self.assertEqual(healthy['result'], 19)
+                    self.assertNotEqual(healthy['slot'], blocked['slot'])
+                    recovered.touch()
+                    with sqlite3.connect(self.root / 'queue.sqlite') as db:
+                        db.execute('UPDATE jobs SET cleanup_after=0 WHERE id=?', (name,))
+                    self.invoke('attach', name)
+                    self.assertEqual(self.wait(name)['result'], 0)
+                    self.assertIsNone(self.status(name)['cleanup_error'])
+                    data = json.loads(state.read_text())
+                    self.assertFalse(data['container'])
+                    self.assertFalse(data['volume'])
+                    self.assertIn(['rm', '-f', '--volumes', owned], data['calls'])
+                    self.assertIn(['volume', 'rm', owned], data['calls'])
+                finally:
+                    release.touch()
+                    recovered.touch()
+                    receipt.unlink(missing_ok=True)
+                    with sqlite3.connect(self.root / 'queue.sqlite') as db:
+                        db.execute('UPDATE jobs SET cleanup_after=0 WHERE id=?', (name,))
+                    self.invoke('attach', name)
+
     def test_dev_containers_and_volumes_removed_after_finish_and_recovery(self):
         state = self.root / 'docker-state.json'
         foreign = {'containers': {'unrelated': True}, 'volumes': ['unrelated']}
@@ -534,6 +605,7 @@ elif args[0]=='exec':
     elif 'show data_checksums' in args: print('on')
     elif 'redis-server' in args: print('Redis server v=8.10.0')
     elif 'PING' in args: print('PONG')
+if result: print('Error: No such '+args[0]+': '+args[2], file=sys.stderr)
 path.write_text(json.dumps(data)); sys.exit(result)
 ''')
         docker.chmod(0o700)
