@@ -100,7 +100,12 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     await rejectOldHello(pendingRetry.access);
     assert.equal(state(id), "joining:pending:false", "an expired attempt cannot confirm the rearmed seat");
     assert.notEqual(retried.access.media.client_payload.connectionId, pending.access.media.client_payload.connectionId);
-    assert.equal((await cancel(pending.access)).status, 200);
+    const currentAttempt = sql(`select generation||':'||media_connection_id from participants where id='${id}'`);
+    const staleCleanup = await cancel(pending.access);
+    assert.equal(staleCleanup.status, 200);
+    assert.deepEqual(await staleCleanup.json(), { cancelled: false }, "stale cleanup must not authorize a fresh admission");
+    await assert.rejects(() => client.participants.issueAccess(spaceId, episodeId, id, { participantGeneration: pending.access.subject.participant_generation, replaceMediaConnection: true }), { status: 409, code: "participant.generation_mismatch" });
+    assert.equal(sql(`select generation||':'||media_connection_id from participants where id='${id}'`), currentAttempt, "stale access recovery must not fence the newer attempt");
     assert.equal(state(id), "joining:pending:false", "late cleanup must not cancel the retry generation");
     assert.equal((await cancel(retried.access, "invalid-token")).status, 401);
     const forgedRoute = `${apiOrigin}/v1/tenants/${tenantId}/spaces/${spaceId}/episodes/${episodeId}/participants/${crypto.randomUUID()}/cancel-join`;
