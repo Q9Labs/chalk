@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCan, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -129,7 +129,7 @@ export function SpaceView({
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
-  const canDrawWhiteboard = useCan("drawWhiteboard");
+  const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();

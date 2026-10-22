@@ -1,7 +1,8 @@
 import { Menu } from "@base-ui/react/menu";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
 import { BoardIcon } from "./BoardIcon";
-import { ISLAND_PLACES, SURFACES, type BoardSurface, type IslandPlace } from "./board-model";
+import type { WhoCanDraw } from "./board-draw-policy";
+import { DRAW_POLICIES, ISLAND_PLACES, SURFACES, type BoardSurface, type IslandPlace } from "./board-model";
 
 export type BoardMenuProps = {
   readonly surface: BoardSurface;
@@ -11,6 +12,8 @@ export type BoardMenuProps = {
   readonly onPlace: (place: IslandPlace) => void;
   readonly onDownload: () => void;
   readonly onCopy: () => void;
+  /** Offered to hosts. */
+  readonly whoCanDraw?: WhoCanDraw;
   readonly onBring?: () => void;
   readonly onClear?: () => void;
   readonly onClose?: () => void;
@@ -52,8 +55,52 @@ function Tiles<T extends string>({ label, value, options, onChange, preview }: {
   );
 }
 
+function Check({ on }: { readonly on: boolean }) {
+  return (
+    <span data-part="menu-check" className="chalk-menu-check" aria-hidden="true">
+      {on ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      ) : null}
+    </span>
+  );
+}
+
+function PickedPeople({ people, onPick }: Pick<WhoCanDraw, "people" | "onPick">) {
+  if (people.length === 0) return <p className="chalk-board-picked-note">No one else is here yet. Hosts can always draw.</p>;
+  return (
+    <>
+      <div className="chalk-board-picked" role="group" aria-label="Picked people">
+        {people.map((person) => (
+          <Menu.CheckboxItem key={person.id} className="chalk-menu-item" checked={person.picked} onCheckedChange={(picked) => onPick(person.id, picked)} closeOnClick={false}>
+            <Check on={person.picked} />
+            <span className="chalk-board-picked-name">{person.name}</span>
+          </Menu.CheckboxItem>
+        ))}
+      </div>
+      {people.some((person) => person.picked) ? null : <p className="chalk-board-picked-note">Only hosts can draw until you pick someone.</p>}
+    </>
+  );
+}
+
+function WhoCanDrawSection({ policy, people, onPolicy, onPick }: WhoCanDraw) {
+  return (
+    <>
+      <Menu.Separator className="chalk-board-menu-rule" />
+      <ChalkMenuLabel>Who can draw</ChalkMenuLabel>
+      {DRAW_POLICIES.map((option) => (
+        <ChalkMenuItem key={option.id} checked={policy === option.id} closeOnClick={false} onClick={() => onPolicy(option.id)}>
+          {option.label}
+        </ChalkMenuItem>
+      ))}
+      {policy === "picked" ? <PickedPeople people={people} onPick={onPick} /> : null}
+    </>
+  );
+}
+
 /** The board's own menu: export, the person's own appearance, and the host's board actions. */
-export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCopy, onBring, onClear, onClose }: BoardMenuProps) {
+export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCopy, whoCanDraw, onBring, onClear, onClose }: BoardMenuProps) {
   return (
     <ChalkMenu
       className="chalk-board-menu"
@@ -75,6 +122,7 @@ export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCo
       <ChalkMenuLabel>Board appearance</ChalkMenuLabel>
       <Tiles label="Surface" value={surface} options={SURFACES} onChange={onSurface} preview={(id) => <SurfacePreview surface={id} />} />
       {place ? <Tiles label="Tool island" value={place} options={ISLAND_PLACES} onChange={onPlace} preview={(id) => <IslandPreview place={id} />} /> : null}
+      {whoCanDraw ? <WhoCanDrawSection {...whoCanDraw} /> : null}
       {onBring || onClear ? <Menu.Separator className="chalk-board-menu-rule" /> : null}
       {onBring ? (
         <ChalkMenuItem onClick={onBring}>

@@ -55,6 +55,7 @@ export const DOCS_SECTIONS: readonly DocsSection[] = [
   { slug: "whiteboard", heading: "React and web", anchor: "react-and-web", excerpt: "Use @q9labsai/chalk-whiteboard/react when the surface is a React web page." },
   { slug: "whiteboard", heading: "React Native and the embedded renderer", anchor: "react-native-and-the-embedded-renderer", excerpt: "Native hosts should build the self-contained embedded renderer with pnpm run build:embedded and use the versioned bridge from…" },
   { slug: "whiteboard", heading: "Transport and recovery", anchor: "transport-and-recovery", excerpt: "The whiteboard client controller exposes the transport." },
+  { slug: "whiteboard", heading: "Who can draw", anchor: "who-can-draw", excerpt: "A host, meaning anyone whose role has manageWhiteboard, sets one policy for the call with setDrawPolicy: everyone, hosts, or picked." },
   { slug: "", heading: "Chalk makes live work durable", anchor: "chalk-makes-live-work-durable", excerpt: "Chalk gives your product a durable Space and a bounded Episode instead of a one-off live surface." },
   { slug: "", heading: "One client, several UI choices", anchor: "one-client-several-ui-choices", excerpt: "The framework-agnostic SpaceClient owns access, recovery, state, and feature commands." },
   { slug: "", heading: "Built for product boundaries", anchor: "built-for-product-boundaries", excerpt: "Chalk keeps server work and client work separate." },

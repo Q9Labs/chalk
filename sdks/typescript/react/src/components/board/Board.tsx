@@ -38,6 +38,7 @@ import { BoardCursors, rememberCursor, type RemoteCursor } from "./BoardCursors"
 import { BoardIcon } from "./BoardIcon";
 import { BoardIsland } from "./BoardIsland";
 import { BoardMenu } from "./BoardMenu";
+import { useWhoCanDraw } from "./board-draw-policy";
 import { BoardStyles } from "./BoardStyles";
 import { useBoardToast, type BoardToast } from "./board-toasts";
 
@@ -261,6 +262,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const phone = useMediaQuery("(max-width: 640px)");
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
   const toast = useBoardToast(engine);
+  const whoCanDraw = useWhoCanDraw(toast);
   const [surface, setSurface] = useState<BoardSurface>(() => readStored(SURFACE_KEY, SURFACES, "chalkboard"));
   const [place, setPlace] = useState<IslandPlace>(() => readStored(ISLAND_KEY, ISLAND_PLACES, "bottom"));
   const [tool, setTool] = useState<BoardTool>("pen");
@@ -607,6 +609,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
               onPlace={(next) => choosePlace(next, true)}
               onDownload={() => void download()}
               onCopy={() => void copy()}
+              whoCanDraw={whoCanDraw}
               onBring={isHost && sendView ? bring : undefined}
               onClear={isHost ? () => void clear() : undefined}
               onClose={onClose}

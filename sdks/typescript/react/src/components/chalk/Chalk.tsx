@@ -6,7 +6,7 @@ import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
@@ -227,7 +227,7 @@ function SpaceSurface(
   const media = useMedia();
   const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
-  const canDrawWhiteboard = useCan("drawWhiteboard");
+  const canDrawWhiteboard = useCanDrawWhiteboard();
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError : null));
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();

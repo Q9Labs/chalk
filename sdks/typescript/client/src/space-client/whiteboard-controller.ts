@@ -5,7 +5,7 @@ import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whit
 import { SpaceStore } from "./store";
 import type { WhiteboardSlice } from "./types";
 
-const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscribed", sceneId: null, revision: null, capabilities: Object.freeze([]), canDraw: false, canClear: false, presenting: false, error: null });
+const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscribed", sceneId: null, revision: null, capabilities: Object.freeze([]), canDraw: false, canClear: false, drawPolicy: null, drawPermissions: Object.freeze([]), presenting: false, error: null });
 
 export type WhiteboardControllerEffects = { readonly transport: () => ChalkWhiteboardV1Transport | null; readonly dispose: () => void };
 export class WhiteboardControllerService extends Context.Service<WhiteboardControllerService, WhiteboardControllerEffects>()("@chalk/client/WhiteboardController") {}
@@ -59,6 +59,8 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
       capabilities: Object.freeze([...summary.capabilities]),
       canDraw: summary.canDraw,
       canClear: summary.canClear,
+      drawPolicy: summary.drawPolicy,
+      drawPermissions: Object.freeze(summary.drawPermissions.map((permission) => Object.freeze({ ...permission }))),
       presenting: summary.presenting,
       error: summary.error ? Object.freeze({ ...summary.error }) : null,
     });
@@ -78,7 +80,11 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   }
 
   #publish(): void {
-    const slice: WhiteboardSlice = Object.freeze({ open: this.#summary.status !== "unsubscribed", engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, presenting: this.#summary.presenting, error: this.#summary.error }) });
+    const slice: WhiteboardSlice = Object.freeze({
+      open: this.#summary.status !== "unsubscribed",
+      engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, presenting: this.#summary.presenting, error: this.#summary.error }),
+      access: Object.freeze({ canDraw: this.#summary.canDraw, policy: this.#summary.drawPolicy, permissions: this.#summary.drawPermissions }),
+    });
     const current = this.#store.getSnapshot().whiteboard;
     if (sameWhiteboard(current, slice)) return;
     this.#store.updateWhiteboard(slice);
@@ -86,7 +92,23 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
 }
 
 function sameWhiteboard(left: WhiteboardSlice, right: WhiteboardSlice): boolean {
-  return left.open === right.open && left.engine.status === right.engine.status && left.engine.sceneId === right.engine.sceneId && left.engine.revision === right.engine.revision && left.engine.presenting === right.engine.presenting && sameError(left.engine.error, right.engine.error);
+  return (
+    left.open === right.open &&
+    left.engine.status === right.engine.status &&
+    left.engine.sceneId === right.engine.sceneId &&
+    left.engine.revision === right.engine.revision &&
+    left.engine.presenting === right.engine.presenting &&
+    sameError(left.engine.error, right.engine.error) &&
+    sameAccess(left.access, right.access)
+  );
+}
+function sameAccess(left: WhiteboardSlice["access"], right: WhiteboardSlice["access"]): boolean {
+  return (
+    left.canDraw === right.canDraw &&
+    left.policy === right.policy &&
+    left.permissions.length === right.permissions.length &&
+    left.permissions.every((permission, index) => permission.participantId === right.permissions[index]?.participantId && permission.canDraw === right.permissions[index]?.canDraw)
+  );
 }
 function sameError(left: WhiteboardSlice["engine"]["error"], right: WhiteboardSlice["engine"]["error"]): boolean {
   if (left === right) return true;

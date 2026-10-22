@@ -206,7 +206,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
     reactions: { active: [] },
     recording: { current: null },
     offline: { pending: [], decisionNeeded: false, policy: "ask" },
-    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }, access: { canDraw: false, policy: null, permissions: [] } },
   };
 }
 

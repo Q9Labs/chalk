@@ -59,11 +59,20 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     collaborator: collaborator,
     observer: observer
   } do
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: true, observer: false}
+    assert welcome_drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: true,
+             observer: false
+           }
 
     set_permission(host, collaborator, false, "permission-revoke-0001")
     assert {:error, :permission_denied} = draw(collaborator, "update-revoked-00001")
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: false, observer: false}
+
+    assert welcome_drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: false,
+             observer: false
+           }
   end
 
   test "one rule combines the policy, the role and the per-person choice", %{
@@ -124,27 +133,24 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     assert {:ok, %{grants: []}} = PostgresRepository.draw_access(collaborator)
   end
 
-  test "a host change reaches the whiteboard on every node", %{
+  test "a role change reaches the whiteboard on every node", %{
     episode: episode,
     host: host,
-    collaborator: collaborator
+    collaborator: collaborator,
+    observer: observer
   } do
     start_fanout(episode)
+    assign_role(host, collaborator, "observer", "draw-policy-demote01")
+    assert_receive :whiteboard_v1_access_changed, 5_000
+    assert {:ok, %{can_draw: false}} = PostgresRepository.connect(collaborator)
+
+    # Under hosts only, making someone a host lets them draw.
     set_policy(host, "hosts", "policy-hosts-000002")
-    assert_receive :whiteboard_v1_access_changed, 5_000
-    assert {:ok, %{can_draw: false}} = PostgresRepository.draw_access(collaborator)
-
-    {:ok, promote} =
-      Command.new("draw-policy-promote1", :assign_roles, %{
-        "participantId" => collaborator.participant_id,
-        "role" => "owner"
-      })
-
     flush_access()
-    assert {:ok, %{result: :committed}} = Postgres.begin_role_transition(host, promote, [])
+    assign_role(host, observer, "owner", "draw-policy-promote1")
     assert_receive :whiteboard_v1_access_changed, 5_000
-    assert {:ok, %{can_draw: true}} = PostgresRepository.draw_access(collaborator)
-    assert {:ok, %{outcome: :committed}} = draw(collaborator, "update-promoted-0001")
+    assert {:ok, %{can_draw: true}} = PostgresRepository.draw_access(observer)
+    assert {:ok, %{outcome: :committed}} = draw(observer, "update-promoted-0001")
 
     Fanout.unsubscribe(episode)
   end
@@ -206,6 +212,23 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
       collaborator: can_draw?(collaborator),
       observer: can_draw?(observer)
     }
+  end
+
+  defp welcome_drawers(host, collaborator, observer) do
+    Map.new([host: host, collaborator: collaborator, observer: observer], fn {name, identity} ->
+      {:ok, %{can_draw: can_draw}} = PostgresRepository.connect(identity)
+      {name, can_draw}
+    end)
+  end
+
+  defp assign_role(host, target, role, command_id) do
+    {:ok, command} =
+      Command.new(command_id, :assign_roles, %{
+        "participantId" => target.participant_id,
+        "role" => role
+      })
+
+    assert {:ok, %{result: :committed}} = Postgres.begin_role_transition(host, command, [])
   end
 
   defp can_draw?(identity) do

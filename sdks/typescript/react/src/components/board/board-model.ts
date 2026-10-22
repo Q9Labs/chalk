@@ -1,4 +1,4 @@
-import { ChalkWhiteboardViewBounds, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { ChalkWhiteboardViewBounds, type ChalkWhiteboardDrawPolicy, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
 
 /** design.md, "The board": every colour, size and key the board's own controls use. */
 export type BoardSurface = "chalkboard" | "paper" | "dots";
@@ -19,6 +19,12 @@ export const ISLAND_PLACES: readonly { readonly id: IslandPlace; readonly label:
   { id: "left", label: "Left" },
   { id: "bottom", label: "Bottom" },
   { id: "top", label: "Top" },
+];
+
+export const DRAW_POLICIES: readonly { readonly id: ChalkWhiteboardDrawPolicy; readonly label: string }[] = [
+  { id: "everyone", label: "Everyone" },
+  { id: "hosts", label: "Only hosts" },
+  { id: "picked", label: "Picked people" },
 ];
 
 export const PEN_COLORS: readonly { readonly id: PenColor; readonly label: string }[] = [

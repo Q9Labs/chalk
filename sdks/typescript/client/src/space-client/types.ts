@@ -1,6 +1,6 @@
 import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
-import type { ChalkWhiteboardV1Failure } from "../whiteboard/types";
+import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
 import type { V1Capability } from "../sync/v1-types";
 import type { ChatControllerEffects } from "./chat-controller";
@@ -230,6 +230,12 @@ export type WhiteboardSlice = {
     readonly revision: string | null;
     readonly presenting: boolean;
     readonly error: ChalkWhiteboardV1Failure | null;
+  };
+  /** Who can draw, as Sync last told this person. `canDraw` is false until the board subscription is live. */
+  readonly access: {
+    readonly canDraw: boolean;
+    readonly policy: ChalkWhiteboardDrawPolicy | null;
+    readonly permissions: readonly ChalkWhiteboardDrawPermission[];
   };
 };
 export type SpaceSnapshot = {

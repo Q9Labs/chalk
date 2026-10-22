@@ -108,6 +108,9 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-tile-preview[data-island="left"] i {left:5px; top:20%; bottom:20%; width:5px;}
 .chalk-board-menu-kbd {margin-left:auto; padding-left:18px; font:600 11px ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--chalk-muted-text);}
 .chalk-board-danger {display:contents; color:var(--chalk-danger-text);}
+.chalk-board-picked {max-height:220px; overflow-y:auto; padding-left:16px;}
+.chalk-board-picked-name {min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.chalk-board-picked-note {margin:0; padding:4px 10px 8px 26px; font-size:12px; line-height:1.4; color:var(--chalk-muted-text);}
 
 .chalk-board-zoom {position:absolute; right:12px; bottom:12px; z-index:5; height:40px; display:flex; align-items:center; border-radius:999px; padding:0 4px; transition:translate .2s ease-out;}
 .chalk-board-zoom button {height:32px; min-width:32px; border-radius:999px; display:grid; place-items:center; padding:0 6px !important; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums;}
