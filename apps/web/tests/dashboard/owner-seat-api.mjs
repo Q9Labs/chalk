@@ -120,29 +120,40 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     const joined = await admit();
     await rejectOldHello(final.access);
     assert.equal(state(id), "joining:pending:false", "a cancelled attempt cannot confirm the rearmed seat");
-    const ws = new WebSocket(syncOrigin);
-    try {
-      const ready = new Promise((resolve, reject) => {
-        ws.addEventListener("message", ({ data }) => {
-          const frame = JSON.parse(data);
-          if (frame.type === "welcome" && frame.mode === "snapshot") {
-            ws.send(JSON.stringify({ type: "recovery_ack", recovery_id: frame.recovery_id, revision: frame.head.revision, state_digest: frame.head.state_digest }));
-          }
-          if (frame.type === "recovery_complete") {
-            assert.equal(state(id), "joining:pending:false", "hello must not confirm entry or attendance");
-            ws.send(JSON.stringify({ type: "entered" }));
-          }
-          if (frame.type === "entered_ack") resolve();
-          if (frame.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
+    async function connectEntered(verifyPending = false) {
+      const socket = new WebSocket(syncOrigin);
+      try {
+        const ready = new Promise((resolve, reject) => {
+          socket.addEventListener("message", ({ data }) => {
+            const frame = JSON.parse(data);
+            if (frame.type === "welcome" && frame.mode === "snapshot") {
+              socket.send(JSON.stringify({ type: "recovery_ack", recovery_id: frame.recovery_id, revision: frame.head.revision, state_digest: frame.head.state_digest }));
+            }
+            if (frame.type === "recovery_complete") {
+              if (verifyPending) assert.equal(state(id), "joining:pending:false", "hello must not confirm entry or attendance");
+              socket.send(JSON.stringify({ type: "entered" }));
+            }
+            if (frame.type === "entered_ack") resolve();
+            if (frame.type === "event") socket.send(JSON.stringify({ type: "delivery_ack", stream: "control", revision: frame.revision, state_digest: frame.resulting_state_digest }));
+            if (frame.type === "ping") socket.send(JSON.stringify({ type: "pong" }));
+          });
+          socket.addEventListener("error", reject, { once: true });
+          socket.addEventListener("close", ({ code, reason }) => reject(new Error(`Sync closed before entry: ${code} ${reason}`)), { once: true });
         });
-        ws.addEventListener("error", reject, { once: true });
-      });
-      await new Promise((resolve, reject) => {
-        ws.addEventListener("open", resolve, { once: true });
-        ws.addEventListener("error", reject, { once: true });
-      });
-      ws.send(JSON.stringify({ type: "hello", entry_confirmation: true, protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
-      await ready;
+        await new Promise((resolve, reject) => {
+          socket.addEventListener("open", resolve, { once: true });
+          socket.addEventListener("error", reject, { once: true });
+        });
+        socket.send(JSON.stringify({ type: "hello", entry_confirmation: true, protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
+        await ready;
+        return socket;
+      } catch (error) {
+        socket.close();
+        throw error;
+      }
+    }
+    let ws = await connectEntered(true);
+    try {
       await waitFor("active:joined:true", () => state(id));
       assert.equal(sql(`select count(*) from sync_control_events where episode_id='${episodeId}' and event_name='participant_joined' and payload->>'participant_id'='${id}'`), "1");
       assert.equal((await cancel(joined.access)).status, 200, "pending cancellation cannot remove a confirmed join");
@@ -152,6 +163,12 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
       assert.equal(state(id), "active:joined:true", "lease cannot reap confirmed joins");
       assert.equal((await attendance()).filter((person) => person.participant_id === id).length, 1);
       assert.equal(sql(`select count(*) from participants where id='${id}'`), "1");
+      // The SDK reconnects when the initial control head requires a fresh snapshot.
+      // Recover at the confirmed head before exercising departure on this raw socket.
+      ws.close();
+      ws = await connectEntered();
+      assert.equal(state(id), "active:joined:true", "reconnect must preserve confirmed attendance");
+      assert.equal(sql(`select count(*) from sync_control_events where episode_id='${episodeId}' and event_name='participant_joined' and payload->>'participant_id'='${id}'`), "1", "repeated entry after reconnect must not stamp attendance twice");
       if (role === "owner") {
         // An older Sync binary confirms attendance but does not know the seat table.
         sql(`update participant_join_seats set state='pending' where participant_id='${id}'`);
