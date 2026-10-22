@@ -105,21 +105,43 @@ describe("a board on a phone", () => {
     expect(geometry.overflowCount).toBe(2);
   });
 
-  it("keeps fewer faces on a short stage so the column stays clear of the zoom control", () => {
-    const short = { width: 608, height: 202 };
+  it("keeps fewer faces on a short stage so the column stays clear of the raised zoom control", () => {
+    const short = { width: 461, height: 246 };
     const geometry = fitSpotlight(short, "whiteboard", ["me", "nora", "malik"], options);
-    const last = geometry.frames.at(-1);
-    expect((last?.y ?? 0) + (last?.height ?? 0)).toBeLessThanOrEqual(short.height - 12 - 52 - 8);
     expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(3);
   });
 
-  it("starts a new column instead of running content past the bottom of a short stage", () => {
-    const short = { width: 608, height: 162 };
-    const geometry = fitSpotlight(short, "whiteboard", ["share", "me", "nora", "malik"], { ...options, wideIds: ["whiteboard", "share"] });
-    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "share", MORE_TILE_ID]);
-    for (const frame of geometry.frames.slice(1)) expect(frame.y + frame.height).toBeLessThanOrEqual(short.height - 8);
-    expect(geometry.frames[2]?.x).toBe(608 - 12 - 120 - 8 - 76);
+  it("keeps the regular strip when the column cannot clear the zoom control", () => {
+    const geometry = fitSpotlight({ width: 624, height: 162 }, "whiteboard", ["share", "me", "nora", "malik"], { ...options, wideIds: ["whiteboard", "share"] });
+    expect(geometry.frames.map((frame) => frame.role)).not.toContain("float");
+    expect(geometry.frames[0]?.width).toBeLessThan(624);
   });
+
+  // The zoom control fills the board's bottom-right 64px and rises 60px while the drawing tools are open; the board menu fills its top 56px.
+  const shares = ["share-1", "share-2", "share-3"];
+  const people = ["me", "nora", "malik", "akash", "sofia"];
+  for (const stage of [box, { width: 624, height: 162 }, { width: 358, height: 162 }, { width: 461, height: 246 }, { width: 608, height: 202 }]) {
+    for (const ids of [people.slice(0, 3), people, ["share-1", ...people.slice(0, 3)], [...shares, ...people]]) {
+      it(`keeps ${ids.length} tiles inside a ${stage.width}x${stage.height} stage and off the board's controls`, () => {
+        const geometry = fitSpotlight(stage, "whiteboard", ids, { ...options, wideIds: ["whiteboard", ...shares] });
+        const [board, ...tiles] = geometry.frames;
+        if (!board) throw new Error("no board frame");
+        for (const tile of tiles) {
+          expect(tile.x, tile.id).toBeGreaterThanOrEqual(0);
+          expect(tile.y, tile.id).toBeGreaterThanOrEqual(0);
+          expect(tile.x + tile.width, tile.id).toBeLessThanOrEqual(stage.width);
+          expect(tile.y + tile.height, tile.id).toBeLessThanOrEqual(stage.height);
+          const overBoard = tile.x < board.x + board.width && tile.x + tile.width > board.x && tile.y < board.y + board.height && tile.y + tile.height > board.y;
+          if (!overBoard) continue;
+          expect(tile.y - board.y, tile.id).toBeGreaterThanOrEqual(56);
+          expect(tile.y + tile.height, tile.id).toBeLessThanOrEqual(board.y + board.height - 64 - 60 - 8);
+        }
+        const shown = tiles.filter((tile) => tile.id !== MORE_TILE_ID).length;
+        if (shown < ids.length) expect(tiles.map((tile) => tile.id)).toContain(MORE_TILE_ID);
+      });
+    }
+  }
 
   it("honours the visible-tile limit", () => {
     const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik"], { ...options, maxPerPage: 2 });

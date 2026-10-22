@@ -7,7 +7,7 @@ import { STATES_LANE } from "./states-lane";
 import { FoundationKit } from "./foundation";
 import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { PERFORMANCE_STATES } from "./performance";
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
@@ -118,6 +118,12 @@ export const CALL_STATES: readonly CallState[] = [
     { id: `board-empty-${scheme}`, title: `Board empty, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} /> },
     { id: `board-people-${scheme}`, title: `Board with two people drawing, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
     {
+      id: `board-notices-${scheme}`,
+      title: `Board with three device notices, ${scheme}`,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} then={raiseDeviceNotices} />,
+    },
+    { id: `board-share-${scheme}`, title: `Board beside a live share, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
+    {
       id: `board-follow-${scheme}`,
       title: `Board following Nora, ${scheme}`,
       actions: [{ click: "Follow Nora" }],
@@ -197,6 +203,10 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
 }
 
 /** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
+function raiseDeviceNotices(client: CallStateClient) {
+  for (let index = 0; index < 3; index += 1) client.emit("error", { error: new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Your camera could not start." }) });
+}
+
 function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void; readonly board?: BoardFixture }) {
   const [client] = useState(() => createCallStateClient(snapshot, board));
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));

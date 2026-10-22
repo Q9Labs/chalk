@@ -133,7 +133,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       corner={
         <>
           {showStatus && hasPoorConnection ? (
-            <span role="img" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
+            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
               <SignalBars />
             </span>
           ) : null}

@@ -816,14 +816,7 @@
   height: 12px;
 }
 
-/* Faces float over the board on a narrow stage. The board keeps its tools at the bottom, so toasts rise above them, and an edge and a shadow lift each face off the drawing. */
-[data-chalk]:has([data-stage-role="float"]) .chalk-toasts {
-  bottom: 182px;
-}
-/* Open drawing tools lift the zoom control by 60px, so toasts rise with it. */
-[data-chalk]:has([data-stage-role="float"]):has(.chalk-board-island[data-place="expanded"]) .chalk-toasts {
-  bottom: 242px;
-}
+/* Faces float over the board on a narrow stage, so an edge and a shadow lift each face off the drawing. */
 [data-stage-role="float"] [data-part="stage-tile"] {
   box-shadow:
     0 0 0 1px var(--chalk-app-line-strong),
@@ -846,6 +839,12 @@
   }
   [data-part="tile-short-name"] {
     display: inline;
+  }
+  [data-part="tile-signal"] {
+    top: 4px;
+    left: 4px;
+    height: 18px;
+    padding: 0 5px;
   }
 }
 
@@ -1240,9 +1239,34 @@
   z-index: 45;
   pointer-events: none;
 }
-/* An open board keeps its tools at the bottom of the stage, so toasts rise above them. */
+
+/* Notices sit between the header and the controls under them. A short call lifts them no higher than leaves room for one notice, and shows only the newest ones that fit. */
+.chalk-toasts {
+  --chalk-toast-lift: 92px;
+  top: 60px;
+  bottom: min(var(--chalk-toast-lift), calc(100% - 60px - 80px));
+  container: chalk-toasts / size;
+  justify-content: flex-end;
+}
+/* An open board keeps its tools at the bottom of the stage, so toasts rise above them. On a narrow board the open drawing tools lift the zoom control 60px more. */
 [data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="bottom"]) .chalk-toasts {
-  bottom: 160px;
+  --chalk-toast-lift: 160px;
+}
+[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="compact"]) .chalk-toasts {
+  --chalk-toast-lift: 182px;
+}
+[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="expanded"]) .chalk-toasts {
+  --chalk-toast-lift: 242px;
+}
+@container chalk-toasts (max-height: 255px) {
+  .chalk-toast:nth-last-child(n + 3) {
+    display: none;
+  }
+}
+@container chalk-toasts (max-height: 167px) {
+  .chalk-toast:not(:last-child) {
+    display: none;
+  }
 }
 .chalk-toast {
   display: flex;
@@ -1634,7 +1658,9 @@
     min-height: 48px;
   }
   .chalk-toasts {
-    bottom: 110px;
+    --chalk-toast-lift: 110px;
+    top: 52px;
+    bottom: min(var(--chalk-toast-lift), calc(100% - 52px - 80px));
   }
   .chalk-drawer {
     inset: auto 0 0;

@@ -149,12 +149,16 @@ function contain(box: StageBox, aspect: number | null): StageBox {
 const FLOAT_SPEAKER = { width: 120, height: 68 };
 const FLOAT_PERSON = { width: 76, height: 44 };
 const FLOAT_MAX = 3;
+// The column starts under the board's menu. It ends 8px above the zoom control, which fills the bottom 64px of the stage and rises 60px more while the drawing tools are open.
+const FLOAT_TOP = 56;
+const FLOAT_BOTTOM = 8 + 64 + 60;
 
 /**
- * The board mockup's floating faces: the speaker first and larger, the local person last, then a +N tile.
+ * The board mockup's floating faces: one column at the right edge, the speaker first and larger, the local person last, then a +N tile.
  * Shared content floats above the faces and never folds into +N, which lists people only.
+ * Returns null when the content and one face do not fit, so the board keeps the regular strip.
  */
-function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry {
+function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry | null {
   const content = stripIds.filter((id) => options.wideIds?.includes(id));
   const people = stripIds.filter((id) => !content.includes(id));
   const speaker = options.speakerId && options.speakerId !== options.localId && people.includes(options.speakerId) ? options.speakerId : null;
@@ -163,24 +167,15 @@ function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string
   const ordered = [...(speaker ? [speaker] : []), ...others, ...(local ? [local] : [])];
   const fold = (max: number): readonly string[] => (ordered.length <= max ? ordered : [...(max > 1 ? [...ordered.slice(0, max - 2), ...ordered.slice(-1)] : []), MORE_TILE_ID]);
   const sizeOf = (id: string) => (id === speaker || content.includes(id) ? FLOAT_SPEAKER : FLOAT_PERSON);
-  // The board's zoom control fills the bottom-right 64px of the stage, under the column.
-  const bottom = box.height - 8 - 64;
-  // A short stage, such as a phone on its side, keeps fewer faces so the column stays over the board.
+  const bottomOf = (ids: readonly string[]) => ids.reduce((y, id) => y + sizeOf(id).height + options.gap, FLOAT_TOP) - options.gap;
   let max = Math.max(1, Math.min(FLOAT_MAX, options.maxPerPage ?? FLOAT_MAX));
-  while (max > 1 && [...content, ...fold(max)].reduce((y, id) => y + sizeOf(id).height + options.gap, 56) - options.gap > bottom) max -= 1;
-  // Content never folds, so what still runs past the bottom starts a new column to the left.
-  let y = 56;
-  let right = box.width - 12;
-  let column = 0;
-  const floats = [...content, ...fold(max)].map((id): StageFrame => {
+  while (max > 1 && bottomOf([...content, ...fold(max)]) > box.height - FLOAT_BOTTOM) max -= 1;
+  const column = [...content, ...fold(max)];
+  if (bottomOf(column) > box.height - FLOAT_BOTTOM) return null;
+  let y = FLOAT_TOP;
+  const floats = column.map((id): StageFrame => {
     const size = sizeOf(id);
-    if (y > 56 && y + size.height > bottom) {
-      right -= column + options.gap;
-      y = 56;
-      column = 0;
-    }
-    const frame: StageFrame = { id, role: "float", page: 0, x: right - size.width, y, ...size };
-    column = Math.max(column, size.width);
+    const frame: StageFrame = { id, role: "float", page: 0, x: box.width - 12 - size.width, y, ...size };
     y += size.height + options.gap;
     return frame;
   });
@@ -209,7 +204,8 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
       perPage: 1,
     };
   }
-  if (phone && options.floatingPhonePeople) return floatPeople(box, primaryId, stripIds, options);
+  const floating = phone && options.floatingPhonePeople ? floatPeople(box, primaryId, stripIds, options) : null;
+  if (floating) return floating;
   const slim = phone && options.slimPhoneStrip === true;
   const strip = slim ? 52 : phone ? Math.round(box.height * 0.3) : clamp(box.height * options.stripRatio, options.minStripHeight, options.maxStripHeight);
   const column = phone && options.content ? 120 : clamp(box.width * 0.15, 180, 260);

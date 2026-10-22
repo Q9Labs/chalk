@@ -431,3 +431,73 @@ it("keeps a live share selectable when a phone guest pins the board", async () =
     await page.setViewportSize({ width: 1440, height: 900 });
   }
 });
+
+it.each([
+  { width: 640, height: 320, shown: 1 },
+  { width: 390, height: 844, shown: 3 },
+])("shows the newest device notices that fit between the header and a $width by $height board's open tools", async ({ width, height, shown }) => {
+  await page.setViewportSize({ width, height });
+  try {
+    await open("board-notices-dark");
+    await page.getByRole("button", { name: "Drawing tools" }).click();
+    await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    await expect.poll(() => page.locator(".chalk-toast").count()).toBe(3);
+    const header = await page.locator(".chalk-header").evaluate((element) => element.getBoundingClientRect().bottom);
+    const toasts = await page.locator(".chalk-toast").evaluateAll((elements) => elements.map((element) => ({ shown: getComputedStyle(element).display !== "none", ...element.getBoundingClientRect().toJSON() })));
+    const visible = toasts.filter((toast) => toast.shown);
+    expect(visible).toHaveLength(shown);
+    expect(toasts.at(-1)?.shown).toBe(true);
+    for (const toast of visible) {
+      expect(toast.top).toBeGreaterThanOrEqual(header);
+      expect(toast.bottom).toBeLessThanOrEqual(height);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+it("keeps a share beside a short board from covering the zoom control, with the drawing tools closed or open", async () => {
+  await page.setViewportSize({ width: 640, height: 320 });
+  try {
+    await open("board-share-dark");
+    if (!(await page.locator(".chalk-board[data-primary]").count())) await page.locator('[data-stage-item="whiteboard"]').click();
+    await page.locator(".chalk-board[data-primary]").waitFor();
+    const zoomHit = () =>
+      page.locator(".chalk-board-zoom").evaluate(async (zoom) => {
+        await Promise.all(zoom.getAnimations().map((animation) => animation.finished));
+        const rect = zoom.getBoundingClientRect();
+        return [0.15, 0.5, 0.85].every((at) => zoom.contains(document.elementFromPoint(rect.left + rect.width * at, rect.top + rect.height / 2)));
+      });
+    expect(await zoomHit()).toBe(true);
+    await page.getByRole("button", { name: "Drawing tools" }).click();
+    await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    expect(await zoomHit()).toBe(true);
+    const stage = await page.getByTestId("stage").evaluate((element) => element.getBoundingClientRect().toJSON());
+    for (const tile of await page.locator("[data-stage-role]").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()))) {
+      expect(tile.left).toBeGreaterThanOrEqual(stage.left - 0.5);
+      expect(tile.right).toBeLessThanOrEqual(stage.right + 0.5);
+      expect(tile.top).toBeGreaterThanOrEqual(stage.top - 0.5);
+      expect(tile.bottom).toBeLessThanOrEqual(stage.bottom + 0.5);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+it("keeps a weak-connection badge off the short tag on a small face", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await open("stage-board-weak");
+    const board = page.locator('[data-stage-item="whiteboard"]');
+    if ((await board.getAttribute("data-stage-role")) !== "primary") await board.click();
+    await expect.poll(() => board.getAttribute("data-stage-role")).toBe("primary");
+    const face = page.locator('[data-stage-role="float"]', { has: page.locator('[data-part="tile-signal"]') });
+    const badge = await face.locator('[data-part="tile-signal"]').boundingBox();
+    const tag = await face.locator('[data-part="tile-tag"]').boundingBox();
+    const tile = await face.boundingBox();
+    expect(tile?.height).toBe(44);
+    expect((badge?.y ?? 0) + (badge?.height ?? 0)).toBeLessThanOrEqual(tag?.y ?? 0);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});

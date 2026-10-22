@@ -20,6 +20,7 @@ interface StageFixtureProps {
   readonly cameras?: boolean;
   readonly board?: boolean;
   readonly names?: readonly string[];
+  readonly weak?: number;
 }
 const NAMES = ["You", "Nora", "Akash", "Sofia", "Malik", "Priya", "Eli", "June", "Tomás", "Lena", "Kenji", "Amara"];
 
@@ -55,7 +56,7 @@ function useScreenTrack(aspect: number): MediaStreamTrack | null {
 }
 
 /** The actual frame and stage, with deterministic media and observable roster/share controls. */
-function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", shareAudio = false, cameras = true, board = false, names = NAMES }: StageFixtureProps) {
+function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", shareAudio = false, cameras = true, board = false, names = NAMES, weak = 4 }: StageFixtureProps) {
   const [count, setCount] = useState(initialCount);
   const [layout, setLayout] = useState(initialLayout);
   const [share, setShare] = useState(initialShare);
@@ -77,14 +78,14 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
         isActiveSpeaker: index === 1,
         isHandRaised: index === 5 || (secondHand && index === 2),
         handRaiseOrder: index === 5 ? 1 : undefined,
-        connectionQuality: index === 4 ? 1 : 4,
+        connectionQuality: index === weak ? 1 : 4,
         isScreenSharing: share === "local" ? index === 0 : share === "two" ? index === 1 || index === 2 : share === "remote" && index === 1,
         screenShareTrack: track,
         screenShareHasAudio: shareAudio,
         screenShareAspect: aspect,
         screenShareState: shareState,
       })),
-    [count, cameras, share, track, aspect, shareState, shareAudio, names, secondHand, voiceLevel],
+    [count, cameras, share, track, aspect, shareState, shareAudio, names, weak, secondHand, voiceLevel],
   );
   return (
     <div className="h-dvh w-full">
@@ -130,11 +131,11 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
   );
 }
 
-function BoardShareFixture() {
+function BoardStageFixture(props: StageFixtureProps) {
   const [client] = useState(() => createCallStateClient(liveSnapshot({ board: true, capabilities: HOST }), { scene: true }));
   return (
     <ChalkProvider client={client}>
-      <StageFixture board share="remote" />
+      <StageFixture board {...props} />
     </ChalkProvider>
   );
 }
@@ -147,7 +148,8 @@ export const STAGE_STATES: readonly CallState[] = [
   { id: "stage-avatars-light", title: "Bold Facehash tiles in Light", render: () => <StageFixture cameras={false} layout="grid" theme="light" /> },
   { id: "stage-long-names-light", title: "Long and RTL names in Light", render: () => <StageFixture count={6} layout="grid" theme="light" names={["You", "Nora", "Akash", "Sofia Alexandrova-Fitzgerald Lindqvist", "مالك الحداد", "Priya"]} /> },
   { id: "stage-avatars", title: "Bold speaking Facehash tiles", render: () => <StageFixture cameras={false} layout="grid" /> },
-  { id: "stage-board-share", title: "Board with a live screen share", render: () => <BoardShareFixture /> },
+  { id: "stage-board-share", title: "Board with a live screen share", render: () => <BoardStageFixture share="remote" /> },
+  { id: "stage-board-weak", title: "Board with a weak connection on a small face", render: () => <BoardStageFixture count={3} weak={2} /> },
   { id: "stage-board", title: "Board in Spotlight", render: () => <StageFixture board /> },
   { id: "stage-board-grid", title: "Double-width board in Grid", render: () => <StageFixture board layout="grid" /> },
   { id: "stage-long-names", title: "Long and right-to-left tile names", render: () => <StageFixture count={6} layout="grid" names={["You", "Nora", "Akash", "Sofia Alexandrova-Fitzgerald Lindqvist", "مالك الحداد", "Priya"]} /> },
