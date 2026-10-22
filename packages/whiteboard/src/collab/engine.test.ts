@@ -126,6 +126,12 @@ it("keeps a received empty text live, so a peer's undone text can be redone", as
   const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture();
   const [written] = restoreElements([{ type: "text", id: "qa-text", index: "a0", x: 0, y: 0, width: 80, height: 25, text: "QA text 1", originalText: "QA text 1", fontSize: 20, fontFamily: 5, lineHeight: 1.25, textAlign: "left", verticalAlign: "top", autoResize: false, containerId: null, version: 2, versionNonce: 2, isDeleted: false }], null);
   if (!written) throw new Error("Text element is missing");
+  // Like Excalidraw, this canvas takes elements as given: updateScene does not restore them.
+  let scene: readonly (typeof written)[] = [];
+  api.getSceneElementsIncludingDeleted = () => scene;
+  api.updateScene = vi.fn((update) => {
+    if (update.elements) scene = [...update.elements];
+  });
   try {
     engine.handleRemoteSnapshot({ sceneId: "scene", elements: [toWireElement(written)] });
     // The writer's Undo of a new text leaves the element empty but live, one version up.
@@ -161,9 +167,8 @@ function createCanvas(restoreElements: typeof import("@excalidraw/excalidraw").r
     getAppState: () => restoreAppState({}, null),
     getFiles: () => ({}),
     getName: () => "Board",
-    // Like Excalidraw, take the elements as given: updateScene does not restore them.
     updateScene: vi.fn((scene) => {
-      if (scene.elements) elements = [...scene.elements];
+      if (scene.elements) elements = restoreElements(scene.elements, null);
     }),
     updateLibrary: vi.fn(),
     resetScene: vi.fn(),
