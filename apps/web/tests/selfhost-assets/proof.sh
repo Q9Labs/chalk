@@ -21,11 +21,21 @@ measure() {
 for label in before after; do
   if [[ "$label" == after ]]; then restore; mv "$saved/fonts" apps/web/public/fonts; fi
   export ASSET_PROOF_DIR="$proof_dir/$label"
-  if [[ "$label" == before ]]; then export ASSET_PROOF_BASELINE=1; else unset ASSET_PROOF_BASELINE; fi
   pnpm exec turbo run build --filter=web...
   measure "$label"
-  ASSET_PROOF_ONLY=1 node apps/web/tests/dashboard-ui/run.mjs
-  pnpm --filter web exec vitest run src/call-states/assets.test.ts
+  if [[ "$label" == before ]]; then
+    if ASSET_PROOF_ONLY=1 node apps/web/tests/dashboard-ui/run.mjs > "$proof_dir/before-web.log" 2>&1; then
+      echo 'Expected the original Google Fonts requests to fail the new assertion' >&2; exit 1
+    fi
+    rg 'sent an external request' "$proof_dir/before-web.log"
+    if pnpm --filter web exec vitest run src/call-states/assets.test.ts > "$proof_dir/before-call.log" 2>&1; then
+      echo 'Expected the original board CDN requests to fail the new assertion' >&2; exit 1
+    fi
+    rg 'external HTTP requests' "$proof_dir/before-call.log"
+  else
+    ASSET_PROOF_ONLY=1 node apps/web/tests/dashboard-ui/run.mjs
+    pnpm --filter web exec vitest run src/call-states/assets.test.ts
+  fi
 done
-unset ASSET_PROOF_DIR ASSET_PROOF_BASELINE
+unset ASSET_PROOF_DIR
 pnpm run gate -- --base origin/master
