@@ -377,12 +377,16 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#phase = "connecting";
     const socket = this.#options.webSocket.connect(this.#options.url);
     this.#socket = socket;
-    this.#cancelDial = scheduleSyncDialDeadline(this.#clock(), () => {
-      this.#cancelDial = undefined;
-      socket.close(CLIENT_RESTART_CLOSE_CODE, "WebSocket dial timeout");
-      this.#disconnected(socket, CLIENT_RESTART_CLOSE_CODE);
-      this.#publishSummary("recovering", failure("start_scene_subscription", "unavailable", true, "The board connection timed out before opening."));
-    });
+    this.#cancelDial = scheduleSyncDialDeadline(
+      this.#clock(),
+      () => {
+        this.#cancelDial = undefined;
+        socket.close(CLIENT_RESTART_CLOSE_CODE, "WebSocket dial timeout");
+        this.#disconnected(socket, CLIENT_RESTART_CLOSE_CODE);
+        this.#publishSummary("recovering", failure("start_scene_subscription", "unavailable", true, "The board connection timed out before opening."));
+      },
+      this.#options.dialTimeoutMs,
+    );
     socket.onopen = () => {
       if (socket !== this.#socket) return;
       this.#clearDial();

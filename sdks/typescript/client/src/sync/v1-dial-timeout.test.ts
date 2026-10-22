@@ -7,9 +7,15 @@ import { V1SyncClient } from "./v1-client";
 import type { SyncSocket, SyncWebSocketFactory } from "./types";
 import { ChalkWhiteboardV1Client } from "../whiteboard/v1-client";
 
-it.each(["sync", "whiteboard"] as const)("%s retries a TCP connection that never completes its WebSocket handshake", async (kind) => {
+it.each([
+  ["sync", 10_000],
+  ["whiteboard", 10_000],
+  ["sync", 30_000],
+  ["whiteboard", 30_000],
+] as const)("%s retries a TCP-stalled handshake after %i ms and admits a slow replacement", async (kind, allowance) => {
   const sockets = new Set<Duplex>();
   let attempts = 0;
+  const clock = new DialClock();
   const server = createServer();
   server.on("connection", (socket) => {
     sockets.add(socket);
@@ -19,27 +25,33 @@ it.each(["sync", "whiteboard"] as const)("%s retries a TCP connection that never
     attempts++;
     if (attempts === 1) return; // Accept TCP and the request, but never send HTTP 101.
     const accept = createHash("sha1").update(`${request.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
-    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    clock.setTimeout(() => socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`), 8_000);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("TCP test server has no port");
-  const clock = new DialClock();
   const token = vi.fn(async () => "test-token");
-  const options = { url: `ws://127.0.0.1:${address.port}/v1/${kind}`, token, webSocket: createBrowserWebSocketFactory(), clock, reconnectDelayMs: 250 };
+  const options = { url: `ws://127.0.0.1:${address.port}/v1/${kind}`, token, webSocket: createBrowserWebSocketFactory(), clock, reconnectDelayMs: 250, ...(allowance > 10_000 ? { dialTimeoutMs: allowance } : {}) };
   const client = dialClient(kind, options);
   try {
     await client.start();
     await vi.waitFor(() => expect(attempts).toBe(1));
-    clock.advance(2_999);
+    clock.advance(allowance - 1);
     expect(token).not.toHaveBeenCalled();
     clock.advance(1);
     clock.advance(250); // Existing first retry backoff.
     await vi.waitFor(() => expect(attempts).toBe(2), { timeout: 1_000 });
+    clock.advance(7_999);
+    expect(token).not.toHaveBeenCalled();
+    clock.advance(1);
     await vi.waitFor(() => expect(token).toHaveBeenCalledTimes(1));
+    // The lifecycle preserves a recovering transport for 60 seconds across its
+    // shorter foreground/background cycles: 18.25s here, or 38.25s for Native.
+    expect(clock.now()).toBe(allowance + 250 + 8_000);
+    expect(clock.now()).toBeLessThan(60_000);
     expect(client.phase()).toBe("recovering");
     expect(client.timeoutEvidence()).toBeTruthy();
-    clock.advance(20_000);
+    clock.advance(60_000);
     expect(attempts).toBe(2);
   } finally {
     await client.stop();
@@ -48,6 +60,52 @@ it.each(["sync", "whiteboard"] as const)("%s retries a TCP connection that never
   }
 });
 
+it.each([
+  ["sync", 3_200],
+  ["whiteboard", 3_200],
+  ["sync", 8_000],
+  ["whiteboard", 8_000],
+] as const)(
+  "%s accepts a real upgrade delayed by %i ms on its first attempt",
+  async (kind, delayMs) => {
+    const sockets = new Set<Duplex>();
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    let attempts = 0;
+    const server = createServer();
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    server.on("upgrade", (request, socket) => {
+      attempts++;
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (socket.destroyed) return;
+        const accept = createHash("sha1").update(`${request.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
+        socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+      }, delayMs);
+      timers.add(timer);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("TCP test server has no port");
+    const token = vi.fn(async () => "test-token");
+    const client = dialClient(kind, { url: `ws://127.0.0.1:${address.port}/v1/${kind}`, token, webSocket: createBrowserWebSocketFactory(), reconnectDelayMs: 250 });
+    try {
+      await client.start();
+      await vi.waitFor(() => expect(token).toHaveBeenCalledTimes(1), { timeout: delayMs + 1_000 });
+      expect(attempts).toBe(1);
+      expect(client.timeoutEvidence()).toBeFalsy();
+    } finally {
+      await client.stop();
+      for (const timer of timers) clearTimeout(timer);
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  },
+  12_000,
+);
+
 it("accepts a slow upgrade before the deadline and cancels the timer on stop", async () => {
   const clock = new DialClock();
   const socket = testSocket();
@@ -55,7 +113,7 @@ it("accepts a slow upgrade before the deadline and cancels the timer on stop", a
   const client = new V1SyncClient({ url: "ws://fixture.test/v1/sync", token, webSocket: { connect: () => socket }, clock });
   try {
     await client.start();
-    clock.advance(2_999);
+    clock.advance(9_999);
     socket.onopen?.();
     await Promise.resolve();
     clock.advance(20_000);
@@ -81,12 +139,12 @@ it("ignores a timed-out attempt's late open without cancelling the replacement d
   const client = new V1SyncClient({ url: "ws://fixture.test/v1/sync", token, webSocket: { connect }, clock, reconnectDelayMs: 250 });
   try {
     await client.start();
-    clock.advance(3_250);
+    clock.advance(10_250);
     expect(connect).toHaveBeenCalledTimes(2);
     first.onopen?.();
     await Promise.resolve();
     expect(token).not.toHaveBeenCalled();
-    clock.advance(3_000);
+    clock.advance(10_000);
     expect(second.close).toHaveBeenCalledTimes(1);
   } finally {
     client.stop();
@@ -129,7 +187,7 @@ class DialClock {
   }
 }
 
-function dialClient(kind: "sync" | "whiteboard", options: { url: string; token: () => Promise<string>; webSocket: SyncWebSocketFactory; clock: DialClock; reconnectDelayMs: number }) {
+function dialClient(kind: "sync" | "whiteboard", options: { url: string; token: () => Promise<string>; webSocket: SyncWebSocketFactory; clock?: DialClock; reconnectDelayMs: number; dialTimeoutMs?: number }) {
   if (kind === "sync") {
     const client = new V1SyncClient(options);
     return { start: () => client.start(), stop: () => client.stop(), phase: () => client.getSnapshot().connection.phase, timeoutEvidence: () => client.getSnapshot().connection.dialTimeoutCount };

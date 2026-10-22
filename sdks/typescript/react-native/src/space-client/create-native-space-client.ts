@@ -38,6 +38,7 @@ export type NativeSpaceClientOptions = {
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
   ensureRandomUUID();
   const { storage } = options;
+  const syncStartupTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
   const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
   const fetch = globalThis.fetch;
@@ -60,9 +61,9 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
-    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage),
+    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage, syncStartupTimeoutMs),
     createChatFileTransport: (input) => createChatFileTransport(apiBaseURL, input, fetch),
-    createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket),
+    createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncStartupTimeoutMs),
     subscribeForeground: (listener) => {
       const subscription = AppState.addEventListener("change", (state) => {
         if (state === "active") listener();
@@ -78,7 +79,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       whiteboardUrl: options.whiteboardURL,
       dependencies,
       fetch,
-      syncStartupTimeoutMs: options.syncStartupTimeoutMs ?? 30000,
+      syncStartupTimeoutMs,
       initialMicrophoneEnabled: options.microphone,
       initialCameraEnabled: options.camera,
     },
@@ -136,7 +137,7 @@ function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMedi
     subscribe: client.subscribe.bind(client),
   };
 }
-function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, storage: ReactNativeAsyncStorage | undefined) {
+function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, storage: ReactNativeAsyncStorage | undefined, dialTimeoutMs: number) {
   const subject = input.access.subject;
   const scope = `${subject.tenantId}:${subject.episodeId}:${subject.participantId}`;
   return createV1SyncClient({
@@ -145,13 +146,14 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     mediaPlane: input.media,
     lifecycle,
     webSocket,
+    dialTimeoutMs,
     ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });
 }
 function createChatFileTransport(apiBaseURL: string, input: ChatFileFactoryInput, fetch: typeof globalThis.fetch) {
   return createChalkChatFileHttpTransport({ baseUrl: apiBaseURL, token: input.token, fetch });
 }
-function createWhiteboardClient(apiBaseURL: string, url: string, input: WhiteboardFactoryInput, fetch: typeof globalThis.fetch, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>) {
+function createWhiteboardClient(apiBaseURL: string, url: string, input: WhiteboardFactoryInput, fetch: typeof globalThis.fetch, lifecycle: ReturnType<typeof createReactNativeSyncLifecycle>, webSocket: ReturnType<typeof createReactNativeWebSocketFactory>, dialTimeoutMs: number) {
   const files = createChalkWhiteboardV1FileDownloadTransport({
     baseUrl: apiBaseURL,
     token: input.token,
@@ -163,6 +165,7 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Whiteboa
     files,
     lifecycle,
     webSocket,
+    dialTimeoutMs,
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
       input.onSummary(summary);

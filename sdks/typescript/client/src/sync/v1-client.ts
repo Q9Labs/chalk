@@ -343,11 +343,15 @@ export class V1SyncClient implements V1CollaborationClient {
     const socket = this.#options.webSocket.connect(this.#options.url);
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
-    this.#cancelDial = scheduleSyncDialDeadline(this.#clock(), () => {
-      this.#cancelDial = undefined;
-      this.#dialTimeoutCount += 1;
-      this.#recover("WebSocket dial timeout");
-    });
+    this.#cancelDial = scheduleSyncDialDeadline(
+      this.#clock(),
+      () => {
+        this.#cancelDial = undefined;
+        this.#dialTimeoutCount += 1;
+        this.#recover("WebSocket dial timeout");
+      },
+      this.#options.dialTimeoutMs,
+    );
     socket.onopen = () => {
       if (socket !== this.#socket) return;
       this.#clearDial();

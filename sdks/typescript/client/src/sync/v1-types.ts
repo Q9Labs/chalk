@@ -231,6 +231,8 @@ export type V1SyncClientOptions = {
   readonly clock?: SyncClock;
   readonly lifecycle?: SyncLifecycle;
   readonly reconnectDelayMs?: number;
+  /** Per-attempt WebSocket opening allowance, clamped to 10–60 seconds; defaults to 10 seconds. */
+  readonly dialTimeoutMs?: number;
   readonly maxPendingCommands?: number;
   readonly maxPendingBytes?: number;
   readonly maxPendingAgeMs?: number;
