@@ -37,6 +37,7 @@ defmodule ChalkSync.Episodes.Reducer do
             role_capabilities: @default_role_capabilities,
             recording: nil,
             admission_requests: %{},
+            admission_request_order: [],
             participants: %{}
 
   @type participant :: %{
@@ -74,6 +75,8 @@ defmodule ChalkSync.Episodes.Reducer do
       )
       |> normalize_role_capabilities()
 
+    admission_requests = value(policy, snapshot, :admission_requests, %{})
+
     %__MODULE__{
       episode_id: episode_id,
       admission_policy: admission_policy,
@@ -81,7 +84,8 @@ defmodule ChalkSync.Episodes.Reducer do
       deadline_at_ms: value(policy, snapshot, :deadline_at_ms, 1),
       deadline_generation: value(policy, snapshot, :deadline_generation, 1),
       recording: value(policy, snapshot, :recording, nil),
-      admission_requests: value(policy, snapshot, :admission_requests, %{})
+      admission_requests: admission_requests,
+      admission_request_order: admission_requests |> Map.keys() |> Enum.sort()
     }
   end
 
@@ -197,6 +201,19 @@ defmodule ChalkSync.Episodes.Reducer do
 
   def apply_event(%__MODULE__{}, _event), do: {:error, :invalid_event}
 
+  @spec replay_event(t(), event() | map(), binary()) :: {:ok, t()} | {:error, atom()}
+  def replay_event(%__MODULE__{} = state, event, recorded_digest) do
+    with {:ok, next} <- apply_event(state, event) do
+      legacy = %{next | admission_request_order: Enum.sort(next.admission_request_order)}
+
+      cond do
+        digest(next) == recorded_digest -> {:ok, next}
+        digest(legacy) == recorded_digest -> {:ok, legacy}
+        true -> {:error, :event_digest_mismatch}
+      end
+    end
+  end
+
   @spec from_snapshot(String.t(), map()) :: {:ok, t()} | {:error, atom()}
   def from_snapshot(episode_id, snapshot) when is_binary(episode_id) and is_map(snapshot) do
     with :ok <- exact_keys(snapshot, snapshot_keys()),
@@ -225,6 +242,8 @@ defmodule ChalkSync.Episodes.Reducer do
         role_capabilities: role_capabilities,
         recording: recording,
         admission_requests: admission_requests,
+        admission_request_order:
+          Enum.map(snapshot["admission_requests"], & &1["admission_request_id"]),
         participants: participant_map
       }
 
@@ -261,9 +280,7 @@ defmodule ChalkSync.Episodes.Reducer do
       "role_capabilities" => state.role_capabilities,
       "recording" => state.recording,
       "admission_requests" =>
-        state.admission_requests
-        |> Map.values()
-        |> Enum.sort_by(& &1["admission_request_id"]),
+        Enum.map(state.admission_request_order, &Map.fetch!(state.admission_requests, &1)),
       "participants" => participants
     }
   end
@@ -522,7 +539,14 @@ defmodule ChalkSync.Episodes.Reducer do
            end),
          false <- joined?(state, request["participant_id"]),
          true <- map_size(state.admission_requests) < @max_participants do
-      {:ok, put_in(state.admission_requests[request["admission_request_id"]], request)}
+      request_id = request["admission_request_id"]
+
+      {:ok,
+       %{
+         state
+         | admission_requests: Map.put(state.admission_requests, request_id, request),
+           admission_request_order: state.admission_request_order ++ [request_id]
+       }}
     else
       true -> {:error, :invalid_transition}
       _ -> {:error, :invalid_payload}
@@ -534,7 +558,7 @@ defmodule ChalkSync.Episodes.Reducer do
     with :ok <- exact_keys(payload, ["admission_request_id"]),
          request_id when is_binary(request_id) <- payload["admission_request_id"],
          true <- Map.has_key?(state.admission_requests, request_id) do
-      {:ok, %{state | admission_requests: Map.delete(state.admission_requests, request_id)}}
+      {:ok, remove_admission_request(state, request_id)}
     else
       _ -> {:error, :invalid_transition}
     end
@@ -568,7 +592,14 @@ defmodule ChalkSync.Episodes.Reducer do
          true <-
            payload["reason"] in ["ended_by_participant", "tenant_recovery", "maximum_duration"] do
       {:ok,
-       %{state | status: "ended", participants: %{}, admission_requests: %{}, recording: nil}}
+       %{
+         state
+         | status: "ended",
+           participants: %{},
+           admission_requests: %{},
+           admission_request_order: [],
+           recording: nil
+       }}
     else
       _ -> {:error, :invalid_transition}
     end
@@ -757,7 +788,11 @@ defmodule ChalkSync.Episodes.Reducer do
   defp remove_admission_request(state, nil), do: state
 
   defp remove_admission_request(state, request_id),
-    do: %{state | admission_requests: Map.delete(state.admission_requests, request_id)}
+    do: %{
+      state
+      | admission_requests: Map.delete(state.admission_requests, request_id),
+        admission_request_order: List.delete(state.admission_request_order, request_id)
+    }
 
   defp valid_display_name?(display_name),
     do:

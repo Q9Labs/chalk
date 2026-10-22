@@ -283,8 +283,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
         }
 
         with true <- schema_version == Reducer.state_schema_version(),
-             {:ok, next} <- Reducer.apply_event(current, event),
-             true <- Reducer.digest(next) == digest do
+             {:ok, next} <- Reducer.replay_event(current, event, digest) do
           {:cont, {:ok, next, count + 1, bytes + encoded_bytes}}
         else
           {:error, reason} -> {:halt, {:error, reason}}
