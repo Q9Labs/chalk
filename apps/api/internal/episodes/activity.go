@@ -10,7 +10,7 @@ import (
 
 const MaximumActivitySpaces = 300
 
-var ErrInvalidActivitySpaceIDs = errors.New("Space activity reads require 1 to 300 distinct Space IDs")
+var ErrInvalidActivitySpaceIDs = errors.New("space activity reads require 1 to 300 distinct Space IDs")
 
 type LatestEpisode struct {
 	EpisodeID utilities.ID
