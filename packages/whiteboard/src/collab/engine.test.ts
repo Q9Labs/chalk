@@ -151,6 +151,8 @@ it("keeps a received empty text live, so a peer's undone text can be redone", as
     null,
   );
   if (!written) throw new Error("Text element is missing");
+  const [dot] = restoreElements([{ type: "rectangle", id: "qa-dot", index: "a1", x: 0, y: 0, width: 0, height: 0, version: 2, versionNonce: 2, isDeleted: false }], null);
+  if (!dot) throw new Error("Shape element is missing");
   // Like Excalidraw, this canvas takes elements as given: updateScene does not restore them.
   let scene: readonly (typeof written)[] = [];
   api.getSceneElementsIncludingDeleted = () => scene;
@@ -161,10 +163,11 @@ it("keeps a received empty text live, so a peer's undone text can be redone", as
     engine.handleRemoteSnapshot({ sceneId: "scene", elements: [toWireElement(written)] });
     // The writer's Undo of a new text leaves the element empty but live, one version up.
     const undone = { ...written, text: "", originalText: "", version: 3, versionNonce: 3 };
-    engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: [toWireElement(undone)] });
+    // A zero-size shape is not an undone text, so it stays deleted the way Excalidraw restores it.
+    engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: [toWireElement(undone), toWireElement({ ...dot, isDeleted: false })] });
     engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
     await vi.advanceTimersByTimeAsync(1000);
-    expect(api.getSceneElementsIncludingDeleted()).toEqual([expect.objectContaining({ id: "qa-text", isDeleted: false, version: 3, versionNonce: 3 })]);
+    expect(api.getSceneElementsIncludingDeleted()).toEqual([expect.objectContaining({ id: "qa-text", isDeleted: false, version: 3, versionNonce: 3 }), expect.objectContaining({ id: "qa-dot", isDeleted: true })]);
     // A viewer sends nothing back for an element it only received.
     expect(submitUpdate).not.toHaveBeenCalled();
   } finally {
