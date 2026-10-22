@@ -57,6 +57,30 @@ func TestAddTracksRecordsUpstreamTimeout(t *testing.T) {
 	assertNoAddTracksSecrets(t, logs.String())
 }
 
+func TestAddTracksRecordsTimeoutWhileReadingResponse(t *testing.T) {
+	release := make(chan struct{})
+	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(writer, `{"tracks":[`)
+		writer.(http.Flusher).Flush()
+		<-release
+	}))
+	defer provider.Close()
+	defer close(release)
+	adapter := addTracksRecordAdapter(t, provider.URL, 150*time.Millisecond)
+	logs := captureAddTracksLogs(t)
+
+	if _, err := adapter.AddTracks(context.Background(), addTracksRecordRequest()); err == nil {
+		t.Fatal("stalled response body must fail add tracks")
+	}
+
+	record := addTracksRecord(t, logs)
+	if record["outcome"] != "transport" || record["provider_code"] != "timeout" || record["http_status"] != float64(http.StatusOK) {
+		t.Fatalf("stalled body outcome = outcome %v provider_code %v http_status %v, want transport timeout after 200", record["outcome"], record["provider_code"], record["http_status"])
+	}
+}
+
 func TestAddTracksRecordsSuccessfulCall(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")

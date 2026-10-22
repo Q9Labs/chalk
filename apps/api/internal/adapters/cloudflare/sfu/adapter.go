@@ -401,17 +401,13 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	}
 	providerResponse, err := a.client.Do(request)
 	if err != nil {
-		code := "transport_error"
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			code = "timeout"
-		}
-		return 0, newProviderFailure(operation, failureStageTransport, 0, code)
+		return 0, newProviderFailure(operation, failureStageTransport, 0, transportFailureCode(ctx, err))
 	}
 	defer providerResponse.Body.Close()
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
 	if err != nil {
-		return providerResponse.StatusCode, newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, "transport_error")
+		return providerResponse.StatusCode, newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, transportFailureCode(ctx, err))
 	}
 	responseBytes = len(payload)
 	if providerResponse.StatusCode < 200 || providerResponse.StatusCode >= 300 {
@@ -428,6 +424,15 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 		}
 	}
 	return providerResponse.StatusCode, nil
+}
+
+// transportFailureCode separates a deadline, from the caller or the client's
+// timeout while waiting for headers or reading the body, from other failures.
+func transportFailureCode(ctx context.Context, err error) string {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "timeout"
+	}
+	return "transport_error"
 }
 
 func (r *closeTracksResponse) providerError(operation string) error {
