@@ -14,3 +14,11 @@ it("matches the server admission-order fixture through live events and snapshot 
     expect(state.stateDigest).toBe(frame.resulting_state_digest);
   }
 });
+
+it("accepts both stored admission orders with the shared server digest", async () => {
+  for (const { snapshot } of fixture.stored_snapshots) {
+    const state = await restoreV1Snapshot(Schema.decodeUnknownSync(SnapshotSchema)(snapshot));
+    expect(state.stateDigest).toBe(snapshot.state_digest);
+    expect(state.admissionRequests.map((request) => request.admissionRequestId)).toEqual(snapshot.admission_requests.map((request) => request.admission_request_id));
+  }
+});

@@ -130,5 +130,89 @@
       },
       "external_operation_id": "00000000-0000-4000-8000-000000000307"
     }
+  ],
+  "stored_snapshots": [
+    {
+      "order": "id_sorted",
+      "snapshot": {
+        "admission_policy": "knock",
+        "admission_requests": [
+          {
+            "admission_request_id": "00000000-0000-4000-8000-000000000010",
+            "participant_id": "00000000-0000-4000-8000-000000000102",
+            "display_name": "Second",
+            "role": "facilitator",
+            "expires_at_ms": 1786278890000
+          },
+          {
+            "admission_request_id": "00000000-0000-4000-8000-000000000050",
+            "participant_id": "00000000-0000-4000-8000-000000000103",
+            "display_name": "Third",
+            "role": "facilitator",
+            "expires_at_ms": 1786278890000
+          },
+          {
+            "admission_request_id": "00000000-0000-4000-8000-000000000090",
+            "participant_id": "00000000-0000-4000-8000-000000000101",
+            "display_name": "First",
+            "role": "facilitator",
+            "expires_at_ms": 1786278890000
+          }
+        ],
+        "control_revision": 3,
+        "deadline_at_ms": 1786278896789,
+        "deadline_generation": 1,
+        "participants": [],
+        "recording": null,
+        "role_capabilities": {
+          "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand", "sendChat"],
+          "observer": ["subscribe", "sendReaction"]
+        },
+        "state_schema_version": 1,
+        "status": "active",
+        "state_digest": "37503a7cad742194df494fcbe46325d7faf365e37e101b4c7f97870ee42377f6"
+      }
+    },
+    {
+      "order": "arrival",
+      "snapshot": {
+        "admission_policy": "knock",
+        "admission_requests": [
+          {
+            "admission_request_id": "00000000-0000-4000-8000-000000000090",
+            "participant_id": "00000000-0000-4000-8000-000000000101",
+            "display_name": "First",
+            "role": "facilitator",
+            "expires_at_ms": 1786278890000
+          },
+          {
+            "admission_request_id": "00000000-0000-4000-8000-000000000010",
+            "participant_id": "00000000-0000-4000-8000-000000000102",
+            "display_name": "Second",
+            "role": "facilitator",
+            "expires_at_ms": 1786278890000
+          },
+          {
+            "admission_request_id": "00000000-0000-4000-8000-000000000050",
+            "participant_id": "00000000-0000-4000-8000-000000000103",
+            "display_name": "Third",
+            "role": "facilitator",
+            "expires_at_ms": 1786278890000
+          }
+        ],
+        "control_revision": 3,
+        "deadline_at_ms": 1786278896789,
+        "deadline_generation": 1,
+        "participants": [],
+        "recording": null,
+        "role_capabilities": {
+          "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand", "sendChat"],
+          "observer": ["subscribe", "sendReaction"]
+        },
+        "state_schema_version": 1,
+        "status": "active",
+        "state_digest": "76e17303023664de86134eaa20e648dc5e54b2db7624f6173bcdfb630a353f50"
+      }
+    }
   ]
 }
