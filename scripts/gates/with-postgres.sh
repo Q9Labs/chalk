@@ -31,8 +31,13 @@ fi
 
 # Service suites can leave fixtures behind; each gate needs its own database.
 if ((command_mode == 0 && $# > 1)); then
+  # shellcheck source=scripts/gates/owned-command.sh
+  source "$(dirname "$0")/owned-command.sh"
+  # Each gate's own wrapper bounds its stop and cleanup, so this one waits longer before it uses KILL.
+  owned_grace=$((owned_grace + 5))
+  trap stop_owned EXIT
   for gate in "$@"; do
-    bash "${BASH_SOURCE[0]}" "${gate}"
+    run_owned bash "${BASH_SOURCE[0]}" "${gate}"
   done
   exit 0
 fi

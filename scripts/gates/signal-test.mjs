@@ -40,11 +40,15 @@ sleep 1 while 1;
 
 // Starts a wrapper in its own process group, sends the group a signal once the wrapped command is ready,
 // and returns how the wrapper exited, how long it took and what it printed to stderr.
-export async function signalWhenReady(context, { args, cwd, env, ready, signal }) {
+// With `againAfterMs`, the group gets the signal a second time while the wrapper is still stopping.
+export async function signalWhenReady(context, { args, cwd, env, ready, signal, againAfterMs }) {
   const child = spawn("bash", args, { cwd, detached: true, stdio: ["ignore", "ignore", "pipe"], env });
   let stderr = "";
   child.stderr.on("data", (chunk) => (stderr += chunk));
-  const exited = new Promise((resolve) => child.on("close", (code, exitSignal) => resolve({ code, signal: exitSignal })));
+  const exited = new Promise((resolve) => child.on("exit", (code, exitSignal) => resolve({ code, signal: exitSignal })));
+  // The wrapper's last stderr lines can arrive after it exits. A process that outlived it can hold the
+  // pipe open, so the wait for the rest is short.
+  const closed = new Promise((resolve) => child.on("close", resolve));
   let early;
   exited.then((result) => (early = result));
   // A failed assertion leaves the wrapper running, and the test runner would wait for it.
@@ -61,8 +65,14 @@ export async function signalWhenReady(context, { args, cwd, env, ready, signal }
   }
   const started = Date.now();
   process.kill(-child.pid, signal);
+  if (againAfterMs !== undefined) {
+    const again = setTimeout(() => early === undefined && process.kill(-child.pid, signal), againAfterMs);
+    exited.then(() => clearTimeout(again));
+  }
   const result = await exited;
-  return { ...result, seconds: (Date.now() - started) / 1000, stderr };
+  const seconds = (Date.now() - started) / 1000;
+  await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 500))]);
+  return { ...result, seconds, stderr };
 }
 
 export async function assertStopped(pids) {

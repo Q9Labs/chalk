@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -104,13 +104,52 @@ for (const { name, args, cleanup, cleanups, signal, code } of stubbornCases) {
   });
 }
 
+test("a second TERM while a gate is stopping does not cut its cleanup short", async (context) => {
+  const { root, write, env } = scratchRoot(context, "chalk-gate-twice-");
+  write("gate.sh", stubbornCommand);
+  const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "--", "./gate.sh"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "2" }, ready: env.TEST_READY, signal: "SIGTERM", againAfterMs: 500 });
+  assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+  await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
+  const services = readFileSync(env.TEST_SERVICE_LOG, "utf8").trim().split("\n");
+  assert.equal(services.filter((line) => line.startsWith("rm -f --volumes ")).length, 1);
+  assert.match(stopped.stderr, /still running 2s after TERM, so it gets KILL$/mu);
+});
+
+test("a stopped run of several gates stops the running gate and starts no more", async (context) => {
+  const { root, write, env } = scratchRoot(context, "chalk-gate-several-");
+  write("gate.sh", stubbornCommand);
+  write("second.sh", '#!/bin/bash\ntouch "$TEST_SECOND"\n');
+  const second = path.join(root, "second-ran");
+  // Only the outer wrapper is in the group that gets TERM; each gate runs in a wrapper of its own.
+  const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "./gate.sh", "./second.sh"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "1", TEST_SECOND: second }, ready: env.TEST_READY, signal: "SIGTERM" });
+  assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+  await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
+  const services = readFileSync(env.TEST_SERVICE_LOG, "utf8").trim().split("\n");
+  assert.equal(services.filter((line) => line.startsWith("rm -f --volumes ")).length, 1);
+  assert.equal(existsSync(second), false);
+  assert.doesNotMatch(stopped.stderr, /with-postgres\.sh \.\/gate\.sh \.\/second\.sh: still running/u);
+});
+
+test("a stop grace that is not a whole number fails before any database starts", (context) => {
+  const { root, env } = scratchRoot(context, "chalk-gate-grace-");
+  const result = spawnSync("bash", ["scripts/gates/with-postgres.sh", "--", "true"], { cwd: root, encoding: "utf8", timeout: 10_000, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "0.5" } });
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /CHALK_GATE_STOP_GRACE_SECONDS must be a whole number of seconds/u);
+  assert.equal(existsSync(env.TEST_SERVICE_LOG), false);
+});
+
 test("a command whose process group holds only a zombie stops without waiting out the grace period", async (context) => {
+  // The holder is outside the group the wrapper stops; ending it lets the zombie be reaped. This hook
+  // runs before the scratch root is removed, because hooks run in the order they were added.
+  let pids;
+  context.after(() => {
+    if (pids === undefined || !existsSync(pids)) return;
+    process.kill(Number(readFileSync(pids, "utf8").split(" ")[0]), "SIGKILL");
+  });
   const { root, write, env } = scratchRoot(context, "chalk-gate-zombie-");
+  pids = env.TEST_PIDS;
   write("gate.pl", zombieCommand);
   const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "--", "./gate.pl"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "5" }, ready: env.TEST_READY, signal: "SIGTERM" });
-  // The holder is outside the group the wrapper stops; ending it lets the zombie be reaped.
-  const [holder] = readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number);
-  context.after(() => process.kill(holder, "SIGKILL"));
   assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
   assert.ok(stopped.seconds < 3, `the wrapper waited ${stopped.seconds} seconds for a zombie`);
   assert.doesNotMatch(stopped.stderr, /gets KILL/u);
