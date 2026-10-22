@@ -119,16 +119,60 @@ class QueueTest(unittest.TestCase):
         for name in ('one', 'two', 'three', 'exclusive', 'after'):
             self.assertEqual(self.wait(name)['result'], 0)
 
+    def shared_fixture(self, legacy_lock):
+        helper = self.root / 'remote-queue.py'
+        helper.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(legacy_lock))
+                          .replace('if legacy_busy(cutover):', 'if False:')
+                          .replace('return legacy_active()', 'return False')
+                          .replace('                reap_legacy()', '                pass'))
+        self.command = [sys.executable, str(helper), '--root', str(self.root)]
+
+    @unittest.skipUnless(shutil.which("shlock"), "requires the macOS legacy shlock binary")
+    def test_only_exclusive_holds_legacy_lock_and_releases_before_cleanup(self):
+        legacy_lock = self.root / 'legacy.lock'
+        self.shared_fixture(legacy_lock)
+        os.environ['CHALK_REMOTE_SLOTS'] = '3'
+        barrier = self.root / 'ordinary-release'
+        script = f'end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
+        for name in ('one', 'two', 'three'):
+            self.submit(name, script)
+        self.lock.close()
+        for name in ('one', 'two', 'three'):
+            self.wait(name, 'running')
+        self.assertFalse(legacy_lock.exists(), 'ordinary slots must never hold the legacy lock')
+        barrier.touch()
+        for name in ('one', 'two', 'three'):
+            self.wait(name)
+        exclusive_release = self.root / 'exclusive-release'
+        script = ('(trap "sleep 2; exit 0" TERM; while :; do sleep .05; done) & '
+                  f'end=$((SECONDS+6)); while [ ! -f "{exclusive_release}" ] && ((SECONDS<end)); do sleep .05; done')
+        self.submit('exclusive', script, '--exclusive')
+        self.wait('exclusive', 'running')
+        self.assertTrue(legacy_lock.exists())
+        admitted = self.root / 'legacy-admitted'
+        waiter = subprocess.Popen(['bash', '-c',
+                                   'until shlock -p $$ -f "$1"; do sleep .02; done; echo admitted > "$2"; rm "$1"',
+                                   'legacy-waiter', str(legacy_lock), str(admitted)])
+        try:
+            time.sleep(.1)
+            self.assertFalse(admitted.exists())
+            exclusive_release.touch()
+            waiter.wait(timeout=1.5)
+            self.assertTrue(admitted.exists(), 'legacy waiter must start before slow descendant cleanup ends')
+            self.assertEqual(self.wait('exclusive')['result'], 0)
+            self.assertFalse(legacy_lock.exists(), 'idle dispatcher must leave the legacy lock free')
+            print('PASS legacy waiter admitted immediately after exclusive exit; ordinary slots and idle daemon never held legacy lock', flush=True)
+        finally:
+            if waiter.poll() is None:
+                waiter.terminate()
+                waiter.wait()
+
     @unittest.skipUnless(shutil.which("shlock"), "requires the macOS legacy shlock binary")
     def test_legacy_lock_occupies_one_slot(self):
         os.environ['CHALK_REMOTE_SLOTS'] = '3'
         legacy_lock = self.root / 'legacy.lock'
         legacy_lock.write_text(str(os.getpid()))
-        helper = self.root / 'remote-queue.py'
-        helper.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(legacy_lock))
-                          .replace('if legacy_busy(cutover):', 'if False:')
-                          .replace('                reap_legacy()', '                pass'))
-        self.command = [sys.executable, str(helper), '--root', str(self.root)]
+        self.shared_fixture(legacy_lock)
         barrier = self.root / 'release'
         script = f'end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
         for name in ('one', 'two', 'three'):

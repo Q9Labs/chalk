@@ -204,6 +204,25 @@ def resources_available(root, request):
         return False
 
 
+def legacy_occupied():
+    lock = Path('/tmp/chalk-remote-admission.lock')
+    try:
+        owner = int(lock.read_text().strip())
+        if owner != os.getpid() and process_start(owner):
+            return True
+    except (FileNotFoundError, ValueError):
+        pass
+    return legacy_active()
+
+
+def legacy_active():
+    processes = subprocess.check_output(['ps', '-axo', 'command='], text=True)
+    if re.search(r'[/]tmp/chalk-remote-\d{8}T', processes):
+        return True
+    cwd = subprocess.run(['lsof', '-d', 'cwd', '-Fn'], capture_output=True, text=True).stdout
+    return bool(re.search(r'^n(/private)?/tmp/chalk-remote-\d{8}T', cwd, re.M))
+
+
 def admission(isolated, cutover):
     if isolated:
         return True
@@ -294,15 +313,16 @@ def daemon(root, db, isolated):
             reap(root, db)
             if not isolated:
                 reap_legacy()
-            cutover = db.execute('SELECT MIN(submitted) FROM jobs').fetchone()[0]
             while True:
                 for ticket, (row, child, started) in list(running.items()):
                     result = child.poll()
                     if result is not None:
+                        if row['exclusive']:
+                            release(isolated)
                         stop_job(root / 'jobs' / row['id'], child.pid, started)
                         finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
                         del running[ticket]
-                if len(running) < slots and not any(row['exclusive'] for row, _, _ in running.values()):
+                if not any(row['exclusive'] for row, _, _ in running.values()):
                     release(isolated)
                 expire_waiters(root, db)
                 row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
@@ -314,10 +334,12 @@ def daemon(root, db, isolated):
                 job = root / 'jobs' / row['id']
                 request = json.loads((job / 'request.json').read_text())
                 exclusive = bool(row['exclusive'] or exclusive_request(request))
-                # Reserve capacity for the unmodified legacy harness. Taking its lock closes
-                # the race between checking capacity and starting the final slot/exclusive job.
-                needs_lock = exclusive or len(running) == slots - 1
-                if (exclusive and running) or not resources_available(root, request) or (needs_lock and not admission(isolated, cutover)):
+                # Ordinary jobs never acquire the legacy lock. A live legacy job occupies
+                # one slot; existing slot jobs keep their isolated ports and continue running.
+                occupied = int(not isolated and legacy_occupied())
+                if (len(running) + occupied >= slots or (exclusive and running)
+                        or not resources_available(root, request)
+                        or (exclusive and not admission(isolated, row['submitted']))):
                     time.sleep(0.2)
                     continue
                 slot = next(i for i in range(slots) if i not in {r['slot'] for r, _, _ in running.values()})

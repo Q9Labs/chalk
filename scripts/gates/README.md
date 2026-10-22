@@ -155,10 +155,11 @@ ticket blocks later tickets; priority only changes waiting ticket order.
 The client installs helpers by content hash and verifies the transfer before an
 atomic rename. Each ticket carries its own worker script; deployment does not
 rewrite running code. Legacy waiters keep their old shlock and drain one at a
-time. The dispatcher leaves one slot available to them, acquiring the old lock
-only to fill the last slot or run exclusively. Its bounded cut-over guard waits
-for legacy tickets created before the first durable ticket before taking that
-lock; later legacy arrivals cannot extend the barrier. Active legacy work always
+time. A live legacy lock owner counts as one occupied slot. Ordinary jobs never
+acquire that lock, even when all new slots are running. Only exclusive jobs take
+it, and release it immediately when their process exits, before descendant
+cleanup. The bounded guard waits for legacy tickets created before the exclusive
+ticket before taking that lock; later arrivals cannot extend its barrier. Active legacy work always
 finishes. New checkout names and port blocks avoid the old harness's process
 veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
 FIFO applies among new tickets. After merge, lanes may voluntarily resubmit
