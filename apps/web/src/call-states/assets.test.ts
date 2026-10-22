@@ -110,6 +110,44 @@ it("loads call, board, sticky note, text and math assets from our origin", async
   }
 }, 90_000);
 
+it("keeps SVG export on our origin when a local font is missing", async () => {
+  const context = await browser.newContext();
+  const requests: string[] = [];
+  context.on("request", (request) => requests.push(request.url()));
+  try {
+    await context.route("**/asset-font-probe", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><body></body>" }));
+    await context.route("**/fonts/Virgil/Virgil-Regular.woff2", (route) => route.fulfill({ status: 404, body: "Missing font" }));
+    const page = await context.newPage();
+    await page.goto(`${origin}/asset-font-probe`);
+    const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
+    const excalidrawModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.js")}`;
+    await page.addScriptTag({
+      type: "module",
+      content: `import { configureWhiteboardAssets } from ${JSON.stringify(assetsModule)};
+        configureWhiteboardAssets({ excalidrawCssPath: "/chalk-whiteboard/0.18.1/index.css", mathJaxBasePath: "/chalk-mathjax/4.1.3" });
+        const { convertToExcalidrawElements, exportToSvg } = await import(${JSON.stringify(excalidrawModule)});
+        const svg = await exportToSvg({ elements: convertToExcalidrawElements([{ type: "text", text: "Local font failure", fontFamily: 1, x: 0, y: 0 }]), appState: {}, files: null });
+        const output = document.createElement("output");
+        output.id = "font-failure-proof";
+        output.textContent = svg.outerHTML;
+        document.body.append(output);`,
+    });
+    await page.locator("#font-failure-proof").waitFor();
+    expect(await page.locator("#font-failure-proof").textContent()).toContain("<svg");
+    expect(requests).toContain(`${origin}/chalk-whiteboard/0.18.1/fonts/Virgil/Virgil-Regular.woff2`);
+    expect(
+      requests.filter((url) => /^https?:/.test(url) && new URL(url).origin !== origin),
+      "external font fallback requests",
+    ).toEqual([]);
+  } finally {
+    if (process.env.ASSET_PROOF_DIR) {
+      await mkdir(process.env.ASSET_PROOF_DIR, { recursive: true });
+      await writeFile(resolve(process.env.ASSET_PROOF_DIR, "font-failure-requests.json"), JSON.stringify({ requests, external: requests.filter((url) => /^https?:/.test(url) && new URL(url).origin !== origin) }, null, 2));
+    }
+    await context.close();
+  }
+}, 30_000);
+
 it("loads the embedded board from file URLs with adjacent fonts", async () => {
   const context = await browser.newContext();
   const messages: string[] = [];
