@@ -5,25 +5,30 @@ import { control, expectAcknowledgedEnd, joinWithTerminalControl, terminalTestCl
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient terminal callbacks", () => {
-  it.each(["host", "guest"] as const)("does not force-close a published microphone when the %s observes the call end", async (role) => {
+  it.each(["host", "guest"] as const)("does not force-close published media when the %s observes the call end", async (role) => {
     const close = vi.fn(async () => undefined);
     const { platform, client, setEnabled, track } = createConvergenceScenario("microphone", {
       media: { closeForcedLocalPublication: close },
       sync: {
         endEpisode: async () => {
-          platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] } });
+          end();
           return { type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" };
         },
       },
     });
+    const end = () => {
+      // Provider teardown can remove media before the terminal control event arrives.
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [] } });
+      platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] } });
+    };
     try {
       await client.join({ microphone: false, camera: false });
-      platform.emitSync({ ...platform.sync.getSnapshot(), control });
+      platform.emitSync({ ...platform.sync.getSnapshot(), control: role === "host" ? control : { ...control, participants: control.participants.map((participant) => ({ ...participant, role: "guest", capabilities: [] })) } });
       await setEnabled(true);
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 1, items: [{ participantId: "participant-1", source: "microphone", enabled: true, publicationId: "publication-1" }] } });
-      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ participantId: "participant-1", source: "microphone", enabled: true, publicationId: "publication-1", track }] });
+      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: "publication-1", track }] });
       if (role === "host") await client.endEpisode();
-      else platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] } });
+      else end();
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("left"));
       expect(close).not.toHaveBeenCalled();
     } finally {
