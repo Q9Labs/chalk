@@ -21,7 +21,7 @@ type reconcileRunner interface {
 	Reconcile(context.Context) (recorderfleet.Result, error)
 }
 
-func buildReconciler(config commandConfig) (*recorderfleet.Reconciler, error) {
+func buildReconciler(config commandConfig, logger *slog.Logger) (reconcileRunner, error) {
 	controlHTTP, err := newControllerHTTPClient(config)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func buildReconciler(config commandConfig) (*recorderfleet.Reconciler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create recorder fleet reconciler: %w", err)
 	}
-	return reconciler, nil
+	return observedReconciler{runner: reconciler, provider: provider, logger: logger, key: config.Fleet.Key}, nil
 }
 
 func newControllerHTTPClient(config commandConfig) (*http.Client, error) {
