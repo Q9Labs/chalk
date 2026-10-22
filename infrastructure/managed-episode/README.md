@@ -268,24 +268,31 @@ the promoted release directory.
 
 Before pulling release images, the controller lists rootless Podman images
 under the deployment lock and removes only unprotected, containerless images
-by digest (`image rm --no-prune`, never `--force`). It explicitly retains images
+by image ID (`image rm --no-prune`, never `--force`). It explicitly retains images
 from the live manifest, the durable active/rollback manifest, the previous
-successful release in the deployment ledger, and the candidate manifest. Local
-image IDs also protect alternate digest aliases of those images. This does not
-depend on a container existing for a protected image. Images without a known
-digest remain; containers, volumes, recordings, and database data remain untouched.
+successful release with a checksum-verified durable manifest in the deployment
+ledger, and the candidate manifest. Missing, altered, and unpublished ledger
+releases are skipped. Local image IDs also protect alternate digest aliases of
+those images. This does not
+depend on a container existing for a protected image. Unprotected dangling
+images with no repository digests are eligible too. Each image is removed once,
+regardless of its tags or digest aliases; already absent images count as success.
+Containers, volumes, recordings, and database data remain untouched.
 
 Cleanup is best effort: failures print diagnostics and a warning. After cleanup
 and all image pulls, the controller requires disk usage below 90% on the root,
 Podman image-store, and controller-state filesystems, matching the runtime health
 limit. A failed or unreadable space check rejects the deployment before runtime
 cutover, secret replacement, migrations, or fencing. Sufficient space permits a
-deployment even when cleanup failed.
+deployment even when cleanup failed. On first-controller adoption, cleanup,
+pulls, and the space gate run before the legacy runtime health check.
 
 `--group image-cleanup` runs stateful image-cache and disk-pressure regressions,
 including rollback with no baseline container. Set `CHALK_TEST_IMAGE_CASE` to
 `active`, `rollback`, `previous`, `candidate`, `space`, `image-space`, `boundary`,
-`cleanup-error`, `cleanup-error-space`, or `rollback-health` for one case.
+`cleanup-error`, `cleanup-error-space`, `rollback-health`, `multi-digest`,
+`dangling`, `ledger-missing`, `ledger-tampered`, or `ledger-invalid-id` for one case.
+`--group adoption-pressure` covers recovering disk space before adoption health.
 
 The host-side `chalk-runtime-watchdog` checks user-unit activity, local API and
 Sync readiness, cloudflared's `/ready` endpoint, release-manifest integrity,

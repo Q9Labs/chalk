@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|all]\n' "$0"
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|adoption-pressure|all]\n' "$0"
 }
 
 test_group="all"
@@ -24,21 +24,21 @@ if [[ $# -gt 0 ]]; then
   test_group="$2"
 fi
 case "${test_group}" in
-  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup) ;;
+  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|adoption-pressure) ;;
   *) fail "unknown test group: ${test_group}" ;;
 esac
 
 group_enabled() {
   local group="$1"
   case "${test_group}:${group}" in
-    all:*|image-cleanup:image-cleanup) return 0 ;;
+    all:*|image-cleanup:image-cleanup|adoption-pressure:adoption) return 0 ;;
     validation:validation|adoption:adoption|inputs:inputs|healthy:healthy|rollback:rollback|restore:restore|recording:recording|ssm-contract:ssm-contract|source-reuse:source-reuse) return 0 ;;
     rollback:healthy|restore:healthy|restore:rollback) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-if [[ "$test_group" != image-cleanup ]]; then
+if [[ "$test_group" != image-cleanup && "$test_group" != adoption-pressure ]]; then
 planner="${managed_root}/scripts/plan-release-components"
 "$planner" apps/api/internal/recordernodebootstrap/attestation.go | jq -e '.classification == "none" and .build_set == [] and .affected_components == [] and .recorder_image_affected == true' >/dev/null || fail "recorder bootstrap source did not plan a recorder image"
 "$planner" apps/api/internal/recordernodebootstrap/attestation_test.go | jq -e '.classification == "none" and .build_set == [] and .affected_components == [] and .recorder_image_affected == false' >/dev/null || fail "recorder bootstrap test incorrectly planned an image"
@@ -190,18 +190,23 @@ case "${1:-} ${2:-}" in
     [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" != true ]] || { echo 'test-only image storage permission denied' >&2; exit 125; }
     if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
       jq -r '.[] | .id + " " + (.containers|tostring) + " " + (.refs|join(" "))' "$FAKE_IMAGE_STATE"
+      if [[ -n "${FAKE_DUPLICATE_IMAGE_ID:-}" ]]; then
+        jq -r --arg id "$FAKE_DUPLICATE_IMAGE_ID" '.[] | select(.id == $id) | .id + " " + (.containers|tostring) + " " + (.refs|join(" "))' "$FAKE_IMAGE_STATE"
+      fi
     fi
     ;;
   "image exists")
     [[ -n "${FAKE_IMAGE_STATE:-}" ]] || exit 1
-    jq -e --arg ref "$3" 'any(.[]; .refs | index($ref))' "$FAKE_IMAGE_STATE" >/dev/null
+    jq -e --arg ref "$3" 'any(.[]; .id == $ref or (.refs | index($ref)))' "$FAKE_IMAGE_STATE" >/dev/null
     ;;
   "image rm")
-    [[ "$3" == --no-prune && "$4" == *@sha256:* && $# == 4 ]]
+    [[ "$3" == --no-prune && $# == 4 ]]
     [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" != true ]] || { echo 'test-only image storage permission denied' >&2; exit 125; }
-    jq --arg ref "$4" '[.[] | if (.refs|index($ref)) then .refs -= [$ref] else . end | select(.refs|length>0)]' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+    removed_id="$(jq -er --arg ref "$4" '.[] | select(.id == $ref or (.refs|index($ref))) | .id' "$FAKE_IMAGE_STATE")" || exit 1
+    jq -r --arg id "$removed_id" '.[] | select(.id == $id) | .id, .refs[]' "$FAKE_IMAGE_STATE" >>"${FAKE_IMAGE_STATE}.removed"
+    # A digest alias can remove the entire image, not just that reference.
+    jq --arg id "$removed_id" '[.[] | select(.id != $id)]' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
     mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
-    printf '%s\n' "$4" >>"${FAKE_IMAGE_STATE}.removed"
     ;;
   "pull "*)
     if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
@@ -308,6 +313,7 @@ cat >"${fixture_root}/bin/df" <<'DF'
 set -euo pipefail
 printf 'df %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 used="${FAKE_DISK_USED:-50}"
+if [[ -n "${FAKE_PRESSURE_IMAGE_ID:-}" ]] && jq -e --arg id "$FAKE_PRESSURE_IMAGE_ID" 'any(.[]; .id == $id)' "$FAKE_IMAGE_STATE" >/dev/null; then used=96; fi
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
 printf 'root 10000000 5000000 5000000 %s%% /\n' "$used"
 printf 'images 10000000 5000000 5000000 %s%% /images\n' "${FAKE_IMAGE_DISK_USED:-$used}"
@@ -324,6 +330,10 @@ sequence="${FAKE_HEALTH_SEQUENCE:-ok}"
 run_root="${CHALK_CONTROLLER_RUN_ROOT:?}"
 [[ -s "${run_root}/release/release-manifest.json" ]]
 [[ -s "${run_root}/release/release-manifest.sha256" ]]
+if [[ -n "${FAKE_PRESSURE_IMAGE_ID:-}" ]]; then
+  printf 'health disk check\n' >>"${FAKE_COMMAND_LOG:?}"
+  ! jq -e --arg id "$FAKE_PRESSURE_IMAGE_ID" 'any(.[]; .id == $id)' "$FAKE_IMAGE_STATE" >/dev/null || { echo 'disk-pressure' >&2; exit 1; }
+fi
 if [[ -n "${FAKE_IMAGE_STATE:-}" ]]; then
   while IFS= read -r image; do
     jq -e --arg ref "$image" 'any(.[]; .refs|index($ref))' "$FAKE_IMAGE_STATE" >/dev/null || exit 1
@@ -432,6 +442,7 @@ make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
 if [[ "$test_group" == all ]]; then
   "$0" --group image-cleanup
+  "$0" --group adoption-pressure
 fi
 if [[ "$test_group" == image-cleanup ]]; then
   image_state="${fixture_root}/images.json"
@@ -451,7 +462,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   jq --arg image "$live_image" '.images.api=$image' "$manifest" >"${fixture_root}/run/release/release-manifest.json"
   mkdir -p "${cleanup_state}/releases/previous"
   jq --arg image "$previous_image" '.release_id="previous" | .images.api=$image' "$manifest" >"${cleanup_state}/releases/previous/release-manifest.json"
-  { printf '{"outcome":"healthy","release_id":"previous"}\n'; cat "${cleanup_state}/ledger.jsonl"; } >"${fixture_root}/ledger.tmp"
+  { jq -cn --arg hash "$(sha256sum "${cleanup_state}/releases/previous/release-manifest.json" | awk '{print $1}')" '{outcome:"healthy",release_id:"previous",manifest_sha256:$hash}'; cat "${cleanup_state}/ledger.jsonl"; } >"${fixture_root}/ledger.tmp"
   mv "${fixture_root}/ledger.tmp" "${cleanup_state}/ledger.jsonl"
   for image in "$candidate_image" "$stale_image" "$live_image" "$previous_image"; do
     jq --arg ref "$image" '. + [{id:($ref|split("@")[1]),refs:[$ref],containers:0}]' "$image_state" >"${image_state}.tmp"
@@ -464,11 +475,44 @@ if [[ "$test_group" == image-cleanup ]]; then
   : >"${image_state}.removed"
   : >"${fixture_root}/commands.log"
   image_case="${CHALK_TEST_IMAGE_CASE:-all}"
+  dangling_id="sha256:$(printf '2%.0s' {1..64})"
+  later_image="example.com/later@sha256:$(printf '3%.0s' {1..64})"
   case "$image_case" in
-    active|rollback|previous|candidate|all)
-      run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >/dev/null
+    multi-digest|dangling|ledger-missing|ledger-tampered|ledger-invalid-id)
+      case "$image_case" in
+        multi-digest)
+          export FAKE_DUPLICATE_IMAGE_ID="${stale_image##*@}"
+          jq --arg ref "$stale_image" --arg alias "example.com/unused-alias@sha256:$(printf '4%.0s' {1..64})" --arg later "$later_image" 'map(if (.refs|index($ref)) then .refs += [$alias] else . end) + [{id:($later|split("@")[1]),refs:[$later],containers:0}]' "$image_state" >"${image_state}.tmp"
+          ;;
+        dangling)
+          jq --arg id "$dangling_id" '. + [{id:$id,refs:[],containers:0}]' "$image_state" >"${image_state}.tmp"
+          ;;
+        ledger-*)
+          jq -cn --arg hash "$(printf '5%.0s' {1..64})" '{outcome:"healthy",release_id:"removed-promotion",manifest_sha256:$hash}' >>"${cleanup_state}/ledger.jsonl"
+          if [[ "$image_case" != ledger-missing ]]; then
+            mkdir -p "${cleanup_state}/releases/removed-promotion"
+            make_manifest removed-promotion >"${cleanup_state}/releases/removed-promotion/release-manifest.json"
+            if [[ "$image_case" == ledger-invalid-id ]]; then
+              # A matching checksum alone must not make a mismatched release identity eligible.
+              jq '.release_id="wrong-release"' "${cleanup_state}/releases/removed-promotion/release-manifest.json" >"${fixture_root}/wrong-identity.json"
+              cp "${fixture_root}/wrong-identity.json" "${cleanup_state}/releases/removed-promotion/release-manifest.json"
+              jq -cn --arg hash "$(sha256sum "${cleanup_state}/releases/removed-promotion/release-manifest.json" | awk '{print $1}')" '{outcome:"healthy",release_id:"removed-promotion",manifest_sha256:$hash}' >>"${cleanup_state}/ledger.jsonl"
+            fi
+          fi
+          cp "$image_state" "${image_state}.tmp"
+          export FAKE_PRESSURE_IMAGE_ID="${stale_image##*@}"
+          ;;
+      esac
+      mv "${image_state}.tmp" "$image_state"
+      ;;
+  esac
+  case "$image_case" in
+    active|rollback|previous|candidate|multi-digest|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|all)
+      run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/cleanup-case.log" 2>&1 || { tail -n 20 "${fixture_root}/cleanup-case.log" >&2; fail "image cleanup deployment failed"; }
       for protected_class in active rollback previous candidate; do
-        [[ "$image_case" == all || "$image_case" == "$protected_class" ]] || continue
+        case "$image_case" in
+          active|rollback|previous|candidate) [[ "$image_case" == "$protected_class" ]] || continue ;;
+        esac
         case "$protected_class" in
           active) protected_image="$live_image" ;;
           rollback) protected_image="$baseline_image" ;;
@@ -480,7 +524,15 @@ if [[ "$test_group" == image-cleanup ]]; then
         printf 'PASS %s image survives cleanup without a container\n' "$protected_class"
       done
       ! grep -Fq 'podman image rm --no-prune example.com/alias@' "${fixture_root}/commands.log" || fail "protected image ID was removed through another digest alias"
+      case "$image_case" in
+        multi-digest)
+          ! jq -e --arg ref "$later_image" 'any(.[]; .refs|index($ref))' "$image_state" >/dev/null || fail "multi-digest removal left later unused images behind"
+          ! grep -Fq 'WARN unused image cache cleanup failed' "${fixture_root}/cleanup-case.log" || fail "already removed image was treated as a cleanup failure"
+          ;;
+        dangling) ! jq -e --arg id "$dangling_id" 'any(.[]; .id == $id)' "$image_state" >/dev/null || fail "dangling image with no RepoDigests survived cleanup" ;;
+      esac
       grep -Fxq "$stale_image" "${image_state}.removed" || fail "unprotected image was not reclaimed"
+      printf 'PASS %s reclamation\n' "$image_case"
       ;;
     space|image-space|boundary|cleanup-error|cleanup-error-space|rollback-health)
       cp "${cleanup_state}/active-release.json" "${fixture_root}/before-pointer.json"
@@ -517,7 +569,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   esac
   unset FAKE_IMAGE_STATE
   if [[ "$image_case" == all ]]; then
-    for image_case in space image-space boundary cleanup-error cleanup-error-space rollback-health; do
+    for image_case in multi-digest dangling ledger-missing ledger-tampered ledger-invalid-id space image-space boundary cleanup-error cleanup-error-space rollback-health; do
       CHALK_TEST_IMAGE_CASE="$image_case" "$0" --group image-cleanup
     done
   fi
@@ -638,6 +690,22 @@ printf '%s\n' \
   chalk-cloudflare-tunnel-token >"${fixture_root}/secret-state"
 make_request adoption-candidate "${fixture_root}/adoption-request.json" '[]' production true
 make_manifest adoption-candidate >"${fixture_root}/adoption-manifest.json"
+if [[ "$test_group" == adoption-pressure ]]; then
+  export FAKE_IMAGE_STATE="${fixture_root}/adoption-images.json"
+  pressure_image="example.com/pressure@sha256:$(printf '6%.0s' {1..64})"
+  export FAKE_PRESSURE_IMAGE_ID="${pressure_image##*@}"
+  jq --arg ref "$pressure_image" '[.images[] | {id:(split("@")[1]),refs:[.],containers:0}] + [{id:($ref|split("@")[1]),refs:[$ref],containers:0}]' "${fixture_root}/run/release/release-manifest.json" >"$FAKE_IMAGE_STATE"
+  : >"${fixture_root}/commands.log"
+  : >"${fixture_root}/health-index"
+  FAKE_API_RELEASE_ID_OVERRIDE=legacy FAKE_SYNC_RELEASE_ID_OVERRIDE=legacy FAKE_SYNC_SOURCE_COMMIT_OVERRIDE="$source_revision" run_controller "$adoption_state" "${fixture_root}/adoption-request.json" "${fixture_root}/adoption-manifest.json" ok >"${fixture_root}/adoption-pressure.log" 2>&1 || fail "disk pressure prevented adoption before cleanup"
+  cleanup_line="$(grep -n '^podman image rm ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+  space_line="$(grep -n '^df -Pk ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+  health_line="$(grep -n '^health disk check' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+  [[ -n "$cleanup_line" && "$cleanup_line" -lt "$space_line" && "$space_line" -lt "$health_line" ]] || fail "adoption health ran before cleanup and space gate"
+  grep -Fq '"outcome":"adopted"' "${adoption_state}/ledger.jsonl" || fail "disk pressure recovery never adopted the legacy release"
+  printf 'PASS adoption pressure: cleanup and space gate precede health\n'
+  exit 0
+fi
 printf '%s' mismatched-live-bytes >"${fixture_root}/run/env/api.env"
 : >>"${fixture_root}/commands.log"
 stops_before_adoption="$(grep -Fc 'stop chalk-runtime.target' "${fixture_root}/commands.log" || true)"
@@ -1013,7 +1081,8 @@ set -euo pipefail
 export FAKE_UPGRADE_PID=$$
 exec "${FAKE_UPGRADE_CONTROLLER:?}" "$@"
 UPGRADE
-  cat >"${fixture_root}/bin/mv" <<'MOVE'
+  mkdir -p "${fixture_root}/upgrade-bin"
+  cat >"${fixture_root}/upgrade-bin/mv" <<'MOVE'
 #!/usr/bin/env bash
 set -euo pipefail
 "${FAKE_REAL_MV:?}" "$@"
@@ -1022,9 +1091,10 @@ if [[ -n "${FAKE_STOP_AFTER_INSTALL:-}" && "${!#}" == "${CHALK_CONTROLLER_INSTAL
   kill -KILL "$PPID" "${FAKE_UPGRADE_PID:?}"
 fi
 MOVE
-  chmod 0755 "${fixture_root}/bin/"{upgrade-controller,mv}
-  export FAKE_REAL_MV="$(command -v mv)" FAKE_INSTALL_BOUNDARY="${fixture_root}/install-boundary"
-  export PATH="${fixture_root}/bin:${PATH}"
+  chmod 0755 "${fixture_root}/bin/upgrade-controller" "${fixture_root}/upgrade-bin/mv"
+  FAKE_REAL_MV="$(command -v mv)"
+  export FAKE_REAL_MV FAKE_INSTALL_BOUNDARY="${fixture_root}/install-boundary"
+  export PATH="${fixture_root}/upgrade-bin:${PATH}"
   make_request recording-upgrade "${fixture_root}/upgrade-request.json"
   make_manifest recording-upgrade | jq '.images.recorder_control = .images.api' >"${fixture_root}/upgrade-manifest.json"
   for boundary in chalk-runtime-health environments.json chalk-deployment-controller; do

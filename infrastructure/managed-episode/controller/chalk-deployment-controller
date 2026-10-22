@@ -867,16 +867,21 @@ cleanup_unused_images() {
     manifests+=("$live_manifest")
   fi
   if [[ -f "$active_pointer" ]]; then
-    local active_id previous_id
+    local active_id previous_id previous_hash previous_manifest
     active_id="$(jq -er '.release_id' "$active_pointer")" || return 1
     manifests+=("$(jq -er '.release_root' "$active_pointer")/release-manifest.json")
-    # Keep the prior successful release as well as the current rollback target.
+    # A failed pointer commit can leave a healthy ledger entry but no durable release.
     if [[ -f "$ledger_file" && ! -L "$ledger_file" ]]; then
-      previous_id="$(jq -sr --arg current "$active_id" '[.[] | select((.outcome == "healthy" or .outcome == "adopted") and .release_id != $current)] | last | .release_id // empty' "$ledger_file")" || return 1
-      if [[ -n "$previous_id" ]]; then
-        [[ "$previous_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ ]] || return 1
-        manifests+=("${state_root}/releases/${previous_id}/release-manifest.json")
-      fi
+      jq -sr --arg current "$active_id" 'reverse[] | select((.outcome == "healthy" or .outcome == "adopted") and .release_id != $current) | [.release_id, .manifest_sha256] | @tsv' "$ledger_file" >"${stage_root}/previous-releases" || return 1
+      while IFS=$'\t' read -r previous_id previous_hash; do
+        [[ "$previous_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ && "$previous_hash" =~ ^[0-9a-f]{64}$ ]] || continue
+        previous_manifest="${state_root}/releases/${previous_id}/release-manifest.json"
+        [[ -f "$previous_manifest" && ! -L "$previous_manifest" ]] || continue
+        [[ "$(sha256_file "$previous_manifest")" == "$previous_hash" ]] || continue
+        jq -e --arg id "$previous_id" '.release_id == $id' "$previous_manifest" >/dev/null || continue
+        manifests+=("$previous_manifest")
+        break
+      done <"${stage_root}/previous-releases"
     fi
   fi
   local file image image_id status
@@ -910,11 +915,16 @@ cleanup_unused_images() {
       if grep -Fq -- "@${ref##*@}" "$protected_refs"; then protected=true; break; fi
     done
     [[ "$protected" == false ]] || continue
-    for ref in $refs; do
-      [[ "$ref" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]] || continue
-      # Never remove containers or recursively prune a protected parent image.
-      run_user_podman image rm --no-prune "$ref" || return 1
-    done
+    # Remove each eligible image once, including digestless/dangling images.
+    # --no-prune retains shared parents; never force removal of containers.
+    if ! run_user_podman image rm --no-prune "sha256:${image_id}"; then
+      if run_user_podman image exists "sha256:${image_id}"; then
+        return 1
+      else
+        status=$?
+        [[ "$status" == 1 ]] || return 1
+      fi
+    fi
   done <"$inventory"
 }
 
@@ -1436,7 +1446,10 @@ deploy() {
     stable_exists=true
   elif [[ -e "$active_pointer" ]]; then
     fail "active release pointer is unsafe"
-  elif [[ "$adopt_existing_release" == true ]]; then
+  fi
+  pull_images
+  check_disk_space
+  if [[ "$stable_exists" == false && "$adopt_existing_release" == true ]]; then
     local live_manifest="${run_root}/release/release-manifest.json"
     if [[ -f "$live_manifest" && ! -L "$live_manifest" ]]; then
       adopt_live_release
@@ -1447,8 +1460,6 @@ deploy() {
       fail "live release manifest is unsafe"
     fi
   fi
-  pull_images
-  check_disk_space
   local release_root="${state_root}/releases/${request_release_id}"
   [[ ! -e "$release_root" ]] || fail "release already exists in durable state"
   local stable_pointer_copy="${stage_root}/stable-pointer.json"
