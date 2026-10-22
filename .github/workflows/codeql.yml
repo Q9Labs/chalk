@@ -13,9 +13,11 @@ on:
 permissions:
   contents: read
 
+# A pull request's new push cancels its older run. Every other run gets its own group, so a pending master scan is
+# never replaced by a later push.
 concurrency:
-  group: codeql-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   languages:

@@ -9,21 +9,24 @@ export const languages = ["actions", "go", "javascript-typescript", "python"];
 
 const configFiles = new Set([".github/workflows/codeql.yml", "scripts/gates/codeql-languages.mjs"]);
 const goFiles = new Set(["go.mod", "go.sum", "go.work", "go.work.sum"]);
-const javascriptExtensions = new Set([".cjs", ".cts", ".htm", ".html", ".js", ".json", ".jsx", ".mjs", ".mts", ".svelte", ".ts", ".tsx", ".vue"]);
+// Every input the JavaScript extractor reads: https://codeql.github.com/docs/codeql-overview/supported-languages-and-frameworks/
+const javascriptExtensions = new Set([".cjs", ".cts", ".ejs", ".es", ".es6", ".hbs", ".htm", ".html", ".js", ".json", ".jsx", ".mjs", ".mts", ".njk", ".raml", ".svelte", ".ts", ".tsx", ".vue", ".xhtm", ".xhtml", ".xml", ".yaml", ".yml"]);
 
-const languageOf = (file) => {
+// One file can be input to several extractors: a workflow file is both an Actions and a JavaScript input.
+const languagesOf = (file) => {
   const name = path.basename(file);
   const extension = path.extname(file);
-  if (file.startsWith(".github/workflows/") || file.startsWith(".github/actions/") || name === "action.yml" || name === "action.yaml") return "actions";
-  if (extension === ".go" || goFiles.has(name)) return "go";
-  if (extension === ".py" || extension === ".pyi") return "python";
-  if (javascriptExtensions.has(extension)) return "javascript-typescript";
-  return null;
+  const found = [];
+  if (file.startsWith(".github/workflows/") || file.startsWith(".github/actions/") || name === "action.yml" || name === "action.yaml") found.push("actions");
+  if (extension === ".go" || goFiles.has(name)) found.push("go");
+  if (extension === ".py" || extension === ".pyi") found.push("python");
+  if (javascriptExtensions.has(extension)) found.push("javascript-typescript");
+  return found;
 };
 
 export function codeqlLanguages(files) {
   if (files.some((file) => configFiles.has(file) || file.startsWith(".github/codeql/"))) return languages;
-  const changed = new Set(files.map(languageOf));
+  const changed = new Set(files.flatMap(languagesOf));
   return languages.filter((language) => changed.has(language));
 }
 
