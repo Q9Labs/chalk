@@ -401,6 +401,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.suspend(() => {
         this.#assertCurrentIntent(source, intent.revision);
         ports.media.setLocalSourceIntent?.(source, true);
+        if (source === "microphone") this.#discardEndedMicrophone();
         const acquire =
           (source === "camera" && !intent.previousEnabled) || !this.#hasTrack(source)
             ? this.#captureForPublish(source, ports.media, (track) =>
@@ -671,6 +672,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #discardEndedCamera(): void {
     if (this.#camera.status === "live" && this.#camera.track.readyState !== "live") this.#transitionCamera({ status: "ended" });
+  }
+  #discardEndedMicrophone(): void {
+    if (this.#tracks.get("microphone")?.readyState === "ended") this.#tracks.delete("microphone");
   }
   #liveCameraSource(current: CameraState & { readonly status: "live" }, purpose: "preview" | "publication"): Effect.Effect<CameraPreview, unknown> {
     if (current.publication !== null && !current.track.enabled && purpose === "preview") {

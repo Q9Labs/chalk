@@ -17,6 +17,25 @@ function heldCapture() {
   return { platform, track, capture, release };
 }
 
+function endingTrack(source: "microphone" | "camera", id: string) {
+  let ended = false;
+  const track = Object.assign(mediaTrack(), {
+    kind: source === "microphone" ? "audio" : "video",
+    id,
+    stop: vi.fn(() => {
+      ended = true;
+    }),
+  });
+  Object.defineProperty(track, "readyState", { get: () => (ended ? "ended" : "live") });
+  return {
+    track,
+    end: () => {
+      ended = true;
+      track.dispatchEvent(new Event("ended"));
+    },
+  };
+}
+
 describe("media capture ownership", () => {
   it("stops microphone capture superseded by Off, before disposal", async () => {
     const { platform, track, capture, release } = heldCapture();
@@ -67,6 +86,41 @@ describe("media capture ownership", () => {
       expect(prepareLocalTrack).toHaveBeenCalledWith("microphone", track);
     } finally {
       release();
+      client.dispose();
+    }
+  });
+
+  it.each(["microphone", "camera"] as const)("captures and prepares a fresh %s after the published track ends", async (source) => {
+    const platform = createCoreTestPlatform();
+    const original = endingTrack(source, "original");
+    const replacement = endingTrack(source, "replacement");
+    let releaseReceipt = () => {};
+    const receiptHeld = new Promise<void>((resolve) => {
+      releaseReceipt = resolve;
+    });
+    const capture = vi.fn().mockResolvedValueOnce(mediaStream(original.track)).mockResolvedValue(mediaStream(replacement.track));
+    const send = vi.fn(async (enabled: boolean) => {
+      if (enabled && send.mock.calls.length === 1) await receiptHeld;
+      return { operationId: "device-loss", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" } as const;
+    });
+    const prepareLocalTrack = vi.fn();
+    const client = capturedClient(platform, original.track, { mediaDevices: { getUserMedia: capture }, media: { prepareLocalTrack }, sync: { setMicrophoneEnabled: send, setCameraEnabled: send } });
+    const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
+    try {
+      await client.join({ microphone: false, camera: false });
+      const on = setEnabled(true).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(send).toHaveBeenCalledWith(true));
+      original.end();
+      const off = setEnabled(false).catch((error: unknown) => error);
+      releaseReceipt();
+      await Promise.all([on, off]);
+      await setEnabled(true);
+      expect(capture).toHaveBeenCalledTimes(2);
+      expect(prepareLocalTrack).toHaveBeenLastCalledWith(source, replacement.track);
+      expect(client.getSnapshot().media.local[source].track).toBe(replacement.track);
+      expect(send.mock.calls.map(([enabled]) => enabled)).toEqual([true, false, true]);
+    } finally {
+      releaseReceipt();
       client.dispose();
     }
   });
