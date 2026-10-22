@@ -7,7 +7,7 @@ import { ChalkSheet } from "../chalk-ui";
 import { useStageDimensions } from "./useStageDimensions";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
-import { buildStageItems, choosePrimary, floatingSpeakerId, gridOrder, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
+import { buildStageItems, choosePrimary, floatingSpeakerId, gridOrder, speakingParticipantId, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
 import { StageMotion } from "./StageMotion";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 
@@ -131,8 +131,8 @@ export function Stage({
 
   useEffect(() => {
     orderRef.current = ordered.map((item) => item.id);
-    const speaking = ordered.find((item) => item.kind === "participant" && (item.participant.isActiveSpeaker || item.participant.isSpeaking));
-    if (speaking) lastSpeakerRef.current = speaking.id;
+    const speaking = speakingParticipantId(ordered);
+    if (speaking) lastSpeakerRef.current = speaking;
   }, [ordered]);
 
   const primary = useMemo(() => (layout === "grid" ? null : choosePrimary(ordered, { layout, pinnedId: activePinnedId, lastSpeakerId: interactive ? lastSpeakerRef.current : null, seenAt: seenAtRef.current })), [activePinnedId, interactive, layout, ordered]);
@@ -320,6 +320,7 @@ export function Stage({
                 key={frame.id}
                 type="button"
                 data-stage-item={MORE_TILE_ID}
+                data-stage-role={frame.role}
                 style={frameStyle(frame)}
                 onClick={onOverflowClick ?? (() => setOverflowOpen(true))}
                 disabled={!interactive}

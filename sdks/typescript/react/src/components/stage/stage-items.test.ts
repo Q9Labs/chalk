@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { choosePrimary, floatingSpeakerId, type StageItem, type PrimaryContext } from "./stage-items";
+import { choosePrimary, floatingSpeakerId, speakingParticipantId, type StageItem, type PrimaryContext } from "./stage-items";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, MORE_TILE_ID } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
@@ -113,6 +113,14 @@ describe("a board on a phone", () => {
     expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "me", MORE_TILE_ID]);
   });
 
+  it("starts a new column instead of running content past the bottom of a short stage", () => {
+    const short = { width: 608, height: 162 };
+    const geometry = fitSpotlight(short, "whiteboard", ["share", "me", "nora", "malik"], { ...options, wideIds: ["whiteboard", "share"] });
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "share", MORE_TILE_ID]);
+    for (const frame of geometry.frames.slice(1)) expect(frame.y + frame.height).toBeLessThanOrEqual(short.height - 8);
+    expect(geometry.frames[2]?.x).toBe(608 - 12 - 120 - 8 - 76);
+  });
+
   it("honours the visible-tile limit", () => {
     const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik"], { ...options, maxPerPage: 2 });
     expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "me", MORE_TILE_ID]);
@@ -124,5 +132,6 @@ it("leads the floating faces with the active speaker before anyone else speaking
   const remote = (id: string, flags: { isActiveSpeaker?: boolean; isSpeaking?: boolean }): StageItem => ({ kind: "participant", id, participant: { id, displayName: id, ...flags } });
   const items = [remote("nora", { isSpeaking: true }), remote("malik", { isActiveSpeaker: true, isSpeaking: true })];
   expect(floatingSpeakerId(items, null)).toBe("malik");
+  expect(speakingParticipantId(items)).toBe("malik");
   expect(floatingSpeakerId([remote("nora", {})], "akash")).toBe("akash");
 });

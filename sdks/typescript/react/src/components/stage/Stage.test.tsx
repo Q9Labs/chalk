@@ -19,3 +19,9 @@ it("uses the primary renderer for focused content when a tile renderer is also s
   expect(html).toContain("Focused content");
   expect(html).not.toContain("Unfocused content");
 });
+
+it("marks the +N tile with its frame role, so styles that follow the layout see it", () => {
+  const people: StageItem[] = ["nora", "akash", "malik"].map((id) => ({ kind: "participant", id, participant: { id, displayName: id } }));
+  const html = renderToStaticMarkup(<Stage items={people} layout="grid" maxPerPage={2} generatedAvatars={false} />);
+  expect(html.match(/<button[^>]*data-stage-item="stage:more"[^>]*>/)?.[0]).toContain('data-stage-role="grid"');
+});
