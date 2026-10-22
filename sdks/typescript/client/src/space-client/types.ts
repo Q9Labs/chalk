@@ -61,6 +61,7 @@ export type ErrorCode =
   | "connection.leave_unconfirmed"
   | "connection.media_recovery_exhausted"
   | "connection.media_start_failed"
+  | "connection.state_digest_recovery_failed"
   | "connection.sync_recovery_exhausted"
   | "connection.sync_start_failed"
   | "connection.sync_hello_timeout"
