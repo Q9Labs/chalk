@@ -8,7 +8,8 @@
     "directory": "sdks/typescript/client"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.helpers.*"
   ],
   "type": "module",
   "sideEffects": [
