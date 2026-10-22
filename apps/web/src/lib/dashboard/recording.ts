@@ -50,7 +50,7 @@ export const TRANSCRIPT: Record<TranscriptState, { readonly copy: string; readon
   preparing: { copy: "The transcript is being prepared.", action: null },
   failed: { copy: "The transcript couldn’t be made", action: null },
   deleted: { copy: "This transcript was deleted.", action: null },
-  expired: { copy: "No transcript is available because the recording source could not be kept.", action: null },
+  expired: { copy: "A transcript can no longer be made for this recording.", action: null },
   creatable: { copy: "There’s no transcript for this recording.", action: "create" },
   none: { copy: "There’s no transcript for this recording.", action: null },
 };

@@ -300,7 +300,7 @@ it.each([404, 410])("shows an unavailable transcript when the selected recording
   transcriptHTTPStatus = status;
   await tick();
   expect(screen.getByText("The recording source is no longer available.")).toBeTruthy();
-  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
   expect(screen.queryByText("The transcript couldn’t be made")).toBeNull();
 });
 
@@ -332,7 +332,7 @@ function transcriptExpectation(row: string, preparation: string): { readonly tex
   if (preparation === "ready") return { text: "There’s no transcript for this recording.", create: true };
   if (preparation === "pending") return { text: "The transcript is being prepared.", create: false };
   if (preparation === "failed") return { text: "The transcript couldn’t be made", create: false };
-  if (preparation === "expired") return { text: "No transcript is available because the recording source could not be kept.", create: false };
+  if (preparation === "expired") return { text: "A transcript can no longer be made for this recording.", create: false };
   return { text: "There’s no transcript for this recording.", create: false };
 }
 
@@ -419,7 +419,7 @@ it("closes the prepare and transcript actions the moment the source window ends,
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
-  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
   expect(requests).toHaveLength(count);
 });
 
@@ -460,7 +460,7 @@ it("rereads the recording after a refused transcript request so a dead action di
   });
   expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(1);
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
-  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
 });
 
 it("shows the new transcript as being prepared once its request is accepted", async () => {
@@ -553,7 +553,7 @@ it("offers a transcript from a ready source only while both its own deadline and
       // transcripts.go:218-231 refuses a source whose expires_at has passed, and it never outlives the video source (schema.sql:402-414).
       const allowed = transcription !== "past" && video !== "past";
       const create = screen.queryByRole("button", { name: /^Make a transcript/ }) !== null;
-      const copy = screen.queryAllByText(allowed ? "There’s no transcript for this recording." : "No transcript is available because the recording source could not be kept.").length > 0;
+      const copy = screen.queryAllByText(allowed ? "There’s no transcript for this recording." : "A transcript can no longer be made for this recording.").length > 0;
       if (create !== allowed || !copy) mismatches.push({ transcription, video, create, copy });
       cleanup();
     }
@@ -580,7 +580,7 @@ it.each([
     await vi.advanceTimersByTimeAsync(1_000);
   });
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
-  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
   // The video keeps its own, later deadline.
   expect(screen.queryByRole("button", { name: "Prepare recording" }) !== null).toBe(at < 60_000);
   await reactAct(async () => {

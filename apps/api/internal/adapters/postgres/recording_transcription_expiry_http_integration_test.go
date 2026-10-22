@@ -143,7 +143,7 @@ func TestGetRecordingExposesTranscriptionSourceExpiry(t *testing.T) {
 		t.Fatalf("transcription expiry %v should precede the open video source %+v", open.TranscriptionPreparation.ExpiresAt, open.Source)
 	}
 
-	if _, err := connection.Exec(ctx, `update recording_transcription_sources set expires_at = now() - interval '1 second' where recording_id = $1`, onDemand.Bytes()); err != nil {
+	if _, err := connection.Exec(ctx, `update recording_transcription_sources set committed_at = now() - interval '2 hours', expires_at = now() - interval '1 second' where recording_id = $1`, onDemand.Bytes()); err != nil {
 		t.Fatal(err)
 	}
 	closed := get(onDemand)

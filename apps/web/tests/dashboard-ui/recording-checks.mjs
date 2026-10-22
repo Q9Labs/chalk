@@ -41,7 +41,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
       await request;
       await tab.getByText("The recording source is no longer available.", { exact: true }).waitFor();
       check("a deleted recording leaves session attendance visible", (await tab.getByText("Who came", { exact: true }).count()) === 1 && (await tab.getByText("Couldn’t load this session", { exact: true }).count()) === 0);
-      await tab.getByText("No transcript is available because the recording source could not be kept.", { exact: true }).waitFor();
+      await tab.getByText("A transcript can no longer be made for this recording.", { exact: true }).waitFor();
       check("a deleted recording keeps its transcript unavailable", (await tab.getByText("The transcript couldn’t be made", { exact: true }).count()) === 0);
       if (evidence) await tab.screenshot({ path: resolve(evidence, "deleted-1440.png"), fullPage: true });
     } finally {
