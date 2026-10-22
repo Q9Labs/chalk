@@ -15,17 +15,17 @@ export function PrivacyNotice({ topInset = 0 }: { readonly topInset?: number } =
     const timer = setTimeout(() => setRevision((current) => current + 1), Math.min(Math.max(remaining, 0), 2_147_483_647));
     return () => clearTimeout(timer);
   }, [pending, revision]);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
   const { colors } = useTheme();
   const toasts = useToasts();
   useEffect(() => {
     let active = true;
     void AsyncStorage.getItem(dismissalKey).then(
       (value) => {
-        if (active && value === "dismissed") setDismissed(true);
+        if (active) setDismissed(value === "dismissed");
       },
       () => {
-        /* Disabled storage leaves the notice available for this visit. */
+        if (active) setDismissed(false);
       },
     );
     return () => {
@@ -38,7 +38,7 @@ export function PrivacyNotice({ topInset = 0 }: { readonly topInset?: number } =
       // Dismissal still applies for this visit if storage is unavailable.
     });
   }
-  if (!pending || dismissed) return null;
+  if (!pending || dismissed !== false) return null;
   return (
     <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: topInset + 8 }]} testID="privacy.notice">
       <ChalkText style={styles.text} variant="meta">

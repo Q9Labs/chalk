@@ -81,6 +81,12 @@ describe("Privacy Policy advance notice", () => {
     expect(screen.getByText("Originally effective 7 August 2026")).toBeTruthy();
     expect(screen.getByText(/We keep your data while your account or tenant is active/)).toBeTruthy();
   });
+  it("discloses webhook content and endpoint retention criteria", () => {
+    render(<LegalPage kind="privacy" />);
+    expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("cleanup after 30 days");
+    expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("Endpoint settings and revision history");
+    expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("tenant is purged");
+  });
   it("discloses Google Fonts request data and transfer safeguards", () => {
     render(<LegalPage kind="privacy" />);
     const provider = screen.getByText("Google Fonts").closest("li");
