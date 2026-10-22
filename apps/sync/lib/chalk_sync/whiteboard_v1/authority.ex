@@ -36,20 +36,32 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @spec watch(EpisodeKey.t()) :: :ok
   def watch(%EpisodeKey{} = episode), do: Poller.watch(episode, self())
 
-  @spec check(Identity.t()) :: access()
-  def check(%Identity{} = identity) do
+  @doc """
+  The socket's access from the latest stored read. `connected_at` is when the socket's own connect
+  check started: a read that started no later can predate the Participant's join, so it never denies.
+  """
+  @spec check(Identity.t(), integer() | nil) :: access()
+  def check(%Identity{} = identity, connected_at \\ nil) do
     case :ets.lookup(@table, identity.episode) do
       # The socket passed a fresh check at connect, and the first read is on its way.
       [] ->
         watch(identity.episode)
 
-      [{_episode, :not_found, _read_at, _failure}] ->
+      [{_episode, :not_found, read_at, _failure}]
+      when not is_integer(connected_at) or read_at > connected_at ->
         {:error, :permission_denied}
 
       [{_episode, access, read_at, failure}] ->
-        if System.monotonic_time(:millisecond) - read_at > stale_ms(),
-          do: {:retryable, {:storage_unavailable, failure || "stale"}},
-          else: decide(access, identity)
+        cond do
+          System.monotonic_time(:millisecond) - read_at > stale_ms() ->
+            {:retryable, {:storage_unavailable, failure || "stale"}}
+
+          is_integer(connected_at) and read_at <= connected_at ->
+            :ok
+
+          true ->
+            decide(access, identity)
+        end
     end
   rescue
     # The table goes away with this process while it restarts.

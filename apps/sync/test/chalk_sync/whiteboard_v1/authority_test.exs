@@ -68,6 +68,29 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     wait_until(fn -> Authority.check(identity) == {:error, :permission_denied} end)
   end
 
+  test "a person who joins after the last read keeps the board until a newer read" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 300)
+    identity = identity()
+
+    Application.put_env(
+      :chalk_sync,
+      :authority_test_access,
+      {:ok, %{status: "active", participants: %{}}}
+    )
+
+    Authority.watch(identity.episode)
+    wait_until(fn -> :ets.member(Authority, identity.episode) end)
+
+    # Connect checked the database just now and found the new Participant active.
+    connected_at = System.monotonic_time(:millisecond)
+    assert Authority.check(identity, connected_at) == :ok
+
+    # A read that started after the connect is current, so it decides.
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+    wait_until(fn -> Authority.check(identity, connected_at) == {:error, :permission_denied} end)
+  end
+
   test "a removal or an end that can still be undone keeps the socket open" do
     for {episode_status, participant_status} <- [
           {"active", "leaving"},

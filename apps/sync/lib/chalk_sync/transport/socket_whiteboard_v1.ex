@@ -36,6 +36,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        phase: :awaiting_hello,
        hello_timer: timer,
        identity: nil,
+       connected_at: nil,
        display_name: nil,
        presentation_negotiated: false,
        view_negotiated: false,
@@ -83,7 +84,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp current_authority(%{identity: nil} = state), do: {:ok, state}
 
   defp current_authority(state) do
-    case Authority.check(state.identity) do
+    case Authority.check(state.identity, state.connected_at) do
       :ok ->
         {:ok, state}
 
@@ -351,6 +352,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     view_origins_negotiated =
       Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
 
+    connected_at = System.monotonic_time(:millisecond)
+
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, welcome} <- Episode.connect(identity) do
@@ -372,6 +375,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           | phase: :live,
             hello_timer: nil,
             identity: identity,
+            connected_at: connected_at,
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
             view_negotiated: view_negotiated,
