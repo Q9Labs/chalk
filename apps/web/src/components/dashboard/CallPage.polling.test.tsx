@@ -50,6 +50,7 @@ it.each([403, 404, 410].flatMap((status) => ["recording", "transcript"].map((kin
         exportRetryable: false,
         failureMessage: null,
         transcriptionStatus: "ready",
+        sourceExpiresAt: null,
         createdAt: "2026-10-21T00:00:00Z",
         transcripts: [{ id: "transcript", status: "pending", languages: ["en"], createdAt: "2026-10-21T00:00:00Z" }],
       },

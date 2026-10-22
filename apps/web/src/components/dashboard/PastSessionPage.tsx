@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
-import { pendingRecording } from "../../lib/dashboard/recording";
+import { pendingRecording, TRANSCRIPT, transcriptState, VIDEO, videoState, type TranscriptState } from "../../lib/dashboard/recording";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -11,14 +11,24 @@ import { useLoad } from "./AppShell";
 import { ErrorPanel, Menu, MenuItem, Sk, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Ids = { readonly spaceId: string; readonly episodeId: string };
-type Transcript =
-  | { readonly kind: "loading" }
-  | { readonly kind: "none" }
-  | { readonly kind: "unrequested" }
-  | { readonly kind: "processing" }
-  | { readonly kind: "failed" }
-  | { readonly kind: "unavailable" }
-  | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
+type Transcript = { readonly kind: "loading" } | { readonly kind: Exclude<TranscriptState, "ready"> } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
+/** The transcript row the page last read; what it means comes from the table in recording.ts. */
+type TranscriptRead = { readonly kind: "loading" } | { readonly kind: "gone" } | { readonly kind: "error" } | { readonly kind: "loaded"; readonly transcript: TranscriptDTO | null; readonly cues: readonly CueDTO[] };
+
+/** The current time, moved forward exactly when the next deadline passes so time-bound states change on screen. */
+function useClock(deadlines: readonly (string | null)[]): number {
+  const [now, setNow] = useState(() => Date.now());
+  const next = deadlines.reduce((soonest, deadline) => {
+    const at = deadline === null ? Number.NaN : Date.parse(deadline);
+    return at > now && at < soonest ? at : soonest;
+  }, Number.POSITIVE_INFINITY);
+  useEffect(() => {
+    if (next === Number.POSITIVE_INFINITY) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [next]);
+  return now;
+}
 
 async function freshRecording(spaceId: string, recording: RecordingDTO): Promise<RecordingDTO> {
   try {
@@ -49,6 +59,7 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       return { ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? next : item)) } };
     },
   });
+  const now = useClock(state.kind === "ready" ? state.data.session.recordings.map((item) => item.sourceExpiresAt) : []);
   const phone = usePhone();
   const back = (name: string | null) => (
     <Link className="back" to="/dashboard/call/$spaceId" params={{ spaceId }}>
@@ -83,9 +94,10 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
     );
   const { recordings } = state.data.session;
   // Show a playable export first, then an attempt that can still be prepared, so a failed newest attempt never hides a usable older one.
-  const recording = recordings.find((item) => item.exportStatus === "ready") ?? recordings.find((item) => preparable(item) || item.exportStatus === "pending") ?? recordings[0];
+  const usable = (item: RecordingDTO) => ["preparable", "retryable", "preparing"].includes(videoState(item, now));
+  const recording = recordings.find((item) => videoState(item, now) === "play") ?? recordings.find(usable) ?? recordings[0];
   // Recordings are newest first, so a later attempt than the one shown sits before it.
-  const newer = recording ? recordings.slice(0, recordings.indexOf(recording)).find((item) => preparable(item) || item.exportStatus === "pending") : undefined;
+  const newer = recording ? recordings.slice(0, recordings.indexOf(recording)).find(usable) : undefined;
   // Player, transcript and export state belong to one recording, so a new selection starts fresh.
   return (
     <Session
@@ -95,12 +107,11 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       session={state.data.session}
       recording={recording}
       newer={newer}
+      now={now}
       onRecording={(next) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? next : item)) } }), { refresh: false })}
     />
   );
 }
-
-const preparable = (recording: RecordingDTO) => recording.sourceStatus === "available" && (recording.exportStatus === "none" || (recording.exportStatus === "failed" && recording.exportRetryable));
 
 function Session({
   ids,
@@ -108,6 +119,7 @@ function Session({
   session,
   recording,
   newer,
+  now,
   onRecording,
 }: {
   readonly ids: Ids;
@@ -115,11 +127,12 @@ function Session({
   readonly session: PastSessionDTO;
   readonly recording: RecordingDTO | undefined;
   readonly newer: RecordingDTO | undefined;
+  readonly now: number;
   readonly onRecording: (recording: RecordingDTO) => void;
 }) {
   const phone = usePhone();
   const { episode, attendance } = session;
-  const [transcript, setTranscript] = useTranscript(ids, recording);
+  const [transcript, setTranscript] = useTranscript(ids, recording, now);
   const intents = useIntentKeys();
   const toast = useToast();
   const [time, setTime] = useState(0);
@@ -133,7 +146,7 @@ function Session({
       {back}
       <div className="pgh">
         <h1>Session on {longDay(episode.startedAt)}</h1>
-        {recording && (recording.exportStatus === "ready" || transcript.kind === "ready") ? <DownloadMenu ids={ids} recording={recording} transcript={transcript.kind === "ready" ? transcript.transcript : null} /> : null}
+        {recording && (videoState(recording, now) === "play" || transcript.kind === "ready") ? <DownloadMenu ids={ids} recording={recording} video={videoState(recording, now) === "play"} transcript={transcript.kind === "ready" ? transcript.transcript : null} /> : null}
         <span className="meta">
           {clock(episode.startedAt)} to {clock(end)} · {duration(episode.startedAt, end)} · {people} {people === 1 ? "person" : "people"}
         </span>
@@ -175,51 +188,55 @@ function Session({
       setExporting(false);
     }
   }
-  const playable = recording.exportStatus === "ready";
-  const failed = recording.sourceStatus === "failed" || recording.status === "failed" || recording.exportStatus === "failed";
-  const unavailable = recording.sourceStatus === "expired" || (recording.exportStatus === "unavailable" && recording.sourceStatus !== "pending");
-  const preparing = recording.exportStatus === "pending";
-  const canPrepare = preparable(recording);
-  const media = playable ? (
-    <>
-      <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
-      {newer ? (
-        <div className="pnote" role="status">
-          <div>
-            {preparable(newer) ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
-            <b>{preparable(newer) ? "A newer recording is ready to prepare" : "Preparing the newer recording"}</b>
-            <p>{preparable(newer) ? "Prepare it to watch or download it here." : "It replaces this video here when it’s ready."}</p>
-            {preparable(newer) ? (
-              <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(newer)}>
-                {exporting ? "Preparing…" : newer.exportStatus === "failed" ? "Try again" : "Prepare recording"}
-              </button>
-            ) : null}
+  const video = videoState(recording, now);
+  const note = VIDEO[video];
+  const newerState = newer ? videoState(newer, now) : null;
+  const newerAction = newerState === null ? null : VIDEO[newerState].action;
+  const actionLabel = (action: "prepare" | "retry") => (exporting ? "Preparing…" : action === "retry" ? "Try again" : "Prepare recording");
+  const media =
+    video === "play" ? (
+      <>
+        <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
+        {newer && newerState ? (
+          <div className="pnote" role="status">
+            <div>
+              {newerAction ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
+              <b>{newerAction ? "A newer recording is ready to prepare" : "Preparing the newer recording"}</b>
+              <p>{newerAction ? "Prepare it to watch or download it here." : "It replaces this video here when it’s ready."}</p>
+              {newerAction === "prepare" || newerAction === "retry" ? (
+                <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(newer)}>
+                  {actionLabel(newerAction)}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ) : null}
-    </>
-  ) : (
-    <div className="pnote" role={failed ? "alert" : "status"}>
-      <div>
-        {failed || unavailable ? <Icon name="recOff" /> : canPrepare ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
-        <b>{failed ? "The recording couldn’t be made" : unavailable ? "The recording is no longer available" : canPrepare ? "The recording is ready to prepare" : preparing ? "Preparing the recording" : "Processing the recording"}</b>
-        <p>{failed || unavailable ? recording.failureMessage || "The recording source is no longer available." : canPrepare ? "Prepare this session’s video to watch or download it." : "You can leave this page and return when the video is ready."}</p>
-        {canPrepare ? (
-          <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
-            {exporting ? "Preparing…" : failed ? "Try again" : "Prepare recording"}
-          </button>
         ) : null}
+      </>
+    ) : (
+      <div className="pnote" role={video === "capture_failed" || video === "retryable" || video === "export_failed" ? "alert" : "status"}>
+        <div>
+          {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
+          <b>{note.title}</b>
+          <p>{note.detail}</p>
+          {note.action === "prepare" || note.action === "retry" ? (
+            <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
+              {actionLabel(note.action)}
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
-  );
+    );
   async function createTranscript(recordingId: string) {
     try {
-      await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
+      const created = await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
       intents.done(`transcript:${recordingId}`);
-      setTranscript({ kind: "processing" });
+      setTranscript(created.transcript);
       toast("Making the transcript. It shows here when it’s ready.", { icon: "clock" });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
+      // A refusal can mean the transcription source closed; reread it so a dead action disappears.
+      // The refusal is already reported, so a failed reread keeps the current state.
+      if (recording) await freshRecording(ids.spaceId, recording).then(onRecording, () => undefined);
     }
   }
   const panel = <TranscriptPanel transcript={transcript} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(recording.id)} />;
@@ -263,50 +280,49 @@ const languageName = (code: string) => {
 
 const TRANSCRIPT_CHECK_MS = 15000;
 
-function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly [Transcript, (next: Transcript) => void] {
-  const [state, setState] = useState<Transcript>({ kind: "loading" });
+function transcriptView(recording: RecordingDTO, read: TranscriptRead, now: number): Transcript {
+  if (read.kind === "loading") return read;
+  if (read.kind === "gone") return { kind: "expired" };
+  if (read.kind === "error") return { kind: "failed" };
+  const kind = transcriptState(recording, read.transcript, now);
+  if (kind !== "ready") return { kind };
+  return read.transcript ? { kind, transcript: read.transcript, cues: read.cues } : { kind: "failed" };
+}
+
+function useTranscript(ids: Ids, recording: RecordingDTO | undefined, now: number): readonly [Transcript, (transcript: TranscriptDTO) => void] {
+  const [read, setRead] = useState<TranscriptRead>({ kind: "loading" });
   const [check, setCheck] = useState(0);
   const recordingId = recording?.id ?? null;
-  const sourceStatus = recording?.sourceStatus;
   const transcriptionStatus = recording?.transcriptionStatus;
+  const state = recording ? transcriptView(recording, read, now) : read.kind === "loading" ? read : ({ kind: "none" } as const);
   // A transcript being made is checked again until it's done, so it shows without a reload.
   useEffect(() => {
-    if (state.kind !== "processing" || !recordingId) return;
+    if (state.kind !== "preparing" || !recordingId) return;
     const timer = window.setTimeout(() => setCheck((value) => value + 1), TRANSCRIPT_CHECK_MS);
     return () => window.clearTimeout(timer);
-  }, [state, recordingId]);
+  }, [state.kind, recordingId, check]);
   useEffect(() => {
     if (!recordingId) return;
     let current = true;
-    (async (): Promise<Transcript> => {
+    (async (): Promise<TranscriptRead> => {
       const { transcripts } = await act("past-session", { action: "transcripts", ...ids, recordingId });
-      const transcript = transcripts.find((item) => item.status === "completed" || item.status === "complete") ?? transcripts[0];
-      if (!transcript) {
-        // A transcript is made from the transcription source, which can outlive the video source.
-        if (transcriptionStatus === "ready") return { kind: "none" };
-        if (sourceStatus === "failed" || sourceStatus === "expired" || transcriptionStatus === "expired") return { kind: "unavailable" };
-        if (transcriptionStatus === "failed") return { kind: "failed" };
-        return { kind: transcriptionStatus === "pending" || sourceStatus === "pending" ? "processing" : "none" };
-      }
-      if (transcript.status === "failed" || transcript.status === "terminal_failure") return { kind: "failed" };
-      if (transcript.status === "deleted") return { kind: "unavailable" };
-      // The server refuses a new transcript while any transcript row exists for the recording.
-      if (transcript.status === "not_requested") return { kind: "unrequested" };
-      if (transcript.status !== "completed" && transcript.status !== "complete") return { kind: "processing" };
+      const transcript = transcripts.find((item) => item.status === "completed" || item.status === "complete") ?? transcripts[0] ?? null;
+      if (!transcript || (transcript.status !== "completed" && transcript.status !== "complete")) return { kind: "loaded", transcript, cues: [] };
       const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: transcript.id });
-      return { kind: "ready", transcript, cues };
+      return { kind: "loaded", transcript, cues };
     })().then(
-      (next) => current && setState(next),
-      (error: unknown) => current && setState({ kind: error instanceof DashboardRequestError && (error.status === 404 || error.status === 410) ? "unavailable" : "failed" }),
+      (next) => current && setRead(next),
+      (error: unknown) => current && setRead({ kind: error instanceof DashboardRequestError && (error.status === 404 || error.status === 410) ? "gone" : "error" }),
     );
     return () => {
       current = false;
     };
-  }, [ids, recordingId, check, sourceStatus, transcriptionStatus]);
-  return [state, setState];
+  }, [ids, recordingId, check, transcriptionStatus]);
+  const created = useCallback((transcript: TranscriptDTO) => setRead({ kind: "loaded", transcript, cues: [] }), []);
+  return [state, created];
 }
 
-function DownloadMenu({ ids, recording, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly transcript: TranscriptDTO | null }) {
+function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly video: boolean; readonly transcript: TranscriptDTO | null }) {
   const toast = useToast();
   async function downloadRecording() {
     try {
@@ -336,7 +352,7 @@ function DownloadMenu({ ids, recording, transcript }: { readonly ids: Ids; reado
     >
       {(close) => (
         <>
-          {recording.exportStatus === "ready" ? (
+          {video ? (
             <MenuItem
               icon="film"
               onSelect={() => {
@@ -482,19 +498,16 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
 
   let body;
   if (transcript.kind === "loading") body = <div className="tempty">Loading the transcript…</div>;
-  else if (transcript.kind === "unavailable") body = <div className="tempty">No transcript is available because the recording source could not be kept.</div>;
   else if (transcript.kind === "failed")
     body = (
       <div style={{ padding: 14 }}>
-        <ErrorPanel title="The transcript couldn’t be made" detail="The transcript isn’t available for this session." />
+        <ErrorPanel title={TRANSCRIPT.failed.copy} detail="The transcript isn’t available for this session." />
       </div>
     );
-  else if (transcript.kind === "processing") body = <div className="tempty">The transcript is being prepared.</div>;
-  else if (transcript.kind === "unrequested") body = <div className="tempty">There’s no transcript for this recording.</div>;
-  else if (transcript.kind === "none")
+  else if (transcript.kind === "creatable")
     body = (
       <div className="tempty">
-        <p>There’s no transcript for this recording.</p>
+        <p>{TRANSCRIPT.creatable.copy}</p>
         <button
           type="button"
           className="btn sec sm"
@@ -510,6 +523,7 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
         </button>
       </div>
     );
+  else if (transcript.kind !== "ready") body = <div className="tempty">{TRANSCRIPT[transcript.kind].copy}</div>;
   else if (!lines.length) body = <div className="tempty">No lines mention “{query.trim()}”.</div>;
   else
     body = lines.map(({ cue, index }) => {

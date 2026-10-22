@@ -25,6 +25,11 @@ let transcriptHTTPStatus = 200;
 let extraRecordings: ReturnType<typeof recording>[] = [];
 let brokenURL: string | null = null;
 let stalledTranscripts: string | null = null;
+let recordingState: string | null = null;
+let transcriptionSource: string | null = null;
+let expiresAt: string | null = null;
+let exportHTTPStatus = 202;
+let createHTTPStatus = 200;
 const requests: { path: string; action?: string; id?: string; recordingId?: string }[] = [];
 
 function recording() {
@@ -34,10 +39,10 @@ function recording() {
       tenant_id: id,
       space_id: id,
       episode_id: id,
-      status: artifact === "ready" ? "completed" : "pending",
-      source: { status: source },
+      status: recordingState ?? (artifact === "ready" ? "completed" : "pending"),
+      source: { status: source, ...(expiresAt ? { expires_at: expiresAt } : {}) },
       export: { status: artifact, retryable, failure_message: source === "failed" ? "The recording capture did not complete." : source === "expired" ? "The recording source is no longer available." : artifact === "failed" ? "The recording export could not be completed." : null },
-      transcription_preparation: { status: source === "failed" ? "failed" : source === "pending" ? "pending" : "ready" },
+      transcription_preparation: { status: transcriptionSource ?? (source === "failed" ? "failed" : source === "pending" ? "pending" : "ready") },
       transcription_policy: "automatic",
       storage_provider: "r2",
       storage_key: null,
@@ -54,6 +59,11 @@ beforeEach(() => {
   extraRecordings = [];
   brokenURL = null;
   stalledTranscripts = null;
+  recordingState = null;
+  transcriptionSource = null;
+  expiresAt = null;
+  exportHTTPStatus = 202;
+  createHTTPStatus = 200;
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -74,6 +84,12 @@ beforeEach(() => {
     if (body?.action === "transcripts" && body.recordingId === stalledTranscripts) return new Promise<Response>(() => {});
     if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
     if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
+    if (body?.action === "export-recording" && exportHTTPStatus !== 202) return Response.json({ error: { code: "recording.not_ready" } }, { status: exportHTTPStatus });
+    if (body?.action === "create-transcript" && createHTTPStatus !== 200) return Response.json({ error: { code: "transcript.source_expired" } }, { status: createHTTPStatus });
+    if (body?.action === "create-transcript") {
+      transcriptStatus = "preparing";
+      return Response.json({ transcript: { id, status: "preparing", languages: ["en"], createdAt: date } });
+    }
     if (body?.action === "export-recording" && source === "expired") return Response.json({ error: { code: "recording_source_expired" } }, { status: 409 });
     if (body?.action === "export-recording") {
       artifact = "pending";
@@ -204,7 +220,8 @@ it("does not offer to create a transcript over an existing not-requested one", a
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
 });
 
-it("removes the prepare action when an export is refused because the source expired meanwhile", async () => {
+it.each([409, 400])("removes the prepare action when an export is refused because the source expired meanwhile: %s", async (status) => {
+  exportHTTPStatus = status;
   await open();
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   source = "expired";
@@ -298,4 +315,144 @@ it("shares metadata polling across pending attempts with one request per tick", 
   await tick();
   await tick();
   expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata").map((request) => request.id)).toEqual([id, second, third]);
+});
+
+const TRANSCRIPT_ROWS = ["", "pending", "processing", "completed", "failed", "not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted"];
+
+// What the API allows, written from the API rather than from the page: transcripts.go:206 refuses a request over any
+// existing row, and :211-231 needs a transcription source that is ready and unexpired (preparation "ready").
+function transcriptExpectation(row: string, preparation: string): { readonly text: string; readonly create: boolean } {
+  if (row === "complete" || row === "completed") return { text: "Saved speech", create: false };
+  if (["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"].includes(row)) return { text: "The transcript is being prepared.", create: false };
+  if (row === "failed" || row === "terminal_failure") return { text: "The transcript couldn’t be made", create: false };
+  if (row === "deleted") return { text: "This transcript was deleted.", create: false };
+  if (row === "not_requested") return { text: "There’s no transcript for this recording.", create: false };
+  if (preparation === "ready") return { text: "There’s no transcript for this recording.", create: true };
+  if (preparation === "pending") return { text: "The transcript is being prepared.", create: false };
+  if (preparation === "failed") return { text: "The transcript couldn’t be made", create: false };
+  if (preparation === "expired") return { text: "No transcript is available because the recording source could not be kept.", create: false };
+  return { text: "There’s no transcript for this recording.", create: false };
+}
+
+it("offers a transcript in exactly the 1,040 state combinations the API accepts, with the matching copy", async () => {
+  const mismatches = [];
+  let count = 0;
+  for (const recordingStatus of ["pending", "processing", "completed", "failed"]) {
+    for (const videoSource of ["pending", "available", "failed", "expired"]) {
+      for (const preparation of ["none", "pending", "ready", "failed", "expired"]) {
+        for (const row of TRANSCRIPT_ROWS) {
+          recordingState = recordingStatus;
+          source = videoSource;
+          transcriptionSource = preparation;
+          transcriptStatus = row;
+          artifact = "none";
+          await open();
+          const expected = transcriptExpectation(row, preparation);
+          const create = screen.queryByRole("button", { name: /^Make a transcript/ }) !== null;
+          const shown = screen.queryAllByText(expected.text).length > 0;
+          if (create !== expected.create || !shown) mismatches.push({ recordingStatus, videoSource, preparation, row: row || "absent", create, shown });
+          count += 1;
+          cleanup();
+        }
+      }
+    }
+  }
+  expect(count).toBe(1040);
+  expect(mismatches).toEqual([]);
+}, 120_000);
+
+it("shows the one video action the API accepts in every recording, source and export state, and never waits without polling", async () => {
+  const mismatches = [];
+  transcriptStatus = "complete";
+  for (const recordingStatus of ["pending", "processing", "completed", "failed"]) {
+    for (const videoSource of ["pending", "available", "failed", "expired"]) {
+      for (const exportStatus of ["none", "pending", "ready", "failed", "unavailable"]) {
+        for (const exportRetryable of [false, true]) {
+          recordingState = recordingStatus;
+          source = videoSource;
+          artifact = exportStatus;
+          retryable = exportRetryable;
+          requests.length = 0;
+          await open();
+          // recordings.go:254-263 signs a video URL only for a completed recording with a ready export.
+          const play = exportStatus === "ready" && recordingStatus === "completed";
+          // E15-E17: an export request changes anything only for an open source with no export, or a retryable failed one.
+          const prepare = videoSource === "available" && exportStatus === "none";
+          const retry = videoSource === "available" && exportStatus === "failed" && exportRetryable;
+          const shown = {
+            play: screen.queryByRole("region", { name: "Recording" }) !== null,
+            prepare: screen.queryByRole("button", { name: "Prepare recording" }) !== null,
+            retry: screen.queryByRole("button", { name: "Try again" }) !== null,
+          };
+          const waiting = document.querySelector(".pnote .spin") !== null;
+          const before = requests.filter((request) => request.path === "/dashboard-api/call-metadata").length;
+          await tick();
+          const polled = requests.filter((request) => request.path === "/dashboard-api/call-metadata").length > before;
+          if (shown.play !== play || shown.prepare !== prepare || shown.retry !== retry || (waiting && !polled)) mismatches.push({ recordingStatus, videoSource, exportStatus, exportRetryable, ...shown, waiting, polled });
+          cleanup();
+        }
+      }
+    }
+  }
+  expect(mismatches).toEqual([]);
+}, 120_000);
+
+it("closes the prepare and transcript actions the moment the source window ends, without waiting for a request", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  await open();
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
+  const count = requests.length;
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(59_000);
+  });
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+  expect(requests).toHaveLength(count);
+});
+
+it("stops playing a rendered export when its source window ends", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  artifact = "ready";
+  await open();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Download" })).toBeTruthy();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
+  expect(screen.queryByRole("region", { name: "Recording" })).toBeNull();
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+});
+
+it("rereads the recording after a refused transcript request so a dead action disappears", async () => {
+  transcriptStatus = "";
+  await open();
+  transcriptionSource = "expired";
+  createHTTPStatus = 409;
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
+  });
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+  expect(screen.getByText("No transcript is available because the recording source could not be kept.")).toBeTruthy();
+});
+
+it("shows the new transcript as being prepared once its request is accepted", async () => {
+  transcriptStatus = "";
+  await open();
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
+  });
+  expect(requests.filter((request) => request.action === "create-transcript")).toHaveLength(1);
+  expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
 });

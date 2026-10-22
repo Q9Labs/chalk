@@ -117,6 +117,7 @@ export type RecordingDTO = {
   id: string;
   status: Recording["status"];
   sourceStatus: Recording["source"]["status"];
+  sourceExpiresAt: string | null;
   exportStatus: Recording["export"]["status"];
   exportRetryable: boolean;
   failureMessage: string | null;

@@ -14,6 +14,7 @@ export function recordingDTO(recording: Recording): RecordingDTO {
     id: recording.id,
     status: recording.status,
     sourceStatus: recording.source.status,
+    sourceExpiresAt: recording.source.expires_at ?? null,
     exportStatus: recording.export.status,
     exportRetryable: recording.export.retryable,
     failureMessage: recording.export.failure_message ?? null,
