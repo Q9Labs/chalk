@@ -486,7 +486,12 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       assert {:stop, :normal, {1008, "policy violation"}, closed} =
                receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
 
-      assert closed.terminal == %{close_code: 1008, reason: :permission_denied}
+      assert closed.terminal == %{
+               close_code: 1008,
+               reason: :permission_denied,
+               denial: :participant_left
+             }
+
       refute_received {:whiteboard_v1_frame, %{"type" => "cursor"}}
     end
 
@@ -601,7 +606,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   defp read(state) do
     ChalkSync.WhiteboardV1.Authority.watch(state.identity.episode)
     assert_receive {:episode_access_read, _episode}, 1_000
-    wait_for(fn -> :ets.member(ChalkSync.WhiteboardV1.Authority, state.identity.episode) end)
+
+    wait_for(fn ->
+      :ets.member(
+        ChalkSync.WhiteboardV1.Authority,
+        EpisodeKey.authority_key(state.identity.episode)
+      )
+    end)
   end
 
   defp wait_for(condition, attempts \\ 100) do

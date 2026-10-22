@@ -497,7 +497,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   end
 
   defp wait_for_entry(episode, after_ms \\ nil, attempts \\ 200) do
-    case :ets.lookup(Authority, episode) do
+    case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
       [{_episode, _access, read_at, _failure}] = entry
       when is_nil(after_ms) or read_at > after_ms ->
         entry

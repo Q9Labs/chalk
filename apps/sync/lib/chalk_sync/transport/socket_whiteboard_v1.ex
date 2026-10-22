@@ -88,8 +88,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       :ok ->
         {:ok, state}
 
-      {:error, :permission_denied} ->
-        stop(state, 1008, "policy violation", :permission_denied)
+      {:error, {:permission_denied, denial}} ->
+        {:stop, reason, close, state} =
+          stop(state, 1008, "policy violation", :permission_denied)
+
+        {:stop, reason, close, put_in(state.terminal[:denial], denial)}
 
       {:retryable, {_reason, failure}} ->
         {:stop, reason, close, state} =

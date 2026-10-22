@@ -4,6 +4,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
 
   use GenServer, restart: :temporary
 
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Repository
 
@@ -49,6 +50,10 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
     end
   end
 
+  # Coordinator.drain_all/0 casts :drain to every child of the Episode supervisor. A poller keeps
+  # reading until its last socket closes, so it ignores the drain.
+  def handle_cast(:drain, state), do: {:noreply, state}
+
   @impl true
   def handle_info(:read, state), do: {:noreply, read(state)}
 
@@ -83,6 +88,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
     state
   end
 
-  defp key(episode), do: {:whiteboard_authority, episode}
+  # UUIDs in tokens may differ in letter case, so one Episode has one poller whatever the case.
+  defp key(episode), do: {:whiteboard_authority, EpisodeKey.authority_key(episode)}
   defp now_ms, do: System.monotonic_time(:millisecond)
 end

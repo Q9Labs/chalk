@@ -19,7 +19,10 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   # Without a successful read for this long, sockets close so their clients reconnect.
   @stale_ms 3_000
 
-  @type access :: :ok | {:error, :permission_denied} | {:retryable, {atom(), String.t()}}
+  # Why a socket lost access, kept in its close trace while the peer sees only a policy violation.
+  @type denial :: :episode_not_found | :episode_ended | :participant_missing | :participant_left
+  @type access ::
+          :ok | {:error, {:permission_denied, denial()}} | {:retryable, {atom(), String.t()}}
 
   def start_link(_options), do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
 
@@ -42,14 +45,14 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   """
   @spec check(Identity.t(), integer() | nil) :: access()
   def check(%Identity{} = identity, connected_at \\ nil) do
-    case :ets.lookup(@table, identity.episode) do
+    case :ets.lookup(@table, EpisodeKey.authority_key(identity.episode)) do
       # The socket passed a fresh check at connect, and the first read is on its way.
       [] ->
         watch(identity.episode)
 
       [{_episode, :not_found, read_at, _failure}]
       when not is_integer(connected_at) or read_at > connected_at ->
-        {:error, :permission_denied}
+        {:error, {:permission_denied, :episode_not_found}}
 
       [{_episode, access, read_at, failure}] ->
         cond do
@@ -70,10 +73,10 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @doc false
   def store(episode, access, read_at, failure),
-    do: :ets.insert(@table, {episode, access, read_at, failure})
+    do: :ets.insert(@table, {EpisodeKey.authority_key(episode), access, read_at, failure})
 
   @doc false
-  def forget(episode), do: :ets.delete(@table, episode)
+  def forget(episode), do: :ets.delete(@table, EpisodeKey.authority_key(episode))
 
   defp stale_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_stale_ms, @stale_ms)
 
@@ -85,9 +88,9 @@ defmodule ChalkSync.WhiteboardV1.Authority do
     key = {String.downcase(identity.participant_id), identity.participant_generation}
 
     case {episode_status, Map.get(participants, key)} do
-      {"ended", _status} -> {:error, :permission_denied}
-      {_episode, nil} -> {:error, :permission_denied}
-      {_episode, "left"} -> {:error, :permission_denied}
+      {"ended", _status} -> {:error, {:permission_denied, :episode_ended}}
+      {_episode, nil} -> {:error, {:permission_denied, :participant_missing}}
+      {_episode, "left"} -> {:error, {:permission_denied, :participant_left}}
       {_episode, _reversible_or_active} -> :ok
     end
   end
