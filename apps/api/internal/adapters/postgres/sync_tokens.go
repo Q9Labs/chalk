@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -87,23 +88,26 @@ func replaceParticipantMediaConnection(ctx context.Context, tx pgx.Tx, key synct
 	return nil
 }
 
-func (r EpisodeLifecycleRepository) LoadParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, requestHash [32]byte) ([]byte, error) {
-	var ciphertext []byte
+func (r EpisodeLifecycleRepository) LoadParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, requestHash [32]byte) (*accessgrants.StoredRefreshReplay, error) {
+	var stored *accessgrants.StoredRefreshReplay
 	err := r.transaction(ctx, func(_ *sqlc.Queries, tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `select r.response_ciphertext from participant_media_refreshes r
+		row := accessgrants.StoredRefreshReplay{}
+		err := tx.QueryRow(ctx, `select r.response_ciphertext,r.created_at from participant_media_refreshes r
  join participants p on p.tenant_id=r.tenant_id and p.space_id=r.space_id and p.episode_id=r.episode_id and p.id=r.participant_id
  where r.tenant_id=$1 and r.space_id=$2 and r.episode_id=$3 and r.participant_id=$4 and r.participant_generation=$5 and r.request_hash=$6
- and p.generation=$5 and p.status='active' and p.media_connection_generation=$5 and p.media_connection_id=r.connection_id`,
-			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, requestHash[:]).Scan(&ciphertext)
+ and p.generation=$5 and p.status='active' and p.media_connection_generation=$5 and p.media_connection_id=r.connection_id
+ and r.created_at + ($7::bigint * interval '1 second') > clock_timestamp()`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, requestHash[:], int64(accessgrants.RefreshReplayWindow/time.Second)).Scan(&row.Ciphertext, &row.CreatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("load participant media refresh: %w", err)
 		}
+		stored = &row
 		return nil
 	})
-	return ciphertext, err
+	return stored, err
 }
 
 func (r EpisodeLifecycleRepository) CompleteParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, next string, replay accessgrants.RefreshReplay) error {
@@ -117,14 +121,18 @@ func (r EpisodeLifecycleRepository) CompleteParticipantMediaRefresh(ctx context.
 			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, replay.RequestHash[:]); err != nil {
 			return fmt.Errorf("remove displaced participant media refreshes: %w", err)
 		}
-		_, err := tx.Exec(ctx, `insert into participant_media_refreshes
+		result, err := tx.Exec(ctx, `insert into participant_media_refreshes
  (tenant_id,space_id,episode_id,participant_id,participant_generation,request_hash,connection_id,response_ciphertext)
  values($1,$2,$3,$4,$5,$6,$7,$8)
  on conflict (tenant_id,space_id,episode_id,participant_id,participant_generation,request_hash)
- do update set connection_id=excluded.connection_id,response_ciphertext=excluded.response_ciphertext`,
-			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, replay.RequestHash[:], next, replay.Ciphertext)
+ do update set connection_id=excluded.connection_id,response_ciphertext=excluded.response_ciphertext
+ where participant_media_refreshes.created_at + ($9::bigint * interval '1 second') > clock_timestamp()`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, replay.RequestHash[:], next, replay.Ciphertext, int64(accessgrants.RefreshReplayWindow/time.Second))
 		if err != nil {
 			return fmt.Errorf("save participant media refresh: %w", err)
+		}
+		if result.RowsAffected() != 1 {
+			return accessgrants.ErrConnectionSuperseded
 		}
 		return nil
 	})

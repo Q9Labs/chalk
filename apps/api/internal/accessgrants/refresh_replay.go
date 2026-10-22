@@ -6,7 +6,15 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"time"
 )
+
+const RefreshReplayWindow = 5 * time.Minute
+
+type StoredRefreshReplay struct {
+	Ciphertext []byte
+	CreatedAt  time.Time
+}
 
 type RefreshReplay struct {
 	RequestHash [32]byte

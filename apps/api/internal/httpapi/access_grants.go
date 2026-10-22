@@ -25,7 +25,7 @@ type ParticipantGenerationAuthorizer interface {
 	BindParticipantMediaConnection(context.Context, accessgrants.Subject) error
 	CheckParticipantMediaConnection(context.Context, accessgrants.Subject) error
 	ReplaceParticipantMediaConnection(context.Context, accessgrants.Subject, accessgrants.Subject) error
-	LoadParticipantMediaRefresh(context.Context, accessgrants.Subject, [32]byte) ([]byte, error)
+	LoadParticipantMediaRefresh(context.Context, accessgrants.Subject, [32]byte) (*accessgrants.StoredRefreshReplay, error)
 	CompleteParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, accessgrants.RefreshReplay) error
 }
 
@@ -153,12 +153,15 @@ func issueAccessGrantEndpoint(
 			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
 			if implicitReplacement {
 				stage = "media_replay"
-				ciphertext, err := generations.LoadParticipantMediaRefresh(ctx, subject, accessgrants.RefreshRequestHash(currentToken))
+				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, accessgrants.RefreshRequestHash(currentToken))
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
-				if ciphertext != nil {
-					cached, valid, err := decodeAccessGrantReplay(currentToken, ciphertext)
+				if stored != nil {
+					if !stored.CreatedAt.Add(accessgrants.RefreshReplayWindow).After(time.Now()) {
+						return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
+					}
+					cached, valid, err := decodeAccessGrantReplay(currentToken, stored.Ciphertext)
 					if err != nil {
 						return accessGrantResponse{}, err
 					}

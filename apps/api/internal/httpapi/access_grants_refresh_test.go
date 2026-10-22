@@ -316,16 +316,17 @@ type refreshGrantRepository struct {
 }
 
 type refreshReplayRecord struct {
+	createdAt  time.Time
 	connection string
 	ciphertext []byte
 }
 
-func (r *refreshGrantRepository) LoadParticipantMediaRefresh(_ context.Context, _ synctokens.SubjectKey, _ int64, requestHash [32]byte) ([]byte, error) {
+func (r *refreshGrantRepository) LoadParticipantMediaRefresh(_ context.Context, _ synctokens.SubjectKey, _ int64, requestHash [32]byte) (*accessgrants.StoredRefreshReplay, error) {
 	record := r.replays[requestHash]
 	if record.connection != r.connection {
 		return nil, nil
 	}
-	return append([]byte(nil), record.ciphertext...), nil
+	return &accessgrants.StoredRefreshReplay{Ciphertext: append([]byte(nil), record.ciphertext...), CreatedAt: record.createdAt}, nil
 }
 
 func (r *refreshGrantRepository) CompleteParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, next string, replay accessgrants.RefreshReplay) error {
@@ -335,7 +336,11 @@ func (r *refreshGrantRepository) CompleteParticipantMediaRefresh(ctx context.Con
 	if r.replays == nil {
 		r.replays = make(map[[32]byte]refreshReplayRecord)
 	}
-	r.replays[replay.RequestHash] = refreshReplayRecord{connection: next, ciphertext: append([]byte(nil), replay.Ciphertext...)}
+	createdAt := r.replays[replay.RequestHash].createdAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+	r.replays[replay.RequestHash] = refreshReplayRecord{createdAt: createdAt, connection: next, ciphertext: append([]byte(nil), replay.Ciphertext...)}
 	return nil
 }
 
