@@ -916,13 +916,16 @@ cleanup_unused_images() {
     done
     [[ "$protected" == false ]] || continue
     # Remove each eligible image once, including digestless/dangling images.
-    # --no-prune retains shared parents; never force removal of containers.
-    if ! run_user_podman image rm --no-prune "sha256:${image_id}"; then
+    # All protected IDs and container-backed images were excluded above.
+    # Force permits multiple names; --no-prune retains shared parents.
+    if ! run_user_podman image rm --no-prune --force "sha256:${image_id}"; then
       if run_user_podman image exists "sha256:${image_id}"; then
-        return 1
+        printf 'WARN unused image sha256:%s could not be removed; continuing cleanup\n' "$image_id" >&2
       else
         status=$?
-        [[ "$status" == 1 ]] || return 1
+        if [[ "$status" != 1 ]]; then
+          printf 'WARN unused image sha256:%s removal could not be verified (status %s); continuing cleanup\n' "$image_id" "$status" >&2
+        fi
       fi
     fi
   done <"$inventory"
@@ -950,7 +953,8 @@ pull_images() {
   jq -e --arg architecture "linux/${host_architecture}" '.architectures | index($architecture) != null' "$manifest_path" >/dev/null || fail "release manifest does not support the host architecture"
   authenticate_ecr_registries
 
-  if ! cleanup_unused_images >"${stage_root}/image-prune.log" 2>&1; then
+  # Keep per-image refusals on stderr even when the rest of cleanup succeeds.
+  if ! cleanup_unused_images >"${stage_root}/image-prune.log"; then
     tail -n 20 "${stage_root}/image-prune.log" >&2
     printf 'WARN unused image cache cleanup failed; disk space gate will decide whether to proceed\n' >&2
   fi
