@@ -15,7 +15,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
           poller
 
         [] ->
-          case DynamicSupervisor.start_child(ChalkSync.Episodes.Supervisor, {__MODULE__, episode}) do
+          case DynamicSupervisor.start_child(Authority.Pollers, {__MODULE__, episode}) do
             {:ok, poller} -> poller
             {:error, {:already_started, poller}} -> poller
           end
@@ -49,10 +49,6 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
       {:noreply, %{state | sockets: MapSet.put(state.sockets, socket)}}
     end
   end
-
-  # Coordinator.drain_all/0 casts :drain to every child of the Episode supervisor. A poller keeps
-  # reading until its last socket closes, so it ignores the drain.
-  def handle_cast(:drain, state), do: {:noreply, state}
 
   @impl true
   def handle_info(:read, state), do: {:noreply, read(state)}

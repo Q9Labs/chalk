@@ -202,12 +202,17 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     assert (drain_reads(identity.episode) + drain_reads(upper.episode)) in 2..4
   end
 
-  test "a node drain leaves the poller reading" do
+  test "pollers are not Episode Coordinators, so a drain and the Coordinator count skip them" do
     identity = identity()
     Authority.watch(identity.episode)
     wait_until(fn -> Authority.check(identity) == :ok end)
     [{poller, _value}] = pollers(identity.episode)
     monitor = Process.monitor(poller)
+
+    refute Enum.any?(
+             DynamicSupervisor.which_children(ChalkSync.Episodes.Supervisor),
+             fn {_id, child, _type, _modules} -> child == poller end
+           )
 
     ChalkSync.Episodes.Coordinator.drain_all()
 

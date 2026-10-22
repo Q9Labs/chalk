@@ -18,6 +18,10 @@ defmodule ChalkSync.Application do
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
         {ChalkSync.WhiteboardV1.Authority, []},
+        # Board access pollers stay out of the Episode supervisor, which drains and counts
+        # Coordinators, and stop before the Authority table they write to.
+        {DynamicSupervisor,
+         [strategy: :one_for_one, name: ChalkSync.WhiteboardV1.Authority.Pollers]},
         collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
