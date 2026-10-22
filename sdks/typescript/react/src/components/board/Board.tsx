@@ -69,7 +69,8 @@ const MODIFIED_ENGINE_KEYS = new Set(["c", "v", "x", "a", "d", "=", "+", "-", "0
 const first = (name: string) => name.split(" ")[0] ?? name;
 
 function fitContent(engine: WhiteboardEngineHandle, animate: boolean) {
-  engine.api.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.85, animate });
+  // Fit large content, but never zoom past 100%: a small drawing should open at its real size, centred.
+  engine.api.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.85, maxZoom: 1, animate });
 }
 
 function isTyping(target: EventTarget | null): boolean {
