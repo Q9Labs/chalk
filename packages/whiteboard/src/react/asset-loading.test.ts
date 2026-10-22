@@ -16,3 +16,22 @@ it("preloads configured local styles while retaining the SDK host default", () =
   preloadWhiteboardStylesheet();
   expect(document.querySelector<HTMLLinkElement>("#chalk-excalidraw-styles")?.getAttribute("href")).toBe("/chalk-whiteboard/0.18.1/index.css");
 });
+
+it("resolves relative fonts beside the stylesheet when a host sets a document base", () => {
+  document.querySelector("#chalk-excalidraw-styles")?.remove();
+  const previousUrl = window.location.href;
+  window.history.replaceState(null, "", "/room/board");
+  const base = document.createElement("base");
+  base.href = "/sdk/";
+  document.head.prepend(base);
+  try {
+    configureWhiteboardAssets({ excalidrawCssPath: "vendor/excalidraw/index.css", mathJaxBasePath: "vendor/mathjax" });
+    preloadWhiteboardStylesheet();
+    expect(document.baseURI).toBe(`${window.location.origin}/sdk/`);
+    expect(window.EXCALIDRAW_ASSET_PATH).toBe(`${window.location.origin}/sdk/vendor/excalidraw/`);
+  } finally {
+    base.remove();
+    document.querySelector("#chalk-excalidraw-styles")?.remove();
+    window.history.replaceState(null, "", previousUrl);
+  }
+});
