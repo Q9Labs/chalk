@@ -1,8 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type ReactNode } from "react";
 
-import type { CallPageDTO, RecordingDTO, CallMetadataQuery } from "../../lib/dashboard/contracts";
-import { act, errorMessage, readPage } from "../../lib/dashboard/client";
+import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO } from "../../lib/dashboard/contracts";
+import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -85,7 +85,21 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           if (current?.id !== data.live?.id) return next;
           return { ...next, live: current };
         }
-        const result = await readPage("call-metadata", target);
+        let result: CallMetadataDTO;
+        try {
+          result = await readPage("call-metadata", target);
+        } catch (error) {
+          // Only artifact reads can reconcile absence here. Status and page failures
+          // still reach useLoad, which handles access loss, sign-in and backoff.
+          if (!(error instanceof DashboardRequestError) || ![403, 404, 410].includes(error.status)) throw error;
+          return {
+            ...next,
+            episodes: next.episodes.map((session) => ({
+              ...session,
+              recordings: session.recordings.filter((recording) => target.kind !== "recording" || recording.id !== target.id).map((recording) => (target.kind === "transcript" ? { ...recording, transcripts: recording.transcripts?.filter((transcript) => transcript.id !== target.id) } : recording)),
+            })),
+          };
+        }
         next = {
           ...next,
           episodes: next.episodes.map((session) => ({

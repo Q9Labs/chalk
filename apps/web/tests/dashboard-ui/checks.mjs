@@ -55,14 +55,14 @@ async function dialogCheck(tab, name, openDialog, opener) {
 try {
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
   {
-    const { tab, context } = await open("/dashboard");
+    const { tab, context } = await open("/dashboard", { set: "fail=call" });
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-    const reads = () => fixture("log").then((log) => log.filter((entry) => entry.method === "GET" && entry.path === "/dashboard-api/call"));
+    const reads = () => fixture("log").then((log) => log.filter((entry) => entry.method === "GET" && entry.path === "/dashboard-api/call-invite"));
     check("Home loads without fetching any invite links", (await reads()).length === 0);
     await tab.getByRole("button", { name: "Copy link", exact: true }).first().click();
     await tab.getByRole("button", { name: "Copied", exact: true }).waitFor();
     const link = await tab.evaluate(() => navigator.clipboard.readText());
-    check("Home fetches one invite on demand and copies it", (await reads()).length === 1 && link.startsWith("https://chalkmeet.com/space/"));
+    check("Home copies one invite despite unrelated Call history failures", (await reads()).length === 1 && link.startsWith("https://chalkmeet.com/space/"));
     await context.close();
   }
   for (const value of ["0", "1000", "-1", "1.5", "NaN", "Infinity", "", "1001", "2000000000"]) {

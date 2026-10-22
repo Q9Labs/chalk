@@ -9,9 +9,9 @@ import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { CopyAction, Dialog, ErrorPanel, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 
-/** A call's shareable link: the row's own, or read from the call's page when Home couldn't load it. */
+/** A call's shareable link: the row's own, or a bounded invite-only read. */
 async function inviteLink(call: HomeCallDTO): Promise<string> {
-  const link = call.inviteUrl ?? (await readPage("call", { spaceId: call.id })).inviteUrl;
+  const link = call.inviteUrl ?? (await readPage("call-invite", { spaceId: call.id })).inviteUrl;
   if (!link) throw new Error("This call has no link yet");
   return link;
 }

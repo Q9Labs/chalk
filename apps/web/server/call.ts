@@ -11,6 +11,10 @@ function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"
     .filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now())
     .map((k) => ({ handle: k.request_handle, name: k.display_name, requestedAt: k.requested_at, expiresAt: k.expires_at, state: k.state, decisionState: knockDecisionState.parse(k.decision_state), decisionAction: knockDecisionAction.parse(k.decision_action ?? null) }));
 }
+export async function callInvite(engine: Engine, spaceId: string): Promise<Pick<CallPageDTO, "inviteUrl">> {
+  const invite = await run(engine.api.spaces.getSpacePublicInvite({ params: { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId) } }));
+  return { inviteUrl: invite.canonical_url };
+}
 export async function callMetadata(engine: Engine, input: CallMetadataQuery): Promise<CallMetadataDTO> {
   if (input.kind === "recording") {
     const recording = await run(engine.api.recordings.getRecording({ params: { tenant_id: engine.tenantId, recording_id: Schema.decodeUnknownSync(RecordingIdSchema)(input.id) } }));

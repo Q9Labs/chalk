@@ -3,7 +3,7 @@ import { act as reactAct, cleanup, fireEvent, render, screen } from "@testing-li
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { act, readPage } from "../../lib/dashboard/client";
+import { act, DashboardRequestError, readPage } from "../../lib/dashboard/client";
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
 import { CallPage } from "./CallPage";
 
@@ -22,7 +22,7 @@ const initial: CallPageDTO = { call: { id: "space", name: "Call", slug: "call", 
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 });
@@ -31,6 +31,39 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it.each([403, 404, 410].flatMap((status) => ["recording", "transcript"].map((kind) => ({ status, kind }))))("removes an unavailable $kind after $status while retaining the Call and shared status polling", async ({ status, kind }) => {
+  const episode = {
+    id: "episode",
+    status: "ended",
+    startedAt: "2026-10-21T00:00:00Z",
+    endedAt: "2026-10-21T00:05:00Z",
+    participantCount: 1,
+    recordingsNextCursor: null,
+    recordings: [{ id: "recording", status: kind === "recording" ? "processing" : "completed", exportStatus: "completed", transcriptionPending: false, createdAt: "2026-10-21T00:00:00Z", transcripts: [{ id: "transcript", status: "pending", languages: ["en"], createdAt: "2026-10-21T00:00:00Z" }] }],
+  } satisfies CallPageDTO["episodes"][number];
+  vi.mocked(readPage)
+    .mockResolvedValueOnce({ ...initial, episodes: [episode] })
+    .mockResolvedValueOnce({ latestEpisodeId: episode.id, episode: null, knocks: [] })
+    .mockResolvedValueOnce({ latestEpisodeId: episode.id, episode: null, knocks: [] })
+    .mockRejectedValueOnce(new DashboardRequestError(status, "engine_not_found"))
+    .mockResolvedValueOnce({ latestEpisodeId: episode.id, episode: null, knocks: [pending] });
+  await reactAct(async () => {
+    render(<CallPage spaceId="space" />);
+  });
+  expect(screen.getByText("Transcript processing")).toBeTruthy();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+  expect(screen.queryByText("Couldn’t load this call")).toBeNull();
+  expect(screen.queryByText("Transcript processing")).toBeNull();
+  expect(screen.getByText(kind === "recording" ? "No recording" : "Recording", { exact: true })).toBeTruthy();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(screen.getByText("June")).toBeTruthy();
+  expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call", "call-status", "call-status", "call-metadata", "call-status"]);
 });
 
 it("uses the shared status tick for new knocks, accepted progress, retry and settlement without page reloads", async () => {
