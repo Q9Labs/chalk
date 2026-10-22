@@ -20,6 +20,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
+  # One Participant may hold at most 4% of a Space stream's 250,000 messages and 2 GiB.
+  @participant_limits %{messages: 10_000, bytes: 64 * 1024 * 1024}
   @capabilities ["sendReaction", "sendChat"]
 
   @impl true
@@ -391,19 +393,32 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     encoded_bytes = Message.encoded_bytes(message)
     params = space_params(identity.episode)
 
-    case Postgrex.query!(
-           connection,
-           SQL.reserve_message(),
-           params ++ [sequence, encoded_bytes]
-         ).rows do
-      [[^sequence]] ->
-        insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
-        attach_files(connection, identity, message, sequence)
-        %{outcome: :committed, message: message}
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :overloaded})
+    with :ok <- within_participant_limits(connection, identity, encoded_bytes),
+         [[^sequence]] <-
+           Postgrex.query!(connection, SQL.reserve_message(), params ++ [sequence, encoded_bytes]).rows do
+      insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
+      attach_files(connection, identity, message, sequence)
+      %{outcome: :committed, message: message}
+    else
+      {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+      [] -> Postgrex.rollback(connection, {:error, :overloaded})
     end
+  end
+
+  # The Space stream lock is held here, so two sends from one Participant cannot both pass.
+  defp within_participant_limits(connection, identity, encoded_bytes) do
+    limits = Application.get_env(:chalk_sync, :chat_participant_limits, @participant_limits)
+
+    [[count, bytes]] =
+      Postgrex.query!(
+        connection,
+        SQL.participant_usage(),
+        space_params(identity.episode) ++ [uuid(identity.participant_id)]
+      ).rows
+
+    if count < limits.messages and bytes + encoded_bytes <= limits.bytes,
+      do: :ok,
+      else: {:error, :rate_limited}
   end
 
   defp insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence) do

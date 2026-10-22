@@ -1,5 +1,6 @@
 defmodule ChalkSync.Chat do
   @moduledoc "Durable Space chat commands and collaboration_v1 negotiation."
+  alias ChalkSync.Admission
   alias ChalkSync.Chat.Repository.Message
   alias ChalkSync.Chat.Repository.Postgres, as: PostgresRepository
   alias ChalkSync.Fanout.Collaboration
@@ -7,7 +8,12 @@ defmodule ChalkSync.Chat do
   alias ChalkSync.Stateholder.Identity
   @extension "collaboration_v1"
   @reactions_extension "collaboration_v2"
-  @type options :: [repository: module(), fanout: GenServer.server(), observability: term()]
+  @type options :: [
+          repository: module(),
+          fanout: GenServer.server(),
+          admission: GenServer.server(),
+          observability: term()
+        ]
   @spec negotiate(Identity.t(), map(), pid()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, chat_cursor, socket) when is_pid(socket) do
     negotiate(identity, chat_cursor, socket, [])
@@ -60,13 +66,15 @@ defmodule ChalkSync.Chat do
     attachment_ids = Map.get(input, :attachment_ids, [])
 
     append_result =
-      repository.append(
-        identity,
-        input
-        |> Map.put(:client_message_id, client_message_id)
-        |> Map.put(:text, text)
-        |> Map.put(:attachment_ids, attachment_ids)
-      )
+      with :ok <- Admission.admit_chat(admission(options), identity) do
+        repository.append(
+          identity,
+          input
+          |> Map.put(:client_message_id, client_message_id)
+          |> Map.put(:text, text)
+          |> Map.put(:attachment_ids, attachment_ids)
+        )
+      end
 
     case append_result do
       {:ok, %{outcome: outcome, message: message}} ->
@@ -372,4 +380,7 @@ defmodule ChalkSync.Chat do
       Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
     )
   end
+
+  defp admission(options),
+    do: Keyword.get(options, :admission, Application.get_env(:chalk_sync, :admission, Admission))
 end
