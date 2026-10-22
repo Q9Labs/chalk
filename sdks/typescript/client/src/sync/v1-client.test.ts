@@ -193,6 +193,32 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });
     client.stop();
   });
+  it("reports access rejection as terminal without reconnecting the stale token", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "stale-token",
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+      clock,
+      reconnectDelayMs: 1,
+    });
+    await client.start();
+    sockets[0]?.close(4401);
+    clock.advance(0);
+    await settle();
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "access_rejected" });
+    clock.advance(60000);
+    await settle();
+    expect(sockets).toHaveLength(1);
+    client.stop();
+  });
   it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
     const clock = new TestClock();
     const sockets: TestSocket[] = [];

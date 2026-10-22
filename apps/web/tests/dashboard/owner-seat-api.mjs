@@ -45,7 +45,8 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
         const timeout = setTimeout(() => reject(new Error("stale Sync hello was not rejected")), 5000);
         ws.addEventListener(
           "close",
-          () => {
+          (event) => {
+            assert.equal(event.code, 4401, "old-generation access must not look like a dependency outage");
             clearTimeout(timeout);
             resolve();
           },
@@ -66,6 +67,96 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
       await rejected;
     } finally {
       ws.close();
+    }
+  }
+  // The real lifecycle and real sockets recover both kinds of lost cleanup
+  // response. Only local media is synthetic; no admission/Sync outcome is mocked.
+  const { createSpaceClientForPlatform } = await import(`${repository}/sdks/typescript/client/dist/effect.js`);
+  const { createV1SyncClient } = await import(`${repository}/sdks/typescript/client/dist/sync/index.js`);
+  for (const committed of [true, false]) {
+    const participantId = crypto.randomUUID();
+    const key = crypto.randomUUID();
+    const admit = () => client.participants.admit(spaceId, episodeId, { participantId, name: "Lost cleanup response", role: "collaborator" }, { idempotencyKey: key });
+    const requests = [],
+      closes = [];
+    let sockets = 0,
+      cleanupAttempts = 0;
+    const localMedia = {
+      start: async () => {},
+      stop: () => {},
+      restart: async () => {},
+      prepareLocalTrack: () => {},
+      clearPreparedLocalTrack: async () => {},
+      setLocalPublicationTarget: async () => ({ outcome: "confirmed", errorCode: null }),
+      observeLocalPublications: () => () => {},
+      observeRemotePublications: () => () => {},
+      getSnapshot: () => ({ connection: { phase: "live", peerConnectionState: null, iceConnectionState: null }, cursor: null, localTracks: [], remoteTracks: [], failure: null }),
+      subscribe: () => () => {},
+    };
+    const app = createSpaceClientForPlatform(
+      { space: space.slug, getAccess: async () => (await admit()).access },
+      {
+        apiBaseUrl: apiOrigin,
+        syncUrl: syncOrigin,
+        whiteboardUrl: null,
+        syncStartupTimeoutMs: 3000,
+        initialMicrophoneEnabled: false,
+        initialCameraEnabled: false,
+        connectionAccess: async ({ reason, replaceMediaConnection }) => {
+          requests.push({ reason, replaceMediaConnection });
+          const admission = await admit();
+          if (requests.length === 1) {
+            if (committed) {
+              const response = await cancel(admission.access);
+              assert.deepEqual(await response.json(), { cancelled: true });
+            } else {
+              await admit(); // Renewal fences the delayed first hello without cancellation.
+            }
+          }
+          return admission.access;
+        },
+        dependencies: {
+          createMediaClient: () => localMedia,
+          cancelPendingAdmission: async (grant) => {
+            cleanupAttempts += 1;
+            const subject = grant.subject;
+            const response = await fetch(`${apiOrigin}/v1/tenants/${subject.tenantId}/spaces/${subject.spaceId}/episodes/${subject.episodeId}/participants/${subject.participantId}/cancel-join`, { method: "POST", headers: { Authorization: `Bearer ${grant.media.token}` } });
+            assert.equal(response.status, 200);
+            assert.deepEqual(await response.json(), { cancelled: committed });
+            throw new Error("Committed or uncommitted cleanup response was lost");
+          },
+          createSyncClient: ({ token, media }) =>
+            createV1SyncClient({
+              url: syncOrigin,
+              token,
+              mediaPlane: media,
+              webSocket: {
+                connect: (url) => {
+                  sockets += 1;
+                  const socket = new WebSocket(url);
+                  socket.addEventListener("close", ({ code }) => closes.push(code));
+                  return socket;
+                },
+              },
+            }),
+        },
+      },
+    );
+    try {
+      await app.join({ microphone: false, camera: false });
+      assert.deepEqual(requests, [
+        { reason: "join", replaceMediaConnection: false },
+        { reason: "join", replaceMediaConnection: false },
+      ]);
+      assert.equal(cleanupAttempts, 1);
+      assert.equal(sockets, 2, "rejected access must not reconnect until the startup timeout");
+      assert.equal(closes[0], 4401);
+      assert.equal(state(participantId), "active:joined:true");
+      assert.equal(sql(`select count(*) from sync_control_events where episode_id='${episodeId}' and event_name='participant_joined' and payload->>'participant_id'='${participantId}'`), "1");
+      await app.leave();
+      console.log(`PASS real SDK lost cleanup response committed=${committed}: terminal stale hello, same participant, one confirmation`);
+    } finally {
+      app.dispose();
     }
   }
   const reservations = () => sql(`select snapshot_reserved_bytes||':'||lifecycle_reserved_events||':'||lifecycle_reserved_bytes||':'||lifecycle_reserved_intents||':'||lifecycle_reserved_intent_bytes from sync_episode_control where episode_id='${episodeId}'`);

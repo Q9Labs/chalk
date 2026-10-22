@@ -1210,7 +1210,7 @@
     {
       "code": 1008,
       "connection": "closed",
-      "reasons": ["invalid token", "policy violation"]
+      "reasons": ["policy violation"]
     },
     {
       "code": 1009,
@@ -1221,6 +1221,11 @@
       "code": 1012,
       "connection": "closed",
       "reasons": ["service restart", "server draining", "terminal acknowledgement timeout"]
+    },
+    {
+      "code": 4401,
+      "connection": "closed",
+      "reasons": ["access rejected"]
     }
   ]
 }

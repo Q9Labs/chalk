@@ -36,6 +36,7 @@ const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+const ACCESS_REJECTED_CLOSE_CODE = 4401;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
@@ -322,7 +323,7 @@ export class V1SyncClient implements V1CollaborationClient {
     return promise;
   }
   #connect(): void {
-    if (!this.#started || !this.#transportAvailable || this.#socket) return;
+    if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
     const socket = this.#options.webSocket.connect(this.#options.url);
@@ -334,10 +335,10 @@ export class V1SyncClient implements V1CollaborationClient {
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
-        this.#inbound = this.#inbound.then(() => this.#disconnected(socket));
+        this.#inbound = this.#inbound.then(() => this.#disconnected(socket, event.code));
       }, 0);
     };
     socket.onerror = () => socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
@@ -683,7 +684,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (evidence.get(frame.sequence) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate projection event");
     return true;
   }
-  #disconnected(socket: V1Socket): void {
+  #disconnected(socket: V1Socket, closeCode?: number): void {
     if (socket !== this.#socket) return;
     this.#socket = null;
     this.#recovery = null;
@@ -695,6 +696,12 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#presence = null;
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
+    if (closeCode === ACCESS_REJECTED_CLOSE_CODE) {
+      this.#clearReconnect();
+      this.#phase = { phase: "terminal", terminalReason: "access_rejected" };
+      this.#emit();
+      return;
+    }
     if (!this.#started || !this.#transportAvailable || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();

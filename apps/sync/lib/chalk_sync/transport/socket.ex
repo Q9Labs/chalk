@@ -293,16 +293,19 @@ defmodule ChalkSync.Transport.SocketV1 do
       )
     else
       {:ok, %{result: :superseded}} ->
-        stop(state, 1008, "policy violation", :admission_rejected)
+        stop(state, 4401, "access rejected", :admission_rejected)
 
       {:error, :invalid_token} ->
-        stop(state, 1008, "invalid token", :admission_rejected)
+        stop(state, 4401, "access rejected", :admission_rejected)
 
       {:error, :invalid_identity} ->
-        stop(state, 1008, "invalid token", :admission_rejected)
+        stop(state, 4401, "access rejected", :admission_rejected)
 
       {:error, :invalid_admission_intent} ->
-        stop(state, 1008, "policy violation", :admission_rejected)
+        stop(state, 4401, "access rejected", :admission_rejected)
+
+      {:error, :stale_participant_generation} ->
+        stop(state, 4401, "access rejected", :admission_rejected)
 
       {:error, reason} ->
         Logger.warning("sync v1 hello failed: reason=#{reason}")
