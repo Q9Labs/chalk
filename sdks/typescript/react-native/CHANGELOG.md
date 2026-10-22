@@ -3,6 +3,7 @@
 ## 5.1.0
 
 - Bound each Sync and whiteboard WebSocket opening attempt to 10 seconds, then retry through the existing reconnect backoff. React Native keeps its 30-second startup allowance, and larger configured allowances, for both transports.
+- Size the call from the enclosing safe-area frame instead of the global window size. Orientation and call-region arrangement now follow the space `Chalk` is given, so a call rendered inside a smaller container, split view or modal lays out for that container rather than the whole screen. Full-screen calls look the same.
 - Render registered native WebRTC host components so remote screen shares and camera video no longer disappear when React Native exports the video view as a string.
 - Disable reaction sending and media enable controls until Sync is live, and keep recovery notices non-blocking.
 - Show plain connection-not-ready and confirmation-timeout media feedback without exposing raw internal exception messages.
