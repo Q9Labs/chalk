@@ -7,7 +7,7 @@ import { ChalkSheet } from "../chalk-ui";
 import { useStageDimensions } from "./useStageDimensions";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
-import { buildStageItems, choosePrimary, gridOrder, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
+import { buildStageItems, choosePrimary, floatingSpeakerId, gridOrder, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
 import { StageMotion } from "./StageMotion";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 
@@ -157,7 +157,7 @@ export function Stage({
     const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
     const remaining = ordered.filter((item) => item.id !== primary.id);
     const strip = [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))];
-    const speakerId = remaining.find((item) => item.kind === "participant" && !item.participant.isLocal && (item.participant.isActiveSpeaker || item.participant.isSpeaking))?.id ?? (interactive ? lastSpeakerRef.current : null);
+    const speakerId = floatingSpeakerId(remaining, interactive ? lastSpeakerRef.current : null);
     const localId = remaining.find((item) => item.kind === "participant" && item.participant.isLocal)?.id ?? null;
     return fitSpotlight(
       box,
