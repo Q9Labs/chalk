@@ -1,5 +1,5 @@
-// Set at merge to 14 days after the deployment date.
-export const PRIVACY_EFFECTIVE_DATE = "2026-11-04T00:00:00Z";
+// The policy label, notice copy and expiry derive from this effective instant.
+export const PRIVACY_EFFECTIVE_DATE = "2026-11-06T00:00:00Z";
 export const PRIVACY_EFFECTIVE_DATE_LABEL = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "long",

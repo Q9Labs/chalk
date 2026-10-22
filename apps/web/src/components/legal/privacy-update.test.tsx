@@ -71,7 +71,7 @@ describe("Privacy Policy advance notice", () => {
   });
   it("shows the future effective date, summary, and current-version link", () => {
     render(<LegalPage kind="privacy" />);
-    expect(screen.getByText("Effective 4 November 2026")).toBeTruthy();
+    expect(screen.getByText("Effective 6 November 2026")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "What's changing" }).parentElement?.id).toBe("whats-changing");
     expect(screen.getByRole("link", { name: "Archived Privacy Policy" }).getAttribute("href")).toBe("/privacy/previous");
   });
@@ -136,7 +136,7 @@ describe("Privacy Policy advance notice", () => {
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByRole("complementary")).toBeNull();
     expect(screen.getByRole("heading", { name: "What's changing" })).toBeTruthy();
-    expect(screen.getByText("Effective 4 November 2026")).toBeTruthy();
+    expect(screen.getByText("Effective 6 November 2026")).toBeTruthy();
   });
   it("does not announce a future update on or after the effective date", () => {
     vi.setSystemTime(new Date(PRIVACY_EFFECTIVE_DATE));
