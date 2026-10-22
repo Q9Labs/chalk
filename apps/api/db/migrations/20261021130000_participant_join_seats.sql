@@ -2,6 +2,34 @@
 -- Rollout: migrate, upgrade every Sync consumer, then API and client SDKs.
 -- Previous API/Sync binaries remain runnable; runtime rollback keeps this schema.
 -- Absence of a seat row means the legacy protocol. No historical rows change.
+-- The Wave 1 baseline recreated this FK without its July constraint name.
+-- Resolve its columns and target before assigning the stable schema name.
+-- +goose StatementBegin
+do $$
+declare
+    generation_constraint name;
+begin
+    select constraint_row.conname into strict generation_constraint
+    from pg_constraint constraint_row
+    where constraint_row.contype = 'f'
+      and constraint_row.conrelid = 'sync_lifecycle_intents'::regclass
+      and constraint_row.confrelid = 'participants'::regclass
+      and (
+          select array_agg(attribute.attname::text order by key.ordinality)
+          from unnest(constraint_row.conkey) with ordinality as key(attnum, ordinality)
+          join pg_attribute attribute
+            on attribute.attrelid = constraint_row.conrelid and attribute.attnum = key.attnum
+      ) = array['tenant_id', 'space_id', 'episode_id', 'participant_id', 'participant_generation'];
+
+    if generation_constraint <> 'sync_lifecycle_intents_sync_v3_generation_fkey' then
+        execute format(
+            'alter table sync_lifecycle_intents rename constraint %I to sync_lifecycle_intents_sync_v3_generation_fkey',
+            generation_constraint
+        );
+    end if;
+end;
+$$;
+-- +goose StatementEnd
 -- Retry rotates the participant and intent together in the authority transaction.
 alter table sync_lifecycle_intents
     alter constraint sync_lifecycle_intents_sync_v3_generation_fkey deferrable initially deferred;
