@@ -76,7 +76,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board :focus-visible {outline:2px solid var(--chalk-focus); outline-offset:2px;}
 .chalk-board button {font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer;}
 
-.chalk-board-island, .chalk-board-zoom, .chalk-board-menu-button, .chalk-board-chip, .chalk-board-view-only {background:var(--chalk-surface); color:var(--chalk-text); box-shadow:var(--board-shadow);}
+.chalk-board-island, .chalk-board-zoom, .chalk-board .chalk-board-menu-button, .chalk-board-chip, .chalk-board-view-only {background:var(--chalk-surface); color:var(--chalk-text); box-shadow:var(--board-shadow);}
 .chalk-board-chips {position:absolute; left:0; right:0; top:12px; z-index:5; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none;}
 .chalk-board-chips[data-low] {top:76px;}
 .chalk-board-chip {display:flex; align-items:center; gap:8px; height:36px; padding:0 6px 0 14px; border-radius:999px; font-size:13px; font-weight:600; pointer-events:auto;}
