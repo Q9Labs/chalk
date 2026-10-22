@@ -273,30 +273,41 @@ class CutTests(unittest.TestCase):
         with patch.object(api, 'pages', return_value=[old, {**old, 'run_attempt': 2, 'conclusion': None}]):
             self.assertFalse(api.has_green_gate(SHA))
 
+    FRESH = dict(TARGET_SHA=SHA, MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID='', RELEASE_MANAGED='true', DEPLOY_MANAGED='false', DEPLOY_WEB='false')
+
+    def require_gate(self, runs, **inputs):
+        api = object.__new__(GitHub)
+        with patch.dict(os.environ, {**self.FRESH, **inputs}), patch.object(api, 'pages', return_value=runs) as pages:
+            release.require_gate(api, None)
+        return pages
+
     def test_fresh_release_needs_a_green_master_gate_for_the_exact_target(self):
         master = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master', event='push', conclusion='success')
-        cases = [('green master Gate', [master], True),
-                 ('pull request Gate only', [{**master, 'event': 'pull_request'}], False),
-                 ('failed master Gate', [{**master, 'conclusion': 'failure'}], False),
-                 ('no Gate run', [], False)]
-        for name, runs, allowed in cases:
-            with self.subTest(name), patch.dict(os.environ, TARGET_SHA=SHA, MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID=''):
-                api = object.__new__(GitHub)
-                with patch.object(api, 'pages', return_value=runs) as pages:
-                    if allowed:
-                        release.require_gate(api, None)
-                    else:
-                        with self.assertRaisesRegex(ValueError, 'no successful Gate run on master'):
-                            release.require_gate(api, None)
-                self.assertIn(f'head_sha={SHA}&branch=master', pages.call_args.args[0])
+        pages = self.require_gate([master])
+        self.assertIn(f'head_sha={SHA}&branch=master', pages.call_args.args[0])
+        for name, runs in [('pull request Gate only', [{**master, 'event': 'pull_request'}]),
+                           ('failed master Gate', [{**master, 'conclusion': 'failure'}]),
+                           ('no Gate run', [])]:
+            with self.subTest(name), self.assertRaisesRegex(ValueError, 'no successful Gate run on master'):
+                self.require_gate(runs)
 
-    def test_reuse_and_rollback_deploy_without_a_new_gate_check(self):
-        for reuse in (dict(MANIFEST_RUN_ID='123', PAGES_ROLLBACK_ID=''), dict(MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID='abc')):
-            with self.subTest(**reuse), patch.dict(os.environ, TARGET_SHA=SHA, **reuse):
-                api = object.__new__(GitHub)
-                with patch.object(api, 'pages', return_value=[]) as pages:
-                    release.require_gate(api, None)
-                pages.assert_not_called()
+    def test_rollback_without_a_new_build_deploys_without_a_gate_check(self):
+        for inputs in (dict(MANIFEST_RUN_ID='123', PAGES_ROLLBACK_ID='456', DEPLOY_WEB='true'),
+                       dict(MANIFEST_RUN_ID='123', DEPLOY_MANAGED='true'),
+                       dict(RELEASE_MANAGED='false')):
+            with self.subTest(**inputs):
+                self.require_gate([], **inputs).assert_not_called()
+
+    def test_rollback_input_does_not_excuse_a_fresh_build(self):
+        for inputs in (dict(PAGES_ROLLBACK_ID='456', RELEASE_MANAGED='false', DEPLOY_WEB='true'),
+                       dict(PAGES_ROLLBACK_ID='456', DEPLOY_MANAGED='true')):
+            with self.subTest(**inputs), self.assertRaisesRegex(ValueError, 'no successful Gate run on master'):
+                self.require_gate([], **inputs)
+
+    def test_gate_check_mirrors_the_fresh_build_jobs(self):
+        workflow = (release.ROOT / '.github/workflows/ci.yml').read_text()
+        self.assertIn("    needs: require-gate\n    if: (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''\n", workflow)
+        self.assertIn("!cancelled() && needs.require-gate.result == 'success' && inputs.deploy_web && inputs.manifest_run_id == ''\n", workflow)
 
     @patch.dict(os.environ, TARGET_SHA=SHA, GITHUB_RUN_ID='1')
     def test_shared_invalidation_never_loses_the_completed_cut_baseline(self):

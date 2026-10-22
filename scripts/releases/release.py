@@ -175,10 +175,16 @@ def plan(github, args):
     outputs(result)
 
 
+def builds_fresh_artifacts():
+    # Mirrors the plan-managed and build-web conditions in ci.yml. Reuse deploys artifacts that an earlier, gated run
+    # built; a Pages rollback input alone does not stop either build.
+    flag = lambda name: os.environ.get(name) == 'true'
+    return not os.environ.get('MANIFEST_RUN_ID') and (flag('RELEASE_MANAGED') or flag('DEPLOY_MANAGED') or flag('DEPLOY_WEB'))
+
+
 def require_gate(github, args):
-    # Reuse and Pages rollback deploy artifacts that an earlier, already gated run built.
-    if os.environ.get('MANIFEST_RUN_ID') or os.environ.get('PAGES_ROLLBACK_ID'):
-        print('Release reuses earlier artifacts; no fresh build needs a Gate run')
+    if not builds_fresh_artifacts():
+        print('Release builds nothing new; it deploys earlier artifacts without a new Gate check')
         return
     target = env('TARGET_SHA')
     require(re.fullmatch('[0-9a-f]{40}', target), 'target_sha must be a full lowercase commit SHA')

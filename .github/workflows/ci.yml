@@ -169,7 +169,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MANIFEST_RUN_ID: ${{ inputs.manifest_run_id }}
-          PAGES_ROLLBACK_ID: ${{ inputs.pages_rollback_id }}
+          RELEASE_MANAGED: ${{ inputs.release_managed }}
+          DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
+          DEPLOY_WEB: ${{ inputs.deploy_web }}
         run: python3 scripts/releases/release.py require_gate
 
   plan-managed:
