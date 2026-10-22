@@ -205,7 +205,7 @@ function useExternalStylesheet(href: string): ExternalStylesheetState {
     const element = boardStylesheet(href);
     const fail = () => setError(`Failed to load ${href}`);
     const ownLink = isManagedStylesheet(element);
-    if (!ownLink || element.dataset.state === "loaded") {
+    if (!ownLink || element.sheet || element.dataset.state === "loaded") {
       setLoaded(true);
       return;
     }
