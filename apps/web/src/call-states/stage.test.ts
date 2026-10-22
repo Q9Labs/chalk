@@ -325,3 +325,41 @@ it("still zooms out to fit a drawing larger than the board", async () => {
     await page.setViewportSize({ width: 1440, height: 900 });
   }
 });
+
+it("brings a typed text back for both people after Undo and Redo", async () => {
+  const context = await browser.newContext({ viewport: { width: 1100, height: 760 }, reducedMotion: "reduce" });
+  try {
+    const [writer, viewer] = await Promise.all([context.newPage(), context.newPage()]);
+    for (const each of [writer, viewer]) {
+      await each.goto(`${origin}/call-states.html?state=board-relay-dark`, { waitUntil: "domcontentloaded" });
+      await each.locator('.chalk-board[data-ready="true"]').waitFor({ timeout: 20_000 });
+    }
+    // Ink is every painted pixel that stands out from the board's own colour.
+    const ink = (each: Page) =>
+      each.locator(".excalidraw canvas.static").evaluate((element) => {
+        if (!(element instanceof HTMLCanvasElement)) throw new Error("Board canvas is missing");
+        const context = element.getContext("2d");
+        if (!context) throw new Error("Board paint context is missing");
+        const { data } = context.getImageData(0, 0, element.width, element.height);
+        let count = 0;
+        for (let at = 0; at < data.length; at += 4) if (Math.abs((data[at] ?? 0) - (data[0] ?? 0)) + Math.abs((data[at + 1] ?? 0) - (data[1] ?? 0)) + Math.abs((data[at + 2] ?? 0) - (data[2] ?? 0)) > 120) count++;
+        return count;
+      });
+    const blank = (await ink(viewer)) + 50;
+    await writer.getByRole("button", { name: "Text", exact: true }).click();
+    await writer.locator(".excalidraw canvas.interactive").click();
+    await writer.keyboard.type("Shared note");
+    await writer.keyboard.press("Escape");
+    await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeGreaterThan(blank);
+
+    await writer.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeLessThan(blank);
+    // The viewer takes in the undone text; a viewer that answers with a delete would empty the writer's Redo here.
+    await viewer.waitForTimeout(1_000);
+    await writer.getByRole("button", { name: "Redo", exact: true }).click({ timeout: 5_000 });
+    await expect.poll(() => ink(writer), { timeout: 10_000 }).toBeGreaterThan(blank);
+    await expect.poll(() => ink(viewer), { timeout: 10_000 }).toBeGreaterThan(blank);
+  } finally {
+    await context.close();
+  }
+});
