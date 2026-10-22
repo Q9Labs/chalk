@@ -206,6 +206,10 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 			}
 			return nil
 		}
+		// Previous APIs lock the public request before the arrival when deciding.
+		if _, err := queries.LockSpacePublicAdmissionRequest(ctx, sqlc.LockSpacePublicAdmissionRequestParams{TenantID: live.TenantID, SpaceID: live.SpaceID, RequestHandle: uuid(input.RequestHandle)}); err != nil {
+			return err
+		}
 		currentArrival, err := queries.LockSpacePublicArrival(ctx, uuid(arrival.ArrivalHandle))
 		if err != nil {
 			return err

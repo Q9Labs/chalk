@@ -153,3 +153,65 @@ func proveAdmissionRolloutLockOrder(t *testing.T, ctx context.Context, pool *pgx
 	}
 	t.Log("previous arrival-first INSERT and current admission creation both completed without a lock cycle")
 }
+
+// A previous decision writer holds the public request before locking its arrival.
+func proveAdmissionDecisionRolloutLockOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, request publicinvites.AdmissionRequest, actorID utilities.ID) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	old, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Rollback(context.Background())
+	queries := sqlc.New(old)
+	if _, err := queries.LockSpacePublicAdmissionRequest(ctx, sqlc.LockSpacePublicAdmissionRequestParams{TenantID: uuid(request.TenantID), SpaceID: uuid(request.SpaceID), RequestHandle: uuid(request.RequestHandle)}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := pool.Config()
+	cfg.MaxConns = 1
+	decider, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer decider.Close()
+	var pid int32
+	if err := decider.QueryRow(ctx, `select pg_backend_pid()`).Scan(&pid); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := publicinvites.NewService(NewPublicInviteRepositoryWithPool(decider)).DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: request.TenantID, SpaceID: request.SpaceID, RequestHandle: request.RequestHandle, ActorID: actorID, Decision: publicinvites.DecisionApprove, RequestKey: "rollout-decision"})
+		done <- err
+	}()
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var waiting bool
+		if err := pool.QueryRow(ctx, `select $2::int=any(pg_blocking_pids($1))`, pid, old.Conn().PgConn().PID()).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("new decision did not wait for old request: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-ticker.C:
+		}
+	}
+	if _, err := old.Exec(ctx, `set local lock_timeout='250ms'`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = queries.LockSpacePublicArrival(ctx, uuid(request.ArrivalHandle))
+	_ = old.Rollback(ctx)
+	if err != nil {
+		t.Fatalf("mixed-version decision arrival blocked by new request writer: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("new decision after old request release: %v", err)
+	}
+	t.Log("previous request-first decision and current decision completed without a lock cycle")
+}

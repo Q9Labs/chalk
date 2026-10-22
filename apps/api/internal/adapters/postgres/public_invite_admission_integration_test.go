@@ -220,6 +220,11 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		return arrival.Arrival, request
 	}
 
+	t.Run("mixed version decision lock", func(t *testing.T) {
+		_, request := newKnock("Rollout decision guest")
+		proveAdmissionDecisionRolloutLockOrder(t, ctx, pool, request, accountID)
+	})
+
 	for _, decision := range []publicinvites.AdmissionDecision{publicinvites.DecisionApprove, publicinvites.DecisionDeny} {
 		for _, explicitKey := range []bool{false, true} {
 			_, request := newKnock("Retry " + string(decision) + " guest")
