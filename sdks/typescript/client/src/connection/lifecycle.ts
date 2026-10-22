@@ -112,6 +112,7 @@ type Model = {
   refreshInFlight: boolean;
   recoveryQueued: RecoveryKind | null;
   joinCancelled: boolean;
+  admissionCleanupConfirmed: boolean;
   closed: boolean;
   epoch: number;
 };
@@ -199,6 +200,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         refreshInFlight: false,
         recoveryQueued: null,
         joinCancelled: false,
+        admissionCleanupConfirmed: true,
         closed: false,
         epoch: 0,
       };
@@ -436,6 +438,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const grant = yield* trace("access_initialize", access.initialize(reason));
+            model.admissionCleanupConfirmed = false;
             const media = yield* trace(
               "create_media_client",
               Effect.try({
@@ -488,8 +491,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
                   const retry = !retried && failure.code === "invalid_access";
                   if (!retry) yield* recordFailure(failure);
+                  model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
                   yield* stopPorts();
-                  if (retry) return yield* performJoin("access_retry", true);
+                  if (retry) return yield* performJoin("join", true);
                   yield* transition("failed");
                   return yield* Effect.fail(failure);
                 }),
@@ -508,7 +512,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const performLeave = (): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* performLeaveEffect() {
-          if (model.state === "idle" || model.state === "left") return;
+          if (model.state === "idle") return;
+          if (model.state === "left") {
+            if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
+            return;
+          }
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
@@ -517,12 +525,29 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* transition("left");
           if (!confirmed) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, "The Episode left locally without a durable Leave acknowledgement"));
         });
+      const cancelPendingAdmission = (): Effect.Effect<boolean> =>
+        Effect.gen(function* () {
+          const grant = access.currentUnsafe();
+          if (!grant) return model.admissionCleanupConfirmed;
+          const cancel = platform.cancelPendingAdmission;
+          if (!cancel) return false;
+          const result = yield* Effect.exit(
+            Effect.tryPromise({
+              try: (signal) => cancel(grant, signal),
+              catch: (cause) => lifecycleFailure("internal_error", true, "Admission cancellation failed", cause),
+            }).pipe(Effect.timeout(3000)),
+          );
+          return result._tag === "Success" && result.value;
+        });
       const leaveIsConfirmed = (): Effect.Effect<boolean> =>
         Effect.gen(function* leaveIsConfirmedEffect() {
           const sync = model.sync;
-          if (!sync || model.episodeEndConfirmed || access.currentUnsafe() === null) return true;
-          const leave = foreign(() => sync.leave()).pipe(Effect.timeout(LEAVE_TIMEOUT_MS));
-          return (yield* Effect.exit(leave))._tag === "Success";
+          if (model.episodeEndConfirmed) return true;
+          if (sync && (sync.getSnapshot().connection.phase === "live" || sync.getSnapshot().control !== null)) {
+            const leave = foreign(() => sync.leave()).pipe(Effect.timeout(LEAVE_TIMEOUT_MS));
+            if ((yield* Effect.exit(leave))._tag === "Success") return true;
+          }
+          return yield* cancelPendingAdmission();
         });
       const publishFreshAccess = (): Effect.Effect<void> =>
         enqueue(

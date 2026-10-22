@@ -74,6 +74,10 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:apply_lifecycle_intent, episode, lifecycle_intent_id})
 
   @impl ChalkSync.Stateholder
+  def confirm_admission(identity),
+    do: apply_lifecycle_intent(identity.episode, identity.admission_lifecycle_intent_id)
+
+  @impl ChalkSync.Stateholder
   def record_lifecycle_failure(_episode, _lifecycle_intent_id, _reason), do: :ok
 
   @impl ChalkSync.Stateholder

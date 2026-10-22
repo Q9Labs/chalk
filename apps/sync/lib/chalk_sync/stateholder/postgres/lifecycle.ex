@@ -11,6 +11,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Authority, as: AuthoritySQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: SQL
@@ -78,10 +79,16 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
     :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
-  def transaction(connection, episode, lifecycle_intent_id) do
+  def transaction(connection, episode, lifecycle_intent_id, identity \\ nil) do
     Transaction.configure(connection)
     control = lock_lifecycle_control(connection, episode)
     intent = lock_intent(connection, episode, lifecycle_intent_id)
+    prepared = JoinSeats.prepare(connection, episode, intent, identity)
+
+    intent =
+      if prepared == :expired,
+        do: lock_intent(connection, episode, lifecycle_intent_id),
+        else: intent
 
     case intent.status do
       "applied" -> lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
