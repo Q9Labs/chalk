@@ -5,7 +5,8 @@ import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
-import type { ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport } from "./types";
+import { ManualClock } from "../../tests/helpers/manual-clock";
+import type { ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation } from "./types";
 
 const sceneId = "10000000-0000-4000-8000-000000000001";
 const files: ChalkWhiteboardV1FileTransport = {
@@ -55,7 +56,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("shares views only after the server accepts view_v1, and steps down for an older server", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     const view = { x: 1, y: 2, width: 300, height: 200, bring: false };
@@ -88,7 +89,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await client.stopSceneSubscription();
     }
 
-    const currentClock = new TestClock();
+    const currentClock = new ManualClock();
     const current = await startedRecoveryClient(currentClock);
     try {
       expect(current.client.supportsViews).toBe(true);
@@ -109,7 +110,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("originates monotonic versions, preserves relayed versions, and interoperates with an older view server", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
     const sent = () => JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
@@ -149,7 +150,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("sends Bring as an unversioned command without consuming a view sequence", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const view = { x: 10, y: 20, width: 300, height: 200, bring: true };
     try {
       client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
@@ -164,7 +165,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   it("starts a fresh transport epoch when the same participant reconnects", async () => {
     const epochs = [];
     for (const _ of [0, 1]) {
-      const { client, sockets } = await startedRecoveryClient(new TestClock());
+      const { client, sockets } = await startedRecoveryClient(new ManualClock());
       try {
         client.sendView({ x: 10, y: 20, width: 300, height: 200, bring: false });
         const frame = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
@@ -179,7 +180,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("renegotiates view support on a later connection after a successful fallback", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     try {
@@ -204,7 +205,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("bounds replay to the 256 most recently active peer views", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const events: ChalkWhiteboardV1Event[] = [];
     try {
       for (let index = 0; index < 300; index++) {
@@ -223,7 +224,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("replays the latest ordinary peer view to a later board consumer", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const events: ChalkWhiteboardV1Event[] = [];
     const view = { type: "view", participant_id: "20000000-0000-4000-8000-000000000001", display_name: "Omar", x: 10, y: 20, width: 300, height: 200, bring: true, occurred_at: "2026-10-21T04:00:00.000Z" };
     let unsubscribe: () => void = () => undefined;
@@ -239,7 +240,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("sends views immediately after ready consumers subscribe and resubscribe", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const socket = sockets[0];
     const view = { x: 10, y: 20, width: 300, height: 200, bring: false };
     const events: ChalkWhiteboardV1Event[] = [];
@@ -260,7 +261,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("flushes a recovering bring when a snapshot consumer resubscribes on completion", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const socket = sockets[0];
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     let unsubscribe: () => void = () => undefined;
@@ -276,7 +277,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       expect(client.sendView(bring)).toBe(true);
       socket?.receive(snapshotPage(socket.requestId()));
       await snapshot;
-      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+      expect(sentFrames(socket, "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
       const view = { ...bring, x: 40, bring: false };
       expect(client.sendView(view)).toBe(true);
       expect(JSON.parse(socket?.sent.at(-1) ?? "{}")).toMatchObject({ type: "view", ...view });
@@ -294,40 +295,32 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     try {
       expect(client.sendView(bring)).toBe(true);
       expect(client.sendView({ ...bring, x: 99, bring: false })).toBe(true);
-      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
+      expect(sentFrames(socket, "view")).toEqual([]);
       if (phase === "initial") await acceptSnapshot(sockets);
       else socket?.receive(snapshotPage(socket.requestId()));
       await recovery;
-      expect(socket?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+      expect(sentFrames(socket, "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
     } finally {
       await client.stopSceneSubscription();
     }
   });
 
   it("keeps only the latest accepted bring across a reconnect", async () => {
-    const clock = new TestClock();
-    const { client, sockets } = await startedRecoveryClient(clock);
-    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    const { clock, client, sockets, bring } = await bringWhileReconnecting();
     try {
-      sockets[0]?.close(1006);
-      expect(client.sendView(bring)).toBe(true);
       expect(client.sendView({ ...bring, x: 40 })).toBe(true);
       clock.advance(1_000);
       await acceptSnapshot(sockets, 1);
       await settle();
-      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
+      expect(sentFrames(sockets[1], "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
     } finally {
       await client.stopSceneSubscription();
     }
   });
 
   it("preserves a queued Bring when origin negotiation falls back to plain views", async () => {
-    const clock = new TestClock();
-    const { client, sockets } = await startedRecoveryClient(clock);
-    const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+    const { clock, client, sockets, bring } = await bringWhileReconnecting();
     try {
-      sockets[0]?.close(1006);
-      expect(client.sendView(bring)).toBe(true);
       for (const index of [1, 2]) {
         clock.advance(1_000);
         await settle();
@@ -338,16 +331,15 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       clock.advance(1_000);
       await acceptSnapshot(sockets, 3);
       expect(client.supportsViews).toBe(true);
-      const frames = sockets[3]?.sent.map((wire) => JSON.parse(wire));
-      expect(frames?.find((frame) => frame.type === "hello").extensions).toContainEqual({ name: "view_v1" });
-      expect(frames?.filter((frame) => frame.type === "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+      expect(helloExtensions(sockets[3])).toContainEqual({ name: "view_v1" });
+      expect(sentFrames(sockets[3], "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
     } finally {
       await client.stopSceneSubscription();
     }
   });
 
   it("does not carry an accepted bring into a restarted subscription", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     const snapshot = client.requestSnapshot();
     void snapshot.catch(() => undefined);
@@ -358,7 +350,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     try {
       await acceptSnapshot(sockets, 1);
       await restart;
-      expect(sockets[1]?.sent.map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "view")).toEqual([]);
+      expect(sentFrames(sockets[1], "view")).toEqual([]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -385,7 +377,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("holds cursors until the recovery snapshot is acknowledged", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
     const startup = client.startSceneSubscription();
     await acceptSnapshot(sockets);
@@ -433,7 +425,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
     const startup = client.startSceneSubscription();
     await acceptSnapshot(sockets);
@@ -477,7 +469,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   });
 
   it("uses capped exponential reconnect backoff until a welcome is live", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
 
     const startup = client.startSceneSubscription();
@@ -524,7 +516,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 describe("ChalkWhiteboardV1Client drawing policy", () => {
   it("takes its drawing permission and the host's choices from draw_access, which Sync computes", async () => {
     const summaries: ChalkWhiteboardSummary[] = [];
-    const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { onSummary: (summary) => summaries.push(summary) });
+    const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { onSummary: (summary) => summaries.push(summary) });
     const picked = "20000000-0000-4000-8000-000000000002";
     try {
       expect(client.supportsViews).toBe(true);
@@ -548,15 +540,13 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   });
 
   it("sends a host's policy change as a receipted operation", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
+    const { client, sockets } = await hostClient();
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
       const change = client.setDrawPolicy("hosts");
       await settle();
-      const frame = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+      const [frame] = sentFrames(sockets[0], "set_draw_policy");
       expect(frame).toMatchObject({ type: "set_draw_policy", policy: "hosts" });
-      sockets[0]?.receive({ type: "commit", operation_id: frame.operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      commit(sockets[0], frame.operation_id, "1");
       await expect(change).resolves.toBeUndefined();
     } finally {
       await client.stopSceneSubscription();
@@ -564,17 +554,11 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   });
 
   it("sends a host's access changes one at a time in order, so a retried earlier change can't land after a later one", async () => {
-    const clock = new TestClock();
-    const { client, sockets } = await startedRecoveryClient(clock);
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock);
     const person = "20000000-0000-4000-8000-000000000002";
-    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy" || frame.type === "set_draw_permission");
-    const commitLast = async () => {
-      sockets[0]?.receive({ type: "commit", operation_id: sent().at(-1).operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
-      await settle();
-    };
+    const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
       const changes = [client.setDrawPolicy("picked"), client.setDrawPermission(person, false), client.setDrawPolicy("everyone"), client.setDrawPermission(person, true)];
       await settle();
       expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked"]);
@@ -584,7 +568,10 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await settle();
       clock.advance(5_000);
       await settle();
-      for (let index = 0; index < 4; index += 1) await commitLast();
+      for (let index = 0; index < 4; index += 1) {
+        commit(sockets[0], sent().at(-1).operation_id, "1");
+        await settle();
+      }
 
       expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked", "picked", false, "everyone", true]);
       await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined, undefined, undefined]);
@@ -594,21 +581,10 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   });
 
   it("sends access changes in the order they were made even when a later save finishes first", async () => {
-    const saves: PromiseWithResolvers<void>[] = [];
-    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
-      override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
-        await super.put(operation);
-        if (operation.frame.type !== "set_draw_policy") return;
-        const save = Promise.withResolvers<void>();
-        saves.push(save);
-        await save.promise;
-      }
-    })();
-    const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
-    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
+    const { pendingStore, saves } = heldPolicyStore("before");
+    const { client, sockets } = await hostClient(new ManualClock(), { pendingStore }, "picked");
+    const sent = () => sentFrames(sockets[0], "set_draw_policy");
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "picked", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
       const changes = [client.setDrawPolicy("everyone"), client.setDrawPolicy("hosts"), client.setDrawPolicy("picked")];
       void changes[1]?.catch(() => undefined);
       await settle();
@@ -621,10 +597,10 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       saves[0]?.resolve();
       await settle();
       expect(sent().map((frame) => frame.policy)).toEqual(["everyone"]);
-      sockets[0]?.receive({ type: "commit", operation_id: sent()[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      commit(sockets[0], sent()[0].operation_id, "1");
       await settle();
       expect(sent().map((frame) => frame.policy)).toEqual(["everyone", "picked"]);
-      sockets[0]?.receive({ type: "commit", operation_id: sent()[1].operation_id, outcome: "committed", scene_id: sceneId, revision: "2" });
+      commit(sockets[0], sent()[1].operation_id, "2");
       await expect(changes[0]).resolves.toBeUndefined();
       await expect(changes[1]).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
       await expect(changes[2]).resolves.toBeUndefined();
@@ -635,21 +611,10 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   });
 
   it("sends a held access change when the save of the one before it fails", async () => {
-    const saves: PromiseWithResolvers<void>[] = [];
-    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
-      override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
-        if (operation.frame.type !== "set_draw_policy") return super.put(operation);
-        const save = Promise.withResolvers<void>();
-        saves.push(save);
-        await save.promise;
-        await super.put(operation);
-      }
-    })();
-    const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
-    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
+    const { pendingStore, saves } = heldPolicyStore("after");
+    const { client, sockets } = await hostClient(new ManualClock(), { pendingStore }, "picked");
+    const sent = () => sentFrames(sockets[0], "set_draw_policy");
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "picked", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
       const first = client.setDrawPolicy("everyone");
       void first.catch(() => undefined);
       const second = client.setDrawPolicy("hosts");
@@ -662,7 +627,7 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await expect(first).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
       await settle();
       expect(sent().map((frame) => frame.policy)).toEqual(["hosts"]);
-      sockets[0]?.receive({ type: "commit", operation_id: sent()[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      commit(sockets[0], sent()[0].operation_id, "1");
       await expect(second).resolves.toBeUndefined();
     } finally {
       for (const save of saves) save.resolve();
@@ -671,23 +636,21 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   });
 
   it("sends a held access change when a snapshot fails for good", async () => {
-    const { client, sockets } = await startedRecoveryClient(new TestClock());
-    const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy" || frame.type === "set_draw_permission");
+    const { client, sockets } = await hostClient();
+    const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
       const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("everyone")];
       await settle();
       void client.requestSnapshot().catch(() => undefined);
       await settle();
-      sockets[0]?.receive({ type: "commit", operation_id: sent()[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      commit(sockets[0], sent()[0].operation_id, "1");
       await settle();
       expect(sent()).toHaveLength(1);
 
       sockets[0]?.receive({ type: "operation_error", correlation_id: sockets[0]?.requestId(), operation: "request_snapshot", code: "storage_unavailable", recoverable: false, message: "Storage failed." });
       await settle();
       expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "everyone"]);
-      sockets[0]?.receive({ type: "commit", operation_id: sent()[1].operation_id, outcome: "committed", scene_id: sceneId, revision: "2" });
+      commit(sockets[0], sent()[1].operation_id, "2");
       await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined]);
     } finally {
       await client.stopSceneSubscription();
@@ -699,61 +662,37 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     // Each id sorts before the one made just before it, so only createdAt can keep the order.
     let made = 0;
     const ids = { next: () => `ffffffff-ffff-4fff-8fff-${(0xffffffffffff - made++).toString(16)}` };
-    const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore, ids });
-    first.sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-    await settle();
-    void first.client.setDrawPolicy("hosts").catch(() => undefined);
-    void first.client.setDrawPolicy("picked").catch(() => undefined);
-    await settle();
-    await first.client.stopSceneSubscription();
+    await saveChangesAndStop({ pendingStore, ids }, (client) => {
+      void client.setDrawPolicy("hosts").catch(() => undefined);
+      void client.setDrawPolicy("picked").catch(() => undefined);
+    });
 
-    const second = recoveryClient(new TestClock(), undefined, { pendingStore });
-    const startup = second.client.startSceneSubscription();
+    const second = restoredClient(new ManualClock(), pendingStore);
     try {
       await acceptSnapshot(second.sockets);
-      const replayed = (second.sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
-      expect(replayed.map((frame) => frame.policy)).toEqual(["hosts"]);
+      expect(sentFrames(second.sockets[0], "set_draw_policy").map((frame) => frame.policy)).toEqual(["hosts"]);
     } finally {
-      void startup.catch(() => undefined);
       await second.client.stopSceneSubscription();
     }
   });
 
   it("refuses a policy change whose save finishes after the client fell back to a Sync without draw_policy_v1", async () => {
-    const saved = Promise.withResolvers<void>();
-    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
-      override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
-        await super.put(operation);
-        if (operation.frame.type === "set_draw_policy") await saved.promise;
-      }
-    })();
-    const clock = new TestClock();
-    const { client, sockets } = await startedRecoveryClient(clock, undefined, { pendingStore });
+    const { pendingStore, saves } = heldPolicyStore("before");
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock, { pendingStore });
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
-      const change = client.setDrawPolicy("hosts");
-      void change.catch(() => undefined);
-      await settle();
-      sockets[0]?.close(1006);
-      clock.advance(5_000);
-      await settle();
-      sockets[1]?.open();
-      await settle();
+      const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
       sockets[1]?.close(1009);
-      clock.advance(5_000);
-      await settle();
-      sockets[2]?.open();
-      await settle();
+      await redial(clock, sockets, 2);
       sockets[2]?.receive(welcome());
       await settle();
-      expect(JSON.parse(sockets[2]?.sent[0] ?? "{}").extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      expect(helloExtensions(sockets[2])).toEqual(withoutDrawPolicy);
 
-      saved.resolve();
+      saves[0]?.resolve();
       await settle();
       sockets[2]?.receive(snapshotPage(sockets[2]?.requestId()));
       await settle();
-      expect((sockets[2]?.sent ?? []).map((wire) => JSON.parse(wire).type)).not.toContain("set_draw_policy");
+      expect(sentFrames(sockets[2], "set_draw_policy")).toEqual([]);
       await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
       expect(await pendingStore.load()).toEqual([]);
     } finally {
@@ -762,24 +701,15 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   });
 
   it("with an older Sync, falls back and refuses a host's policy change that was waiting on the dropped connection", async () => {
-    const clock = new TestClock();
-    const { client, sockets } = await startedRecoveryClient(clock);
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock);
     try {
-      sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-      await settle();
-      const change = client.setDrawPolicy("hosts");
-      void change.catch(() => undefined);
-      await settle();
-      sockets[0]?.close(1006);
-      clock.advance(5_000);
-      await settle();
-      sockets[1]?.open();
-      await settle();
+      const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
       sockets[1]?.close(1009, "invalid whiteboard frame");
       clock.advance(5_000);
       await acceptSnapshot(sockets, 2);
-      expect(JSON.parse(sockets[2]?.sent[0] ?? "{}").extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
-      expect((sockets[2]?.sent ?? []).map((wire) => JSON.parse(wire).type)).not.toContain("set_draw_policy");
+      expect(helloExtensions(sockets[2])).toEqual(withoutDrawPolicy);
+      expect(sentFrames(sockets[2], "set_draw_policy")).toEqual([]);
       await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable", recoverable: true });
     } finally {
       await client.stopSceneSubscription();
@@ -788,41 +718,23 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
 
   it("with a current Sync, keeps its hello and a saved policy change when a token is rejected once, and gives up after repeated rejections", async () => {
     const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
-    const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
-    first.sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-    await settle();
-    void first.client.setDrawPolicy("hosts").catch(() => undefined);
-    await settle();
-    await first.client.stopSceneSubscription();
+    await saveChangesAndStop({ pendingStore }, (client) => void client.setDrawPolicy("hosts").catch(() => undefined));
 
-    const clock = new TestClock();
-    const second = recoveryClient(clock, undefined, { pendingStore });
-    const startup = second.client.startSceneSubscription();
-    const sent = (index: number) => (second.sockets[index]?.sent ?? []).map((wire) => JSON.parse(wire));
+    const clock = new ManualClock();
+    const second = restoredClient(clock, pendingStore);
     try {
       await settle();
       // Sync's hello deadline can pass while the token is still being fetched.
       second.sockets[0]?.open();
       second.sockets[0]?.close(1008, "hello timeout");
-      clock.advance(5_000);
-      await settle();
-      second.sockets[1]?.open();
-      await settle();
+      await redial(clock, second.sockets, 1);
       second.sockets[1]?.close(1008, "invalid token");
-      clock.advance(5_000);
-      await settle();
-      second.sockets[2]?.open();
-      await settle();
+      await redial(clock, second.sockets, 2);
       second.sockets[2]?.receive(welcome());
       await settle();
-      expect(sent(2)[0].extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }]);
-      expect(
-        sent(2)
-          .filter((frame) => frame.type === "set_draw_policy")
-          .map((frame) => frame.policy),
-      ).toEqual(["hosts"]);
+      expect(helloExtensions(second.sockets[2])).toEqual([...withoutDrawPolicy, { name: "draw_policy_v1" }]);
+      expect(sentFrames(second.sockets[2], "set_draw_policy").map((frame) => frame.policy)).toEqual(["hosts"]);
     } finally {
-      void startup.catch(() => undefined);
       await second.client.stopSceneSubscription();
     }
 
@@ -831,14 +743,12 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     void rejectedStartup.catch(() => undefined);
     try {
       for (let index = 0; index < 5; index += 1) {
-        await settle();
-        rejected.sockets[index]?.open();
-        await settle();
+        await redial(clock, rejected.sockets, index, 0);
         rejected.sockets[index]?.close(1008, "invalid token");
         clock.advance(10_000);
       }
       await expect(rejectedStartup).rejects.toMatchObject({ code: "permission_denied", recoverable: false });
-      expect(rejected.sockets.map((socket) => JSON.parse(socket.sent[0] ?? "{}").extensions.length)).toEqual([3, 3, 3, 3, 3]);
+      expect(rejected.sockets.map((socket) => helloExtensions(socket).length)).toEqual([3, 3, 3, 3, 3]);
     } finally {
       await rejected.client.stopSceneSubscription();
     }
@@ -847,38 +757,29 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
   it("with an older Sync, refuses a saved policy change on the summary instead of replaying it", async () => {
     const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
     const person = "20000000-0000-4000-8000-000000000002";
-    const first = await startedRecoveryClient(new TestClock(), undefined, { pendingStore });
-    first.sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
-    await settle();
-    void first.client.setDrawPolicy("hosts").catch(() => undefined);
-    void first.client.setDrawPermission(person, false).catch(() => undefined);
-    await settle();
-    await first.client.stopSceneSubscription();
+    await saveChangesAndStop({ pendingStore }, (client) => {
+      void client.setDrawPolicy("hosts").catch(() => undefined);
+      void client.setDrawPermission(person, false).catch(() => undefined);
+    });
 
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const second = recoveryClient(clock, undefined, { pendingStore });
     const errors: (string | undefined)[] = [];
     second.client.subscribeSummary((summary) => errors.push(summary.error?.operation));
     const startup = second.client.startSceneSubscription();
-    const sent = (index: number) => (second.sockets[index]?.sent ?? []).map((wire) => JSON.parse(wire));
     try {
-      await settle();
-      second.sockets[0]?.open();
-      await settle();
+      await redial(clock, second.sockets, 0, 0);
       second.sockets[0]?.close(1009, "invalid whiteboard frame");
-      clock.advance(1_000);
-      await settle();
-      second.sockets[1]?.open();
-      await settle();
+      await redial(clock, second.sockets, 1, 1_000);
       second.sockets[1]?.receive(welcome());
       await settle();
-      expect(sent(1)[0].extensions).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
+      expect(helloExtensions(second.sockets[1])).toEqual(withoutDrawPolicy);
       expect(errors).toContain("set_draw_policy");
-      expect(sent(1).map((frame) => frame.type)).not.toContain("set_draw_policy");
-      const permissions = sent(1).filter((frame) => frame.type === "set_draw_permission");
+      expect(sentFrames(second.sockets[1], "set_draw_policy")).toEqual([]);
+      const permissions = sentFrames(second.sockets[1], "set_draw_permission");
       expect(permissions.map((frame) => frame.can_draw)).toEqual([false]);
       expect((await pendingStore.load()).map((pending) => pending.frame.type)).toEqual(["set_draw_permission"]);
-      second.sockets[1]?.receive({ type: "commit", operation_id: permissions[0].operation_id, outcome: "committed", scene_id: sceneId, revision: "1" });
+      commit(second.sockets[1], permissions[0].operation_id, "1");
       await settle();
       second.sockets[1]?.receive(snapshotPage(second.sockets[1]?.requestId()));
       await startup;
@@ -890,7 +791,7 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
 
 describe("whiteboard slow-connection watchdog", () => {
   it("rejects a legacy three-method clock instead of silently disabling recovery", () => {
-    const scheduler = new TestClock();
+    const scheduler = new ManualClock();
     const clock = {
       now: () => scheduler.now(),
       setTimeout: (callback: () => void, milliseconds: number) => scheduler.setTimeout(callback, milliseconds),
@@ -902,7 +803,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("replaces a silent socket within eight seconds without waiting for its close event", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
     const oldSocket = sockets[0];
     if (!oldSocket) throw new Error("missing socket");
@@ -917,7 +818,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("does not treat a late pong as the healthy reply to a newer ping", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     clock.advance(6_100);
     sockets[0]?.receive({ type: "pong" });
@@ -928,7 +829,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("accepts normal jitter and one isolated slow sample followed by recovery", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     for (const rtt of [110, 250, 1_000, 2_100, 250, 110, 1_000]) {
       const previousPings = sockets[0]?.sent.filter((wire) => JSON.parse(wire).type === "ping").length;
@@ -947,7 +848,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("backs off subsequent replacements even after a new welcome", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
     clock.advance(8_100);
     await acceptSnapshot(sockets, 1);
@@ -959,7 +860,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("caps recurrent probe back-off at four seconds and resets after healthy replies", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const telemetry = vi.fn();
     const { client, sockets } = await startedRecoveryClient(clock, 100, { onWatchdogReplacement: telemetry });
     for (const [index, backoff] of [0, 1_000, 2_000, 4_000, 4_000].entries()) {
@@ -994,7 +895,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("ignores extra pongs without shifting future probes", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     clock.advance(4_100);
     sockets[0]?.receive({ type: "pong" });
@@ -1008,7 +909,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("catches up through the normal reconnect snapshot and ignores the retired socket", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
     const snapshots: ChalkWhiteboardV1Event[] = [];
     client.subscribe((event) => {
@@ -1048,7 +949,7 @@ describe("whiteboard slow-connection watchdog", () => {
           clearTimeout: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
         }
       : undefined;
-    const { client, sockets } = recoveryClient(new TestClock(), 100, { clock });
+    const { client, sockets } = recoveryClient(new ManualClock(), 100, { clock });
     try {
       const startup = client.startSceneSubscription();
       await acceptSnapshot(sockets);
@@ -1069,7 +970,7 @@ describe("whiteboard slow-connection watchdog", () => {
     const document = new EventTarget();
     vi.stubGlobal("document", document);
     const remove = vi.spyOn(document, "removeEventListener");
-    const first = recoveryClient(new TestClock(), undefined, {
+    const first = recoveryClient(new ManualClock(), undefined, {
       pendingStore: {
         load: async () => {
           throw new Error("store unavailable");
@@ -1082,7 +983,7 @@ describe("whiteboard slow-connection watchdog", () => {
     try {
       await expect(first.client.startSceneSubscription()).rejects.toThrow("Unable to restore");
       expect(remove).toHaveBeenCalledTimes(1);
-      const connected = await startedRecoveryClient(new TestClock());
+      const connected = await startedRecoveryClient(new ManualClock());
       second = connected.client;
       connected.sockets[0]?.close(1008);
       expect(remove).toHaveBeenCalledTimes(2);
@@ -1094,7 +995,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("qualifies late timers and pongs after a busy main thread", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     clock.advance(4_000);
     clock.stall(2_500);
@@ -1113,7 +1014,7 @@ describe("whiteboard slow-connection watchdog", () => {
     Object.defineProperty(document, "hidden", { get: () => state.hidden });
     vi.stubGlobal("document", document);
     const remove = vi.spyOn(document, "removeEventListener");
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     try {
       const startup = client.startSceneSubscription();
@@ -1136,7 +1037,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("counts snapshot pages as progress even with pongs queued behind replay", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     await settle();
@@ -1155,7 +1056,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("replaces after a dropped pong, then matches the fresh connection normally", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, 100);
     clock.advance(6_100);
     sockets[0]?.receive({ type: "pong" }); // The first reply is missing; FIFO intentionally reconnects.
@@ -1168,7 +1069,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("ignores unsolicited pongs and resets probes, and can disable replacements", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock, undefined, { watchdog: false });
     sockets[0]?.receive({ type: "pong" });
     await settle();
@@ -1179,7 +1080,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("emits exactly one bounded replacement event", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const telemetry = vi.fn();
     const { client, sockets } = await startedRecoveryClient(clock, 100, { onWatchdogReplacement: telemetry });
     clock.advance(6_200);
@@ -1191,7 +1092,7 @@ describe("whiteboard slow-connection watchdog", () => {
   });
 
   it("stops a slow socket immediately without waiting for the close handshake or reconnecting", async () => {
-    const clock = new TestClock();
+    const clock = new ManualClock();
     const { client, sockets } = await startedRecoveryClient(clock);
     const socket = sockets[0];
     if (!socket) throw new Error("missing socket");
@@ -1208,7 +1109,7 @@ function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
 }
 
-function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
+function recoveryClient(clock = new ManualClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
   const sockets: TestSocket[] = [];
   const client = new ChalkWhiteboardV1Client({
     url: "ws://sync.test/v1/whiteboard",
@@ -1228,7 +1129,17 @@ function recoveryClient(clock = new TestClock(), reconnectDelayMs?: number, opti
   return { client, sockets };
 }
 
-async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
+/** A live client that drops its socket and queues a Bring while it reconnects. */
+async function bringWhileReconnecting() {
+  const clock = new ManualClock();
+  const { client, sockets } = await startedRecoveryClient(clock);
+  const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
+  sockets[0]?.close(1006);
+  expect(client.sendView(bring)).toBe(true);
+  return { clock, client, sockets, bring };
+}
+
+async function startedRecoveryClient(clock: ManualClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
   const result = recoveryClient(clock, reconnectDelayMs, options);
   const startup = result.client.startSceneSubscription();
   await acceptSnapshot(result.sockets);
@@ -1237,7 +1148,7 @@ async function startedRecoveryClient(clock: TestClock, reconnectDelayMs?: number
 }
 
 async function recoveringViewClient(phase: "initial" | "requested") {
-  const result = phase === "initial" ? recoveryClient() : await startedRecoveryClient(new TestClock());
+  const result = phase === "initial" ? recoveryClient() : await startedRecoveryClient(new ManualClock());
   const recovery = phase === "initial" ? result.client.startSceneSubscription() : result.client.requestSnapshot();
   return { ...result, recovery };
 }
@@ -1281,7 +1192,7 @@ function snapshotPage(requestId: string | undefined): Record<string, unknown> {
 }
 
 /** Answers each keepalive probe on time, starting with the first one five seconds in. */
-async function answerProbes(clock: TestClock, socket: TestSocket | undefined, probes: number) {
+async function answerProbes(clock: ManualClock, socket: TestSocket | undefined, probes: number) {
   for (let probe = 0; probe < probes; probe += 1) {
     clock.advance(probe === 0 ? 5_000 : 4_000);
     socket?.receive({ type: "pong" });
@@ -1325,48 +1236,74 @@ class TestSocket implements SyncSocket {
   }
 }
 
-class TestClock {
-  #now = 0;
-  #nextHandle = 0;
-  readonly #timers = new Map<number, { readonly at: number; readonly callback: () => void }>();
+const withoutDrawPolicy = [{ name: "presentation_v1" }, { name: "view_v1", origins: true }];
 
-  now(): number {
-    return this.#now;
-  }
+/** A live client whose person is a host, under the given call-wide policy. */
+async function hostClient(clock = new ManualClock(), options: Partial<ChalkWhiteboardV1ClientOptions> = {}, policy: ChalkWhiteboardDrawPolicy = "everyone") {
+  const started = await startedRecoveryClient(clock, undefined, options);
+  started.sockets[0]?.receive({ type: "draw_access", policy, can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+  await settle();
+  return started;
+}
 
-  monotonicNow(): number {
-    return this.#now;
-  }
+/** Makes access changes as a host, then stops, so the next client restores them from the same store. */
+async function saveChangesAndStop(options: Partial<ChalkWhiteboardV1ClientOptions>, change: (client: ChalkWhiteboardV1Client) => void) {
+  const { client } = await hostClient(new ManualClock(), options);
+  change(client);
+  await settle();
+  await client.stopSceneSubscription();
+}
 
-  setTimeout(callback: () => void, milliseconds: number): number {
-    const handle = this.#nextHandle++;
-    this.#timers.set(handle, { at: this.#now + milliseconds, callback });
-    return handle;
-  }
+/** A client that restores the store's saved changes as it starts. */
+function restoredClient(clock: ManualClock, pendingStore: InMemoryChalkWhiteboardV1PendingOperationStore) {
+  const restored = recoveryClient(clock, undefined, { pendingStore });
+  void restored.client.startSceneSubscription().catch(() => undefined);
+  return restored;
+}
 
-  clearTimeout(handle: unknown): void {
-    if (typeof handle === "number") this.#timers.delete(handle);
-  }
+/** Starts a policy change, then drops the socket and opens the next one, as a Sync rollback would. */
+async function policyChangeOnDroppedConnection(client: ChalkWhiteboardV1Client, sockets: readonly TestSocket[], clock: ManualClock) {
+  const change = client.setDrawPolicy("hosts");
+  void change.catch(() => undefined);
+  await settle();
+  sockets[0]?.close(1006);
+  await redial(clock, sockets, 1);
+  return { change };
+}
 
-  stall(milliseconds: number): void {
-    this.#now += milliseconds;
-    const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= this.#now);
-    for (const [handle, timer] of due) {
-      this.#timers.delete(handle);
-      timer.callback();
+/** A store whose policy saves wait for the test, written to the store before or after that wait. */
+function heldPolicyStore(write: "before" | "after") {
+  const saves: PromiseWithResolvers<void>[] = [];
+  const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+    override async put(operation: ChalkWhiteboardV1PendingOperation): Promise<void> {
+      if (operation.frame.type !== "set_draw_policy") return super.put(operation);
+      if (write === "before") await super.put(operation);
+      const save = Promise.withResolvers<void>();
+      saves.push(save);
+      await save.promise;
+      if (write === "after") await super.put(operation);
     }
-  }
+  })();
+  return { pendingStore, saves };
+}
 
-  advance(milliseconds: number): void {
-    const target = this.#now + milliseconds;
-    while (true) {
-      const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= target).sort(([leftHandle, left], [rightHandle, right]) => left.at - right.at || leftHandle - rightHandle)[0];
-      if (!due) break;
-      const [handle, timer] = due;
-      this.#timers.delete(handle);
-      this.#now = timer.at;
-      timer.callback();
-    }
-    this.#now = target;
-  }
+/** Lets the reconnect timer dial, then opens the socket it made. */
+async function redial(clock: ManualClock, sockets: readonly TestSocket[], index: number, milliseconds = 5_000) {
+  clock.advance(milliseconds);
+  await settle();
+  sockets[index]?.open();
+  await settle();
+}
+
+function commit(socket: TestSocket | undefined, operationId: string, revision: string) {
+  socket?.receive({ type: "commit", operation_id: operationId, outcome: "committed", scene_id: sceneId, revision });
+}
+
+function sentFrames(socket: TestSocket | undefined, ...types: string[]) {
+  const frames = (socket?.sent ?? []).map((wire) => JSON.parse(wire));
+  return types.length === 0 ? frames : frames.filter((frame) => types.includes(frame.type));
+}
+
+function helloExtensions(socket: TestSocket | undefined): readonly unknown[] {
+  return sentFrames(socket)[0]?.extensions ?? [];
 }

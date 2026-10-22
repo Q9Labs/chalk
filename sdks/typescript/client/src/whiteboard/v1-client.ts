@@ -34,6 +34,17 @@ const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
 /** Matches the retries the hello ladder used to give a rejected token, so a key rotation or clock skew still clears up. */
 const MAX_REJECTED_HELLO_RETRIES = 4;
+type ClientPhase = "idle" | "connecting" | "authenticating" | "live" | "stopped";
+type CloseStep = "step-down" | "retry-hello" | "reconnect" | "fail";
+/**
+ * What a close before welcome means. Every Sync closes with 1009 on a hello it can't decode, such as one with an
+ * unknown extension, so only that steps the hello down. A 1008 rejects the token or the participant, or says the
+ * hello came too late, and any of those can clear up on the next try. Other closes reconnect, or fail when terminal.
+ */
+const CLOSE_STEPS: Readonly<Partial<Record<number, Partial<Record<ClientPhase, CloseStep>>>>> = {
+  1008: { connecting: "retry-hello", authenticating: "retry-hello" },
+  1009: { authenticating: "step-down" },
+};
 const encoder = new TextEncoder();
 
 type Deferred<T> = {
@@ -84,7 +95,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #cancelDial: (() => void) | undefined;
   #started = false;
   #startupGeneration = 0;
-  #phase: "idle" | "connecting" | "authenticating" | "live" | "stopped" = "idle";
+  #phase: ClientPhase = "idle";
   #participantId: string | null = null;
   #sceneId: string | null;
   #revision: string | null;
@@ -711,27 +722,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (queuedBytes + pending.bytes > WhiteboardV1ProtocolLimits.multipartUpdateMaxBytes) {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation byte capacity is full."));
     }
-    this.#reservedOperationIds.add(frame.operation_id);
-    if (isAccessChange(frame)) this.#savingAccessChanges.set(frame.operation_id, pending.createdAt);
-    let storeWrite: Promise<void>;
-    try {
-      storeWrite = this.#store.put(pending);
-    } catch (cause) {
-      this.#reservedOperationIds.delete(frame.operation_id);
-      this.#abandonAccessChange(frame.operation_id);
-      throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
-    }
-    this.#pendingStoreWrites.add(storeWrite);
-    try {
-      await storeWrite;
-    } catch (cause) {
-      this.#abandonAccessChange(frame.operation_id);
-      throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
-    } finally {
-      this.#pendingStoreWrites.delete(storeWrite);
-      this.#reservedOperationIds.delete(frame.operation_id);
-      this.#savingAccessChanges.delete(frame.operation_id);
-    }
+    await this.#persist(pending);
     if (frame.type === "set_draw_policy" && this.#phase === "live" && this.#hello !== "draw-policy") {
       void this.#store.remove(frame.operation_id).catch(() => undefined);
       this.#sendNextAccessChange();
@@ -747,6 +738,26 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#sendOperation(frame);
     }
     return promise;
+  }
+
+  async #persist(pending: ChalkWhiteboardV1PendingOperation): Promise<void> {
+    const { operationId, frame } = pending;
+    this.#reservedOperationIds.add(operationId);
+    if (isAccessChange(frame)) this.#savingAccessChanges.set(operationId, pending.createdAt);
+    let storeWrite: Promise<void> | undefined;
+    try {
+      storeWrite = this.#store.put(pending);
+      this.#pendingStoreWrites.add(storeWrite);
+      await storeWrite;
+    } catch (cause) {
+      this.#reservedOperationIds.delete(operationId);
+      this.#abandonAccessChange(operationId);
+      throw error(failure(operationName(frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
+    } finally {
+      if (storeWrite) this.#pendingStoreWrites.delete(storeWrite);
+      this.#reservedOperationIds.delete(operationId);
+      this.#savingAccessChanges.delete(operationId);
+    }
   }
 
   #commit(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "commit" }>): void {
@@ -775,22 +786,30 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#requireLive();
     const entry = this.#operations.get(frame.correlation_id);
     if (entry) {
-      if (frame.recoverable && retryableOperationCode(frame.code)) {
-        this.#scheduleOperationRetry(frame.correlation_id, entry);
-        return;
-      }
-      this.#operations.delete(frame.correlation_id);
-      this.#clearOperationRetryTimer(frame.correlation_id);
-      this.#awaitingOperationIds.delete(frame.correlation_id);
-      entry.deferred && rejectDeferred(entry.deferred, error(failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message)));
-      this.#publishSummary("ready", failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message));
-      void this.#store.remove(frame.correlation_id).catch(() => undefined);
-      if (isAccessChange(entry.pending.frame)) this.#sendNextAccessChange();
-      this.#requestSnapshotAfterOperations();
+      this.#failOperation(entry, frame);
       return;
     }
     const snapshot = this.#snapshots.get(frame.correlation_id);
-    if (!snapshot) return;
+    if (snapshot) this.#failSnapshot(snapshot, frame);
+  }
+
+  #failOperation(entry: OperationEntry, frame: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>): void {
+    if (frame.recoverable && retryableOperationCode(frame.code)) {
+      this.#scheduleOperationRetry(frame.correlation_id, entry);
+      return;
+    }
+    this.#operations.delete(frame.correlation_id);
+    this.#clearOperationRetryTimer(frame.correlation_id);
+    this.#awaitingOperationIds.delete(frame.correlation_id);
+    const operationFailure = failure(operationName(entry.pending.frame), mapErrorCode(frame.code), frame.recoverable, frame.message);
+    entry.deferred && rejectDeferred(entry.deferred, error(operationFailure));
+    this.#publishSummary("ready", operationFailure);
+    void this.#store.remove(frame.correlation_id).catch(() => undefined);
+    if (isAccessChange(entry.pending.frame)) this.#sendNextAccessChange();
+    this.#requestSnapshotAfterOperations();
+  }
+
+  #failSnapshot(snapshot: SnapshotAssembly, frame: Extract<WhiteboardV1ServerFrame, { readonly type: "operation_error" }>): void {
     this.#snapshots.delete(frame.correlation_id);
     const snapshotError = error(failure("request_snapshot", mapErrorCode(frame.code), frame.recoverable, frame.message));
     this.#publishSummary(frame.recoverable ? "recovering" : "failed", failure("request_snapshot", mapErrorCode(frame.code), frame.recoverable, frame.message));
@@ -855,33 +874,35 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#operationRetryTimers.set(operationId, timer);
   }
 
-  /**
-   * Every Sync closes with 1009 on a hello it can't decode, such as one with an unknown extension, so only that steps the hello down.
-   * A 1008 rejects the token or the participant, or says the hello came too late, and any of those can clear up on the next try.
-   */
   #disconnected(socket: SyncSocket, closeCode: number): void {
     if (socket !== this.#socket) return;
-    const authenticating = this.#phase === "authenticating";
-    const beforeWelcome = authenticating || this.#phase === "connecting";
-    const wasLive = this.#phase === "live";
+    const phase = this.#phase;
     this.#resetDisconnectedState();
     if (!this.#started || !this.#transportAvailable) return;
-    if (authenticating && closeCode === 1009 && this.#hello !== "legacy") {
-      this.#fallbackHello();
-      this.#scheduleReconnect();
-      return;
-    }
-    if (beforeWelcome && closeCode === 1008 && this.#rejectedHelloRetries < MAX_REJECTED_HELLO_RETRIES) {
-      this.#rejectedHelloRetries += 1;
-      this.#scheduleReconnect();
-      return;
-    }
-    if (terminalCloseCode(closeCode)) {
-      this.#failRejectedConnection(closeCode);
-      return;
-    }
-    if (wasLive) this.#hello = "draw-policy";
-    this.#scheduleReconnect();
+    const step = CLOSE_STEPS[closeCode]?.[phase] ?? (terminalCloseCode(closeCode) ? "fail" : "reconnect");
+    if (this.#takeCloseStep(step, phase)) this.#scheduleReconnect();
+    else this.#failRejectedConnection(closeCode);
+  }
+
+  /** Returns false when the step has nothing left to try, so the connection fails. */
+  #takeCloseStep(step: CloseStep, phase: ClientPhase): boolean {
+    if (step === "fail") return false;
+    if (step === "step-down") return this.#stepDownHello();
+    if (step === "retry-hello") return this.#retryHello();
+    if (phase === "live") this.#hello = "draw-policy";
+    return true;
+  }
+
+  #stepDownHello(): boolean {
+    if (this.#hello === "legacy") return false;
+    this.#fallbackHello();
+    return true;
+  }
+
+  #retryHello(): boolean {
+    if (this.#rejectedHelloRetries >= MAX_REJECTED_HELLO_RETRIES) return false;
+    this.#rejectedHelloRetries += 1;
+    return true;
   }
 
   #fallbackHello(): void {
