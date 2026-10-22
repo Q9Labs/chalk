@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT / 'scripts/recorder'))
@@ -388,9 +389,47 @@ def deploy_dispatcher(args):
         print(json.dumps(proof))
 
 
+def reconcile_nightly_address(provider, config):
+    """Move the existing allocation; never allocate, release, or change DNS."""
+    instance_id = config['runtime']['instance_id']
+    require(instance_id == os.environ.get('CHALK_MANAGED_INSTANCE_ID'),
+            'nightly recorder SSM target must match the deployed instance')
+    instances = provider.aws('ec2', 'describe-instances', '--instance-ids', instance_id)
+    hosts = [host for reservation in instances['Reservations'] for host in reservation['Instances']]
+    require(len(hosts) == 1 and hosts[0]['InstanceId'] == instance_id, 'nightly address target is ambiguous')
+    tags = {tag['Key']: tag['Value'] for tag in hosts[0].get('Tags', [])}
+    require(tags.get('chalk:environment') == 'nightly', 'recorder address target must be tagged nightly')
+    require(hosts[0]['State']['Name'] == 'running', 'nightly address target must be running')
+    addresses = provider.aws('ec2', 'describe-addresses', '--filters',
+                             'Name=tag:Name,Values=chalk-nightly-recording-control',
+                             'Name=tag:chalk:environment,Values=nightly')['Addresses']
+    require(len(addresses) == 1, 'expected exactly one retained nightly recorder allocation; recover it before release')
+    address = addresses[0]
+    tags = {tag['Key']: tag['Value'] for tag in address.get('Tags', [])}
+    require(tags.get('Name') == 'chalk-nightly-recording-control' and tags.get('chalk:environment') == 'nightly',
+            'recorder allocation must be tagged nightly')
+    allocation = address['AllocationId']
+    if address.get('InstanceId') != instance_id:
+        provider.aws('ec2', 'associate-address', '--allocation-id', allocation,
+                     '--instance-id', instance_id, '--allow-reassociation')
+    # Also covers a retry after AWS moved the address but the client lost its response.
+    for attempt in range(12):
+        current = provider.aws('ec2', 'describe-addresses', '--allocation-ids', allocation)['Addresses']
+        if len(current) == 1 and current[0].get('InstanceId') == instance_id:
+            require(current[0]['PublicIp'] == address['PublicIp'], 'nightly recorder allocation changed address')
+            print('Nightly recorder address association ready', flush=True)
+            return
+        if attempt < 11:
+            time.sleep(5)
+    raise RuntimeError('nightly recorder address association did not converge; cold boot refused')
+
+
 def qualify(args):
     provider, config = settings(args)
     media = validate_members(json.loads(args.output.read_text()))
+    if args.environment == 'nightly':
+        require(args.config_parameter == '/chalk/nightly/release/recorder.json', 'nightly address requires canonical SSM config')
+        reconcile_nightly_address(provider, config)
     args.directory.mkdir(parents=True, exist_ok=True)
     for role in ('capture', 'render'):
         values = env_values(provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')['Value'])

@@ -1,8 +1,9 @@
 # Nightly backend configuration
 
 Nightly runs the same backend images as production with separate data, keys and
-provider resources. These files do not provision resources or contain credentials.
-Use `nightly` as the deployment identity. Sync still builds with `MIX_ENV=prod`.
+provider resources. Runtime configuration files contain no credentials; the
+OpenTofu roots provision nightly infrastructure. Use `nightly` as the deployment
+identity. Sync still builds with `MIX_ENV=prod`.
 
 ## Component names
 
@@ -45,6 +46,83 @@ Supply `host-cloud-init.yaml` as user-data when an operator launches the approve
 Ubuntu 24.04 arm64 host. The script checks cgroups v2, Quadlet and the rootless
 user manager, then runs a disposable rootless smoke container. It contains no
 runtime secrets. Verify SSM Online and a successful reboot before deployment.
+
+### Stable recorder address
+
+The nightly Spot host must use the Elastic IP owned by
+[`recording-control-address`](recording-control-address/main.tf). An automatically
+assigned public IP changes after a Spot stop/start, leaving the recorder's direct
+TLS hostname pointing at the previous address. The API tunnel does not replace
+this direct listener.
+
+Apply this root once when installing the retained allocation. On later host
+replacements, update the nightly release configuration's `runtime.instance_id`
+and the nightly managed deployment target together. The existing Release flow
+calls `scripts/releases/media.py qualify` after deployment and before either
+recorder cold boot. That caller automatically moves the existing tagged allocation
+to the SSM target and waits for AWS to confirm it. A retry after a lost response
+observes the completed move without remapping it again. Missing or ambiguous
+allocations fail closed; Release never allocates, releases, or changes DNS.
+
+The root reads only
+`/chalk/nightly/release/recorder.json` and refuses a host without the
+`chalk:environment=nightly` tag. Its separate state keeps the allocation when the
+host is replaced; only the association moves. Do not destroy or recreate the
+allocation during host replacement.
+
+```sh
+tofu -chdir=infrastructure/nightly/recording-control-address init -backend-config=/absolute/path/to/nightly-backend.hcl
+tofu -chdir=infrastructure/nightly/recording-control-address plan -out=address.plan
+tofu -chdir=infrastructure/nightly/recording-control-address apply address.plan
+tofu -chdir=infrastructure/nightly/recording-control-address output -raw public_ip
+```
+
+Save the `allocation_id` output durably with the private backend coordinates and
+DNS undo, outside temporary directories, before replacing a host or removing the
+root. If that saved ID is lost, recover it read-only by its tags, then match the
+returned public IP to `nightly-recording-control.chalkmeet.com` before importing:
+
+```sh
+aws ec2 describe-addresses --region ap-southeast-1 --filters Name=tag:Name,Values=chalk-nightly-recording-control Name=tag:chalk:environment,Values=nightly --query 'Addresses[].{AllocationId:AllocationId,PublicIp:PublicIp}'
+```
+
+The release requires [release-policy.json](recording-control-address/release-policy.json).
+Use the private **Nightly recorder address permissions** operator runbook in the
+repo's ignored `.private/` workspace for account-specific installation and undo.
+Select credentials through that runbook, not through public documentation.
+The policy allows address/instance reads and association of only the allocation
+with both nightly recorder tags. The caller requires the SSM target to match
+`CHALK_MANAGED_INSTANCE_ID` and rejects a target without
+`chalk:environment=nightly`. The policy grants no allocate, release, disassociate,
+DNS, or IAM-write permissions. No instance-profile change is required.
+
+The backend file supplies the existing nightly state bucket, as in
+`backend.hcl.example`. On the first install only, save the full Cloudflare record
+as the undo and set **only** the DNS-only A record
+`nightly-recording-control.chalkmeet.com` to this output, preserving its TTL and
+other fields. Append `/32` to the IPv4 output for the capture and render recorder
+policies' `control_addresses`, then apply both firewalls before the cold-boot check.
+The current nightly firewalls already allow this destination. Keep that record
+unchanged across later host replacements.
+Confirm its public DNS answer matches the output before the signed recorder
+cold-boot check. The output `allocation_id` identifies the same allocation for
+read-only association checks and recovery. The allocation uses
+`lifecycle.destroy = false`, which persists its retention policy in state even if
+the block is removed. Reverting code does not release the live address; move the
+retained allocation back to the previous nightly host to undo an association change.
+If a removal apply forgets the allocation, import its saved `allocation_id` into
+`aws_eip.control` before applying the restored root.
+
+Run `tofu test` in this root with OpenTofu 1.12.3 for host selection and production
+isolation. Run `python3 test_lifecycle.py` after `tofu init -backend=false` for a
+stateful apply of the real root against a local EC2/SSM emulator. It proves the
+allocation ID survives replacement, only the association moves, a lost response
+recovers on retry, the next plan is a no-op, and removal retains the allocation.
+`python3 test_lifecycle.py --negative replacement` injects an allocation-replacement
+dependency and must fail the allocation-ID assertion. `--negative retention` removes
+the retention policy and must fail the retained-removal assertion. These tests
+create no cloud resources. Production's recorder
+address is not managed by this root.
 
 `render-runtime <manifest> <output> nightly` selects the following caps.
 Production rendering remains unchanged.
