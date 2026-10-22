@@ -29,7 +29,7 @@ it("copies a Home invite when unrelated Call history is unavailable", async () =
     render(<HomePage />);
   });
   await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Copy link", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
   });
   expect(writeText).toHaveBeenCalledWith("https://chalk.test/join/invite");
 });
