@@ -158,16 +158,21 @@ rewrite running code. Legacy waiters keep their old shlock and drain one at a
 time. A live legacy lock owner counts as one occupied slot. Ordinary jobs never
 acquire that lock, even when all new slots are running. Only exclusive jobs take
 it for the lifetime of the worker. Native shlock reclaims a dead worker’s lock;
-the dispatcher never unlinks it. The exclusive worker owns the lock through exec,
-so dispatcher death cannot make a surviving exclusive worker lose its lock.
+the dispatcher never unlinks it. The exclusive supervisor owns the lock until
+its workload exits, even if the dispatcher dies.
 Detected legacy waiters get a 35-second handoff window before another exclusive
 job, covering their 30-second polling interval. Admission reserves the
 lock before checking for legacy checkouts without a lock. That check has a
 30-second limit; a checkout that remains active fails only the new ticket.
 Bare legacy waiters remain queued and cannot extend this guard. New checkout names and port blocks avoid the old harness's process
 veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
-Cleanup tracks inherited job IDs, checkout paths, sessions, and reserved slot
-ports. A slot stays occupied until those process checks are empty. Job-specific
+Cleanup signals only processes identified by inherited job IDs or the recorded
+worker/session. Port matches never authorize signals. Reserved local slot ports
+must be free before release; a foreign holder quarantines the slot and its PID,
+command and socket appear in job status and logs. Cleanup failures also quarantine
+only that slot, with a 30-second retry. Healthy slots keep running. After a
+dispatcher restart, surviving supervisors finish and supply their saved exit codes.
+Job-specific
 Postgres and Redis container and volume receipts survive dispatcher crashes;
 completion and recovery remove those resources before releasing the slot.
 FIFO applies among new tickets. After merge, lanes may voluntarily resubmit

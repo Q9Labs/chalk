@@ -130,6 +130,133 @@ class QueueTest(unittest.TestCase):
                           .replace("if __name__ == '__main__':", "def legacy_active():\n    return False\n\nif 'legacy_waiters' in globals():\n    actual_legacy_waiters = legacy_waiters\n    def legacy_waiters():\n        return set()\n\nif __name__ == '__main__':"))
         self.command = [sys.executable, str(helper), '--root', str(self.root)]
 
+    def test_port_matches_never_authorize_signalling_foreign_processes(self):
+        queue = runpy.run_path(str(HELPER))
+        job = self.root / 'jobs' / 'ended'
+        (job / 'resources').mkdir(parents=True)
+        for slot in range(90, 100):
+            base = 21000 + slot * 100
+            found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}',
+                                    f'-iUDP:{base+1}-{base+18}', '-t'], capture_output=True, text=True)
+            if not found.stdout:
+                break
+        else:
+            self.fail('no unused test slot block')
+        port = base + 4
+        (job / 'resources/slot').write_text(str(slot))
+        db = queue['database'](self.root)
+        with db:
+            db.execute("INSERT INTO jobs(id,priority,submitted,wait_seconds,state,slot) VALUES('ended',0,?,0,'running',?)",
+                       (time.time(), slot))
+        server_code = ('import socket,sys,time; s=socket.socket(); '
+                       's.bind(("127.0.0.1",int(sys.argv[1]))); s.listen(); '
+                       'print("ready",flush=True); time.sleep(30)')
+        children = []
+        try:
+            for token in (None, queue['job_token'](job)):
+                environment = {key: value for key, value in os.environ.items() if not key.startswith('CHALK_REMOTE_')}
+                if token:
+                    environment['CHALK_REMOTE_JOB_TOKEN'] = token
+                server = subprocess.Popen([sys.executable, '-c', server_code, str(port)], env=environment,
+                                          stdout=subprocess.PIPE, text=True, start_new_session=True, cwd='/')
+                children.append(server)
+                self.assertEqual(server.stdout.readline().strip(), 'ready')
+                client_code = ('import socket,sys,time; s=socket.create_connection(("127.0.0.1",int(sys.argv[1]))); '
+                               'print("ready",flush=True); time.sleep(30)')
+                client = subprocess.Popen([sys.executable, '-c', client_code, str(port)],
+                                          env={**environment, 'CHALK_REMOTE_JOB_TOKEN': 'different-job-token'},
+                                          stdout=subprocess.PIPE, text=True, start_new_session=True, cwd='/')
+                children.append(client)
+                self.assertEqual(client.stdout.readline().strip(), 'ready')
+                queue['stop_job'](job, None, None, slot)
+                self.assertIsNone(client.poll(), 'cleanup killed another job’s connected client')
+                if token is None:
+                    self.assertIsNone(server.poll(), 'cleanup killed an untagged foreign listener')
+                else:
+                    self.assertIsNotNone(server.poll(), 'the job-owned listener survived cleanup')
+                row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+                queue['complete'](self.root, db, row, 0, 'test cleanup', False)
+                row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+                if token is None:
+                    self.assertEqual(row['state'], 'quarantined')
+                    self.assertIn(str(server.pid), row['cleanup_error'])
+                    self.assertIn(str(server.pid), (job / 'output.log').read_text())
+                    self.assertIsNone(server.poll(), 'quarantine signalled the foreign port owner')
+                    print(f'PASS foreign listener {server.pid} and client {client.pid} survived; slot {slot} quarantined with owner logged', flush=True)
+                else:
+                    self.assertEqual(row['state'], 'done', 'remote endpoints must not reserve the slot')
+                    self.assertIsNone(client.poll(), 'release check signalled a foreign client')
+                    print(f'PASS job listener reaped; foreign-token client {client.pid} survived; remote endpoint did not block release', flush=True)
+                for child in (server, client):
+                    if child.poll() is None:
+                        child.kill()
+                    child.wait()
+        finally:
+            for child in children:
+                if child.poll() is None:
+                    child.kill()
+                child.wait()
+                child.stdout.close()
+            db.close()
+
+    def test_cleanup_quarantine_does_not_interrupt_other_slots_or_recovery(self):
+        os.environ['CHALK_REMOTE_SLOTS'] = '2'
+        docker = self.root / 'docker'
+        docker.write_text('#!/bin/sh\nexit 1\n')
+        docker.chmod(0o700)
+        release_bad = self.root / 'release-bad'
+        release_healthy = self.root / 'release-healthy'
+        healthy_ready = self.root / 'healthy-ready'
+        self.submit('bad', f'while [ ! -f "{release_bad}" ]; do sleep .05; done')
+        self.submit('healthy', f'touch "{healthy_ready}"; while [ ! -f "{release_healthy}" ]; do sleep .05; done; exit 17')
+        self.submit('after', 'exit 9')
+        job = self.root.resolve() / 'jobs/bad'
+        (job / 'resources').mkdir()
+        name = 'chalk-postgres-slot-0-' + runpy.run_path(str(HELPER))['job_token'](job)
+        receipt = job / 'resources/postgres'
+        receipt.write_text(name + '\n' + name + '\n')
+        self.lock.close()
+        try:
+            healthy = self.wait('healthy', 'running')
+            deadline = time.monotonic() + 4
+            while not healthy_ready.exists() and time.monotonic() < deadline:
+                time.sleep(.02)
+            self.assertTrue(healthy_ready.exists())
+            release_bad.touch()
+            bad = self.wait('bad', 'quarantined')
+            self.assertIn('cleanup', bad['cleanup_error'])
+            self.assertIn('cleanup', (job / 'output.log').read_text())
+            os.kill(int((self.root / 'dispatcher.pid').read_text()), signal.SIGKILL)
+            self.invoke('attach', 'healthy')
+            receipt.write_text('invalid-receipt\n')
+            with sqlite3.connect(self.root / 'queue.sqlite') as db:
+                db.execute('UPDATE jobs SET cleanup_after=0 WHERE id="bad"')
+            deadline = time.monotonic() + 5
+            while 'invalid' not in self.status('bad')['cleanup_error'] and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertIn('invalid', self.status('bad')['cleanup_error'])
+            self.assertEqual(self.status('healthy')['pid'], healthy['pid'])
+            self.assertTrue(runpy.run_path(str(HELPER))['process_start'](healthy['pid']))
+            release_healthy.touch()
+            self.assertEqual(self.wait('healthy')['result'], 17)
+            self.assertEqual(self.wait('after')['result'], 9)
+            self.assertEqual(self.status('after')['slot'], 1, 'quarantined slot was reused')
+            receipt.write_text(name + '\n' + name + '\n')
+            docker.write_text('#!/bin/sh\nif [ "$1" = info ]; then exit 0; fi\nexit 1\n')
+            with sqlite3.connect(self.root / 'queue.sqlite') as db:
+                db.execute('UPDATE jobs SET cleanup_after=0 WHERE id="bad"')
+            self.assertEqual(self.wait('bad')['result'], 0)
+            self.assertIsNone(self.status('bad')['cleanup_error'])
+            print('PASS Docker failure and invalid receipt quarantined slot 0; recovery preserved healthy exit 17; following exit 9 used slot 1; repair released slot 0', flush=True)
+        finally:
+            release_bad.touch()
+            release_healthy.touch()
+            receipt.unlink(missing_ok=True)
+            with sqlite3.connect(self.root / 'queue.sqlite') as db:
+                if 'cleanup_after' in {row[1] for row in db.execute('PRAGMA table_info(jobs)')}:
+                    db.execute('UPDATE jobs SET cleanup_after=0')
+            self.invoke('attach', 'bad')
+
     @unittest.skipUnless(shutil.which('shlock'), 'requires the macOS legacy shlock binary')
     def test_dead_worker_cleanup_cannot_unlink_reclaimed_legacy_lock(self):
         lock = self.root / 'legacy.lock'
@@ -239,6 +366,7 @@ path.write_text(json.dumps(data)); sys.exit(result)
             time.sleep(.02)
         self.assertTrue(ready.exists())
         os.kill(int((self.root / 'dispatcher.pid').read_text()), signal.SIGKILL)
+        os.kill(self.status('recover')['pid'], signal.SIGKILL)
         self.invoke('attach', 'recover')
         self.assertEqual(self.wait('recover')['result'], 137)
         self.assertEqual(json.loads(state.read_text()), foreign, 'crash recovery leaked private containers or volumes')
@@ -572,12 +700,12 @@ def legacy_busy(*args):
         self.assertFalse((self.root / 'jobs/crash/work').exists())
 
     def test_dispatcher_crash_is_recovered_on_attach(self):
-        self.submit('interrupted', 'sleep 8')
+        self.submit('interrupted', 'sleep 1; exit 23')
         self.lock.close()
         self.wait('interrupted', 'running')
         os.kill(int((self.root / 'dispatcher.pid').read_text()), signal.SIGKILL)
         self.invoke('attach', 'interrupted')
-        self.assertEqual(self.wait('interrupted')['result'], 137)
+        self.assertEqual(self.wait('interrupted')['result'], 23)
         self.submit('after-restart', 'exit 0')
         self.assertEqual(self.wait('after-restart')['result'], 0)
 
