@@ -41,11 +41,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
 }
 
 /* =============================================================================
@@ -1205,6 +1205,10 @@
   gap: 8px;
   z-index: 90;
   pointer-events: none;
+}
+/* An open board keeps its tools at the bottom of the stage, so toasts rise above them. */
+[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="bottom"]) .chalk-toasts {
+  bottom: 160px;
 }
 .chalk-toast {
   display: flex;
