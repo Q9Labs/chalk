@@ -10,7 +10,7 @@ import (
 
 func TestJoinSeatMigrationDefersExistingGenerationForeignKey(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
-	migration, err := migrations.Files.ReadFile("20261021130000_participant_join_seats.sql")
+	migration, err := migrations.Files.ReadFile("20261023100000_participant_join_seats.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
