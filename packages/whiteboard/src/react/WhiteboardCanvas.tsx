@@ -7,7 +7,7 @@ import type { AppState, BinaryFiles } from "../collab/types";
 import { MathEditor } from "./MathEditor";
 import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
 import { renderLatexToSvg } from "./mathjax-renderer";
-import { getWhiteboardAssets } from "../assets";
+import { getWhiteboardAssets, resolveExcalidrawAssetPath } from "../assets";
 
 const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
@@ -233,7 +233,7 @@ function useExcalidrawModule(cssPath: string, onLoadError: ((error: Error) => vo
   useEffect(() => {
     let mounted = true;
 
-    window.EXCALIDRAW_ASSET_PATH = new URL(".", new URL(cssPath, window.location.href)).href;
+    window.EXCALIDRAW_ASSET_PATH = resolveExcalidrawAssetPath(cssPath);
     import("@excalidraw/excalidraw")
       .then((module) => {
         if (mounted) setExcalidraw(module);
