@@ -557,6 +557,16 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame(:ping, state),
     do: {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
 
+  defp confirm_legacy_entry(_identity, true), do: :ok
+
+  defp confirm_legacy_entry(identity, false) do
+    case Stateholder.confirm_admission(identity) do
+      {:ok, %{result: result}} when result in [:applied, :already_applied] -> :ok
+      {:ok, %{result: :superseded}} -> {:error, :invalid_admission_intent}
+      error -> error
+    end
+  end
+
   defp start_registered_recovery(
          state,
          identity,
@@ -848,7 +858,8 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, recovery} <- Stateholder.recover(identity, cursor),
+    with :ok <- confirm_legacy_entry(identity, Map.get(hello, :entry_confirmation, false)),
+         {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,

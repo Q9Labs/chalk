@@ -665,19 +665,19 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 
   defp decode_hello(%{"type" => "hello", "protocol" => @protocol_version, "token" => token,
       "streams" => streams} = frame) do
-    cond do
-      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams"]) and
-          valid_token?(token) and valid_streams?(streams) ->
-        {:ok, {:hello, %{token: token, streams: streams, extensions: [],
-            correlation: correlation_fields(frame)}}}
-      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
-          valid_token?(token) and valid_streams?(streams) and
-          valid_collaborations_hello_extensions?(frame["extensions"]) ->
-        {:ok, {:hello, %{token: token, streams: streams, extensions: frame["extensions"],
-            correlation: correlation_fields(frame)}}}
-      true ->
-        {:error, :invalid_hello}
-    end
+    entry = Map.get(frame, "entry_confirmation", false)
+    keys = ["type", "protocol", "token", "streams"] ++ if(Map.has_key?(frame,
+        "entry_confirmation"), do: ["entry_confirmation"], else: [])
+    keys = keys ++ if(Map.has_key?(frame, "extensions"), do: ["extensions"], else: [])
+    extensions = Map.get(frame, "extensions", [])
+    valid_entry = not Map.has_key?(frame, "entry_confirmation") or entry == true
+    valid_extensions = not Map.has_key?(frame, "extensions") or
+        valid_collaborations_hello_extensions?(extensions)
+    if correlation_exact_keys?(frame, keys) and valid_entry and valid_extensions and
+        valid_token?(token) and valid_streams?(streams),
+      do: {:ok, {:hello, %{token: token, streams: streams, entry_confirmation: entry,
+          extensions: extensions, correlation: correlation_fields(frame)}}},
+      else: {:error, :invalid_hello}
   end
   defp decode_hello(%{"protocol" => protocol}) when is_integer(protocol), do: {:error,
       :unsupported_protocol}

@@ -46,7 +46,7 @@ const problemReporter=()=>()=>Promise.resolve();
 const intentKey=()=>crypto.randomUUID();
 const act=(_route,input)=>{admissions.push(input);return new Promise(()=>{});};
 const readPage=async()=>{if(pageFailures>0){pageFailures--;throw Error('Transient call read failure');}return {live:liveEpisodeId?{id:liveEpisodeId}:null};};
-const useSession=()=>({profile:{name:'Synthetic owner'}});
+const useSession=()=>({profile:{id:'user-one',name:'Synthetic owner'}});
 const useLoad=()=>({state:ready?{kind:'ready',data:{inviteUrl:'http://engine.local/space/call-test',call:{name:'Call'}}}:{kind:'loading'}});
 const useSiteTheme=()=>({theme:'dark'});
 const useNavigate=()=>()=>{};
@@ -97,7 +97,7 @@ try {
   }
   assert.notEqual(test.admissions[0].idempotencyKey, test.admissions[1].idempotencyKey, "A deliberate remount is a new join intent");
   const { writeReloadRejoin, reloadRejoinStorageKey } = await import(resolve(web, "../../sdks/typescript/client/src/space-client/reload-rejoin.ts"));
-  for (const scenario of ["same-episode", "different-episode", "ended", "expired", "different-space", "transient-read"]) {
+  for (const scenario of ["same-episode", "different-episode", "ended", "expired", "different-space", "different-user", "transient-read"]) {
     const savedKey = crypto.randomUUID();
     writeReloadRejoin(
       window.sessionStorage,
@@ -112,11 +112,12 @@ try {
         microphone: false,
         camera: false,
         ownerJoinKey: savedKey,
+        ownerUserId: scenario === "different-user" ? "user-two" : "user-one",
       },
       scenario === "expired" ? Date.now() - 120001 : Date.now(),
     );
     test.setLiveEpisode(scenario === "ended" ? null : scenario === "different-episode" ? "another-episode" : "episode-test");
-    const owner = test.ownerAccess("call-test");
+    const owner = test.ownerAccess("call-test", "user-one");
     if (scenario === "transient-read") {
       test.failOnePageRead();
       await assert.rejects(owner.getAccess({ reason: "join", replaceMediaConnection: false }), /Transient call read failure/);
@@ -131,6 +132,19 @@ try {
     assert.equal(key === savedKey, scenario === "same-episode" || scenario === "transient-read", `Reload intent binding: ${scenario}`);
     assert.equal(window.sessionStorage.getItem(reloadRejoinStorageKey), null, "Reload marker is consumed even when rejected");
   }
+  window.sessionStorage.clear();
+  test.setLiveEpisode("episode-test");
+  const firstOwner = test.ownerAccess("call-test", "user-one");
+  void firstOwner.getAccess({ reason: "join", replaceMediaConnection: false });
+  await new Promise((done) => setImmediate(done));
+  const firstKey = test.admissions.at(-1).idempotencyKey;
+  const firstStorage = [...Array(window.sessionStorage.length)].map((_, i) => window.sessionStorage.key(i)).find((key) => key.startsWith("chalk.owner-join:"));
+  window.sessionStorage.setItem(`${firstStorage}:episode`, "episode-test");
+  const secondOwner = test.ownerAccess("call-test", "user-two");
+  void secondOwner.getAccess({ reason: "join", replaceMediaConnection: false });
+  await new Promise((done) => setImmediate(done));
+  assert.notEqual(test.admissions.at(-1).idempotencyKey, firstKey, "A different signed-in user cannot reuse the previous user's pending admission key");
+  console.log("PASS: account switch keeps pending admission keys separate");
   console.log("PASS: delayed OwnerCall StrictMode replay → one usable join → unmount/remount; every SDK client leaves and disposes");
   console.log("PASS: owner reload intent is single-use, short-lived and bound to the current Space/Episode");
 } finally {

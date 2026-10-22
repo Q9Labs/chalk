@@ -149,6 +149,27 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
              ).rows
   end
 
+  @tag :legacy_entry
+  @tag :entered_admission
+  test "a v1 client without entry confirmation confirms its seat and attendance on hello", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    on_exit(fn -> Client.close_tcp(client) end)
+    client = Client.send_json(client, Map.delete(hello(fixture.identity), "entry_confirmation"))
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    assert [["active", "joined", true]] = entry_row(connection, fixture)
+    client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
+    assert {:json, %{"type" => "recovery_complete"}, _client} = Client.recv(client)
+    assert [["active", "joined", true]] = entry_row(connection, fixture)
+  end
+
   @tag :entered_admission
   test "hello is cancellable after Sync recovery without attendance, entered confirms exactly once",
        %{connections: connections, port: port} do
@@ -237,6 +258,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
     %{
       "type" => "hello",
+      "entry_confirmation" => true,
       "protocol" => 1,
       "extensions" => [
         %{

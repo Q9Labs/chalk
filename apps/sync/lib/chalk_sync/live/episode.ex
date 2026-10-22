@@ -58,7 +58,7 @@ defmodule ChalkSync.Live.Episode do
   @spec register(t(), Identity.t(), pid()) ::
           {:ok, t(), [map()], [map()]} | {:error, atom()}
   def register(%__MODULE__{} = state, %Identity{} = identity, socket) when is_pid(socket) do
-    with {:ok, authority} <- actor_authority(state, identity),
+    with {:ok, authority} <- recovery_authority(state, identity),
          {:ok, requests} <-
            DirectedRequests.register(state.requests, authority.participant_id, socket),
          next = %{
@@ -624,6 +624,26 @@ defmodule ChalkSync.Live.Episode do
     |> Enum.filter(&(&1["source"] == "screen" and &1["enabled"]))
     |> Enum.map(& &1["participant_id"])
     |> Enum.uniq()
+  end
+
+  defp recovery_authority(state, identity) do
+    case actor_authority(state, identity) do
+      {:error, :participant_inactive} ->
+        case Stateholder.recover(identity, nil) do
+          {:ok, %{mode: mode}} when mode != :terminal ->
+            {:ok,
+             %{
+               participant_id: identity.participant_id,
+               generation: identity.participant_generation
+             }}
+
+          _ ->
+            {:error, :participant_inactive}
+        end
+
+      result ->
+        result
+    end
   end
 
   defp actor_authority(state, identity) do

@@ -7,7 +7,7 @@ import { proveServerSeats } from "./owner-seat-api.mjs";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
 
 const fixture = await createDashboardProofFixture({ recordingName: "owner-seat-dashboard.webm", devicesMissing: true });
-const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, syncLog, pagesLog, cleanup } = fixture;
+const { apiOrigin, origin, syncOrigin, repository, context, tenantId, userId, bindings, syncLog, pagesLog, cleanup } = fixture;
 try {
   let page = await context.newPage();
   fixture.recordPage(page);
@@ -24,16 +24,6 @@ try {
     });
     const mediaFailurePage = await context.newPage();
     fixture.recordPage(mediaFailurePage);
-    await mediaFailurePage.addInitScript(() => {
-      navigator.mediaDevices.getUserMedia = async () => {
-        const audio = new AudioContext();
-        const source = audio.createOscillator();
-        const output = audio.createMediaStreamDestination();
-        source.connect(output);
-        source.start();
-        return output.stream;
-      };
-    });
     let syncRecovered;
     const recovered = new Promise((resolve) => {
       syncRecovered = resolve;
@@ -64,6 +54,16 @@ try {
       await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "synthetic SFU startup failure after Sync recovery" }) });
     });
     await mediaFailurePage.goto(`${origin}/dashboard`);
+    await mediaFailurePage.evaluate(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const audio = new AudioContext();
+        const source = audio.createOscillator();
+        const output = audio.createMediaStreamDestination();
+        source.connect(output);
+        source.start();
+        return output.stream;
+      };
+    });
     await mediaFailurePage.getByRole("button", { name: "Start a call", exact: true }).click();
     await mediaFailurePage.getByRole("button", { name: "Join call", exact: true }).click();
     await mediaFailurePage.getByRole("button", { name: "Try again", exact: true }).waitFor({ timeout: 65000 });
@@ -128,11 +128,11 @@ try {
     await abandoned.goto(`${origin}/dashboard`);
     const unknownJoinKey = crypto.randomUUID();
     await abandoned.evaluate(
-      ({ spaceId, unknownJoinKey }) => {
-        sessionStorage.setItem(`chalk.owner-join:${spaceId}`, unknownJoinKey);
-        sessionStorage.removeItem(`chalk.owner-join:${spaceId}:episode`);
+      ({ spaceId, userId, unknownJoinKey }) => {
+        sessionStorage.setItem(`chalk.owner-join:${userId}:${spaceId}`, unknownJoinKey);
+        sessionStorage.removeItem(`chalk.owner-join:${userId}:${spaceId}:episode`);
       },
-      { spaceId, unknownJoinKey },
+      { spaceId, userId, unknownJoinKey },
     );
     const admissionResponse = abandoned.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === "join" && response.status() === 200);
     await abandoned.goto(joinUrl);

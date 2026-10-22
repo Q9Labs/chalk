@@ -62,7 +62,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
         ws.addEventListener("open", resolve, { once: true });
         ws.addEventListener("error", reject, { once: true });
       });
-      ws.send(JSON.stringify({ type: "hello", protocol: 1, token: access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
+      ws.send(JSON.stringify({ type: "hello", entry_confirmation: true, protocol: 1, token: access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
       await rejected;
     } finally {
       ws.close();
@@ -141,7 +141,7 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
         ws.addEventListener("open", resolve, { once: true });
         ws.addEventListener("error", reject, { once: true });
       });
-      ws.send(JSON.stringify({ type: "hello", protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
+      ws.send(JSON.stringify({ type: "hello", entry_confirmation: true, protocol: 1, token: joined.access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
       await ready;
       await waitFor("active:joined:true", () => state(id));
       assert.equal(sql(`select count(*) from sync_control_events where episode_id='${episodeId}' and event_name='participant_joined' and payload->>'participant_id'='${id}'`), "1");

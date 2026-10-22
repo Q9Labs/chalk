@@ -398,11 +398,29 @@ describe("V1SyncClient", () => {
       sync.stop();
     }
   });
+  it("advertises full-entry confirmation so the server does not apply legacy hello confirmation", async () => {
+    const { client, socket } = await liveClient();
+    try {
+      expect(socket.frames().find((frame) => frame.type === "hello")).toMatchObject({ entry_confirmation: true });
+    } finally {
+      client.stop();
+    }
+  });
   it("treats policy rejection as rejected access instead of reconnecting with the stale credential", async () => {
     const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
     try {
       socket.close(1008);
       await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "access_rejected" }));
+    } finally {
+      client.stop();
+    }
+  });
+  it("reconnects after a hello timeout without rejecting valid access", async () => {
+    const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
+    try {
+      socket.close(1008, "hello timeout");
+      await vi.waitFor(() => expect(client.getSnapshot().connection.phase).toBe("connecting"));
+      expect(client.getSnapshot().connection).not.toMatchObject({ terminalReason: "access_rejected" });
     } finally {
       client.stop();
     }

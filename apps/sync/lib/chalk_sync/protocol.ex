@@ -213,6 +213,13 @@ defmodule ChalkSync.ProtocolV1 do
       else: raise(ArgumentError, "invalid protocol-v1 server frame")
   end
 
+  defp normalize({:hello, %{entry_confirmation: entry} = hello}) do
+    with {:ok, {:hello, normalized}} <-
+           normalize({:hello, Map.delete(hello, :entry_confirmation)}) do
+      {:ok, {:hello, Map.put(normalized, :entry_confirmation, entry)}}
+    end
+  end
+
   defp normalize(
          {:hello,
           %{

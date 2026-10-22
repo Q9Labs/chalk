@@ -1,6 +1,8 @@
 {
   "client_frames": [
-    { "type": "entered" },
+    {
+      "type": "entered"
+    },
     {
       "type": "hello",
       "protocol": 1,
@@ -22,6 +24,29 @@
       "journey_id": "00000000-0000-4000-8000-000000000042",
       "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
       "tracestate": "vendor=value"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "journey_id": "00000000-0000-4000-8000-000000000042",
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "tracestate": "vendor=value",
+      "entry_confirmation": true
     },
     {
       "type": "command",
@@ -177,7 +202,7 @@
     {
       "type": "reaction_send",
       "operation_id": "reaction-op-00001",
-      "reaction": "🎉"
+      "reaction": "\ud83c\udf89"
     },
     {
       "type": "chat_send",
@@ -197,7 +222,9 @@
     }
   ],
   "server_frames": [
-    { "type": "entered_ack" },
+    {
+      "type": "entered_ack"
+    },
     {
       "type": "welcome",
       "protocol": 1,
@@ -391,7 +418,7 @@
       "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c80",
       "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
       "display_name": "Ada",
-      "reaction": "🎉",
+      "reaction": "\ud83c\udf89",
       "occurred_at": "2026-07-29T14:00:00.000Z",
       "expires_at": "2026-07-29T14:00:05.000Z"
     },
@@ -404,7 +431,7 @@
         "event_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c80",
         "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
         "display_name": "Ada",
-        "reaction": "🎉",
+        "reaction": "\ud83c\udf89",
         "occurred_at": "2026-07-29T14:00:00.000Z",
         "expires_at": "2026-07-29T14:00:05.000Z"
       }

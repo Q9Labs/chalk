@@ -13,22 +13,22 @@ import { ErrorPanel } from "./kit";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL } from "../../lib/chalk-access";
-const ownerReloadIntent = z.object({ ownerJoinKey: z.uuid() });
+const ownerReloadIntent = z.object({ ownerJoinKey: z.uuid(), ownerUserId: z.string() });
 
-function readOwnerReload(spaceId: string) {
+function readOwnerReload(spaceId: string, userId: string) {
   try {
     const encoded = window.sessionStorage.getItem(reloadRejoinStorageKey);
     const marker = readReloadRejoin(window.sessionStorage, spaceId);
     const saved = encoded ? ownerReloadIntent.safeParse(JSON.parse(encoded)) : null;
-    return marker && saved?.success ? { episodeId: marker.episodeId, joinKey: saved.data.ownerJoinKey } : null;
+    return marker && saved?.success && saved.data.ownerUserId === userId ? { episodeId: marker.episodeId, joinKey: saved.data.ownerJoinKey } : null;
   } catch {
     return null;
   }
 }
 
 /** Owner access for one call: `join` admits the owner, `refresh-access` renews the same seat. */
-function ownerAccess(spaceId: string) {
-  const joinStorageKey = `chalk.owner-join:${spaceId}`;
+function ownerAccess(spaceId: string, userId: string) {
+  const joinStorageKey = `chalk.owner-join:${userId}:${spaceId}`;
   let joinKey = intentKey();
   let hasStoredJoinKey = false;
   try {
@@ -57,7 +57,7 @@ function ownerAccess(spaceId: string) {
     }
   };
   const restore = async () => {
-    if (recovery === undefined) recovery = readOwnerReload(spaceId);
+    if (recovery === undefined) recovery = readOwnerReload(spaceId, userId);
     const saved = recovery;
     let pendingEpisode: string | null = null;
     try {
@@ -108,6 +108,7 @@ function ownerAccess(spaceId: string) {
       microphone: snapshot.media.local.microphone.state === "enabled",
       camera: snapshot.media.local.camera.state === "enabled",
       ownerJoinKey: joinKey,
+      ownerUserId: userId,
     };
     try {
       writeReloadRejoin(window.sessionStorage, marker);
@@ -141,7 +142,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { theme, setTheme } = useSiteTheme();
   const navigate = useNavigate();
   const apiBaseURL = publicAPIBaseURL();
-  const owner = useMemo(() => ownerAccess(spaceId), [spaceId]);
+  const owner = useMemo(() => ownerAccess(spaceId, profile?.id ?? ""), [spaceId, profile?.id]);
   const [client, setClient] = useState<SpaceClient | null>(null);
   useEffect(() => {
     const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });

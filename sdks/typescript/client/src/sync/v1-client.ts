@@ -407,7 +407,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
         this.#inbound = this.#inbound.then(() => {
-          if (socket === this.#socket && event.code === 1008) {
+          if (socket === this.#socket && event.code === 1008 && event.reason !== "hello timeout") {
             this.#phase = { phase: "terminal", terminalReason: "access_rejected" };
             this.#emit();
           }
@@ -431,6 +431,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const hello = {
         type: "hello",
         protocol: 1,
+        entry_confirmation: true,
         token,
         streams: {
           control: { cursor: this.#control && { revision: this.#control.revision, state_schema_version: this.#control.stateSchemaVersion, state_digest: this.#control.stateDigest } },

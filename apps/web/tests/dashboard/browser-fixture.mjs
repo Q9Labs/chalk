@@ -194,6 +194,7 @@ Process.sleep(:infinity)
       browser,
       context,
       tenantId,
+      userId,
       bindings,
       syncLog,
       pagesLog,

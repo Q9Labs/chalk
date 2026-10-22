@@ -340,6 +340,7 @@
     }
   },
   "hello": {
+    "entryConfirmation": { "wireName": "entry_confirmation", "optional": true, "value": true },
     "direction": "client-to-server",
     "type": "hello",
     "token": {
