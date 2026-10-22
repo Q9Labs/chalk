@@ -7,8 +7,9 @@ import type { AppState, BinaryFiles } from "../collab/types";
 import { MathEditor } from "./MathEditor";
 import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
 import { renderLatexToSvg } from "./mathjax-renderer";
+import { getWhiteboardAssets } from "../assets";
 
-const DEFAULT_EXCALIDRAW_CSS = "/chalk-whiteboard/0.18.1/index.css";
+const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
@@ -159,7 +160,7 @@ function useWhiteboardCanvasConfiguration(props: WhiteboardCanvasProps): Whitebo
     canDraw,
     headless: props.headless === true,
     classNames,
-    excalidrawCssPath: valueOr(props.excalidrawCssPath, DEFAULT_EXCALIDRAW_CSS),
+    excalidrawCssPath: valueOr(props.excalidrawCssPath, getWhiteboardAssets()?.excalidrawCssPath ?? DEFAULT_EXCALIDRAW_CSS),
     icons: valueOr(props.icons, {}),
     isCollaborating: Boolean(props.collab),
     isVisible: valueOr(props.isVisible, true),
@@ -232,7 +233,7 @@ function useExcalidrawModule(cssPath: string, onLoadError: ((error: Error) => vo
   useEffect(() => {
     let mounted = true;
 
-    window.EXCALIDRAW_ASSET_PATH = new URL(".", new URL(cssPath, window.location.origin)).href;
+    window.EXCALIDRAW_ASSET_PATH = new URL(".", new URL(cssPath, window.location.href)).href;
     import("@excalidraw/excalidraw")
       .then((module) => {
         if (mounted) setExcalidraw(module);

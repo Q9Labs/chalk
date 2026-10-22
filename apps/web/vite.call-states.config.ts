@@ -1,3 +1,4 @@
+import "./scripts/sync-public-assets";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";

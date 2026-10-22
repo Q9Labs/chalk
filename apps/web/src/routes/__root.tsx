@@ -1,3 +1,4 @@
+import "../lib/whiteboard-assets";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
