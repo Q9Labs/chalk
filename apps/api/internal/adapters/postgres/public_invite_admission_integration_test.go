@@ -347,6 +347,9 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	t.Run("collection rejects a terminal seat", func(t *testing.T) {
 		proveTerminalAdmissionCollection(t, ctx, pool, service, repository, episodeRepository, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
 	})
+	t.Run("cancellation persists its terminal journey and signals", func(t *testing.T) {
+		proveAdmissionCancellation(t, ctx, pool, repository, proof, tenantID, space.ID, newKnock)
+	})
 	t.Run("collection validates locked provenance", func(t *testing.T) {
 		proveAdmissionProvenanceCollection(t, ctx, pool, service, episodeRepository, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
 	})

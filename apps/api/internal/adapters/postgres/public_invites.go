@@ -47,6 +47,7 @@ type publicInviteQuerier interface {
 	RotateSpacePublicInvite(context.Context, sqlc.RotateSpacePublicInviteParams) (sqlc.SpacePublicInvite, error)
 	UpdateSpacePublicAdmissionRequest(context.Context, sqlc.UpdateSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
 	UpdateSpacePublicArrivalState(context.Context, sqlc.UpdateSpacePublicArrivalStateParams) (sqlc.SpacePublicArrival, error)
+	RecordPublicAdmissionCancellation(context.Context, sqlc.RecordPublicAdmissionCancellationParams) error
 	UpdateSpacePublicInviteEnabled(context.Context, sqlc.UpdateSpacePublicInviteEnabledParams) (sqlc.SpacePublicInvite, error)
 }
 
@@ -411,6 +412,19 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			return fmt.Errorf("update public arrival state: %w", err)
 		}
 		result = mapPublicArrival(row)
+		if current.State == string(publicinvites.ArrivalPending) && input.State == publicinvites.ArrivalUnavailable && input.Reason == "cancelled" {
+			journey, err := lifecycleJourneyFromContext(ctx)
+			if err != nil {
+				return fmt.Errorf("create admission cancellation journey: %w", err)
+			}
+			if err := queries.RecordPublicAdmissionCancellation(ctx, sqlc.RecordPublicAdmissionCancellationParams{
+				EventID: uuid(journey.ParentEventID), JourneyID: uuid(journey.JourneyID),
+				TraceID: textValue(journey.TraceID), SpanID: textValue(journey.SpanID),
+				TenantID: current.TenantID, SpaceID: current.SpaceID, ArrivalHandle: current.ArrivalHandle,
+			}); err != nil {
+				return fmt.Errorf("record admission cancellation journey: %w", err)
+			}
+		}
 		return nil
 	})
 	return result, err
