@@ -1,3 +1,4 @@
+import "./scripts/sync-public-assets";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import mdx from "@mdx-js/rollup";
 import rehypeShiki, { type RehypeShikiOptions } from "@shikijs/rehype";

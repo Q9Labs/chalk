@@ -6,7 +6,7 @@ cd "$root"
 proof_dir="${ASSET_PROOF_ROOT:-/Users/agents/lanes/selfhost-assets/evidence}"
 mkdir -p "$proof_dir"
 saved="$(mktemp -d)"
-files=(apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html packages/whiteboard/src/react/WhiteboardCanvas.tsx packages/whiteboard/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts)
+files=(apps/web/src/lib/whiteboard-assets.ts apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html packages/whiteboard/src/react/WhiteboardCanvas.tsx packages/whiteboard/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts apps/web/vite.config.ts apps/web/vite.call-states.config.ts)
 restore() {
   for index in "${!files[@]}"; do cp "$saved/$index" "${files[$index]}"; done
 }
@@ -14,7 +14,9 @@ cleanup() { restore; if [[ -d "$saved/fonts" ]]; then mv "$saved/fonts" apps/web
 trap cleanup EXIT
 for index in "${!files[@]}"; do cp "${files[$index]}" "$saved/$index"; done
 mv apps/web/public/fonts "$saved/fonts"
-for file in "${files[@]}"; do git show "origin/master:$file" > "$file"; done
+for file in "${files[@]}"; do
+  if git cat-file -e "origin/master:$file" 2>/dev/null; then git show "origin/master:$file" > "$file"; else : > "$file"; fi
+done
 measure() {
   node apps/web/tests/selfhost-assets/sizes.mjs "$1" "$proof_dir"
 }

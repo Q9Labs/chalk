@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,9 +28,6 @@ function copyAsset(source: string, relativePath: string) {
   cpSync(source, destination, { recursive: true });
 }
 
-for (const directory of ["chalk-whiteboard", "chalk-mathjax"]) {
-  rmSync(resolve(publicDir, directory), { recursive: true, force: true });
-}
 copyAsset(join(excalidrawRoot, "index.css"), "chalk-whiteboard/0.18.1/index.css");
 copyAsset(join(excalidrawRoot, "fonts"), "chalk-whiteboard/0.18.1/fonts");
 for (const directory of ["input", "output", "a11y", "ui", "sre"]) {

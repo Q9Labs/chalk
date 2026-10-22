@@ -1,7 +1,8 @@
+import { getWhiteboardAssets } from "../assets";
 const MATHJAX_INPUT_EM = 16;
 const MATHJAX_INPUT_EX = 8;
 const MATHJAX_CONTAINER_WIDTH = 80 * MATHJAX_INPUT_EM;
-const DEFAULT_MATHJAX_SCRIPT_URL = "/chalk-mathjax/4.1.3/tex-svg.js";
+const DEFAULT_MATHJAX_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-svg-nofont.js";
 
 export interface RenderedMathSvg {
   svg: string;
@@ -55,11 +56,12 @@ async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
 // Existing global configuration must be preserved when a host initializes MathJax first.
 // fallow-ignore-next-line complexity
 function configureMathJax(target: typeof globalThis | Window, existing: (MathJaxRuntime & Record<string, unknown>) | undefined): void {
+  const basePath = getWhiteboardAssets()?.mathJaxBasePath;
   target.MathJax = {
     ...(existing ?? {}),
-    loader: { paths: { mathjax: "/chalk-mathjax/4.1.3", fonts: "/chalk-mathjax/4.1.3/fonts" }, ...(existing?.loader as object | undefined) },
-    svg: { dynamicPrefix: "/chalk-mathjax/4.1.3/fonts/mathjax-newcm-font/svg/dynamic", fontCache: "none", ...(existing?.svg as object | undefined) },
-    options: { worker: { path: "/chalk-mathjax/4.1.3/sre", maps: "/chalk-mathjax/4.1.3/sre/mathmaps" }, ...(existing?.options as object | undefined), enableMenu: false },
+    ...(basePath ? { loader: { paths: { mathjax: basePath, fonts: `${basePath}/fonts` }, ...(existing?.loader as object | undefined) } } : {}),
+    svg: { ...(basePath ? { dynamicPrefix: `${basePath}/fonts/mathjax-newcm-font/svg/dynamic` } : {}), fontCache: "none", ...(existing?.svg as object | undefined) },
+    options: { ...(basePath ? { worker: { path: `${basePath}/sre`, maps: `${basePath}/sre/mathmaps` } } : {}), ...(existing?.options as object | undefined), enableMenu: false },
     startup: { ...(existing?.startup as object | undefined), typeset: false },
   } as unknown as MathJaxRuntime & Record<string, unknown>;
 }
@@ -74,7 +76,8 @@ function loadMathJaxScript(): Promise<void> {
     }
 
     const script = document.createElement("script");
-    script.src = DEFAULT_MATHJAX_SCRIPT_URL;
+    const basePath = getWhiteboardAssets()?.mathJaxBasePath;
+    script.src = basePath ? `${basePath}/tex-svg.js` : DEFAULT_MATHJAX_SCRIPT_URL;
     script.async = true;
     script.dataset.chalkMathjax = "true";
     script.onload = () => resolve();

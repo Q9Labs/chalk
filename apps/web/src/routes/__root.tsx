@@ -1,3 +1,4 @@
+import "../lib/whiteboard-assets";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
