@@ -174,6 +174,13 @@ function PrivacyPolicy() {
         <tbody>
           <tr>
             <td>
+              <code>chalk_theme</code>
+            </td>
+            <td>Remembers your light or dark theme preference (Client-readable)</td>
+            <td>1 year</td>
+          </tr>
+          <tr>
+            <td>
               <code>__Host-chalk_session</code>, <code>__Host-chalk_binding</code>
             </td>
             <td>Keeps your dashboard sign-in and binds requests to your session (HttpOnly, Secure)</td>

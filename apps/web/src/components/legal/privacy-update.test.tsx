@@ -86,6 +86,13 @@ describe("Privacy Policy advance notice", () => {
     expect(screen.getByText(/Space, Episode, and participant records/).textContent).toContain("while the tenant that owns the Space exists");
     expect(screen.queryByText(/host's Chalk account/)).toBeNull();
   });
+  it("discloses the client-readable theme cookie and its one-year lifetime", () => {
+    render(<LegalPage kind="privacy" />);
+    const row = screen.getByText("chalk_theme").closest("tr");
+    expect(row?.textContent).toContain("theme preference");
+    expect(row?.textContent).toContain("Client-readable");
+    expect(row?.textContent).toContain("1 year");
+  });
   it("discloses webhook content and endpoint retention criteria", () => {
     render(<LegalPage kind="privacy" />);
     expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("cleanup after 30 days");
