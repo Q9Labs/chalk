@@ -122,6 +122,25 @@ it("paints canonical Ink in the viewer's surface ink and sends it back canonical
   }
 });
 
+it("keeps a received empty text live, so a peer's undone text can be redone", async () => {
+  const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture();
+  const [written] = restoreElements([{ type: "text", id: "qa-text", index: "a0", x: 0, y: 0, width: 80, height: 25, text: "QA text 1", originalText: "QA text 1", version: 2, versionNonce: 2, isDeleted: false }], null);
+  if (!written) throw new Error("Text element is missing");
+  try {
+    engine.handleRemoteSnapshot({ sceneId: "scene", elements: [toWireElement(written)] });
+    // The writer's Undo of a new text leaves the element empty but live, one version up.
+    const undone = { ...written, text: "", originalText: "", version: 3, versionNonce: 3 };
+    engine.handleRemoteData({ sceneId: "scene", syncAll: false, elements: [toWireElement(undone)] });
+    engine.handleChange(api.getSceneElementsIncludingDeleted(), restoreAppState({}, null), {});
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(api.getSceneElementsIncludingDeleted()).toEqual([expect.objectContaining({ id: "qa-text", isDeleted: false, version: 3, versionNonce: 3 })]);
+    // A viewer never writes back an element it only received; that echoed deletion is what made Redo lose the text.
+    expect(submitUpdate).not.toHaveBeenCalled();
+  } finally {
+    engine.dispose();
+  }
+});
+
 async function createReconciliationFixture(options: { readonly inkColor?: string; readonly canDraw?: boolean; readonly canManage?: boolean } = {}) {
   const { restoreAppState, restoreElements } = await import("@excalidraw/excalidraw");
   const { ExcalidrawCollabEngine } = await import("./engine");
