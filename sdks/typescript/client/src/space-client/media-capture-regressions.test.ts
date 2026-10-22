@@ -103,8 +103,15 @@ describe("media capture ownership", () => {
       if (enabled && send.mock.calls.length === 1) await receiptHeld;
       return { operationId: "device-loss", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" } as const;
     });
-    const prepareLocalTrack = vi.fn();
-    const client = capturedClient(platform, original.track, { mediaDevices: { getUserMedia: capture }, media: { prepareLocalTrack }, sync: { setMicrophoneEnabled: send, setCameraEnabled: send } });
+    const prepared = new Map<string, MediaStreamTrack>();
+    const prepareLocalTrack = vi.fn((preparedSource: string, track: MediaStreamTrack) => {
+      if (prepared.has(preparedSource)) throw new Error(`A ${preparedSource} track is already prepared`);
+      prepared.set(preparedSource, track);
+    });
+    const clearPreparedLocalTrack = vi.fn(async (preparedSource: string) => {
+      prepared.delete(preparedSource);
+    });
+    const client = capturedClient(platform, original.track, { mediaDevices: { getUserMedia: capture }, media: { prepareLocalTrack, clearPreparedLocalTrack }, sync: { setMicrophoneEnabled: send, setCameraEnabled: send } });
     const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
     try {
       await client.join({ microphone: false, camera: false });
@@ -116,6 +123,7 @@ describe("media capture ownership", () => {
       await Promise.all([on, off]);
       await setEnabled(true);
       expect(capture).toHaveBeenCalledTimes(2);
+      expect(prepared.get(source)).toBe(replacement.track);
       expect(prepareLocalTrack).toHaveBeenLastCalledWith(source, replacement.track);
       expect(client.getSnapshot().media.local[source].track).toBe(replacement.track);
       expect(send.mock.calls.map(([enabled]) => enabled)).toEqual([true, false, true]);
