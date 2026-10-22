@@ -522,12 +522,24 @@ function changedFiles(base) {
   return gitLines(["diff", "--name-only", `${base}...HEAD`]);
 }
 
+// A selection that cannot be planned runs every job in full rather than skipping lanes. full tells the jobs to pass
+// --full, because the base that broke the plan would break their own diff too.
+function selectCiJobs(base) {
+  if (base === "--full") return { ...ciJobs([], { full: true }), full: true };
+  try {
+    return { ...ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" } }), full: false };
+  } catch (error) {
+    console.error(`::warning title=Gate job selection failed::Running every gate job in full. Selection against ${base} failed: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
+    return { ...ciJobs([], { full: true }), full: true };
+  }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [flag, base] = process.argv.slice(2);
   if (flag !== "--ci-jobs" || !base) {
     console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full>");
     process.exit(2);
   }
-  const jobs = base === "--full" ? ciJobs([], { full: true }) : ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" } });
-  console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}`);
+  const jobs = selectCiJobs(base);
+  console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
 }

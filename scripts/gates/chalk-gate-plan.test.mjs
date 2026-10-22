@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { classify } from "@q9labsai/gates";
 import gateConfig from "../../gate.config.ts";
@@ -196,6 +197,31 @@ test("deployment tree changes run the gates that read them, not a full gate", ()
     assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks"] }, file);
   }
   assert.equal(createGatePlan(["infrastructure/observability/new.yaml"]).full, true);
+});
+
+function ciJobsOutput(base) {
+  const stdout = execFileSync("node", [fileURLToPath(new URL("chalk-gate-plan.mjs", import.meta.url)), "--ci-jobs", base], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  return Object.fromEntries(
+    stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.split("=")),
+  );
+}
+
+const fullCiJobs = { api: "true", sync: "true", root_groups: JSON.stringify(ciJobs([], { full: true }).rootGroups), full: "true" };
+
+test("CI job selection that cannot resolve its base runs every job in full", () => {
+  assert.deepEqual(ciJobsOutput("origin/chalk-gate-plan-missing-base"), fullCiJobs);
+  assert.deepEqual(ciJobsOutput("--full"), fullCiJobs);
+  assert.equal(ciJobsOutput("HEAD").full, "false");
+});
+
+// When Select gate jobs fails, the workflow falls back to its own list of root groups.
+test("the Gate workflow falls back to every root lane group", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
+  const fallback = /needs\.changes\.outputs\.root_groups \|\| '([^']+)'/u.exec(workflow)?.[1];
+  assert.deepEqual(JSON.parse(fallback ?? "null"), ciJobs([], { full: true }).rootGroups);
 });
 
 test("browser CI groups each run only their own selected lane", () => {
