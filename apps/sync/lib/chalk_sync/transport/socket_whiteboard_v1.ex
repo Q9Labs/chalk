@@ -18,6 +18,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   @hello_timeout_ms 5000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
+  @access_retry_ms 1_000
   @impl true
   def init(options) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
@@ -48,6 +49,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        presentation_negotiated: false,
        view_negotiated: false,
        view_origins_negotiated: false,
+       draw_policy_negotiated: false,
+       can_draw: nil,
+       access_stale: false,
        scene_id: nil,
        revision: 0,
        snapshot: nil,
@@ -247,6 +251,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     {:ok, state}
   end
 
+  defp handle_message(:whiteboard_v1_access_changed, %{phase: :live} = state) do
+    refresh_access(state)
+  end
+
+  defp handle_message(:whiteboard_v1_access_changed, %{phase: :recovering} = state) do
+    {:ok, %{state | access_stale: true}}
+  end
+
+  defp handle_message(:whiteboard_v1_access_changed, state) do
+    {:ok, state}
+  end
+
   defp handle_message(:whiteboard_drain, state) do
     push_next(state)
   end
@@ -296,6 +312,42 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp note_missed_head(state, scene_id, revision) do
     %{state | missed_head: {scene_id, revision}}
+  end
+
+  defp resume_stale_access(%{access_stale: false} = state), do: state
+
+  defp resume_stale_access(state) do
+    send(self(), :whiteboard_v1_access_changed)
+    %{state | access_stale: false}
+  end
+
+  # The server computes each person's drawing permission; a socket only
+  # relays its own. Clients without draw_policy_v1 keep the legacy frame.
+  defp refresh_access(%{identity: identity} = state) do
+    case Episode.draw_access(identity) do
+      {:ok, access} ->
+        enqueue_and_push(%{state | can_draw: access["can_draw"]}, access_frames(state, access))
+
+      {:error, :permission_denied} ->
+        {:ok, state}
+
+      _unavailable ->
+        Process.send_after(self(), :whiteboard_v1_access_changed, @access_retry_ms)
+        {:ok, state}
+    end
+  end
+
+  defp access_frames(%{draw_policy_negotiated: true}, access), do: [access]
+  defp access_frames(%{can_draw: can_draw}, %{"can_draw" => can_draw}), do: []
+
+  defp access_frames(%{identity: identity}, access) do
+    [
+      %{
+        "type" => "permission_updated",
+        "participant_id" => identity.participant_id,
+        "can_draw" => access["can_draw"]
+      }
+    ]
   end
 
   defp resume_pending_bring(%{pending_bring: nil} = state), do: state
@@ -436,13 +488,30 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          %{phase: :live, identity: identity} = state
        ) do
     case Episode.set_draw_permission(identity, operation) do
-      {:ok, commit, permission} ->
-        Fanout.broadcast_local(identity.episode, permission)
+      {:ok, commit} ->
         state = observe_operation(state, "set_draw_permission", "committed")
         {:push, {:text, Protocol.encode!(commit)}, state}
 
       failure ->
         operation_failure(operation.operation_id, :set_draw_permission, failure, state)
+    end
+  end
+
+  defp handle_frame(
+         {:set_draw_policy, operation},
+         %{phase: :live, draw_policy_negotiated: false} = state
+       ) do
+    operation_failure(operation.operation_id, :set_draw_policy, {:error, :unavailable}, state)
+  end
+
+  defp handle_frame({:set_draw_policy, operation}, %{phase: :live, identity: identity} = state) do
+    case Episode.set_draw_policy(identity, operation) do
+      {:ok, commit} ->
+        state = observe_operation(state, "set_draw_policy", "committed")
+        {:push, {:text, Protocol.encode!(commit)}, state}
+
+      failure ->
+        operation_failure(operation.operation_id, :set_draw_policy, failure, state)
     end
   end
 
@@ -495,6 +564,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               :submit_update_part,
               :clear,
               :set_draw_permission,
+              :set_draw_policy,
               :set_presentation
             ] do
     operation =
@@ -568,7 +638,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               missed_head: nil
           }
 
-          next = resume_pending_bring(next)
+          next = next |> resume_pending_bring() |> resume_stale_access()
           resume_snapshot_requests(next)
           catch_up_after_snapshot(next, state.missed_head)
       end
@@ -971,6 +1041,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     view_origins_negotiated =
       Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
 
+    draw_policy_negotiated = Enum.any?(extensions, &(&1["name"] == "draw_policy_v1"))
+
     with {:ok, welcome} <- Episode.connect(identity),
          # Taken once the connect check has passed, so a stored read that started while it waited,
          # possibly before the Participant's admission committed, cannot close this socket.
@@ -998,12 +1070,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             presentation_negotiated: presentation_negotiated,
             view_negotiated: view_negotiated,
             view_origins_negotiated: view_origins_negotiated,
+            draw_policy_negotiated: draw_policy_negotiated,
+            can_draw: welcome["can_draw"],
             scene_id: welcome["scene_id"],
             revision: String.to_integer(welcome["revision"])
         }
         |> observe_operation("connect", "accepted")
 
-      nil
+      if draw_policy_negotiated, do: send(self(), :whiteboard_v1_access_changed)
       {:push, {:text, Protocol.encode!(welcome)}, next}
     else
       {:error, :permission_denied} -> stop(state, 1008, "policy violation", :permission_denied)

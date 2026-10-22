@@ -70,11 +70,28 @@ defmodule ChalkSync.WhiteboardV1.Episode do
 
   def set_draw_permission(%Identity{} = identity, operation) do
     with {:ok, commit} <- Repository.set_draw_permission(identity, operation) do
-      {:ok, commit_frame(commit),
+      {:ok, commit_frame(commit)}
+    end
+  end
+
+  def set_draw_policy(%Identity{} = identity, operation) do
+    with {:ok, commit} <- Repository.set_draw_policy(identity, operation) do
+      {:ok, commit_frame(commit)}
+    end
+  end
+
+  def draw_access(%Identity{} = identity) do
+    with {:ok, access} <- Repository.draw_access(identity) do
+      {:ok,
        %{
-         "type" => "permission_updated",
-         "participant_id" => operation.participant_id,
-         "can_draw" => operation.can_draw
+         "type" => "draw_access",
+         "policy" => access.draw_policy,
+         "can_draw" => access.can_draw,
+         "capabilities" => access.capabilities,
+         "grants" =>
+           Enum.map(access.grants, fn {participant_id, can_draw} ->
+             %{"participant_id" => participant_id, "can_draw" => can_draw}
+           end)
        }}
     end
   end

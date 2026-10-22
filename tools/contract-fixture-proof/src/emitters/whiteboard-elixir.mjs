@@ -20,6 +20,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 ${renderAttribute("metadata", contract).join("\n")}
 ${renderAttribute("limits", contract.limits).join("\n")}
 ${renderAttribute("capabilities", contract.capabilities).join("\n")}
+${renderAttribute("draw_policies", contract.drawPolicies).join("\n")}
 ${renderAttribute("receipt_outcomes", contract.receiptOutcomes).join("\n")}
 ${renderAttribute("reset_reasons", contract.resetReasons).join("\n")}
 ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
@@ -30,6 +31,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   def metadata, do: @metadata
   def limits, do: @limits
   def capabilities, do: @capabilities
+  def draw_policies, do: @draw_policies
 
   def decode_client_frame(frame) when is_map(frame) do
     case Map.get(frame, "type") do
@@ -40,6 +42,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       "snapshot_ack" -> decode_snapshot_ack(frame)
       "clear" -> decode_clear(frame)
       "set_draw_permission" -> decode_set_draw_permission(frame)
+      "set_draw_policy" -> decode_set_draw_policy(frame)
       "set_presentation" -> decode_set_presentation(frame)
       "cursor" -> decode_cursor(frame)
       "view" -> decode_view(frame)
@@ -60,6 +63,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       "cursor" -> valid_server_cursor?(frame)
       "view" -> valid_server_view?(frame)
       "permission_updated" -> valid_permission_updated?(frame)
+      "draw_access" -> valid_draw_access?(frame)
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
       "operation_error" -> valid_operation_error?(frame)
@@ -88,17 +92,30 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
         {:ok, []}
 
       exact?(frame, ${render(contract.frames.hello.extendedExactFields)}) and
-          frame["extensions"] in [
-            [%{"name" => ${render(contract.extensions.presentation.name)}}],
-            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],
-            [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}]
-          ] ->
+          hello_extension_set?(frame["extensions"]) ->
         {:ok, frame["extensions"]}
 
       true ->
         {:error, :invalid_hello}
     end
   end
+
+  defp hello_extension_set?(extensions) when is_list(extensions) do
+    {base, draw_policy} =
+      case Enum.split(extensions, -1) do
+        {base, [%{"name" => ${render(contract.extensions.drawPolicy.name)}}]} -> {base, true}
+        _ -> {extensions, false}
+      end
+
+    (base != [] or draw_policy) and
+      base in [
+        [%{"name" => ${render(contract.extensions.presentation.name)}}],
+        [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],
+        [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}]
+      ]
+  end
+
+  defp hello_extension_set?(_extensions), do: false
 
   defp decode_submit_update(frame) do
     with true <- exact?(frame, ${render(contract.frames.submitUpdate.exactFields)}),
@@ -153,6 +170,15 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
          operation_id?(frame["operation_id"]) and uuid?(frame["participant_id"]) and
          is_boolean(frame["can_draw"]) do
       {:ok, {:set_draw_permission, %{operation_id: frame["operation_id"], participant_id: frame["participant_id"], can_draw: frame["can_draw"]}}}
+    else
+      {:error, :invalid_payload}
+    end
+  end
+
+  defp decode_set_draw_policy(frame) do
+    if exact?(frame, ${render(contract.frames.setDrawPolicy.exactFields)}) and
+         operation_id?(frame["operation_id"]) and frame["policy"] in @draw_policies do
+      {:ok, {:set_draw_policy, %{operation_id: frame["operation_id"], policy: frame["policy"]}}}
     else
       {:error, :invalid_payload}
     end
@@ -274,6 +300,14 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       uuid?(frame["participant_id"]) and is_boolean(frame["can_draw"])
   end
 
+  defp valid_draw_access?(frame) do
+    exact?(frame, ${render(contract.frames.drawAccess.exactFields)}) and
+      frame["policy"] in @draw_policies and is_boolean(frame["can_draw"]) and
+      capabilities?(frame["capabilities"]) and is_list(frame["grants"]) and
+      length(frame["grants"]) <= @limits["drawAccessMaxGrants"] and
+      Enum.all?(frame["grants"], &(exact?(&1, ${render(contract.frames.drawAccess.grantExactFields)}) and uuid?(&1["participant_id"]) and is_boolean(&1["can_draw"])))
+  end
+
   defp valid_presentation_updated?(frame) do
     exact?(frame, ${render(contract.frames.presentationUpdated.exactFields)}) and
       uuid?(frame["scene_id"]) and unsigned_decimal?(frame["revision"]) and
@@ -288,7 +322,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   defp valid_operation_error?(frame) do
     exact?(frame, ${render(contract.frames.operationError.exactFields)}) and
       request_id?(frame["correlation_id"]) and
-      frame["operation"] in ["submit_update", "request_snapshot", "clear", "set_draw_permission", "set_presentation"] and
+      frame["operation"] in ["submit_update", "request_snapshot", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"] and
       frame["code"] in @error_codes and is_boolean(frame["recoverable"]) and
       bounded_string?(frame["message"], 0, @limits["errorMessageMaxBytes"])
   end

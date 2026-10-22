@@ -8,11 +8,13 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.SQL
 
   @limits GeneratedWhiteboardV1.limits()
   @max_replay_items @limits["snapshotPageMaxItems"]
   @max_replay_bytes @limits["socketQueueMaxBytes"]
+  @max_draw_grants @limits["drawAccessMaxGrants"]
 
   @impl true
   def connect(%Identity{} = identity) do
@@ -126,7 +128,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
                  elements: nil,
                  presenting: nil
                }
-             ) do
+             ),
+           :ok <- notify_access(connection, identity) do
         {:ok, commit(operation.operation_id, :committed, scene.scene_id, scene.revision)}
       else
         {:duplicate, scene_id, revision, _event_presenting} ->
@@ -134,6 +137,29 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
         other ->
           other
+      end
+    end)
+  end
+
+  @impl true
+  def set_draw_policy(%Identity{} = identity, operation) do
+    transaction(identity, fn connection ->
+      with {:ok, authority} <- authority(connection, identity),
+           :ok <- require_capability(authority, "manageWhiteboard"),
+           {:ok, scene} <- current_scene(connection, identity),
+           {:ok, outcome} <- upsert_draw_policy(connection, identity, operation),
+           :ok <- notify_access_after(outcome, connection, identity) do
+        {:ok, commit(operation.operation_id, outcome, scene.scene_id, scene.revision)}
+      end
+    end)
+  end
+
+  @impl true
+  def draw_access(%Identity{} = identity) do
+    transaction(identity, fn connection ->
+      with {:ok, authority} <- authority(connection, identity),
+           {:ok, grants} <- draw_grants(connection, identity, authority) do
+        {:ok, Map.put(authority, :grants, grants)}
       end
     end)
   end
@@ -338,7 +364,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
         [uuid(identity.participant_id), identity.participant_generation]
 
     case Postgrex.query(connection, SQL.lock_authority(), params) do
-      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw]]}} ->
+      {:ok, %Postgrex.Result{rows: [[_role, capabilities, can_draw, draw_policy]]}} ->
         role_capabilities =
           Enum.filter(capabilities, &(&1 in ["drawWhiteboard", "manageWhiteboard"]))
 
@@ -351,7 +377,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
          %{
            capabilities: role_capabilities,
            participant_capabilities: participant_capabilities,
-           can_draw: can_draw
+           can_draw: can_draw,
+           draw_policy: draw_policy
          }}
 
       {:ok, %Postgrex.Result{rows: []}} ->
@@ -536,6 +563,33 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
+  defp upsert_draw_policy(connection, identity, operation) do
+    params =
+      context(identity) ++
+        [operation.policy, operation.operation_id, uuid(identity.participant_id)]
+
+    case Postgrex.query(connection, SQL.upsert_draw_policy(), params) do
+      {:ok, %Postgrex.Result{num_rows: 1}} -> {:ok, :committed}
+      {:ok, %Postgrex.Result{num_rows: 0}} -> {:ok, :duplicate}
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
+  # Only hosts see the per-person choices, because only hosts can change them.
+  defp draw_grants(connection, identity, authority) do
+    if "manageWhiteboard" in authority.capabilities do
+      case Postgrex.query(connection, SQL.draw_grants(), context(identity) ++ [@max_draw_grants]) do
+        {:ok, %Postgrex.Result{rows: rows}} ->
+          {:ok, Enum.map(rows, fn [participant_id, can_draw] -> {participant_id, can_draw} end)}
+
+        {:error, _error} ->
+          {:retryable, :storage_unavailable}
+      end
+    else
+      {:ok, []}
+    end
+  end
+
   defp snapshot_elements(connection, identity, scene_id) do
     params = [uuid(identity.episode.tenant_id), uuid(identity.episode.space_id), uuid(scene_id)]
 
@@ -577,6 +631,16 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       )
 
     case Postgrex.query(connection, SQL.notify_head(), [payload]) do
+      {:ok, _result} -> :ok
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
+  defp notify_access_after(:duplicate, _connection, _identity), do: :ok
+  defp notify_access_after(:committed, connection, identity), do: notify_access(connection, identity)
+
+  defp notify_access(connection, identity) do
+    case Postgrex.query(connection, SQL.notify_access(), [Fanout.access_payload(identity.episode)]) do
       {:ok, _result} -> :ok
       {:error, _error} -> {:retryable, :storage_unavailable}
     end

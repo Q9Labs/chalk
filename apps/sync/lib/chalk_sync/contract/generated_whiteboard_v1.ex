@@ -19,7 +19,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         "name" => "view_v1",
         "exactFields" => ["name"],
         "extendedExactFields" => ["name", "origins"]
-      }
+      },
+      "drawPolicy" => %{"name" => "draw_policy_v1", "exactFields" => ["name"]}
     },
     "identity" => %{
       "credential" => "participant-access-token",
@@ -27,6 +28,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "generationFenced" => true
     },
     "capabilities" => ["drawWhiteboard", "manageWhiteboard"],
+    "drawPolicies" => ["everyone", "hosts", "picked"],
     "phases" => [
       %{"id" => "awaiting_hello", "accepts" => ["hello", "ping"], "deadlineMs" => 5000},
       %{
@@ -38,6 +40,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
           "snapshot_ack",
           "clear",
           "set_draw_permission",
+          "set_draw_policy",
           "set_presentation",
           "cursor",
           "view",
@@ -79,7 +82,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "multipartUpdateTimeoutMs" => 10_000,
       "sceneElementMaxItems" => 10_000,
       "sceneJsonMaxBytes" => 67_108_864,
-      "sceneObjectMaxBytes" => 268_435_456
+      "sceneObjectMaxBytes" => 268_435_456,
+      "drawAccessMaxGrants" => 1024
     },
     "cursor" => %{"sceneId" => "uuid", "revision" => "unsigned-decimal-string"},
     "element" => %{
@@ -121,6 +125,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "setDrawPermission" => %{
         "exactFields" => ["type", "operation_id", "participant_id", "can_draw"]
       },
+      "setDrawPolicy" => %{"exactFields" => ["type", "operation_id", "policy"]},
       "setPresentation" => %{"exactFields" => ["type", "operation_id", "presenting"]},
       "cursor" => %{
         "clientExactFields" => ["type", "x", "y"],
@@ -197,6 +202,10 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       },
       "commit" => %{"exactFields" => ["type", "operation_id", "outcome", "scene_id", "revision"]},
       "permissionUpdated" => %{"exactFields" => ["type", "participant_id", "can_draw"]},
+      "drawAccess" => %{
+        "exactFields" => ["type", "policy", "can_draw", "capabilities", "grants"],
+        "grantExactFields" => ["participant_id", "can_draw"]
+      },
       "presentationUpdated" => %{"exactFields" => ["type", "scene_id", "revision", "presenting"]},
       "resetRequired" => %{"exactFields" => ["type", "scene_id", "reason"]},
       "operationError" => %{
@@ -211,6 +220,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "snapshot_ack",
       "clear",
       "set_draw_permission",
+      "set_draw_policy",
       "set_presentation",
       "cursor",
       "view",
@@ -225,12 +235,19 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "cursor",
       "view",
       "permission_updated",
+      "draw_access",
       "presentation_updated",
       "reset_required",
       "operation_error",
       "pong"
     ],
-    "receiptOperations" => ["submit_update", "clear", "set_draw_permission", "set_presentation"],
+    "receiptOperations" => [
+      "submit_update",
+      "clear",
+      "set_draw_permission",
+      "set_draw_policy",
+      "set_presentation"
+    ],
     "receiptOutcomes" => ["committed", "duplicate"],
     "resetReasons" => ["scene_changed", "cursor_expired", "gap"],
     "errorCodes" => [
@@ -299,9 +316,11 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "multipartUpdateTimeoutMs" => 10_000,
     "sceneElementMaxItems" => 10_000,
     "sceneJsonMaxBytes" => 67_108_864,
-    "sceneObjectMaxBytes" => 268_435_456
+    "sceneObjectMaxBytes" => 268_435_456,
+    "drawAccessMaxGrants" => 1024
   }
   @capabilities ["drawWhiteboard", "manageWhiteboard"]
+  @draw_policies ["everyone", "hosts", "picked"]
   @receipt_outcomes ["committed", "duplicate"]
   @reset_reasons ["scene_changed", "cursor_expired", "gap"]
   @error_codes [
@@ -321,6 +340,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   def metadata, do: @metadata
   def limits, do: @limits
   def capabilities, do: @capabilities
+  def draw_policies, do: @draw_policies
 
   def decode_client_frame(frame) when is_map(frame) do
     case Map.get(frame, "type") do
@@ -331,6 +351,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "snapshot_ack" -> decode_snapshot_ack(frame)
       "clear" -> decode_clear(frame)
       "set_draw_permission" -> decode_set_draw_permission(frame)
+      "set_draw_policy" -> decode_set_draw_policy(frame)
       "set_presentation" -> decode_set_presentation(frame)
       "cursor" -> decode_cursor(frame)
       "view" -> decode_view(frame)
@@ -352,6 +373,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "cursor" -> valid_server_cursor?(frame)
       "view" -> valid_server_view?(frame)
       "permission_updated" -> valid_permission_updated?(frame)
+      "draw_access" -> valid_draw_access?(frame)
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
       "operation_error" -> valid_operation_error?(frame)
@@ -391,17 +413,30 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   "cursor",
   "extensions"
 ]) and
-          frame["extensions"] in [
-            [%{"name" => "presentation_v1"}],
-            [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],
-            [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
-          ] ->
+          hello_extension_set?(frame["extensions"]) ->
         {:ok, frame["extensions"]}
 
       true ->
         {:error, :invalid_hello}
     end
   end
+
+  defp hello_extension_set?(extensions) when is_list(extensions) do
+    {base, draw_policy} =
+      case Enum.split(extensions, -1) do
+        {base, [%{"name" => "draw_policy_v1"}]} -> {base, true}
+        _ -> {extensions, false}
+      end
+
+    (base != [] or draw_policy) and
+      base in [
+        [%{"name" => "presentation_v1"}],
+        [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],
+        [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
+      ]
+  end
+
+  defp hello_extension_set?(_extensions), do: false
 
   defp decode_submit_update(frame) do
     with true <- exact?(frame, [
@@ -495,6 +530,19 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
          is_boolean(frame["can_draw"]) do
       {:ok, {:set_draw_permission, %{operation_id: frame["operation_id"],
           participant_id: frame["participant_id"], can_draw: frame["can_draw"]}}}
+    else
+      {:error, :invalid_payload}
+    end
+  end
+
+  defp decode_set_draw_policy(frame) do
+    if exact?(frame, [
+  "type",
+  "operation_id",
+  "policy"
+]) and
+         operation_id?(frame["operation_id"]) and frame["policy"] in @draw_policies do
+      {:ok, {:set_draw_policy, %{operation_id: frame["operation_id"], policy: frame["policy"]}}}
     else
       {:error, :invalid_payload}
     end
@@ -717,6 +765,23 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       uuid?(frame["participant_id"]) and is_boolean(frame["can_draw"])
   end
 
+  defp valid_draw_access?(frame) do
+    exact?(frame, [
+  "type",
+  "policy",
+  "can_draw",
+  "capabilities",
+  "grants"
+]) and
+      frame["policy"] in @draw_policies and is_boolean(frame["can_draw"]) and
+      capabilities?(frame["capabilities"]) and is_list(frame["grants"]) and
+      length(frame["grants"]) <= @limits["drawAccessMaxGrants"] and
+      Enum.all?(frame["grants"], &(exact?(&1, [
+  "participant_id",
+  "can_draw"
+]) and uuid?(&1["participant_id"]) and is_boolean(&1["can_draw"])))
+  end
+
   defp valid_presentation_updated?(frame) do
     exact?(frame, [
   "type",
@@ -748,7 +813,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
 ]) and
       request_id?(frame["correlation_id"]) and
       frame["operation"] in ["submit_update", "request_snapshot", "clear", "set_draw_permission",
-          "set_presentation"] and
+          "set_draw_policy", "set_presentation"] and
       frame["code"] in @error_codes and is_boolean(frame["recoverable"]) and
       bounded_string?(frame["message"], 0, @limits["errorMessageMaxBytes"])
   end

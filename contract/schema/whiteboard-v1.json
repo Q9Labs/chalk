@@ -15,6 +15,10 @@
       "name": "view_v1",
       "exactFields": ["name"],
       "extendedExactFields": ["name", "origins"]
+    },
+    "drawPolicy": {
+      "name": "draw_policy_v1",
+      "exactFields": ["name"]
     }
   },
   "identity": {
@@ -23,6 +27,7 @@
     "generationFenced": true
   },
   "capabilities": ["drawWhiteboard", "manageWhiteboard"],
+  "drawPolicies": ["everyone", "hosts", "picked"],
   "phases": [
     {
       "id": "awaiting_hello",
@@ -31,7 +36,7 @@
     },
     {
       "id": "live",
-      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"],
+      "accepts": ["submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"],
       "heartbeatIntervalMs": 20000,
       "missedDeadlinesBeforeClose": 2
     }
@@ -68,7 +73,8 @@
     "multipartUpdateTimeoutMs": 10000,
     "sceneElementMaxItems": 10000,
     "sceneJsonMaxBytes": 67108864,
-    "sceneObjectMaxBytes": 268435456
+    "sceneObjectMaxBytes": 268435456,
+    "drawAccessMaxGrants": 1024
   },
   "cursor": {
     "sceneId": "uuid",
@@ -104,6 +110,9 @@
     "setDrawPermission": {
       "exactFields": ["type", "operation_id", "participant_id", "can_draw"]
     },
+    "setDrawPolicy": {
+      "exactFields": ["type", "operation_id", "policy"]
+    },
     "setPresentation": {
       "exactFields": ["type", "operation_id", "presenting"]
     },
@@ -138,6 +147,10 @@
     "permissionUpdated": {
       "exactFields": ["type", "participant_id", "can_draw"]
     },
+    "drawAccess": {
+      "exactFields": ["type", "policy", "can_draw", "capabilities", "grants"],
+      "grantExactFields": ["participant_id", "can_draw"]
+    },
     "presentationUpdated": {
       "exactFields": ["type", "scene_id", "revision", "presenting"]
     },
@@ -148,9 +161,9 @@
       "exactFields": ["type", "correlation_id", "operation", "code", "recoverable", "message"]
     }
   },
-  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_presentation", "cursor", "view", "ping"],
-  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "presentation_updated", "reset_required", "operation_error", "pong"],
-  "receiptOperations": ["submit_update", "clear", "set_draw_permission", "set_presentation"],
+  "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"],
+  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "pong"],
+  "receiptOperations": ["submit_update", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"],
   "receiptOutcomes": ["committed", "duplicate"],
   "resetReasons": ["scene_changed", "cursor_expired", "gap"],
   "errorCodes": ["unavailable", "permission_denied", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "storage_unavailable"],
