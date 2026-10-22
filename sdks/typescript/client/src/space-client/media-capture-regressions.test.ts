@@ -133,6 +133,39 @@ describe("media capture ownership", () => {
     }
   });
 
+  it("does not capture a microphone after Off arrives while the ended track is retired", async () => {
+    const platform = createCoreTestPlatform();
+    const original = endingTrack("microphone", "original");
+    let releaseClear = () => {};
+    const clearHeld = new Promise<void>((resolve) => {
+      releaseClear = resolve;
+    });
+    const capture = vi
+      .fn()
+      .mockResolvedValueOnce(mediaStream(original.track))
+      .mockResolvedValue(mediaStream(endingTrack("microphone", "late").track));
+    const send = vi.fn(async () => ({ operationId: "retire-race", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) as const);
+    const clearPreparedLocalTrack = vi.fn(async () => {
+      await clearHeld;
+    });
+    const client = capturedClient(platform, original.track, { mediaDevices: { getUserMedia: capture }, media: { clearPreparedLocalTrack }, sync: { setMicrophoneEnabled: send } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      await client.media.setMicrophoneEnabled(true);
+      original.end();
+      const on = client.media.setMicrophoneEnabled(true).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(clearPreparedLocalTrack).toHaveBeenCalledWith("microphone", { stopTrack: false }));
+      const off = client.media.setMicrophoneEnabled(false);
+      releaseClear();
+      await Promise.all([on, off]);
+      expect(capture).toHaveBeenCalledOnce();
+      expect(send.mock.calls.at(-1)).toEqual([false]);
+    } finally {
+      releaseClear();
+      client.dispose();
+    }
+  });
+
   it("a rejected duplicate join does not change active media", async () => {
     const { client, track, setEnabled } = createConvergenceScenario("microphone");
     try {

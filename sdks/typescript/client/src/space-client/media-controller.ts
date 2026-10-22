@@ -402,8 +402,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#assertCurrentIntent(source, intent.revision);
         ports.media.setLocalSourceIntent?.(source, true);
         const retire = source === "microphone" ? this.#retireEndedMicrophone(ports.media) : Effect.void;
-        const acquire = Effect.suspend(() =>
-          (source === "camera" && !intent.previousEnabled) || !this.#hasTrack(source)
+        const acquire = Effect.suspend(() => {
+          this.#assertActivePorts(ports, action);
+          this.#assertCurrentIntent(source, intent.revision);
+          return (source === "camera" && !intent.previousEnabled) || !this.#hasTrack(source)
             ? this.#captureForPublish(source, ports.media, (track) =>
                 Effect.try({
                   try: () => {
@@ -418,8 +420,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
                   catch: (cause) => cause,
                 }),
               )
-            : Effect.void,
-        );
+            : Effect.void;
+        });
         return retire.pipe(Effect.andThen(acquire), Effect.andThen(this.#send(ports, source, intent, true)));
       }),
     ).pipe(Effect.catch((cause) => this.#rollbackCapture({ action, cause, fallback: Effect.void, media: ports.media, permissionMessage: `${source} permission was denied`, prepared, source, track: captured })));
