@@ -50,8 +50,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
 
     [host, collaborator, observer] = fixture.identities
 
-    {:ok,
-     episode: fixture.episode, host: host, collaborator: collaborator, observer: observer}
+    {:ok, episode: fixture.episode, host: host, collaborator: collaborator, observer: observer}
   end
 
   test "an existing call without a policy keeps the role default and per-person choices", %{
@@ -81,27 +80,54 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     observer: observer
   } do
     set_policy(host, "hosts", "policy-hosts-000001")
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: false, observer: false}
+
+    assert drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: false,
+             observer: false
+           }
+
     assert {:error, :permission_denied} = draw(collaborator, "update-hosts-000001")
     assert {:ok, %{outcome: :committed}} = draw(host, "update-hosts-000002")
 
     # Under hosts only, a host's earlier choice for a person is kept but ignored.
     set_permission(host, observer, true, "permission-grant-0001")
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: false, observer: false}
+
+    assert drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: false,
+             observer: false
+           }
 
     # Picked people draw only when picked, whatever their role.
     set_policy(host, "picked", "policy-picked-00001")
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: false, observer: true}
+
+    assert drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: false,
+             observer: true
+           }
+
     assert {:ok, %{outcome: :committed}} = draw(observer, "update-picked-00001")
     assert {:error, :permission_denied} = draw(collaborator, "update-picked-00002")
 
     set_permission(host, collaborator, true, "permission-grant-0002")
     set_permission(host, observer, false, "permission-revoke-0002")
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: true, observer: false}
+
+    assert drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: true,
+             observer: false
+           }
 
     # Everyone goes back to the role default, with the same per-person choices on top.
     set_policy(host, "everyone", "policy-everyone-0001")
-    assert drawers(host, collaborator, observer) == %{host: true, collaborator: true, observer: false}
+
+    assert drawers(host, collaborator, observer) == %{
+             host: true,
+             collaborator: true,
+             observer: false
+           }
   end
 
   test "only hosts change the policy and a retried change is a duplicate", %{

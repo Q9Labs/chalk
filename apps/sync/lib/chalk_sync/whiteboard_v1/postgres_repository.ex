@@ -637,7 +637,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp notify_access_after(:duplicate, _connection, _identity), do: :ok
-  defp notify_access_after(:committed, connection, identity), do: notify_access(connection, identity)
+
+  defp notify_access_after(:committed, connection, identity),
+    do: notify_access(connection, identity)
 
   defp notify_access(connection, identity) do
     case Postgrex.query(connection, SQL.notify_access(), [Fanout.access_payload(identity.episode)]) do

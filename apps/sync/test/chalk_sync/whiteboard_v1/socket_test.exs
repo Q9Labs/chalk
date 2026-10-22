@@ -177,7 +177,11 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert {:push, {:text, encoded}, _state} = receive_frame(frame, state)
 
-    assert %{"type" => "operation_error", "operation" => "set_draw_policy", "code" => "unavailable"} =
+    assert %{
+             "type" => "operation_error",
+             "operation" => "set_draw_policy",
+             "code" => "unavailable"
+           } =
              JSON.decode!(encoded)
   end
 
