@@ -166,7 +166,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 
 .chalk-board-announcer {position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap;}
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) {
   .chalk-board-zoom {height:52px;}
   .chalk-board-zoom button {height:44px; min-width:44px;}
   .chalk-board-menu-button {width:44px; height:44px;}
