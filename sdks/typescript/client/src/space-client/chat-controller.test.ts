@@ -359,7 +359,10 @@ describe("message reactions", () => {
 });
 
 describe("Chat controller send failures", () => {
-  it("reports a rate-limited send as a retryable failure", async () => {
+  it.each([
+    ["rate_limited", "command.rate_limited"],
+    ["overloaded", "collaboration.unavailable"],
+  ] as const)("reports a send refused as %s as a retryable failure", async (errorCode, code) => {
     const harness = await setup();
     try {
       const emitted = harness.sent.length;
@@ -371,8 +374,8 @@ describe("Chat controller send failures", () => {
       await settle();
       const request = harness.sent.slice(emitted).find((frame): frame is SendRequest => frame.type === "chat_send");
       if (!request) throw new Error("chat_send was not sent");
-      harness.collaboration.chatSendResult({ type: "chat_send_result", client_message_id: request.client_message_id, outcome: "rejected", error_code: "rate_limited" });
-      expect(await outcome).toMatchObject({ code: "command.rate_limited", recoverable: true });
+      harness.collaboration.chatSendResult({ type: "chat_send_result", client_message_id: request.client_message_id, outcome: "rejected", error_code: errorCode });
+      expect(await outcome).toMatchObject({ code, recoverable: true });
       expect(harness.client.getSnapshot().chat.pendingSends).toEqual([expect.objectContaining({ status: "failed" })]);
     } finally {
       harness.client.dispose();

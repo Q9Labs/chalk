@@ -1,9 +1,23 @@
--- name: LockChatAttachmentStream :exec
+-- name: LockChatAttachmentStream :one
 -- Reservations in one Space wait here, so the per-person count in the next statement sees every
--- reservation committed before it.
+-- reservation committed before it. It returns no row when the Participant may not send chat.
 insert into sync_chat_streams (tenant_id, space_id)
-values (sqlc.arg(tenant_id), sqlc.arg(space_id))
-on conflict (tenant_id, space_id) do update set updated_at = sync_chat_streams.updated_at;
+select participant.tenant_id, participant.space_id
+from participants participant
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
+where participant.tenant_id = sqlc.arg(tenant_id)
+    and participant.space_id = sqlc.arg(space_id)
+    and participant.episode_id = sqlc.arg(episode_id)
+    and participant.id = sqlc.arg(participant_id)
+    and participant.generation = sqlc.arg(participant_generation)
+    and participant.status = 'active'
+    and episode.status = 'active'
+    and participant.capabilities @> array['sendChat']::text[]
+on conflict (tenant_id, space_id) do update set updated_at = sync_chat_streams.updated_at
+returning tenant_id;
 
 -- name: ReserveChatAttachmentUpload :one
 with authority as materialized (

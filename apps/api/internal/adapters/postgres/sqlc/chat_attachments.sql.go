@@ -555,22 +555,47 @@ func (q *Queries) GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAt
 	return i, err
 }
 
-const lockChatAttachmentStream = `-- name: LockChatAttachmentStream :exec
+const lockChatAttachmentStream = `-- name: LockChatAttachmentStream :one
 insert into sync_chat_streams (tenant_id, space_id)
-values ($1, $2)
+select participant.tenant_id, participant.space_id
+from participants participant
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
+where participant.tenant_id = $1
+    and participant.space_id = $2
+    and participant.episode_id = $3
+    and participant.id = $4
+    and participant.generation = $5
+    and participant.status = 'active'
+    and episode.status = 'active'
+    and participant.capabilities @> array['sendChat']::text[]
 on conflict (tenant_id, space_id) do update set updated_at = sync_chat_streams.updated_at
+returning tenant_id
 `
 
 type LockChatAttachmentStreamParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	SpaceID  pgtype.UUID `json:"space_id"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
 }
 
 // Reservations in one Space wait here, so the per-person count in the next statement sees every
-// reservation committed before it.
-func (q *Queries) LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) error {
-	_, err := q.db.Exec(ctx, lockChatAttachmentStream, arg.TenantID, arg.SpaceID)
-	return err
+// reservation committed before it. It returns no row when the Participant may not send chat.
+func (q *Queries) LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockChatAttachmentStream,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+	)
+	var tenant_id pgtype.UUID
+	err := row.Scan(&tenant_id)
+	return tenant_id, err
 }
 
 const releaseChatAttachmentUploadFinalize = `-- name: ReleaseChatAttachmentUploadFinalize :execrows

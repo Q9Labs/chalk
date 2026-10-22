@@ -54,6 +54,11 @@ func TestChatAttachmentQuotaFollowsThePersonAcrossRejoins(t *testing.T) {
 	if err := reserve(chatAttachmentReservation(t, other, 108, 1)); !errors.Is(err, chatattachments.ErrQuotaExceeded) {
 		t.Fatalf("another person reserved past 200 MiB: %v", err)
 	}
+
+	mustExec(t, tx, `update participants set status = 'left', left_at = now(), last_left_reason = 'left' where id = $1`, uuid(first.ParticipantID))
+	if err := reserve(held[0]); !errors.Is(err, chatattachments.ErrQuotaExceeded) {
+		t.Fatalf("a Participant who left got its stored reservation back: %v", err)
+	}
 }
 
 func TestChatAttachmentQuotaHoldsForConcurrentReservations(t *testing.T) {

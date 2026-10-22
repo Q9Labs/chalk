@@ -49,9 +49,16 @@ func (r ChatAttachmentRepository) Reserve(ctx context.Context, input chatattachm
 	}
 	defer tx.Rollback(ctx)
 	queries := sqlc.New(tx)
-	if err := queries.LockChatAttachmentStream(ctx, sqlc.LockChatAttachmentStreamParams{
-		TenantID: uuid(input.Subject.TenantID), SpaceID: uuid(input.Subject.SpaceID),
-	}); err != nil {
+	subject := input.Subject
+	_, err = queries.LockChatAttachmentStream(ctx, sqlc.LockChatAttachmentStreamParams{
+		TenantID: uuid(subject.TenantID), SpaceID: uuid(subject.SpaceID),
+		EpisodeID: uuid(subject.EpisodeID), ParticipantID: uuid(subject.ParticipantID),
+		ParticipantGeneration: subject.ParticipantGeneration,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return chatattachments.Upload{}, chatattachments.ErrQuotaExceeded
+	}
+	if err != nil {
 		return chatattachments.Upload{}, fmt.Errorf("lock chat attachment stream: %w", err)
 	}
 	// A retry of a stored reservation returns it even when the person is now at the cap.

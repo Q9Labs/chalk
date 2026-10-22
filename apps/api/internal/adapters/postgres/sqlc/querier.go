@@ -263,8 +263,8 @@ type Querier interface {
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
 	LockAutoSpaceLifecycle(ctx context.Context, arg LockAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	// Reservations in one Space wait here, so the per-person count in the next statement sees every
-	// reservation committed before it.
-	LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) error
+	// reservation committed before it. It returns no row when the Participant may not send chat.
+	LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) (pgtype.UUID, error)
 	LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error)
 	LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error)
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
