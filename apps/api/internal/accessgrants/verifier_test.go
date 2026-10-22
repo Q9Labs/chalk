@@ -261,3 +261,20 @@ func issueWithKey(t *testing.T, keyID string, privateKey ed25519.PrivateKey) str
 	}
 	return credential.Token
 }
+
+func TestExpiredCredentialReturnsOnlyAuthenticatedSubject(t *testing.T) {
+	fixture := newCredentialFixture(t)
+	token := rewriteClaims(t, fixture.token, fixture.privateKey, func(claims map[string]any) {
+		now := testNow.Unix()
+		claims["iat"], claims["nbf"], claims["exp"] = now-86400, now-86400, now-86100
+	})
+	subject, err := fixture.verifier.Verify(context.Background(), token)
+	if !errors.Is(err, accessgrants.ErrExpired) || subject != fixture.subject {
+		t.Fatalf("expired subject=%+v err=%v", subject, err)
+	}
+	malformed := rewriteClaims(t, token, fixture.privateKey, func(claims map[string]any) { claims["participant_generation"] = 0 })
+	subject, err = fixture.verifier.Verify(context.Background(), malformed)
+	if !errors.Is(err, accessgrants.ErrInvalidSubject) || subject != (accessgrants.Subject{}) {
+		t.Fatalf("invalid expired subject=%+v err=%v", subject, err)
+	}
+}

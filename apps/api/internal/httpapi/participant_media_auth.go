@@ -42,6 +42,10 @@ func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer Activ
 			}
 
 			active, err := authorizer.AuthorizeActiveParticipant(r.Context(), subject)
+			if errors.Is(err, accessgrants.ErrGenerationMismatch) {
+				writeAPIError(w, apiErrorForbidden)
+				return
+			}
 			if err != nil {
 				writeServiceUnavailable(w)
 				return

@@ -122,6 +122,14 @@ func (i AccessGrantIssuer) Issue(ctx context.Context, subject accessgrants.Subje
 	return credential, err
 }
 
+type accessGrantRefreshContextKey struct{}
+
+// ContextWithAccessGrantRefresh scopes expiry acceptance to credential telemetry.
+// The tenant-authorized handler still checks the route and active generation.
+func ContextWithAccessGrantRefresh(ctx context.Context) context.Context {
+	return context.WithValue(ctx, accessGrantRefreshContextKey{}, true)
+}
+
 type ParticipantMediaVerifier struct {
 	next      participantMediaVerifier
 	recovery  participantMediaRecoveryVerifier
@@ -143,9 +151,14 @@ func (v ParticipantMediaVerifier) Verify(ctx context.Context, credential string)
 	startedAt := v.telemetry.now()
 	ctx, span := launchTracer.Start(ctx, "participant_media.authenticate")
 	subject, err := v.next.Verify(ctx, credential)
+	authenticationErr := err
 	outcome, reason := participantAuthenticationResult(err)
+	if ctx.Value(accessGrantRefreshContextKey{}) == true && errors.Is(err, accessgrants.ErrExpired) && !subject.ParticipantID.IsZero() {
+		authenticationErr = nil
+		outcome, reason = "accepted", "expired_recovered"
+	}
 	v.telemetry.recordParticipantAuthentication(ctx, outcome, reason, v.telemetry.now().Sub(startedAt))
-	finishLaunchSpan(span, outcome, reason, err)
+	finishLaunchSpan(span, outcome, reason, authenticationErr)
 	return subject, err
 }
 

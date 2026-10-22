@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -61,8 +62,74 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	if _, err := tx.Exec(ctx, `update participants set status='active' where id=$1`, uuid(participantID)); err != nil {
 		t.Fatal(err)
 	}
+	if err := repository.CheckParticipantMediaConnection(ctx, key, 1, "initial-join"); err != nil {
+		t.Fatalf("current expired connection cannot recover: %v", err)
+	}
+	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "initial-join", "replacement:reservation"); err != nil {
+		t.Fatalf("reserve expired connection replacement: %v", err)
+	}
+	if err := repository.CheckParticipantMediaConnection(ctx, key, 1, "initial-join"); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("expired replay was not superseded: %v", err)
+	}
+	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "initial-join", "racing-retry"); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("concurrent expired replay replaced current binding: %v", err)
+	}
+	replay, err := accessgrants.SealRefreshReplay("signed-expired-request", []byte(`{"winning":"grant"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "replacement:reservation", "recovered", replay); err != nil {
+		t.Fatalf("complete reserved replacement: %v", err)
+	}
+	reader := NewEpisodeLifecycleRepository(lingerTestTransactor{tx})
+	stored, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash)
+	if err != nil || stored == nil {
+		t.Fatalf("missing refresh replay: %v", err)
+	}
+	winning, err := accessgrants.OpenRefreshReplay("signed-expired-request", stored.Ciphertext)
+	if err != nil || string(winning) != `{"winning":"grant"}` {
+		t.Fatalf("committed refresh did not retain its grant: %v", err)
+	}
+	if _, err := accessgrants.OpenRefreshReplay("other-request", stored.Ciphertext); err == nil {
+		t.Fatal("another request decrypted the retained grant")
+	}
+
+	// A renewal must preserve the deadline fixed by the first completed refresh.
+	if _, err := tx.Exec(ctx, `update participant_media_refreshes set created_at=clock_timestamp()-interval '4 minutes' where participant_id=$1`, uuid(participantID)); err != nil {
+		t.Fatal(err)
+	}
+	original, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash)
+	if err != nil || original == nil {
+		t.Fatalf("inside-window replay missing: %v", err)
+	}
+	if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "recovered", "recovered", replay); err != nil {
+		t.Fatal(err)
+	}
+	renewed, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash)
+	if err != nil || renewed == nil || !renewed.CreatedAt.Equal(original.CreatedAt) {
+		t.Fatalf("renewal extended first-success deadline: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `update participant_media_refreshes set created_at=clock_timestamp()-interval '1 day' where participant_id=$1`, uuid(participantID)); err != nil {
+		t.Fatal(err)
+	}
+	if expired, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash); err != nil || expired != nil {
+		t.Fatalf("day-old consumed request still replayable: %v", err)
+	}
+	// Completion can cross the deadline after lookup; it must roll back the binding.
+	if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "recovered", "late-replay", replay); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("expired upsert renewed the replay: %v", err)
+	}
+	if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "replacement:reservation", "losing-retry", replay); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("lost reservation overwrote winning replay: %v", err)
+	}
+	if err := tx.QueryRow(ctx, `select media_connection_id from participants where id=$1`, uuid(participantID)).Scan(&initialConnection); err != nil || initialConnection != "recovered" {
+		t.Fatalf("expired replay displaced recovered seat: %q, %v", initialConnection, err)
+	}
 	if err := repository.SetParticipantMediaConnection(ctx, key, 1, "authenticated-replacement"); err != nil {
 		t.Fatal(err)
+	}
+	if stored, err := reader.LoadParticipantMediaRefresh(ctx, key, 1, replay.RequestHash); err != nil || stored != nil {
+		t.Fatalf("replay revived a displaced connection: found=%v err=%v", stored != nil, err)
 	}
 	query := newProviderOperationQueries(tx)
 	participants, err := query.ListPublicationParticipants(ctx, providerObservationIdentityParams{TenantID: uuid(tenantID), EpisodeID: uuid(episodeID)})

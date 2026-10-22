@@ -55,3 +55,14 @@ function forwardedRequestFixture() {
   const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch });
   return { initial, fetch, client, state: getAccessRefreshState(initial) };
 }
+
+it.each([429, 502, 503, 504, "network"] as const)("does not repeat an implicit replacement after a lost %s", async (failure) => {
+  const initial = accessGrantFromParsed(accessGrant(Date.now() + 60_000, "initial"));
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+    if (failure === "network") throw new TypeError("Response lost");
+    return Response.json({ error: { code: "service.unavailable", message: "Unavailable" } }, { status: failure });
+  });
+  const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch });
+  await expect(client.participants.issueAccess("space-1", "episode-1", "participant-1", getAccessRefreshState(initial))).rejects.toMatchObject({ retryable: false });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

@@ -2,13 +2,16 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -20,6 +23,10 @@ type ParticipantMediaIssuer interface {
 type ParticipantGenerationAuthorizer interface {
 	AuthorizeActiveParticipantGeneration(context.Context, synctokens.SubjectKey, int64) (bool, error)
 	BindParticipantMediaConnection(context.Context, accessgrants.Subject) error
+	CheckParticipantMediaConnection(context.Context, accessgrants.Subject) error
+	ReplaceParticipantMediaConnection(context.Context, accessgrants.Subject, accessgrants.Subject) error
+	LoadParticipantMediaRefresh(context.Context, accessgrants.Subject, [32]byte) (*accessgrants.StoredRefreshReplay, error)
+	CompleteParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, accessgrants.RefreshReplay) error
 }
 
 type accessGrantSubjectResponse struct {
@@ -80,10 +87,18 @@ func issueAccessGrantEndpoint(
 		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant",
 		"issueAccessGrant",
 		decodeIssueAccessGrantRequest,
-		func(ctx context.Context, request issueAccessGrantRequest) (accessGrantResponse, error) {
+		func(ctx context.Context, request issueAccessGrantRequest) (_ accessGrantResponse, failure error) {
+			stage := "tenant_authorization"
+			defer func() {
+				if failure != nil {
+					apiErr := accessGrantAPIError(failure)
+					observability.LogAccessGrantFailure(ctx, stage, apiErr.Code)
+				}
+			}()
 			if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 				return accessGrantResponse{}, err
 			}
+			stage = "request"
 			if refresh == nil || mediaIssuer == nil || mediaVerifier == nil || active == nil || generations == nil {
 				return accessGrantResponse{}, apiErrorServiceUnavailable
 			}
@@ -97,63 +112,136 @@ func issueAccessGrantEndpoint(
 				join    mediaplane.Join
 				err     error
 			)
-			if request.Body.ReplaceMediaConnection {
-				isActive, authErr := generations.AuthorizeActiveParticipantGeneration(ctx, key, request.Body.ParticipantGeneration)
-				if authErr != nil {
-					return accessGrantResponse{}, authErr
+			currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
+			replaceMediaConnection := request.Body.ReplaceMediaConnection
+			if !replaceMediaConnection {
+				stage = "media_token"
+				if currentToken == "" {
+					return accessGrantResponse{}, apiErrorMediaTokenRequired
 				}
-				if !isActive {
-					return accessGrantResponse{}, apiErrorForbidden
+				subject, err = mediaVerifier.Verify(observability.ContextWithAccessGrantRefresh(ctx), currentToken)
+				if err != nil && !errors.Is(err, accessgrants.ErrExpired) {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
-				join, err = createAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request)
+				replaceMediaConnection = errors.Is(err, accessgrants.ErrExpired)
+				if routeErr := accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
+					TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
+					ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
+					Provider: subject.Provider, ProviderSubject: subject.ProviderSubject,
+					CloudflareConnectionID: subject.CloudflareConnectionID,
+				}); routeErr != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(routeErr)
+				}
+				if subject.ParticipantGeneration != request.Body.ParticipantGeneration {
+					return accessGrantResponse{}, apiErrorParticipantGenerationMismatch
+				}
+			}
+			stage = "participant_authorization"
+			var isActive bool
+			if replaceMediaConnection {
+				isActive, err = generations.AuthorizeActiveParticipantGeneration(ctx, key, request.Body.ParticipantGeneration)
+			} else {
+				isActive, err = active.AuthorizeActiveParticipant(ctx, subject)
+			}
+			if err != nil {
+				return accessGrantResponse{}, accessGrantRefreshError(err)
+			}
+			if !isActive {
+				return accessGrantResponse{}, apiErrorForbidden
+			}
+			previous := subject
+			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
+			if implicitReplacement {
+				stage = "media_replay"
+				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, accessgrants.RefreshRequestHash(currentToken))
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
-				subject, err = accessGrantSubjectForJoin(request, join)
-			} else {
-				currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
-				if currentToken == "" {
-					return accessGrantResponse{}, apiErrorInvalidRequest
+				if stored != nil {
+					if !stored.CreatedAt.Add(accessgrants.RefreshReplayWindow).After(time.Now()) {
+						return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
+					}
+					cached, valid, err := decodeAccessGrantReplay(currentToken, stored.Ciphertext)
+					if err != nil {
+						return accessGrantResponse{}, err
+					}
+					if valid {
+						return cached, nil
+					}
+					// Expired cached credentials can renew on the winning connection.
+					subject, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: cached.Media.ClientPayload})
+					if err != nil {
+						return accessGrantResponse{}, err
+					}
+					previous = subject
+					replaceMediaConnection = false
+				} else {
+					stage = "media_binding"
+					reservationID, err := utilities.NewID()
+					if err != nil {
+						return accessGrantResponse{}, err
+					}
+					reservation := previous
+					reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
+					if err := generations.ReplaceParticipantMediaConnection(ctx, previous, reservation); err != nil {
+						return accessGrantResponse{}, accessGrantRefreshError(err)
+					}
+					original := previous
+					defer func() {
+						if failure == nil {
+							return
+						}
+						cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+						defer cancel()
+						if err := generations.ReplaceParticipantMediaConnection(cleanup, reservation, original); err != nil && !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+							failure = errors.Join(failure, fmt.Errorf("release media refresh reservation: %w", err))
+						}
+					}()
+					previous = reservation
 				}
-				subject, err = mediaVerifier.Verify(ctx, currentToken)
+			}
+			stage = "media_connection"
+			if replaceMediaConnection {
+				join, err = createAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request)
 				if err == nil {
-					err = accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
-						TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
-						ParticipantID: request.ParticipantID, ParticipantGeneration: request.Body.ParticipantGeneration,
-						Provider: subject.Provider, ProviderSubject: subject.ProviderSubject,
-						CloudflareConnectionID: subject.CloudflareConnectionID,
-					})
+					subject, err = accessGrantSubjectForJoin(request, join)
 				}
-				if err != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
-				isActive, authErr := active.AuthorizeActiveParticipant(ctx, subject)
-				if authErr != nil {
-					return accessGrantResponse{}, authErr
-				}
-				if !isActive {
-					return accessGrantResponse{}, apiErrorForbidden
-				}
+			} else {
 				join, err = resumeAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request, subject)
 			}
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
 
+			stage = "sync_credential"
 			syncCredential, err := refresh.IssueForParticipant(ctx, key)
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
+			stage = "media_credential"
 			mediaCredential, err := mediaIssuer.Issue(ctx, subject)
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
-			if request.Body.ReplaceMediaConnection {
-				if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
+			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+			stage = "media_binding"
+			if implicitReplacement {
+				body, err := json.Marshal(response)
+				if err != nil {
 					return accessGrantResponse{}, err
 				}
+				replay, err := accessgrants.SealRefreshReplay(currentToken, body)
+				if err != nil {
+					return accessGrantResponse{}, err
+				}
+				if err := generations.CompleteParticipantMediaRefresh(ctx, previous, subject, replay); err != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
+				}
+			} else if replaceMediaConnection {
+				if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
+				}
 			}
-			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
 
 			return response, nil
 		},
@@ -163,7 +251,7 @@ func issueAccessGrantEndpoint(
 		Parameters(accessGrantParameters()...).
 		RequestBody("IssueAccessGrantRequest", issueAccessGrantBody{}).
 		Responds(http.StatusCreated, "AccessGrant", accessGrantResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).
+		Errors(accessGrantErrors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorRateLimited))...).
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
@@ -278,14 +366,4 @@ func episodeStartedAt(value *time.Time) *string {
 	}
 	formatted := value.UTC().Format(time.RFC3339Nano)
 	return &formatted
-}
-
-func accessGrantRefreshError(err error) error {
-	if errors.Is(err, accessgrants.ErrSubjectMismatch) {
-		return apiErrorForbidden
-	}
-	if isParticipantMediaCredentialRejection(err) {
-		return apiErrorInvalidRequest
-	}
-	return err
 }

@@ -65,7 +65,7 @@ export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
   if (httpError?.response?.status === 429) throw new DashboardError(429, "engine_rate_limited");
   const code = failure.success ? failure.data.error.code : "engine.unavailable";
   if (code.endsWith("not_found") || code === "access.forbidden") throw new DashboardError(404, "resource_not_found");
-  if (code.includes("conflict") || code.includes("already_active") || code.includes("already_exists") || code.includes("capacity_exceeded")) throw new DashboardError(409, "engine_conflict");
+  if (code === "participant.connection_superseded" || code.includes("conflict") || code.includes("already_active") || code.includes("already_exists") || code.includes("capacity_exceeded")) throw new DashboardError(409, "engine_conflict");
   if (code.includes("rate_limited")) throw new DashboardError(429, "engine_rate_limited");
   throw new DashboardError(502, "engine_unavailable");
 }

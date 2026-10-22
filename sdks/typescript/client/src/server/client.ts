@@ -128,7 +128,8 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
           path: `${tenantPath}/spaces/${segment(spaceId)}/episodes/${segment(episodeId)}/participants/${segment(participantId)}/access-grant`,
           body: accessGrantRequest(resolvedInput),
           expectedStatus: 201,
-          retry: resolvedInput.replaceMediaConnection === true ? "never" : "always",
+          // An expired token can cause replacement even without the explicit flag.
+          retry: "never",
         });
         return accessGrant(access);
       },
