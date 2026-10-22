@@ -6,10 +6,15 @@ import { chromium } from "playwright";
 import { provePublicAdmission } from "./public-admission-browser.mjs";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
 
-const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, syncLog, pagesLog, cleanup } = await createDashboardProofFixture();
+const admissionProof = process.argv.some((argument) => argument.startsWith("--admission"));
+const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, syncLog, pagesLog, cleanup, recordPage } = await createDashboardProofFixture({
+  devicesMissing: true,
+  recordingName: admissionProof ? `fix-admit/${process.argv.includes("--admission-before") ? "before" : "after"}-host.webm` : undefined,
+});
 let admissionGuestBrowser;
 try {
   const page = await context.newPage();
+  recordPage(page);
   const sockets = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
   try {
@@ -58,7 +63,7 @@ try {
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(copied, call.inviteUrl, "In-call copy must preserve the exact engine canonical invite URL");
     assert(!copied.includes("/dashboard/call/"));
-    if (process.argv.some((argument) => argument.startsWith("--admission"))) {
+    if (admissionProof) {
       admissionGuestBrowser = await chromium.launch({ headless: true });
       await provePublicAdmission({ browser: admissionGuestBrowser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl: call.inviteUrl, repository });
       if (await page.getByRole("button", { name: "Leave call", exact: true }).count()) await leaveCall(page);
