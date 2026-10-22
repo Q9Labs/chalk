@@ -49,6 +49,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  podman-image-cleanup:
+    name: Podman 4.9 image cleanup contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ubuntu's Podman
+        run: |
+          sudo apt-get update -qq
+          version="$(apt-cache madison podman | awk '$3 ~ /^4[.]9[.]/{print $3; exit}')"
+          test -n "$version"
+          sudo apt-get install -y --allow-downgrades "podman=$version"
+      - name: Capture real storage behavior without cloud access
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo bash infrastructure/managed-episode/scripts/test-podman-image-cleanup 2>&1 | tee "${RUNNER_TEMP}/podman-image-cleanup.log"
+      - name: Keep the observed Podman trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-image-cleanup-trace
+          path: ${{ runner.temp }}/podman-image-cleanup.log
+          retention-days: 7
+          if-no-files-found: error
   contracts:
     name: Pre-deploy release contracts
     runs-on: ubuntu-24.04
