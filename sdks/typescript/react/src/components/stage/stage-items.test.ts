@@ -105,12 +105,12 @@ describe("a board on a phone", () => {
     expect(geometry.overflowCount).toBe(2);
   });
 
-  it("keeps fewer faces on a short stage so the column stays over the board", () => {
+  it("keeps fewer faces on a short stage so the column stays clear of the zoom control", () => {
     const short = { width: 608, height: 202 };
     const geometry = fitSpotlight(short, "whiteboard", ["me", "nora", "malik"], options);
     const last = geometry.frames.at(-1);
-    expect((last?.y ?? 0) + (last?.height ?? 0)).toBeLessThanOrEqual(short.height - 8);
-    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "me", MORE_TILE_ID]);
+    expect((last?.y ?? 0) + (last?.height ?? 0)).toBeLessThanOrEqual(short.height - 12 - 52 - 8);
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", MORE_TILE_ID]);
   });
 
   it("starts a new column instead of running content past the bottom of a short stage", () => {
