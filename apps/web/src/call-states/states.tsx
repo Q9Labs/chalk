@@ -163,6 +163,16 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "reconnecting-short", title: "Reconnecting, after 3 seconds", actions: [{ wait: 2_100 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
   { id: "reconnecting-long", title: "Reconnecting, after 10 seconds", actions: [{ wait: 10_500 }], render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "reconnecting" })} /> },
   { id: "offline-actions", title: "Back online with unsent actions", render: () => <Live snapshot={liveSnapshot({ others: [nora], offlinePending: true })} /> },
+  {
+    id: "hand-peer-toast",
+    title: "Your hand is up when Nora raises hers",
+    render: () => (
+      <Live
+        snapshot={liveSnapshot({ self: { handRaised: true }, others: [nora] })}
+        then={(client) => client.updateSnapshot((current) => ({ ...current, participants: { ...current.participants, roster: current.participants.roster.map((person) => (person.participantId === nora.id ? { ...person, handRaised: true } : person)) } }))}
+      />
+    ),
+  },
   { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
   { id: "leaving", title: "Leaving", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "leaving" })} /> },
   { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
