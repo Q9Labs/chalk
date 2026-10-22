@@ -79,7 +79,7 @@ function loadMathJaxScript(): Promise<void> {
 
     const script = document.createElement("script");
     const basePath = getWhiteboardAssets()?.mathJaxBasePath;
-    script.src = basePath ? `${basePath}/tex-svg.js` : DEFAULT_MATHJAX_SCRIPT_URL;
+    script.src = basePath ? `${basePath.replace(/\/$/, "")}/tex-svg.js` : DEFAULT_MATHJAX_SCRIPT_URL;
     script.async = true;
     script.dataset.chalkMathjax = "true";
     script.onload = () => resolve();
