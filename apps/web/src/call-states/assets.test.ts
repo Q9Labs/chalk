@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -113,14 +114,20 @@ it("loads call, board, sticky note, text and math assets from our origin", async
 it("keeps SVG export on our origin when a local font is missing", async () => {
   const context = await browser.newContext();
   const requests: string[] = [];
+  const errors: string[] = [];
+  const failed: string[] = [];
   context.on("request", (request) => requests.push(request.url()));
+  context.on("response", (response) => {
+    if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
+  });
   try {
     await context.route("**/asset-font-probe", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><body></body>" }));
     await context.route("**/fonts/Virgil/Virgil-Regular.woff2", (route) => route.fulfill({ status: 404, body: "Missing font" }));
     const page = await context.newPage();
+    page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`${origin}/asset-font-probe`);
     const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
-    const excalidrawModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.js")}`;
+    const excalidrawModule = `/@fs/${realpathSync(resolve(import.meta.dirname, "../../../../packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.js"))}`;
     await page.addScriptTag({
       type: "module",
       content: `import { configureWhiteboardAssets } from ${JSON.stringify(assetsModule)};
@@ -132,7 +139,7 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
         output.textContent = svg.outerHTML;
         document.body.append(output);`,
     });
-    await page.locator("#font-failure-proof").waitFor();
+    await page.locator("#font-failure-proof").waitFor({ timeout: 10_000 });
     expect(await page.locator("#font-failure-proof").textContent()).toContain("<svg");
     expect(requests).toContain(`${origin}/chalk-whiteboard/0.18.1/fonts/Virgil/Virgil-Regular.woff2`);
     expect(
@@ -142,7 +149,7 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
   } finally {
     if (process.env.ASSET_PROOF_DIR) {
       await mkdir(process.env.ASSET_PROOF_DIR, { recursive: true });
-      await writeFile(resolve(process.env.ASSET_PROOF_DIR, "font-failure-requests.json"), JSON.stringify({ requests, external: requests.filter((url) => /^https?:/.test(url) && new URL(url).origin !== origin) }, null, 2));
+      await writeFile(resolve(process.env.ASSET_PROOF_DIR, "font-failure-requests.json"), JSON.stringify({ requests, errors, failed, external: requests.filter((url) => /^https?:/.test(url) && new URL(url).origin !== origin) }, null, 2));
     }
     await context.close();
   }
