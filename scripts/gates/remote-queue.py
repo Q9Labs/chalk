@@ -135,7 +135,14 @@ def stop_job(job, pid, started):
                 except ProcessLookupError:
                     pass
         if sig == signal.SIGTERM and receipts:
-            time.sleep(0.3)
+            # Give gate traps (notably temporary database cleanup) the old runner's ten-second grace.
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                states = subprocess.run(['ps', '-p', ','.join(str(p) for p in receipts), '-o', 'pid=,stat='],
+                                        capture_output=True, text=True).stdout.splitlines()
+                if not any(not line.split()[1].startswith('Z') for line in states):
+                    break
+                time.sleep(0.05)
 
 
 def finish(root, db, row, result, reason):

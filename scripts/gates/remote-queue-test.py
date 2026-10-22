@@ -158,6 +158,18 @@ class QueueTest(unittest.TestCase):
         self.assertNotEqual(bad.returncode, 0)
         self.assertEqual(subprocess.run([*self.command, 'status', 'bad'], capture_output=True).returncode, 4)
 
+    def test_crash_allows_descendants_to_finish_signal_cleanup(self):
+        child = self.root / 'cleanup.py'
+        ready = self.root / 'ready'
+        cleaned = self.root / 'cleaned'
+        child.write_text('import pathlib,signal,time,sys\n'
+                         f'def cleanup(*args):\n time.sleep(.6)\n pathlib.Path({str(cleaned)!r}).touch()\n sys.exit(0)\n'
+                         f'signal.signal(signal.SIGTERM,cleanup)\npathlib.Path({str(ready)!r}).touch()\ntime.sleep(8)\n')
+        self.submit('grace', f'python3 "{child}" &\nfor i in {{1..100}}; do test ! -f "{ready}" || break; sleep .02; done\nkill -KILL $$')
+        self.lock.close()
+        self.wait('grace')
+        self.assertTrue(cleaned.exists(), 'signal cleanup was killed before it could finish')
+
     def test_wait_timeout_returns_while_another_job_is_running(self):
         self.submit('active', 'sleep 3')
         self.lock.close()
