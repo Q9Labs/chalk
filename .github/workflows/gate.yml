@@ -66,8 +66,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
-    # Includes median Chromium setup (~9.5m): tests/bundles take ~12m each; leaks take ~27m.
-    timeout-minutes: ${{ fromJSON('{"browser-tests":24,"call-performance":24,"call-leaks":54}')[matrix.group] || 30 }}
+    # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
+    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"call-performance":27,"call-leaks":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -131,7 +131,10 @@ jobs:
       # Browser tests, call bundle budgets and leak journeys all drive Chromium.
       - name: Install browser runtime
         if: contains(fromJSON('["browser-tests", "call-performance", "call-leaks"]'), matrix.group)
-        run: pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
+        timeout-minutes: 12
+        uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
 
       # call-performance runs in the root gate for call rendering changes;
       # GitHub enforces gzip budgets, while testbox enforces timing too.
