@@ -189,6 +189,20 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	if len(response.Spaces) != 1 || response.Spaces[0].LiveEpisode == nil || response.Spaces[0].LiveEpisode.ParticipantCount != 0 || len(response.Spaces[0].LiveEpisode.Participants) != 0 {
 		t.Fatalf("current empty roster not reflected: %+v", response)
 	}
+	// A large live roster returns its full count but only its first five Participants, so 300 Spaces stay small.
+	roster := make([]string, 0, 7)
+	for i := 0; i < 7; i++ {
+		roster = append(roster, fmt.Sprintf(`{"participant_id":%q,"display_name":"Guest %d"}`, accountTenantIntegrationID(t).String(), i))
+	}
+	if _, err := pool.Exec(ctx, `update sync_episode_control set folded_state=$3::jsonb where tenant_id=$1 and episode_id=$2`, uuid(tenantID), uuid(liveEpisodeID), `{"participants":[`+strings.Join(roster, ",")+`]}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(request(tenantID, liveSpaceID.String(), key.RawKey, http.StatusOK), &response); err != nil {
+		t.Fatal(err)
+	}
+	if live := response.Spaces[0].LiveEpisode; live == nil || live.ParticipantCount != 7 || len(live.Participants) != 5 || live.Participants[0].DisplayName != "Guest 0" || live.Participants[4].DisplayName != "Guest 4" {
+		t.Fatalf("large live roster not bounded: %+v", response.Spaces[0].LiveEpisode)
+	}
 	// An ending Episode and an archived Space follow the unchanged live-read semantics.
 	if _, err := pool.Exec(ctx, `update episodes set status='ending' where id=$1`, uuid(liveEpisodeID)); err != nil {
 		t.Fatal(err)
@@ -244,6 +258,14 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Many seats in one Episode: the five most recent joins must come from an index, not a sort of every seat.
+	if _, err := pool.Exec(ctx, `insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,first_joined_at,joined_at)
+		select gen_random_uuid(),$1,$2,$3,'Seat '||n,array['publishAudio'],1,'left','guest',now()-n*interval '1 second',now()-n*interval '1 second' from generate_series(1,5000) n`, uuid(tenantID), uuid(liveSpaceID), uuid(liveEpisodeID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `analyze participants`); err != nil {
+		t.Fatal(err)
+	}
 	explain := "explain (analyze, buffers) " + strings.NewReplacer("sqlc.arg(tenant_id)", "$1", "sqlc.arg(space_ids)", "$2").Replace(string(query))
 	rows, err := pool.Query(ctx, explain, uuid(tenantID), []string{liveSpaceID.String(), emptySpaceID.String(), endedSpaceID.String()})
 	if err != nil {
@@ -264,6 +286,9 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	t.Logf("Space activity indexed plan:\n%s", plan.String())
 	if !strings.Contains(plan.String(), "episodes_tenant_space_created_at_id_idx") || !strings.Contains(plan.String(), "Index") {
 		t.Fatalf("missing latest Episode index: %s", plan.String())
+	}
+	if !strings.Contains(plan.String(), "participants_episode_recent_join_idx") {
+		t.Fatalf("recent Participants are not read from their index: %s", plan.String())
 	}
 
 }

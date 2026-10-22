@@ -13,7 +13,10 @@ import (
 
 const listSpaceActivity = `-- name: ListSpaceActivity :many
 select s.id as space_id, live.id as live_episode_id,
-       coalesce(c.folded_state -> 'participants', '[]'::jsonb)::jsonb as live_participants,
+       coalesce(jsonb_array_length(c.folded_state -> 'participants'), 0)::int as live_participant_count,
+       coalesce((select jsonb_agg(roster.value order by roster.position)
+                 from jsonb_array_elements(c.folded_state -> 'participants') with ordinality as roster(value, position)
+                 where roster.position <= 5), '[]'::jsonb)::jsonb as live_participants,
        latest.id as latest_episode_id, coalesce(latest.status, '')::text as status, latest.started_at, latest.ended_at,
        coalesce(recent.participants, '[]'::jsonb)::jsonb as recent_participants
 from spaces s
@@ -48,14 +51,15 @@ type ListSpaceActivityParams struct {
 }
 
 type ListSpaceActivityRow struct {
-	SpaceID            pgtype.UUID        `json:"space_id"`
-	LiveEpisodeID      pgtype.UUID        `json:"live_episode_id"`
-	LiveParticipants   []byte             `json:"live_participants"`
-	LatestEpisodeID    pgtype.UUID        `json:"latest_episode_id"`
-	Status             string             `json:"status"`
-	StartedAt          pgtype.Timestamptz `json:"started_at"`
-	EndedAt            pgtype.Timestamptz `json:"ended_at"`
-	RecentParticipants []byte             `json:"recent_participants"`
+	SpaceID              pgtype.UUID        `json:"space_id"`
+	LiveEpisodeID        pgtype.UUID        `json:"live_episode_id"`
+	LiveParticipantCount int32              `json:"live_participant_count"`
+	LiveParticipants     []byte             `json:"live_participants"`
+	LatestEpisodeID      pgtype.UUID        `json:"latest_episode_id"`
+	Status               string             `json:"status"`
+	StartedAt            pgtype.Timestamptz `json:"started_at"`
+	EndedAt              pgtype.Timestamptz `json:"ended_at"`
+	RecentParticipants   []byte             `json:"recent_participants"`
 }
 
 func (q *Queries) ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error) {
@@ -70,6 +74,7 @@ func (q *Queries) ListSpaceActivity(ctx context.Context, arg ListSpaceActivityPa
 		if err := rows.Scan(
 			&i.SpaceID,
 			&i.LiveEpisodeID,
+			&i.LiveParticipantCount,
 			&i.LiveParticipants,
 			&i.LatestEpisodeID,
 			&i.Status,

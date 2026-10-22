@@ -521,6 +521,9 @@ create index participants_sync_active_episode_capacity_idx
 create index participants_admission_cleanup_active_idx
     on participants(tenant_id, episode_id, id)
     where status = 'active';
+create index participants_episode_recent_join_idx
+    on participants(tenant_id, space_id, episode_id, (coalesce(first_joined_at, joined_at)) desc, id)
+    where coalesce(first_joined_at, joined_at) is not null;
 create unique index participants_dashboard_account_episode_idx
     on participants(tenant_id, episode_id, account_id)
     where account_id is not null and status in ('joining', 'active');

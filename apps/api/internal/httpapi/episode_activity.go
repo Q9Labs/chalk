@@ -83,7 +83,7 @@ func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer Tenan
 				item.RecentParticipants = append(item.RecentParticipants, presentParticipantResponse{ParticipantID: participant.ParticipantID.String(), DisplayName: participant.DisplayName})
 			}
 			if space.LiveEpisode != nil {
-				live := liveEpisodeResponse{EpisodeID: space.LiveEpisode.EpisodeID.String(), ParticipantCount: len(space.LiveEpisode.Participants), Participants: make([]presentParticipantResponse, 0, len(space.LiveEpisode.Participants))}
+				live := liveEpisodeResponse{EpisodeID: space.LiveEpisode.EpisodeID.String(), ParticipantCount: space.LiveParticipantCount, Participants: make([]presentParticipantResponse, 0, len(space.LiveEpisode.Participants))}
 				for _, participant := range space.LiveEpisode.Participants {
 					live.Participants = append(live.Participants, presentParticipantResponse{ParticipantID: participant.ParticipantID.String(), DisplayName: participant.DisplayName})
 				}

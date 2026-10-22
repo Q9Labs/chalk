@@ -19,11 +19,13 @@ type LatestEpisode struct {
 	EndedAt   *time.Time
 }
 
+// SpaceActivity holds at most five live Participants; LiveParticipantCount counts the whole live roster.
 type SpaceActivity struct {
-	SpaceID            utilities.ID
-	LiveEpisode        *LiveEpisode
-	LatestEpisode      *LatestEpisode
-	RecentParticipants []PresentParticipant
+	SpaceID              utilities.ID
+	LiveEpisode          *LiveEpisode
+	LiveParticipantCount int
+	LatestEpisode        *LatestEpisode
+	RecentParticipants   []PresentParticipant
 }
 
 func (s Service) ListSpaceActivity(ctx context.Context, tenantID utilities.ID, spaceIDs []utilities.ID) ([]SpaceActivity, error) {

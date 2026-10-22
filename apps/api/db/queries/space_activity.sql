@@ -1,6 +1,9 @@
 -- name: ListSpaceActivity :many
 select s.id as space_id, live.id as live_episode_id,
-       coalesce(c.folded_state -> 'participants', '[]'::jsonb)::jsonb as live_participants,
+       coalesce(jsonb_array_length(c.folded_state -> 'participants'), 0)::int as live_participant_count,
+       coalesce((select jsonb_agg(roster.value order by roster.position)
+                 from jsonb_array_elements(c.folded_state -> 'participants') with ordinality as roster(value, position)
+                 where roster.position <= 5), '[]'::jsonb)::jsonb as live_participants,
        latest.id as latest_episode_id, coalesce(latest.status, '')::text as status, latest.started_at, latest.ended_at,
        coalesce(recent.participants, '[]'::jsonb)::jsonb as recent_participants
 from spaces s

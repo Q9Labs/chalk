@@ -42,6 +42,7 @@ func (r EpisodeLifecycleRepository) ListSpaceActivity(ctx context.Context, tenan
 				return nil, err
 			}
 			item.LiveEpisode = &episodes.LiveEpisode{EpisodeID: utilities.IDFromBytes(row.LiveEpisodeID.Bytes), Participants: participants}
+			item.LiveParticipantCount = int(row.LiveParticipantCount)
 		}
 		if row.LatestEpisodeID.Valid {
 			item.LatestEpisode = &episodes.LatestEpisode{EpisodeID: utilities.IDFromBytes(row.LatestEpisodeID.Bytes), Status: row.Status, StartedAt: timestamp(row.StartedAt), EndedAt: nullableTimestamp(row.EndedAt)}
