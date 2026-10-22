@@ -98,7 +98,6 @@ export const ChatPanelSurface = React.memo(
     const [pickingFiles, setPickingFiles] = useState(false);
     const [composerError, setComposerError] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const endRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isAtBottomRef = useRef(true);
@@ -124,8 +123,7 @@ export const ChatPanelSurface = React.memo(
         return;
       }
       if (!isAtBottomRef.current) return;
-      scroller.scrollTop = scroller.scrollHeight;
-      endRef.current?.scrollIntoView?.({ behavior: autoScrollBehavior ?? (mountedRef.current ? "smooth" : "auto"), block: "end" });
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: autoScrollBehavior ?? (mountedRef.current ? "smooth" : "auto") });
       if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
       mountedRef.current = true;
     }, [autoScrollBehavior, latestSequence, messages.length, onMarkRead, pendingMessages.length]);
@@ -369,7 +367,6 @@ export const ChatPanelSurface = React.memo(
               ) : null}
             </div>
           ))}
-          <div ref={endRef} />
         </div>
 
         {(error || composerError) && (
