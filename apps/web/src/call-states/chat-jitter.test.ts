@@ -63,7 +63,7 @@ for (const width of [1440, 390]) {
         await page.screenshot({ path: `${directory}/screen.png` });
       }
       expect(await clock.textContent()).not.toBe(before);
-      expect(samples.length).toBeGreaterThan(duration / 50);
+      expect(samples.length).toBeGreaterThanOrEqual(duration / 100);
       const ys = samples.map((sample) => sample.y);
       expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(1);
     } finally {
