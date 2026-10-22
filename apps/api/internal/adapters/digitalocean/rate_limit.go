@@ -46,7 +46,10 @@ func rateLimitReset(value string) time.Time {
 }
 
 func retryDeadline(header http.Header, now time.Time) time.Time {
-	deadline := rateLimitReset(header.Get("RateLimit-Reset"))
+	var deadline time.Time
+	if remaining := rateLimitNumber(header.Get("RateLimit-Remaining")); remaining != nil && *remaining == 0 {
+		deadline = rateLimitReset(header.Get("RateLimit-Reset"))
+	}
 	value := header.Get("Retry-After")
 	if seconds, err := strconv.ParseUint(value, 10, 63); err == nil && seconds <= uint64((1<<63-1)/int64(time.Second)) {
 		if retry := now.Add(time.Duration(seconds) * time.Second); retry.After(deadline) {
