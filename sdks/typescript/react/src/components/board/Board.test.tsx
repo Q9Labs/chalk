@@ -1605,7 +1605,7 @@ it("keeps the dockable island available on an 820-point native tablet", async ()
       expect(container.querySelector('.chalk-board-island[data-place="left"]')).not.toBeNull();
     },
     true,
-    { phone: false },
+    { phone: false, presentation: "mobile" },
   );
 
 });

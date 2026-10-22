@@ -64,7 +64,11 @@ function Tiles<T extends string>({
           <Menu.RadioItem key={option.id} value={option.id} closeOnClick={false} className="chalk-board-tile">
             {preview(option.id)}
             <span>{option.label}</span>
-            {list ? <Menu.RadioItemIndicator className="chalk-board-option-check">✓</Menu.RadioItemIndicator> : null}
+            {list ? (
+              <span className="chalk-board-option-check" aria-hidden="true">
+                {value === option.id ? "✓" : null}
+              </span>
+            ) : null}
           </Menu.RadioItem>
         ))}
       </Menu.RadioGroup>
