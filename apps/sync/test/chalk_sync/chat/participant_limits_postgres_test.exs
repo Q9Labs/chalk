@@ -149,6 +149,34 @@ defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
     Task.await(holder)
   end
 
+  test "a retry with a file that commits while the retry waits gets the original message",
+       %{connection: connection, fixture: fixture} do
+    [first, _second] = fixture.identities
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("file-retry-0"))
+    attachment_id = ready_attachment(connection, first)
+    input = %{chat("file-retry-1") | attachment_ids: [attachment_id]}
+    test = self()
+
+    # The retry stops after its first duplicate lookup, just before it checks the file.
+    paused = fn ->
+      send(test, :retry_paused)
+      receive do: (:check -> :ok)
+    end
+
+    # The retry runs on another Sync node, so it has its own database connection.
+    retry =
+      Task.async(fn ->
+        Process.put(:sync_test_node, :second)
+        Repository.append(first, Map.put(input, :attachment_check_observer, paused))
+      end)
+
+    assert_receive :retry_paused
+    assert {:ok, %{outcome: :committed, message: message}} = Repository.append(first, input)
+    send(retry.pid, :check)
+
+    assert {:ok, %{outcome: :duplicate, message: ^message}} = Task.await(retry)
+  end
+
   test "a person who rejoins as a new participant keeps the same rate window",
        %{connection: connection, fixture: fixture} do
     [first, rejoined] = same_person(connection, fixture)
@@ -242,6 +270,35 @@ defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
     end)
 
     fixture.identities
+  end
+
+  defp ready_attachment(connection, identity) do
+    attachment_id = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_chat_attachments (
+        tenant_id, space_id, episode_id, attachment_id, participant_id, participant_generation,
+        client_attachment_id, request_fingerprint, upload_id, object_key, original_filename,
+        mime_type, byte_length, sha256, immutable_object_identity, finalized_at, status, expires_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, sha256(convert_to($7::text, 'UTF8')), $8, $7, 'notes.txt', 'text/plain',
+        5, sha256('notes'), 'etag-1', now(), 'ready', now() + interval '1 hour')
+      """,
+      [
+        UUID.dump!(identity.episode.tenant_id),
+        UUID.dump!(identity.episode.space_id),
+        UUID.dump!(identity.episode.episode_id),
+        UUID.dump!(attachment_id),
+        UUID.dump!(identity.participant_id),
+        identity.participant_generation,
+        "file-#{attachment_id}",
+        UUID.dump!(UUID.generate())
+      ]
+    )
+
+    attachment_id
   end
 
   defp chat(client_message_id, text \\ "Hello"),

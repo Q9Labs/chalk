@@ -317,9 +317,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     with {:ok, profile} <- lock_authority(connection, identity),
          :ok <- require_capability(profile, "sendChat"),
          :ok <- within_person_rate(connection, identity, input.client_message_id),
-         # A send with a missing or unusable file fails here, without the Space stream lock.
-         {:ok, _attachments} <-
-           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()) do
+         :ok <- check_attachments(connection, identity, input) do
       params = space_params(identity.episode)
       Postgrex.query!(connection, SQL.insert_stream(), params)
 
@@ -349,7 +347,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
        ) do
     case select_idempotent(connection, identity, input.client_message_id) do
       nil ->
-        notify_attachment_commit_attempt(input)
+        observe(input, :attachment_commit_observer)
 
         case attachments(connection, identity, input.attachment_ids, SQL.lock_attachments()) do
           {:ok, attachments} ->
@@ -515,8 +513,23 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  defp notify_attachment_commit_attempt(input) do
-    case Map.get(input, :attachment_commit_observer) do
+  # A send with a missing or unusable file fails here, without the Space stream lock. A retry
+  # whose original committed after the first duplicate lookup finds its files attached, so it
+  # goes on to the duplicate lookup under the lock instead.
+  defp check_attachments(connection, identity, input) do
+    observe(input, :attachment_check_observer)
+
+    with {:error, reason} <-
+           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()),
+         nil <- select_idempotent(connection, identity, input.client_message_id) do
+      {:error, reason}
+    else
+      _ok_or_existing -> :ok
+    end
+  end
+
+  defp observe(input, key) do
+    case Map.get(input, key) do
       observer when is_function(observer, 0) -> observer.()
       _other -> :ok
     end
