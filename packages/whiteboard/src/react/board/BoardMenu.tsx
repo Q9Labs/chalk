@@ -156,7 +156,7 @@ export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCo
         <BoardIcon name="copy" size={18} />
         Copy as image
       </ChalkMenuItem>
-      <Menu.Separator className="chalk-board-menu-rule" />
+      {!list || onBring || onClear ? <Menu.Separator className="chalk-board-menu-rule" /> : null}
       {!list ? appearance : null}
       {whoCanDraw ? <WhoCanDrawSection {...whoCanDraw} /> : null}
       {!list && (onBring || onClear) ? <Menu.Separator className="chalk-board-menu-rule" /> : null}

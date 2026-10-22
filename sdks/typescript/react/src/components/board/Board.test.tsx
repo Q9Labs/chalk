@@ -883,7 +883,7 @@ it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s 
 async function withOpenBoard(
   check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null) => Promise<void>) => Promise<void>,
   primary = true,
-  options: { capabilities?: readonly Capability[]; canDraw?: boolean; phone?: boolean; presentation?: BoardProps["presentation"]; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
+  options: { capabilities?: readonly Capability[]; canDraw?: boolean; phone?: boolean; presentation?: BoardProps["presentation"]; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClose?: BoardProps["onClose"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
 ) {
   const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
   options.onClient?.(client);
@@ -902,6 +902,7 @@ async function withOpenBoard(
         visible
         phone={options.phone}
         presentation={options.presentation}
+        onClose={options.onClose}
         colorScheme="dark"
         people={[]}
         following={following}
@@ -976,6 +977,20 @@ it("keeps following when a Bring animation's first frame predates its start", as
     },
     true,
     { onFollow },
+  );
+});
+
+it("separates guest mobile export and Close board actions once", async () => {
+  await withOpenBoard(
+    async (container) => {
+      await clickControl(container, "Board menu");
+      const menu = container.querySelector('[role="menu"]');
+      expect(menu?.textContent).toContain("Close board");
+      const roles = [...(menu?.querySelectorAll('[role="separator"], [role="menuitem"]') ?? [])].map((item) => item.getAttribute("role"));
+      expect(roles.join("|")).not.toContain("separator|separator");
+    },
+    true,
+    { phone: true, presentation: "mobile", capabilities: ["drawWhiteboard"], onClose: () => undefined },
   );
 });
 
@@ -1614,5 +1629,4 @@ it("keeps the dockable island available on an 820-point native tablet", async ()
     true,
     { phone: false, presentation: "mobile" },
   );
-
 });
