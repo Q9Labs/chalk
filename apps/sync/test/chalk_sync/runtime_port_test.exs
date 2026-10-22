@@ -14,6 +14,6 @@ defmodule ChalkSync.RuntimePortTest do
 
     runtime = Path.expand("../../config/runtime.exs", __DIR__)
     assert Config.Reader.read!(runtime, env: :test) |> get_in([:chalk_sync, :port]) == nil
-    assert Config.Reader.read!(runtime, env: :dev) |> get_in([:chalk_sync, :port]) == 21302
+    assert Config.Reader.read!(runtime, env: :dev) |> get_in([:chalk_sync, :port]) == 21_302
   end
 end

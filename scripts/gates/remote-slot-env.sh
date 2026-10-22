@@ -16,7 +16,13 @@ if [[ -n "${CHALK_REMOTE_SLOT:-}" ]]; then
   export CHALK_POSTGRES_PORT="$CHALK_DEV_POSTGRES_PORT" CHALK_REDIS_PORT="$CHALK_DEV_REDIS_PORT"
   export CHALK_DEV_API_ORIGIN="http://127.0.0.1:${CHALK_DEV_API_PORT}" VITE_ORIGIN="http://127.0.0.1:${CHALK_DEV_WEB_PORT}"
   export CHALK_DEV_STATE_ROOT="${TMPDIR}/chalk-dev-state"
-  export CHALK_REDIS_CONTAINER="chalk-slot-${CHALK_REMOTE_SLOT}-$$" CHALK_REDIS_VOLUME="chalk-slot-${CHALK_REMOTE_SLOT}-$$"
-  export CHALK_POSTGRES_CONTAINER="chalk-postgres-slot-${CHALK_REMOTE_SLOT}-$$" CHALK_POSTGRES_VOLUME="chalk-postgres-slot-${CHALK_REMOTE_SLOT}-$$"
+  slot_owner="${CHALK_REMOTE_JOB_TOKEN:-$$}"
+  export CHALK_REDIS_CONTAINER="chalk-slot-${CHALK_REMOTE_SLOT}-${slot_owner}" CHALK_REDIS_VOLUME="chalk-slot-${CHALK_REMOTE_SLOT}-${slot_owner}"
+  export CHALK_POSTGRES_CONTAINER="chalk-postgres-slot-${CHALK_REMOTE_SLOT}-${slot_owner}" CHALK_POSTGRES_VOLUME="chalk-postgres-slot-${CHALK_REMOTE_SLOT}-${slot_owner}"
+  if [[ -n "${CHALK_REMOTE_RESOURCE_DIR:-}" ]]; then
+    mkdir -p "$CHALK_REMOTE_RESOURCE_DIR"
+    printf '%s\n' "$CHALK_REMOTE_SLOT" > "$CHALK_REMOTE_RESOURCE_DIR/slot"
+  fi
+  unset slot_owner
   unset slot_base
 fi

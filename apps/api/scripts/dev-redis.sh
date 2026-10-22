@@ -76,6 +76,12 @@ verify_version() {
 case "${cmd}" in
   start)
     require_docker
+    if [[ -n "${CHALK_REMOTE_RESOURCE_DIR:-}" ]]; then
+      mkdir -p "$CHALK_REMOTE_RESOURCE_DIR"
+      receipt="$(mktemp "$CHALK_REMOTE_RESOURCE_DIR/.redis.XXXXXX")"
+      printf '%s\n%s\n' "$container" "$volume" > "$receipt"
+      mv "$receipt" "$CHALK_REMOTE_RESOURCE_DIR/redis"
+    fi
 
     if container_exists; then
       docker start "${container}" >/dev/null

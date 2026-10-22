@@ -9,6 +9,8 @@ from pathlib import Path
 import signal
 import shutil
 import runpy
+import shlex
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -125,8 +127,168 @@ class QueueTest(unittest.TestCase):
                           .replace('if legacy_busy(cutover):', 'if False:')
                           .replace('return legacy_active()', 'return False')
                           .replace('                reap_legacy()', '                pass')
-                          .replace("if __name__ == '__main__':", "def legacy_active():\n    return False\n\nif __name__ == '__main__':"))
+                          .replace("if __name__ == '__main__':", "def legacy_active():\n    return False\n\nif 'legacy_waiters' in globals():\n    actual_legacy_waiters = legacy_waiters\n    def legacy_waiters():\n        return set()\n\nif __name__ == '__main__':"))
         self.command = [sys.executable, str(helper), '--root', str(self.root)]
+
+    @unittest.skipUnless(shutil.which('shlock'), 'requires the macOS legacy shlock binary')
+    def test_dead_worker_cleanup_cannot_unlink_reclaimed_legacy_lock(self):
+        lock = self.root / 'legacy.lock'
+        fixture = self.root / 'race.py'
+        fixture.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(lock)))
+        release = runpy.run_path(str(fixture)).get('release', lambda *args: None)
+        dead = subprocess.Popen(['sleep', '0'])
+        dead.wait()
+        lock.write_text(str(dead.pid))
+        time.sleep(1.1)
+        waiter = subprocess.Popen(['sleep', '10'])
+        contender = subprocess.Popen(['sleep', '10'])
+        reclaimed = []
+        class InterleavedPath(type(self.root)):
+            def read_text(path, *args, **kwargs):
+                value = super().read_text(*args, **kwargs)
+                result = subprocess.run(['shlock', '-p', str(waiter.pid), '-f', str(lock)])
+                reclaimed.append(result.returncode == 0)
+                return value
+        try:
+            if hasattr(release, '__globals__'):
+                release.__globals__['Path'] = InterleavedPath
+            release(False, dead.pid)
+            if not reclaimed:
+                self.assertEqual(subprocess.run(['shlock', '-p', str(waiter.pid), '-f', str(lock)]).returncode, 0)
+            else:
+                self.assertTrue(reclaimed[0])
+            result = subprocess.run(['shlock', '-p', str(contender.pid), '-f', str(lock)])
+            self.assertNotEqual(result.returncode, 0, 'dispatcher removed a living legacy owner\'s replacement lock')
+            self.assertEqual(int(lock.read_text()), waiter.pid)
+        finally:
+            for child in (waiter, contender):
+                child.terminate()
+                child.wait()
+
+    def test_detached_changed_directory_listener_is_gone_before_slot_reuse(self):
+        receipt = self.root / 'listener.json'
+        detached = self.root / 'detached.py'
+        detached.write_text('import os,socket,time,json,pathlib\n'
+                            'os.setsid(); os.chdir("/")\n'
+                            's=socket.socket(); s.bind(("127.0.0.1",0)); s.listen()\n'
+                            f'pathlib.Path({str(receipt)!r}).write_text(json.dumps([os.getpid(),s.getsockname()[1]]))\n'
+                            'time.sleep(20)\n')
+        self.submit('crash', f'python3 "{detached}" &\n'
+                    f'for i in {{1..100}}; do [ ! -f "{receipt}" ] || break; sleep .02; done\nkill -KILL $$')
+        bind = 'import json,socket,sys; s=socket.socket(); s.bind(("127.0.0.1",json.load(open(sys.argv[1]))[1]))'
+        self.submit('after', 'python3 -c ' + shlex.quote(bind) + ' ' + shlex.quote(str(receipt)))
+        self.lock.close()
+        try:
+            self.assertEqual(self.wait('crash')['result'], 137)
+            self.assertEqual(self.wait('after')['result'], 0, 'orphan still owns the port when its slot is reused')
+            pid, port = json.loads(receipt.read_text())
+            state = subprocess.run(['ps', '-p', str(pid), '-o', 'stat='], capture_output=True, text=True).stdout.strip()
+            self.assertFalse(state and not state.startswith('Z'), 'detached job process survived cleanup')
+            with socket.socket() as probe:
+                self.assertNotEqual(probe.connect_ex(('127.0.0.1', port)), 0)
+        finally:
+            if receipt.exists():
+                pid, _ = json.loads(receipt.read_text())
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_dev_containers_and_volumes_removed_after_finish_and_recovery(self):
+        state = self.root / 'docker-state.json'
+        foreign = {'containers': {'unrelated': True}, 'volumes': ['unrelated']}
+        state.write_text(json.dumps(foreign))
+        docker = self.root / 'docker'
+        docker.write_text('#!/usr/bin/env python3\n' + f'''
+import json,sys,pathlib
+path=pathlib.Path({str(state)!r})
+data=json.loads(path.read_text()); args=sys.argv[1:]; result=0
+if args[:2]==['container','inspect']: result=0 if args[2] in data['containers'] else 1
+elif args[:2]==['volume','inspect']: result=0 if args[2] in data['volumes'] else 1
+elif args[0]=='run':
+    name=args[args.index('--name')+1]; volume=args[args.index('-v')+1].split(':')[0]
+    data['containers'][name]=True
+    if volume not in data['volumes']: data['volumes'].append(volume)
+elif args[0]=='stop': data['containers'][args[1]]=False
+elif args[0]=='rm': data['containers'].pop(args[-1],None)
+elif args[:2]==['volume','rm']:
+    if args[-1] in data['volumes']: data['volumes'].remove(args[-1])
+elif args[0]=='exec':
+    if 'show server_version' in args: print('18.3')
+    elif 'show data_checksums' in args: print('on')
+    elif 'redis-server' in args: print('Redis server v=8.10.0')
+    elif 'PING' in args: print('PONG')
+path.write_text(json.dumps(data)); sys.exit(result)
+''')
+        docker.chmod(0o700)
+        repository = Path(__file__).resolve().parents[2]
+        postgres = shlex.quote(str(repository / 'apps/api/scripts/dev-postgres.sh'))
+        redis = shlex.quote(str(repository / 'apps/api/scripts/dev-redis.sh'))
+        slot_env = shlex.quote(str(repository / 'scripts/gates/remote-slot-env.sh'))
+        startup = (f'export PATH={shlex.quote(str(self.root))}:$PATH\n'
+                   f'mkdir -p "$1/tmp"; export TMPDIR="$1/tmp"\nsource {slot_env}\n'
+                   f'bash {postgres} start\nbash {redis} start\n')
+        self.submit('finish', startup + f'bash {postgres} stop\nbash {redis} stop')
+        self.lock.close()
+        self.assertEqual(self.wait('finish')['result'], 0, (self.root / 'jobs/finish/output.log').read_text())
+        self.assertEqual(json.loads(state.read_text()), foreign, 'successful teardown leaked private containers or volumes')
+        ready = self.root / 'resources-ready'
+        self.submit('recover', startup + f'touch "{ready}"; sleep 15')
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.02)
+        self.assertTrue(ready.exists())
+        os.kill(int((self.root / 'dispatcher.pid').read_text()), signal.SIGKILL)
+        self.invoke('attach', 'recover')
+        self.assertEqual(self.wait('recover')['result'], 137)
+        self.assertEqual(json.loads(state.read_text()), foreign, 'crash recovery leaked private containers or volumes')
+
+    @unittest.skipUnless(shutil.which('shlock'), 'requires the macOS legacy shlock binary')
+    def test_legacy_thirty_second_poller_gets_handoff_before_new_exclusive(self):
+        lock = self.root / 'legacy.lock'
+        self.shared_fixture(lock)
+        run_id = '20000101T000000Z-' + self.root.name + '-1-deadbeef'
+        helper = Path(self.command[1])
+        override = f"\ndef legacy_waiters():\n    return {{entry for entry in actual_legacy_waiters() if entry[1] == {run_id!r}}}\n"
+        if 'actual_legacy_waiters' in helper.read_text():
+            helper.write_text(helper.read_text().replace("if __name__ == '__main__':", override + "\nif __name__ == '__main__':"))
+        release_first = self.root / 'release-first'
+        release_new = self.root / 'release-new'
+        admitted = self.root / 'admitted'
+        tried = self.root / 'tried'
+        self.submit('first', f'while [ ! -f "{release_first}" ]; do sleep .02; done', '--exclusive')
+        self.lock.close()
+        self.wait('first', 'running')
+        script = '''lock="$3"; admitted="$4"; tried="$5"
+started=$SECONDS
+while :; do
+  if shlock -p $$ -f "$lock"; then touch "$admitted"; rm "$lock"; exit 0; fi
+  touch "$tried"
+  if ((SECONDS-started >= 30)); then exit 76; fi
+  sleep 30
+done
+'''
+        waiter = subprocess.Popen(['bash', '-s', '--', 'run', run_id, str(lock), str(admitted), str(tried)], stdin=subprocess.PIPE)
+        waiter.stdin.write(script.encode())
+        waiter.stdin.close()
+        try:
+            deadline = time.monotonic() + 3
+            while not tried.exists() and time.monotonic() < deadline:
+                time.sleep(.02)
+            self.assertTrue(tried.exists())
+            self.submit('newer', f'end=$((SECONDS+40)); while [ ! -f "{release_new}" ] && ((SECONDS<end)); do sleep .05; done', '--exclusive')
+            release_first.touch()
+            waiter.wait(timeout=35)
+            self.assertEqual(waiter.returncode, 0, 'older legacy waiter expired while a newer exclusive overtook it')
+            self.assertTrue(admitted.exists())
+            print('PASS legacy waiter using real 30-second polling admitted before the next exclusive', flush=True)
+        finally:
+            release_first.touch()
+            release_new.touch()
+            if waiter.poll() is None:
+                waiter.terminate()
+                waiter.wait()
+            self.wait('newer')
 
     def test_invalid_disk_threshold_rejected_before_ticket(self):
         for index, value in enumerate(('not-a-number', '-1', '1.5', 'NaN', '')):

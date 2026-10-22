@@ -89,7 +89,11 @@ def process_start(pid):
     return result.stdout.strip()
 
 
-def stop_job(job, pid, started):
+def job_token(job):
+    return hashlib.sha256(str(job).encode()).hexdigest()
+
+
+def owned_processes(job, pid, started, slot):
     # setpgrp (including with-timeout.sh) changes process group but preserves the job's session.
     # Session membership survives reparenting and cwd changes; start times protect PID reuse.
     owned = set()
@@ -124,17 +128,37 @@ def stop_job(job, pid, started):
             path = os.path.realpath(line[1:])
             if path == work or path.startswith(work + '/'):
                 owned.add(current)
+    marker = 'CHALK_REMOTE_JOB_TOKEN=' + job_token(job)
+    environment_flag = '-Eww' if sys.platform == 'darwin' else 'eww'
+    # Environment bytes stay in memory; only matched PIDs become cleanup receipts.
+    environment = subprocess.check_output(['ps', environment_flag, '-axo', 'pid=,stat=,command='], text=True)
+    for line in environment.splitlines():
+        fields = line.split(maxsplit=2)
+        if len(fields) == 3 and marker in fields[2].split() and not fields[1].startswith('Z'):
+            owned.add(int(fields[0]))
+    ports = job / 'resources' / 'slot'
+    if slot is not None and ports.exists():
+        if ports.is_symlink() or ports.read_text().strip() != str(slot):
+            raise ValueError('invalid slot port receipt')
+        base = 21000 + slot * 100
+        listeners = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}',
+                                    f'-iUDP:{base+1}-{base+18}', '-t'], capture_output=True, text=True)
+        if listeners.returncode not in (0, 1):
+            raise RuntimeError('could not inspect slot ports')
+        owned.update(int(value) for value in listeners.stdout.split())
     receipts = {p: process_start(p) for p in owned if p != os.getpid()}
+    if not receipts:
+        return {}
+    states = subprocess.check_output(['ps', '-axo', 'pid=,stat='], text=True)
+    alive = {int(line.split()[0]) for line in states.splitlines() if not line.split()[1].startswith('Z')}
+    return {p: start for p, start in receipts.items() if p in alive and start}
+
+
+def stop_job(job, pid, started, slot=None):
+    receipts = owned_processes(job, pid, started, slot)
     for sig in (signal.SIGTERM, signal.SIGKILL):
-        if sig == signal.SIGKILL and pid and process_start(pid) in ('', started):
-            # Include children started by a TERM handler after the first process snapshot.
-            for value in subprocess.check_output(['ps', '-axo', 'pid='], text=True).split():
-                p = int(value)
-                try:
-                    if os.getsid(p) == pid:
-                        receipts[p] = process_start(p)
-                except ProcessLookupError:
-                    pass
+        if sig == signal.SIGKILL:
+            receipts.update(owned_processes(job, pid, started, slot))
         for p, start in receipts.items():
             if start and process_start(p) == start:
                 try:
@@ -150,10 +174,55 @@ def stop_job(job, pid, started):
                 if not any(not line.split()[1].startswith('Z') for line in states):
                     break
                 time.sleep(0.05)
+    # A detached child can fork from a shutdown handler or leave its session/cwd.
+    # Never mark the ticket done (or free its slot) until a fresh scan is empty.
+    deadline = time.monotonic() + 5
+    while True:
+        remaining = owned_processes(job, pid, started, slot)
+        if not remaining:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError('job processes survived cleanup: ' + str(sorted(remaining)))
+        for p, start in remaining.items():
+            if process_start(p) == start:
+                try:
+                    os.kill(p, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        time.sleep(.05)
+
+
+def cleanup_resources(job, slot):
+    resources = job / 'resources'
+    if not resources.is_dir():
+        return
+    receipts = []
+    for service, prefix in [('postgres', 'chalk-postgres-slot'), ('redis', 'chalk-slot')]:
+        receipt = resources / service
+        if not receipt.exists():
+            continue
+        name = f'{prefix}-{slot}-{job_token(job)}'
+        if receipt.is_symlink() or receipt.read_text().splitlines() != [name, name]:
+            raise ValueError('invalid slot resource receipt')
+        receipts.append(name)
+    if not receipts:
+        return
+    docker = shutil.which('docker') or str(Path.home() / '.orbstack/bin/docker')
+    subprocess.run([docker, 'info'], check=True, capture_output=True, timeout=10)
+    for name in receipts:
+        for kind in ('container', 'volume'):
+            found = subprocess.run([docker, kind, 'inspect', name], capture_output=True, timeout=10)
+            if found.returncode == 0:
+                command = [docker, 'rm', '-f', '--volumes', name] if kind == 'container' else [docker, 'volume', 'rm', name]
+                subprocess.run(command, check=True, capture_output=True, timeout=10)
+            elif found.returncode != 1:
+                raise RuntimeError('could not inspect owned ' + kind)
+
 
 
 def finish(root, db, row, result, reason):
     job = root / 'jobs' / row['id']
+    cleanup_resources(job, row['slot'])
     work = job / 'work'
     if work.is_symlink():
         target = work.resolve()
@@ -215,6 +284,18 @@ def legacy_active():
     return bool(re.search(r'^n(/private)?/tmp/chalk-remote-\d{8}T', cwd, re.M))
 
 
+def legacy_waiters():
+    processes = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True)
+    waiters = set()
+    for line in processes.splitlines():
+        fields = line.split(maxsplit=1)
+        if len(fields) == 2:
+            match = re.match(r'^bash -s -- run ([A-Za-z0-9_-]+)(?: |$)', fields[1])
+            if match:
+                waiters.add((int(fields[0]), match[1]))
+    return waiters
+
+
 def admission(isolated, owner):
     if isolated:
         return True
@@ -223,14 +304,6 @@ def admission(isolated, owner):
         return True
     return subprocess.run(['shlock', '-p', str(owner), '-f', str(lock)]).returncode == 0
 
-
-
-def release(isolated, owner=None):
-    if not isolated:
-        owner = owner if owner is not None else os.getpid()
-        lock = Path('/tmp/chalk-remote-admission.lock')
-        if lock.exists() and lock.read_text().strip() == str(owner):
-            lock.unlink()
 
 
 def reap(root, db):
@@ -297,98 +370,103 @@ def daemon(root, db, isolated):
         fcntl.flock(lock, fcntl.LOCK_EX)
         (root / 'dispatcher.pid').write_text(str(os.getpid()))
         running = {}
-        try:
-            for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
-                stop_job(root / 'jobs' / row['id'], row['pid'], row['started'])
-                if row['exclusive']:
-                    release(isolated, row['pid'])
-                finish(root, db, row, 137, 'dispatcher restarted; interrupted job reaped')
-            reap(root, db)
-            if not isolated:
-                reap_legacy()
-            while True:
-                for ticket, (row, child, started) in list(running.items()):
-                    result = child.poll()
-                    if result is not None:
-                        if row['exclusive']:
-                            release(isolated, child.pid)
-                        stop_job(root / 'jobs' / row['id'], child.pid, started)
-                        finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
-                        del running[ticket]
-                if not any(row['exclusive'] for row, _, _ in running.values()):
-                    release(isolated)
-                expire_waiters(root, db)
-                row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
-                if row is None and not running:
-                    return
-                if row is None or len(running) >= slots or any(r['exclusive'] for r, _, _ in running.values()):
-                    time.sleep(0.2)
-                    continue
-                job = root / 'jobs' / row['id']
-                request = json.loads((job / 'request.json').read_text())
-                try:
-                    disk_threshold(request)
-                except ValueError as error:
-                    finish(root, db, row, 64, str(error))
-                    continue
-                exclusive = bool(row['exclusive'] or exclusive_request(request))
-                # Ordinary jobs never acquire the legacy lock. A live legacy job occupies
-                # one slot; existing slot jobs keep their isolated ports and continue running.
-                occupied = int(not isolated and legacy_occupied())
-                if (len(running) + occupied >= slots or (exclusive and running)
-                        or not resources_available(root, request)):
-                    time.sleep(0.2)
-                    continue
-                slot = next(i for i in range(slots) if i not in {r['slot'] for r, _, _ in running.values()})
-                child = None
-                started = None
-                try:
-                    work = Path('/tmp') / ('chalk-queue-work-' + hashlib.sha256(str(job).encode()).hexdigest()[:24])
-                    with (job / 'output.log').open('ab') as log:
-                        login_shell = '/bin/zsh' if sys.platform == 'darwin' else '/bin/bash'
-                        child = subprocess.Popen(['/bin/bash', '-ec',
-                                                  'read -r ready; shell="$1"; shift; exec "$shell" -lc \'exec bash "$@"\' chalk-queue "$@"', 'chalk-queue', login_shell,
-                                                  str(job / 'runner.sh'), str(work), *request],
-                                                 env={**os.environ, 'CHALK_REMOTE_SLOT': str(slot)},
-                                                 stdin=subprocess.PIPE, stdout=log, stderr=log,
-                                                 start_new_session=True, close_fds=True)
-                        started = process_start(child.pid)
-                        # The blocked worker owns the reservation, then keeps the same PID
-                        # through exec. Dispatcher death cannot invalidate an exclusive lock.
-                        if exclusive and not admission(isolated, child.pid):
-                            child.stdin.close()
-                            child.wait()
-                            time.sleep(.2)
-                            continue
-                        with db:
-                            db.execute("UPDATE jobs SET state='running',slot=?,exclusive=?,pid=?,started=? WHERE id=?",
-                                       (slot, int(exclusive), child.pid, started, row['id']))
-                        row = db.execute('SELECT * FROM jobs WHERE id=?', (row['id'],)).fetchone()
-                        # Reserve before inspecting orphaned legacy work. Bare legacy waiters
-                        # cannot run while we own shlock and must not extend this guard.
-                        deadline = time.monotonic() + 30
-                        while exclusive and not isolated and legacy_active():
-                            if time.monotonic() >= deadline:
-                                raise RuntimeError('legacy checkout still active after 30-second admission guard')
-                            time.sleep(.2)
-                        (job / 'work').symlink_to(work)
-                        work.mkdir()
-                        (job / 'repo.bundle').rename(work / 'repo.bundle')
-                        log.write(f"[remote] ticket {row['ticket']} running: {row['id']} slot={slot} exclusive={exclusive}\n".encode())
-                        log.flush()
-                        child.stdin.write(b'run\n')
-                        child.stdin.close()
-                    running[row['ticket']] = (row, child, started)
-                except Exception as error:
-                    if child:
-                        stop_job(job, child.pid, started)
+        legacy_handoff_until = None
+        for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
+            stop_job(root / 'jobs' / row['id'], row['pid'], row['started'], None if isolated else row['slot'])
+            finish(root, db, row, 137, 'dispatcher restarted; interrupted job reaped')
+        reap(root, db)
+        if not isolated:
+            reap_legacy()
+        while True:
+            for ticket, (row, child, started) in list(running.items()):
+                result = child.poll()
+                if result is not None:
+                    if row['exclusive']:
+                        legacy_handoff_until = None
+                    stop_job(root / 'jobs' / row['id'], child.pid, started, None if isolated else row['slot'])
+                    finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
+                    del running[ticket]
+            expire_waiters(root, db)
+            row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
+            if row is None and not running:
+                return
+            if row is None or len(running) >= slots or any(r['exclusive'] for r, _, _ in running.values()):
+                time.sleep(0.2)
+                continue
+            job = root / 'jobs' / row['id']
+            request = json.loads((job / 'request.json').read_text())
+            try:
+                disk_threshold(request)
+            except ValueError as error:
+                finish(root, db, row, 64, str(error))
+                continue
+            exclusive = bool(row['exclusive'] or exclusive_request(request))
+            # Ordinary jobs never acquire the legacy lock. A live legacy job occupies
+            # one slot; existing slot jobs keep their isolated ports and continue running.
+            occupied = int(not isolated and legacy_occupied())
+            if occupied:
+                legacy_handoff_until = None
+            if (len(running) + occupied >= slots or (exclusive and running)
+                    or not resources_available(root, request)):
+                time.sleep(0.2)
+                continue
+            if exclusive and not isolated and not occupied:
+                if legacy_waiters():
+                    if legacy_handoff_until is None:
+                        legacy_handoff_until = time.monotonic() + 35
+                    if time.monotonic() < legacy_handoff_until:
+                        time.sleep(.2)
+                        continue
+                else:
+                    legacy_handoff_until = None
+            slot = next(i for i in range(slots) if i not in {r['slot'] for r, _, _ in running.values()})
+            child = None
+            started = None
+            try:
+                work = Path('/tmp') / ('chalk-queue-work-' + hashlib.sha256(str(job).encode()).hexdigest()[:24])
+                with (job / 'output.log').open('ab') as log:
+                    login_shell = '/bin/zsh' if sys.platform == 'darwin' else '/bin/bash'
+                    child = subprocess.Popen(['/bin/bash', '-ec',
+                                              'read -r ready; shell="$1"; shift; exec "$shell" -lc \'exec bash "$@"\' chalk-queue "$@"', 'chalk-queue', login_shell,
+                                              str(job / 'runner.sh'), str(work), *request],
+                                             env={**os.environ, 'CHALK_REMOTE_SLOT': str(slot),
+                                                  'CHALK_REMOTE_JOB_TOKEN': job_token(job),
+                                                  'CHALK_REMOTE_RESOURCE_DIR': str(job / 'resources')},
+                                             stdin=subprocess.PIPE, stdout=log, stderr=log,
+                                             start_new_session=True, close_fds=True)
+                    started = process_start(child.pid)
+                    # The blocked worker owns the reservation, then keeps the same PID
+                    # through exec. Dispatcher death cannot invalidate an exclusive lock.
+                    if exclusive and not admission(isolated, child.pid):
                         child.stdin.close()
                         child.wait()
-                        if exclusive:
-                            release(isolated, child.pid)
-                    finish(root, db, row, 70, f'queue failed: {error}')
-        finally:
-            release(isolated)
+                        time.sleep(.2)
+                        continue
+                    with db:
+                        db.execute("UPDATE jobs SET state='running',slot=?,exclusive=?,pid=?,started=? WHERE id=?",
+                                   (slot, int(exclusive), child.pid, started, row['id']))
+                    row = db.execute('SELECT * FROM jobs WHERE id=?', (row['id'],)).fetchone()
+                    # Reserve before inspecting orphaned legacy work. Bare legacy waiters
+                    # cannot run while we own shlock and must not extend this guard.
+                    deadline = time.monotonic() + 30
+                    while exclusive and not isolated and legacy_active():
+                        if time.monotonic() >= deadline:
+                            raise RuntimeError('legacy checkout still active after 30-second admission guard')
+                        time.sleep(.2)
+                    (job / 'work').symlink_to(work)
+                    work.mkdir()
+                    (job / 'repo.bundle').rename(work / 'repo.bundle')
+                    log.write(f"[remote] ticket {row['ticket']} running: {row['id']} slot={slot} exclusive={exclusive}\n".encode())
+                    log.flush()
+                    child.stdin.write(b'run\n')
+                    child.stdin.close()
+                running[row['ticket']] = (row, child, started)
+            except Exception as error:
+                if child:
+                    stop_job(job, child.pid, started, None if isolated else slot)
+                    child.stdin.close()
+                    child.wait()
+                finish(root, db, row, 70, f'queue failed: {error}')
 
 
 def main():
