@@ -622,6 +622,30 @@ reservation as (
     where sync_chat_streams.space_id = excluded.space_id
         and sync_chat_streams.attachment_count < 1000
         and sync_chat_streams.attachment_bytes + $8 <= 5368709120
+        -- One person may hold at most 40 attachments or 200 MiB of the Space budget. Rejoining
+        -- creates a new participant row, so this counts every row with the same account or identity.
+        and (
+            select count(*) < 40
+                and coalesce(sum(held.byte_length), 0) + $8 <= 209715200
+            from sync_chat_attachments held
+            where held.tenant_id = $11
+                and held.space_id = $12
+                and held.participant_id in (
+                    select sibling.id
+                    from participants sender
+                    join participants sibling
+                        on sibling.tenant_id = sender.tenant_id
+                        and sibling.space_id = sender.space_id
+                        and (
+                            sibling.id = sender.id
+                            or sibling.account_id = sender.account_id
+                            or sibling.identity_id = sender.identity_id
+                        )
+                    where sender.tenant_id = $11
+                        and sender.space_id = $12
+                        and sender.id = $14
+                )
+        )
     returning
         sync_chat_streams.tenant_id,
         sync_chat_streams.space_id

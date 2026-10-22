@@ -20,7 +20,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
-  # One Participant may hold at most 4% of a Space stream's 250,000 messages and 2 GiB.
+  # One person may hold at most 4% of a Space stream's 250,000 messages and 2 GiB.
   @participant_limits %{messages: 10_000, bytes: 64 * 1024 * 1024}
   @capabilities ["sendReaction", "sendChat"]
 
@@ -96,6 +96,19 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   def append(%Identity{}, _input), do: {:error, :invalid_payload}
+
+  @impl true
+  def committed(%Identity{} = identity, %{
+        client_message_id: client_message_id,
+        text: text,
+        attachment_ids: attachment_ids
+      }) do
+    existing(identity, client_message_id, request_fingerprint(text, attachment_ids))
+  rescue
+    _exception -> {:error, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:error, :dependency_unavailable}
+  end
 
   @impl true
   def head(%EpisodeKey{} = episode) do
@@ -393,7 +406,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     encoded_bytes = Message.encoded_bytes(message)
     params = space_params(identity.episode)
 
-    with :ok <- within_participant_limits(connection, identity, encoded_bytes),
+    with :ok <- within_person_limits(connection, identity, encoded_bytes),
          [[^sequence]] <-
            Postgrex.query!(connection, SQL.reserve_message(), params ++ [sequence, encoded_bytes]).rows do
       insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
@@ -405,14 +418,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  # The Space stream lock is held here, so two sends from one Participant cannot both pass.
-  defp within_participant_limits(connection, identity, encoded_bytes) do
+  # The Space stream lock is held here, so two sends from one person cannot both pass.
+  defp within_person_limits(connection, identity, encoded_bytes) do
     limits = Application.get_env(:chalk_sync, :chat_participant_limits, @participant_limits)
 
     [[count, bytes]] =
       Postgrex.query!(
         connection,
-        SQL.participant_usage(),
+        SQL.person_usage(),
         space_params(identity.episode) ++ [uuid(identity.participant_id)]
       ).rows
 
@@ -530,17 +543,24 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   defp resolve_uncertain_append(identity, client_message_id, fingerprint) do
-    connection = Database.connection(identity.episode, 1)
-
-    case select_idempotent(connection, identity, client_message_id) do
-      {message, ^fingerprint} -> {:ok, %{outcome: :duplicate, message: message}}
-      {_message, _other_fingerprint} -> {:error, :client_message_id_conflict}
-      nil -> {:error, :dependency_unavailable}
+    case existing(identity, client_message_id, fingerprint) do
+      :not_found -> {:error, :dependency_unavailable}
+      result -> result
     end
   rescue
     _exception -> {:error, :dependency_unavailable}
   catch
     :exit, _reason -> {:error, :dependency_unavailable}
+  end
+
+  defp existing(identity, client_message_id, fingerprint) do
+    connection = Database.connection(identity.episode, 1)
+
+    case select_idempotent(connection, identity, client_message_id) do
+      {message, ^fingerprint} -> {:ok, %{outcome: :duplicate, message: message}}
+      {_message, _other_fingerprint} -> {:error, :client_message_id_conflict}
+      nil -> :not_found
+    end
   end
 
   defp lock_authority(connection, identity) do

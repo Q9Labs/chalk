@@ -65,15 +65,16 @@ defmodule ChalkSync.Chat do
     repository = repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
+    input =
+      input
+      |> Map.put(:client_message_id, client_message_id)
+      |> Map.put(:text, text)
+      |> Map.put(:attachment_ids, attachment_ids)
+
     append_result =
-      with :ok <- Admission.admit_chat(admission(options), identity) do
-        repository.append(
-          identity,
-          input
-          |> Map.put(:client_message_id, client_message_id)
-          |> Map.put(:text, text)
-          |> Map.put(:attachment_ids, attachment_ids)
-        )
+      case Admission.admit(admission(options), :chat, identity) do
+        :ok -> repository.append(identity, input)
+        {:error, reason} -> committed_or_rejected(repository, identity, input, options, reason)
       end
 
     case append_result do
@@ -260,6 +261,20 @@ defmodule ChalkSync.Chat do
       "outcome" => "cursor_reset",
       "retained_floor_sequence" => floor
     }
+  end
+
+  # A retry of a message that already committed must still get its original result, even when
+  # the sender's window is full. Those lookups have their own window so a flood cannot use the
+  # rejection path to drive unbounded reads.
+  defp committed_or_rejected(repository, identity, input, options, reason) do
+    with :ok <- Admission.admit(admission(options), :chat_retry, identity),
+         {:ok, _duplicate} = result <- repository.committed(identity, input) do
+      result
+    else
+      :not_found -> {:error, reason}
+      {:error, :client_message_id_conflict} = conflict -> conflict
+      {:error, _lookup_unavailable} -> {:error, reason}
+    end
   end
 
   defp rejected_chat(client_message_id, reason) do

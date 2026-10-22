@@ -110,13 +110,30 @@ defmodule ChalkSync.Chat.Repository.SQL do
     """
   end
 
-  def participant_usage do
+  # Rejoining creates a new participant row, so usage counts every row in the Space that
+  # shares the sender's account or API identity, not only the current row.
+  def person_usage do
     """
-    select count(*), coalesce(sum(encoded_bytes), 0)::bigint
-    from sync_chat_messages
-    where tenant_id = $1
-      and space_id = $2
-      and participant_id = $3
+    with person as materialized (
+      select sibling.id
+      from participants sender
+      join participants sibling
+        on sibling.tenant_id = sender.tenant_id
+        and sibling.space_id = sender.space_id
+        and (
+          sibling.id = sender.id
+          or sibling.account_id = sender.account_id
+          or sibling.identity_id = sender.identity_id
+        )
+      where sender.tenant_id = $1
+        and sender.space_id = $2
+        and sender.id = $3
+    )
+    select count(*), coalesce(sum(message.encoded_bytes), 0)::bigint
+    from sync_chat_messages message
+    where message.tenant_id = $1
+      and message.space_id = $2
+      and message.participant_id in (select id from person)
     """
   end
 

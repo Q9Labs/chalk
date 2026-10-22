@@ -5,6 +5,7 @@
 - Add `media.captureCameraPreview()` to capture an unpublished camera track with the selected device and refresh the inventory after permission is granted. It shares live or pending camera capture; callers release a preview handle.
 - Exhausted media confirmations now return recoverable `media.timeout`; unrelated command retries are not classified as media failures.
 - Reaction acknowledgement timeouts return recoverable `collaboration.unavailable` without claiming whether the reaction arrived.
+- Chat sends that Sync refuses for sending too fast now fail with recoverable `command.rate_limited` instead of `chat.payload_invalid`.
 
 - Preserve access, Sync, SFU, and recovery failure codes and recoverability in join rejections, snapshots, and error events.
 - Add `connection.sync_hello_timeout` for the Sync startup handshake deadline. Handle it alongside `connection.sync_start_failed` and retain a fallback for future codes.

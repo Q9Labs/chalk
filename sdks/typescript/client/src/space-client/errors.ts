@@ -48,6 +48,7 @@ const SYNC_FAILURES: ReadonlyMap<string, { readonly failure: ClientFailure; read
   ["media_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
   ["retry_exhausted", { failure: MEDIA_TIMEOUT_FAILURE, scope: "media" }],
   ["reaction_ack_timeout", { failure: { code: "collaboration.unavailable", recoverable: true, message: "Couldn’t confirm your reaction. Try again." } }],
+  ["rate_limited", { failure: { code: "command.rate_limited", recoverable: true, message: "You are sending messages too fast. Wait a moment, then try again." } }],
 ]);
 
 export function normalizeMediaError(cause: unknown): SpaceClientError {
