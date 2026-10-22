@@ -405,3 +405,18 @@ it("brings a typed text back for both people after Undo and Redo", async () => {
     await context.close();
   }
 });
+
+it("keeps a live share selectable when a phone guest pins the board", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    await open("stage-board-share");
+    await page.locator('[data-stage-item="whiteboard"]').click();
+    await page.locator(".chalk-board[data-primary]").waitFor();
+    const share = page.locator('[data-stage-item="screen-share:stage-1"]');
+    expect(await share.isVisible()).toBe(true);
+    await share.click();
+    await expect.poll(() => share.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});

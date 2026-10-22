@@ -37,6 +37,8 @@ export interface SpotlightFitOptions {
   readonly content?: boolean;
   readonly wideIds?: readonly string[];
   readonly maxPerPage?: number;
+  /** @deprecated Prefer floatingPhonePeople for boards. Preserves the 52px phone strip. */
+  readonly slimPhoneStrip?: boolean;
   /** On a phone the board keeps the whole stage, and people float in a short column at its right edge. */
   readonly floatingPhonePeople?: boolean;
   readonly speakerId?: string | null;
@@ -208,14 +210,15 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
     };
   }
   if (phone && options.floatingPhonePeople) return floatPeople(box, primaryId, stripIds, options);
-  const strip = phone ? Math.round(box.height * 0.3) : clamp(box.height * options.stripRatio, options.minStripHeight, options.maxStripHeight);
+  const slim = phone && options.slimPhoneStrip === true;
+  const strip = slim ? 52 : phone ? Math.round(box.height * 0.3) : clamp(box.height * options.stripRatio, options.minStripHeight, options.maxStripHeight);
   const column = phone && options.content ? 120 : clamp(box.width * 0.15, 180, 260);
   const belowMain = options.content ? contain({ width: box.width, height: box.height - strip - options.gap }, aspect) : { width: box.width, height: box.height - strip - options.gap };
   const besideMain = options.content ? contain({ width: box.width - column - options.gap, height: box.height }, aspect) : { width: box.width - column - options.gap, height: box.height };
   const beside = options.content ? besideMain.width * besideMain.height > belowMain.width * belowMain.height * 1.005 : !phone && Math.abs(Math.log(besideMain.width / besideMain.height / WIDESCREEN)) < Math.abs(Math.log(belowMain.width / belowMain.height / WIDESCREEN));
   const main = { width: beside ? besideMain.width : box.width, height: beside ? box.height : belowMain.height };
   const remaining = { width: beside ? box.width - main.width - options.gap : box.width, height: beside ? box.height : box.height - main.height - options.gap };
-  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: phone ? 72 : 96, maxPerPage: options.maxPerPage ?? DEFAULT_GRID_OPTIONS.maxPerPage }, options.wideIds);
+  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: slim ? 52 : phone ? 72 : 96, maxPerPage: options.maxPerPage ?? DEFAULT_GRID_OPTIONS.maxPerPage }, options.wideIds);
   return {
     ...people,
     frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...main }, ...people.frames.map((frame) => ({ ...frame, role: "strip" as const, x: frame.x + (beside ? main.width + options.gap : 0), y: frame.y + (beside ? 0 : main.height + options.gap) }))],
