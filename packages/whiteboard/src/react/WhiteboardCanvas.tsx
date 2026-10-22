@@ -545,10 +545,16 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
   );
   const placeMathRef = useRef(placeMath);
   placeMathRef.current = placeMath;
+  const liveApi = useRef(api);
+  useEffect(() => {
+    liveApi.current = api;
+    return () => {
+      liveApi.current = null;
+    };
+  }, [api]);
   const { engineRef } = collaboration;
   useEffect(() => {
     if (!api || !excalidraw || !loaded || !isReady || !collaboration.ready || !onEngineReady) return;
-    let active = true;
     onEngineReady({
       api,
       excalidraw,
@@ -567,16 +573,13 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
         api.updateScene({ elements: [], captureUpdate: excalidraw.CaptureUpdateAction.NEVER });
         api.history.clear();
         return () => {
-          if (!active || api.getSceneElementsIncludingDeleted().length > 0) return false;
+          if (liveApi.current !== api || api.getSceneElementsIncludingDeleted().length > 0) return false;
           api.updateScene({ elements: before.map((element) => excalidraw.newElementWith(element, {})), captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY });
           return true;
         };
       },
       placeMath: (latex) => placeMathRef.current(latex),
     });
-    return () => {
-      active = false;
-    };
   }, [api, engineRef, excalidraw, isReady, loaded, collaboration.ready, onEngineReady]);
   return { onApiReady, onChange };
 }

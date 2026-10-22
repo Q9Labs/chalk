@@ -11,6 +11,7 @@ import * as BoardMenuModule from "./BoardMenu";
 import { BoardToastContext } from "./board-toasts";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import type { Capability, ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 
 type TestEngine = {
   pan: (x: number, y: number) => void;
@@ -778,6 +779,38 @@ it("receives Bring while the board tile is off-page and keeps that view on retur
     true,
     { onFollow },
   );
+});
+
+it.each([false, true])("standalone Clear Undo survives callback changes but not unmount, unmount %s", async (unmount) => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let current: WhiteboardEngineHandle | undefined;
+  const render = () =>
+    root.render(
+      <WhiteboardCanvas
+        onEngineReady={(engine) => {
+          current = engine;
+        }}
+      />,
+    );
+  try {
+    await act(async () => render());
+    await vi.waitFor(() => expect(loadedEngines()).toHaveLength(1));
+    await act(async () => document.getElementById("chalk-excalidraw-styles")?.dispatchEvent(new Event("load")));
+    await vi.waitFor(() => expect(current).toBeDefined());
+    const engine = loadedEngines()[0];
+    if (!engine || !current) throw new Error("Standalone board must be ready");
+    await act(async () => engine.select("stroke"));
+    const restore = await act(async () => current?.clearWithUndo());
+    if (!restore) throw new Error("Clear must return Undo");
+    await act(async () => (unmount ? root.render(null) : render()));
+    await act(async () => expect(restore()).toBe(!unmount));
+    expect(engine.elements()).toHaveLength(unmount ? 0 : 1);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
 });
 
 it.each(["new empty scene", "new empty revision", "disposed"])("refuses Clear Undo after %s", async (change) => {
