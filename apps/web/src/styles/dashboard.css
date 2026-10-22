@@ -1053,7 +1053,7 @@
   color: #fff;
 }
 
-/* Without a size, a recording plays at its own resolution and the 16:9 box crops it to the top-left corner. */
+/* A recording smaller than the player, or not 16:9, otherwise keeps its own size in the top-left corner of the 16:9 box. */
 .site .dash .player video {
   display: block;
   width: 100%;
