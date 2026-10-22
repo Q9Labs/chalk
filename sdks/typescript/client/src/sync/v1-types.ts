@@ -98,6 +98,8 @@ export type V1EpisodeSnapshot = {
     readonly terminalReason?: string;
     readonly noticeUnresponsive?: boolean;
     readonly health?: import("./v1-health").SyncHealth;
+    /** Cumulative count retained across successful retries; contains no URL or credentials. */
+    readonly dialTimeoutCount?: number;
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;

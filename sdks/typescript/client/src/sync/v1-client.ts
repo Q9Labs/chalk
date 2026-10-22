@@ -1,4 +1,5 @@
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
+import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -38,9 +39,6 @@ const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
-// Bounds only TCP/TLS/HTTP upgrade. Sync upgrades before authentication; its
-// 5-second hello timer and 60-second WebSocket idle timer start after open.
-const DIAL_TIMEOUT_MS = 10_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
@@ -90,7 +88,8 @@ export class V1SyncClient implements V1CollaborationClient {
   #startupGeneration = 0;
   #connectionGeneration = 0;
   #reconnectTimer: unknown;
-  #dialTimer: unknown;
+  #cancelDial: (() => void) | undefined;
+  #dialTimeoutCount = 0;
   #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -192,7 +191,7 @@ export class V1SyncClient implements V1CollaborationClient {
     const pendingCommands = this.#commandScheduler.pendingCommands;
     const optimisticControl = this.#control && this.#participantId ? optimisticV1Control(this.#control, this.#participantId, pendingCommands) : this.#control;
     return {
-      connection: this.#phase.phase === "live" ? { ...this.#phase, noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : { ...this.#phase },
+      connection: { ...this.#phase, ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}), ...(this.#dialTimeoutCount ? { dialTimeoutCount: this.#dialTimeoutCount } : {}) },
       participantId: this.#participantId,
       participantGeneration: this.#participantGeneration,
       control: this.#control,
@@ -344,10 +343,11 @@ export class V1SyncClient implements V1CollaborationClient {
     const socket = this.#options.webSocket.connect(this.#options.url);
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
-    this.#dialTimer = this.#clock().setTimeout(() => {
-      this.#dialTimer = undefined;
+    this.#cancelDial = scheduleSyncDialDeadline(this.#clock(), () => {
+      this.#cancelDial = undefined;
+      this.#dialTimeoutCount += 1;
       this.#recover("WebSocket dial timeout");
-    }, DIAL_TIMEOUT_MS);
+    });
     socket.onopen = () => {
       if (socket !== this.#socket) return;
       this.#clearDial();
@@ -790,9 +790,8 @@ export class V1SyncClient implements V1CollaborationClient {
     return this.#clock().now();
   }
   #clearDial(): void {
-    if (this.#dialTimer === undefined) return;
-    this.#clock().clearTimeout(this.#dialTimer);
-    this.#dialTimer = undefined;
+    this.#cancelDial?.();
+    this.#cancelDial = undefined;
   }
   #clearReconnect(): void {
     if (this.#reconnectTimer === undefined) return;

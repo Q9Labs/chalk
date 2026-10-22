@@ -4,9 +4,10 @@ import type { Duplex } from "node:stream";
 import { expect, it, vi } from "vitest";
 import { createBrowserWebSocketFactory } from "./browser";
 import { V1SyncClient } from "./v1-client";
-import type { SyncSocket } from "./types";
+import type { SyncSocket, SyncWebSocketFactory } from "./types";
+import { ChalkWhiteboardV1Client } from "../whiteboard/v1-client";
 
-it("retries a TCP connection that never completes its WebSocket handshake", async () => {
+it.each(["sync", "whiteboard"] as const)("%s retries a TCP connection that never completes its WebSocket handshake", async (kind) => {
   const sockets = new Set<Duplex>();
   let attempts = 0;
   const server = createServer();
@@ -25,21 +26,23 @@ it("retries a TCP connection that never completes its WebSocket handshake", asyn
   if (!address || typeof address === "string") throw new Error("TCP test server has no port");
   const clock = new DialClock();
   const token = vi.fn(async () => "test-token");
-  const client = new V1SyncClient({ url: `ws://127.0.0.1:${address.port}/v1/sync`, token, webSocket: createBrowserWebSocketFactory(), clock, reconnectDelayMs: 250 });
+  const options = { url: `ws://127.0.0.1:${address.port}/v1/${kind}`, token, webSocket: createBrowserWebSocketFactory(), clock, reconnectDelayMs: 250 };
+  const client = dialClient(kind, options);
   try {
     await client.start();
     await vi.waitFor(() => expect(attempts).toBe(1));
-    clock.advance(9_999);
+    clock.advance(2_999);
     expect(token).not.toHaveBeenCalled();
     clock.advance(1);
     clock.advance(250); // Existing first retry backoff.
     await vi.waitFor(() => expect(attempts).toBe(2), { timeout: 1_000 });
     await vi.waitFor(() => expect(token).toHaveBeenCalledTimes(1));
-    expect(client.getSnapshot().connection.phase).toBe("recovering");
+    expect(client.phase()).toBe("recovering");
+    expect(client.timeoutEvidence()).toBeTruthy();
     clock.advance(20_000);
     expect(attempts).toBe(2);
   } finally {
-    client.stop();
+    await client.stop();
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -52,7 +55,7 @@ it("accepts a slow upgrade before the deadline and cancels the timer on stop", a
   const client = new V1SyncClient({ url: "ws://fixture.test/v1/sync", token, webSocket: { connect: () => socket }, clock });
   try {
     await client.start();
-    clock.advance(9_999);
+    clock.advance(2_999);
     socket.onopen?.();
     await Promise.resolve();
     clock.advance(20_000);
@@ -78,12 +81,12 @@ it("ignores a timed-out attempt's late open without cancelling the replacement d
   const client = new V1SyncClient({ url: "ws://fixture.test/v1/sync", token, webSocket: { connect }, clock, reconnectDelayMs: 250 });
   try {
     await client.start();
-    clock.advance(10_250);
+    clock.advance(3_250);
     expect(connect).toHaveBeenCalledTimes(2);
     first.onopen?.();
     await Promise.resolve();
     expect(token).not.toHaveBeenCalled();
-    clock.advance(10_000);
+    clock.advance(3_000);
     expect(second.close).toHaveBeenCalledTimes(1);
   } finally {
     client.stop();
@@ -98,6 +101,9 @@ class DialClock {
   #now = 0;
   #nextHandle = 0;
   readonly #timers = new Map<number, { at: number; callback: () => void }>();
+  monotonicNow(): number {
+    return this.#now;
+  }
   now(): number {
     return this.#now;
   }
@@ -121,4 +127,34 @@ class DialClock {
     }
     this.#now = target;
   }
+}
+
+function dialClient(kind: "sync" | "whiteboard", options: { url: string; token: () => Promise<string>; webSocket: SyncWebSocketFactory; clock: DialClock; reconnectDelayMs: number }) {
+  if (kind === "sync") {
+    const client = new V1SyncClient(options);
+    return { start: () => client.start(), stop: () => client.stop(), phase: () => client.getSnapshot().connection.phase, timeoutEvidence: () => client.getSnapshot().connection.dialTimeoutCount };
+  }
+  let timedOut = false;
+  let phase = "unsubscribed";
+  const client = new ChalkWhiteboardV1Client({
+    ...options,
+    files: { getDownloadUrl: async () => ({ downloadUrl: "https://files.test/download", expiresAt: "2026-08-23T00:00:00.000Z" }) },
+    onSummary: (summary) => {
+      phase = summary.status;
+      if (summary.error?.message.includes("timed out before opening")) timedOut = true;
+    },
+  });
+  let startup: Promise<unknown> | undefined;
+  return {
+    start: async () => {
+      startup = client.startSceneSubscription().catch(() => undefined);
+      await Promise.resolve();
+    },
+    stop: async () => {
+      await client.stopSceneSubscription();
+      await startup;
+    },
+    phase: () => phase,
+    timeoutEvidence: () => timedOut,
+  };
 }

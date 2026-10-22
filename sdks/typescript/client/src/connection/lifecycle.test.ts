@@ -80,6 +80,26 @@ describe("ConnectionLifecycle Episode snapshot", () => {
       }).pipe(Effect.provide(layer)),
     );
   });
+  it("retains a redacted dial-timeout diagnostic after Sync recovers without duplicate events", async () => {
+    const platform = createCoreTestPlatform();
+    const layer = makeConnectionLifecycleLayer({
+      access: async () => parseParsedAccessGrant(opaqueAccessGrant("dial-diagnostic")),
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      dependencies: platform.dependencies,
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
+        yield* lifecycle.join();
+        const live = platform.sync.getSnapshot();
+        platform.emitSync({ ...live, connection: { phase: "connecting", dialTimeoutCount: 1 } });
+        platform.emitSync({ ...live, connection: { phase: "live", dialTimeoutCount: 1 } });
+        platform.emitSync({ ...live, connection: { phase: "live", dialTimeoutCount: 1 } });
+        expect(lifecycle.getDiagnostics().filter((event) => event.event === "sync_dial_timeout")).toEqual([{ timestamp: expect.any(Number), event: "sync_dial_timeout", state: "live", epoch: expect.any(Number), attempt: 1 }]);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
   it("carries the server Episode start time into the live snapshot", async () => {
     const platform = createCoreTestPlatform();
     const access = parseParsedAccessGrant({

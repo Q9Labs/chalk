@@ -1,3 +1,4 @@
+import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
@@ -72,6 +73,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #updateAssembler = new WhiteboardV1UpdateAssembler();
   readonly #updateAssemblyTimers = new Map<string, unknown>();
   #socket: SyncSocket | null = null;
+  #cancelDial: (() => void) | undefined;
   #started = false;
   #startupGeneration = 0;
   #phase: "idle" | "connecting" | "authenticating" | "live" | "stopped" = "idle";
@@ -171,6 +173,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
     this.#clearReconnect();
+    this.#clearDial();
     this.#clearHeartbeat();
     this.#clearOperationRetryTimers();
     this.#clearUpdateAssemblies();
@@ -374,7 +377,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#phase = "connecting";
     const socket = this.#options.webSocket.connect(this.#options.url);
     this.#socket = socket;
-    socket.onopen = () => void this.#authenticate(socket);
+    this.#cancelDial = scheduleSyncDialDeadline(this.#clock(), () => {
+      this.#cancelDial = undefined;
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "WebSocket dial timeout");
+      this.#disconnected(socket, CLIENT_RESTART_CLOSE_CODE);
+      this.#publishSummary("recovering", failure("start_scene_subscription", "unavailable", true, "The board connection timed out before opening."));
+    });
+    socket.onopen = () => {
+      if (socket !== this.#socket) return;
+      this.#clearDial();
+      void this.#authenticate(socket);
+    };
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
@@ -768,6 +781,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #resetDisconnectedState(): void {
     this.#socket = null;
+    this.#clearDial();
     this.#clearHeartbeat();
     this.#clearUpdateAssemblies();
     this.#phase = "connecting";
@@ -784,6 +798,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#publishSummary("failed", terminalFailure);
     if (this.#initialSnapshot) rejectDeferred(this.#initialSnapshot, error(terminalFailure));
     this.#rejectOperationCallers(terminalFailure);
+  }
+
+  #clearDial(): void {
+    this.#cancelDial?.();
+    this.#cancelDial = undefined;
   }
 
   #scheduleReconnect(): void {
