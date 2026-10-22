@@ -505,7 +505,10 @@ try {
       assert.equal(result.kind, kind);
       assert.equal(result[kind].id, id);
       if (kind === "recording") {
-        assert.equal(typeof result.recording.transcriptionPending, "boolean");
+        assert.equal(result.recording.sourceStatus, "failed");
+        assert.equal(result.recording.exportStatus, "unavailable");
+        assert.equal(result.recording.transcriptionStatus, "failed");
+        assert.equal(result.recording.failureMessage, "The recording capture did not complete.");
         assert.equal(result.recording.transcripts[0].id, foreign.transcriptId);
       }
       assert.equal(engineReads.slice(offset).filter((read) => read.path.startsWith(`/v1/tenants/${firstTenant}/`)).length, kind === "recording" ? 2 : 1, "Recording discovery costs two tenant reads; transcript refresh costs one");

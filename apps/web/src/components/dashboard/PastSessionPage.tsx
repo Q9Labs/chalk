@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { act, errorMessage, readPage } from "../../lib/dashboard/client";
+import { pendingRecording } from "../../lib/dashboard/recording";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -10,7 +11,7 @@ import { useLoad } from "./AppShell";
 import { ErrorPanel, Menu, MenuItem, Sk, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Ids = { readonly spaceId: string; readonly episodeId: string };
-type Transcript = { readonly kind: "loading" } | { readonly kind: "none" } | { readonly kind: "processing" } | { readonly kind: "failed" } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
+type Transcript = { readonly kind: "loading" } | { readonly kind: "none" } | { readonly kind: "processing" } | { readonly kind: "failed" } | { readonly kind: "unavailable" } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
 
 async function loadSession({ spaceId, episodeId }: Ids) {
   const [session, call] = await Promise.all([readPage("past-session", { spaceId, episodeId }), readPage("call", { spaceId })]);
@@ -19,7 +20,20 @@ async function loadSession({ spaceId, episodeId }: Ids) {
 
 export function PastSessionPage({ spaceId, episodeId }: Ids) {
   const ids = useMemo(() => ({ spaceId, episodeId }), [spaceId, episodeId]);
-  const { state, reload } = useLoad(() => loadSession(ids), `past:${spaceId}:${episodeId}`);
+  const { state, reload, update } = useLoad(() => loadSession(ids), `past:${spaceId}:${episodeId}`, {
+    visibility: "status",
+    interval: (data) => (data.session.recordings.some(pendingRecording) ? 5000 : undefined),
+    read: async (data) => {
+      const recordings = await Promise.all(
+        data.session.recordings.map(async (recording) => {
+          if (!pendingRecording(recording)) return recording;
+          const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
+          return result.kind === "recording" ? result.recording : recording;
+        }),
+      );
+      return { ...data, session: { ...data.session, recordings } };
+    },
+  });
   const phone = usePhone();
   const back = (name: string | null) => (
     <Link className="back" to="/dashboard/call/$spaceId" params={{ spaceId }}>
@@ -52,18 +66,21 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
         </div>
       </div>
     );
-  return <Session ids={ids} back={back(state.data.callName)} session={state.data.session} />;
+  return (
+    <Session ids={ids} back={back(state.data.callName)} session={state.data.session} onRecording={(recording) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? recording : item)) } }), { refresh: false })} />
+  );
 }
 
-function Session({ ids, back, session }: { readonly ids: Ids; readonly back: ReactNode; readonly session: PastSessionDTO }) {
+function Session({ ids, back, session, onRecording }: { readonly ids: Ids; readonly back: ReactNode; readonly session: PastSessionDTO; readonly onRecording: (recording: RecordingDTO) => void }) {
   const phone = usePhone();
   const { episode, attendance, recordings } = session;
-  const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
+  const recording = recordings.find((item) => item.exportStatus === "ready") ?? recordings[0];
   const [transcript, setTranscript] = useTranscript(ids, recording);
   const intents = useIntentKeys();
   const toast = useToast();
   const [time, setTime] = useState(0);
   const seek = useRef<(seconds: number) => void>(() => {});
+  const [exporting, setExporting] = useState(false);
   const end = episode.endedAt ?? episode.startedAt;
   const people = attendance.participants.length;
 
@@ -72,7 +89,7 @@ function Session({ ids, back, session }: { readonly ids: Ids; readonly back: Rea
       {back}
       <div className="pgh">
         <h1>Session on {longDay(episode.startedAt)}</h1>
-        {recording?.status === "completed" ? <DownloadMenu ids={ids} recording={recording} transcript={transcript.kind === "ready" ? transcript.transcript : null} /> : null}
+        {recording && (recording.exportStatus === "ready" || transcript.kind === "ready") ? <DownloadMenu ids={ids} recording={recording} transcript={transcript.kind === "ready" ? transcript.transcript : null} /> : null}
         <span className="meta">
           {clock(episode.startedAt)} to {clock(end)} · {duration(episode.startedAt, end)} · {people} {people === 1 ? "person" : "people"}
         </span>
@@ -98,18 +115,40 @@ function Session({ ids, back, session }: { readonly ids: Ids; readonly back: Rea
       </div>
     );
 
-  const media =
-    recording.status === "completed" ? (
-      <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
-    ) : (
-      <div className="pnote" role="status">
-        <div>
-          <span className="spin" aria-hidden="true" />
-          <b>Processing the recording</b>
-          <p>The recording and transcript show here when they’re ready. You can leave this page.</p>
-        </div>
+  async function prepareRecording() {
+    if (!recording || exporting) return;
+    setExporting(true);
+    try {
+      const result = await act("past-session", { action: "export-recording", ...ids, recordingId: recording.id, idempotencyKey: intents.key(`export:${recording.id}`) });
+      onRecording(result.recording);
+      intents.done(`export:${recording.id}`);
+    } catch (error) {
+      toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      setExporting(false);
+    }
+  }
+  const playable = recording.exportStatus === "ready";
+  const failed = recording.sourceStatus === "failed" || recording.status === "failed" || recording.exportStatus === "failed";
+  const unavailable = recording.sourceStatus === "expired" || (recording.exportStatus === "unavailable" && recording.sourceStatus !== "pending");
+  const preparing = recording.exportStatus === "pending";
+  const canPrepare = recording.sourceStatus === "available" && (recording.exportStatus === "none" || (recording.exportStatus === "failed" && recording.exportRetryable));
+  const media = playable ? (
+    <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
+  ) : (
+    <div className="pnote" role={failed ? "alert" : "status"}>
+      <div>
+        {failed || unavailable ? <Icon name="recOff" /> : canPrepare ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
+        <b>{failed ? "The recording couldn’t be made" : unavailable ? "The recording is no longer available" : canPrepare ? "The recording is ready to prepare" : preparing ? "Preparing the recording" : "Processing the recording"}</b>
+        <p>{failed || unavailable ? recording.failureMessage || "The recording source is no longer available." : canPrepare ? "Prepare this session’s video to watch or download it." : "You can leave this page and return when the video is ready."}</p>
+        {canPrepare ? (
+          <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording()}>
+            {exporting ? "Preparing…" : failed ? "Try again" : "Prepare recording"}
+          </button>
+        ) : null}
       </div>
-    );
+    </div>
+  );
   async function createTranscript(recordingId: string) {
     try {
       await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
@@ -120,7 +159,7 @@ function Session({ ids, back, session }: { readonly ids: Ids; readonly back: Rea
       toast(errorMessage(error), { icon: "alert" });
     }
   }
-  const panel = <TranscriptPanel transcript={recording.status === "completed" ? transcript : { kind: "processing" }} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(recording.id)} />;
+  const panel = <TranscriptPanel transcript={transcript} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(recording.id)} />;
 
   if (phone)
     return (
@@ -164,7 +203,9 @@ const TRANSCRIPT_CHECK_MS = 15000;
 function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly [Transcript, (next: Transcript) => void] {
   const [state, setState] = useState<Transcript>({ kind: "loading" });
   const [check, setCheck] = useState(0);
-  const recordingId = recording?.status === "completed" ? recording.id : null;
+  const recordingId = recording?.id ?? null;
+  const sourceStatus = recording?.sourceStatus;
+  const transcriptionStatus = recording?.transcriptionStatus;
   // A transcript being made is checked again until it's done, so it shows without a reload.
   useEffect(() => {
     if (state.kind !== "processing" || !recordingId) return;
@@ -176,10 +217,16 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
     let current = true;
     (async (): Promise<Transcript> => {
       const { transcripts } = await act("past-session", { action: "transcripts", ...ids, recordingId });
-      const transcript = transcripts.find((item) => item.status === "completed") ?? transcripts[0];
-      if (!transcript) return { kind: "none" };
-      if (transcript.status === "failed") return { kind: "failed" };
-      if (transcript.status !== "completed") return { kind: "processing" };
+      const transcript = transcripts.find((item) => item.status === "completed" || item.status === "complete") ?? transcripts[0];
+      if (!transcript) {
+        if (sourceStatus === "failed" || sourceStatus === "expired" || transcriptionStatus === "expired") return { kind: "unavailable" };
+        if (transcriptionStatus === "failed") return { kind: "failed" };
+        return { kind: transcriptionStatus === "pending" || sourceStatus === "pending" ? "processing" : "none" };
+      }
+      if (transcript.status === "failed" || transcript.status === "terminal_failure") return { kind: "failed" };
+      if (transcript.status === "deleted") return { kind: "unavailable" };
+      if (transcript.status === "not_requested") return { kind: "none" };
+      if (transcript.status !== "completed" && transcript.status !== "complete") return { kind: "processing" };
       const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: transcript.id });
       return { kind: "ready", transcript, cues };
     })().then(
@@ -189,23 +236,15 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
     return () => {
       current = false;
     };
-  }, [ids, recordingId, check]);
+  }, [ids, recordingId, check, sourceStatus, transcriptionStatus]);
   return [state, setState];
 }
 
 function DownloadMenu({ ids, recording, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly transcript: TranscriptDTO | null }) {
-  const [preparing, setPreparing] = useState(recording.exportStatus === "processing");
   const toast = useToast();
   async function downloadRecording() {
     try {
-      if (recording.exportStatus === "completed") {
-        window.location.assign((await act("past-session", { action: "recording-url", ...ids, recordingId: recording.id, download: true })).url);
-        return;
-      }
-      if (preparing) return;
-      await act("past-session", { action: "export-recording", ...ids, recordingId: recording.id, idempotencyKey: intentKey() });
-      setPreparing(true);
-      toast("Preparing the MP4. Come back to download it when it’s ready.", { icon: "clock" });
+      window.location.assign((await act("past-session", { action: "recording-url", ...ids, recordingId: recording.id, download: true })).url);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     }
@@ -231,15 +270,17 @@ function DownloadMenu({ ids, recording, transcript }: { readonly ids: Ids; reado
     >
       {(close) => (
         <>
-          <MenuItem
-            icon={preparing ? "clock" : "film"}
-            onSelect={() => {
-              close();
-              void downloadRecording();
-            }}
-          >
-            {preparing ? "Preparing the MP4…" : "Recording (MP4)"}
-          </MenuItem>
+          {recording.exportStatus === "ready" ? (
+            <MenuItem
+              icon="film"
+              onSelect={() => {
+                close();
+                void downloadRecording();
+              }}
+            >
+              Recording (MP4)
+            </MenuItem>
+          ) : null}
           {transcript ? (
             <MenuItem
               icon="file"
@@ -375,13 +416,14 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
 
   let body;
   if (transcript.kind === "loading") body = <div className="tempty">Loading the transcript…</div>;
+  else if (transcript.kind === "unavailable") body = <div className="tempty">No transcript is available because the recording source could not be kept.</div>;
   else if (transcript.kind === "failed")
     body = (
       <div style={{ padding: 14 }}>
-        <ErrorPanel title="The transcript couldn’t be made" detail="The recording is fine. The transcript isn’t available for this session." />
+        <ErrorPanel title="The transcript couldn’t be made" detail="The transcript isn’t available for this session." />
       </div>
     );
-  else if (transcript.kind === "processing") body = <div className="tempty">The transcript follows the recording.</div>;
+  else if (transcript.kind === "processing") body = <div className="tempty">The transcript is being prepared.</div>;
   else if (transcript.kind === "none")
     body = (
       <div className="tempty">

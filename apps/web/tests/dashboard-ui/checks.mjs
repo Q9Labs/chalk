@@ -53,6 +53,7 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  await (await import("./recording-checks.mjs")).recordingChecks({ open, fixture, check, CALL });
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
   {
     const { tab, context } = await open("/dashboard", { set: "fail=call" });
@@ -302,7 +303,7 @@ try {
     await tab.waitForTimeout(800);
     const [create] = await posted("create-transcript");
     check("transcript action sends one explicit language", offered === 1 && JSON.stringify(create?.body?.languages) === '["en"]' && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
-    check("transcript action leaves the panel processing", (await tab.getByText("The transcript follows the recording.").count()) === 1);
+    check("transcript action leaves the panel processing", (await tab.getByText("The transcript is being prepared.").count()) === 1);
     await context.close();
   }
   {

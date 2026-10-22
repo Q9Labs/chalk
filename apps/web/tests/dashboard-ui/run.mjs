@@ -73,7 +73,7 @@ try {
   await ready(`${webOrigin}/dashboard/sign-in`, vite);
   const fixture = start(process.execPath, ["apps/web/tests/dashboard-ui/fixture-server.mjs"], { env: { ...process.env, FIXTURE_VIDEO: video, FIXTURE_PORT: fixturePort, VITE_ORIGIN: webOrigin } });
   await ready(`${fixtureOrigin}/__fixture/log`, fixture);
-  await completed(start(process.execPath, ["apps/web/tests/dashboard-ui/checks.mjs", require.resolve("playwright").replace(/index\.js$/, "index.mjs"), fixtureOrigin]));
+  await completed(start(process.execPath, [process.env.DASHBOARD_RECORDING_ONLY ? "apps/web/tests/dashboard-ui/recording-browser.mjs" : "apps/web/tests/dashboard-ui/checks.mjs", require.resolve("playwright").replace(/index\.js$/, "index.mjs"), fixtureOrigin]));
 } finally {
   clearTimeout(deadline);
   clearInterval(watcher);

@@ -3,6 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
+import { pendingRecording } from "../../lib/dashboard/recording";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -12,7 +13,6 @@ import { AdmissionKnocks } from "./AdmissionKnocks";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
-const pendingRecording = (recording: RecordingDTO) => recording.transcriptionPending || ["pending", "processing"].includes(recording.status) || ["pending", "processing"].includes(recording.exportStatus);
 
 type Admission = CallPageDTO["call"]["admission"];
 type Session = CallPageDTO["episodes"][number];

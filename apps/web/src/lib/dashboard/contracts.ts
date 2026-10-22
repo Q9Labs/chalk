@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AccessGrant } from "@q9labsai/chalk-client/effect";
+import type { AccessGrant, Recording } from "@q9labsai/chalk-client/effect";
 
 const id = z.uuid();
 const name = z.string().trim().min(1).max(120);
@@ -113,7 +113,18 @@ export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
 export type CallDTO = { id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
 export type LiveDTO = { spaceId: string; episode: null | { id: string; count: number; participants: { id: string; name: string }[] } };
 export type EpisodeDTO = { id: string; status: "active" | "ending" | "ended"; startedAt: string; endedAt: string | null };
-export type RecordingDTO = { id: string; status: string; exportStatus: string; transcriptionPending: boolean; createdAt: string; transcripts?: TranscriptDTO[]; transcriptsNextCursor?: string | null };
+export type RecordingDTO = {
+  id: string;
+  status: Recording["status"];
+  sourceStatus: Recording["source"]["status"];
+  exportStatus: Recording["export"]["status"];
+  exportRetryable: boolean;
+  failureMessage: string | null;
+  transcriptionStatus: Recording["transcription_preparation"]["status"];
+  createdAt: string;
+  transcripts?: TranscriptDTO[];
+  transcriptsNextCursor?: string | null;
+};
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };

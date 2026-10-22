@@ -162,6 +162,22 @@ const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: null, lastActiveAt
 const episodeDTO = ({ people: _people, kept: _kept, ...episode }) => episode;
 const inviteURL = (call) => `https://chalkmeet.com/space/${call.slug}#invite=fx${call.id.slice(-6)}`;
 const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
+function recordingScenario() {
+  if (!state.recordingScenario) return {};
+  const mode = state.recordingScenario;
+  const failed = mode === "failed";
+  const expired = mode === "expired";
+  const pending = mode === "pending";
+  return {
+    status: mode === "export_ready" ? "completed" : "pending",
+    sourceStatus: failed ? "failed" : expired ? "expired" : pending ? "pending" : "available",
+    exportStatus: failed || expired || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
+    exportRetryable: mode === "export_failed",
+    failureMessage: failed ? "The recording capture did not complete." : expired ? "The recording source is no longer available." : ["export_failed", "export_exhausted"].includes(mode) ? "The recording export could not be completed." : null,
+    transcriptionStatus: failed || mode === "transcript_failed" ? "failed" : expired ? "expired" : pending ? "pending" : "ready",
+  };
+}
+
 const recordingsFor = (episode, withTranscripts) =>
   episode.kept === "none"
     ? []
@@ -169,9 +185,13 @@ const recordingsFor = (episode, withTranscripts) =>
         {
           id: uuid(0x800),
           status: episode.kept === "processing" ? "processing" : "completed",
-          exportStatus: "not_requested",
-          transcriptionPending: state.transcriptionPending ?? false,
+          sourceStatus: episode.kept === "processing" ? "pending" : "available",
+          exportStatus: episode.kept === "processing" ? "unavailable" : "ready",
+          exportRetryable: false,
+          failureMessage: null,
+          transcriptionStatus: state.transcriptionPending ? "pending" : "ready",
           createdAt: episode.startedAt,
+          ...recordingScenario(),
           ...(withTranscripts ? { transcripts: state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
         },
       ];
@@ -320,7 +340,8 @@ async function dashboard(request, response, page, url, entry) {
     case "recording-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/video.mp4`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
     case "export-recording":
-      return send(response, 200, { recording: { id: action.recordingId, status: "completed", exportStatus: "processing", transcriptionPending: false, createdAt: new Date().toISOString() } });
+      state.recordingScenario = "export_pending";
+      return send(response, 200, { recording: recordingsFor(data.sessions[0], false)[0] });
     case "transcripts":
       return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()), nextCursor: null });
     case "create-transcript":
@@ -455,6 +476,11 @@ const server = createServer(async (request, response) => {
           } else if (key === "metadataComplete") {
             for (const session of accounts.hasan.sessions) if (session.kept === "processing") session.kept = "done";
             state.finishedTranscript = value;
+          } else if (key === "recordingScenario") {
+            state.recordingScenario = value;
+            state.transcript = ["available", "export_pending", "export_ready", "export_failed", "export_exhausted"].includes(value) ? "complete" : value === "transcript_failed" ? "terminal_failure" : "none";
+            accounts.hasan.live = false;
+            accounts.hasan.calls[0].admission = "anyone";
           } else if (key === "transcript") state.transcript = value;
           else if (key === "signInError") state.signInError = value === "1";
           else if (key === "newCall") accounts.hasan.calls.unshift({ id: uuid(0x1000 + accounts.hasan.calls.length), slug: "made-elsewhere", name: value, archived: false, admission: "knock", createdAt: new Date().toISOString() });
