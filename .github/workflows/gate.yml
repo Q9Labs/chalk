@@ -59,8 +59,8 @@ jobs:
           fi
           cat "${GITHUB_OUTPUT}"
 
-  # Jobs narrow a pull request only when Select gate jobs reports full=false, so a selection that fails or leaves no
-  # output runs every job below in full.
+  # Jobs narrow a pull request only when Select gate jobs succeeded and reported full=false. A failed job can still
+  # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded.
   root-lanes:
     name: Root ${{ matrix.group }}
     needs: changes
@@ -71,10 +71,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
-      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
       VITEST_MAX_WORKERS: "2"
     steps:
@@ -153,7 +153,7 @@ jobs:
           # A push to master scans every pushed commit for secrets, including the commits a merge brings in.
           GITLEAKS_LOG_OPTS: ${{ github.event_name == 'push' && format('{0}..{1}', github.event.before, github.sha) || '' }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ needs.changes.outputs.full }}" == "false" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ needs.changes.result }}" == "success" && "${{ needs.changes.outputs.full }}" == "false" ]]; then
             pnpm exec bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"
           else
             pnpm exec bash scripts/gates/commit.sh --full
@@ -194,7 +194,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
       GOMAXPROCS: "2"
       # A cached Go test result would not see migration or database changes.
       GOFLAGS: -buildvcs=false -count=1
@@ -262,7 +262,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
       GOMAXPROCS: "2"
       VITEST_MAX_WORKERS: "2"
     steps:

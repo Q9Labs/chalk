@@ -224,6 +224,15 @@ test("the Gate workflow falls back to every root lane group", () => {
   assert.deepEqual(JSON.parse(fallback ?? "null"), ciJobs([], { full: true }).rootGroups);
 });
 
+// The runner still exports what a failed Select gate jobs wrote, such as root_groups=["checks"] and full=false
+// followed by a crash, so every place that narrows on those outputs must also see that the selection succeeded.
+test("the Gate workflow narrows only on a job selection that succeeded", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
+  const narrowing = workflow.split("\n").filter((line) => /needs\.changes\.outputs\.(root_groups|full)\b/u.test(line));
+  assert.equal(narrowing.length, 5);
+  for (const line of narrowing) assert.match(line, /needs\.changes\.result == 'success'|"\$\{\{ needs\.changes\.result \}\}" == "success"/u, line.trim());
+});
+
 test("browser CI groups each run only their own selected lane", () => {
   const plan = createGatePlan(["apps/web/src/components/space/SpacePage.tsx"]);
   for (const group of ["browser-tests", "call-performance", "call-leaks"]) {
