@@ -79,3 +79,10 @@ it.each(["client.internal_error", "connection.invalid_state"] as const)("preserv
   const toast = mediaFailureToast({ code, recoverable: false, message: "Recording is not allowed for this participant." });
   expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("Recording is not allowed for this participant.");
 });
+
+it.each([undefined, "camera", "microphone", "screen"] as const)("hides unhandled media failure details with source %s", (source) => {
+  const toast = mediaFailureToast({ code: "media.timeout", recoverable: true, message: "setCameraEnabled belongs to an inactive connection" }, source);
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).not.toContain("setCameraEnabled");
+  expect(text).not.toContain("inactive connection");
+});

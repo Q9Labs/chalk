@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-export function CallEventIcon({ kind, error = false }: { readonly kind: "microphone" | "microphone-on" | "camera" | "screen" | "recording" | "hand" | "host"; readonly error?: boolean }) {
+export function CallEventIcon({ kind, error = false }: { readonly kind: "speaker" | "microphone" | "microphone-on" | "camera" | "screen" | "recording" | "hand" | "host"; readonly error?: boolean }) {
   const paths: { readonly [K in typeof kind]: ReactNode } = {
+    speaker: <path d="M11 5 6 9H3v6h3l5 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14" />,
     microphone: <path d="M2 2l20 20M15 9.3V5a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 5.1 2.1M17 17a7 7 0 0 1-12-6v-1M19 10v1a7 7 0 0 1-.1 1.2M12 18v4" />,
     "microphone-on": (
       <>

@@ -1,9 +1,10 @@
+import type { MediaCommandSource } from "../control-bar/command-failure";
 import { CallEventIcon } from "./CallEventIcon";
 import { Avatar } from "../atomic/Avatar";
 import type { ClientFailure, SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { Toast } from "./ToastStack";
 
-export function mediaFailureToast(failure: ClientFailure | null, source?: "microphone" | "camera" | "screen"): Omit<Toast, "id"> | null {
+export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource): Omit<Toast, "id"> | null {
   if (!failure) return null;
   const device = source ?? "device";
   const icon = <CallEventIcon kind={source ?? "microphone"} error />;
@@ -41,7 +42,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
   if (failure.code === "media.device_constraint_invalid") return { icon, type: "error", message: `Your ${device} doesn’t support these settings. Choose another ${device}, then try again.` };
   if (failure.code === "media.capture_failed") return { icon, type: "error", message: `Your ${device} couldn’t start. Check that it is connected and available, then try again.` };
   if (source && failure.code === "connection.invalid_state") return { icon, type: "error", message: "That change was interrupted. Try again." };
-  if (source && failure.code === "client.internal_error") return { icon, type: "error", message: `Couldn’t change ${source === "screen" ? "screen sharing" : `your ${device} settings`}. Try again.` };
+  if (source || failure.code.startsWith("media.")) return { icon, type: "error", message: `Couldn’t change ${source === "screen" ? "screen sharing" : `your ${device} settings`}. Try again.` };
   return { icon, type: "error", message: failure.message };
 }
 

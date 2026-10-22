@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { commandFailure } from "./command-failure";
+import { commandFailure, type MediaCommandSource } from "./command-failure";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
-import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
+import type { CameraPreview, ClientFailure, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
@@ -105,7 +105,7 @@ export interface ControlBarProps {
   /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
   readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
-  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource) => void;
+  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaCommandSource) => void;
   readonly participantColorSeed?: string;
   readonly participantGradientPreference?: ParticipantGradientPreference;
   readonly className?: string;
@@ -252,7 +252,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const [commandError, setCommandError] = useState<ClientFailure | null>(null);
 
   const run = useCallback(
-    async (command: () => Promise<unknown>, source?: MediaSource) => {
+    async (command: () => Promise<unknown>, source?: MediaCommandSource) => {
       setCommandError(null);
       props.onCommandError?.(null, source);
       try {
@@ -359,11 +359,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           output.stream.getTracks().forEach((track) => track.stop());
           await context.close();
         }
-      }),
+      }, "speaker"),
     onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone"),
     onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera"),
     onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
-    onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId)),
+    onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
     onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),

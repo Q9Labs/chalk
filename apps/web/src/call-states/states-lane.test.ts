@@ -7,6 +7,8 @@ import type { CallStateClient } from "./fixtures";
 declare global {
   interface Window {
     __terminalTestClient: CallStateClient;
+    __mediaTestClient: CallStateClient;
+    __mediaCalls: boolean[];
   }
 }
 
@@ -254,6 +256,56 @@ it.each([
       await page.getByRole("heading", { name: title, exact: true }).waitFor({ timeout: 5_000 });
       expect(await page.getByRole("button", { name: "Rejoin", exact: true }).count()).toBe(rejoin ? 1 : 0);
     } finally {
+      await page.unroute(boundary);
+    }
+  },
+  30_000,
+);
+
+it.each([
+  { gesture: "camera shortcut", source: "camera", key: "Control+e", release: false },
+  { gesture: "microphone shortcut", source: "microphone", key: "Control+d", release: false },
+  { gesture: "push-to-talk press", source: "microphone", key: "Space", release: false },
+  { gesture: "push-to-talk release", source: "microphone", key: "Space", release: true },
+])(
+  "keeps internal errors out of the $gesture toast",
+  async ({ source, key, release }) => {
+    const boundary = "**/src/call-states/states-lane.tsx";
+    await page.route(boundary, async (route) => {
+      const response = await route.fetch();
+      const body = await response.text();
+      expect(body).toContain("return createCallStateClient(");
+      await route.fulfill({ response, body: body.replace("return createCallStateClient(", "return window.__mediaTestClient = createCallStateClient(") });
+    });
+    try {
+      await page.goto(`${origin}/call-states.html?state=states-events`);
+      await page.locator('[data-part="call-frame"]').waitFor();
+      await page.evaluate(
+        ({ source, release }) => {
+          const client = window.__mediaTestClient;
+          window.__mediaCalls = [];
+          client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, microphone: { ...current.media.local.microphone, state: "disabled" } } } }));
+          const reject = async (enabled: boolean) => {
+            window.__mediaCalls.push(enabled);
+            if (release && enabled) return;
+            throw new Error(source === "camera" ? "setCameraEnabled belongs to an inactive connection" : "setMicrophoneEnabled belongs to an inactive connection");
+          };
+          if (source === "camera") client.media.setCameraEnabled = reject;
+          else client.media.setMicrophoneEnabled = reject;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        },
+        { source, release },
+      );
+      if (key === "Space") {
+        await page.keyboard.down(key);
+        if (release) await page.keyboard.up(key);
+      } else await page.keyboard.press(key);
+      const notice = page.getByRole("alert").filter({ hasText: `Couldn’t change your ${source} settings. Try again.` });
+      await notice.waitFor({ timeout: 5_000 });
+      expect(await page.getByRole("alert").allTextContents()).not.toEqual(expect.arrayContaining([expect.stringMatching(/setCameraEnabled|setMicrophoneEnabled|inactive connection/)]));
+      expect(await page.evaluate(() => window.__mediaCalls)).toEqual(release ? [true, false] : [source !== "camera"]);
+    } finally {
+      await page.keyboard.up("Space");
       await page.unroute(boundary);
     }
   },

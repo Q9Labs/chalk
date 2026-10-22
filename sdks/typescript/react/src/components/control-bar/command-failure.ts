@@ -1,4 +1,6 @@
-import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
+import { SpaceClientError, type ClientFailure, type MediaSource } from "@q9labsai/chalk-client";
+
+export type MediaCommandSource = MediaSource | "speaker";
 
 export function commandFailure(cause: unknown): ClientFailure {
   return cause instanceof SpaceClientError
