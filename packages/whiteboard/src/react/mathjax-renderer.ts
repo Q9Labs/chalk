@@ -56,7 +56,9 @@ async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
 // Existing global configuration must be preserved when a host initializes MathJax first.
 // fallow-ignore-next-line complexity
 function configureMathJax(target: typeof globalThis | Window, existing: (MathJaxRuntime & Record<string, unknown>) | undefined): void {
-  const basePath = getWhiteboardAssets()?.mathJaxBasePath;
+  const configuredPath = getWhiteboardAssets()?.mathJaxBasePath;
+  // The speech worker uses blob URLs, so importScripts and map fetches need absolute URLs.
+  const basePath = configuredPath ? new URL(configuredPath, document.baseURI).href.replace(/\/$/, "") : undefined;
   target.MathJax = {
     ...(existing ?? {}),
     ...(basePath ? { loader: { paths: { mathjax: basePath, fonts: `${basePath}/fonts` }, ...(existing?.loader as object | undefined) } } : {}),
