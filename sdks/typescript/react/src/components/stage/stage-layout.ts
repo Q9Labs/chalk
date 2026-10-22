@@ -161,7 +161,8 @@ function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string
   const ordered = [...(speaker ? [speaker] : []), ...others, ...(local ? [local] : [])];
   const fold = (max: number): readonly string[] => (ordered.length <= max ? ordered : [...(max > 1 ? [...ordered.slice(0, max - 2), ...ordered.slice(-1)] : []), MORE_TILE_ID]);
   const sizeOf = (id: string) => (id === speaker || content.includes(id) ? FLOAT_SPEAKER : FLOAT_PERSON);
-  const bottom = box.height - 8;
+  // The board's zoom control fills the bottom-right 64px of the stage, under the column.
+  const bottom = box.height - 8 - 64;
   // A short stage, such as a phone on its side, keeps fewer faces so the column stays over the board.
   let max = Math.max(1, Math.min(FLOAT_MAX, options.maxPerPage ?? FLOAT_MAX));
   while (max > 1 && [...content, ...fold(max)].reduce((y, id) => y + sizeOf(id).height + options.gap, 56) - options.gap > bottom) max -= 1;

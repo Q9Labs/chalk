@@ -158,6 +158,18 @@ it.each([390, 650])("floats people over a board on a %ipx-wide screen and keeps 
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
+it("keeps toasts above a phone board's zoom control while the drawing tools are open", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open("board-people-dark");
+  await page.getByRole("button", { name: "Drawing tools" }).click();
+  await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+  await page.waitForFunction(() => document.querySelector(".chalk-board-zoom")?.getAnimations().length === 0);
+  const controlsTop = Math.min(...(await page.locator(".chalk-board-island, .chalk-board-zoom").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))));
+  const toastBottom = await page.locator('[data-part="toast-stack"]').evaluate((stack) => stack.getBoundingClientRect().bottom);
+  expect(toastBottom).toBeLessThanOrEqual(controlsTop - 8);
+  await page.setViewportSize({ width: 1440, height: 900 });
+});
+
 it("cancels a departing tile's fade when the same participant immediately rejoins", async () => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await open("stage-grid-6");
