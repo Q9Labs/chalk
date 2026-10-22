@@ -124,7 +124,7 @@ it("paints canonical Ink in the viewer's surface ink and sends it back canonical
 
 it("keeps a received empty text live, so a peer's undone text can be redone", async () => {
   const { api, engine, submitUpdate, restoreElements, restoreAppState, toWireElement } = await createReconciliationFixture();
-  const [written] = restoreElements([{ type: "text", id: "qa-text", index: "a0", x: 0, y: 0, width: 80, height: 25, text: "QA text 1", originalText: "QA text 1", version: 2, versionNonce: 2, isDeleted: false }], null);
+  const [written] = restoreElements([{ type: "text", id: "qa-text", index: "a0", x: 0, y: 0, width: 80, height: 25, text: "QA text 1", originalText: "QA text 1", fontSize: 20, fontFamily: 5, lineHeight: 1.25, textAlign: "left", verticalAlign: "top", autoResize: false, containerId: null, version: 2, versionNonce: 2, isDeleted: false }], null);
   if (!written) throw new Error("Text element is missing");
   try {
     engine.handleRemoteSnapshot({ sceneId: "scene", elements: [toWireElement(written)] });
