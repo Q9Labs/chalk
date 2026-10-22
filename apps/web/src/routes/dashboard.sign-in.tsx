@@ -10,8 +10,8 @@ export const Route = createFileRoute("/dashboard/sign-in")({
     returnTo: typeof search.returnTo === "string" ? search.returnTo : undefined,
     failed: search.failed === "google" || search.failed === "apple" ? search.failed : undefined,
   }),
-  // Google's button guidelines set its label in Roboto 500. Only this page loads it, and only the label's letters.
-  head: () => ({ links: [{ rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Roboto:wght@500&text=Continue%20with%20Google&display=swap" }] }),
+  // Google's button guidelines set its label in Roboto 500. Only this page loads the local label subset.
+  head: () => ({ links: [{ rel: "stylesheet", href: "/fonts/sign-in.css" }] }),
   component: SignInRoute,
 });
 

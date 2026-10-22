@@ -8,7 +8,7 @@ import { MathEditor } from "./MathEditor";
 import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
 import { renderLatexToSvg } from "./mathjax-renderer";
 
-const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
+const DEFAULT_EXCALIDRAW_CSS = "/chalk-whiteboard/0.18.1/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
@@ -226,12 +226,13 @@ function useExternalStylesheet(href: string): ExternalStylesheetState {
   return { error, loaded };
 }
 
-function useExcalidrawModule(onLoadError: ((error: Error) => void) | undefined, setLoadError: (message: string) => void): ExcalidrawModule | null {
+function useExcalidrawModule(cssPath: string, onLoadError: ((error: Error) => void) | undefined, setLoadError: (message: string) => void): ExcalidrawModule | null {
   const [excalidraw, setExcalidraw] = useState<ExcalidrawModule | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
+    window.EXCALIDRAW_ASSET_PATH = new URL(".", new URL(cssPath, window.location.origin)).href;
     import("@excalidraw/excalidraw")
       .then((module) => {
         if (mounted) setExcalidraw(module);
@@ -245,7 +246,7 @@ function useExcalidrawModule(onLoadError: ((error: Error) => void) | undefined, 
     return () => {
       mounted = false;
     };
-  }, [onLoadError, setLoadError]);
+  }, [cssPath, onLoadError, setLoadError]);
 
   return excalidraw;
 }
@@ -483,7 +484,7 @@ function useWhiteboardCanvasState(props: WhiteboardCanvasProps) {
   const configuration = useWhiteboardCanvasConfiguration(props);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedLatex, setSelectedLatex] = useState<string | null>(null);
-  const excalidraw = useExcalidrawModule(props.onLoadError, setLoadError);
+  const excalidraw = useExcalidrawModule(configuration.excalidrawCssPath, props.onLoadError, setLoadError);
   const stylesheet = useExternalStylesheet(configuration.excalidrawCssPath);
   const collaboration = useWhiteboardCollaboration({
     canDraw: configuration.canDraw,
