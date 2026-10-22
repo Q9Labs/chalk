@@ -284,7 +284,8 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
         await release();
       }
       try {
-        await pending.guest.getByTestId("stage").waitFor({ timeout: 20000 });
+        // The barrier forces a finalization failure; its durable claim is retried after 60 seconds.
+        await pending.guest.getByTestId("stage").waitFor({ timeout: 90000 });
         await pending.guest.getByRole("group", { name: "Stage with 1 participant", exact: true }).waitFor({ timeout: 15000 });
       } catch (error) {
         await pending.guest.screenshot({ path: resolve(out, "hostless-failure-guest.png") });
