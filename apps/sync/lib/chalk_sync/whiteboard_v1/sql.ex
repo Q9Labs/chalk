@@ -253,6 +253,22 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
+  # A client can only replay operations still in its pending store, so each
+  # participant keeps as many receipts as that store can hold.
+  def prune_draw_policy_receipts do
+    """
+    delete from sync_whiteboard_draw_policy_receipts
+    where tenant_id = $1 and space_id = $2 and participant_id = $3
+      and operation_id not in (
+        select operation_id
+        from sync_whiteboard_draw_policy_receipts
+        where tenant_id = $1 and space_id = $2 and participant_id = $3
+        order by completed_at desc, operation_id desc
+        limit $4
+      )
+    """
+  end
+
   def draw_grants do
     """
     select permission.participant_id::text, permission.can_draw

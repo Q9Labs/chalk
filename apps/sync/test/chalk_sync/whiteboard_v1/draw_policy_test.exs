@@ -153,6 +153,31 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
              PostgresRepository.set_draw_policy(host, %{operation | policy: "picked"})
   end
 
+  test "each host keeps a bounded number of policy receipts", %{host: host, episode: episode} do
+    for index <- 1..130 do
+      set_policy(
+        host,
+        Enum.at(["hosts", "everyone"], rem(index, 2)),
+        "policy-bound-#{pad(index)}"
+      )
+    end
+
+    %Postgrex.Result{rows: [[count]]} =
+      Postgrex.query!(
+        Database.connection(episode),
+        "select count(*) from sync_whiteboard_draw_policy_receipts where tenant_id = $1 and participant_id = $2",
+        [UUID.dump!(episode.tenant_id), UUID.dump!(host.participant_id)]
+      )
+
+    assert count == 128
+
+    assert {:ok, %{outcome: :duplicate}} =
+             PostgresRepository.set_draw_policy(host, %{
+               operation_id: "policy-bound-#{pad(130)}",
+               policy: "hosts"
+             })
+  end
+
   test "unpicking someone under picked people does not block them once everyone can draw", %{
     host: host,
     collaborator: collaborator
@@ -190,6 +215,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
       end)
 
     assert_receive :scene_locked, 5_000
+
     drawing =
       Task.async(fn ->
         PostgresRepository.commit_update(collaborator, %{
@@ -313,6 +339,8 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
       params ++ [UUID.dump!(host.participant_id)]
     )
   end
+
+  defp pad(index), do: String.pad_leading(Integer.to_string(index), 6, "0")
 
   defp drawers(host, collaborator, observer) do
     %{

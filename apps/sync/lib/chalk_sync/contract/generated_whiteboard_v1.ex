@@ -424,11 +424,15 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   defp hello_extension_set?(extensions) when is_list(extensions) do
     {base, draw_policy} =
       case Enum.split(extensions, -1) do
-        {base, [%{"name" => "draw_policy_v1"}]} -> {base, true}
-        _ -> {extensions, false}
+        {base, [%{"name" => "draw_policy_v1"} = extension]}
+        when map_size(extension) == 1 ->
+          {base, true}
+
+        _ ->
+          {extensions, false}
       end
 
-    (base != [] or draw_policy) and
+    (draw_policy and base == []) or
       base in [
         [%{"name" => "presentation_v1"}],
         [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],

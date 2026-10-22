@@ -15,6 +15,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   @max_replay_items @limits["snapshotPageMaxItems"]
   @max_replay_bytes @limits["socketQueueMaxBytes"]
   @max_draw_grants @limits["drawAccessMaxGrants"]
+  @max_draw_policy_receipts @limits["pendingOperationMaxItems"]
 
   @impl true
   def connect(%Identity{} = identity) do
@@ -590,6 +591,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     with :missing <- draw_policy_receipt(connection, identity, operation),
          :ok <- upsert_draw_policy(connection, identity, operation),
          :ok <- insert_draw_policy_receipt(connection, identity, operation),
+         :ok <- prune_draw_policy_receipts(connection, identity),
          :ok <- notify_access(connection, identity) do
       {:ok, :committed}
     else
@@ -629,6 +631,20 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
         [uuid(identity.participant_id), operation.operation_id, operation.policy]
 
     case Postgrex.query(connection, SQL.insert_draw_policy_receipt(), params) do
+      {:ok, _result} -> :ok
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
+  defp prune_draw_policy_receipts(connection, identity) do
+    params = [
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.participant_id),
+      @max_draw_policy_receipts
+    ]
+
+    case Postgrex.query(connection, SQL.prune_draw_policy_receipts(), params) do
       {:ok, _result} -> :ok
       {:error, _error} -> {:retryable, :storage_unavailable}
     end

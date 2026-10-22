@@ -103,11 +103,15 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   defp hello_extension_set?(extensions) when is_list(extensions) do
     {base, draw_policy} =
       case Enum.split(extensions, -1) do
-        {base, [%{"name" => ${render(contract.extensions.drawPolicy.name)}}]} -> {base, true}
-        _ -> {extensions, false}
+        {base, [%{"name" => ${render(contract.extensions.drawPolicy.name)}} = extension]}
+        when map_size(extension) == 1 ->
+          {base, true}
+
+        _ ->
+          {extensions, false}
       end
 
-    (base != [] or draw_policy) and
+    (draw_policy and base == []) or
       base in [
         [%{"name" => ${render(contract.extensions.presentation.name)}}],
         [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],

@@ -19,6 +19,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
   @access_retry_ms 1_000
+  @access_reconcile_ms 30_000
   @impl true
   def init(options) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
@@ -51,6 +52,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        view_origins_negotiated: false,
        draw_policy_negotiated: false,
        can_draw: nil,
+       access: nil,
+       access_timer: nil,
        access_stale: false,
        scene_id: nil,
        revision: 0,
@@ -323,20 +326,30 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   # The server computes each person's drawing permission; a socket only
   # relays its own. Clients without draw_policy_v1 keep the legacy frame.
+  # Notifications only speed this up: one timer per socket reads the answer
+  # again, so a missed notification is repaired and an outage costs one retry.
   defp refresh_access(%{identity: identity} = state) do
     case Episode.draw_access(identity) do
       {:ok, access} ->
-        enqueue_and_push(%{state | can_draw: access["can_draw"]}, access_frames(state, access))
+        state
+        |> arm_access_timer(@access_reconcile_ms)
+        |> Map.merge(%{can_draw: access["can_draw"], access: access})
+        |> enqueue_and_push(access_frames(state, access))
 
       {:error, :permission_denied} ->
         {:ok, state}
 
       _unavailable ->
-        Process.send_after(self(), :whiteboard_v1_access_changed, @access_retry_ms)
-        {:ok, state}
+        {:ok, arm_access_timer(state, @access_retry_ms)}
     end
   end
 
+  defp arm_access_timer(%{access_timer: timer} = state, delay) do
+    if timer, do: Process.cancel_timer(timer)
+    %{state | access_timer: Process.send_after(self(), :whiteboard_v1_access_changed, delay)}
+  end
+
+  defp access_frames(%{draw_policy_negotiated: true, access: access}, access), do: []
   defp access_frames(%{draw_policy_negotiated: true}, access), do: [access]
   defp access_frames(%{can_draw: can_draw}, %{"can_draw" => can_draw}), do: []
 
@@ -1077,7 +1090,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         }
         |> observe_operation("connect", "accepted")
 
-      if draw_policy_negotiated, do: send(self(), :whiteboard_v1_access_changed)
+      send(self(), :whiteboard_v1_access_changed)
       {:push, {:text, Protocol.encode!(welcome)}, next}
     else
       {:error, :permission_denied} -> stop(state, 1008, "policy violation", :permission_denied)
