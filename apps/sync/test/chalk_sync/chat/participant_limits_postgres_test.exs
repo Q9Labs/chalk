@@ -117,6 +117,38 @@ defmodule ChalkSync.Chat.PersonLimitsPostgresTest do
     assert outcomes == [:error, :ok]
   end
 
+  test "a send with a missing file fails without waiting for the Space stream lock",
+       %{fixture: fixture} do
+    [first, _second] = fixture.identities
+    assert {:ok, %{outcome: :committed}} = Repository.append(first, chat("files-first-0"))
+
+    # Another send holds the Space stream lock for as long as this test needs.
+    [blocker] = SyncPostgres.start_connections(@database_url, 1)
+    test = self()
+
+    holder =
+      Task.async(fn ->
+        Postgrex.transaction(blocker, fn locked ->
+          Postgrex.query!(
+            locked,
+            "select 1 from sync_chat_streams where tenant_id = $1 and space_id = $2 for update",
+            [UUID.dump!(first.episode.tenant_id), UUID.dump!(first.episode.space_id)]
+          )
+
+          send(test, :locked)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :locked
+    missing = %{chat("files-first-1") | attachment_ids: [UUID.generate()]}
+    send_with_missing_file = Task.async(fn -> Repository.append(first, missing) end)
+
+    assert {:ok, {:error, :attachment_not_found}} = Task.yield(send_with_missing_file, 2_000)
+    send(holder.pid, :release)
+    Task.await(holder)
+  end
+
   test "a person who rejoins as a new participant keeps the same rate window",
        %{connection: connection, fixture: fixture} do
     [first, rejoined] = same_person(connection, fixture)

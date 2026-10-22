@@ -258,7 +258,9 @@ defmodule ChalkSync.Chat.Repository.SQL do
     """
   end
 
-  def lock_attachments do
+  def lock_attachments, do: read_attachments() <> "for update\n"
+
+  def read_attachments do
     """
     select
       attachment_id,
@@ -276,9 +278,11 @@ defmodule ChalkSync.Chat.Repository.SQL do
       and expires_at > now()
       and cleanup_claim_token is null
     order by array_position($4::uuid[], attachment_id)
-    for update
     """
   end
+
+  # Read under the Space stream lock, so message times follow the sequence and share one clock.
+  def database_now, do: "select clock_timestamp()"
 
   def attach_message_files do
     """

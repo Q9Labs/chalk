@@ -1,16 +1,23 @@
+-- +goose NO TRANSACTION
 -- +goose Up
+-- The running release keeps writing participants and chat messages while this applies, so the
+-- indexes build concurrently. Each statement commits on its own, and a rerun after a failed build
+-- first drops the invalid index it left behind.
+
 -- Chat limits apply to a person, not a seat. A rejoin creates a new participant row, so the
 -- person is the account, else the identity, else that one row (a guest has no stable key).
-create index participants_chat_person_idx
+drop index concurrently if exists participants_chat_person_idx;
+create index concurrently participants_chat_person_idx
     on participants(tenant_id, space_id, (coalesce(account_id, identity_id, id)));
 
 -- Sync counts a person's messages under the Space stream lock on every send, so it reads
 -- only this index and never the Space's whole message history.
-create index sync_chat_messages_participant_usage_idx
+drop index concurrently if exists sync_chat_messages_participant_usage_idx;
+create index concurrently sync_chat_messages_participant_usage_idx
     on sync_chat_messages(tenant_id, space_id, participant_id) include (created_at, encoded_bytes);
 
 -- +goose StatementBegin
-create function chat_person_participant_ids(p_tenant_id uuid, p_space_id uuid, p_participant_id uuid)
+create or replace function chat_person_participant_ids(p_tenant_id uuid, p_space_id uuid, p_participant_id uuid)
 returns table (participant_id uuid)
 language sql
 stable
@@ -29,6 +36,6 @@ $$;
 -- +goose StatementEnd
 
 -- +goose Down
-drop function chat_person_participant_ids(uuid, uuid, uuid);
-drop index sync_chat_messages_participant_usage_idx;
-drop index participants_chat_person_idx;
+drop function if exists chat_person_participant_ids(uuid, uuid, uuid);
+drop index concurrently if exists sync_chat_messages_participant_usage_idx;
+drop index concurrently if exists participants_chat_person_idx;

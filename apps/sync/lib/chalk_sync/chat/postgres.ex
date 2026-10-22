@@ -316,7 +316,10 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   defp append_after_authorization(connection, identity, input, fingerprint) do
     with {:ok, profile} <- lock_authority(connection, identity),
          :ok <- require_capability(profile, "sendChat"),
-         :ok <- within_person_rate(connection, identity, input.client_message_id) do
+         :ok <- within_person_rate(connection, identity, input.client_message_id),
+         # A send with a missing or unusable file fails here, without the Space stream lock.
+         {:ok, _attachments} <-
+           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()) do
       params = space_params(identity.episode)
       Postgrex.query!(connection, SQL.insert_stream(), params)
 
@@ -348,7 +351,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       nil ->
         notify_attachment_commit_attempt(input)
 
-        case lock_attachments(connection, identity, input.attachment_ids) do
+        case attachments(connection, identity, input.attachment_ids, SQL.lock_attachments()) do
           {:ok, attachments} ->
             append_new_message(
               connection,
@@ -386,6 +389,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
          fingerprint,
          sequence
        ) do
+    [[now]] = Postgrex.query!(connection, SQL.database_now(), []).rows
+
     message = %{
       message_id: UUID.generate(),
       client_message_id: input.client_message_id,
@@ -394,7 +399,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       display_name: display_name,
       text: input.text,
       attachments: attachments,
-      created_at: DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      created_at: now |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
     }
 
     encoded_bytes = Message.encoded_bytes(message)
@@ -479,17 +484,13 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     )
   end
 
-  defp lock_attachments(_connection, _identity, []), do: {:ok, []}
+  defp attachments(_connection, _identity, [], _query), do: {:ok, []}
 
-  defp lock_attachments(connection, identity, attachment_ids) do
+  defp attachments(connection, identity, attachment_ids, query) do
     dumped_ids = Enum.map(attachment_ids, &uuid/1)
 
     rows =
-      Postgrex.query!(
-        connection,
-        SQL.lock_attachments(),
-        episode_params(identity.episode) ++ [dumped_ids]
-      ).rows
+      Postgrex.query!(connection, query, episode_params(identity.episode) ++ [dumped_ids]).rows
 
     cond do
       length(rows) != length(attachment_ids) ->
