@@ -28,6 +28,8 @@ type SourceWorker = {
 function sourceWorker(enabled: boolean): SourceWorker {
   return { desired: { enabled, revision: 0, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, sentRevision: 0, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null };
 }
+type SyncSnapshot = ReturnType<ConnectionPorts["sync"]["getSnapshot"]>;
+type RecoveryPublication = { readonly revision: number; readonly publicationId: string };
 type CaptureAction = "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare";
 type CaptureRollback = {
   readonly action: CaptureAction;
@@ -255,10 +257,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   dispose(): void {
     this.#cancelCaptures();
-    this.#unsubscribeMedia?.();
-    this.#unsubscribeRequests?.();
-    this.#unsubscribePause?.();
-    this.#unsubscribeSync?.();
+    for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
     this.#unsubscribeConnection?.();
     this.#unsubscribeScreenEnded?.();
     this.#unsubscribePorts?.();
@@ -409,14 +408,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const acquire =
           (source === "camera" && !intent.previousEnabled) || !this.#hasTrack(source)
             ? this.#captureForPublish(source, ports.media, (track) =>
-                Effect.sync(() => {
-                  captured = track;
-                  this.#assertActivePorts(ports, action);
-                  this.#assertCurrentIntent(source, intent.revision);
-                  this.#setTrack(source, track);
-                  ports.media.prepareLocalTrack(source, track);
-                  prepared = true;
-                  this.#publish();
+                Effect.try({
+                  try: () => {
+                    captured = track;
+                    this.#assertActivePorts(ports, action);
+                    this.#assertCurrentIntent(source, intent.revision);
+                    this.#setTrack(source, track);
+                    ports.media.prepareLocalTrack(source, track);
+                    prepared = true;
+                    this.#publish();
+                  },
+                  catch: (cause) => cause,
                 }),
               )
             : Effect.void;
@@ -519,6 +521,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const source = track.kind === "audio" ? "microphone" : "camera";
         const state = this.#sources[source];
         track.enabled = state.desired.enabled;
+        if (!state.desired.enabled) {
+          // An omitted source was never prepared in the media plane. Release its publication ownership.
+          this.#deleteTrack(source);
+          if (source === "microphone") track.stop();
+        }
         return state.desired.enabled;
       });
       for (const source of ["microphone", "camera"] as const) this.#sources[source].sentRevision = revisions[source];
@@ -857,11 +864,19 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#connection.getSnapshot().state === "live" && this.#ports?.sync === ports.sync && this.#ports.media === ports.media) return;
     throw new ConnectionError({ code: "invalid_state", action, recoverable: false, message: `${action} belongs to an inactive connection` });
   }
+  #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number): void {
+    const state = this.#sources[source];
+    if (state.desired.revision !== revision || ports.sync.getSnapshot().control?.status === "ended") return;
+    state.forcedRevision = revision;
+    state.localEnabled = false;
+    this.#pauseTracks(source);
+    ports.media.setLocalSourceIntent?.(source, false);
+    if (ports.media.closeForcedLocalPublication) this.#fork(foreign(() => ports.media.closeForcedLocalPublication!(source)).pipe(Effect.ignore));
+    this.#publish();
+  }
   #bind(ports: ConnectionPorts | null): void {
-    this.#unsubscribeMedia?.();
-    this.#unsubscribeRequests?.();
-    this.#unsubscribePause?.();
-    this.#unsubscribeSync?.();
+    if (ports && this.#ports?.sync === ports.sync && this.#ports.media === ports.media) return;
+    for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
     this.#unsubscribeMedia = null;
     this.#unsubscribeRequests = null;
     this.#unsubscribePause = null;
@@ -884,29 +899,58 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#applyRemoteMediaState(ports, ports.sync.getSnapshot());
       this.#publish();
     });
-    this.#unsubscribePause =
+    this.#unsubscribePause = this.#subscribePauses(ports);
+    this.#unsubscribeRequests = ports.sync.onDirectedRequest((request) => this.#request(request));
+    this.#unsubscribeSync = this.#subscribeSync(ports);
+    this.#applyRemoteMediaState(ports, ports.sync.getSnapshot());
+    this.#publish();
+  }
+  #subscribePauses(ports: ConnectionPorts): (() => void) | null {
+    return (
       ports.sync.onMediaPause?.((pause) => {
         const state = this.#sources[pause.source];
         if (pause.revision <= state.serverSequence) return;
         state.serverSequence = pause.revision;
         // Control events carry no self-media generation: scope the pause to the sent op at arrival.
-        if (state.sentRevision !== state.desired.revision || ports.sync.getSnapshot().control?.status === "ended") return;
-        state.forcedRevision = state.sentRevision;
-        state.localEnabled = false;
-        this.#pauseTracks(pause.source);
-        ports.media.setLocalSourceIntent?.(pause.source, false);
-        if (ports.media.closeForcedLocalPublication) this.#fork(foreign(() => ports.media.closeForcedLocalPublication!(pause.source)).pipe(Effect.ignore));
-        this.#publish();
-      }) ?? null;
-    this.#unsubscribeRequests = ports.sync.onDirectedRequest((request) => this.#request(request));
-    // Projections carry no self-media operation generation and cannot settle local work.
-    this.#unsubscribeSync = ports.sync.subscribe((snapshot) => {
+        this.#pausePublication(ports, pause.source, state.sentRevision);
+      }) ?? null
+    );
+  }
+  #rememberPublications(snapshot: SyncSnapshot): Map<MediaSource, RecoveryPublication> {
+    const publications = new Map<MediaSource, RecoveryPublication>();
+    const own = (snapshot.media?.items ?? []).filter((item) => item.participantId === snapshot.participantId && item.enabled && item.publicationId !== null);
+    for (const item of own) {
+      if (item.source === "screen_audio" || item.publicationId === null) continue;
+      const state = this.#sources[item.source];
+      if (state.localEnabled && state.sentRevision === state.desired.revision) publications.set(item.source, { revision: state.sentRevision, publicationId: item.publicationId });
+    }
+    return publications;
+  }
+  #pauseLostPublications(ports: ConnectionPorts, snapshot: SyncSnapshot, publications: ReadonlyMap<MediaSource, RecoveryPublication>): void {
+    for (const [source, previous] of publications) {
+      const current = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
+      if (!current || (!current.enabled && (current.publicationId === previous.publicationId || current.publicationId === null))) this.#pausePublication(ports, source, previous.revision);
+    }
+  }
+  #subscribeSync(ports: ConnectionPorts): () => void {
+    let recovering = new Map<MediaSource, RecoveryPublication>();
+    let lastLive = ports.sync.getSnapshot();
+    let wasLive = lastLive.connection.phase === "live";
+    // Live projections cannot settle local work. Recovery replacement can revoke only the
+    // publication known before disconnect, scoped to its user revision (never a newer action).
+    return ports.sync.subscribe((snapshot) => {
+      const live = snapshot.connection.phase === "live";
+      if (wasLive && !live) recovering = this.#rememberPublications(lastLive);
+      if (live && !wasLive) {
+        this.#pauseLostPublications(ports, snapshot, recovering);
+        recovering.clear();
+      }
+      if (live) lastLive = snapshot;
+      wasLive = live;
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
     });
-    this.#applyRemoteMediaState(ports, ports.sync.getSnapshot());
-    this.#publish();
   }
   #bindCamera(ports: ConnectionPorts | null): void {
     if (!ports) return;
