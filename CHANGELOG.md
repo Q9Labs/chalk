@@ -9,7 +9,7 @@
 - React: keep chat messages still while the clock ticks.
 - UI: round call corners and lift board messages in the stylesheet.
 - Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
-- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds with retry (also in React Native), and capture a fresh microphone after its track ended.
+- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, then retry. React Native keeps a 30-second opening deadline, or `syncStartupTimeoutMs` when set, before it retries. Capture a fresh microphone after its track ended.
 - React: label screen shares of unknown surfaces plainly.
 - React Native: size the call from the enclosing safe-area frame instead of the window, so calls in a smaller container lay out for that container.
 - React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
