@@ -167,6 +167,13 @@ export function EmbeddedWhiteboard({
             : {}),
         });
         noticesRef.current.set(notice.id, toastId);
+        if (noticesRef.current.size > 8) {
+          const oldest = noticesRef.current.entries().next().value;
+          if (oldest) {
+            toasts.dismiss(oldest[1]);
+            noticesRef.current.delete(oldest[0]);
+          }
+        }
       },
       onFollow: (id) => onFollowRef.current?.(id),
       onCloseBoard: () => onCloseBoardRef.current?.(),

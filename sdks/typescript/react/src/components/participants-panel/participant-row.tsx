@@ -1,7 +1,7 @@
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useState, useRef, useEffect } from "react";
-import { Popover } from "@base-ui/react/popover";
+import { ChalkPopoverPrimitive as Popover } from "../chalk-ui";
 import { MicrophoneOff01Icon, VideoOffIcon, Edit02Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { cn } from "../../utils/cn";

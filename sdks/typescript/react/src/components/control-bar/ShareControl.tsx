@@ -1,4 +1,4 @@
-import { Menu } from "@base-ui/react/menu";
+import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
 import { useState } from "react";
 import type { ScreenShareOptions, ScreenShareSurface } from "@q9labsai/chalk-client";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";

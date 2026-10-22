@@ -537,7 +537,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       else await navigator.clipboard.write([new ClipboardItem({ "image/png": image })]);
       toast({ message: "Copied the board as an image" });
     } catch {
-      toast({ type: "error", message: "The browser blocked copying. Use Download as PNG instead." });
+      toast({ type: "error", message: "Copy failed. Try saving the image instead." });
     }
   };
   const bring = async () => {

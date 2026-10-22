@@ -34,3 +34,5 @@ export { ChalkCopyButton } from "./ChalkCopyButton";
 export { ChalkSheet, type ChalkSheetProps } from "./ChalkSheet";
 export { ChalkToast, type ChalkToastProps } from "./ChalkToast";
 export { ChalkTooltip } from "@q9labsai/chalk-whiteboard/react";
+
+export { ChalkMenuPrimitive, ChalkPopoverPrimitive } from "@q9labsai/chalk-whiteboard/react";

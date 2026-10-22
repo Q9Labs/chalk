@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import type { WhiteboardCollaborationEvent } from "../collab/engine";
 import { BoardToastContext, type BoardToast } from "../react/board/board-toasts";
 import { Board } from "../react/board/Board";
+import { WhiteboardCanvas, type WhiteboardCanvasProps } from "../react/WhiteboardCanvas";
 import type { ChalkEmbeddedBoardContext } from "./protocol";
 import type { ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol";
 import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge";
@@ -97,7 +98,18 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
   if (closed) return <div className="chalk-whiteboard-closed">Whiteboard closed</div>;
   if (!configuration) return <div className="chalk-whiteboard-loading">Loading whiteboard…</div>;
 
-  if (!boardContext) return <div className="chalk-whiteboard-loading">Opening board…</div>;
+  const canvas: WhiteboardCanvasProps = {
+    canDraw: configuration.canDraw,
+    collab: { ...collaboration, canDraw: configuration.canDraw },
+    excalidrawCssPath: "./index.css",
+    localParticipantColor: configuration.localParticipantColor,
+    onExcalidrawApiReady: (api) => {
+      apiRef.current = api;
+      applyCurrentViewport(api, viewportRef.current);
+    },
+    onLoadError: (error) => bridge.post({ type: "error", payload: { code: "renderer_load_failed", message: error.message.slice(0, 256), recoverable: false } }),
+  };
+  if (!boardContext) return <WhiteboardCanvas {...canvas} isVisible theme={configuration.theme} />;
   const colors = boardContext.colors;
   const style = {
     "--chalk-canvas": colors.canvas,
@@ -118,17 +130,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
     <BoardToastContext.Provider value={publishNotice}>
       <div data-chalk style={{ ...style, fontFamily: "Figtree,system-ui,sans-serif" }}>
         <Board
-          board={{
-            canDraw: configuration.canDraw,
-            collab: { ...collaboration, canDraw: configuration.canDraw },
-            excalidrawCssPath: "./index.css",
-            localParticipantColor: configuration.localParticipantColor,
-            onExcalidrawApiReady: (api) => {
-              apiRef.current = api;
-              applyCurrentViewport(api, viewportRef.current);
-            },
-            onLoadError: (error) => bridge.post({ type: "error", payload: { code: "renderer_load_failed", message: error.message.slice(0, 256), recoverable: false } }),
-          }}
+          board={canvas}
           primary={boardContext.primary}
           phone={boardContext.phone}
           visible
@@ -142,7 +144,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
           viewBounds={boardContext.viewBounds}
           renderCursorAvatar={(name) => (
             <span className="chalk-board-cursor-avatar">
-              <Facehash name={name} size={24} variant="flat" intensity3d="subtle" interactive={false} enableBlink={false} />
+              <Facehash name={name} size={24} variant="solid" intensity3d="subtle" interactive={false} enableBlink={false} />
             </span>
           )}
           following={following}

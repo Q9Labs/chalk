@@ -1,4 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
+export { Menu as ChalkMenuPrimitive };
 import { useRef, type ReactElement, type ReactNode } from "react";
 
 export interface ChalkMenuProps {

@@ -1,4 +1,5 @@
 import { Popover } from "@base-ui/react/popover";
+export { Popover as ChalkPopoverPrimitive };
 import { useState, type ReactElement, type ReactNode } from "react";
 import { ChalkTooltip } from "./ChalkTooltip";
 
