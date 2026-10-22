@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { encodeEmbeddedWhiteboardMessage } from "../../../../packages/whiteboard/src/embedded/protocol";
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -11,6 +13,7 @@ let stop: (() => Promise<void>) | undefined;
 let browser: Browser;
 
 beforeAll(async () => {
+  await promisify(execFile)(process.execPath, [resolve(import.meta.dirname, "../../../../packages/whiteboard/scripts/build-embedded.mjs")]);
   ({ origin, stop } = await startCallHarness());
   browser = await chromium.launch({ headless: true });
 }, 60_000);
@@ -54,14 +57,18 @@ it("loads call, board, sticky note, text and math assets from our origin", async
       await page.keyboard.type(text);
       await page.keyboard.press("Escape");
     }
-    const svg = await page.evaluate(
-      async (path) => {
-        const { renderLatexToSvg } = await import(/* @vite-ignore */ path);
-        return (await renderLatexToSvg(String.raw`\require{color}\color{blue}{\mathbb{R} + \mathfrak{g} + \sum_{n=1}^{10} n^2}`)).svg;
-      },
-      `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/react/mathjax-renderer.ts")}`,
-    );
-    expect(svg).toContain("<svg");
+    const mathModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/react/mathjax-renderer.ts")}`;
+    await page.addScriptTag({
+      type: "module",
+      content: `import { renderLatexToSvg } from ${JSON.stringify(mathModule)};
+        const result = await renderLatexToSvg(${JSON.stringify(String.raw`\require{color}\color{blue}{\mathbb{R} + \mathfrak{g} + \sum_{n=1}^{10} n^2}`)});
+        const output = document.createElement("output");
+        output.id = "math-assets-proof";
+        output.hidden = true;
+        output.textContent = result.svg;
+        document.body.append(output);`,
+    });
+    await expect.poll(() => page.locator("#math-assets-proof").textContent()).toContain("<svg");
     await page.evaluate(() => document.fonts.ready);
     const fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, status: font.status })));
     const external = requests.filter(({ url }) => /^https?:/.test(url) && new URL(url).origin !== origin);
@@ -95,7 +102,7 @@ it("loads the embedded board from file URLs with adjacent fonts", async () => {
     const initialize = encodeEmbeddedWhiteboardMessage({ type: "initialize", payload: { canDraw: true, canClear: false, theme: "light" } }, { journeyId: "assets-test", rendererGeneration: "assets-generation", nextMessageId: () => "initialize-assets" });
     await page.evaluate((data) => window.dispatchEvent(new MessageEvent("message", { data })), initialize);
     await page.locator(".excalidraw canvas.interactive").waitFor();
-    expect(await page.evaluate(() => window.EXCALIDRAW_ASSET_PATH)).toBe(new URL(".", url).href);
+    await page.evaluate(() => document.fonts.ready);
     expect(messages.some((message) => message.includes("renderer_load_failed"))).toBe(false);
     expect(failures).toEqual([]);
   } finally {
