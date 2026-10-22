@@ -303,15 +303,18 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
         }, before);
       }
     };
+    const visitChat = async () => {
+      await click("Chat");
+      await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
+      await click("Close panel");
+      await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
+    };
     if (scenario.id === "panels") {
       const openPhoneNavigation = async () => {
         if (device.touch) await outsideSample(() => click("More options"));
       };
       await openPhoneNavigation();
-      await click("Chat");
-      await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
-      await click("Close panel");
-      await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
+      await visitChat();
       await openPhoneNavigation();
       await click(device.touch ? "People" : /^People, \d+$/);
       await page.getByRole("button", { name: "Close panel", exact: true }).waitFor();
@@ -340,10 +343,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       await outsideSample(async () => {
         await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
         if (device.touch) await click("More options");
-        await click("Chat");
-        await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
-        await click("Close panel");
-        await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
+        await visitChat();
       });
       await page.waitForTimeout(350);
       await page.locator("[data-perf-recover]").dispatchEvent("click");

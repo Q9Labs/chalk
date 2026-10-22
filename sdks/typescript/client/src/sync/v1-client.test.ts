@@ -128,7 +128,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().pendingCommandCount).toBe(1);
     expect(await store.load()).toHaveLength(1);
     const restarted = await liveClient({ pendingStore: store });
-    expect(restarted.socket.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_hand_raised" });
+    expect(restarted.socket.frames().findLast((frame) => frame.type === "command")).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_hand_raised" });
     restarted.client.stop();
   });
   it("uses browser-legal application close codes for client-initiated restarts", async () => {
@@ -181,6 +181,23 @@ describe("V1SyncClient", () => {
     await lifecycleClient.start();
     lifecycle?.("inactive");
     expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
+  });
+  it("probes immediately so an in-budget first pong keeps a fresh connection healthy", async () => {
+    const clock = new TestClock();
+    const send = vi.spyOn(TestSocket.prototype, "send").mockImplementation(function (this: TestSocket, data: string) {
+      this.sent.push(data);
+      if (JSON.parse(data).type === "ping") clock.setTimeout(() => this.receive({ type: "pong" }), 700);
+    });
+    const { client } = await liveClient({ clock });
+    try {
+      clock.advance(700);
+      await settle();
+      clock.advance(50);
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy", noticeUnresponsive: false });
+    } finally {
+      client.stop();
+      send.mockRestore();
+    }
   });
   it("keeps one-in-four pong loss non-blocking and clears degradation only after stable pongs", async () => {
     const clock = new TestClock();
@@ -258,7 +275,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     expect(socket.closeCalls).toEqual([]);
     clock.advance(250);
-    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(8);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(9);
     socket.receive({ type: "pong" });
     await settle();
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
@@ -1137,7 +1154,7 @@ describe("V1SyncClient", () => {
     await settle();
     first.stop();
     const { socket } = await liveClient({ pendingStore: store });
-    expect(socket.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_display_name", payload: { display_name: "Persisted" } });
+    expect(socket.frames().findLast((frame) => frame.type === "command")).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_display_name", payload: { display_name: "Persisted" } });
   });
   it("retries failed cleanup for an expired restored target without replaying it", async () => {
     const clock = new TestClock();
@@ -1184,7 +1201,7 @@ describe("V1SyncClient", () => {
     await settle();
     expect(sockets[1]!.frames()[0]).toMatchObject({ streams: { control: { cursor: { revision: 1, state_schema_version: 1, state_digest: state.stateDigest } } } });
     await recoverSocket(client, sockets[1]!, state, snapshot, "up_to_date");
-    expect(sockets[1]!.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_admission_policy" });
+    expect(sockets[1]!.frames().findLast((frame) => frame.type === "command")).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_admission_policy" });
     expect(sockets[1]!.frames().some((frame) => frame.type === "directed_request")).toBe(false);
     client.stop();
   });

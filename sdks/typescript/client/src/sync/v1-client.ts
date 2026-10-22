@@ -820,6 +820,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #startNoticeProbe(): void {
     this.#clearNoticeProbe();
+    this.#send({ type: "ping" });
     this.#health = new V1SyncHealth(this.#now());
     const tick = () => {
       this.#noticeProbeTimer = undefined;

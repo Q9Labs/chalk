@@ -8,4 +8,4 @@ Add optional Sync health to connection snapshots without changing the public sta
 
 Guard media enabling at the SDK controller boundary for all web, native, and imperative callers, including retries, requests, and share replacement. Keep private camera preview and media off available during recovery. Retain off intents until Sync confirms them after reconnect, clear video even if screen-audio cleanup fails, and treat already-absent local publications as successfully off. Keep hand controls available while reaction sending is disabled.
 
-Keep device menus and camera selection usable during recovery, preserve the screen-share action identity, and retain pending off intent when a queued enable loses its live-state guard.
+Keep device menus and camera selection usable during recovery, preserve the screen-share action identity, and reconcile one revisioned desired state per media source so older queued operations cannot erase a newer Stop. Start the silence budget only after sending the first connection probe.
