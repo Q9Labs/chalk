@@ -1,34 +1,47 @@
 import { strict as assert } from "node:assert";
 
-export async function proveToastLayering(browser, styles) {
-  const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
-  try {
-    await page.setContent(`<style>${styles}</style>
-      <main style="position:relative;height:580px">
-        <div style="position:absolute;bottom:92px;left:300px;z-index:50">
-          <button style="width:180px;height:48px" onclick="this.dataset.clicked='true'">Send a reaction</button>
-        </div>
-        <div class="chalk-toasts">
-          <div class="chalk-toast" role="alert" style="width:500px">
-            <span style="flex:1">Your camera couldn’t start. Try again.</span>
-            <button aria-label="Dismiss" onclick="this.closest('[role=alert]').remove()">×</button>
-          </div>
-        </div>
-      </main>`);
-    const reaction = page.getByRole("button", { name: "Send a reaction", exact: true });
-    assert.equal(
-      await reaction.evaluate((button) => {
-        const bounds = button.getBoundingClientRect();
-        return button.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
-      }),
-      true,
-      "The error toast must not cover the open z-50 reaction tray",
-    );
-    await reaction.click();
-    assert.equal(await reaction.getAttribute("data-clicked"), "true");
-    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
-    assert.equal(await page.getByRole("alert").count(), 0, "The toast dismiss button must remain usable");
-  } finally {
-    await page.close();
+export async function proveToastLayering(browser, baseURL, { screenshotDirectory, label = "layering", noticeBottom } = {}) {
+  const failures = [];
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+    [844, 390],
+  ]) {
+    const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(3000);
+    try {
+      const url = new URL(baseURL);
+      url.searchParams.set("fixture", "toast-layering");
+      await page.goto(url.href);
+      if (noticeBottom !== undefined) await page.addStyleTag({ content: `.chalk-toasts { bottom: ${noticeBottom}px; }` });
+      const alert = page.getByRole("alert").filter({ hasText: "setCameraEnabled belongs to an inactive connection" });
+      await alert.waitFor();
+      await page.getByRole("button", { name: "Reactions", exact: true }).click();
+      await page.getByRole("button", { name: "React with 👍", exact: true }).click();
+      await page.waitForFunction(() => window.__toastLayering.state().reactions.includes("👍"));
+      await page.getByRole("button", { name: "Reactions", exact: true }).click();
+      const hand = page.getByRole("button", { name: "Raise hand", exact: true });
+      await hand.click();
+      await page.waitForFunction(() => window.__toastLayering.state().raised);
+      await page.evaluate(() => window.__toastLayering.peerHand());
+      await page.getByRole("status").filter({ hasText: "Nora raised a hand" }).waitFor();
+      await hand.click();
+      await page.waitForFunction(() => !window.__toastLayering.state().raised);
+      const reactions = await page.evaluate(() => window.__toastLayering.state().reactions);
+      if (screenshotDirectory) await page.screenshot({ path: `${screenshotDirectory}/${label}-${width}x${height}.png` });
+      await alert.getByRole("button", { name: "Dismiss", exact: true }).click();
+      await alert.waitFor({ state: "detached" });
+      assert.deepEqual(await page.evaluate(() => window.__toastLayering.state().reactions), reactions, "Dismiss must not send a reaction");
+      await page.keyboard.press("Escape");
+      await page.locator(".chalk-shell-reactions").waitFor({ state: "detached" });
+      assert.equal(await page.locator(".chalk-toasts").evaluate((element) => getComputedStyle(element).marginBottom), "0px", "Closing the tray must restore the notice baseline");
+      console.log(`[toast-layering] ${label} ${width}x${height}: passed`);
+    } catch (error) {
+      failures.push(`${width}x${height}: ${error.message}`);
+      console.error(`[toast-layering] ${label} ${width}x${height}: ${error.message}`);
+    } finally {
+      await page.close();
+    }
   }
+  assert.equal(failures.length, 0, failures.join("\n"));
 }

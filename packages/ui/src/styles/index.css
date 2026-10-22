@@ -1199,6 +1199,7 @@
   left: 0;
   right: 0;
   bottom: 92px;
+  margin-bottom: var(--chalk-reaction-toast-lift, 0px);
   display: flex;
   flex-direction: column;
   align-items: center;
