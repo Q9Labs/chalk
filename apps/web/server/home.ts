@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { run } from "./engine";
+import { live, run } from "./engine";
 import { callDTO } from "./dto";
 import type { HomeAction, HomeDTO, HomeStatusDTO, HomeStatusQuery, LiveDTO } from "../src/lib/dashboard/contracts";
 type Activity = { live: LiveDTO; call: HomeStatusDTO["calls"][number] };
@@ -29,12 +29,14 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
   };
 }
 /**
- * Every listed Space's live state, last active time and recent people in one tenant read. With `home`, one more
+ * Home's check: every listed Space's live state, last active time and recent people in one tenant read. One more
  * read lists the newest page, and the answer carries the first page (two more reads) when any call on it isn't
- * listed: a call made in this tab can be newest while one made elsewhere just before it is still missing.
+ * listed: a call made in this tab can be newest while one made elsewhere just before it is still missing. Without
+ * `home`, this is the call page's roster check, which needs the full live roster rather than Home's five faces.
  */
 export async function homeStatus(engine: Engine, query: HomeStatusQuery): Promise<HomeStatusDTO> {
-  const [rows, newest] = await Promise.all([activity(engine, query.spaceIds), query.home ? run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, archived: false } })).then((result) => result.spaces.map((space) => space.id)) : []]);
+  if (!query.home) return { live: await live(engine, query.spaceIds), calls: [] };
+  const [rows, newest] = await Promise.all([activity(engine, query.spaceIds), run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, archived: false } })).then((result) => result.spaces.map((space) => space.id))]);
   const status = { live: rows.map((row) => row.live), calls: rows.map((row) => row.call) };
   return newest.some((id) => !query.spaceIds.includes(id)) ? { ...status, first: await homePage(engine) } : status;
 }

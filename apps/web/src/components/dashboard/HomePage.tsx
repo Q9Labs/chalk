@@ -50,11 +50,13 @@ export function HomePage() {
         const next = { ...data, calls: data.calls.map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })), live: data.live.map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item) };
         if (!status.first) return next;
         // A call made elsewhere (another tab, device or API client): the first page replaces the top of the list in
-        // its own order, keeping the expanded history below it. With no overlap a gap could hide calls, so reload the
-        // list instead.
+        // its own order, keeping the expanded history below it. That is safe only when the page ends on a call the list
+        // already holds, or holds every call; otherwise more new calls may sit below it, so reload the list instead.
         if (!ids.length) return status.first;
         const first = status.first;
-        if (!first.calls.some((call) => ids.includes(call.id))) return null;
+        const known = data.calls.map((call) => call.id);
+        const last = first.calls.at(-1);
+        if (first.nextCursor && !(last && known.includes(last.id))) return null;
         const firstIds = first.calls.map((call) => call.id);
         return {
           ...next,

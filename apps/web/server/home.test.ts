@@ -57,6 +57,11 @@ async function fakeEngine(spaces: string[], live: Record<string, string>) {
             }),
           });
         }
+        if (path === "/live-episodes") {
+          const ids = url.searchParams.get("space_ids")?.split(",") ?? [];
+          const roster = Array.from({ length: 7 }, (_, index) => ({ display_name: `Guest ${index}`, participant_id: uuid(0xa00 + index) }));
+          return json({ spaces: ids.map((id) => ({ space_id: id, live_episode: live[id] ? { episode_id: live[id], participant_count: roster.length, participants: roster } : null })) });
+        }
         if (path === "/spaces") {
           const size = Number(url.searchParams.get("page_size"));
           return json({ spaces: spaces.slice(0, size).map(space), pagination: { has_more: spaces.length > size, next_cursor: spaces.length > size ? String(size) : null, page_size: size } });
@@ -114,11 +119,12 @@ describe("Home", () => {
     expect(paths(requests)).toEqual(["spaces", "space-activity"]);
   });
 
-  it("answers the call page's roster check with one engine read", async () => {
+  it("answers the call page's roster check with the full live roster in one engine read", async () => {
     const ids = spaceIds(1);
     const { engine, requests } = await fakeEngine(ids, { [ids[0] ?? ""]: uuid(0xe1) });
     const status = await homeStatus(engine, { spaceIds: ids });
-    expect(status.live).toEqual([{ spaceId: ids[0], episode: { id: uuid(0xe1), count: 1, participants: [{ id: nora.participant_id, name: "Nora" }] } }]);
-    expect(paths(requests)).toEqual(["space-activity"]);
+    expect(status.live[0]?.episode?.participants).toHaveLength(7);
+    expect(status.live[0]?.episode?.count).toBe(7);
+    expect(paths(requests)).toEqual(["live-episodes"]);
   });
 });

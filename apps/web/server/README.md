@@ -57,11 +57,12 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   one tenant read for a transcript, or two for a recording and its latest transcripts.
   Recording polling includes pending audio preparation, so new automatic transcripts appear.
   Call pages share one metadata request per ten seconds between the live roster and pending artifacts.
-- `GET /dashboard-api/home-status?spaceIds=...`: live state, last active time and recent
-  people for up to 300 Spaces, in one tenant read (`listSpaceActivity`). Home adds `home=1`,
-  which costs one more read to find the newest unarchived Space; when that Space isn't
-  listed, the answer also carries the first page (two more reads). The server derives
-  Tenant authority from the session.
+- `GET /dashboard-api/home-status?spaceIds=...&home=1`: Home's check. Live state, last active
+  time and recent people for up to 300 Spaces in one tenant read (`listSpaceActivity`), plus
+  one read for the five newest unarchived Spaces; when any of them isn't listed, the answer
+  also carries the first page (two more reads). Without `home=1`, the call page's roster
+  check: the full live roster from `listSpaceLiveEpisodes`, one read for up to 30 Spaces.
+  The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
   recordings and attendance. `POST`: `PastSessionAction` (artifact URLs,
   transcripts, export, deletion). Artifact URLs expire; request again on expiry.

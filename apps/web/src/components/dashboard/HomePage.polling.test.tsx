@@ -134,6 +134,29 @@ it("finds a call made elsewhere just before this tab made a newer one", async ()
   expect(screen.getAllByText(/^(Made in this tab|Made in another tab|Planning)$/).map((item) => item.textContent)).toEqual(["Made in this tab", "Made in another tab", "Planning"]);
 });
 
+it("reloads when more calls were made elsewhere than the first page holds", async () => {
+  const truth: Truth = { calls: [planning], live: {} };
+  serve(truth);
+  await open();
+  const mine = row(uuid(3), "Made in this tab");
+  const others = Array.from({ length: 5 }, (_, index) => row(uuid(0x40 + index), `Elsewhere ${index}`));
+  vi.mocked(act).mockResolvedValue({ call: mine });
+  // The reload after this tab's new call fails, so the next check finds this tab's call newest and five others missing.
+  truth.calls = [...others, planning];
+  truth.failFirstPage = true;
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Start a call" }));
+  });
+  truth.failFirstPage = false;
+  truth.calls = [mine, ...others, planning];
+  // The first check after a failure waits twice the interval.
+  await tick(10_000);
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+  });
+  expect(screen.getAllByText(/^(Made in this tab|Elsewhere \d|Planning)$/).map((item) => item.textContent)).toEqual(["Made in this tab", ...others.map((call) => call.name), "Planning"]);
+});
+
 it("brings back the call pushed past 300 when a shown call is archived", async () => {
   const rows = Array.from({ length: 310 }, (_, index) => row(uuid(0x1000 + index), `Call ${index}`));
   const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
