@@ -72,7 +72,8 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       </div>
     );
   const { recordings } = state.data.session;
-  const recording = recordings.find((item) => item.exportStatus === "ready") ?? recordings[0];
+  // Show a playable export first, then an attempt that can still be prepared, so a failed newest attempt never hides a usable older one.
+  const recording = recordings.find((item) => item.exportStatus === "ready") ?? recordings.find((item) => preparable(item) || item.exportStatus === "pending") ?? recordings[0];
   // Recordings are newest first, so a later attempt than the one shown sits before it.
   const newer = recording ? recordings.slice(0, recordings.indexOf(recording)).find((item) => preparable(item) || item.exportStatus === "pending") : undefined;
   // Player, transcript and export state belong to one recording, so a new selection starts fresh.

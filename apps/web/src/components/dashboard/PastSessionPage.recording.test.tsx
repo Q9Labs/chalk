@@ -175,6 +175,19 @@ it("keeps a newer preparable attempt reachable while an older export plays", asy
   expect(requests.filter((request) => request.action === "recording-url").map((request) => request.recordingId)).toEqual([older, id]);
 });
 
+it("offers an older preparable attempt when the newest attempt failed", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  extraRecordings = [{ ...recording(), id: older }];
+  source = "failed";
+  artifact = "unavailable";
+  await open();
+  expect(screen.getByText("The recording is ready to prepare")).toBeTruthy();
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
+  });
+  expect(requests.filter((request) => request.action === "export-recording").map((request) => request.recordingId)).toEqual([older]);
+});
+
 it("replaces pending capture with its terminal reason without a reload", async () => {
   source = "pending";
   artifact = "unavailable";
