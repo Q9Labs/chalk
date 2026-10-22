@@ -152,6 +152,9 @@ it.each([390, 650])("floats people over a board on a %ipx-wide screen and keeps 
         .map(([, name]) => name),
     ),
   ).toEqual(["Nora", "Malik", "You"]);
+  // On a wide window the tile menu would cover the short tag, so small faces leave it out.
+  await page.locator('[data-stage-role="float"]').first().hover();
+  expect(await page.locator('[data-stage-role="float"] [data-part="tile-menu"]').evaluateAll((menus) => menus.filter((menu) => getComputedStyle(menu).display !== "none").length)).toBe(0);
   const controlsTop = Math.min(...(await page.locator(".chalk-board-island, .chalk-board-zoom").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))));
   const toastBottom = await page.locator('[data-part="toast-stack"]').evaluate((stack) => stack.getBoundingClientRect().bottom);
   expect(toastBottom).toBeLessThanOrEqual(controlsTop - 8);

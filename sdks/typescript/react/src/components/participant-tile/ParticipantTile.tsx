@@ -138,7 +138,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             </span>
           ) : null}
           {onClick && !phone ? (
-            <span className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
               <ChalkMenu
                 trigger={
                   <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
