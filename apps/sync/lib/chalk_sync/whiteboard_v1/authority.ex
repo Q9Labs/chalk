@@ -55,8 +55,11 @@ defmodule ChalkSync.WhiteboardV1.Authority do
         {:error, {:permission_denied, :episode_not_found}}
 
       [{_episode, access, read_at, failure}] ->
+        # The socket's own connect check read the database too, so it counts as a fresh read.
+        fresh_at = if is_integer(connected_at), do: max(read_at, connected_at), else: read_at
+
         cond do
-          System.monotonic_time(:millisecond) - read_at > stale_ms() ->
+          System.monotonic_time(:millisecond) - fresh_at > stale_ms() ->
             {:retryable, {:storage_unavailable, failure || "stale"}}
 
           is_integer(connected_at) and read_at <= connected_at ->

@@ -141,6 +141,23 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     end)
   end
 
+  test "a socket that just connected keeps the board while the stored read is stale" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 300)
+    identity = identity()
+    now = System.monotonic_time(:millisecond)
+    Authority.store(identity.episode, nil, now - 10_000, "timeout")
+
+    # The connect check just read the database and found the Participant.
+    connected_at = System.monotonic_time(:millisecond)
+    assert Authority.check(identity, connected_at) == :ok
+    assert Authority.check(identity) == {:retryable, {:storage_unavailable, "timeout"}}
+
+    Process.sleep(350)
+
+    assert Authority.check(identity, connected_at) ==
+             {:retryable, {:storage_unavailable, "timeout"}}
+  end
+
   test "an Episode that no longer exists denies access" do
     identity = identity()
     Application.put_env(:chalk_sync, :authority_test_access, {:error, :not_found})
