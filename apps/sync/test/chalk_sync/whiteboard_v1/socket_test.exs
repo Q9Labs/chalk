@@ -5,6 +5,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
+  alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
 
@@ -24,7 +25,21 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
        }}
     end
 
-    def participant_active(_identity), do: Process.get(:whiteboard_access, :ok)
+    def episode_access(episode) do
+      send(self(), {:episode_access_read, episode})
+
+      Process.get(
+        :whiteboard_episode_access,
+        {:ok,
+         %{
+           status: "active",
+           participants: %{
+             {"20000000-0000-4000-8000-000000000002", 1} => "active",
+             {"60000000-0000-4000-8000-000000000006", 1} => "active"
+           }
+         }}
+      )
+    end
 
     def commit_update(_identity, operation) do
       send(self(), {:committed_update, operation})
@@ -421,13 +436,14 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     end)
   end
 
-  describe "a live socket whose Participant lost access" do
+  describe "a live socket whose access changes" do
     setup do
       {:ok, initial} = SocketWhiteboardV1.init(%{})
       Process.cancel_timer(initial.hello_timer)
-      identity = identity()
+      # Access is cached per Episode, so each test gets its own Episode.
+      identity = %{identity() | episode: %{identity().episode | episode_id: UUID.generate()}}
       Fanout.subscribe(identity.episode)
-      on_exit(fn -> Process.delete(:whiteboard_access) end)
+      on_exit(fn -> Process.delete(:whiteboard_episode_access) end)
 
       # The last access check is older than the one-second cache, so the next event checks again.
       state = %{
@@ -451,8 +467,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       {:ok, state: state, update: update}
     end
 
-    test "closes instead of sending a cursor", %{state: state} do
-      Process.put(:whiteboard_access, {:error, :permission_denied})
+    test "closes instead of sending a cursor after the Participant left", %{state: state} do
+      access("active", "left")
 
       assert {:stop, :normal, {1008, "policy violation"}, closed} =
                receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
@@ -461,31 +477,94 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       refute_received {:whiteboard_v1_frame, %{"type" => "cursor"}}
     end
 
-    test "closes instead of receiving other people's board updates", %{
+    test "closes instead of receiving board updates after the Episode ended", %{
       state: state,
       update: update
     } do
-      Process.put(:whiteboard_access, {:error, :permission_denied})
+      access("ended", "active")
 
       assert {:stop, :normal, {1008, "policy violation"}, _closed} =
                SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
     end
 
-    test "closes for a retry when access cannot be checked", %{state: state, update: update} do
-      Process.put(:whiteboard_access, {:retryable, :storage_unavailable})
+    test "stays open while a removal or an Episode end can still be undone", %{
+      state: state,
+      update: update
+    } do
+      for {episode_status, participant_status} <- [
+            {"active", "leaving"},
+            {"ending", "active"},
+            {"ending", "leaving"}
+          ] do
+        access(episode_status, participant_status)
+        state = %{state | identity: %{state.identity | episode: new_episode(state)}}
 
-      assert {:stop, :normal, {1012, "dependency unavailable"}, _closed} =
-               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
+        assert {:push, {:text, _update}, _state} =
+                 SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
+      end
     end
 
-    test "checks access at most once a second", %{state: state, update: update} do
+    test "closes for a retry and records why when access cannot be checked", %{
+      state: state,
+      update: update
+    } do
+      Process.put(:whiteboard_episode_access, {:retryable, {:storage_unavailable, "timeout"}})
+
+      assert {:stop, :normal, {1012, "dependency unavailable"}, closed} =
+               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, state)
+
+      assert closed.terminal == %{
+               close_code: 1012,
+               reason: :dependency_unavailable,
+               failure: "timeout"
+             }
+    end
+
+    test "one change to many sockets in an Episode reads access once", %{
+      state: state,
+      update: update
+    } do
+      participants =
+        for index <- 1..50 do
+          "20000000-0000-4000-8000-#{String.pad_leading(Integer.to_string(index), 12, "0")}"
+        end
+
+      Process.put(
+        :whiteboard_episode_access,
+        {:ok, %{status: "active", participants: Map.new(participants, &{{&1, 1}, "active"})}}
+      )
+
+      for participant_id <- participants do
+        socket = %{state | identity: %{state.identity | participant_id: participant_id}}
+
+        assert {:push, {:text, _update}, _state} =
+                 SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, socket)
+      end
+
+      assert_received {:episode_access_read, _episode}
+      refute_received {:episode_access_read, _episode}
+    end
+
+    test "each socket checks access at most once a second", %{state: state, update: update} do
       fresh = %{state | authority_checked_at: System.monotonic_time(:millisecond)}
-      Process.put(:whiteboard_access, {:error, :permission_denied})
+      access("active", "left")
 
       assert {:push, {:text, _update}, _state} =
                SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, fresh)
+
+      refute_received {:episode_access_read, _episode}
     end
   end
+
+  defp access(episode_status, participant_status) do
+    Process.put(
+      :whiteboard_episode_access,
+      {:ok,
+       %{status: episode_status, participants: %{{@participant_id, 1} => participant_status}}}
+    )
+  end
+
+  defp new_episode(state), do: %{state.identity.episode | episode_id: UUID.generate()}
 
   test "enforces the hello deadline and strict text framing" do
     assert {:ok, state} = SocketWhiteboardV1.init(%{})

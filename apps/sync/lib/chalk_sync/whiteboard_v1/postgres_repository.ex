@@ -5,6 +5,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Database
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.SQL
@@ -203,19 +204,37 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   @impl true
-  def participant_active(%Identity{} = identity) do
-    params = context(identity) ++ [uuid(identity.participant_id), identity.participant_generation]
+  def episode_access(%EpisodeKey{} = episode) do
+    params = [uuid(episode.tenant_id), uuid(episode.space_id), uuid(episode.episode_id)]
 
-    case Postgrex.query(Database.connection(identity.episode), SQL.participant_active(), params,
+    case Postgrex.query(Database.connection(episode), SQL.episode_access(), params,
            timeout: 1_000
          ) do
-      {:ok, %Postgrex.Result{rows: [_row]}} -> :ok
-      {:ok, %Postgrex.Result{rows: []}} -> {:error, :permission_denied}
-      {:error, _error} -> {:retryable, :storage_unavailable}
+      {:ok, %Postgrex.Result{rows: []}} ->
+        {:error, :not_found}
+
+      {:ok, %Postgrex.Result{rows: [[episode_status | _participant] | _rest] = rows}} ->
+        participants =
+          for [_episode_status, id, generation, status] <- rows, id != nil, into: %{} do
+            {{UUID.load!(id), generation}, status}
+          end
+
+        {:ok, %{status: episode_status, participants: participants}}
+
+      {:error, error} ->
+        {:retryable, {:storage_unavailable, storage_failure(error)}}
     end
   catch
-    :exit, _reason -> {:retryable, :storage_unavailable}
+    :exit, _reason -> {:retryable, {:storage_unavailable, "exit"}}
   end
+
+  @doc false
+  # A bounded category for close evidence; the error itself can carry query text and values.
+  def storage_failure(%DBConnection.ConnectionError{reason: :queue_timeout}), do: "queue_timeout"
+  def storage_failure(%DBConnection.ConnectionError{}), do: "connection"
+  def storage_failure(%Postgrex.Error{postgres: %{code: :query_canceled}}), do: "timeout"
+  def storage_failure(%Postgrex.Error{}), do: "postgres"
+  def storage_failure(_error), do: "unknown"
 
   defp transaction(identity, callback) do
     connection = Database.connection(identity.episode)

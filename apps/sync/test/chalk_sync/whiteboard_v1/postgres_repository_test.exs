@@ -2,8 +2,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
+  alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
+  alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.PostgresRepository
@@ -271,21 +274,78 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert Enum.all?(stored, &(&1["version"] == 3))
   end
 
-  test "reports a Participant who left as no longer allowed on the board", %{
-    connection: connection,
+  test "a live board stays open through a removal or an end that is undone, and closes when final",
+       %{connection: connection, host: host, participant: participant} do
+    Application.put_env(:chalk_sync, :whiteboard_authority_ttl_ms, 0)
+    on_exit(fn -> Application.delete_env(:chalk_sync, :whiteboard_authority_ttl_ms) end)
+    {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(host)
+
+    removed = [
+      uuid(participant.episode.tenant_id),
+      uuid(participant.episode.space_id),
+      uuid(participant.episode.episode_id),
+      uuid(participant.participant_id),
+      participant.participant_generation
+    ]
+
+    ended = Enum.take(removed, 3)
+    socket = live_socket(participant, scene_id)
+
+    # A host removes the Participant, the provider call fails, and the lifecycle restores them.
+    lifecycle(connection, PlannerSQL.mark_participant_leaving(), removed)
+    assert {:push, _frame, _state} = deliver(socket, scene_id)
+    lifecycle(connection, FinalizerSQL.restore_participant_active(), removed)
+    assert {:push, _frame, _state} = deliver(socket, scene_id)
+
+    # The same for an Episode end that fails and is undone.
+    lifecycle(connection, PlannerSQL.mark_episode_ending(), ended)
+    assert {:push, _frame, _state} = deliver(socket, scene_id)
+    lifecycle(connection, FinalizerSQL.restore_episode_active(), ended)
+    assert {:push, _frame, _state} = deliver(socket, scene_id)
+
+    # A removal that completes closes the socket for good.
+    lifecycle(connection, PlannerSQL.mark_participant_leaving(), removed)
+    lifecycle(connection, FinalizerSQL.complete_external_participant(), removed)
+
+    assert {:stop, :normal, {1008, "policy violation"}, _state} = deliver(socket, scene_id)
+    assert {:push, _frame, _state} = deliver(live_socket(host, scene_id), scene_id)
+
+    # An Episode end that completes closes every remaining socket.
+    lifecycle(connection, PlannerSQL.mark_episode_ending(), ended)
+    lifecycle(connection, FinalizerSQL.complete_external_episode(), ended)
+
+    assert {:stop, :normal, {1008, "policy violation"}, _state} =
+             deliver(live_socket(host, scene_id), scene_id)
+  end
+
+  test "reports the lifecycle state of every Participant in an Episode", %{
     host: host,
     participant: participant
   } do
-    assert :ok = PostgresRepository.participant_active(participant)
+    assert {:ok, %{status: "active", participants: participants}} =
+             PostgresRepository.episode_access(host.episode)
 
-    Postgrex.query!(
-      connection,
-      "update participants set status = 'left', left_at = now(), last_left_reason = 'left' where id = $1",
-      [uuid(participant.participant_id)]
-    )
+    assert participants[{String.downcase(host.participant_id), 1}] == "active"
+    assert participants[{String.downcase(participant.participant_id), 1}] == "active"
 
-    assert {:error, :permission_denied} = PostgresRepository.participant_active(participant)
-    assert :ok = PostgresRepository.participant_active(host)
+    assert {:error, :not_found} =
+             PostgresRepository.episode_access(%{host.episode | episode_id: UUID.generate()})
+  end
+
+  test "names a bounded storage failure for close evidence" do
+    assert PostgresRepository.storage_failure(%DBConnection.ConnectionError{
+             reason: :queue_timeout
+           }) ==
+             "queue_timeout"
+
+    assert PostgresRepository.storage_failure(%DBConnection.ConnectionError{}) == "connection"
+
+    assert PostgresRepository.storage_failure(%Postgrex.Error{postgres: %{code: :query_canceled}}) ==
+             "timeout"
+
+    assert PostgresRepository.storage_failure(%Postgrex.Error{
+             postgres: %{code: :undefined_table}
+           }) == "postgres"
   end
 
   test "lists a snapshot in the byte order of the order keys and ids", %{connection: connection} do
@@ -357,6 +417,50 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
       "is_deleted" => false,
       "payload" => %{"x" => index * 10, "y" => 20, "points" => points}
     }
+  end
+
+  defp live_socket(identity, scene_id) do
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+    Process.cancel_timer(initial.hello_timer)
+
+    %{
+      initial
+      | phase: :live,
+        identity: identity,
+        display_name: "Ada",
+        scene_id: scene_id,
+        revision: 4
+    }
+  end
+
+  # Another Participant's change reaching this socket through fanout.
+  defp deliver(socket, scene_id) do
+    SocketWhiteboardV1.handle_info(
+      {:whiteboard_v1_frame,
+       %{
+         "type" => "update",
+         "operation_id" =>
+           "operation-#{String.pad_leading(Integer.to_string(System.unique_integer([:positive])), 10, "0")}",
+         "scene_id" => scene_id,
+         "revision" => "5",
+         "elements" => [
+           %{
+             "id" => "element-1",
+             "type" => "rectangle",
+             "version" => 1,
+             "version_nonce" => 1,
+             "index" => "a0",
+             "is_deleted" => false,
+             "payload" => %{}
+           }
+         ]
+       }},
+      socket
+    )
+  end
+
+  defp lifecycle(connection, statement, params) do
+    assert %Postgrex.Result{num_rows: 1} = Postgrex.query!(connection, statement, params)
   end
 
   defp element(id, version, version_nonce) do

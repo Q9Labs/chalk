@@ -17,6 +17,7 @@ defmodule ChalkSync.Application do
         {Task.Supervisor, [name: ChalkSync.CommandTaskSupervisor]},
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
+        {ChalkSync.WhiteboardV1.Authority, []},
         collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),

@@ -36,22 +36,18 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
-  # The same Participant and Episode conditions as lock_authority, read without a row lock.
-  def participant_active do
+  # Every Participant's lifecycle state in one Episode, read without a row lock.
+  def episode_access do
     """
-    select 1
-    from participants participant
-    join episodes episode
-      on episode.tenant_id = participant.tenant_id
-      and episode.space_id = participant.space_id
-      and episode.id = participant.episode_id
-    where participant.tenant_id = $1
-      and participant.space_id = $2
-      and participant.episode_id = $3
-      and participant.id = $4
-      and participant.generation = $5
-      and participant.status = 'active'
-      and episode.status = 'active'
+    select episode.status, participant.id, participant.generation, participant.status
+    from episodes episode
+    left join participants participant
+      on participant.tenant_id = episode.tenant_id
+      and participant.space_id = episode.space_id
+      and participant.episode_id = episode.id
+    where episode.tenant_id = $1
+      and episode.space_id = $2
+      and episode.id = $3
     """
   end
 

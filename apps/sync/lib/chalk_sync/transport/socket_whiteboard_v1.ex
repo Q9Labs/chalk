@@ -8,16 +8,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketClose
+  alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
-  alias ChalkSync.WhiteboardV1.Repository
   @hello_timeout_ms 5000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
-  @authority_ttl_ms 1000
   @impl true
   def init(options) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
@@ -87,13 +86,21 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     now_ms = System.monotonic_time(:millisecond)
 
     if is_integer(state.authority_checked_at) and
-         now_ms - state.authority_checked_at < @authority_ttl_ms do
+         now_ms - state.authority_checked_at < Authority.ttl_ms() do
       {:ok, state}
     else
-      case Repository.participant_active(state.identity) do
-        :ok -> {:ok, %{state | authority_checked_at: now_ms}}
-        {:error, _reason} -> stop(state, 1008, "policy violation", :permission_denied)
-        _unavailable -> stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+      case Authority.check(state.identity) do
+        :ok ->
+          {:ok, %{state | authority_checked_at: now_ms}}
+
+        {:error, :permission_denied} ->
+          stop(state, 1008, "policy violation", :permission_denied)
+
+        {:retryable, {_reason, failure}} ->
+          {:stop, reason, close, state} =
+            stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+
+          {:stop, reason, close, put_in(state.terminal[:failure], failure)}
       end
     end
   end
