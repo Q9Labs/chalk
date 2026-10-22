@@ -97,6 +97,14 @@ describe("Home", () => {
     expect(status.first?.calls[0]?.lastActiveAt).toBe(ended);
   });
 
+  it("returns the first page when a call below the newest isn't listed", async () => {
+    const ids = spaceIds(3);
+    const [mine = "", ...older] = ids;
+    const { engine } = await fakeEngine([mine, uuid(0x99), ...older], {});
+    const status = await homeStatus(engine, { spaceIds: ids, home: "1" });
+    expect(status.first?.calls.map((call) => call.id)).toEqual([mine, uuid(0x99), ...older]);
+  });
+
   it("loads a page of calls with two engine reads", async () => {
     const ids = spaceIds(7);
     const { engine, requests } = await fakeEngine(ids, {});

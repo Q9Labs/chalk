@@ -30,12 +30,13 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
 }
 /**
  * Every listed Space's live state, last active time and recent people in one tenant read. With `home`, one more
- * read finds the newest call, and the answer carries the first page (two more reads) when that call isn't listed.
+ * read lists the newest page, and the answer carries the first page (two more reads) when any call on it isn't
+ * listed: a call made in this tab can be newest while one made elsewhere just before it is still missing.
  */
 export async function homeStatus(engine: Engine, query: HomeStatusQuery): Promise<HomeStatusDTO> {
-  const [rows, newest] = await Promise.all([activity(engine, query.spaceIds), query.home ? run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 1, archived: false } })).then((result) => result.spaces[0]?.id) : undefined]);
+  const [rows, newest] = await Promise.all([activity(engine, query.spaceIds), query.home ? run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, archived: false } })).then((result) => result.spaces.map((space) => space.id)) : []]);
   const status = { live: rows.map((row) => row.live), calls: rows.map((row) => row.call) };
-  return newest && !query.spaceIds.includes(newest) ? { ...status, first: await homePage(engine) } : status;
+  return newest.some((id) => !query.spaceIds.includes(id)) ? { ...status, first: await homePage(engine) } : status;
 }
 export async function homeMutation(engine: Engine, action: HomeAction) {
   const params = { tenant_id: engine.tenantId };

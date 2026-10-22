@@ -19,8 +19,11 @@ async function inviteLink(call: HomeCallDTO): Promise<string> {
 /** A mutation returns the bare call; keep the row's link, activity and people. */
 const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...call });
 
-/** Home lists at most the 300 newest calls, so one status check covers every row. */
-const recent = (data: HomeDTO): HomeDTO => (data.calls.length > HOME_STATUS_ROWS ? { ...data, calls: data.calls.slice(0, HOME_STATUS_ROWS) } : data);
+/**
+ * Home shows and checks the 300 newest calls, so one status check covers every row. Calls pushed past 300 stay in the
+ * list, so the page cursor still follows the last loaded call and an archive brings the next one back into view.
+ */
+const shown = (data: HomeDTO): HomeCallDTO[] => data.calls.slice(0, HOME_STATUS_ROWS);
 
 export function HomePage() {
   const pages = useRef(1);
@@ -32,7 +35,7 @@ export function HomePage() {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
       }
-      return recent(data);
+      return data;
     },
     "home",
     {
@@ -42,17 +45,22 @@ export function HomePage() {
       // catches up.
       interval: () => 5000,
       read: async (data) => {
-        const ids = data.calls.map((call) => call.id);
+        const ids = shown(data).map((call) => call.id);
         const status = await readPage("home-status", { home: "1", ...(ids.length ? { spaceIds: ids.join(",") } : {}) });
         const next = { ...data, calls: data.calls.map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })), live: data.live.map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item) };
         if (!status.first) return next;
-        // A call made elsewhere (another tab, device or API client): put the first page's new calls on top, keeping
-        // the expanded history. With no overlap a gap could hide calls, so reload the list instead.
+        // A call made elsewhere (another tab, device or API client): the first page replaces the top of the list in
+        // its own order, keeping the expanded history below it. With no overlap a gap could hide calls, so reload the
+        // list instead.
         if (!ids.length) return status.first;
-        const fresh = status.first.calls.filter((call) => !ids.includes(call.id));
-        if (fresh.length === status.first.calls.length) return null;
-        const freshIds = fresh.map((call) => call.id);
-        return recent({ ...next, calls: [...fresh, ...next.calls], live: [...status.first.live.filter((item) => freshIds.includes(item.spaceId)), ...next.live] });
+        const first = status.first;
+        if (!first.calls.some((call) => ids.includes(call.id))) return null;
+        const firstIds = first.calls.map((call) => call.id);
+        return {
+          ...next,
+          calls: [...first.calls.map((call) => next.calls.find((row) => row.id === call.id) ?? call), ...next.calls.filter((call) => !firstIds.includes(call.id))],
+          live: [...first.live.filter((item) => !ids.includes(item.spaceId)), ...next.live],
+        };
       },
     },
   );
@@ -70,7 +78,7 @@ export function HomePage() {
       const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
       startKey.current = intentKey();
       const row: HomeCallDTO = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [] };
-      update((data) => recent({ ...data, calls: [row, ...data.calls], live: [{ spaceId: call.id, episode: null }, ...data.live] }));
+      update((data) => ({ ...data, calls: [row, ...data.calls], live: [{ spaceId: call.id, episode: null }, ...data.live] }));
       const link = await inviteLink(row);
       update((data) => ({ ...data, calls: data.calls.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
       setDialog({ kind: "ready", call, link });
@@ -129,7 +137,7 @@ export function HomePage() {
       ) : (
         <>
           <div className="list">
-            {state.data.calls.map((call) => (
+            {shown(state.data).map((call) => (
               <CallRow key={call.id} call={call} live={liveFor(state.data, call.id)} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
             ))}
           </div>
@@ -146,7 +154,7 @@ export function HomePage() {
                 update(
                   (data) => {
                     const known = new Set(data.calls.map((call) => call.id));
-                    return recent({ ...data, calls: [...data.calls, ...page.calls.filter((call) => !known.has(call.id))], live: [...data.live, ...page.live.filter((item) => !known.has(item.spaceId))], nextCursor: page.nextCursor });
+                    return { ...data, calls: [...data.calls, ...page.calls.filter((call) => !known.has(call.id))], live: [...data.live, ...page.live.filter((item) => !known.has(item.spaceId))], nextCursor: page.nextCursor };
                   },
                   { refresh: false },
                 );
