@@ -1121,6 +1121,9 @@ create table sync_whiteboard_draw_policy_receipts (
         on delete restrict
 );
 
+create index sync_whiteboard_draw_policy_receipts_window
+    on sync_whiteboard_draw_policy_receipts (tenant_id, space_id, episode_id, completed_at desc);
+
 create table sync_whiteboard_operation_receipts (
     tenant_id uuid not null,
     space_id uuid not null,

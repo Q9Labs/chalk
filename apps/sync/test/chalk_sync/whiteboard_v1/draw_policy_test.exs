@@ -153,29 +153,32 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
              PostgresRepository.set_draw_policy(host, %{operation | policy: "picked"})
   end
 
-  test "each host keeps a bounded number of policy receipts", %{host: host, episode: episode} do
-    for index <- 1..130 do
-      set_policy(
-        host,
-        Enum.at(["hosts", "everyone"], rem(index, 2)),
-        "policy-bound-#{pad(index)}"
-      )
+  test "an Episode keeps a bounded window of policy receipts, and retries inside it stay duplicates",
+       %{host: host, episode: episode} do
+    for index <- 1..1026 do
+      set_policy(host, policy_at(index), "policy-bound-#{pad(index)}")
     end
 
     %Postgrex.Result{rows: [[count]]} =
       Postgrex.query!(
         Database.connection(episode),
-        "select count(*) from sync_whiteboard_draw_policy_receipts where tenant_id = $1 and participant_id = $2",
-        [UUID.dump!(episode.tenant_id), UUID.dump!(host.participant_id)]
+        "select count(*) from sync_whiteboard_draw_policy_receipts where tenant_id = $1 and space_id = $2 and episode_id = $3",
+        [
+          UUID.dump!(episode.tenant_id),
+          UUID.dump!(episode.space_id),
+          UUID.dump!(episode.episode_id)
+        ]
       )
 
-    assert count == 128
+    assert count == 1024
 
-    assert {:ok, %{outcome: :duplicate}} =
-             PostgresRepository.set_draw_policy(host, %{
-               operation_id: "policy-bound-#{pad(130)}",
-               policy: "hosts"
-             })
+    for index <- [3, 1026] do
+      assert {:ok, %{outcome: :duplicate}} =
+               PostgresRepository.set_draw_policy(host, %{
+                 operation_id: "policy-bound-#{pad(index)}",
+                 policy: policy_at(index)
+               })
+    end
   end
 
   test "unpicking someone under picked people does not block them once everyone can draw", %{
@@ -341,6 +344,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
   end
 
   defp pad(index), do: String.pad_leading(Integer.to_string(index), 6, "0")
+  defp policy_at(index), do: Enum.at(["hosts", "everyone"], rem(index, 2))
 
   defp drawers(host, collaborator, observer) do
     %{

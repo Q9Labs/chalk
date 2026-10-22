@@ -36,6 +36,9 @@ create table sync_whiteboard_draw_policy_receipts (
         on delete restrict
 );
 
+create index sync_whiteboard_draw_policy_receipts_window
+    on sync_whiteboard_draw_policy_receipts (tenant_id, space_id, episode_id, completed_at desc);
+
 -- +goose Down
 drop table sync_whiteboard_draw_policy_receipts;
 drop table sync_whiteboard_draw_policies;

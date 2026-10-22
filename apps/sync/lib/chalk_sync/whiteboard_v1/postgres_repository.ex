@@ -15,7 +15,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   @max_replay_items @limits["snapshotPageMaxItems"]
   @max_replay_bytes @limits["socketQueueMaxBytes"]
   @max_draw_grants @limits["drawAccessMaxGrants"]
-  @max_draw_policy_receipts @limits["pendingOperationMaxItems"]
+  # Eight hosts' worth of full pending stores, so ordinary retries stay idempotent.
+  @max_draw_policy_receipts 8 * @limits["pendingOperationMaxItems"]
 
   @impl true
   def connect(%Identity{} = identity) do
@@ -637,12 +638,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp prune_draw_policy_receipts(connection, identity) do
-    params = [
-      uuid(identity.episode.tenant_id),
-      uuid(identity.episode.space_id),
-      uuid(identity.participant_id),
-      @max_draw_policy_receipts
-    ]
+    params = context(identity) ++ [@max_draw_policy_receipts]
 
     case Postgrex.query(connection, SQL.prune_draw_policy_receipts(), params) do
       {:ok, _result} -> :ok
