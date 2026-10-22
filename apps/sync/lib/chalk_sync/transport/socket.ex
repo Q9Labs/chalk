@@ -27,6 +27,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   @heartbeat_interval_ms 20_000
   @missed_heartbeat_limit 2
   @terminal_ack_timeout_ms 5_000
+  @entry_timeout_ms 120_000
 
   @impl true
   def init(opts) do
@@ -51,6 +52,8 @@ defmodule ChalkSync.Transport.SocketV1 do
        terminal: nil,
        hello_timer: timer,
        heartbeat_timer: nil,
+       entry_timer: nil,
+       entry_confirmation: false,
        terminal_ack_timer: nil,
        terminal_head: nil,
        missed_heartbeats: 0,
@@ -81,6 +84,21 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
+
+  def handle_info(:entry_timeout, %{phase: :live, entry_timer: timer, identity: identity} = state)
+      when not is_nil(timer) do
+    case Stateholder.participant_authority(
+           identity.episode,
+           identity.participant_id,
+           identity.participant_generation
+         ) do
+      {:ok, _authority} -> {:ok, %{state | entry_timer: nil}}
+      {:retryable, _reason} -> stop(state, 1012, "service restart", :dependency_unavailable)
+      {:error, _reason} -> stop(state, 1008, "entry timeout", :entry_timeout)
+    end
+  end
+
+  def handle_info(:entry_timeout, state), do: {:ok, state}
 
   def handle_info(:heartbeat_check, %{phase: :live} = state) do
     missed = state.missed_heartbeats + 1
@@ -130,18 +148,6 @@ defmodule ChalkSync.Transport.SocketV1 do
       ) do
     pop_outbound(state)
   end
-
-  def handle_info(
-        {:sync_recovery_live, coordinator},
-        %{phase: :recovering, coordinator: coordinator} = state
-      ) do
-    state
-    |> Map.put(:phase, :live)
-    |> start_heartbeat()
-    |> push_collaboration()
-  end
-
-  def handle_info({:sync_recovery_live, _coordinator}, state), do: {:ok, state}
 
   def handle_info(
         {:sync_v1_live_frame, coordinator, frame},
@@ -231,6 +237,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   @impl true
   def terminate(reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
     cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.entry_timer)
     cancel_timer(state.terminal_ack_timer)
     unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
@@ -252,6 +259,7 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   def terminate(reason, state) do
     cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.entry_timer)
     cancel_timer(state.terminal_ack_timer)
     unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
@@ -294,7 +302,10 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame(:entered, %{phase: :live, identity: identity} = state) do
     case Stateholder.confirm_admission(identity) do
       {:ok, %{result: result}} when result in [:applied, :already_applied] ->
-        {:push, {:text, encode_with_context(state, ProtocolV1.entered_ack())}, state}
+        cancel_timer(state.entry_timer)
+
+        {:push, {:text, encode_with_context(state, ProtocolV1.entered_ack())},
+         %{state | entry_timer: nil}}
 
       {:ok, %{result: :superseded}} ->
         stop(state, 1008, "policy violation", :admission_rejected)
@@ -726,6 +737,11 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp pop_outbound(%{coordinator: coordinator} = state) do
     case Coordinator.pop(coordinator, self()) do
+      {:ok, encoded, :recovery_complete} ->
+        next = state |> Map.put(:phase, :live) |> start_heartbeat() |> start_entry_deadline()
+        send(self(), :collaboration_drain)
+        {:push, {:text, encode_with_context(next, encoded)}, next}
+
       {:ok, encoded, false} ->
         {:push, {:text, encode_with_context(state, encoded)}, mark_control_checked(state)}
 
@@ -749,6 +765,12 @@ defmodule ChalkSync.Transport.SocketV1 do
         stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
+
+  defp start_entry_deadline(%{entry_confirmation: true} = state) do
+    %{state | entry_timer: Process.send_after(self(), :entry_timeout, @entry_timeout_ms)}
+  end
+
+  defp start_entry_deadline(state), do: state
 
   defp start_heartbeat(state) do
     state
@@ -869,7 +891,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:ok, coordinator} <-
            Coordinator.begin_recovery(identity, self(), protocol_options) do
       start_registered_recovery(
-        state,
+        %{state | entry_confirmation: Map.get(hello, :entry_confirmation, false)},
         identity,
         recovery,
         coordinator,

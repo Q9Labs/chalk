@@ -3,7 +3,7 @@
 -- Previous API/Sync binaries remain runnable; runtime rollback keeps this schema.
 -- Absence of a seat row means the legacy protocol. No historical rows change.
 -- The Wave 1 baseline recreated this FK without its July constraint name.
--- Resolve its columns and target before assigning the stable schema name.
+-- Resolve its columns and target without renaming a deployed constraint.
 -- +goose StatementBegin
 do $$
 declare
@@ -21,18 +21,13 @@ begin
             on attribute.attrelid = constraint_row.conrelid and attribute.attnum = key.attnum
       ) = array['tenant_id', 'space_id', 'episode_id', 'participant_id', 'participant_generation'];
 
-    if generation_constraint <> 'sync_lifecycle_intents_sync_v3_generation_fkey' then
-        execute format(
-            'alter table sync_lifecycle_intents rename constraint %I to sync_lifecycle_intents_sync_v3_generation_fkey',
-            generation_constraint
-        );
-    end if;
+    execute format(
+        'alter table sync_lifecycle_intents alter constraint %I deferrable initially deferred',
+        generation_constraint
+    );
 end;
 $$;
 -- +goose StatementEnd
--- Retry rotates the participant and intent together in the authority transaction.
-alter table sync_lifecycle_intents
-    alter constraint sync_lifecycle_intents_sync_v3_generation_fkey deferrable initially deferred;
 
 create table participant_join_seats (
     tenant_id uuid not null,
@@ -49,7 +44,7 @@ create table participant_join_seats (
 
 -- The existing lifecycle queue delivers pending-seat expiry at next_attempt_at.
 -- One authority owns the state machine for API cancellation/retry and Sync hello:
--- pending -> joined (hello), cancelled (HTTP), expired (lease).
+-- pending -> joined (completed entry), cancelled (HTTP), expired (lease).
 -- cancelled/expired -> pending (retry); joined -> left (normal departure trigger).
 -- +goose StatementBegin
 create function transition_participant_join_seat(
@@ -66,6 +61,9 @@ begin
     end if;
     perform 1 from sync_episode_control
     where tenant_id = seat_tenant and space_id = seat_space and episode_id = seat_episode
+    for update;
+    perform 1 from episodes
+    where tenant_id = seat_tenant and space_id = seat_space and id = seat_episode
     for update;
     perform 1 from participants
     where tenant_id = seat_tenant and space_id = seat_space and episode_id = seat_episode
@@ -205,5 +203,27 @@ drop function complete_participant_join_seat();
 drop function transition_participant_join_seat(uuid, uuid, uuid, uuid, bigint, text, text);
 drop table participant_join_seats;
 
-alter table sync_lifecycle_intents
-    alter constraint sync_lifecycle_intents_sync_v3_generation_fkey not deferrable;
+-- +goose StatementBegin
+do $$
+declare
+    generation_constraint name;
+begin
+    select constraint_row.conname into strict generation_constraint
+    from pg_constraint constraint_row
+    where constraint_row.contype = 'f'
+      and constraint_row.conrelid = 'sync_lifecycle_intents'::regclass
+      and constraint_row.confrelid = 'participants'::regclass
+      and (
+          select array_agg(attribute.attname::text order by key.ordinality)
+          from unnest(constraint_row.conkey) with ordinality as key(attnum, ordinality)
+          join pg_attribute attribute
+            on attribute.attrelid = constraint_row.conrelid and attribute.attnum = key.attnum
+      ) = array['tenant_id', 'space_id', 'episode_id', 'participant_id', 'participant_generation'];
+
+    execute format(
+        'alter table sync_lifecycle_intents alter constraint %I not deferrable',
+        generation_constraint
+    );
+end;
+$$;
+-- +goose StatementEnd

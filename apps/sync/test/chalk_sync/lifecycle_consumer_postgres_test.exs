@@ -2,6 +2,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Operations.Probe
   alias ChalkSync.Operations.Readiness
   alias ChalkSync.Stateholder.Postgres
@@ -171,6 +172,75 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   end
 
   @tag :entered_admission
+  test "entered immediately after recovery_complete is accepted on reconnect", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(fixture.identity)
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    on_exit(fn -> Client.close_tcp(client) end)
+    client = Client.send_json(client, hello(fixture.identity))
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    client = Client.send_json(client, %{"type" => "entered"})
+    receive_entered_ack(client)
+    assert [["active", "joined", true]] = entry_row(connection, fixture)
+  end
+
+  @tag :entry_timeout_trace
+  @tag :entered_admission
+  test "pending entry deadline evicts an expired socket and releases live capacity", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    handler = "entry-timeout-#{System.unique_integer([:positive])}"
+    owner = self()
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _, _, metadata, _ ->
+        if metadata.event == "sync.websocket.closed",
+          do: send(owner, {:entry_closed, metadata.attributes})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    on_exit(fn -> Client.close_tcp(client) end)
+    client = Client.send_json(client, hello(fixture.identity))
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
+    coordinator = Coordinator.whereis(fixture.episode)
+    [socket] = coordinator |> :sys.get_state() |> Map.fetch!(:sockets) |> Map.keys()
+    monitor = Process.monitor(coordinator)
+
+    Postgrex.query!(
+      connection,
+      "update participant_join_seats set expires_at=now()-interval '1 second' where participant_id=$1",
+      [UUID.dump!(fixture.identity.participant_id)]
+    )
+
+    assert [["expired"]] = seat_transition(connection, fixture, "expire")
+    send(socket, :entry_timeout)
+    assert {:closed, 1008, "entry timeout", _client} = Client.recv(client)
+    assert_receive {:entry_closed, %{reason: :entry_timeout, close_code: 1008}}, 1_000
+    assert_receive {:DOWN, ^monitor, :process, ^coordinator, _reason}, 2_000
+    assert [["left", "expired", false]] = entry_row(connection, fixture)
+  end
+
+  @tag :entered_admission
   test "hello is cancellable after Sync recovery without attendance, entered confirms exactly once",
        %{connections: connections, port: port} do
     connection = hd(connections)
@@ -228,8 +298,14 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
   defp receive_entered_ack(client, remaining) when remaining > 0 do
     case Client.recv(client) do
-      {:json, %{"type" => "entered_ack"}, client} -> client
-      {:json, _frame, client} -> receive_entered_ack(client, remaining - 1)
+      {:json, %{"type" => "entered_ack"}, client} ->
+        client
+
+      {:json, %{"type" => "error"} = frame, _client} ->
+        flunk("entered rejected: #{inspect(frame)}")
+
+      {:json, _frame, client} ->
+        receive_entered_ack(client, remaining - 1)
     end
   end
 
