@@ -44,7 +44,8 @@ docker_bin=""
 container=""
 native_root=""
 native_pg_bin=""
-callback_pid=""
+# shellcheck source=scripts/gates/owned-command.sh
+source "$(dirname "$0")/owned-command.sh"
 
 docker_binary() {
   local candidate
@@ -84,11 +85,7 @@ available_port() {
 }
 
 cleanup() {
-  if [[ -n "${callback_pid}" ]]; then
-    kill -TERM "${callback_pid}" >/dev/null 2>&1 || true
-    wait "${callback_pid}" >/dev/null 2>&1 || true
-    callback_pid=""
-  fi
+  stop_owned
   if [[ "${backend}" == "docker" ]]; then
     "${docker_bin}" rm -f --volumes "${container}" >/dev/null 2>&1 || true
   elif [[ "${backend}" == "native" ]]; then
@@ -102,8 +99,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 postgres_ready() {
   # The container shell expands /proc state.
@@ -205,20 +200,12 @@ fi
 
 cd "${repository_root}"
 if ((command_mode == 1)); then
-  if ((api_gate_db_lane == 0)); then
-    "$@"
-    exit "$?"
+  if ((api_gate_db_lane == 1)); then
+    export CHALK_GATE_POSTGRES_CALLBACK=1
   fi
-
-  export CHALK_GATE_POSTGRES_CALLBACK=1
-  "$@" &
-  callback_pid="$!"
-  wait "${callback_pid}"
-  status="$?"
-  callback_pid=""
-  exit "${status}"
+  run_owned "$@"
 else
   for gate in "$@"; do
-    "${gate}"
+    run_owned "${gate}"
   done
 fi

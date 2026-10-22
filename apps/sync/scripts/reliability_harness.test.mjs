@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { assertStopped, signalWhenReady, stubbornCommand } from "../../../scripts/gates/signal-test.mjs";
 import { createProfilePlan, executeProfile } from "./reliability_harness.mjs";
 
 test("maps the three triggers to one harness with explicit profiles", () => {
@@ -83,32 +83,28 @@ test("fails closed, records the failed step, and stops the plan", (context) => {
   assert.deepEqual(manifest.reproducer, ["apps/sync/scripts/reliability-harness", "topology"]);
 });
 
-test("strict Sync tests stopped with TERM exit 143 even when mix exits 0 on TERM", async (context) => {
+function strictRoot(context) {
   const root = mkdtempSync(path.join(tmpdir(), "chalk-test-strict-signal-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));
-  const ready = path.join(root, "ready");
+  mkdirSync(path.join(root, "tmp"));
+  const env = { ...process.env, PATH: `${root}:${process.env.PATH}`, TMPDIR: path.join(root, "tmp"), TEST_READY: path.join(root, "ready"), TEST_PIDS: path.join(root, "pids") };
+  return { root, env };
+}
+
+test("strict Sync tests stopped with TERM exit 143 even when mix exits 0 on TERM", async (context) => {
+  const { root, env } = strictRoot(context);
   // The BEAM shuts down cleanly with status 0 when it gets TERM.
   writeFileSync(path.join(root, "mix"), "#!/bin/bash\ntrap 'exit 0' TERM\ntouch \"$TEST_READY\"\nsleep 10 &\nwait\n", { mode: 0o755 });
-  const child = spawn("bash", [path.join(import.meta.dirname, "test-strict")], {
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env, PATH: `${root}:${process.env.PATH}`, TEST_READY: ready },
-  });
-  const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
-  let early;
-  exited.then((result) => (early = result));
-  // A failed assertion leaves the wrapper running, and the test runner would wait for it.
-  context.after(async () => {
-    if (early !== undefined) return;
-    process.kill(-child.pid, "SIGKILL");
-    await exited;
-  });
-  const deadline = Date.now() + 10_000;
-  while (!existsSync(ready)) {
-    assert.equal(early, undefined, "the wrapper exited before its command started");
-    assert.ok(Date.now() < deadline, "the wrapper's command did not start within 10 seconds");
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  process.kill(-child.pid, "SIGTERM");
-  assert.deepEqual(await exited, { code: 143, signal: null });
+  const stopped = await signalWhenReady(context, { args: [path.join(import.meta.dirname, "test-strict")], env, ready: env.TEST_READY, signal: "SIGTERM" });
+  assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+});
+
+test("strict Sync tests stop a mix that ignores TERM, remove their output and exit 143", async (context) => {
+  const { root, env } = strictRoot(context);
+  writeFileSync(path.join(root, "mix"), stubbornCommand, { mode: 0o755 });
+  const stopped = await signalWhenReady(context, { args: [path.join(import.meta.dirname, "test-strict")], env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "1" }, ready: env.TEST_READY, signal: "SIGTERM" });
+  assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+  assert.ok(stopped.seconds < 6, `the wrapper took ${stopped.seconds} seconds to stop`);
+  await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
+  assert.deepEqual(readdirSync(env.TMPDIR), []);
 });
