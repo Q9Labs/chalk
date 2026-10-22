@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { liveMediaClient } from "../../test-support/live-media.test.helpers";
+import { liveMediaClient } from "../../../tests/helpers/live-media";
 import { Chalk } from "./Chalk";
 
 it.each(["unmute", "start_camera"] as const)("checks the current connection before allowing web %s requests", async (kind) => {

@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { SpaceClientError } from "@q9labsai/chalk-client";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
-import { liveMediaClient } from "../../test-support/live-media.test.helpers";
+import { liveMediaClient } from "../../../tests/helpers/live-media";
 import { SpaceView } from "./SpaceView";
 
 it.each([

@@ -3,7 +3,7 @@ import { act, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { SpaceClientError } from "@q9labsai/chalk-client";
-import { liveMediaClient } from "./live-media.test.helpers";
+import { liveMediaClient } from "../../tests/helpers/live-media";
 import { useSpaceClient } from "../../../react-native/src/context/space-client-context";
 import { useToasts } from "../../../react-native/src/primitives/toast/ToastStack";
 import { createToastStore } from "../../../react-native/src/primitives/toast/toast-store";
