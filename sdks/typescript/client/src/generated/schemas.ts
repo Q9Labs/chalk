@@ -801,6 +801,41 @@ export const SpaceSchema = Schema.Struct({
 });
 export type Space = typeof SpaceSchema.Type;
 
+export const SpaceActivityListSchema = Schema.Struct({
+  spaces: Schema.Array(
+    Schema.Struct({
+      latest_episode: Schema.NullOr(
+        Schema.Struct({
+          ended_at: Schema.NullOr(DateTimeStringSchema),
+          episode_id: EpisodeIdSchema,
+          started_at: DateTimeStringSchema,
+          status: Schema.String,
+        }),
+      ),
+      live_episode: Schema.NullOr(
+        Schema.Struct({
+          episode_id: EpisodeIdSchema,
+          participant_count: Schema.Number,
+          participants: Schema.Array(
+            Schema.Struct({
+              display_name: Schema.String,
+              participant_id: ParticipantIdSchema,
+            }),
+          ),
+        }),
+      ),
+      recent_participants: Schema.Array(
+        Schema.Struct({
+          display_name: Schema.String,
+          participant_id: ParticipantIdSchema,
+        }),
+      ),
+      space_id: SpaceIdSchema,
+    }),
+  ),
+});
+export type SpaceActivityList = typeof SpaceActivityListSchema.Type;
+
 export const SpaceListSchema = Schema.Struct({
   pagination: PaginationSchema,
   spaces: Schema.Array(SpaceSchema),
@@ -1928,6 +1963,26 @@ export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.T
 
 export const ListRecordingsResponseSchema = RecordingListSchema;
 export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
+
+export const ListSpaceActivityPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type ListSpaceActivityPathParams = typeof ListSpaceActivityPathParamsSchema.Type;
+
+export const ListSpaceActivityQueryParamsSchema = Schema.Struct({
+  space_ids: Schema.String,
+});
+export type ListSpaceActivityQueryParams = typeof ListSpaceActivityQueryParamsSchema.Type;
+
+export const ListSpaceActivityResponseSchema = SpaceActivityListSchema;
+export type ListSpaceActivityResponse = typeof ListSpaceActivityResponseSchema.Type;
+
+export const ListSpaceActivity429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ListSpaceActivity429ResponseHeaders = typeof ListSpaceActivity429ResponseHeadersSchema.Type;
 
 export const ListSpaceLiveEpisodesPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -5294,6 +5349,9 @@ export const ListRecordingsErrorSchema = Schema.Union([
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
 
+export const ListSpaceActivityErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidSpaceIdsErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
+export type ListSpaceActivityError = typeof ListSpaceActivityErrorSchema.Type;
+
 export const ListSpaceLiveEpisodesErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5789,6 +5847,7 @@ export const ChalkOperationPolicies = {
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  listSpaceActivity: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpaceLiveEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listTenants: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

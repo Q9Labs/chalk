@@ -386,6 +386,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/space-activity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List space activity */
+    get: operations["listSpaceActivity"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces": {
     parameters: {
       query?: never;
@@ -1713,6 +1730,29 @@ export interface components {
       tenant_id: components["schemas"]["TenantId"];
       transcription_policy: string;
       updated_at: components["schemas"]["DateTimeString"];
+    };
+    SpaceActivityList: {
+      spaces: {
+        latest_episode: {
+          ended_at: components["schemas"]["DateTimeString"] | null;
+          episode_id: components["schemas"]["EpisodeId"];
+          started_at: components["schemas"]["DateTimeString"];
+          status: string;
+        } | null;
+        live_episode: {
+          episode_id: components["schemas"]["EpisodeId"];
+          participant_count: number;
+          participants: {
+            display_name: string;
+            participant_id: components["schemas"]["ParticipantId"];
+          }[];
+        } | null;
+        recent_participants: {
+          display_name: string;
+          participant_id: components["schemas"]["ParticipantId"];
+        }[];
+        space_id: components["schemas"]["SpaceId"];
+      }[];
     };
     /** Format: uuid */
     SpaceId: string;
@@ -4562,6 +4602,96 @@ export interface operations {
       };
       /** @description Request Entity Too Large */
       413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listSpaceActivity: {
+    parameters: {
+      query: {
+        space_ids: string;
+      };
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SpaceActivityList"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };
