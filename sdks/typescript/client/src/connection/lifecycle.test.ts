@@ -447,6 +447,19 @@ it("confirms entry only after Sync is live and SFU startup has completed", async
   );
 });
 
+it("keeps a late entry timeout retryable instead of reporting invalid access", async () => {
+  const platform = createCoreTestPlatform();
+  const layer = admissionLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: platform.dependencies });
+  await exerciseAdmission(layer, (lifecycle) =>
+    Effect.gen(function* () {
+      yield* lifecycle.join();
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "entry_timeout" } });
+      yield* Effect.sleep("20 millis");
+      expect(lifecycle.getSnapshot().failure?.code).not.toBe("invalid_access");
+    }),
+  );
+});
+
 it("refreshes rejected access during entry confirmation instead of retrying the old credential", async () => {
   const platform = createCoreTestPlatform();
   const reasons: string[] = [];

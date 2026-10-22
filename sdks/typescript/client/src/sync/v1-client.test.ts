@@ -415,6 +415,15 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  it("reports an entry timeout as its own terminal reason instead of rejected access", async () => {
+    const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
+    try {
+      socket.close(1008, "entry timeout");
+      await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "entry_timeout" }));
+    } finally {
+      client.stop();
+    }
+  });
   it("reconnects after a hello timeout without rejecting valid access", async () => {
     const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
     try {
