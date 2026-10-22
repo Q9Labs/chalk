@@ -9,6 +9,8 @@
 - React: keep chat messages still while the clock ticks.
 - UI: round call corners and lift board messages in the stylesheet.
 - Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
+- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds with retry (also in React Native), and capture a fresh microphone after its track ended.
+- React: label screen shares of unknown surfaces plainly.
 - React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
 - Advance the seven coordinated Chalk SDK packages to 5.1.0. `@q9labsai/recording-presentation` remains at 0.1.1.
 
