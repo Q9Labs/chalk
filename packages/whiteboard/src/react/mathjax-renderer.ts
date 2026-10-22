@@ -59,7 +59,7 @@ function configureMathJax(target: typeof globalThis | Window, existing: (MathJax
     ...(existing ?? {}),
     loader: { paths: { mathjax: "/chalk-mathjax/4.1.3", fonts: "/chalk-mathjax/4.1.3/fonts" }, ...(existing?.loader as object | undefined) },
     svg: { dynamicPrefix: "/chalk-mathjax/4.1.3/fonts/mathjax-newcm-font/svg/dynamic", fontCache: "none", ...(existing?.svg as object | undefined) },
-    options: { ...(existing?.options as object | undefined), enableMenu: false },
+    options: { worker: { path: "/chalk-mathjax/4.1.3/sre", maps: "/chalk-mathjax/4.1.3/sre/mathmaps" }, ...(existing?.options as object | undefined), enableMenu: false },
     startup: { ...(existing?.startup as object | undefined), typeset: false },
   } as unknown as MathJaxRuntime & Record<string, unknown>;
 }

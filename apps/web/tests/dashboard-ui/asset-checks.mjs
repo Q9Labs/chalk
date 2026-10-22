@@ -33,24 +33,24 @@ try {
         await mkdir(process.env.ASSET_PROOF_DIR, { recursive: true });
         await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, `${name}.png`) });
       }
-      if (!process.env.ASSET_PROOF_BASELINE) {
-        assert.deepEqual(external, [], `${name} sent an external request`);
-        assert.deepEqual(failed, [], `${name} failed to load an asset`);
-        assert(
-          fonts.some((font) => font.family === "Figtree" && font.status === "loaded"),
-          `${name} did not render Figtree`,
-        );
-        if (name === "sign-in")
-          assert(
-            fonts.some((font) => font.family === "Roboto" && font.status === "loaded"),
-            "Sign-in did not render Roboto",
-          );
-      }
     } finally {
       await context.close();
     }
   }
   if (process.env.ASSET_PROOF_DIR) await writeFile(resolve(process.env.ASSET_PROOF_DIR, "web-requests.json"), JSON.stringify(report, null, 2));
+  for (const { name, external, failed, fonts } of report) {
+    assert.deepEqual(external, [], `${name} sent an external request`);
+    assert.deepEqual(failed, [], `${name} failed to load an asset`);
+    assert(
+      fonts.some((font) => font.family === "Figtree" && font.status === "loaded"),
+      `${name} did not render Figtree`,
+    );
+    if (name === "sign-in")
+      assert(
+        fonts.some((font) => font.family === "Roboto" && font.status === "loaded"),
+        "Sign-in did not render Roboto",
+      );
+  }
   console.log("PASS: landing, sign-in and dashboard asset requests and loaded fonts");
 } finally {
   await browser.close();

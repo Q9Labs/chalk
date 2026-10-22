@@ -67,12 +67,10 @@ it("loads call, board, sticky note, text and math assets from our origin", async
       await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, "board.png") });
       await writeFile(resolve(process.env.ASSET_PROOF_DIR, "call-requests.json"), JSON.stringify({ requests, failed, fonts, external }, null, 2));
     }
-    if (!process.env.ASSET_PROOF_BASELINE) {
-      expect(external).toEqual([]);
-      expect(failed).toEqual([]);
-      expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
-      expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
-    }
+    expect(external, "external HTTP requests").toEqual([]);
+    expect(failed).toEqual([]);
+    expect(fonts.some((font) => /Nunito|Excalifont|Virgil/.test(font.family) && font.status === "loaded")).toBe(true);
+    expect(requests.some(({ url }) => url.includes("/chalk-mathjax/"))).toBe(true);
   } finally {
     await context.close();
   }
