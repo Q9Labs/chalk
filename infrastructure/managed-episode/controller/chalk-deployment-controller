@@ -867,22 +867,20 @@ cleanup_unused_images() {
     manifests+=("$live_manifest")
   fi
   if [[ -f "$active_pointer" ]]; then
-    local active_id previous_id previous_hash previous_manifest
-    active_id="$(jq -er '.release_id' "$active_pointer")" || return 1
+    local previous_id previous_hash previous_manifest
+    if [[ "$(jq -er '.schema_version' "$active_pointer")" != 2 ]]; then
+      printf 'WARN previous committed identity is unknown in legacy pointer; skipping image cleanup\n' >&2
+      return 1
+    fi
     manifests+=("$(jq -er '.release_root' "$active_pointer")/release-manifest.json")
-    # A failed pointer commit can leave a healthy ledger entry but no durable release.
-    if [[ -f "$ledger_file" && ! -L "$ledger_file" ]]; then
-      # A crash can truncate an append; retain complete records independently.
-      jq -Rsr --arg current "$active_id" 'split("\n") | map(fromjson? | select(type == "object")) | reverse[] | select((.outcome == "healthy" or .outcome == "adopted") and .release_id != $current) | [.release_id, .manifest_sha256] | @tsv' "$ledger_file" >"${stage_root}/previous-releases" || return 1
-      while IFS=$'\t' read -r previous_id previous_hash; do
-        [[ "$previous_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$ && "$previous_hash" =~ ^[0-9a-f]{64}$ ]] || continue
-        previous_manifest="${state_root}/releases/${previous_id}/release-manifest.json"
-        [[ -f "$previous_manifest" && ! -L "$previous_manifest" ]] || continue
-        [[ "$(sha256_file "$previous_manifest")" == "$previous_hash" ]] || continue
-        jq -e --arg id "$previous_id" '.release_id == $id' "$previous_manifest" >/dev/null || continue
-        manifests+=("$previous_manifest")
-        break
-      done <"${stage_root}/previous-releases"
+    if jq -e '.previous_release != null' "$active_pointer" >/dev/null; then
+      previous_id="$(jq -er '.previous_release.release_id' "$active_pointer")" || return 1
+      previous_hash="$(jq -er '.previous_release.manifest_sha256' "$active_pointer")" || return 1
+      previous_manifest="${state_root}/releases/${previous_id}/release-manifest.json"
+      [[ -f "$previous_manifest" && ! -L "$previous_manifest" ]] || return 1
+      [[ "$(sha256_file "$previous_manifest")" == "$previous_hash" ]] || return 1
+      jq -e --arg id "$previous_id" '.release_id == $id' "$previous_manifest" >/dev/null || return 1
+      manifests+=("$previous_manifest")
     fi
   fi
   local file image image_id status
@@ -1228,6 +1226,10 @@ persist_release() {
   local runtime_checksums
   runtime_checksums="$(directory_checksums "${release_root}/runtime")"
   local pointer_tmp="${stage_root}/active-pointer.json"
+  local previous_release=null
+  if [[ -f "$pointer_file" ]]; then
+    previous_release="$(jq -c '{release_id,manifest_sha256}' "$pointer_file")"
+  fi
   jq -n \
     --arg release_id "$request_release_id" \
     --arg source_revision "$request_source_revision" \
@@ -1241,11 +1243,17 @@ persist_release() {
     --argjson excluded_secrets "$excluded_json" \
     --argjson inputs "$input_records_json" \
     --argjson runtime_sha256 "$runtime_checksums" \
-    '{schema_version:1,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,runtime_sha256:$runtime_sha256,release_root:$release_root,inputs:$inputs}' >"$pointer_tmp"
+    --argjson previous_release "$previous_release" \
+    '{schema_version:2,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,runtime_sha256:$runtime_sha256,release_root:$release_root,inputs:$inputs,previous_release:$previous_release}' >"$pointer_tmp"
   if [[ -e "$ledger_file" || -L "$ledger_file" ]]; then
     require_regular_file "$ledger_file"
   else
     reject_symlink_components "$ledger_file"
+  fi
+  if [[ -s "$ledger_file" ]]; then
+    local trailing_newlines
+    trailing_newlines="$(tail -c 1 "$ledger_file" | wc -l)" || fail "deployment ledger boundary inspection failed"
+    if ((trailing_newlines == 0)); then printf '\n' >>"$ledger_file"; fi
   fi
   jq -cn \
     --arg outcome "$outcome" --arg release_id "$request_release_id" --arg source_revision "$request_source_revision" \
@@ -1271,8 +1279,15 @@ load_active_pointer() {
   require_regular_file "$active_pointer"
   jq -e --argjson allowed "$INPUT_IDS" '
     type == "object" and
-    (keys | sort) == ["aws_region","controller_version","environment","excluded_secrets","inputs","manifest_sha256","parameter_prefix","release_id","release_root","request_id","requested_at","runtime_sha256","schema_version","source_revision"] and
-    .schema_version == 1 and .controller_version == 2 and
+    (keys - ["previous_release"] | sort) == ["aws_region","controller_version","environment","excluded_secrets","inputs","manifest_sha256","parameter_prefix","release_id","release_root","request_id","requested_at","runtime_sha256","schema_version","source_revision"] and
+    (if .schema_version == 1 then has("previous_release") | not
+     elif .schema_version == 2 then
+       has("previous_release") and (.previous_release == null or
+         (.previous_release | type == "object" and
+           (keys | sort) == ["manifest_sha256","release_id"] and
+           (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$") and (contains("..") | not)) and
+           (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$"))))
+     else false end) and .controller_version == 2 and
     (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.aws_region | type == "string" and test("^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$")) and

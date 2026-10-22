@@ -11,7 +11,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|adoption-pressure|all]\n' "$0"
+  printf 'usage: %s [--group validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|committed-history|adoption-pressure|all]\n' "$0"
 }
 
 test_group="all"
@@ -24,7 +24,7 @@ if [[ $# -gt 0 ]]; then
   test_group="$2"
 fi
 case "${test_group}" in
-  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|adoption-pressure) ;;
+  all|validation|adoption|inputs|healthy|rollback|restore|recording|source-reuse|ssm-contract|image-cleanup|committed-history|adoption-pressure) ;;
   *) fail "unknown test group: ${test_group}" ;;
 esac
 
@@ -38,7 +38,7 @@ group_enabled() {
   esac
 }
 
-if [[ "$test_group" != image-cleanup && "$test_group" != adoption-pressure ]]; then
+if [[ "$test_group" != image-cleanup && "$test_group" != committed-history && "$test_group" != adoption-pressure ]]; then
 planner="${managed_root}/scripts/plan-release-components"
 "$planner" apps/api/internal/recordernodebootstrap/attestation.go | jq -e '.classification == "none" and .build_set == [] and .affected_components == [] and .recorder_image_affected == true' >/dev/null || fail "recorder bootstrap source did not plan a recorder image"
 "$planner" apps/api/internal/recordernodebootstrap/attestation_test.go | jq -e '.classification == "none" and .build_set == [] and .affected_components == [] and .recorder_image_affected == false' >/dev/null || fail "recorder bootstrap test incorrectly planned an image"
@@ -485,8 +485,118 @@ invalid_request="${fixture_root}/invalid-request.json"
 manifest="${fixture_root}/manifest.json"
 make_manifest stable >"$manifest"
 make_request stable "${fixture_root}/request.json"
+if [[ "$test_group" == committed-history ]]; then
+  history_case="${CHALK_TEST_HISTORY_CASE:-all}"
+  if [[ "$history_case" == all ]]; then
+    for history_case in crash truncated legacy; do
+      CHALK_TEST_HISTORY_CASE="$history_case" "$0" --group committed-history
+    done
+    exit 0
+  fi
+  # These sequences reproduce the retained judge-367-r4 crash and truncation probes.
+  export FAKE_IMAGE_STATE="${fixture_root}/history-images.json"
+  printf '[]\n' >"$FAKE_IMAGE_STATE"
+  history_state="${fixture_root}/history-state"
+  mkdir -p "$history_state"
+  history_deploy() {
+    local id="$1" digit="$2"
+    make_manifest "$id" | jq --arg digest "$(printf "$digit%.0s" {1..64})" '.images.api="example.com/judge-api@sha256:"+$digest' >"${fixture_root}/${id}.json"
+    make_request "$id" "${fixture_root}/${id}-request.json"
+    printf '0' >"${fixture_root}/health-index"
+    run_controller "$history_state" "${fixture_root}/${id}-request.json" "${fixture_root}/${id}.json" "${3:-ok}"
+  }
+  history_image_survives() {
+    local ref
+    ref="$(jq -r '.images.api' "${fixture_root}/$1.json")"
+    jq -e --arg ref "$ref" 'any(.[]; .refs|index($ref))' "$FAKE_IMAGE_STATE" >/dev/null || fail "previous committed $1 image was deleted"
+  }
+  history_rollback() {
+    if history_deploy "$1" "$2" fail,ok >"${fixture_root}/history-rollback.log" 2>&1; then
+      fail "unhealthy history candidate unexpectedly succeeded"
+    fi
+    sed -n 's/^RESULT //p' "${fixture_root}/history-rollback.log" | jq -e '.status == "rolled_back"' >/dev/null || fail "history candidate did not roll back"
+  }
+  history_deploy previous 7 >/dev/null
+  history_deploy active 8 >/dev/null
+  cp "${history_state}/active-release.json" "${fixture_root}/committed-pointer.json"
+  case "$history_case" in
+    crash)
+      history_crash() {
+        local FAKE_HISTORY_CONTROLLER="$controller" FAKE_HISTORY_MV
+        FAKE_HISTORY_MV="$(command -v mv)"
+        export FAKE_HISTORY_CONTROLLER FAKE_HISTORY_MV
+        mkdir "${fixture_root}/history-bin"
+        cat >"${fixture_root}/history-bin/controller" <<'CONTROLLER'
+#!/usr/bin/env bash
+export FAKE_HISTORY_PID=$$
+exec "$FAKE_HISTORY_CONTROLLER" "$@"
+CONTROLLER
+        cat >"${fixture_root}/history-bin/mv" <<'MOVE'
+#!/usr/bin/env bash
+if [[ "${!#}" == "${CHALK_ACTIVE_RELEASE_POINTER:-}" ]]; then
+  printf 'crash before pointer publication\n' >"${CHALK_CONTROLLER_STATE_ROOT}/crash-marker"
+  kill -KILL "${FAKE_HISTORY_PID:?}" "$PPID"
+  exit 137
+fi
+exec "$FAKE_HISTORY_MV" "$@"
+MOVE
+        chmod 0755 "${fixture_root}/history-bin/"{controller,mv}
+        local PATH="${fixture_root}/history-bin:${PATH}"
+        export PATH
+        local controller="${fixture_root}/history-bin/controller" status=0
+        history_deploy unpublished 9 >"${fixture_root}/history-crash.log" 2>&1 || status=$?
+        [[ "$status" == 137 && -f "${history_state}/crash-marker" ]] || fail "pointer publication crash was not reached"
+      }
+      history_crash
+      if [[ -d "${history_state}/lock.d" ]]; then rmdir "${history_state}/lock.d"; fi
+      cmp -s "${history_state}/active-release.json" "${fixture_root}/committed-pointer.json" || fail "crash advanced the committed pointer"
+      jq -e 'select(.release_id=="unpublished" and .outcome=="healthy")' "${history_state}/ledger.jsonl" >/dev/null || fail "crash did not leave the unpublished healthy audit row"
+      [[ -f "${history_state}/releases/unpublished/release-manifest.json" ]] || fail "unpublished manifest was not retained across crash"
+      run_restore "$history_state" ok >/dev/null
+      history_rollback next 0
+      history_image_survives previous
+      history_image_survives active
+      cmp -s "${history_state}/active-release.json" "${fixture_root}/committed-pointer.json" || fail "rollback changed committed identities"
+      printf 'PASS crash: unpublished ledger row cannot displace previous committed image\n'
+      ;;
+    truncated)
+      printf '{"outcome":"healthy","release_id":"partial' >>"${history_state}/ledger.jsonl"
+      history_deploy first-after-truncation 9 >/dev/null
+      history_deploy second-after-truncation 0 >/dev/null
+      history_rollback third-after-truncation 1
+      history_image_survives first-after-truncation
+      history_image_survives second-after-truncation
+      jq -Rse 'split("\n") | map(fromjson?) | any(.release_id == "first-after-truncation")' "${history_state}/ledger.jsonl" >/dev/null || fail "partial ledger line swallowed the next committed row"
+      printf '{"outcome":"healthy","release_id":"another-partial' >>"${history_state}/ledger.jsonl"
+      history_deploy fourth-after-truncation 2 >/dev/null
+      history_rollback fifth-after-truncation 3
+      history_image_survives second-after-truncation
+      history_image_survives fourth-after-truncation
+      jq -e '.release_id=="fourth-after-truncation" and .previous_release.release_id=="second-after-truncation"' "${history_state}/active-release.json" >/dev/null || fail "multiple deploys lost the previous committed identity"
+      jq -Rse 'split("\n") | map(fromjson?) | any(.release_id == "fourth-after-truncation")' "${history_state}/ledger.jsonl" >/dev/null || fail "second partial ledger line swallowed a committed row"
+      printf 'PASS truncation: several deploys and rollbacks retain the committed pair and repair audit boundaries\n'
+      ;;
+    legacy)
+      jq '.schema_version=1 | del(.previous_release)' "${history_state}/active-release.json" >"${fixture_root}/legacy-pointer.json"
+      cp "${fixture_root}/legacy-pointer.json" "${history_state}/active-release.json"
+      run_restore "$history_state" ok >/dev/null
+      history_rollback legacy-failed 0
+      history_image_survives previous
+      grep -Fq 'previous committed identity is unknown' "${fixture_root}/history-rollback.log" || fail "legacy retention uncertainty was not reported"
+      history_deploy upgraded 1 >/dev/null
+      jq -e '.schema_version==2 and .previous_release.release_id=="active"' "${history_state}/active-release.json" >/dev/null || fail "legacy pointer did not upgrade to an atomic committed pair"
+      history_rollback after-upgrade 2
+      history_image_survives active
+      history_image_survives upgraded
+      printf 'PASS legacy: restore works and cleanup waits for a published committed pair\n'
+      ;;
+    *) fail "unknown committed history case" ;;
+  esac
+  exit 0
+fi
 if [[ "$test_group" == all ]]; then
   "$0" --group image-cleanup
+  "$0" --group committed-history
   "$0" --group adoption-pressure
 fi
 if [[ "$test_group" == image-cleanup ]]; then
@@ -507,6 +617,9 @@ if [[ "$test_group" == image-cleanup ]]; then
   jq --arg image "$live_image" '.images.api=$image' "$manifest" >"${fixture_root}/run/release/release-manifest.json"
   mkdir -p "${cleanup_state}/releases/previous"
   jq --arg image "$previous_image" '.release_id="previous" | .images.api=$image' "$manifest" >"${cleanup_state}/releases/previous/release-manifest.json"
+  previous_hash="$(sha256sum "${cleanup_state}/releases/previous/release-manifest.json" | awk '{print $1}')"
+  jq --arg hash "$previous_hash" '.previous_release={release_id:"previous",manifest_sha256:$hash}' "${cleanup_state}/active-release.json" >"${fixture_root}/paired-pointer.json"
+  cp "${fixture_root}/paired-pointer.json" "${cleanup_state}/active-release.json"
   { jq -cn --arg hash "$(sha256sum "${cleanup_state}/releases/previous/release-manifest.json" | awk '{print $1}')" '{outcome:"healthy",release_id:"previous",manifest_sha256:$hash}'; cat "${cleanup_state}/ledger.jsonl"; } >"${fixture_root}/ledger.tmp"
   mv "${fixture_root}/ledger.tmp" "${cleanup_state}/ledger.jsonl"
   for image in "$candidate_image" "$stale_image" "$live_image" "$previous_image"; do

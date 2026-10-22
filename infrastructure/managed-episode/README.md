@@ -194,8 +194,11 @@ On the host, `chalk-deployment-controller` performs this transaction:
    rollback leaves the runtime fenced. Database migrations are forward-only:
    runtime rollback never attempts to undo an applied migration.
 
-A healthy release writes its non-secret manifest, rendered runtime, active
-pointer, and append-only ledger under `/var/lib/chalk/deployment-controller`.
+A healthy release writes its non-secret manifest, rendered runtime, published
+pointer, and audit ledger under `/var/lib/chalk/deployment-controller`. Pointer
+schema 2 atomically records the active release and the previous committed
+release's identity and manifest checksum. The ledger is not a retention authority.
+An interrupted final ledger record is separated from the next append by a newline.
 The root
 `chalk-runtime-restore.service` retries transient boot failures. After a reboot
 clears `/run`, it reads the active pointer, fetches the recorded SSM versions,
@@ -257,7 +260,8 @@ node --test scripts/deploy/deploy-managed-release.test.mjs
 ```
 
 The controller harness runs every group by default. Use `--group validation`,
-`adoption`, `inputs`, `healthy`, `rollback`, `restore`, `image-cleanup`, or `ssm-contract` for a
+`adoption`, `inputs`, `healthy`, `rollback`, `restore`, `image-cleanup`,
+`committed-history`, or `ssm-contract` for a
 focused check. `rollback` includes the healthy deployment setup, and `restore`
 includes both earlier groups because those checks need the durable stable
 release.
@@ -268,11 +272,12 @@ the promoted release directory.
 
 Before pulling release images, the controller lists rootless Podman images
 under the deployment lock and removes only unprotected, containerless images
-by image ID (`image rm --no-prune`, never `--force`). It explicitly retains images
-from the live manifest, the durable active/rollback manifest, the previous
-successful release with a checksum-verified durable manifest in the deployment
-ledger, and the candidate manifest. Missing, altered, and unpublished ledger
-releases are skipped. Local image IDs also protect alternate digest aliases of
+by image ID (`image untag ID` then `image rm --no-prune ID`, never `--force`). It
+explicitly retains images from the live manifest, candidate manifest, and the
+active and previous committed releases in the published pointer. The previous
+manifest must match the identity and checksum in that pointer. Healthy ledger
+rows, including unpublished or truncated rows, never select protected images.
+Local image IDs also protect alternate digest aliases of
 those images. This does not
 depend on a container existing for a protected image. Unprotected dangling
 images with no repository digests are eligible too. Each image is removed once,
@@ -286,6 +291,9 @@ limit. A failed or unreadable space check rejects the deployment before runtime
 cutover, secret replacement, migrations, or fencing. Sufficient space permits a
 deployment even when cleanup failed. On first-controller adoption, cleanup,
 pulls, and the space gate run before the legacy runtime health check.
+Schema-1 pointers remain readable for restore. Because they do not identify the
+previous committed release, cleanup conservatively leaves the cache intact until
+a successful deployment publishes the schema-2 pair. The space gate still applies.
 
 `--group image-cleanup` runs stateful image-cache and disk-pressure regressions,
 including rollback with no baseline container. Set `CHALK_TEST_IMAGE_CASE` to
@@ -293,6 +301,9 @@ including rollback with no baseline container. Set `CHALK_TEST_IMAGE_CASE` to
 `cleanup-error`, `cleanup-error-space`, `rollback-health`, `multi-digest`,
 `dangling`, `ledger-missing`, `ledger-tampered`, or `ledger-invalid-id` for one case.
 `--group adoption-pressure` covers recovering disk space before adoption health.
+`--group committed-history` reproduces a crash between a healthy audit append and
+pointer publication, several deployments and rollbacks after truncated appends,
+and safe upgrade from a schema-1 pointer.
 
 The host-side `chalk-runtime-watchdog` checks user-unit activity, local API and
 Sync readiness, cloudflared's `/ready` endpoint, release-manifest integrity,
