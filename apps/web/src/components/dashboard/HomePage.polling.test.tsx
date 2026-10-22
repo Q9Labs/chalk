@@ -3,7 +3,7 @@ import { act as reactAct, cleanup, fireEvent, render, screen } from "@testing-li
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { readPage } from "../../lib/dashboard/client";
+import { act, readPage } from "../../lib/dashboard/client";
 import type { HomeCallDTO, HomeDTO, HomeStatusDTO, LiveDTO } from "../../lib/dashboard/contracts";
 import { lastActive } from "../../lib/dashboard/format";
 import { HomePage } from "./HomePage";
@@ -32,7 +32,7 @@ const second: Episode = { id: uuid(0xe2), count: 2, participants: [nora, { id: u
  * answer with every row's live state, last active time and recent people, plus the first page when the newest call
  * isn't in the list.
  */
-type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; fail?: boolean; pageSize?: number };
+type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; fail?: boolean; failFirstPage?: boolean; pageSize?: number };
 function serve(truth: Truth) {
   const answer = (spaceId: string) => ({ spaceId, episode: truth.live[spaceId] ?? null });
   const pageAt = (offset: number): HomeDTO => {
@@ -41,7 +41,11 @@ function serve(truth: Truth) {
     return { calls, live: calls.map((call) => answer(call.id)), nextCursor: end < truth.calls.length ? String(end) : null };
   };
   vi.mocked(readPage).mockImplementation(async (name, query) => {
-    if (name === "home") return pageAt(query && "cursor" in query && query.cursor ? Number(query.cursor) : 0);
+    if (name === "home") {
+      const cursor = query && "cursor" in query && query.cursor ? Number(query.cursor) : 0;
+      if (!cursor && truth.failFirstPage) throw new Error("page read failed");
+      return pageAt(cursor);
+    }
     if (name !== "home-status") throw new Error(`unexpected ${name}`);
     if (truth.fail) throw new Error("status check failed");
     const ids = query && "spaceIds" in query && query.spaceIds ? query.spaceIds.split(",") : [];
@@ -108,6 +112,43 @@ it("shows a row that ended and restarted between two checks as the new call afte
   truth.live[planning.id] = second;
   await tick();
   expect(screen.getByText("Live · 2 in the call")).toBeTruthy();
+});
+
+it("keeps 300 calls when a reload replays more pages than the limit needs", async () => {
+  const rows = Array.from({ length: 310 }, (_, index) => row(uuid(0x1000 + index), `Call ${index}`));
+  const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
+  serve(truth);
+  const archived = rows[5];
+  if (!archived) throw new Error("no row to archive");
+  vi.mocked(act).mockResolvedValue({ call: { ...archived, archived: true } });
+  await open();
+  const more = async () =>
+    reactAct(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+    });
+  for (let count = 1; count < 6; count++) await more();
+  // Archiving one row brings Show more back while the reload after it fails, so Home reads one page more than 300
+  // calls need.
+  truth.calls = rows.filter((call) => call !== archived);
+  truth.failFirstPage = true;
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: `More actions for ${archived.name}` }));
+  });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive call" }));
+  });
+  await more();
+  expect(screen.getAllByText(/^Call \d+$/)).toHaveLength(300);
+  truth.failFirstPage = false;
+  // A full first page of calls made elsewhere shares no row with the list, so Home reloads every page it read.
+  const fresh = Array.from({ length: 50 }, (_, index) => row(uuid(0x2000 + index), `New ${index}`));
+  truth.calls = [...fresh, ...truth.calls];
+  await tick();
+  await tick();
+  expect(screen.getAllByText(/^(Call|New) \d+$/)).toHaveLength(300);
+  await tick();
+  const [, query] = requests().findLast(([name]) => name === "home-status") ?? [];
+  expect(query && "spaceIds" in query ? query.spaceIds?.split(",") : []).toHaveLength(300);
 });
 
 // #416: a call that starts and ends between two checks is never live in an answer, but its latest session moves.

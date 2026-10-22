@@ -27,12 +27,12 @@ export function HomePage() {
   const { state, reload, update } = useLoad<HomeDTO>(
     async () => {
       let data = await readPage("home", {});
-      // Keep expanded rows when a live call changes.
-      for (let page = 1; page < pages.current && data.nextCursor; page++) {
+      // Keep expanded rows when the list reloads, up to Home's 300 calls.
+      for (let page = 1; page < pages.current && data.nextCursor && data.calls.length < HOME_STATUS_ROWS; page++) {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
       }
-      return data;
+      return recent(data);
     },
     "home",
     {
