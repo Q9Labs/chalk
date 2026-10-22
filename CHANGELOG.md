@@ -7,7 +7,7 @@
 - Board: the call's board shows Chalk's own controls with Follow and Bring everyone. New public APIs: `ChalkWhiteboardView` and `sendView()` in the client, `followingId`, `onFollowChange` and `clickAction` on the React `Stage`, and a headless `WhiteboardCanvas` in `@q9labsai/chalk-whiteboard`. Scene-scoped Follow, Clear and Undo, Redo for undone text, and 100% maximum initial zoom fix earlier board behavior.
 - Client: export `isChalkAccessGrantError` from the server entry point, and add `decision_state` and `decision_action` to admission responses.
 - React: keep chat messages still while the clock ticks.
-- UI: round call corners, lift board messages and fit small recordings in the stylesheet.
+- UI: round call corners and lift board messages in the stylesheet.
 - Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
 - React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
 - Advance the seven coordinated Chalk SDK packages to 5.1.0. `@q9labsai/recording-presentation` remains at 0.1.1.

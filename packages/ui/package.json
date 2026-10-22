@@ -9,7 +9,8 @@
   },
   "style": "./dist/styles.css",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "sideEffects": [

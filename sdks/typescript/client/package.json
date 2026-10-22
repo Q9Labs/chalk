@@ -9,6 +9,7 @@
   },
   "files": [
     "dist",
+    "CHANGELOG.md",
     "!dist/**/*.test.helpers.*"
   ],
   "type": "module",

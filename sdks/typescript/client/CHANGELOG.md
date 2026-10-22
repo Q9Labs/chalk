@@ -5,6 +5,7 @@
 - Add shared board views: `ChalkWhiteboardView`, `ChalkWhiteboardViewBounds`, and the whiteboard client's `supportsViews` and `sendView()`, so participants can follow a person's board view or bring everyone to theirs. The board stream also carries a `view` event.
 - Export `isChalkAccessGrantError` and the `ChalkAccessGrantErrorCode` type from the server entry point. `ChalkAPIError.code` now includes the known media-token codes, such as `media_token.expired`.
 - Admission responses add `decision_state` and an optional `decision_action`, so dashboard hosts see public invite knocks and a call that ends shows without a reload. Hosts can admit simultaneous knocks without reconnecting.
+- Public invite reads (`getSpacePublicInvite`, `getSpacePublicInviteArrival`, `listSpacePublicAdmissionRequests`) move from `v1.authenticated.write` (60 per minute) to `v1.authenticated.read` (300 per minute) in the exported `ChalkOperationPolicies`.
 - Calling `leave()` no longer closes media the server already ended.
 - Accept a server-selected media replacement during access refresh, including when the client clock still considers its prior credential valid, so rejoining with an expired media token works. The full participant subject check still runs before the client switches connections.
 - Add optional Sync health to connection snapshots without changing the public status union. Brief pong loss degrades without blocking; sustained silence triggers recovery and stable pongs clear it. Reaction acknowledgements time out after five seconds and are not replayed.
