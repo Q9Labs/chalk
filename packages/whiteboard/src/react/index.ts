@@ -10,4 +10,4 @@ export { CANONICAL_INK } from "../collab/ink";
 export { observeEngineHistory, type EngineHistoryState } from "./engine-history";
 export { Board, type BoardProps } from "./board/Board";
 export { BoardToastContext, type BoardToast } from "./board/board-toasts";
-export * from "./board/controls";
+export * from "./board/controls/index";
