@@ -4,7 +4,7 @@ defmodule ChalkSync.Episodes.AdmissionOrderTest do
   alias ChalkSync.Episodes.Reducer
 
   @fixture Path.expand(
-             "../../fixtures/admission_order_v1.json",
+             "../../../../../sdks/typescript/client/test/fixtures/admission-order-v1.json",
              __DIR__
            )
 

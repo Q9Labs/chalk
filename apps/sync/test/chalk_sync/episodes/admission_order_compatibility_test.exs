@@ -4,7 +4,10 @@ defmodule ChalkSync.Episodes.AdmissionOrderCompatibilityTest do
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.Postgres.Control
 
-  @fixture Path.expand("../../fixtures/admission_order_v1.json", __DIR__)
+  @fixture Path.expand(
+             "../../../../../sdks/typescript/client/test/fixtures/admission-order-v1.json",
+             __DIR__
+           )
 
   test "the reader accepts both stored orders with the client's digest" do
     fixture = @fixture |> File.read!() |> JSON.decode!()

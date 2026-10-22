@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { expect, it } from "vitest";
-import fixture from "../../../../../apps/sync/test/fixtures/admission_order_v1.json";
+import fixture from "../../test/fixtures/admission-order-v1.json";
 import { SnapshotSchema } from "../generated/sync";
 import { decodeV1ServerFrame } from "./v1-codec";
 import { applyV1Event, restoreV1Snapshot } from "./v1-reducer";
