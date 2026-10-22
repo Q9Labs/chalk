@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
@@ -214,4 +216,47 @@ func proveAdmissionDecisionRolloutLockOrder(t *testing.T, ctx context.Context, p
 		t.Fatalf("new decision after old request release: %v", err)
 	}
 	t.Log("previous request-first decision and current decision completed without a lock cycle")
+}
+
+func proveCanonicalAdmissionRejectsLegacyDecision(t *testing.T, ctx context.Context, pool *pgxpool.Pool, service publicinvites.Service, actorID utilities.ID, newKnock func(string) (publicinvites.Arrival, publicinvites.AdmissionRequest)) {
+	t.Helper()
+	repository := NewPublicInviteRepositoryWithPool(pool)
+	for _, decision := range []publicinvites.AdmissionDecision{publicinvites.DecisionApprove, publicinvites.DecisionDeny} {
+		arrival, request := newKnock("Old replica " + string(decision))
+		input := publicinvites.DecideAdmissionRequestInput{TenantID: request.TenantID, SpaceID: request.SpaceID, RequestHandle: request.RequestHandle, ActorID: actorID, Decision: decision, RequestKey: accountTenantIntegrationID(t).String()}
+		for _, reserved := range []bool{false, true} {
+			if reserved {
+				if _, _, err := service.DecideAdmissionRequest(ctx, input); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, _, err := repository.decideLegacyAdmissionRequest(ctx, input)
+			var constraint *pgconn.PgError
+			if !errors.As(err, &constraint) || constraint.Code != "23514" {
+				t.Fatalf("previous API changed canonical %s (reserved=%t): %v", decision, reserved, err)
+			}
+			current, err := repository.GetAdmissionRequestForArrival(ctx, arrival)
+			if err != nil || current.State != publicinvites.AdmissionRequestPending || current.Binding == nil {
+				t.Fatalf("old replica hid the canonical knock: state=%s binding=%v err=%v", current.State, current.Binding, err)
+			}
+			stored, err := repository.GetArrival(ctx, arrival.ArrivalHandle)
+			if err != nil || stored.State != publicinvites.ArrivalPending {
+				t.Fatalf("old replica changed canonical arrival: state=%s err=%v", stored.State, err)
+			}
+		}
+		legacy, err := service.CreateArrival(ctx, publicinvites.CreateArrivalInput{TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, Invite: publicinvites.Token{Handle: arrival.InviteHandle, Generation: arrival.InviteGeneration}, InviteStateEpoch: arrival.InviteStateEpoch, IdentityMode: publicinvites.IdentityGuest, DisplayName: "Legacy replica guest", GuestCredential: []byte("legacy-rollout-credential"), IdempotencyKey: accountTenantIntegrationID(t).String()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		now, expires := time.Now(), time.Now().Add(time.Minute)
+		legacyHandle := accountTenantIntegrationID(t)
+		if _, err := sqlc.New(pool).CreateSpacePublicAdmissionRequest(ctx, sqlc.CreateSpacePublicAdmissionRequestParams{RequestHandle: uuid(legacyHandle), ArrivalHandle: uuid(legacy.Arrival.ArrivalHandle), TenantID: uuid(arrival.TenantID), SpaceID: uuid(arrival.SpaceID), DisplayName: "Legacy replica guest", RequestedAt: timestamptz(&now), ExpiresAt: timestamptz(&expires)}); err != nil {
+			t.Fatal(err)
+		}
+		input.RequestHandle = legacyHandle
+		if _, _, err := repository.decideLegacyAdmissionRequest(ctx, input); err != nil {
+			t.Fatalf("previous replica cannot decide a legacy request: %v", err)
+		}
+	}
+	t.Log("previous replica approve/deny rejected before and after canonical reservation; canonical knock and arrival remain pending; legacy decisions still work")
 }

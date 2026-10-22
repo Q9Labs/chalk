@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -72,6 +73,8 @@ func (r *arrivalBudgetRepository) GetArrivalForCredential(_ context.Context, _ u
 func (r *arrivalBudgetRepository) UpdateArrivalState(_ context.Context, input publicinvites.UpdateArrivalStateInput) (publicinvites.Arrival, error) {
 	r.updates++
 	r.arrival.State = input.State
+	r.arrival.EpisodeID, r.arrival.ParticipantID, r.arrival.ParticipantGeneration = input.EpisodeID, input.ParticipantID, input.ParticipantGeneration
+	r.arrival.Provider, r.arrival.ProviderSubject = input.Provider, input.ProviderSubject
 	return r.arrival, nil
 }
 
@@ -158,9 +161,65 @@ func (arrivalBudgetSpace) GetPublicSpace(_ context.Context, tenant, space utilit
 type arrivalBudgetAccess struct {
 	publicinvites.Access
 	grants int
+	grant  *publicinvites.PublicAccessGrant
+	inputs []publicinvites.Arrival
 }
 
-func (a *arrivalBudgetAccess) GrantPublicAccess(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+func (a *arrivalBudgetAccess) GrantPublicAccess(_ context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 	a.grants++
+	a.inputs = append(a.inputs, input.Arrival)
+	if a.grant != nil {
+		return *a.grant, nil
+	}
 	return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
+}
+
+func TestArrivalStatusRetryReissuesAdmittedAccess(t *testing.T) {
+	tenant := mustTestID(t, "00000000-0000-4000-8000-00000000000a")
+	space := mustTestID(t, "00000000-0000-4000-8000-00000000000b")
+	handle := mustTestID(t, "00000000-0000-4000-8000-00000000000c")
+	episode := mustTestID(t, "00000000-0000-4000-8000-00000000000d")
+	participant := mustTestID(t, "00000000-0000-4000-8000-00000000000e")
+	credential := []byte("lost-status-response-credential")
+	repo := &arrivalBudgetRepository{arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, ArrivalHandle: handle, IdentityMode: publicinvites.IdentityGuest, State: publicinvites.ArrivalPending, ExpiresAt: time.Now().Add(time.Hour)}, hash: sha256.Sum256(credential), requestState: publicinvites.AdmissionRequestApproved}
+	grant := publicinvites.PublicAccessGrant{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "stored-connection", SyncToken: "fixture-sync", MediaToken: "fixture-media", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "stored-connection", StunServer: "stun:fixture"}, ExpiresAt: time.Now().Add(time.Hour)}
+	access := &arrivalBudgetAccess{grant: &grant}
+	runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repo), arrivalBudgetSpace{}, inviteBudgetLifecycle{}, access, inviteBudgetAccounts{}, inviteBudgetLinks{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := DefaultRateLimitOptions()
+	now := time.Now()
+	options.Now = func() time.Time { return now }
+	request := func() *httptest.ResponseRecorder {
+		router := chi.NewRouter()
+		publicInviteArrivalStatusEndpoint(runtime).Mount(router, options)
+		req := httptest.NewRequest(http.MethodGet, "/public/space-invite-arrival", nil)
+		req.RemoteAddr = "192.0.2.1:1234"
+		req.Header.Set(publicInviteTokenHeader, handle.String())
+		req.AddCookie(&http.Cookie{Name: publicGuestCookiePrefix + handle.String(), Value: base64.RawURLEncoding.EncodeToString(credential)})
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, req)
+		return response
+	}
+	// The first response is lost after its admission transition commits.
+	for attempt := 0; attempt < 2; attempt++ {
+		response := request()
+		var result publicSpaceArrivalResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if response.Code != http.StatusOK || result.Access == nil || result.Access.Subject.ParticipantID != participant.String() || result.Access.Subject.EpisodeID != episode.String() || result.Access.Subject.ParticipantGeneration != 7 {
+			t.Fatalf("admitted status attempt %d: status=%d body=%s", attempt, response.Code, response.Body.String())
+		}
+	}
+	if repo.updates != 1 || access.grants != 2 || access.inputs[1].EpisodeID != episode || access.inputs[1].ParticipantID != participant || access.inputs[1].ProviderSubject != grant.ProviderSubject {
+		t.Fatalf("retry did not resume stored binding: updates=%d grants=%d inputs=%+v", repo.updates, access.grants, access.inputs)
+	}
+	for i := 0; i < authenticatedWriteRateLimit.Limit-2; i++ {
+		options.Limiter.Allow(context.Background(), "ip:192.0.2.1", authenticatedWriteRateLimit, now)
+	}
+	if response := request(); response.Code != http.StatusTooManyRequests || access.grants != 2 || repo.updates != 1 {
+		t.Fatalf("retry bypassed write budget: status=%d grants=%d updates=%d", response.Code, access.grants, repo.updates)
+	}
 }

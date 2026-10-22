@@ -3,8 +3,9 @@ package publicinvites
 import (
 	"context"
 	"crypto/ed25519"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type retrySpace struct {
@@ -66,13 +67,27 @@ func TestKnockRetryPreservesAnAlreadyAdmittedArrival(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository.arrival.State = ArrivalAdmitted
+	repository.arrival.EpisodeID, repository.arrival.ParticipantID, repository.arrival.ParticipantGeneration = id(), id(), 7
+	repository.arrival.Provider, repository.arrival.ProviderSubject = PublicProviderCloudflareSFU, "stored-connection"
 	token, err := service.IssueInviteToken(invite)
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := Runtime{service: service, space: retrySpace{value: PublicSpace{TenantID: invite.TenantID, SpaceID: invite.SpaceID, AdmissionMode: AdmissionKnock}}}
+	access := &retryAccess{}
+	runtime := Runtime{service: service, access: access, space: retrySpace{value: PublicSpace{TenantID: invite.TenantID, SpaceID: invite.SpaceID, AdmissionMode: AdmissionKnock}}}
 	result, err := runtime.Arrive(context.Background(), PublicInviteArrivalInput{Token: token, DisplayName: "Joined while open", RequestKey: key, GuestCredential: string(credential)})
-	if repository.arrival.State != ArrivalAdmitted || result.State != ArrivalAdmitted || result.Access != nil || err != nil {
+	if repository.arrival.State != ArrivalAdmitted || result.State != ArrivalAdmitted || result.Access == nil || err != nil || access.grants != 1 {
 		t.Fatalf("retry revoked an existing admission: stored=%s returned=%s err=%v", repository.arrival.State, result.State, err)
 	}
+}
+
+type retryAccess struct {
+	Access
+	grants int
+}
+
+func (a *retryAccess) GrantPublicAccess(_ context.Context, input PublicAccessInput) (PublicAccessGrant, error) {
+	a.grants++
+	arrival := input.Arrival
+	return PublicAccessGrant{TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: arrival.EpisodeID, ParticipantID: arrival.ParticipantID, ParticipantGeneration: arrival.ParticipantGeneration, Provider: arrival.Provider, ProviderSubject: arrival.ProviderSubject, ClientPayload: PublicAccessClientPayload{ConnectionID: arrival.ProviderSubject, StunServer: "stun:fixture"}}, nil
 }

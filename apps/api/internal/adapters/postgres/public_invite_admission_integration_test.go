@@ -220,6 +220,10 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		return arrival.Arrival, request
 	}
 
+	t.Run("mixed version canonical decision gate", func(t *testing.T) {
+		proveCanonicalAdmissionRejectsLegacyDecision(t, ctx, pool, service, accountID, newKnock)
+	})
+
 	t.Run("mixed version decision lock", func(t *testing.T) {
 		_, request := newKnock("Rollout decision guest")
 		proveAdmissionDecisionRolloutLockOrder(t, ctx, pool, request, accountID)
