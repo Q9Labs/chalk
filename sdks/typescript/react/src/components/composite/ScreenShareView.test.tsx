@@ -9,17 +9,18 @@ import { ScreenSharePresentation, ScreenShareView } from "./ScreenShareView";
 import { SpaceView } from "../space-view/SpaceView";
 
 it.each([
-  [null, "your screen"],
-  ["monitor", "your screen"],
-  ["window", "a window"],
-  ["browser", "a tab"],
+  [null, "You’re screen sharing"],
+  [undefined, "You’re screen sharing"],
+  ["monitor", "You’re sharing your screen"],
+  ["window", "You’re sharing a window"],
+  ["browser", "You’re sharing a tab"],
 ] as const)("describes the reported capture surface without guessing: %s", async (surface, description) => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(async () => root.render(<ScreenSharePresentation sharedByName="You" media={null} mediaVisible isLocal capture={{ surface, label: "Primary Monitor" }} />));
-    expect(container.textContent).toContain(`You’re sharing ${description}`);
+    await act(async () => root.render(<ScreenSharePresentation sharedByName="You" media={null} mediaVisible isLocal {...(surface === undefined ? {} : { capture: { surface, label: "Primary Monitor" } })} />));
+    expect(container.textContent).toContain(description);
   } finally {
     await act(async () => root.unmount());
     container.remove();
