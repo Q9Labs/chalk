@@ -24,7 +24,7 @@ The `whiteboard` client controller exposes the transport. The v1 transport can s
 
 ### Who can draw
 
-A host, meaning anyone whose role has `manageWhiteboard`, sets one policy for the call with `setDrawPolicy`: `everyone`, `hosts`, or `picked`. Under `hosts` and `picked`, hosts can always draw. `setDrawPermission(participantId, canDraw)` stores the host's choice for one person. Under `everyone` that choice overrides the role default, under `picked` `true` means the person is picked, and under `hosts` it is kept but ignored. A call with no policy behaves as `everyone`, which is how calls worked before the policy existed.
+A host, meaning anyone whose role has `manageWhiteboard`, sets one policy for the call with `setDrawPolicy`: `everyone`, `hosts`, or `picked`. Under `hosts` and `picked`, hosts can always draw. `setDrawPermission(participantId, canDraw)` stores the host's choice for one person. Under `everyone` that choice overrides the role default, under `picked` `true` picks the person and `false` clears the choice, so it can't block them later under `everyone`, and under `hosts` it is kept but ignored. A call with no policy behaves as `everyone`, which is how calls worked before the policy existed.
 
 Sync computes each person's permission from the policy, their current role, and the host's choice for them, and enforces it on every write. It sends the result again after a policy change, a per-person change, or a role change, and on every reconnect. The summary and `useWhiteboard().access` expose `canDraw`, the policy, and, for hosts only, the per-person choices. A person who can't draw can still pan, zoom, follow, and pick their own surface.
 

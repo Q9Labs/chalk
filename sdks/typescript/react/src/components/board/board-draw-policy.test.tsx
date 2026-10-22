@@ -32,6 +32,21 @@ it("draws only when Sync says so once the board subscription is live, whatever t
   expect(seen.at(-1)).toBe(false);
 });
 
+it("still follows a live role change on a Sync server without the drawing policy", async () => {
+  const client = createPreviewClient(createSnapshot(["drawWhiteboard"]));
+  const seen: boolean[] = [];
+  function Probe() {
+    seen.push(useCanDrawWhiteboard());
+    return null;
+  }
+  await mount(client, <Probe />);
+  await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, whiteboard: { ...snapshot.whiteboard, engine: { ...snapshot.whiteboard.engine, status: "ready" }, access: { canDraw: true, policy: null, permissions: [] } } })));
+  expect(seen.at(-1)).toBe(true);
+
+  await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, self: { ...snapshot.self, capabilities: [], can: () => false } })));
+  expect(seen.at(-1)).toBe(false);
+});
+
 it("offers hosts the people who are not hosts, with their picks, and sends the host's changes", async () => {
   const setDrawPolicy = vi.fn(async () => undefined);
   const setDrawPermission = vi.fn(async () => undefined);

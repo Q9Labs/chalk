@@ -1,6 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Database
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -142,6 +143,67 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     assert {:ok, %{outcome: :committed}} = PostgresRepository.set_draw_policy(host, operation)
     assert {:ok, %{outcome: :duplicate}} = PostgresRepository.set_draw_policy(host, operation)
     assert {:ok, %{draw_policy: "hosts"}} = PostgresRepository.draw_access(collaborator)
+
+    # A retry that arrives after a newer change must not undo it.
+    set_policy(host, "everyone", "policy-retry-000002")
+    assert {:ok, %{outcome: :duplicate}} = PostgresRepository.set_draw_policy(host, operation)
+    assert {:ok, %{draw_policy: "everyone"}} = PostgresRepository.draw_access(collaborator)
+
+    assert {:error, :operation_id_conflict} =
+             PostgresRepository.set_draw_policy(host, %{operation | policy: "picked"})
+  end
+
+  test "unpicking someone under picked people does not block them once everyone can draw", %{
+    host: host,
+    collaborator: collaborator
+  } do
+    set_policy(host, "picked", "policy-picked-00004")
+    set_permission(host, collaborator, true, "permission-pick-00001")
+    set_permission(host, collaborator, false, "permission-unpick-0001")
+    assert {:ok, %{grants: []}} = PostgresRepository.draw_access(host)
+    refute can_draw?(collaborator)
+
+    set_policy(host, "everyone", "policy-everyone-0002")
+    assert can_draw?(collaborator)
+  end
+
+  test "a drawing that waits behind a policy change is checked against the new policy", %{
+    episode: episode,
+    host: host,
+    collaborator: collaborator
+  } do
+    {:ok, %{scene_id: scene_id}} = PostgresRepository.connect(collaborator)
+    {:ok, options} = Database.connection_options(@database_url)
+    {:ok, blocker} = Postgrex.start_link(options)
+    parent = self()
+
+    holder =
+      Task.async(fn ->
+        Postgrex.transaction(blocker, fn transaction ->
+          hold_scene_and_set_hosts(transaction, episode, host)
+          send(parent, :scene_locked)
+
+          receive do
+            :commit -> :ok
+          end
+        end)
+      end)
+
+    assert_receive :scene_locked, 5_000
+    drawing =
+      Task.async(fn ->
+        PostgresRepository.commit_update(collaborator, %{
+          operation_id: "update-waiting-00001",
+          scene_id: scene_id,
+          elements: [element("update-waiting-00001")]
+        })
+      end)
+
+    Process.sleep(200)
+    send(holder.pid, :commit)
+    assert {:ok, :ok} = Task.await(holder)
+    assert {:error, :permission_denied} = Task.await(drawing)
+    GenServer.stop(blocker)
   end
 
   test "only hosts see the per-person choices", %{
@@ -230,6 +292,26 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
              "capabilities" => ["drawWhiteboard", "manageWhiteboard"],
              "grants" => [%{"participant_id" => ^observer_id, "can_draw" => true}]
            } = JSON.decode!(frame)
+  end
+
+  defp hold_scene_and_set_hosts(transaction, episode, host) do
+    params = [
+      UUID.dump!(episode.tenant_id),
+      UUID.dump!(episode.space_id),
+      UUID.dump!(episode.episode_id)
+    ]
+
+    Postgrex.query!(
+      transaction,
+      "select 1 from sync_whiteboard_scenes where tenant_id = $1 and space_id = $2 and episode_id = $3 and is_current for update",
+      params
+    )
+
+    Postgrex.query!(
+      transaction,
+      "insert into sync_whiteboard_draw_policies (tenant_id, space_id, episode_id, policy, updated_by_participant_id) values ($1, $2, $3, 'hosts', $4)",
+      params ++ [UUID.dump!(host.participant_id)]
+    )
   end
 
   defp drawers(host, collaborator, observer) do
@@ -343,6 +425,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
         "sync_whiteboard_operation_receipts",
         "sync_whiteboard_permissions",
         "sync_whiteboard_draw_policies",
+        "sync_whiteboard_draw_policy_receipts",
         "sync_whiteboard_elements",
         "sync_whiteboard_scenes"
       ],

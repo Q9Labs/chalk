@@ -6,7 +6,6 @@ create table sync_whiteboard_draw_policies (
     space_id uuid not null,
     episode_id uuid not null,
     policy text not null check (policy in ('everyone', 'hosts', 'picked')),
-    operation_id text not null check (octet_length(operation_id) between 16 and 64),
     updated_by_participant_id uuid not null,
     updated_at timestamptz not null default now(),
     primary key (tenant_id, space_id, episode_id),
@@ -18,5 +17,25 @@ create table sync_whiteboard_draw_policies (
         on delete restrict
 );
 
+-- Policy changes keep their own receipts, because widening the operation_name
+-- check on sync_whiteboard_operation_receipts would mean dropping it.
+create table sync_whiteboard_draw_policy_receipts (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    operation_id text not null check (octet_length(operation_id) between 16 and 64),
+    policy text not null check (policy in ('everyone', 'hosts', 'picked')),
+    completed_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, participant_id, operation_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id)
+        on delete cascade,
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id)
+        on delete restrict
+);
+
 -- +goose Down
+drop table sync_whiteboard_draw_policy_receipts;
 drop table sync_whiteboard_draw_policies;

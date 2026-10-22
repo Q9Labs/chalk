@@ -12,8 +12,9 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   # The one effective drawing rule. A host is a participant whose role has
   # manageWhiteboard. A per-person row is the host's choice for that person:
-  # under everyone it overrides the role default, under picked it is the pick,
-  # and under hosts it is kept but ignored.
+  # under everyone it overrides the role default, under picked a true row is
+  # the pick, and under hosts it is kept but ignored. Unpicking under picked
+  # deletes the row, so it can't turn into a hidden block under everyone.
   def lock_authority do
     """
     select
@@ -216,22 +217,39 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
+  def delete_permission do
+    """
+    delete from sync_whiteboard_permissions
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and participant_id = $4
+    """
+  end
+
   def upsert_draw_policy do
     """
     insert into sync_whiteboard_draw_policies (
-      tenant_id, space_id, episode_id,
-      policy, operation_id, updated_by_participant_id
-    ) values ($1, $2, $3, $4, $5, $6)
+      tenant_id, space_id, episode_id, policy, updated_by_participant_id
+    ) values ($1, $2, $3, $4, $5)
     on conflict (tenant_id, space_id, episode_id)
     do update set
       policy = excluded.policy,
-      operation_id = excluded.operation_id,
       updated_by_participant_id = excluded.updated_by_participant_id,
       updated_at = now()
-    where sync_whiteboard_draw_policies.operation_id <> excluded.operation_id
-       or sync_whiteboard_draw_policies.updated_by_participant_id
-          <> excluded.updated_by_participant_id
-    returning policy
+    """
+  end
+
+  def select_draw_policy_receipt do
+    """
+    select policy
+    from sync_whiteboard_draw_policy_receipts
+    where tenant_id = $1 and space_id = $2 and participant_id = $3 and operation_id = $4
+    """
+  end
+
+  def insert_draw_policy_receipt do
+    """
+    insert into sync_whiteboard_draw_policy_receipts (
+      tenant_id, space_id, episode_id, participant_id, operation_id, policy
+    ) values ($1, $2, $3, $4, $5, $6)
     """
   end
 

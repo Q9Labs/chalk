@@ -567,6 +567,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
         "sync_whiteboard_operation_receipts",
         "sync_whiteboard_permissions",
         "sync_whiteboard_draw_policies",
+        "sync_whiteboard_draw_policy_receipts",
         "sync_whiteboard_elements",
         "sync_whiteboard_scenes"
       ],

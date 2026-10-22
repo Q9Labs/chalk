@@ -31,9 +31,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     fingerprint = fingerprint(operation)
 
     transaction(identity, fn connection ->
-      with {:ok, authority} <- authority(connection, identity),
-           :ok <- require_capability(authority, "drawWhiteboard"),
-           {:ok, scene} <- current_scene(connection, identity),
+      with {:ok, scene} <- drawing_scene(connection, identity),
            :ok <- current_scene?(scene, operation.scene_id),
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
            {:ok, changed_elements} <-
@@ -114,7 +112,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
            :ok <- require_capability(authority, "manageWhiteboard"),
            {:ok, scene} <- current_scene(connection, identity),
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
-           :ok <- upsert_permission(connection, identity, operation),
+           :ok <- store_permission(connection, identity, authority.draw_policy, operation),
            :ok <-
              insert_receipt(
                connection,
@@ -147,8 +145,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       with {:ok, authority} <- authority(connection, identity),
            :ok <- require_capability(authority, "manageWhiteboard"),
            {:ok, scene} <- current_scene(connection, identity),
-           {:ok, outcome} <- upsert_draw_policy(connection, identity, operation),
-           :ok <- notify_access_after(outcome, connection, identity) do
+           {:ok, outcome} <- apply_draw_policy(connection, identity, operation) do
         {:ok, commit(operation.operation_id, outcome, scene.scene_id, scene.revision)}
       end
     end)
@@ -169,9 +166,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     fingerprint = fingerprint(operation)
 
     transaction(identity, fn connection ->
-      with {:ok, authority} <- authority(connection, identity),
-           :ok <- require_capability(authority, "drawWhiteboard"),
-           {:ok, scene} <- current_scene(connection, identity),
+      with {:ok, scene} <- drawing_scene(connection, identity),
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
            {:ok, revision, presenting} <-
              update_presentation(connection, identity, scene.scene_id, operation.presenting),
@@ -416,6 +411,18 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
+  # A policy or per-person change commits while holding the scene lock, so the
+  # rule is read again once this write holds it. The first read takes the
+  # participant row lock first, which keeps the lock order of every other write.
+  defp drawing_scene(connection, identity) do
+    with {:ok, _locked} <- authority(connection, identity),
+         {:ok, scene} <- current_scene(connection, identity),
+         {:ok, authority} <- authority(connection, identity),
+         :ok <- require_capability(authority, "drawWhiteboard") do
+      {:ok, scene}
+    end
+  end
+
   defp receipt(connection, identity, operation_id, fingerprint) do
     params = [
       uuid(identity.episode.tenant_id),
@@ -547,6 +554,22 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
+  # Under picked, no row already means not picked, and a stored false would
+  # still block the person after the host switches back to everyone.
+  defp store_permission(connection, identity, "picked", %{can_draw: false} = operation) do
+    case Postgrex.query(
+           connection,
+           SQL.delete_permission(),
+           context(identity) ++ [uuid(operation.participant_id)]
+         ) do
+      {:ok, _result} -> :ok
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
+  defp store_permission(connection, identity, _draw_policy, operation),
+    do: upsert_permission(connection, identity, operation)
+
   defp upsert_permission(connection, identity, operation) do
     params =
       context(identity) ++
@@ -563,14 +586,50 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
+  defp apply_draw_policy(connection, identity, operation) do
+    with :missing <- draw_policy_receipt(connection, identity, operation),
+         :ok <- upsert_draw_policy(connection, identity, operation),
+         :ok <- insert_draw_policy_receipt(connection, identity, operation),
+         :ok <- notify_access(connection, identity) do
+      {:ok, :committed}
+    else
+      :duplicate -> {:ok, :duplicate}
+      other -> other
+    end
+  end
+
+  defp draw_policy_receipt(connection, identity, operation) do
+    params = [
+      uuid(identity.episode.tenant_id),
+      uuid(identity.episode.space_id),
+      uuid(identity.participant_id),
+      operation.operation_id
+    ]
+
+    case Postgrex.query(connection, SQL.select_draw_policy_receipt(), params) do
+      {:ok, %Postgrex.Result{rows: []}} -> :missing
+      {:ok, %Postgrex.Result{rows: [[policy]]}} when policy == operation.policy -> :duplicate
+      {:ok, %Postgrex.Result{rows: [_conflict]}} -> {:error, :operation_id_conflict}
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
   defp upsert_draw_policy(connection, identity, operation) do
-    params =
-      context(identity) ++
-        [operation.policy, operation.operation_id, uuid(identity.participant_id)]
+    params = context(identity) ++ [operation.policy, uuid(identity.participant_id)]
 
     case Postgrex.query(connection, SQL.upsert_draw_policy(), params) do
-      {:ok, %Postgrex.Result{num_rows: 1}} -> {:ok, :committed}
-      {:ok, %Postgrex.Result{num_rows: 0}} -> {:ok, :duplicate}
+      {:ok, _result} -> :ok
+      {:error, _error} -> {:retryable, :storage_unavailable}
+    end
+  end
+
+  defp insert_draw_policy_receipt(connection, identity, operation) do
+    params =
+      context(identity) ++
+        [uuid(identity.participant_id), operation.operation_id, operation.policy]
+
+    case Postgrex.query(connection, SQL.insert_draw_policy_receipt(), params) do
+      {:ok, _result} -> :ok
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end
@@ -635,11 +694,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end
-
-  defp notify_access_after(:duplicate, _connection, _identity), do: :ok
-
-  defp notify_access_after(:committed, connection, identity),
-    do: notify_access(connection, identity)
 
   defp notify_access(connection, identity) do
     case Postgrex.query(connection, SQL.notify_access(), [Fanout.access_payload(identity.episode)]) do
