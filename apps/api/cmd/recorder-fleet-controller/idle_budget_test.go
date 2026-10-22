@@ -34,7 +34,9 @@ func TestIdleControllerProviderRequestBudget(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+				// Measure [0, 5m): cancellation must precede the poll at exactly 5m,
+				// rather than race that poll's timer in runLoop's select.
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute-time.Nanosecond)
 				defer cancel()
 				providerCalls, unexpected := 0, 0
 				client := &http.Client{Transport: rateLimitTransport(func(r *http.Request) (*http.Response, error) {
