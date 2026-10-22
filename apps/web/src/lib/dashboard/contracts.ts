@@ -14,14 +14,13 @@ export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ 
 export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
 /** The most rows Home lists. One status check covers them all with one engine read, and 300 ids fit in a GET URL. */
 export const HOME_STATUS_ROWS = 300;
-export const homeStatusQuery = z.strictObject({
-  spaceIds: z
+const spaceIds = (most: number) =>
+  z
     .string()
     .transform((value) => value.split(","))
-    .pipe(z.array(id).min(1).max(HOME_STATUS_ROWS))
-    .default([]),
-  home: z.literal("1").optional(),
-});
+    .pipe(z.array(id).min(1).max(most));
+/** Home's check reads activity for up to 300 calls; the call page's roster check uses the engine's 30-Space live read. */
+export const homeStatusQuery = z.union([z.strictObject({ home: z.literal("1"), spaceIds: spaceIds(HOME_STATUS_ROWS).default([]) }), z.strictObject({ home: z.undefined().optional(), spaceIds: spaceIds(30) })]);
 export type HomeStatusQuery = z.infer<typeof homeStatusQuery>;
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });

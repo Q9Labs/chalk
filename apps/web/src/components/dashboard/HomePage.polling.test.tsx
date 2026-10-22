@@ -30,17 +30,21 @@ const second: Episode = { id: uuid(0xe2), count: 2, participants: [nora, { id: u
 /**
  * The server as Home sees it, answering from `truth` the way `server/home.ts` does: pages of five, and one status
  * answer with every row's live state, last active time and recent people, plus the first page when any of the five
- * newest calls isn't in the list.
+ * newest calls isn't in the list. Like the engine, it lists calls newest first, so a call first seen higher in
+ * `truth.calls` gets a later creation time.
  */
 type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; fail?: boolean; failFirstPage?: boolean; pageSize?: number };
 function serve(truth: Truth) {
   const answer = (spaceId: string) => ({ spaceId, episode: truth.live[spaceId] ?? null });
+  const made = new WeakMap<HomeCallDTO, string>();
+  let clock = Date.parse("2026-10-21T00:00:00Z");
   const pageAt = (offset: number): HomeDTO => {
     const end = offset + (truth.pageSize ?? 5);
-    const calls = truth.calls.slice(offset, end);
+    const calls = truth.calls.slice(offset, end).map((call) => ({ ...call, createdAt: made.get(call) ?? call.createdAt }));
     return { calls, live: calls.map((call) => answer(call.id)), nextCursor: end < truth.calls.length ? String(end) : null };
   };
   vi.mocked(readPage).mockImplementation(async (name, query) => {
+    for (const call of [...truth.calls].reverse()) if (!made.has(call)) made.set(call, new Date((clock += 1000)).toISOString());
     if (name === "home") {
       const cursor = query && "cursor" in query && query.cursor ? Number(query.cursor) : 0;
       if (!cursor && truth.failFirstPage) throw new Error("page read failed");
@@ -269,33 +273,50 @@ it("keeps every expanded row when more than a page of calls is made elsewhere", 
   expect(screen.getAllByText(/^Paged \d+$/)).toHaveLength(100);
 });
 
-it("keeps the last row when more calls are made elsewhere than a page holds", async () => {
-  const history = Array.from({ length: 5 }, (_, index) => row(uuid(0x100 + index), `Old ${index}`));
-  const truth: Truth = { calls: history, live: {} };
-  serve(truth);
-  await open();
-  // Six new calls push Old 4, the last row Home showed, onto the third page.
-  const fresh = Array.from({ length: 6 }, (_, index) => row(uuid(0x50 + index), `New ${index}`));
-  truth.calls = [...fresh, ...history];
-  await tick();
-  expect(screen.getAllByText(/^(New|Old) \d$/).map((item) => item.textContent)).toEqual([...fresh, ...history].map((call) => call.name));
-});
+const series = (label: string, count: number, base: number) => Array.from({ length: count }, (_, index) => row(uuid(base + index), `${label} ${index}`));
+const names = (list: readonly HomeCallDTO[]) => list.map((call) => call.name);
+const without = (list: readonly HomeCallDTO[], index: number) => list.filter((_, position) => position !== index);
+const fresh5 = series("New", 5, 0x5000);
+const fresh12 = series("New", 12, 0x5000);
+const fresh50 = series("New", 50, 0x5000);
+const old12 = series("Old", 12, 0x100);
+const old320 = series("Old", 320, 0x1000);
+const nth = (list: readonly HomeCallDTO[], index: number) => {
+  const call = list[index];
+  if (!call) throw new Error(`no row ${index}`);
+  return call;
+};
+/**
+ * Six calls made elsewhere, or any burst that fills Home's first page, make Home reload its list. The reload reads
+ * pages until a row sorts at or past where Home's last row sat, or until 300 calls. Home starts with Old 0 to Old 9
+ * shown in pages of five (Old 9 last), or 300 of 320 calls in pages of 50.
+ */
+const depthCases = [
+  { name: "the last row is still there", pageSize: 5, history: old12, opened: 2, change: () => [...fresh5, ...old12], shown: [...names(fresh5), ...names(old12.slice(0, 10))], reads: 3 },
+  { name: "the last row was archived elsewhere", pageSize: 5, history: old12, opened: 2, change: () => [...fresh5, ...without(old12, 9)], shown: [...names(fresh5), ...names(old12.slice(0, 9)), "Old 10"], reads: 3 },
+  { name: "the last row moved up", pageSize: 5, history: old12, opened: 2, change: () => [{ ...nth(old12, 9) }, ...fresh5, ...without(old12, 9)], shown: ["Old 9", ...names(fresh5), ...names(old12.slice(0, 9)), "Old 10", "Old 11"], reads: 4 },
+  { name: "more calls came in than a page holds", pageSize: 5, history: old12, opened: 2, change: () => [...fresh12, ...old12], shown: [...names(fresh12), ...names(old12)], reads: 5 },
+  { name: "the account has more than 300 calls", pageSize: 50, history: old320, opened: 6, change: () => [...fresh50, ...old320], shown: [...names(fresh50), ...names(old320.slice(0, 250))], reads: 6 },
+];
 
-it("reads on to 300 calls to keep the last row when a burst of calls is made elsewhere", async () => {
-  const history = Array.from({ length: 50 }, (_, index) => row(uuid(0x1000 + index), `Old ${index}`));
-  const truth: Truth = { calls: history, live: {}, pageSize: 50 };
-  serve(truth);
-  await open();
-  // 250 new calls push Old 49 to the 300th row, six pages down.
-  const fresh = Array.from({ length: 250 }, (_, index) => row(uuid(0x2000 + index), `New ${index}`));
-  truth.calls = [...fresh, ...history];
-  const before = requests().length;
-  await tick();
-  expect(screen.getAllByText(/^New \d+$/)).toHaveLength(250);
-  expect(screen.getAllByText(/^Old \d+$/)).toHaveLength(50);
-  expect(screen.getByText("Old 49")).toBeTruthy();
-  expect(requests().slice(before).filter(([name]) => name === "home")).toHaveLength(6);
-}, 20_000);
+it.each(depthCases)(
+  "reloads to the same depth when $name",
+  async ({ pageSize, history, opened, change, shown, reads }) => {
+    const truth: Truth = { calls: history, live: {}, pageSize };
+    serve(truth);
+    await open();
+    for (let count = 1; count < opened; count++)
+      await reactAct(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+      });
+    truth.calls = change();
+    const before = requests().length;
+    await tick();
+    expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual(shown);
+    expect(requests().slice(before).filter(([name]) => name === "home")).toHaveLength(reads);
+  },
+  20_000,
+);
 
 it("ends a live call in the same check that finds a call made elsewhere", async () => {
   const truth: Truth = { calls: [planning], live: { [planning.id]: first } };

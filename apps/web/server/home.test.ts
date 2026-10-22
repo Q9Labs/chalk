@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect";
 import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { homeStatusQuery } from "../src/lib/dashboard/contracts";
 import { homePage, homeStatus } from "./home";
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
@@ -126,5 +128,18 @@ describe("Home", () => {
     expect(status.live[0]?.episode?.participants).toHaveLength(7);
     expect(status.live[0]?.episode?.count).toBe(7);
     expect(paths(requests)).toEqual(["live-episodes"]);
+  });
+});
+
+// The dashboard answers a ZodError with its own 400, so an over-long list never reaches the engine as a 502.
+describe("home-status query", () => {
+  const ids = (count: number) => Array.from({ length: count }, (_, index) => uuid(0x100 + index)).join(",");
+  it("lets Home check up to 300 calls", () => {
+    expect(homeStatusQuery.parse({ home: "1", spaceIds: ids(300) }).spaceIds).toHaveLength(300);
+    expect(() => homeStatusQuery.parse({ home: "1", spaceIds: ids(301) })).toThrow(z.ZodError);
+  });
+  it("keeps every other caller at the engine's 30-Space live read", () => {
+    expect(homeStatusQuery.parse({ spaceIds: ids(30) }).spaceIds).toHaveLength(30);
+    expect(() => homeStatusQuery.parse({ spaceIds: ids(31) })).toThrow(z.ZodError);
   });
 });

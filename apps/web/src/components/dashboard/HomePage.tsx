@@ -25,23 +25,29 @@ const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...ca
  */
 const shown = (data: HomeDTO): HomeCallDTO[] => data.calls.slice(0, HOME_STATUS_ROWS);
 
+/**
+ * Where a call sits in Home's order: newest first by creation time, then by ID. The engine writes UTC timestamps with
+ * up to nine fraction digits and drops trailing zeros, so the key pads the fraction and compares as a string.
+ */
+const sortKey = (call: HomeCallDTO): string => {
+  const [seconds = "", fraction = ""] = call.createdAt.slice(0, -1).split(".");
+  return `${seconds}.${fraction.padEnd(9, "0")} ${call.id}`;
+};
+
 export function HomePage() {
-  const pages = useRef(1);
-  const last = useRef<string>(undefined);
+  const boundary = useRef<string>(undefined);
   const { state, reload, update } = useLoad<HomeDTO>(
     async () => {
       let data = await readPage("home", {});
-      // Keep expanded rows when the list reloads, up to Home's 300 calls: read as many pages as before, and on until
-      // the last row Home showed is back, since new calls on top push it onto a later page. However many calls came
-      // in, and even if that row is gone, the 300-call limit ends the search.
-      const reached = () => !last.current || data.calls.some((call) => call.id === last.current);
-      let read = 1;
-      while (data.nextCursor && data.calls.length < HOME_STATUS_ROWS && (read < pages.current || !reached())) {
+      // Keep expanded rows when the list reloads, up to Home's 300 calls: read on until a row sorts at or past where
+      // Home's last row sat. New calls on top push that depth onto later pages, and the depth holds even if that row
+      // was archived since.
+      const until = boundary.current;
+      const deeper = (call: HomeCallDTO | undefined) => until !== undefined && call !== undefined && sortKey(call) > until;
+      while (data.nextCursor && data.calls.length < HOME_STATUS_ROWS && deeper(data.calls.at(-1))) {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
-        read++;
       }
-      pages.current = read;
       return data;
     },
     "home",
@@ -74,7 +80,9 @@ export function HomePage() {
     },
   );
   useEffect(() => {
-    if (state.kind === "ready") last.current = shown(state.data).at(-1)?.id;
+    if (state.kind !== "ready") return;
+    const end = shown(state.data).at(-1);
+    boundary.current = end && sortKey(end);
   }, [state]);
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
@@ -161,7 +169,6 @@ export function HomePage() {
               cursor={state.data.nextCursor}
               load={(cursor) => readPage("home", { cursor })}
               onLoaded={(page) => {
-                pages.current++;
                 // A call made elsewhere may already be on top, so skip calls the list already shows.
                 update(
                   (data) => {
