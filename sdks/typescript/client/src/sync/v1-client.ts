@@ -38,6 +38,9 @@ const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+// Bounds only TCP/TLS/HTTP upgrade. Sync upgrades before authentication; its
+// 5-second hello timer and 60-second WebSocket idle timer start after open.
+const DIAL_TIMEOUT_MS = 10_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
@@ -87,6 +90,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #startupGeneration = 0;
   #connectionGeneration = 0;
   #reconnectTimer: unknown;
+  #dialTimer: unknown;
   #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -169,6 +173,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
     this.#clearReconnect();
+    this.#clearDial();
     this.#clearHeartbeat();
     this.#clearNoticeProbe();
     this.#commandScheduler.stop("client_stopped");
@@ -339,7 +344,13 @@ export class V1SyncClient implements V1CollaborationClient {
     const socket = this.#options.webSocket.connect(this.#options.url);
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
+    this.#dialTimer = this.#clock().setTimeout(() => {
+      this.#dialTimer = undefined;
+      this.#recover("WebSocket dial timeout");
+    }, DIAL_TIMEOUT_MS);
     socket.onopen = () => {
+      if (socket !== this.#socket) return;
+      this.#clearDial();
       void this.#authenticate(socket);
     };
     socket.onmessage = (event) => {
@@ -695,6 +706,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #disconnected(socket: V1Socket): void {
     if (socket !== this.#socket) return;
     this.#socket = null;
+    this.#clearDial();
     this.#recovery = null;
     this.#clearHeartbeat();
     this.#clearNoticeProbe();
@@ -776,6 +788,11 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #now(): number {
     return this.#clock().now();
+  }
+  #clearDial(): void {
+    if (this.#dialTimer === undefined) return;
+    this.#clock().clearTimeout(this.#dialTimer);
+    this.#dialTimer = undefined;
   }
   #clearReconnect(): void {
     if (this.#reconnectTimer === undefined) return;
