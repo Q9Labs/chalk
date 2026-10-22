@@ -224,7 +224,8 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into episodes(id,tenant_id,space_id,status,started_at,ended_at,created_at,config_snapshot) select gen_random_uuid(),s.tenant_id,s.id,'ended',now()-interval '1 day',now(),now()-g.n*interval '1 day',e.config_snapshot from spaces s cross join generate_series(1,5) g(n) join episodes e on e.id=$2 where s.tenant_id=$1`, uuid(tenantID), uuid(liveEpisodeID)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,joined_at) select gen_random_uuid(),tenant_id,space_id,id,'Plan person',array['publishAudio'],1,'left','guest',now() from episodes where tenant_id=$1 and id!=$2`, uuid(tenantID), uuid(liveEpisodeID)); err != nil {
+	// Ten seats in each of the 10,000 seeded Episodes: about 100,000 Participants, joined at different times.
+	if _, err := pool.Exec(ctx, `insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,first_joined_at,joined_at) select gen_random_uuid(),e.tenant_id,e.space_id,e.id,'Plan person '||g.n,array['publishAudio'],1,'left','guest',e.created_at+g.n*interval '1 minute',e.created_at+g.n*interval '1 minute' from episodes e cross join generate_series(1,10) g(n) where e.tenant_id=$1 and e.id!=$2`, uuid(tenantID), uuid(liveEpisodeID)); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"spaces", "episodes", "participants", "sync_episode_control"} {
@@ -267,28 +268,32 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	explain := "explain (analyze, buffers) " + strings.NewReplacer("sqlc.arg(tenant_id)", "$1", "sqlc.arg(space_ids)", "$2").Replace(string(query))
-	rows, err := pool.Query(ctx, explain, uuid(tenantID), []string{liveSpaceID.String(), emptySpaceID.String(), endedSpaceID.String()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var plan strings.Builder
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
+	for _, batch := range []struct {
+		name string
+		ids  []string
+	}{{"three Spaces", []string{liveSpaceID.String(), emptySpaceID.String(), endedSpaceID.String()}}, {"300 Spaces", append(batchIDs[:299:299], liveSpaceID.String())}} {
+		rows, err := pool.Query(ctx, explain, uuid(tenantID), batch.ids)
+		if err != nil {
 			t.Fatal(err)
 		}
-		plan.WriteString(line + "\n")
+		var plan strings.Builder
+		for rows.Next() {
+			var line string
+			if err := rows.Scan(&line); err != nil {
+				t.Fatal(err)
+			}
+			plan.WriteString(line + "\n")
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Space activity plan for %s:\n%s", batch.name, plan.String())
+		if !strings.Contains(plan.String(), "episodes_tenant_space_created_at_id_idx") || !strings.Contains(plan.String(), "participants_episode_recent_join_idx") {
+			t.Fatalf("%s: latest Episode or recent Participants not read from their index: %s", batch.name, plan.String())
+		}
+		if strings.Contains(plan.String(), "Seq Scan on participants") || strings.Contains(plan.String(), "Seq Scan on episodes") {
+			t.Fatalf("%s: sequential scan: %s", batch.name, plan.String())
+		}
 	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("Space activity indexed plan:\n%s", plan.String())
-	if !strings.Contains(plan.String(), "episodes_tenant_space_created_at_id_idx") || !strings.Contains(plan.String(), "Index") {
-		t.Fatalf("missing latest Episode index: %s", plan.String())
-	}
-	if !strings.Contains(plan.String(), "participants_episode_recent_join_idx") {
-		t.Fatalf("recent Participants are not read from their index: %s", plan.String())
-	}
-
 }
