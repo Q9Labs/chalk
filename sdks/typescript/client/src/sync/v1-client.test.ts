@@ -17,6 +17,168 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 describe("V1SyncClient", () => {
+  it.each(["live", "replay"] as const)("replaces a %s digest mismatch with one snapshot before durable replay", async (source) => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    const badEvent = { ...eventBase("deadline_changed"), payload: { deadline_at_ms: 200000, deadline_generation: 2 }, external_operation_id: projectionId };
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+      if (source === "replay") {
+        sockets[0]!.close();
+        clock.advance(0);
+        await settle();
+        clock.advance(1);
+        sockets[1]!.open();
+        await settle();
+        sockets[1]!.receive({ type: "welcome", protocol: 1, participant_id: ownerId, participant_generation: 1, recovery_id: recoveryId, mode: "replay", head: { revision: 2, state_schema_version: 1, state_digest: badEvent.resulting_state_digest } });
+        sockets[1]!.receive({ type: "replay_page", recovery_id: recoveryId, first_revision: 2, last_revision: 2, events: [badEvent] });
+      } else sockets[0]!.receive(badEvent);
+      await settle();
+      clock.advance(2);
+      const recovery = sockets.at(-1)!;
+      recovery.open();
+      await settle();
+      expect(recovery.frames()[0]).toMatchObject({ type: "hello", streams: { control: { cursor: null } } });
+      const pending = client.setHandRaised(true, { commandId: commandIds[0] });
+      void pending.catch(() => {});
+      expect(recovery.frames().some((frame) => frame.type === "command")).toBe(false);
+      await recoverSocket(client, recovery, state, snapshot, "snapshot");
+      expect(recovery.frames().filter((frame) => frame.type === "command")).toHaveLength(1);
+      const count = sockets.length;
+      recovery.receive(badEvent);
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "state_digest_recovery_failed" });
+      clock.advance(60000);
+      await settle();
+      expect(sockets).toHaveLength(count);
+    } finally {
+      client.stop();
+    }
+  });
+  it.each(["digest", "head", "semantics", "replay"] as const)("stops an invalid replacement snapshot (%s) without installing or retrying it", async (fault) => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    let resume: (() => void) | undefined;
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      lifecycle: {
+        subscribe: (listener) => {
+          resume = () => listener("active");
+          return () => {
+            resume = undefined;
+          };
+        },
+      },
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+      sockets[0]!.receive({ ...eventBase("deadline_changed"), payload: { deadline_at_ms: 200000, deadline_generation: 2 }, external_operation_id: projectionId });
+      await settle();
+      clock.advance(1);
+      const recovery = sockets[1]!;
+      recovery.open();
+      await settle();
+      const pending = client.setHandRaised(true, { commandId: commandIds[0] }).catch((error: unknown) => error);
+      const invalidSnapshot = fault === "digest" ? { ...snapshot, state_digest: "f".repeat(64) } : fault === "semantics" ? { ...snapshot, participants: [...snapshot.participants, snapshot.participants[0]] } : snapshot;
+      recovery.receive({
+        type: "welcome",
+        protocol: 1,
+        participant_id: ownerId,
+        participant_generation: 1,
+        recovery_id: recoveryId,
+        head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: fault === "head" ? "f".repeat(64) : state.stateDigest },
+        ...(fault === "replay" ? { mode: "replay" } : { mode: "snapshot", snapshot: invalidSnapshot }),
+      });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "state_digest_recovery_failed" });
+      await expect(pending).resolves.toMatchObject({ code: "state_digest_recovery_failed" });
+      expect(client.getSnapshot().control).toBeNull();
+      expect(recovery.frames().filter((frame) => frame.type === "command" || frame.type === "recovery_ack")).toEqual([]);
+      clock.advance(60000);
+      await settle();
+      resume?.();
+      expect(sockets).toHaveLength(2);
+    } finally {
+      client.stop();
+    }
+  });
+  it("resumes recovery after a validated snapshot loses its transport before projections arrive", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    const head = { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest };
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+      sockets[0]!.receive({ ...eventBase("deadline_changed"), payload: { deadline_at_ms: 200000, deadline_generation: 2 }, external_operation_id: projectionId });
+      await settle();
+      clock.advance(1);
+      sockets[1]!.open();
+      await settle();
+      sockets[1]!.receive({ type: "welcome", protocol: 1, participant_id: ownerId, participant_generation: 1, recovery_id: recoveryId, mode: "snapshot", head, snapshot });
+      await settle();
+      expect(sockets[1]!.frames().at(-1)).toMatchObject({ type: "recovery_ack" });
+      sockets[1]!.close();
+      clock.advance(0);
+      await settle();
+      clock.advance(2);
+      sockets[2]!.open();
+      await settle();
+      expect(sockets[2]!.frames()[0]).toMatchObject({ streams: { control: { cursor: head } } });
+      await recoverSocket(client, sockets[2]!, state, snapshot, "up_to_date");
+    } finally {
+      client.stop();
+    }
+  });
   it("keeps local media paused after a terminal Off protocol result", async () => {
     const { client: sync, socket } = await liveClient();
     const platform = createCoreTestPlatform();
