@@ -1,7 +1,7 @@
 const MATHJAX_INPUT_EM = 16;
 const MATHJAX_INPUT_EX = 8;
 const MATHJAX_CONTAINER_WIDTH = 80 * MATHJAX_INPUT_EM;
-const DEFAULT_MATHJAX_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-svg-nofont.js";
+const DEFAULT_MATHJAX_SCRIPT_URL = "/chalk-mathjax/4.1.3/tex-svg.js";
 
 export interface RenderedMathSvg {
   svg: string;
@@ -57,9 +57,10 @@ async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
 function configureMathJax(target: typeof globalThis | Window, existing: (MathJaxRuntime & Record<string, unknown>) | undefined): void {
   target.MathJax = {
     ...(existing ?? {}),
+    loader: { paths: { mathjax: "/chalk-mathjax/4.1.3", fonts: "/chalk-mathjax/4.1.3/fonts" }, ...(existing?.loader as object | undefined) },
+    svg: { dynamicPrefix: "/chalk-mathjax/4.1.3/fonts/mathjax-newcm-font/svg/dynamic", fontCache: "none", ...(existing?.svg as object | undefined) },
     options: { ...(existing?.options as object | undefined), enableMenu: false },
     startup: { ...(existing?.startup as object | undefined), typeset: false },
-    svg: { fontCache: "none", ...(existing?.svg as object | undefined) },
   } as unknown as MathJaxRuntime & Record<string, unknown>;
 }
 

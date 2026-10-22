@@ -21,12 +21,7 @@ export const Route = createRootRoute({
       { rel: "icon", href: "/brand/chalk/chalk-icon.svg", type: "image/svg+xml" },
       { rel: "icon", href: "/favicon.ico", sizes: "64x64" },
       { rel: "apple-touch-icon", href: "/brand/chalk/apple-touch-icon.png" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=Spline+Sans+Mono:wght@400;500;600&display=swap",
-      },
+      { rel: "stylesheet", href: "/fonts/site.css" },
       { rel: "stylesheet", href: appCss },
     ],
   }),

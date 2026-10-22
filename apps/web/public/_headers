@@ -1,3 +1,12 @@
+/fonts/*
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/chalk-whiteboard/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/chalk-mathjax/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
