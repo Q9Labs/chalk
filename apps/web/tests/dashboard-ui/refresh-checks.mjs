@@ -302,19 +302,24 @@ export async function missingMetadataChecks({ open, fixture, check, CALL }) {
       const reads = async (page) => (await fixture("log")).filter((entry) => entry.path === `/dashboard-api/${page}`).length;
       const full = await reads("call");
       await tab.route("**/dashboard-api/call-metadata?*", (route) => route.fulfill({ status, json: { error: { code: "artifact_unavailable" } } }));
+      const metadata = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-metadata?"));
       for (let tick = 0; tick < 2; tick++) {
         const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
         await tab.clock.runFor(5000);
-        await response;
+        await (await response).finished();
         await tab.waitForLoadState("networkidle");
       }
+      await (await metadata).finished();
+      await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden" });
       check(`metadata ${status} removes the transcript while keeping Call available`, (await tab.locator(".errp").count()) === 0 && (await tab.getByText("Transcript processing", { exact: true }).count()) === 0 && (await tab.locator(".srow").count()) > 0);
       if (status === 404) {
         await mkdir(resolve("artifacts/dashboard-followups"), { recursive: true });
         await tab.screenshot({ path: resolve(`artifacts/dashboard-followups/metadata-${process.env.DASHBOARD_FOLLOWUP_PROOF ?? "after"}.png`), fullPage: true });
       }
       const before = await reads("call-status");
+      const next = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"), { timeout: 2000 }).catch(() => null);
       await tab.clock.runFor(5000);
+      await (await next)?.finished();
       await tab.waitForLoadState("networkidle");
       check(`metadata ${status} keeps shared status polling without reloading history`, (await reads("call-status")) > before && (await reads("call")) === full);
     } finally {
