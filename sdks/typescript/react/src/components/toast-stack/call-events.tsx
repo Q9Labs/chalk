@@ -63,7 +63,8 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
           </>
         ),
       });
-    if (old && !old.handRaised && person.handRaised)
+    // Your own hand needs no toast: it would sit over the tray's hand button and block lowering it.
+    if (old && !old.handRaised && person.handRaised && person.participantId !== next.self.participantId)
       events.push({
         icon: <CallEventIcon kind="hand" />,
         message: (
