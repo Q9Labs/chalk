@@ -90,7 +90,7 @@ beforeEach(() => {
       transcriptStatus = "preparing";
       return Response.json({ transcript: { id, status: "preparing", languages: ["en"], createdAt: date } });
     }
-    if (body?.action === "export-recording" && source === "expired") return Response.json({ error: { code: "recording_source_expired" } }, { status: 409 });
+    if (body?.action === "export-recording" && (source === "expired" || artifact === "unavailable")) return Response.json({ recording: recording() });
     if (body?.action === "export-recording") {
       artifact = "pending";
       return Response.json({ recording: recording() });
@@ -220,7 +220,7 @@ it("does not offer to create a transcript over an existing not-requested one", a
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
 });
 
-it.each([409, 400])("removes the prepare action when an export is refused because the source expired meanwhile: %s", async (status) => {
+it.each([202, 400, 409])("removes the prepare action when an export is refused because the source expired meanwhile: %s", async (status) => {
   exportHTTPStatus = status;
   await open();
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
@@ -361,9 +361,11 @@ it("offers a transcript in exactly the 1,040 state combinations the API accepts,
   expect(mismatches).toEqual([]);
 }, 120_000);
 
-it("shows the one video action the API accepts in every recording, source and export state, and never waits without polling", async () => {
+it("shows the one video action the API accepts in every recording, source and export state, and polls exactly while it shows a wait", async () => {
   const mismatches = [];
   transcriptStatus = "complete";
+  // Transcription preparation polls on its own, so it is held still here to judge the video's waits alone.
+  transcriptionSource = "none";
   for (const recordingStatus of ["pending", "processing", "completed", "failed"]) {
     for (const videoSource of ["pending", "available", "failed", "expired"]) {
       for (const exportStatus of ["none", "pending", "ready", "failed", "unavailable"]) {
@@ -388,7 +390,7 @@ it("shows the one video action the API accepts in every recording, source and ex
           const before = requests.filter((request) => request.path === "/dashboard-api/call-metadata").length;
           await tick();
           const polled = requests.filter((request) => request.path === "/dashboard-api/call-metadata").length > before;
-          if (shown.play !== play || shown.prepare !== prepare || shown.retry !== retry || (waiting && !polled)) mismatches.push({ recordingStatus, videoSource, exportStatus, exportRetryable, ...shown, waiting, polled });
+          if (shown.play !== play || shown.prepare !== prepare || shown.retry !== retry || waiting !== polled) mismatches.push({ recordingStatus, videoSource, exportStatus, exportRetryable, ...shown, waiting, polled });
           cleanup();
         }
       }
@@ -419,18 +421,31 @@ it("closes the prepare and transcript actions the moment the source window ends,
   expect(requests).toHaveLength(count);
 });
 
-it("stops playing a rendered export when its source window ends", async () => {
+it.each([
+  ["stops playing a rendered export", "unavailable", "The recording is no longer available"],
+  ["keeps playing a legacy export the server still serves", "ready", null],
+])("%s when its source window ends, by asking the server at that moment", async (_name, after, copy) => {
   vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
   expiresAt = "2026-10-22T12:01:00Z";
   artifact = "ready";
   await open();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Download" })).toBeTruthy();
+  // recording_pipeline.sql:686-696 expires a rendered artifact with its source; a legacy one with no artifact expiry stays ready.
+  recordingState = "completed";
+  source = "expired";
+  artifact = after;
   await reactAct(async () => {
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(59_000);
   });
-  expect(screen.queryByRole("region", { name: "Recording" })).toBeNull();
-  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(0);
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(1);
+  expect(screen.queryByRole("region", { name: "Recording" }) !== null).toBe(copy === null);
+  if (copy) expect(screen.getByText(copy)).toBeTruthy();
+  await tick();
+  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(1);
 });
 
 it("rereads the recording after a refused transcript request so a dead action disappears", async () => {
@@ -455,4 +470,69 @@ it("shows the new transcript as being prepared once its request is accepted", as
   expect(requests.filter((request) => request.action === "create-transcript")).toHaveLength(1);
   expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+});
+
+it("closes the prepare action at a source deadline beyond the longest browser timer", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  // The default retention is 30 days, past setTimeout's 24.8-day limit.
+  expiresAt = "2026-11-21T12:00:00Z";
+  transcriptStatus = "";
+  await open();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(29 * 86_400_000);
+  });
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(86_400_000);
+  });
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+});
+
+it("shows a transcript another request created when this page's request is refused", async () => {
+  transcriptStatus = "";
+  await open();
+  transcriptStatus = "complete";
+  createHTTPStatus = 409;
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
+  });
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+});
+
+it("reads the transcripts again when the recording's transcription preparation changes", async () => {
+  source = "pending";
+  artifact = "unavailable";
+  transcriptStatus = "";
+  await open();
+  expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
+  source = "available";
+  artifact = "none";
+  transcriptStatus = "complete";
+  await tick();
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+});
+
+it("retries a transcript list that failed to load instead of calling the transcript failed", async () => {
+  transcriptHTTPStatus = 503;
+  await open();
+  transcriptHTTPStatus = 200;
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  expect(screen.queryByText("The transcript couldn’t be made")).toBeNull();
+});
+
+it("says a newer attempt failed when it can only be retried", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  artifact = "failed";
+  retryable = true;
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready", exportRetryable: false, failureMessage: null }];
+  await open();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(screen.getByText("A newer recording couldn’t be prepared")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  expect(screen.queryByText("A newer recording is ready to prepare")).toBeNull();
 });

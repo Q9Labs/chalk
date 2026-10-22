@@ -1,8 +1,9 @@
 import type { RecordingDTO, TranscriptDTO } from "./contracts";
 
-export function pendingRecording(recording: RecordingDTO): boolean {
-  // A rendered export is playable only once the recording is marked completed, so the page waits for that too.
-  return recording.sourceStatus === "pending" || recording.exportStatus === "pending" || recording.transcriptionStatus === "pending" || (recording.exportStatus === "ready" && recording.status !== "completed");
+/** A recording is polled exactly while the page shows it waiting, so a terminal state never polls and a wait never stalls. */
+export function pendingRecording(recording: RecordingDTO, now = Date.now()): boolean {
+  const video = videoState(recording, now);
+  return video === "capturing" || video === "preparing" || recording.transcriptionStatus === "pending";
 }
 
 /** The server closes the source retention window at read time, so the page closes it on its own clock too. */
@@ -26,11 +27,8 @@ export const VIDEO: Record<VideoState, { readonly title: string; readonly detail
 };
 
 export function videoState(recording: RecordingDTO, now: number): VideoState {
-  if (recording.exportStatus === "ready") {
-    if (recording.status !== "completed") return "preparing";
-    // A rendered export expires with its source; a legacy export the server still calls ready keeps playing.
-    return recording.sourceStatus !== "expired" && pastSourceDeadline(recording, now) ? "expired" : "play";
-  }
+  // A rendered export expires with its source, but a legacy one can outlive it, so the page rereads a ready export at its deadline instead of guessing.
+  if (recording.exportStatus === "ready") return recording.status === "completed" ? "play" : "preparing";
   if (recording.sourceStatus === "failed") return "capture_failed";
   if (recording.sourceStatus === "pending") return "capturing";
   if (recording.sourceStatus === "expired" || pastSourceDeadline(recording, now) || recording.exportStatus === "unavailable") return "expired";
