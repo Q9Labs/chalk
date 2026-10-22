@@ -6,6 +6,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
 
@@ -14,6 +15,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   defmodule Repository do
     def connect(identity) do
+      if hook = Process.get(:whiteboard_connect_hook), do: hook.()
+
       {:ok,
        %{
          capabilities: Process.get(:current_capabilities, identity.capabilities),
@@ -29,6 +32,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     def episode_access(episode) do
       if test = Application.get_env(:chalk_sync, :whiteboard_test_reads),
         do: send(test, {:episode_access_read, episode})
+
+      Process.sleep(Application.get_env(:chalk_sync, :whiteboard_test_read_delay_ms, 0))
 
       Application.get_env(
         :chalk_sync,
@@ -454,7 +459,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
               :whiteboard_test_reads,
               :whiteboard_test_access,
               :whiteboard_authority_poll_ms,
-              :whiteboard_authority_stale_ms
+              :whiteboard_authority_stale_ms,
+              :whiteboard_test_read_delay_ms
             ],
             do: Application.delete_env(:chalk_sync, key)
       end)
@@ -479,6 +485,43 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       {:ok, state: state, update: update}
     end
 
+    test "a read that started while the connect check waited cannot close the new socket", %{
+      state: state
+    } do
+      {:ok, initial} = SocketWhiteboardV1.init(%{})
+      Process.cancel_timer(initial.hello_timer)
+      identity = state.identity
+
+      # While the connect check waits behind the admission, a read starts and finds no
+      # Participant. The admission then commits and the connect check passes.
+      Process.put(:whiteboard_connect_hook, fn ->
+        Authority.store(
+          identity.episode,
+          %{status: "active", participants: %{}},
+          System.monotonic_time(:millisecond),
+          nil
+        )
+
+        Process.sleep(5)
+      end)
+
+      # The next read is slow, so the stored read is the one the first frame meets.
+      Application.put_env(:chalk_sync, :whiteboard_test_read_delay_ms, 500)
+
+      assert {:push, {:text, _welcome}, live} =
+               receive_frame(
+                 %{
+                   "type" => "hello",
+                   "protocol" => "whiteboard-v1",
+                   "token" => token(identity),
+                   "cursor" => nil
+                 },
+                 initial
+               )
+
+      refute match?({:stop, _reason, _close, _state}, receive_frame(cursor(), live))
+    end
+
     test "closes instead of sending a cursor after the Participant left", %{state: state} do
       access("active", "left")
       read(state)
@@ -489,7 +532,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       assert closed.terminal == %{
                close_code: 1008,
                reason: :permission_denied,
-               denial: :participant_left
+               denial: :participant_inactive
              }
 
       refute_received {:whiteboard_v1_frame, %{"type" => "cursor"}}
@@ -1335,6 +1378,24 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       elements: [element()]
     }
   end
+
+  defp token(identity) do
+    ChalkSync.Auth.DevTokenVerifier.token(%{
+      "tenant_id" => identity.episode.tenant_id,
+      "space_id" => identity.episode.space_id,
+      "episode_id" => identity.episode.episode_id,
+      "participant_id" => identity.participant_id,
+      "participant_generation" => identity.participant_generation,
+      "admission_lifecycle_intent_id" => UUID.generate(),
+      "display_name" => "Ada",
+      "role" => "collaborator",
+      "capabilities" => ["drawWhiteboard"],
+      "issued_at" => 1,
+      "expires_at" => 4_102_444_800
+    })
+  end
+
+  defp cursor, do: %{"type" => "cursor", "x" => 1, "y" => 2}
 
   defp identity do
     %Identity{

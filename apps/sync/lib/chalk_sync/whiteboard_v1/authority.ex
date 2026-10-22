@@ -20,7 +20,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @stale_ms 3_000
 
   # Why a socket lost access, kept in its close trace while the peer sees only a policy violation.
-  @type denial :: :episode_not_found | :episode_ended | :participant_missing | :participant_left
+  @type denial :: :episode_not_found | :episode_ended | :participant_inactive
   @type access ::
           :ok | {:error, {:permission_denied, denial()}} | {:retryable, {atom(), String.t()}}
 
@@ -84,7 +84,9 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   defp stale_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_stale_ms, @stale_ms)
 
   # Removing a Participant or ending an Episode passes through leaving or ending, and a failed
-  # provider operation restores active. Only the final states close the socket.
+  # provider operation restores active. Only the final states close the socket. The read skips
+  # left rows, and the socket's connect check found this Participant, so a missing row means the
+  # Participant left.
   defp decide(nil, _identity), do: :ok
 
   defp decide(%{status: episode_status, participants: participants}, identity) do
@@ -92,8 +94,8 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
     case {episode_status, Map.get(participants, key)} do
       {"ended", _status} -> {:error, {:permission_denied, :episode_ended}}
-      {_episode, nil} -> {:error, {:permission_denied, :participant_missing}}
-      {_episode, "left"} -> {:error, {:permission_denied, :participant_left}}
+      {_episode, nil} -> {:error, {:permission_denied, :participant_inactive}}
+      {_episode, "left"} -> {:error, {:permission_denied, :participant_inactive}}
       {_episode, _reversible_or_active} -> :ok
     end
   end

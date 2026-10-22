@@ -67,7 +67,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     access("active", "left")
 
     wait_until(fn ->
-      Authority.check(identity) == {:error, {:permission_denied, :participant_left}}
+      Authority.check(identity) == {:error, {:permission_denied, :participant_inactive}}
     end)
   end
 
@@ -94,7 +94,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
 
     wait_until(fn ->
       Authority.check(identity, connected_at) ==
-        {:error, {:permission_denied, :participant_missing}}
+        {:error, {:permission_denied, :participant_inactive}}
     end)
   end
 

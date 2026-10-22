@@ -310,8 +310,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     lifecycle(connection, PlannerSQL.mark_participant_leaving(), removed)
     lifecycle(connection, FinalizerSQL.complete_external_participant(), removed)
 
-    assert {:stop, :normal, {1008, "policy violation"}, _state} =
+    assert {:stop, :normal, {1008, "policy violation"}, closed} =
              SocketWhiteboardV1.handle_info(:whiteboard_authority_tick, socket)
+
+    # The read skips left rows, so the close trace names the Participant as no longer active.
+    assert closed.terminal.denial == :participant_inactive
 
     assert {:push, _frame, _state} = deliver(live_socket(host, scene_id), scene_id)
 
@@ -319,8 +322,10 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     lifecycle(connection, PlannerSQL.mark_episode_ending(), ended)
     lifecycle(connection, FinalizerSQL.complete_external_episode(), ended)
 
-    assert {:stop, :normal, {1008, "policy violation"}, _state} =
+    assert {:stop, :normal, {1008, "policy violation"}, closed} =
              deliver(live_socket(host, scene_id), scene_id)
+
+    assert closed.terminal.denial == :episode_ended
   end
 
   test "reports the lifecycle state of every current Participant in an Episode", %{

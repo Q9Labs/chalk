@@ -355,11 +355,12 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     view_origins_negotiated =
       Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
 
-    connected_at = System.monotonic_time(:millisecond)
-
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
          {:ok, welcome} <- Episode.connect(identity) do
+      # Taken once the connect check has passed, so a stored read that started while it waited,
+      # possibly before the Participant's admission committed, cannot close this socket.
+      connected_at = System.monotonic_time(:millisecond)
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
       Authority.watch(identity.episode)
