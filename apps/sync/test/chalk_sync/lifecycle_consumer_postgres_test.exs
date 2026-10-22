@@ -2,6 +2,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.UUID
@@ -30,6 +31,129 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     else
       :ok
     end
+  end
+
+  for state <- ["pending", "cancelled", "expired"] do
+    @seat_state state
+    @tag :join_seat_retry
+    test "retry from #{@seat_state} fences the previous Sync identity", %{
+      connections: connections
+    } do
+      connection = hd(connections)
+      fixture = managed_pending_join(connection)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+      case @seat_state do
+        "cancelled" ->
+          assert [["cancelled"]] = seat_transition(connection, fixture, "cancel")
+
+        "expired" ->
+          Postgrex.query!(
+            connection,
+            "update participant_join_seats set expires_at=now()-interval '1 second' where participant_id=$1",
+            [UUID.dump!(fixture.identity.participant_id)]
+          )
+
+          assert [["expired"]] = seat_transition(connection, fixture, "expire")
+
+        "pending" ->
+          :ok
+      end
+
+      assert [["pending"]] = seat_transition(connection, fixture, "retry")
+
+      assert {:error, :stale_participant_generation} =
+               Postgres.confirm_admission(fixture.identity)
+
+      assert [["joining", nil, generation]] =
+               Postgrex.query!(
+                 connection,
+                 "select status, first_joined_at, generation from participants where id=$1",
+                 [UUID.dump!(fixture.identity.participant_id)]
+               ).rows
+
+      assert generation > fixture.identity.participant_generation
+      current = %{fixture.identity | participant_generation: generation}
+      assert {:ok, %{result: :applied}} = Postgres.confirm_admission(current)
+      assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
+    end
+  end
+
+  @tag :join_seat_retry
+  test "retry renews both pending-seat deadlines without adding reservations", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    participant = [UUID.dump!(fixture.identity.participant_id)]
+
+    reservations = fn ->
+      Postgrex.query!(
+        connection,
+        "select snapshot_reserved_bytes,lifecycle_reserved_events,lifecycle_reserved_bytes,lifecycle_reserved_intents,lifecycle_reserved_intent_bytes from sync_episode_control where episode_id=$1",
+        [UUID.dump!(fixture.episode.episode_id)]
+      ).rows
+    end
+
+    before_retry = reservations.()
+
+    Postgrex.query!(
+      connection,
+      "update participant_join_seats set expires_at=now()+interval '2 seconds' where participant_id=$1",
+      participant
+    )
+
+    Postgrex.query!(
+      connection,
+      "update sync_lifecycle_intents set next_attempt_at=now()+interval '2 seconds' where participant_id=$1",
+      participant
+    )
+
+    assert [["pending"]] = seat_transition(connection, fixture, "retry")
+
+    assert [[true, true]] =
+             Postgrex.query!(
+               connection,
+               """
+               select s.expires_at between now()+interval '55 seconds' and now()+interval '1 minute',
+                 i.next_attempt_at=s.expires_at
+               from participant_join_seats s join sync_lifecycle_intents i using(participant_id)
+               where s.participant_id=$1 and i.intent_name='participant_joined'
+               """,
+               participant
+             ).rows
+
+    assert reservations.() == before_retry
+  end
+
+  defp managed_pending_join(connection) do
+    fixture = SyncPostgres.seed_pending_join(connection)
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into participant_join_seats(tenant_id,space_id,episode_id,participant_id,generation,state,expires_at)
+      values($1,$2,$3,$4,1,'pending',now()+interval '1 minute')
+      """,
+      Scope.participant(fixture.identity)
+    )
+
+    Postgrex.query!(
+      connection,
+      "update participants set media_connection_id='attempt-old' where id=$1",
+      [UUID.dump!(fixture.identity.participant_id)]
+    )
+
+    fixture
+  end
+
+  defp seat_transition(connection, fixture, action) do
+    Postgrex.query!(
+      connection,
+      "select transition_participant_join_seat($1,$2,$3,$4,1,$5,'attempt-old')",
+      Scope.participant(fixture.identity) ++ [action]
+    ).rows
   end
 
   test "records concurrent failures without losing attempts or overflowing the counter", %{

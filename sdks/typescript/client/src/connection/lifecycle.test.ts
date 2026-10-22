@@ -199,12 +199,22 @@ function blockedSync(platform: ReturnType<typeof createCoreTestPlatform>) {
   };
 }
 
+function rejectFirstAccess(platform: ReturnType<typeof createCoreTestPlatform>) {
+  let rejected = false;
+  return () => {
+    if (!rejected) {
+      rejected = true;
+      throw new ConnectionAccessFailure({ code: "access.invalid", cause: "rejected provider connection" });
+    }
+    return platform.sync;
+  };
+}
+
 describe("failed join admission cleanup", () => {
   it("re-admits a cancelled seat instead of trying to refresh it after access rejection", async () => {
     const platform = createCoreTestPlatform();
     const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
     let cancelled = false;
-    let rejectAccess = true;
     const layer = admissionLayer({
       access: async ({ reason }) => {
         if (reason === "join") cancelled = false;
@@ -217,18 +227,37 @@ describe("failed join admission cleanup", () => {
           cancelled = true;
           return true;
         },
-        createSyncClient: () => {
-          if (rejectAccess) {
-            rejectAccess = false;
-            throw new ConnectionAccessFailure({ code: "access.invalid", cause: "rejected token" });
-          }
-          return platform.sync;
-        },
+        createSyncClient: rejectFirstAccess(platform),
       },
     });
     await exerciseAdmission(layer, (lifecycle) =>
       Effect.gen(function* () {
         expect((yield* Effect.exit(lifecycle.join()))._tag).toBe("Success");
+      }),
+    );
+  });
+
+  it.each([false, undefined])("replaces rejected legacy access when cancellation is %s", async (cancelled) => {
+    const platform = createCoreTestPlatform();
+    const requests: { reason: string; replaceMediaConnection: boolean }[] = [];
+    const layer = admissionLayer({
+      access: async ({ reason, replaceMediaConnection }) => {
+        requests.push({ reason, replaceMediaConnection });
+        return parseParsedAccessGrant(opaqueAccessGrant(requests.length));
+      },
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: cancelled === undefined ? undefined : async () => cancelled,
+        createSyncClient: rejectFirstAccess(platform),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        yield* lifecycle.join();
+        expect(requests).toEqual([
+          { reason: "join", replaceMediaConnection: false },
+          { reason: "access_retry", replaceMediaConnection: true },
+        ]);
       }),
     );
   });

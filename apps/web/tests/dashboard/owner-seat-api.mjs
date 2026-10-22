@@ -38,6 +38,36 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     const s = access.subject;
     return fetch(`${apiOrigin}/v1/tenants/${s.tenant_id}/spaces/${s.space_id}/episodes/${s.episode_id}/participants/${s.participant_id}/cancel-join`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   }
+  async function rejectOldHello(access) {
+    const ws = new WebSocket(syncOrigin);
+    try {
+      const rejected = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("stale Sync hello was not rejected")), 5000);
+        ws.addEventListener(
+          "close",
+          () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          { once: true },
+        );
+        ws.addEventListener("message", ({ data }) => {
+          if (JSON.parse(data).type === "welcome") {
+            clearTimeout(timeout);
+            reject(new Error("stale Sync token confirmed a retried seat"));
+          }
+        });
+      });
+      await new Promise((resolve, reject) => {
+        ws.addEventListener("open", resolve, { once: true });
+        ws.addEventListener("error", reject, { once: true });
+      });
+      ws.send(JSON.stringify({ type: "hello", protocol: 1, token: access.sync.token, streams: { control: { cursor: null }, media: { cursor: null }, presence: { cursor: null }, requests: { cursor: null } } }));
+      await rejected;
+    } finally {
+      ws.close();
+    }
+  }
   const reservations = () => sql(`select snapshot_reserved_bytes||':'||lifecycle_reserved_events||':'||lifecycle_reserved_bytes||':'||lifecycle_reserved_intents||':'||lifecycle_reserved_intent_bytes from sync_episode_control where episode_id='${episodeId}'`);
   for (const role of ["owner", "collaborator"]) {
     const baseline = reservations();
@@ -51,13 +81,24 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     assert(!(await attendance()).some((person) => person.participant_id === id));
     await delay(300);
     assert.equal(state(id), "joining:pending:false", "admission with no socket must not become attendance");
-    assert.equal((await admit()).participant.id, id, "same-page Retry must reuse one seat");
+    sql(`update participant_join_seats set expires_at=now()+interval '2 seconds' where participant_id='${id}'; update sync_lifecycle_intents set next_attempt_at=now()+interval '2 seconds' where participant_id='${id}' and status='pending'`);
+    const pendingRetry = await admit();
+    assert.equal(pendingRetry.participant.id, id, "same-page Retry must reuse one seat");
+    assert.equal(
+      sql(`select (s.expires_at > now()+interval '55 seconds' and i.next_attempt_at=s.expires_at)::text from participant_join_seats s join sync_lifecycle_intents i using(participant_id) where s.participant_id='${id}' and i.intent_name='participant_joined'`),
+      "true",
+      "Retry renews the seat and reaper deadlines",
+    );
+    await rejectOldHello(pending.access);
+    assert.equal(state(id), "joining:pending:false", "the previous pending attempt cannot confirm the renewed seat");
     // Tab closes after HTTP admission, so no client cleanup can run.
     expire(id);
     await waitFor("left:expired:false", () => state(id));
     assert.equal((await cancel(pending.access)).status, 200, "late cleanup is idempotent");
     const retried = await admit();
     assert.equal(retried.participant.id, id, "expired unresolved admission must rearm the same seat");
+    await rejectOldHello(pendingRetry.access);
+    assert.equal(state(id), "joining:pending:false", "an expired attempt cannot confirm the rearmed seat");
     assert.notEqual(retried.access.media.client_payload.connectionId, pending.access.media.client_payload.connectionId);
     assert.equal((await cancel(pending.access)).status, 200);
     assert.equal(state(id), "joining:pending:false", "late cleanup must not cancel the retry generation");
@@ -72,6 +113,8 @@ export async function proveServerSeats({ repository, apiOrigin, syncOrigin, tena
     assert.equal(state(id), "left:cancelled:false");
     assert.equal(reservations(), baseline, "expiry and cancellation must release all pending-seat reservations");
     const joined = await admit();
+    await rejectOldHello(final.access);
+    assert.equal(state(id), "joining:pending:false", "a cancelled attempt cannot confirm the rearmed seat");
     const ws = new WebSocket(syncOrigin);
     try {
       const ready = new Promise((resolve, reject) => {
