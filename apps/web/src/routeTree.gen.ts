@@ -19,6 +19,7 @@ import { Route as DashboardAppRouteImport } from './routes/dashboard._app'
 import { Route as DashboardSignInRouteImport } from './routes/dashboard.sign-in'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsSlugRouteImport } from './routes/docs.$slug'
+import { Route as PrivacyPreviousRouteImport } from './routes/privacy_.previous'
 import { Route as SpaceIndexRouteImport } from './routes/space.index'
 import { Route as SpaceSlugRouteImport } from './routes/space.$slug'
 import { Route as DashboardAppIndexRouteImport } from './routes/dashboard._app.index'
@@ -76,6 +77,11 @@ const DocsSlugRoute = DocsSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => DocsRoute,
 } as any)
+const PrivacyPreviousRoute = PrivacyPreviousRouteImport.update({
+  id: '/privacy_/previous',
+  path: '/privacy/previous',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SpaceIndexRoute = SpaceIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/dashboard/sign-in': typeof DashboardSignInRoute
   '/docs/$slug': typeof DocsSlugRoute
+  '/privacy/previous': typeof PrivacyPreviousRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
@@ -140,6 +147,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/dashboard/sign-in': typeof DashboardSignInRoute
   '/docs/$slug': typeof DocsSlugRoute
+  '/privacy/previous': typeof PrivacyPreviousRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs': typeof DocsIndexRoute
   '/space': typeof SpaceIndexRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/dashboard/_app': typeof DashboardAppRouteWithChildren
   '/dashboard/sign-in': typeof DashboardSignInRoute
   '/docs/$slug': typeof DocsSlugRoute
+  '/privacy_/previous': typeof PrivacyPreviousRoute
   '/space/$slug': typeof SpaceSlugRoute
   '/docs/': typeof DocsIndexRoute
   '/space/': typeof SpaceIndexRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/dashboard/sign-in'
     | '/docs/$slug'
+    | '/privacy/previous'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/dashboard/sign-in'
     | '/docs/$slug'
+    | '/privacy/previous'
     | '/space/$slug'
     | '/docs'
     | '/space'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/dashboard/_app'
     | '/dashboard/sign-in'
     | '/docs/$slug'
+    | '/privacy_/previous'
     | '/space/$slug'
     | '/docs/'
     | '/space/'
@@ -230,6 +242,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   SpaceRoute: typeof SpaceRouteWithChildren
   TermsRoute: typeof TermsRoute
+  PrivacyPreviousRoute: typeof PrivacyPreviousRoute
   DashboardCallSpaceIdJoinRoute: typeof DashboardCallSpaceIdJoinRoute
 }
 
@@ -304,6 +317,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/docs/$slug'
       preLoaderRoute: typeof DocsSlugRouteImport
       parentRoute: typeof DocsRoute
+    }
+    '/privacy_/previous': {
+      id: '/privacy_/previous'
+      path: '/privacy/previous'
+      fullPath: '/privacy/previous'
+      preLoaderRoute: typeof PrivacyPreviousRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/space/': {
       id: '/space/'
@@ -421,6 +441,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   SpaceRoute: SpaceRouteWithChildren,
   TermsRoute: TermsRoute,
+  PrivacyPreviousRoute: PrivacyPreviousRoute,
   DashboardCallSpaceIdJoinRoute: DashboardCallSpaceIdJoinRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,3 +1,4 @@
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ErrorCode, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
@@ -12,13 +13,24 @@ const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 type EntryFailure = { readonly message: string; readonly retryable: boolean };
 type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
-export function SpacePage({
-  slug,
-  navigatePublicSpace = replacePublicSpaceHistory,
-}: {
+type SpacePageProps = {
   readonly slug?: string;
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
-} = {}) {
+};
+export function SpacePage(props: SpacePageProps = {}) {
+  const { mode } = useTheme();
+  return (
+    <div data-chalk data-chalk-theme={mode} className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
+      <div className="mx-auto w-full max-w-5xl shrink-0 px-4">
+        <PrivacyNotice />
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <SpaceEntry {...props} />
+      </div>
+    </div>
+  );
+}
+function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
   const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly errorCode: ErrorCode | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
@@ -230,7 +242,7 @@ export function SpacePage({
   );
   if (terminal)
     return (
-      <main className="relative h-dvh">
+      <main className="relative h-full">
         <StatusSurface
           phase={terminal.phase}
           callName={terminal.callName}
@@ -276,24 +288,26 @@ export function SpacePage({
     );
   }
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
-      {pending ? (
-        <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
-      ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-        <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
-      ) : error ? (
-        <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
-      ) : (
-        <NameNeeded
-          spaceName={callName}
-          displayName={displayName}
-          onDisplayNameChange={(name) => {
-            nameEdited.current = true;
-            setDisplayName(name);
-          }}
-          onJoin={() => start()}
-        />
-      )}
+    <main data-chalk data-chalk-theme={mode} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="min-h-0 flex-1">
+        {pending ? (
+          <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+        ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
+          <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
+        ) : error ? (
+          <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
+        ) : (
+          <NameNeeded
+            spaceName={callName}
+            displayName={displayName}
+            onDisplayNameChange={(name) => {
+              nameEdited.current = true;
+              setDisplayName(name);
+            }}
+            onJoin={() => start()}
+          />
+        )}
+      </div>
     </main>
   );
 }
@@ -466,7 +480,7 @@ function LocalSpace({
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
+    <main className="h-full min-h-0 w-full overflow-hidden">
       {homeError ? <p role="alert">{homeError}</p> : null}
       <Chalk
         theme={{ colorScheme: mode }}

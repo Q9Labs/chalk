@@ -1,9 +1,11 @@
 import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
 import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
-import { ChalkUI, useToasts } from "@q9labsai/chalk-react-native/ui";
+import { ChalkUI, useDeviceLayout, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking } from "react-native";
+import { Linking, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { PrivacyNotice } from "./src/privacy/PrivacyNotice";
 import { Splash } from "./src/brand/Splash";
 import { CallScreen } from "./src/call/CallScreen";
 import { useClipboardOffer } from "./src/home/ClipboardCard";
@@ -90,7 +92,22 @@ type ShellProps = {
   readonly reportError: (source: string) => (cause: unknown) => void;
 };
 
-function Shell({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNameChange, openedLink, preferences, recentCalls, reportError }: ShellProps): React.JSX.Element {
+function Shell(props: ShellProps): React.JSX.Element {
+  const { insets } = useDeviceLayout();
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+      <View style={{ paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right }}>
+        <PrivacyNotice topInset={insets.top} />
+      </View>
+      <SafeAreaProvider>
+        <ShellContent {...props} />
+      </SafeAreaProvider>
+    </View>
+  );
+}
+
+function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNameChange, openedLink, preferences, recentCalls, reportError }: ShellProps): React.JSX.Element {
   const toasts = useToasts();
   const [step, setStep] = useState<Step>(() => (openedLink ? (name ? { kind: "joining", target: { kind: "link", route: openedLink }, name } : { kind: "name", target: { kind: "link", route: openedLink } }) : { kind: "home" }));
 
