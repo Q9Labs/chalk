@@ -48,12 +48,14 @@ const REACTIONS: readonly (readonly [Reaction, string])[] = [
 export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink, returnFocusRef }: MoreSheetProps): React.JSX.Element {
   const client = useSpaceClient();
   const self = useSelf();
+  const stage = useStageView();
   const people = useParticipants().roster.length;
   const toasts = useToasts();
   const { soundsEnabled } = usePreferences();
   const canRaiseHand = useCan("raiseHand");
   const live = useConnection().status === "live";
   const canReact = useCan("sendReaction") && live;
+  const canManageBoard = useCan("manageWhiteboard");
 
   const fail = useCallback((message: string) => () => toasts.show({ kind: "error", dismissible: true, message }), [toasts]);
   const toggleHand = useCallback(() => {
@@ -86,6 +88,27 @@ export function MoreSheet({ open, onClose, onOpenPeople, onOpenChat, inviteLink,
       <SheetGroup>
         {inviteLink ? <CopyLinkRow link={inviteLink} /> : null}
         {inviteLink ? <SheetRow icon="iosShare" label="Share link" onPress={() => shareLink(inviteLink)} testID="more.share" /> : null}
+        <SheetRow
+          icon="pen"
+          label="Board"
+          onPress={() => {
+            onClose();
+            const transport = client.whiteboard.transport();
+            if (!transport) {
+              fail("The board is unavailable in this call.")();
+              return;
+            }
+            void transport
+              .startSceneSubscription()
+              .then(async () => {
+                if (canManageBoard) await transport.setPresentation?.(true);
+                stage.setBoardOpen(true);
+                stage.showContent();
+              })
+              .catch(fail("Couldn’t open the board. Try again."));
+          }}
+          testID="more.board"
+        />
         <RecordingRow onDone={onClose} />
         <ChatRow onPress={onOpenChat} />
         <SheetRow end={<PeopleCount count={people} />} icon="users" label="People" onPress={onOpenPeople} testID="more.people" />

@@ -1,4 +1,4 @@
-import type { WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
+import type { WhiteboardEngineHandle } from "../WhiteboardCanvas";
 import { NOTE_FILL, NOTE_ROUNDNESS, NOTE_SIZE, NOTE_TEXT, engineStrokeWidth, highlighterStyle, penHex, widthUnits, type BoardSurface, type BoardTool, type CallTheme, type Camera, type PenColor, type PenWidth } from "./board-model";
 
 /** The pen the person has chosen, and the surface it is drawn on. */

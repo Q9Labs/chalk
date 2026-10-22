@@ -1,3 +1,4 @@
+import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
 import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
 
 export const CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION = 1 as const;
@@ -14,6 +15,36 @@ export type ChalkEmbeddedWhiteboardViewport = {
 
 export type ChalkEmbeddedWhiteboardOperationResult = { readonly requestId: string; readonly ok: true; readonly result?: unknown } | { readonly requestId: string; readonly ok: false; readonly error: { readonly code: string; readonly message: string; readonly recoverable: boolean } };
 
+export type ChalkEmbeddedBoardNotice = { readonly id: string; readonly message: string; readonly kind: "info" | "error"; readonly actionLabel?: string };
+
+export type ChalkEmbeddedBoardContext = {
+  readonly primary: boolean;
+  readonly phone: boolean;
+  readonly following: string | null;
+  readonly ownParticipantId: string | null;
+  readonly people: readonly { readonly id: string; readonly displayName: string }[];
+  readonly viewBounds: WhiteboardViewBounds;
+  readonly sceneId: string | null;
+  readonly sceneStatus: string;
+  readonly connectionStatus: string;
+  readonly viewsAvailable: boolean;
+  readonly colors: {
+    readonly canvas: string;
+    readonly surface: string;
+    readonly raised: string;
+    readonly popover: string;
+    readonly hover: string;
+    readonly line: string;
+    readonly lineStrong: string;
+    readonly text: string;
+    readonly textStrong: string;
+    readonly textMuted: string;
+    readonly textSoft: string;
+    readonly dangerText: string;
+    readonly focus: string;
+  };
+};
+
 export type ChalkEmbeddedWhiteboardHostMessage =
   | {
       readonly type: "initialize";
@@ -22,6 +53,7 @@ export type ChalkEmbeddedWhiteboardHostMessage =
         readonly canClear: boolean;
         readonly theme: ChalkEmbeddedWhiteboardTheme;
         readonly localParticipantColor?: string;
+        readonly board?: ChalkEmbeddedBoardContext;
       };
     }
   | {
@@ -64,6 +96,9 @@ export type ChalkEmbeddedWhiteboardHostMessage =
       readonly type: "set_capabilities";
       readonly payload: { readonly canDraw: boolean; readonly canClear: boolean };
     }
+  | { readonly type: "notice_action"; readonly payload: { readonly id: string } }
+  | { readonly type: "set_board"; readonly payload: ChalkEmbeddedBoardContext }
+  | { readonly type: "apply_view"; readonly payload: WhiteboardView & { readonly participantId: string; readonly displayName: string; readonly occurredAt: string } }
   | { readonly type: "set_viewport"; readonly payload: ChalkEmbeddedWhiteboardViewport }
   | { readonly type: "operation_result"; readonly payload: ChalkEmbeddedWhiteboardOperationResult }
   | {
@@ -97,6 +132,10 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
       };
     }
   | { readonly type: "cursor"; readonly payload: { readonly x: number; readonly y: number } }
+  | { readonly type: "view"; readonly payload: WhiteboardView & { readonly requestId: string } }
+  | { readonly type: "notice"; readonly payload: ChalkEmbeddedBoardNotice | null }
+  | { readonly type: "follow"; readonly payload: { readonly participantId: string | null } }
+  | { readonly type: "close_board"; readonly payload: {} }
   | { readonly type: "camera"; readonly payload: { readonly scrollX: number; readonly scrollY: number; readonly zoom: number } }
   | { readonly type: "request_snapshot"; readonly payload: { readonly requestId: string } }
   | { readonly type: "clear"; readonly payload: { readonly requestId: string } }
@@ -117,7 +156,7 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
     }
   | {
       readonly type: "user_export";
-      readonly payload: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string };
+      readonly payload: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string; readonly action?: "download" | "copy" };
     }
   | {
       readonly type: "metric";
@@ -187,9 +226,24 @@ export function decodeEmbeddedWhiteboardRendererMessage(value: string, expectedG
   return decodeEnvelope(value, expectedGeneration, rendererMessageTypes) as ChalkEmbeddedWhiteboardRendererEnvelope;
 }
 
-const hostMessageTypes = new Set<ChalkEmbeddedWhiteboardHostMessage["type"]>(["initialize", "apply_snapshot", "apply_update", "apply_cursor", "reset_required", "set_capabilities", "set_viewport", "operation_result", "provide_file_bytes", "request_user_export", "prepare_close"]);
+const hostMessageTypes = new Set<ChalkEmbeddedWhiteboardHostMessage["type"]>([
+  "notice_action",
+  "set_board",
+  "apply_view",
+  "initialize",
+  "apply_snapshot",
+  "apply_update",
+  "apply_cursor",
+  "reset_required",
+  "set_capabilities",
+  "set_viewport",
+  "operation_result",
+  "provide_file_bytes",
+  "request_user_export",
+  "prepare_close",
+]);
 
-const rendererMessageTypes = new Set<ChalkEmbeddedWhiteboardRendererMessage["type"]>(["ready", "local_update", "cursor", "camera", "request_snapshot", "clear", "file_read", "file_write", "user_export", "metric", "error", "close_ready"]);
+const rendererMessageTypes = new Set<ChalkEmbeddedWhiteboardRendererMessage["type"]>(["notice", "view", "follow", "close_board", "ready", "local_update", "cursor", "camera", "request_snapshot", "clear", "file_read", "file_write", "user_export", "metric", "error", "close_ready"]);
 
 function decodeEnvelope(value: string, expectedGeneration: string | undefined, allowedTypes: ReadonlySet<string>): ChalkEmbeddedWhiteboardBridgeEnvelope<{ type: string; payload: unknown }> {
   if (encodedBytes(value) > CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES) throw new Error("embedded whiteboard message exceeds the bridge limit");

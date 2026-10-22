@@ -6,6 +6,10 @@ export type StageLayoutChoice = "spotlight" | "grid";
 export type StageView = {
   readonly layout: StageLayoutChoice;
   readonly pinned: string | null;
+  readonly boardOpen: boolean | null;
+  readonly setBoardOpen: (open: boolean) => void;
+  readonly following: string | null;
+  readonly setFollowing: (participantId: string | null) => void;
   /** Whether your own front-camera video is mirrored, as in a mirror. On by default. */
   readonly mirror: boolean;
   readonly setLayout: (layout: StageLayoutChoice) => void;
@@ -25,6 +29,8 @@ const StageViewContext = createContext<StageView | null>(null);
 export function StageViewProvider({ children }: { readonly children: ReactNode }): React.JSX.Element {
   const [layout, setLayout] = useState<StageLayoutChoice>("spotlight");
   const [pinned, setPinned] = useState<string | null>(null);
+  const [boardOpen, setBoardOpen] = useState<boolean | null>(null);
+  const [following, setFollowing] = useState<string | null>(null);
   const [mirror, setMirror] = useState(true);
 
   const dev = useDevScenario();
@@ -37,6 +43,10 @@ export function StageViewProvider({ children }: { readonly children: ReactNode }
     () => ({
       layout,
       pinned,
+      boardOpen,
+      setBoardOpen,
+      following,
+      setFollowing,
       mirror,
       setLayout: (next) => {
         setLayout(next);
@@ -56,7 +66,7 @@ export function StageViewProvider({ children }: { readonly children: ReactNode }
       },
       setMirror,
     }),
-    [layout, mirror, pinned],
+    [layout, mirror, pinned, following, boardOpen],
   );
   return <StageViewContext.Provider value={value}>{children}</StageViewContext.Provider>;
 }

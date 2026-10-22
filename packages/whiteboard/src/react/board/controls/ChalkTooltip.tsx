@@ -1,6 +1,6 @@
 import { Tooltip } from "@base-ui/react/tooltip";
 import { useRef, type ReactElement, type ReactNode } from "react";
-import { useMediaQuery } from "../../internal/useMediaQuery";
+import { useMediaQuery } from "../useMediaQuery";
 export function ChalkTooltip({ trigger, children }: { readonly trigger: ReactElement; readonly children: ReactNode }) {
   const container = useRef<HTMLElement>(null);
   const fine = useMediaQuery("(pointer:fine)");

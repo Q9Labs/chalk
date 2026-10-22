@@ -1,7 +1,7 @@
 import { Popover } from "@base-ui/react/popover";
 import { useState, type ReactElement, type ReactNode } from "react";
 import { ChalkTooltip } from "./ChalkTooltip";
-import { cn } from "../../utils/cn";
+
 export function ChalkPopover({
   trigger,
   children,
@@ -30,7 +30,7 @@ export function ChalkPopover({
         {tooltip ? <ChalkTooltip trigger={<Popover.Trigger render={trigger} />}>{tooltip}</ChalkTooltip> : <Popover.Trigger render={trigger} />}
         <Popover.Portal container={root ?? holder}>
           <Popover.Positioner side="bottom" align="start" alignOffset={alignOffset} sideOffset={8} collisionPadding={8} collisionBoundary={root ?? undefined} className="chalk-popover-positioner">
-            <Popover.Popup aria-label={label} data-part="popover" className={cn("chalk-menu chalk-popover", className)}>
+            <Popover.Popup aria-label={label} data-part="popover" className={["chalk-menu chalk-popover", className].filter(Boolean).join(" ")} style={{ maxHeight: "var(--available-height)", maxWidth: "var(--available-width)", overflowY: "auto", overscrollBehavior: "contain" }}>
               {children}
             </Popover.Popup>
           </Popover.Positioner>

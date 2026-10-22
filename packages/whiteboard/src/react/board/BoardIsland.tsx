@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { ChalkMenu, ChalkMenuItem, ChalkPopover, ChalkTooltip } from "../chalk-ui";
+import { usePrefersReducedMotion } from "./useMediaQuery";
+import { ChalkMenu, ChalkMenuItem, ChalkPopover, ChalkTooltip } from "./controls";
 import { BoardIcon, GripIcon, type BoardGlyph } from "./BoardIcon";
 import { ISLAND_PLACES, PEN_COLORS, PEN_WIDTHS, SHAPES, penHex, type BoardSurface, type BoardTool, type CallTheme, type IslandPlace, type PenColor, type PenWidth, type ShapeTool } from "./board-model";
 

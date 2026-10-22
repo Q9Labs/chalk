@@ -26,7 +26,7 @@ import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { NoticeButton } from "../toast-stack/NoticeButton";
-import { BoardToastContext, type BoardToast } from "../board/board-toasts";
+import { BoardToastContext, type BoardToast } from "@q9labsai/chalk-whiteboard/react";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "../stage/SpaceStage";

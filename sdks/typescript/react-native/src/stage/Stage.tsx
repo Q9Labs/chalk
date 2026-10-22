@@ -1,7 +1,10 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
+import { useSpaceClient } from "../context/space-client-context";
+import { useToasts } from "../primitives/toast/ToastStack";
+import { ownNativeBoardSession } from "../whiteboard/native-board-session";
 import { useDevScenario } from "../frame/dev-scenario";
 import { useDeviceLayout } from "../frame/device-layout";
 import { useMeasuredRef } from "../frame/measurement";
@@ -44,7 +47,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
     present: (hasSelf && selfId !== null ? [selfId, ...others] : others).join("\n"),
     speaker: roster.find((person) => person.presence.activeSpeaker)?.participantId ?? null,
     sharer: roster.find((person) => person.participantId !== selfId && person.media.screenShare === "active")?.participantId ?? null,
-    board: snapshot.whiteboard.open,
+    board: snapshot.whiteboard.engine.presenting,
   };
 }
 
@@ -54,18 +57,26 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
  * remounted by a move, a layout switch or a sheet; only tiles on the stage subscribe to video.
  */
 export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): React.JSX.Element {
+  const client = useSpaceClient();
+  const toasts = useToasts();
+  useEffect(() => ownNativeBoardSession(client, () => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t open the board. Try again from More." })), [client, toasts]);
   const structure = useSpaceSelector(selectStructure, shallowEqual);
   const view = useStageView();
   const { arrangement } = useDeviceLayout();
   const { shareAspect } = useDevScenario();
   const [sheet, setSheet] = useState<{ readonly id: string | null; readonly open: boolean }>({ id: null, open: false });
 
+  useEffect(() => {
+    if (view.following && !structure.present.split("\n").includes(view.following)) view.setFollowing(null);
+  }, [structure.present, view.following, view.setFollowing]);
+
   const present = useMemo(() => (structure.present ? structure.present.split("\n") : []), [structure.present]);
   const [order, setOrder] = useState<StageOrder>({ order: [], spot: null });
   const next = nextStageOrder(order, present, structure.selfId, structure.speaker);
   if (next !== order) setOrder(next);
 
-  const content = useMemo<SharedContent | null>(() => (structure.board ? { kind: "board" } : structure.sharer !== null ? { kind: "screen", sharerId: structure.sharer } : null), [structure.board, structure.sharer]);
+  const boardVisible = view.boardOpen ?? structure.board;
+  const content = useMemo<SharedContent | null>(() => (boardVisible ? { kind: "board" } : structure.sharer !== null ? { kind: "screen", sharerId: structure.sharer } : null), [boardVisible, structure.sharer]);
   const pinned = view.pinned !== null && present.includes(view.pinned) ? view.pinned : null;
   const items = useMemo(
     () =>
@@ -82,6 +93,17 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
     [arrangement, content, frame, next, pinned, shareAspect, view.layout],
   );
 
+  const followTile = useCallback(
+    (id: string) => {
+      if (!boardVisible || id === structure.selfId) {
+        setSheet({ id, open: true });
+        return;
+      }
+      view.showContent();
+      view.setFollowing(view.following === id ? null : id);
+    },
+    [boardVisible, structure.selfId, view],
+  );
   const openTile = useCallback((id: string) => setSheet({ id, open: true }), []);
   const closeTile = useCallback(() => setSheet((current) => ({ ...current, open: false })), []);
   // Like the mockup's `.stage`, the stage is a full-screen layer: tiles are placed in screen points
@@ -91,7 +113,7 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   return (
     <View pointerEvents="box-none" ref={stageRef} style={styles.layer} testID="frame.stage">
       {items.map((item) => (
-        <StageTile content={content} item={item} key={itemKey(item)} mirror={view.mirror} onOpenPeople={onOpenPeople} onOpenTile={openTile} onShowContent={view.showContent} peopleCount={present.length} pinned={pinned} />
+        <StageTile content={content} item={item} key={itemKey(item)} mirror={view.mirror} onOpenPeople={onOpenPeople} onOpenTile={followTile} onTileOptions={openTile} following={view.following} onShowContent={view.showContent} peopleCount={present.length} pinned={pinned} />
       ))}
       <TileSheet onClose={closeTile} open={sheet.open} participantId={sheet.id} />
     </View>
@@ -108,19 +130,21 @@ type StageTileProps = {
   readonly pinned: string | null;
   readonly mirror: boolean;
   readonly peopleCount: number;
+  readonly following: string | null;
+  readonly onTileOptions: (participantId: string) => void;
   readonly onOpenTile: (participantId: string) => void;
   readonly onOpenPeople: () => void;
   readonly onShowContent: () => void;
 };
 
-function StageTile({ item, content, pinned, mirror, peopleCount, onOpenTile, onOpenPeople, onShowContent }: StageTileProps): React.JSX.Element | null {
+function StageTile({ item, content, pinned, mirror, peopleCount, onOpenTile, onOpenPeople, onShowContent, following, onTileOptions }: StageTileProps): React.JSX.Element | null {
   const { scheme } = useTheme();
   const float = item.kind === "person" && item.float;
   return (
     <MovingFrame frame={item.frame} style={float ? [styles.float, { boxShadow: elevations[scheme].floatTile }] : null}>
       <Animated.View entering={tileEntering} exiting={tileLeaving} style={styles.fill}>
         {item.kind === "person" ? (
-          <ParticipantTile float={float} height={item.frame.height} id={item.id} mirror={mirror} onOpen={onOpenTile} pinned={pinned === item.id} width={item.frame.width} />
+          <ParticipantTile float={float} height={item.frame.height} id={item.id} mirror={mirror} onOpen={onOpenTile} onOptions={onTileOptions} following={following === item.id} pinned={pinned === item.id} width={item.frame.width} />
         ) : item.kind === "content" && content ? (
           <ContentTile content={content} inner={item.inner} mini={item.mini} onShowInSpotlight={onShowContent} />
         ) : item.kind === "more" ? (

@@ -1,6 +1,6 @@
 import { Menu } from "@base-ui/react/menu";
 import { useRef, type ReactElement, type ReactNode } from "react";
-import { cn } from "../../utils/cn";
+
 export interface ChalkMenuProps {
   readonly trigger: ReactElement;
   readonly onOpenChange?: (open: boolean) => void;
@@ -21,7 +21,7 @@ export function ChalkMenu({ trigger, children, side = "bottom", className, onOpe
         <Menu.Trigger render={trigger} />
         <Menu.Portal container={container}>
           <Menu.Positioner side={side} align={side === "top" ? "center" : "end"} sideOffset={side === "top" ? 10 : 6} collisionPadding={8} className="chalk-menu-positioner">
-            <Menu.Popup data-part="menu" className={cn("chalk-menu", className)}>
+            <Menu.Popup data-part="menu" className={["chalk-menu", className].filter(Boolean).join(" ")} style={{ maxHeight: "var(--available-height)", maxWidth: "var(--available-width)", overflowY: "auto", overscrollBehavior: "contain" }}>
               {children}
             </Menu.Popup>
           </Menu.Positioner>

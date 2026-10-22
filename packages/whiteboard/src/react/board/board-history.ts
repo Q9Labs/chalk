@@ -1,5 +1,6 @@
 import { useEffect, useState, type MutableRefObject } from "react";
-import { observeEngineHistory, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
+import { observeEngineHistory } from "../engine-history";
+import type { WhiteboardEngineHandle } from "../WhiteboardCanvas";
 
 /** Reads the engine's stacks; never counts host mutations. */
 export function useEngineHistory(root: MutableRefObject<HTMLElement | null>, engine: WhiteboardEngineHandle | null) {

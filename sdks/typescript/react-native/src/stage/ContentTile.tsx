@@ -1,18 +1,18 @@
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
-import { memo, useMemo, useRef } from "react";
+import { ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
+import { useDeviceLayout } from "../frame/device-layout";
 import { useDevScenario } from "../frame/dev-scenario";
 import { useMeasuredRef } from "../frame/measurement";
-import { Icon } from "../icons/Icon";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import type { Frame } from "../motion/MovingFrame";
-import { ChalkText } from "../primitives/ChalkText";
 import { NameTag } from "../primitives/NameTag";
 import { useTheme } from "../theme/theme";
 import { radii } from "../theme/tokens";
+import { useStageView } from "./stage-view";
 import { useSpaceSelector } from "./space-selector";
 
 export type SharedContent = { readonly kind: "screen"; readonly sharerId: string } | { readonly kind: "board" };
@@ -60,34 +60,58 @@ function ScreenShare({ sharerId, inner, mini, onShowInSpotlight }: { readonly sh
 }
 
 const selectBoard = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.status;
+const selectRoster = (snapshot: SpaceSnapshot) => snapshot.participants.roster;
+const selectSelfId = (snapshot: SpaceSnapshot) => snapshot.self.participantId;
+const selectConnection = (snapshot: SpaceSnapshot) => snapshot.connection.status;
+const selectSceneId = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.sceneId;
 
-/** The shared board, view-only today, through the embedded whiteboard. It loads only while a board is shared. */
+/** The shared board uses the same renderer, tools and view protocol as web. */
 function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly onShowInSpotlight: () => void }): React.JSX.Element {
   const client = useSpaceClient();
   const { colors, scheme } = useTheme();
+  const view = useStageView();
+  const { phone } = useDeviceLayout();
   const status = useSpaceSelector(selectBoard);
-  const chipStyle = [styles.viewOnly, { backgroundColor: colors.surface, borderColor: colors.lineStrong }];
-  const chipRef = useMeasuredRef<View>("tile.content.view-only", chipStyle);
-  // The transport changes when the engine resubscribes.
+  const roster = useSpaceSelector(selectRoster);
+  const selfId = useSpaceSelector(selectSelfId);
+  const connectionStatus = useSpaceSelector(selectConnection);
+  const sceneId = useSpaceSelector(selectSceneId);
   const transport = useMemo(() => client.whiteboard.transport(), [client, status]);
+  const [capabilities, setCapabilities] = useState({ canDraw: false, canClear: false, viewsAvailable: false });
+  useEffect(() => transport?.subscribeSummary?.((summary) => setCapabilities({ canDraw: summary.canDraw, canClear: summary.canClear, viewsAvailable: transport.supportsViews === true })), [transport]);
+  const board = useMemo(
+    () => ({
+      primary: !mini,
+      phone,
+      following: view.following,
+      ownParticipantId: selfId,
+      people: roster.map((person) => ({ id: person.participantId, displayName: person.displayName })),
+      viewBounds: ChalkWhiteboardViewBounds,
+      sceneId,
+      sceneStatus: status,
+      connectionStatus,
+      viewsAvailable: capabilities.viewsAvailable,
+      colors,
+    }),
+    [mini, phone, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, colors],
+  );
+  const onClose = useCallback(() => {
+    view.setBoardOpen(false);
+    view.setFollowing(null);
+  }, [view.setBoardOpen, view.setFollowing]);
   const journeyId = useRef(`board-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`).current;
 
   return (
     <>
-      {transport ? <EmbeddedWhiteboard canClear={false} canDraw={false} journeyId={journeyId} style={StyleSheet.absoluteFill} testID="tile.content.board" theme={scheme} transport={transport} /> : null}
+      {transport ? (
+        <EmbeddedWhiteboard board={board} canClear={capabilities.canClear} canDraw={!mini && capabilities.canDraw} journeyId={journeyId} onCloseBoard={onClose} onFollow={view.setFollowing} style={StyleSheet.absoluteFill} testID="tile.content.board" theme={scheme} transport={transport} />
+      ) : null}
       {mini ? (
         <>
           <Pressable accessibilityLabel="Show the board in spotlight" accessibilityRole="button" onPress={onShowInSpotlight} style={StyleSheet.absoluteFill} testID="tile.content.open" />
           <NameTag icon="pen" name="Board" testID="tile.content.name" />
         </>
-      ) : (
-        <View accessibilityLiveRegion="polite" accessibilityRole="text" accessible ref={chipRef} style={chipStyle} testID="tile.content.view-only">
-          <Icon color={colors.textMuted} name="lock" size={16} />
-          <ChalkText tone="textSoft" variant="section">
-            View only
-          </ChalkText>
-        </View>
-      )}
+      ) : null}
     </>
   );
 }
@@ -95,6 +119,4 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
 const styles = StyleSheet.create({
   tile: { flex: 1, overflow: "hidden", borderRadius: radii.tilePhone },
   box: { position: "absolute", overflow: "hidden" },
-  // `.vchip`: a 30 pt pill 12 pt in from the board's top-left corner, with a one-pixel ring.
-  viewOnly: { position: "absolute", left: 12, top: 12, height: 30, paddingHorizontal: 12, borderRadius: radii.round, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 6, zIndex: 3 },
 });

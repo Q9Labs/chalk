@@ -41,6 +41,7 @@ await Promise.all([
   cp(join(excalidrawProd, "index.css"), join(outputRoot, "index.css")),
   cp(join(mathJaxRoot, "tex-svg.js"), join(outputRoot, "mathjax", "tex-svg.js")),
   cp(compatibilityManifestPath, join(outputRoot, "compatibility-manifest.json")),
+  cp(join(packageRoot, "../../apps/mobile/assets/fonts/OFL.txt"), join(outputRoot, "licenses", "Figtree.txt")),
   copyWhenPresent(join(mathJaxRoot, "LICENSE"), join(outputRoot, "licenses", "MathJax.txt")),
 ]);
 
@@ -70,9 +71,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 `,
 );
+const callStyles = await readFile(join(packageRoot, "../ui/src/styles/index.css"), "utf8");
+const menuStart = callStyles.indexOf(".chalk-menu {");
+const menuEnd = callStyles.indexOf(".chalk-tooltip {", menuStart);
+if (menuStart < 0 || menuEnd < 0) throw new Error("Chalk menu style source is missing");
+await cp(join(packageRoot, "../../apps/mobile/assets/fonts/Figtree-Regular.ttf"), join(outputRoot, "Figtree-Regular.ttf"));
+await cp(join(packageRoot, "../../apps/mobile/assets/fonts/Figtree-SemiBold.ttf"), join(outputRoot, "Figtree-SemiBold.ttf"));
 await writeFile(
   join(outputRoot, "chalk.css"),
   [
+    "@font-face{font-family:Figtree;src:url('./Figtree-Regular.ttf')}@font-face{font-family:Figtree;src:url('./Figtree-SemiBold.ttf');font-weight:600}",
+    "[data-chalk]{height:100%;width:100%;font-family:Figtree,system-ui,sans-serif;color:var(--chalk-text)}",
+    "[data-chalk] *{box-sizing:border-box}button{font:inherit;color:inherit;background:none;border:0;padding:0}button:disabled{opacity:.35}",
+    menuStart >= 0 ? callStyles.slice(menuStart, menuEnd) : "",
+    ".chalk-menu-positioner{z-index:80}.chalk-popover-positioner{z-index:85}.chalk-menu{position:relative;font-family:Figtree,system-ui,sans-serif;color:var(--chalk-text)}.chalk-menu-item{cursor:pointer;min-height:44px}.chalk-menu-item[data-disabled]{opacity:.35;pointer-events:none}",
     "html,body,#root{height:100%;width:100%;margin:0;overflow:hidden;background:#fff}",
     "#root>div{height:100%;width:100%}",
     ".chalk-whiteboard-loading,.chalk-whiteboard-closed{height:100%;display:flex;align-items:center;justify-content:center;font:600 15px Assistant,system-ui,sans-serif;color:#475569}",

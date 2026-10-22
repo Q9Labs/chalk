@@ -1,3 +1,4 @@
+import type { WhiteboardView } from "../collab/view";
 import type { WhiteboardCommit } from "../collab/wire";
 import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, decodeEmbeddedWhiteboardHostMessage, encodeEmbeddedWhiteboardMessage, type ChalkEmbeddedWhiteboardHostEnvelope, type ChalkEmbeddedWhiteboardRendererMessage } from "./protocol";
 
@@ -67,6 +68,15 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request<WhiteboardCommit>("local_update", input);
   }
 
+  async sendView(view: WhiteboardView): Promise<boolean> {
+    await this.#request<void>("view", view);
+    return true;
+  }
+
+  exportImage(payload: { readonly format: "png"; readonly mimeType: "image/png"; readonly dataURL: string; readonly action: "download" | "copy" }): Promise<void> {
+    return this.#request<void>("user_export", payload);
+  }
+
   requestSnapshot(): Promise<void> {
     return this.#request<void>("request_snapshot", {});
   }
@@ -79,7 +89,7 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request("file_read", { fileId });
   }
 
-  #request<T>(type: "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>): Promise<T> {
+  #request<T>(type: "view" | "user_export" | "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>): Promise<T> {
     const requestId = this.#context.nextMessageId();
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {

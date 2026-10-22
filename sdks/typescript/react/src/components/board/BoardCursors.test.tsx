@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { BoardCursors } from "./BoardCursors";
+import { BoardCursors } from "../../../../../../packages/whiteboard/src/react/board/BoardCursors";
 
 it("does not resurrect an expired retained cursor when the layer remounts", async () => {
   let frame: FrameRequestCallback = () => {};

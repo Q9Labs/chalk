@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
-import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
+import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel } from "./controls";
 import { BoardIcon } from "./BoardIcon";
 import type { WhoCanDraw } from "./board-draw-policy";
 import { DRAW_POLICIES, ISLAND_PLACES, SURFACES, type BoardSurface, type IslandPlace } from "./board-model";
@@ -10,6 +10,7 @@ export type BoardMenuProps = {
   /** Offered outside a phone, to people who can draw. */
   readonly place?: IslandPlace;
   readonly onPlace: (place: IslandPlace) => void;
+  readonly downloadLabel?: string;
   readonly onDownload: () => void;
   readonly onCopy: () => void;
   /** Offered to hosts. */
@@ -100,7 +101,7 @@ function WhoCanDrawSection({ policy, people, onPolicy, onPick }: WhoCanDraw) {
 }
 
 /** The board's own menu: export, the person's own appearance, and the host's board actions. */
-export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCopy, whoCanDraw, onBring, onClear, onClose }: BoardMenuProps) {
+export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCopy, whoCanDraw, onBring, onClear, onClose, downloadLabel = "Download as PNG" }: BoardMenuProps) {
   return (
     <ChalkMenu
       className="chalk-board-menu"
@@ -112,7 +113,7 @@ export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCo
     >
       <ChalkMenuItem onClick={onDownload}>
         <BoardIcon name="download" size={18} />
-        Download as PNG
+        {downloadLabel}
       </ChalkMenuItem>
       <ChalkMenuItem onClick={onCopy}>
         <BoardIcon name="copy" size={18} />
