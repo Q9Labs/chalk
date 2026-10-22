@@ -81,6 +81,7 @@ type Options struct {
 
 	Spaces           SpaceService
 	Episodes         EpisodeLifecycleService
+	ParticipantJoins ParticipantJoinService
 	SyncTokens       SyncTokenIssuer
 	SyncTokenRefresh SyncTokenRefreshIssuer
 

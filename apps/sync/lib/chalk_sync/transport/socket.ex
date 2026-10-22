@@ -273,11 +273,8 @@ defmodule ChalkSync.Transport.SocketV1 do
 
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
-         {:ok, _lifecycle} <-
-           Stateholder.apply_lifecycle_intent(
-             identity.episode,
-             identity.admission_lifecycle_intent_id
-           ),
+         {:ok, %{result: result}} when result in [:applied, :already_applied] <-
+           Stateholder.confirm_admission(identity),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
@@ -295,6 +292,9 @@ defmodule ChalkSync.Transport.SocketV1 do
         collaboration_version
       )
     else
+      {:ok, %{result: :superseded}} ->
+        stop(state, 1008, "policy violation", :admission_rejected)
+
       {:error, :invalid_token} ->
         stop(state, 1008, "invalid token", :admission_rejected)
 

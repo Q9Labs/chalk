@@ -12,6 +12,7 @@ func mountSpaceEpisodeRoutes(r chi.Router, options Options) {
 }
 
 func mountLiveParticipantRoutes(r chi.Router, options Options) {
+	cancelParticipantJoinEndpoint(options.ParticipantJoins, options.ParticipantMediaVerify).Mount(r, options.RateLimit)
 	r.Group(func(r chi.Router) {
 		mountParticipantMediaRoutes(r, options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.RateLimit)
 	})

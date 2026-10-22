@@ -30,6 +30,8 @@ defmodule ChalkSync.Stateholder do
               {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
   @callback apply_lifecycle_intent(EpisodeKey.t(), String.t()) ::
               {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback confirm_admission(Identity.t()) ::
+              {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
   @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
               :ok | {:retryable, atom()}
   @callback pending_lifecycle_intents(pos_integer()) ::
@@ -125,6 +127,19 @@ defmodule ChalkSync.Stateholder do
   def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id) do
     started_at = System.monotonic_time(:microsecond)
     result = impl().apply_lifecycle_intent(episode, lifecycle_intent_id)
+
+    Telemetry.execute(
+      [:lifecycle, :decision],
+      %{duration_us: elapsed_us(started_at)},
+      %{outcome: lifecycle_outcome(result)}
+    )
+
+    result
+  end
+
+  def confirm_admission(%Identity{} = identity) do
+    started_at = System.monotonic_time(:microsecond)
+    result = impl().confirm_admission(identity)
 
     Telemetry.execute(
       [:lifecycle, :decision],
