@@ -12,3 +12,18 @@ reason = "braces 3.0.3 has no fixed release for this deep-nesting stack-exhausti
 id = "GHSA-238p-pmpm-9mq7"
 ignoreUntil = 2026-11-17
 reason = "KaTeX 0.16.47 reaches browser whiteboards through Excalidraw/Mermaid; user-authored diagram math can reach it. The advisory requires separate prototype pollution and unsanitized insertion; Mermaid defaults to strict security and sanitizes rendered math and SVG. Chalk math uses MathJax, not KaTeX. The 0.18.2 bump changes renderer CSS classes (base/strut/sizing) in all seven compatibility samples, so defer this minor upgrade to a Mermaid/whiteboard compatibility change. Re-reviewed 17 Oct 2026: 0.18.2 is still the only fix and the whiteboard compatibility change has not been scheduled. Revisit by this date, if sanitizer/security settings change, or if a prototype-pollution path is found."
+
+[[IgnoredVulns]]
+id = "GHSA-4qx8-w7c3-pj3p"
+ignoreUntil = 2026-11-22
+reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, whose unstable/cli Primitive.fileParse is the sole importer. Chalk never imports effect/unstable/cli or toml, so no Chalk service, SDK or browser bundle parses TOML; the advisories are parser DoS and need attacker-supplied TOML. The fix is toml 5.0.1, a major version effect does not yet accept. Revisit when effect moves to toml 5, or if Chalk starts using effect's CLI or parsing TOML."
+
+[[IgnoredVulns]]
+id = "GHSA-9j65-hcg3-gc64"
+ignoreUntil = 2026-11-22
+reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, whose unstable/cli Primitive.fileParse is the sole importer. Chalk never imports effect/unstable/cli or toml, so no Chalk service, SDK or browser bundle parses TOML; the advisories are parser DoS and need attacker-supplied TOML. The fix is toml 5.0.1, a major version effect does not yet accept. Revisit when effect moves to toml 5, or if Chalk starts using effect's CLI or parsing TOML."
+
+[[IgnoredVulns]]
+id = "GHSA-9qmh-m7c6-f92p"
+ignoreUntil = 2026-11-22
+reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, whose unstable/cli Primitive.fileParse is the sole importer. Chalk never imports effect/unstable/cli or toml, so no Chalk service, SDK or browser bundle parses TOML; the advisories are parser DoS and need attacker-supplied TOML. The fix is toml 5.0.1, a major version effect does not yet accept. Revisit when effect moves to toml 5, or if Chalk starts using effect's CLI or parsing TOML."
