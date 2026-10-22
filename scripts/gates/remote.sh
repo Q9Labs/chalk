@@ -168,7 +168,16 @@ fi
 # Content-addressed deployment never rewrites a helper used by an existing dispatcher.
 helper_hash="$(shasum -a 256 "${script_directory}/remote-queue.py" | cut -d ' ' -f1)"
 remote_helper=".local/share/chalk-remote/helpers/${helper_hash}.py"
-until ssh "${ssh_options[@]}" "${host}" "set -e; mkdir -p .local/share/chalk-remote/helpers; umask 077; trap 'rm -f ${remote_helper}.upload.\$\$' EXIT; cat > ${remote_helper}.upload.\$\$; test \"\$(shasum -a 256 ${remote_helper}.upload.\$\$ | cut -d ' ' -f1)\" = ${helper_hash}; mv ${remote_helper}.upload.\$\$ ${remote_helper}" <"${script_directory}/remote-queue.py"; do
+while :; do
+  if ssh "${ssh_options[@]}" "${host}" "set -e; mkdir -p .local/share/chalk-remote/helpers; umask 077; trap 'rm -f ${remote_helper}.upload.\$\$' EXIT; cat > ${remote_helper}.upload.\$\$; test \"\$(shasum -a 256 ${remote_helper}.upload.\$\$ | cut -d ' ' -f1)\" = ${helper_hash}; mv ${remote_helper}.upload.\$\$ ${remote_helper}" <"${script_directory}/remote-queue.py"; then
+    break
+  else
+    install_status=$?
+    if ((install_status != 255)); then
+      echo "[local] helper installation failed with status ${install_status}; job state stays on the M4" >&2
+      exit "$install_status"
+    fi
+  fi
   echo "[local] connection lost while installing helper; retrying" >&2
   sleep 2
 done

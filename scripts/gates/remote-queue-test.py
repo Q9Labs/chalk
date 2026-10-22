@@ -135,6 +135,20 @@ class QueueTest(unittest.TestCase):
         self.submit('after-restart', 'exit 0')
         self.assertEqual(self.wait('after-restart')['result'], 0)
 
+    def test_crash_reaps_child_in_another_group_and_directory(self):
+        # A timeout wrapper creates a new group; the workload can also change cwd before its shell dies.
+        child = self.root / 'moved-child.py'
+        receipt = self.root / 'moved-pid'
+        child.write_text(f'import os,time,pathlib\nos.setpgrp()\nos.chdir("/")\npathlib.Path({str(receipt)!r}).write_text(str(os.getpid()))\ntime.sleep(8)\n')
+        self.submit('moved', f'python3 "{child}" &\nfor i in {{1..100}}; do test ! -f "{receipt}" || break; sleep .02; done\nkill -KILL $$')
+        self.submit('after-moved')
+        self.lock.close()
+        self.assertEqual(self.wait('moved')['result'], 137)
+        self.assertEqual(self.wait('after-moved')['result'], 0)
+        pid = int(receipt.read_text())
+        state = subprocess.run(['ps', '-p', str(pid), '-o', 'stat='], capture_output=True, text=True).stdout.strip()
+        self.assertTrue(not state or state.startswith('Z'), state)
+
     def test_wait_timeout_and_bad_transfer(self):
         self.submit('expired', 'exit 99', '--wait-seconds', '1')
         time.sleep(1.1)
@@ -143,6 +157,15 @@ class QueueTest(unittest.TestCase):
         bad = subprocess.run([*self.command, 'submit', 'bad'], input=b'incomplete', capture_output=True)
         self.assertNotEqual(bad.returncode, 0)
         self.assertEqual(subprocess.run([*self.command, 'status', 'bad'], capture_output=True).returncode, 4)
+
+    def test_wait_timeout_returns_while_another_job_is_running(self):
+        self.submit('active', 'sleep 3')
+        self.lock.close()
+        self.wait('active', 'running')
+        self.submit('limited', 'exit 99', '--wait-seconds', '1')
+        self.assertEqual(self.wait('limited')['result'], 76)
+        self.assertEqual(self.status('active')['state'], 'running')
+        self.wait('active')
 
     def test_unlimited_wait_and_reaping_keep_idempotence(self):
         ticket = self.submit('old-ticket')

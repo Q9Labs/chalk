@@ -83,8 +83,8 @@ def process_start(pid):
 
 
 def stop_job(job, pid, started):
-    # Descendants may create new process groups or outlive their shell. Exact checkout cwd ownership
-    # also catches these after a dispatcher crash; PID start times guard against reuse.
+    # setpgrp (including with-timeout.sh) changes process group but preserves the job's session.
+    # Session membership survives reparenting and cwd changes; start times protect PID reuse.
     owned = set()
     processes = subprocess.check_output(['ps', '-axo', 'pid=,ppid=,command='], text=True)
     parents = {}
@@ -95,6 +95,13 @@ def stop_job(job, pid, started):
             owned.add(int(p))
     if pid and process_start(pid) == started:
         owned.add(pid)
+    if pid and process_start(pid) in ('', started):
+        for p in parents:
+            try:
+                if os.getsid(p) == pid:
+                    owned.add(p)
+            except ProcessLookupError:
+                pass
     changed = True
     while changed:
         children = {p for p, parent in parents.items() if parent in owned}
@@ -112,6 +119,15 @@ def stop_job(job, pid, started):
                 owned.add(current)
     receipts = {p: process_start(p) for p in owned if p != os.getpid()}
     for sig in (signal.SIGTERM, signal.SIGKILL):
+        if sig == signal.SIGKILL and pid and process_start(pid) in ('', started):
+            # Include children started by a TERM handler after the first process snapshot.
+            for value in subprocess.check_output(['ps', '-axo', 'pid='], text=True).split():
+                p = int(value)
+                try:
+                    if os.getsid(p) == pid:
+                        receipts[p] = process_start(p)
+                except ProcessLookupError:
+                    pass
         for p, start in receipts.items():
             if start and process_start(p) == start:
                 try:
@@ -184,6 +200,12 @@ def reap(root, db):
         # Keep the small tombstone so a run ID can never execute twice.
 
 
+def expire_waiters(root, db):
+    rows = db.execute("SELECT * FROM jobs WHERE state='queued' AND wait_seconds>0 AND submitted+wait_seconds<=?", (time.time(),)).fetchall()
+    for row in rows:
+        finish(root, db, row, 76, 'queue wait limit expired')
+
+
 def daemon(root, db, isolated):
     # Blocking flock makes a wake racing an idle dispatcher's exit take over after it exits.
     with (root / 'dispatcher.lock').open('a') as lock:
@@ -195,16 +217,10 @@ def daemon(root, db, isolated):
                 finish(root, db, row, 137, 'dispatcher restarted; interrupted job reaped')
             reap(root, db)
             while True:
-                now = time.time()
-                rows = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket").fetchall()
-                if not rows:
-                    return
-                for row in rows:
-                    if row['wait_seconds'] and now - row['submitted'] >= row['wait_seconds']:
-                        finish(root, db, row, 76, 'queue wait limit expired')
+                expire_waiters(root, db)
                 row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
                 if row is None:
-                    continue
+                    return
                 if not admission(isolated):
                     time.sleep(2)
                     continue
@@ -237,7 +253,12 @@ def daemon(root, db, isolated):
                                        (child.pid, started, row['id']))
                         child.stdin.write(b'run\n')
                         child.stdin.close()
-                        result = child.wait()
+                        while True:
+                            try:
+                                result = child.wait(timeout=0.5)
+                                break
+                            except subprocess.TimeoutExpired:
+                                expire_waiters(root, db)
                     stop_job(job, child.pid, started)
                     finish(root, db, row, result if result >= 0 else 128 - result, 'job finished; checkout cleaned')
                 except Exception as error:

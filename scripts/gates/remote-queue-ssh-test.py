@@ -82,6 +82,8 @@ try:
         marker = local / 'dropped-once'
         wrapper.write_text('#!/usr/bin/env python3\nimport os,pathlib,sys\n'
                            f'p=pathlib.Path({str(marker)!r})\n'
+                           'if os.environ.get("CHALK_TEST_INSTALL_FAILURE") and ".upload." in sys.argv[-1]:\n'
+                           ' sys.exit(73)\n'
                            'if " read " in sys.argv[-1] and not p.exists():\n'
                            ' p.touch(); print("PARTIAL_FAILED_READ"); sys.exit(255)\n'
                            'os.execv("/usr/bin/ssh", ["ssh", *sys.argv[1:]])\n')
@@ -89,6 +91,9 @@ try:
         environment = {**os.environ, 'PATH': str(local) + ':' + os.environ['PATH'],
                        'CHALK_REMOTE_HOST': host, 'CHALK_REMOTE_REPO': str(source.parent.parent),
                        'CHALK_REMOTE_LOG_DIR': str(local / 'logs')}
+        failed = subprocess.run(['bash', str(scripts / 'remote.sh'), '--attach', 'queued'],
+                                env={**environment, 'CHALK_TEST_INSTALL_FAILURE': '1'}, capture_output=True, text=True, timeout=5)
+        assert failed.returncode == 73 and 'installation failed' in failed.stderr, failed.stdout + failed.stderr
         attached = subprocess.run(['bash', str(scripts / 'remote.sh'), '--attach', 'queued'],
                                   env=environment, capture_output=True, text=True, timeout=30)
         assert attached.returncode == 23, attached.stdout + attached.stderr
