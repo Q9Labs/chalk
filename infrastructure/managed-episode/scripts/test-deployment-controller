@@ -181,6 +181,13 @@ set -euo pipefail
 printf 'podman %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 state="${FAKE_SECRET_STATE:?}"
 case "${1:-} ${2:-}" in
+  "image prune")
+    [[ "$*" == 'image prune --all --force' ]]
+    if [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" == true ]]; then
+      printf 'test-only image storage permission denied\n' >&2
+      exit 125
+    fi
+    ;;
   "login --username")
     [[ "${3:-}" == AWS && "${4:-}" == --password-stdin && "${5:-}" =~ ^[0-9]{12}\.dkr\.ecr\.ap-southeast-1\.amazonaws\.com$ ]]
     [[ "$(cat)" == test-only-registry-password ]]
@@ -599,6 +606,9 @@ make_request stable "${fixture_root}/request.json"
 : >"${fixture_root}/secret-state"
 : >"${fixture_root}/aws.log"
 run_controller "$stable_state" "${fixture_root}/request.json" "$manifest" ok >/dev/null
+prune_line="$(grep -nFx 'podman image prune --all --force' "${fixture_root}/commands.log" | cut -d: -f1)"
+pull_line="$(grep -n '^podman pull ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+[[ -n "$prune_line" && "$prune_line" -lt "$pull_line" ]] || fail "unused images were not cleaned before pulling the release"
 for alert_unit in chalk-alert-state.service chalk-alert-state.timer; do
   grep -Fxq 'alert unit preservation sentinel' "${fixture_root}/systemd/${alert_unit}" || fail "managed deployment replaced ${alert_unit}"
 done
@@ -636,6 +646,15 @@ grep -Fq 'podman login --username AWS --password-stdin 123456789012.dkr.ecr.ap-s
 if grep -Eq 'test-only-secret-bytes|test-only-registry-password' "${fixture_root}/commands.log"; then
   fail "secret bytes were written to the command log"
 fi
+
+make_request prune-failure "${fixture_root}/prune-failure-request.json"
+make_manifest prune-failure >"${fixture_root}/prune-failure-manifest.json"
+: >"${fixture_root}/commands.log"
+FAKE_IMAGE_PRUNE_FAILURE=true expect_failure run_controller "$stable_state" "${fixture_root}/prune-failure-request.json" "${fixture_root}/prune-failure-manifest.json" ok
+grep -Fq 'test-only image storage permission denied' "${fixture_root}/expected-failure.log" || fail "cleanup failure lost its storage diagnostic"
+! grep -q '^podman pull ' "${fixture_root}/commands.log" || fail "a release image was pulled after cleanup failed"
+! grep -q '^systemctl --user stop ' "${fixture_root}/commands.log" || fail "running services were stopped after cleanup failed"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "cleanup failure changed the active release"
 
 runtime_only_state="${fixture_root}/runtime-only-state"
 mkdir -p "$runtime_only_state"

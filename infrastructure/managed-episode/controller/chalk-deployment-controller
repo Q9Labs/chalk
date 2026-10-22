@@ -868,6 +868,11 @@ pull_images() {
   jq -e --arg architecture "linux/${host_architecture}" '.architectures | index($architecture) != null' "$manifest_path" >/dev/null || fail "release manifest does not support the host architecture"
   authenticate_ecr_registries
 
+  if ! run_user_podman image prune --all --force >"${stage_root}/image-prune.log" 2>&1; then
+    tail -n 20 "${stage_root}/image-prune.log" >&2
+    fail "unused image cache cleanup failed before runtime cutover"
+  fi
+
   local image image_architecture
   while IFS= read -r image; do
     [[ "$image" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]] || fail "manifest image is not digest-addressed"

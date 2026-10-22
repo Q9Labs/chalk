@@ -266,6 +266,12 @@ The controller runs this validator against its private `/run` stage. It removes
 the transient secret inputs after Podman registration, so they are not kept in
 the promoted release directory.
 
+Before pulling release images, the controller removes unused rootless Podman
+images under the deployment lock. Images referenced by running or stopped
+containers remain; volumes, recordings, and database data are never pruned.
+Cleanup must succeed before runtime cutover. A later rollback may need to
+download its digest-pinned images again from the registry.
+
 The host-side `chalk-runtime-watchdog` checks user-unit activity, local API and
 Sync readiness, cloudflared's `/ready` endpoint, release-manifest integrity,
 disk pressure, and memory pressure every 15 seconds. A failed oneshot unit is
