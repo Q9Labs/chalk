@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -80,4 +81,21 @@ test("fails closed, records the failed step, and stops the plan", (context) => {
   const manifest = JSON.parse(readFileSync(path.join(result.runDirectory, "manifest.json"), "utf8"));
   assert.equal(manifest.steps[0].exit_code, 7);
   assert.deepEqual(manifest.reproducer, ["apps/sync/scripts/reliability-harness", "topology"]);
+});
+
+test("strict Sync tests stopped with TERM exit 143 even when mix exits 0 on TERM", async (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "chalk-test-strict-signal-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const ready = path.join(root, "ready");
+  // The BEAM shuts down cleanly with status 0 when it gets TERM.
+  writeFileSync(path.join(root, "mix"), "#!/bin/bash\ntrap 'exit 0' TERM\ntouch \"$TEST_READY\"\nsleep 10 &\nwait\n", { mode: 0o755 });
+  const child = spawn("bash", [path.join(import.meta.dirname, "test-strict")], {
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env, PATH: `${root}:${process.env.PATH}`, TEST_READY: ready },
+  });
+  const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
+  while (!existsSync(ready)) await new Promise((resolve) => setTimeout(resolve, 20));
+  process.kill(-child.pid, "SIGTERM");
+  assert.deepEqual(await exited, { code: 143, signal: null });
 });

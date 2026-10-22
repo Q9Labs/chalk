@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -43,3 +43,29 @@ esac
     }
   });
 }
+
+test("a gate stopped with TERM exits 143 even when its command exits 0 on TERM", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "chalk-postgres-signal-"));
+  const write = (file, source) => writeFileSync(path.join(root, file), source, { mode: 0o755 });
+  try {
+    for (const directory of ["scripts/gates", "apps/api/scripts", "bin"]) mkdirSync(path.join(root, directory), { recursive: true });
+    copyFileSync(new URL("./with-postgres.sh", import.meta.url), path.join(root, "scripts/gates/with-postgres.sh"));
+    write("bin/docker", `#!/bin/bash\ncase "$1" in port) printf '127.0.0.1:%s\\n' "$PPID" ;; esac\n`);
+    write("apps/api/scripts/db-migrate.sh", "#!/bin/bash\nexit 0\n");
+    // Like the BEAM, this command shuts down cleanly with status 0 when it gets TERM.
+    write("gate.sh", "#!/bin/bash\ntrap 'exit 0' TERM\ntouch \"$TEST_READY\"\nsleep 10 &\nwait\n");
+    const ready = path.join(root, "ready");
+    const child = spawn("bash", ["scripts/gates/with-postgres.sh", "--", "./gate.sh"], {
+      cwd: root,
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, TEST_READY: ready },
+    });
+    const exited = new Promise((resolve) => child.on("exit", (code, signal) => resolve({ code, signal })));
+    while (!existsSync(ready)) await new Promise((resolve) => setTimeout(resolve, 20));
+    process.kill(-child.pid, "SIGTERM");
+    assert.deepEqual(await exited, { code: 143, signal: null });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

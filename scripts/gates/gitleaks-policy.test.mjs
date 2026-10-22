@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+// Built at runtime so this file holds no credential-shaped literal.
+const leakedToken = ["ghp", "_", "R8x2Kq7Lm4Nv9Pz3Tb6Wc1Yd5Hf0Js8Ga2E"].join("");
+
+for (const file of ["apps/api/internal/httpapi/leak_test.go", "apps/web/src/leak.test.ts", "apps/web/src/leak.test.tsx", "apps/docs/src/content/docs/api/authentication.mdx", "packages/client/dist/index.js"]) {
+  test(`the secret scan catches a real token in ${file}`, (context) => {
+    const root = mkdtempSync(path.join(tmpdir(), "chalk-gitleaks-policy-"));
+    context.after(() => rmSync(root, { recursive: true, force: true }));
+    mkdirSync(path.join(root, "scripts/gates"), { recursive: true });
+    mkdirSync(path.join(root, path.dirname(file)), { recursive: true });
+    copyFileSync(new URL("./gitleaks.sh", import.meta.url), path.join(root, "scripts/gates/gitleaks.sh"));
+    copyFileSync(new URL("../../.gitleaks.toml", import.meta.url), path.join(root, ".gitleaks.toml"));
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    spawnSync("git", ["-c", "user.name=Gate", "-c", "user.email=gate@example.invalid", "commit", "-q", "--allow-empty", "-m", "empty"], { cwd: root });
+    writeFileSync(path.join(root, file), `const token = "${leakedToken}";\n`);
+    const result = spawnSync("bash", ["scripts/gates/gitleaks.sh"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, GATE_EXPLICIT_FILES: file, GITLEAKS_LOG_OPTS: "-1 HEAD", GATE_SCOPE: "" },
+    });
+    assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout + result.stderr, /leaks found: 1/);
+  });
+}

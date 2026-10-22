@@ -5,12 +5,8 @@ title = "Chalk gitleaks policy"
 useDefault = true
 
 [[allowlists]]
-description = "Local mobile/app credentials and generated artifacts are not part of the public gate surface."
-paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.properties$''', '''^apps/mobile/ios/Pods/''', '''^apps/web/\.dev\.vars$''', '''^packages/.*/dist/''']
-
-[[allowlists]]
-description = "Checked-in tests and API docs use obvious placeholder credentials."
-paths = ['''^apps/docs/src/content/docs/api/authentication\.mdx$''', '''_test\.go$''', '''\.test\.ts$''', '''\.test\.tsx$''']
+description = "Local mobile and app credentials are ignored files, not part of the public gate surface."
+paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.properties$''', '''^apps/mobile/ios/Pods/''', '''^apps/web/\.dev\.vars$''']
 
 # The following exceptions match whole lines and name no path, because `gitleaks dir` skips every file
 # that an allowlist path matches, even when the allowlist also needs a line match. gitleaks starts each
@@ -19,6 +15,16 @@ paths = ['''^apps/docs/src/content/docs/api/authentication\.mdx$''', '''_test\.g
 description = "The Space page test helpers use one placeholder capability token."
 regexTarget = "line"
 regexes = ['''^\s*export const spacePageTestToken = "cspi1\.test-capability";$''']
+
+[[allowlists]]
+description = "Postgres integration tests use a fixture object key and a fixture idempotency key."
+regexTarget = "line"
+regexes = ['''^\s*key := "tenants/fixture/recordings/" \+ fixture\.recordingID\.String\(\) \+ "/capture/1/bundles/0"$''', '''IdempotencyKey: "disable-fence-0001"''']
+
+[[allowlists]]
+description = "The invalid-invite Space test uses one placeholder invitation URL."
+regexTarget = "line"
+regexes = ['''^\s*window\.history\.replaceState\(\{\}, "", "/space/design-lab#spaceInviteToken=cspi1\.unavailable-fixture"\);$''']
 
 [[allowlists]]
 description = "The public Space journey uses one placeholder invitation URL."

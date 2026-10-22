@@ -7,7 +7,9 @@ output="$(mktemp "${TMPDIR:-/tmp}/chalk-sync-test-output.XXXXXX")"
 cleanup() {
   rm -f "${output}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 set +e
 mix test "$@" 2>&1 | tee "${output}"
