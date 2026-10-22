@@ -8,8 +8,10 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(scriptDir, "../public");
 const blankHtml = '<!doctype html><html><head><meta charset="utf-8" /></head><body></body></html>\n';
 
+// Rewriting an unchanged HTML file makes every running Vite server reload its open pages.
 function writePublicFile(relativePath: string, contents: string) {
   const outputPath = resolve(publicDir, relativePath);
+  if (existsSync(outputPath) && readFileSync(outputPath, "utf8") === contents) return;
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, contents);
 }
