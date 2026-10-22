@@ -307,6 +307,9 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:push, {:text, encode_with_context(state, ProtocolV1.entered_ack())},
          %{state | entry_timer: nil}}
 
+      {:ok, %{result: :superseded, reason: :entry_expired}} ->
+        stop(state, 1008, "entry timeout", :entry_timeout)
+
       {:ok, %{result: :superseded}} ->
         stop(state, 1008, "policy violation", :admission_rejected)
 
@@ -904,6 +907,9 @@ defmodule ChalkSync.Transport.SocketV1 do
 
       {:error, :invalid_admission_intent} ->
         stop(state, 1008, "policy violation", :admission_rejected)
+
+      {:error, :entry_expired} ->
+        stop(state, 1008, "entry timeout", :entry_timeout)
 
       {:error, reason} ->
         Logger.warning("sync v1 hello failed: reason=#{reason}")

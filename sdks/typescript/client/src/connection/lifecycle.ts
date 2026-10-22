@@ -804,7 +804,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         if (snapshot.connection.phase === "idle" || snapshot.connection.phase === "stopped") return Effect.succeed(true);
         if (snapshot.connection.phase !== "terminal") return Effect.succeed(false);
         const failure = syncTerminalFailure(snapshot);
-        return failure.recoverable ? Effect.succeed(true) : Effect.fail(failure);
+        return syncAutoRecoverable(snapshot, failure) ? Effect.succeed(true) : Effect.fail(failure);
       };
       const recoverSync = (attempt: SyncRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
@@ -887,7 +887,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           if (snapshot.connection.phase !== "terminal") return false;
           const failure = syncTerminalFailure(snapshot);
-          if (failure.recoverable) return false;
+          if (syncAutoRecoverable(snapshot, failure)) return false;
           yield* failForSnapshot(failure);
           return true;
         });
@@ -1237,6 +1237,7 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
   if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
   if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "entry_timeout") return lifecycleFailure("sync_start_failed", true, "Call entry was not confirmed in time");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
 }
 
@@ -1244,4 +1245,9 @@ function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFai
   const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
   const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
   return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
+}
+
+// The expired seat cannot reconnect with the same grant; only a new admission can retry it.
+function syncAutoRecoverable(snapshot: V1EpisodeSnapshot, failure: ConnectionLifecycleFailure): boolean {
+  return failure.recoverable && snapshot.connection.terminalReason !== "entry_timeout";
 }

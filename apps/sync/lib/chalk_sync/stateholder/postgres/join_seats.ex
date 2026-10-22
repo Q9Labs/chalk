@@ -16,10 +16,27 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       Postgrex.rollback(connection, {:error, :stale_participant_generation})
     end
 
-    if intent.name == "participant_joined" and intent.status == "pending" do
-      prepare_pending(connection, episode, intent, identity)
-    else
-      :ok
+    cond do
+      intent.name != "participant_joined" -> :ok
+      intent.status == "pending" -> prepare_pending(connection, episode, intent, identity)
+      identity && intent.status == "superseded" -> reaped_seat(connection, episode, intent)
+      true -> :ok
+    end
+  end
+
+  # The lifecycle consumer may already have expired this generation's lease.
+  defp reaped_seat(connection, episode, intent) do
+    case Postgrex.query!(
+           connection,
+           """
+           select state from participant_join_seats
+           where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
+           """,
+           Scope.episode(episode) ++
+             [UUID.dump!(intent.participant_id), intent.participant_generation]
+         ).rows do
+      [["expired"]] -> :entry_expired
+      _ -> :ok
     end
   end
 
@@ -36,6 +53,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
            params
          ).rows do
       [[state]] when state in ["legacy", "joined"] -> :ok
+      [["expired"]] when not is_nil(identity) -> :entry_expired
       [[state]] when state in ["cancelled", "expired", "left"] -> :expired
       [["pending"]] -> Postgrex.rollback(connection, {:retryable, :admission_pending})
       _ -> Postgrex.rollback(connection, {:error, :invalid_admission_intent})

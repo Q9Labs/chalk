@@ -91,7 +91,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
         validate_admission_intent(connection, identity, status)
 
       [[_generation, _status]] ->
-        {:terminal, :participant_inactive}
+        expired_entry(connection, identity)
 
       [] ->
         {:terminal, :participant_inactive}
@@ -111,8 +111,22 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     case Postgrex.query!(connection, SQL.read_admission_intent(), params).rows do
       [["applied", _state, _valid]] when status == "active" -> :ok
       [["pending", "pending", true]] when status == "joining" -> :ok
+      [["pending", "pending", false]] when status == "joining" -> {:error, :entry_expired}
       [["pending", nil, nil]] when status == "joining" -> :ok
       _ -> {:error, :invalid_admission_intent}
+    end
+  end
+
+  # A lease that ran out before entry is a timeout, not a departure or rejection.
+  defp expired_entry(_connection, %Identity{admission_lifecycle_intent_id: nil}),
+    do: {:terminal, :participant_inactive}
+
+  defp expired_entry(connection, identity) do
+    params = Scope.participant(identity) ++ [Scope.uuid(identity.admission_lifecycle_intent_id)]
+
+    case Postgrex.query!(connection, SQL.read_admission_intent(), params).rows do
+      [["superseded", "expired", _valid]] -> {:error, :entry_expired}
+      _ -> {:terminal, :participant_inactive}
     end
   end
 

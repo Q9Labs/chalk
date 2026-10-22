@@ -86,14 +86,22 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
     prepared = JoinSeats.prepare(connection, episode, intent, identity)
 
     intent =
-      if prepared == :expired,
+      if prepared in [:expired, :entry_expired],
         do: lock_intent(connection, episode, lifecycle_intent_id),
         else: intent
 
-    case intent.status do
-      "applied" -> lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
-      "superseded" -> superseded_lifecycle_decision(lifecycle_intent_id, intent)
-      "pending" -> apply_pending_lifecycle(connection, episode, control, intent)
+    case {intent.status, prepared} do
+      {"applied", _prepared} ->
+        lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
+
+      {"superseded", :entry_expired} ->
+        %{superseded_lifecycle_decision(lifecycle_intent_id, intent) | reason: :entry_expired}
+
+      {"superseded", _prepared} ->
+        superseded_lifecycle_decision(lifecycle_intent_id, intent)
+
+      {"pending", _prepared} ->
+        apply_pending_lifecycle(connection, episode, control, intent)
     end
   end
 

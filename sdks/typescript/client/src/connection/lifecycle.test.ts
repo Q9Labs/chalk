@@ -447,15 +447,26 @@ it("confirms entry only after Sync is live and SFU startup has completed", async
   );
 });
 
-it("keeps a late entry timeout retryable instead of reporting invalid access", async () => {
+it("fails a late entry timeout as retryable without reconnecting the expired seat", async () => {
   const platform = createCoreTestPlatform();
-  const layer = admissionLayer({ access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)), dependencies: platform.dependencies });
+  let syncClients = 0;
+  const layer = admissionLayer({
+    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+    dependencies: {
+      ...platform.dependencies,
+      createSyncClient: () => {
+        syncClients += 1;
+        return platform.sync;
+      },
+    },
+  });
   await exerciseAdmission(layer, (lifecycle) =>
     Effect.gen(function* () {
       yield* lifecycle.join();
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "entry_timeout" } });
       yield* Effect.sleep("20 millis");
-      expect(lifecycle.getSnapshot().failure?.code).not.toBe("invalid_access");
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "sync_start_failed", recoverable: true } });
+      expect(syncClients).toBe(1);
     }),
   );
 });

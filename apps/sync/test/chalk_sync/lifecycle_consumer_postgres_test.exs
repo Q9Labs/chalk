@@ -240,6 +240,95 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert [["left", "expired", false]] = entry_row(connection, fixture)
   end
 
+  for {case_name, reaped, close_reason, seat_state} <- [
+        {"an expired lease", false, "entry timeout", "expired"},
+        {"a lease the consumer already expired", true, "entry timeout", "expired"},
+        {"a cancelled seat", nil, "policy violation", "cancelled"}
+      ] do
+    @case_name case_name
+    @reaped reaped
+    @close_reason close_reason
+    @seat_state seat_state
+    @tag :entered_admission
+    test "entered after recovery on #{@case_name} closes with #{@close_reason}", %{
+      connections: connections,
+      port: port
+    } do
+      connection = hd(connections)
+      fixture = managed_pending_join(connection)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+      {:ok, client} = Client.connect(port, "/v1/sync")
+      on_exit(fn -> Client.close_tcp(client) end)
+      client = Client.send_json(client, hello(fixture.identity))
+      assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+      client = Client.acknowledge_recovery(client, welcome)
+      assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+      assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
+      assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
+
+      if is_nil(@reaped) do
+        assert [["cancelled"]] = seat_transition(connection, fixture, "cancel")
+      else
+        Postgrex.query!(
+          connection,
+          "update participant_join_seats set expires_at=now()-interval '1 second' where participant_id=$1",
+          [UUID.dump!(fixture.identity.participant_id)]
+        )
+
+        if @reaped, do: assert([["expired"]] = seat_transition(connection, fixture, "expire"))
+      end
+
+      client = Client.send_json(client, %{"type" => "entered"})
+      assert {:closed, 1008, @close_reason, _client} = Client.recv(client)
+      assert [["left", @seat_state, false]] = entry_row(connection, fixture)
+    end
+  end
+
+  for reaped <- [false, true] do
+    @reaped reaped
+    @tag :entered_admission
+    test "reconnecting after the lease expired before entry closes as entry timeout (reaped: #{@reaped})",
+         %{connections: connections, port: port} do
+      connection = hd(connections)
+      fixture = managed_pending_join(connection)
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+      Postgrex.query!(
+        connection,
+        "update participant_join_seats set expires_at=now()-interval '1 second' where participant_id=$1",
+        [UUID.dump!(fixture.identity.participant_id)]
+      )
+
+      if @reaped, do: assert([["expired"]] = seat_transition(connection, fixture, "expire"))
+      {:ok, client} = Client.connect(port, "/v1/sync")
+      on_exit(fn -> Client.close_tcp(client) end)
+      client = Client.send_json(client, hello(fixture.identity))
+      assert {:closed, 1008, "entry timeout", _client} = Client.recv(client)
+    end
+  end
+
+  @tag :entered_admission
+  test "entered from a retried seat's previous generation closes as rejected access", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    on_exit(fn -> Client.close_tcp(client) end)
+    client = Client.send_json(client, hello(fixture.identity))
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
+    assert [["pending"]] = seat_transition(connection, fixture, "retry")
+    client = Client.send_json(client, %{"type" => "entered"})
+    assert {:closed, 1008, "invalid token", _client} = Client.recv(client)
+    assert [["joining", "pending", false]] = entry_row(connection, fixture)
+  end
+
   @tag :entered_admission
   test "hello is cancellable after Sync recovery without attendance, entered confirms exactly once",
        %{connections: connections, port: port} do
