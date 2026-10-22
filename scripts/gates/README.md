@@ -28,15 +28,17 @@ consumer workspaces whose tests drive Chromium), `call-performance` (call bundle
 budgets), `call-leaks` (call resource cleanup journeys), and
 `build` (with Publint and Are The Types Wrong, which read the build output).
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
-keeps its own selection inside the group. `Root gate` passes only when the
-planner and every selected group passed; a job that the planner skips counts as
-passed. Pushes to `master`, the nightly run, and manual runs select every job and
+keeps its own selection inside the group. `Root gate` passes only when every
+selected group passed; a job that the planner skips counts as passed. When the
+planner cannot select jobs, for example because the base does not resolve, or
+`Select gate jobs` fails, every job runs and every lane runs with `--full`. Pushes to `master`, the nightly run, and manual runs select every job and
 run every lane with `--full`, so anything a pull request skips still runs once it merges, and
 every master commit keeps its own run. A full run scans staged files and commits
 for secrets: the pushed range on a push to `master`, otherwise the commits since
 the base, or the last commit.
 
-On a pull request, the workflow sets `GATE_VULN_BASE_REF` to the base branch.
+On a pull request that the planner narrowed, the workflow sets
+`GATE_VULN_BASE_REF` to the base branch.
 When OSV-Scanner (`osv` lane) or govulncheck (API gate) finds a vulnerability,
 `osv-scanner.sh` and `govulncheck.sh` run the same scan on the merge base, and
 `new-vulnerabilities.mjs` fails the pull request only for a finding the base
@@ -108,6 +110,8 @@ shipment target from branch, release mode, or directory.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.
+- `infrastructure/managed-episode` and `infrastructure/nightly` run the API,
+  Sync and recorder gates, whose tests read them.
   The full mode selects every rule. Separate nightly and release-candidate
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.

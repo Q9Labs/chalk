@@ -1,0 +1,8 @@
+# Mobile CI compares this fingerprint to decide whether to compile both native apps. The React Native SDK is
+# autolinked from its package root, so Expo hashes the whole package. Its TypeScript and built JavaScript reach the
+# app only through the Metro bundle, which the gate's build lane exports for iOS and Android. Its native code,
+# podspec, package.json and embedded whiteboard assets stay in the fingerprint.
+../../sdks/typescript/react-native/dist/**/*
+../../sdks/typescript/react-native/src/**/*
+../../sdks/typescript/react-native/test/**/*
+../../sdks/typescript/react-native/tsconfig.tsbuildinfo
