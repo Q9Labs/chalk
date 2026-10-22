@@ -1,4 +1,3 @@
-import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { BottomSheet, ChalkText, PillButton } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useState, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
@@ -35,7 +34,6 @@ export function JoinSheet({ open, onClose, onJoin, returnFocusRef }: JoinSheetPr
   return (
     <BottomSheet accessibilityLabel="Join with a link" onClose={onClose} open={open} returnFocusRef={returnFocusRef} testID="sheet.join" title="Join with a link">
       <View style={styles.form}>
-        <PrivacyNotice />
         <ChalkText variant="button">Call link</ChalkText>
         <View style={styles.row}>
           <TextField accessibilityLabel="Call link" autoCapitalize="none" autoComplete="off" autoCorrect={false} enterKeyHint="go" invalid={invalid} keyboardType="url" onChangeText={change} onSubmitEditing={join} placeholder="chalkmeet.com/…" size="sheet" testID="join.link" value={link} />

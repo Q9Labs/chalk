@@ -3,13 +3,14 @@ import { PRIVACY_EFFECTIVE_DATE, PRIVACY_NOTICE_TEXT, PRIVACY_NOTICE_LINK_TEXT, 
 
 export function PrivacyNotice() {
   const [revision, setRevision] = useState(0);
-  const pending = Date.now() < Date.parse(PRIVACY_EFFECTIVE_DATE);
+  const [pending, setPending] = useState(false);
   useEffect(() => {
-    if (!pending) return;
     const remaining = Date.parse(PRIVACY_EFFECTIVE_DATE) - Date.now();
+    setPending(remaining > 0);
+    if (remaining <= 0) return;
     const timer = setTimeout(() => setRevision((current) => current + 1), Math.min(Math.max(remaining, 0), 2_147_483_647));
     return () => clearTimeout(timer);
-  }, [pending, revision]);
+  }, [revision]);
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     try {

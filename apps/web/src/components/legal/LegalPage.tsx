@@ -33,7 +33,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "International transfers",
     content:
-      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Google relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
+      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Google relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Apple describes EU Standard Contractual Clauses for international transfers of EEA personal data in its Privacy Policy. jsDelivr is operated by Volentio JSD Limited in the UK and uses global CDN providers; jsDelivr and esm.sh can process asset-request data internationally under their own terms. External content hosts and sign-in providers also apply their own privacy terms to their services. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
   },
   {
     heading: "Children",
@@ -207,25 +207,51 @@ function PrivacyPolicy() {
       <p>We use these service providers and third-party services to run Chalk:</p>
       <ul>
         <li>
-          <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI can perform speech-to-text when enabled in the transcription configuration.
+          <strong>Cloudflare</strong> hosts the web app, routes API and asset traffic (including assets.chalkmeet.com), receives connection metadata such as IP addresses and user agents, carries real-time audio and video and screen sharing (Realtime SFU and STUN), and stores uploaded files,
+          whiteboards, recordings, and transcripts (R2). Cloudflare Workers AI can perform speech-to-text when enabled in the transcription configuration.
         </li>
         <li>
-          <strong>Amazon Web Services</strong> hosts our API and real-time application services, runs the transcription pipeline (processing, job scheduling, secret storage, and logs) and provides recording encryption key management.
+          <strong>Amazon Web Services</strong> hosts our API and real-time application services, processes the account, participation, and collaboration data handled by those services, runs the transcription pipeline (audio processing, job scheduling, secret storage, and logs), and provides
+          recording encryption key management.
         </li>
         <li>
-          <strong>PlanetScale</strong> stores account and collaboration records in PostgreSQL.
+          <strong>PlanetScale</strong> stores account and collaboration records in PostgreSQL, including account email addresses, display names, membership and participation records, chat, and whiteboard metadata.
         </li>
         <li>
-          <strong>DeepInfra</strong> performs speech-to-text when enabled in the transcription configuration.
+          <strong>DeepInfra</strong> receives audio chunks and returns transcript text to perform speech-to-text when enabled in the transcription configuration.
         </li>
         <li>
-          <strong>DigitalOcean</strong> runs recording workers when recording is enabled.
+          <strong>DigitalOcean</strong> runs recording workers that process call audio, video, screen sharing, and recording metadata when recording is enabled.
         </li>
         <li>
-          <strong>Axiom</strong> receives API request logs and Sync diagnostic traces to help us run and secure the service.
+          <strong>Axiom</strong> receives API request logs and Sync diagnostic traces, including request paths, outcomes, timing, and journey and trace identifiers, to help us run and secure the service.
         </li>
         <li>
           <strong>Discord</strong> receives operational alerts that may include a tenant's display name.
+        </li>
+        <li>
+          <strong>Google sign-in</strong> lets you authenticate your dashboard account. If you choose it, your browser contacts accounts.google.com and our server exchanges an authorization code with oauth2.googleapis.com and verifies Google's keys from www.googleapis.com. Google receives the
+          sign-in request, Chalk's application identifier and callback URL, security state and nonce, and your browser's IP address and user agent. Google returns the account identity you authorize, including name, email address, and an optional profile picture. Google's own{" "}
+          <a href="https://policies.google.com/privacy">Privacy Policy</a> governs its sign-in service.
+        </li>
+        <li>
+          <strong>Apple sign-in</strong> lets you authenticate your dashboard account. If you choose it, your browser and our server contact appleid.apple.com for sign-in, an authorization code exchange, and key verification. Apple receives the sign-in request, Chalk's application identifier and
+          callback URL, security state and nonce, and your browser's IP address and user agent. Apple returns the account identity you authorize, including name and email address, which can be an Apple relay address. Apple's own <a href="https://www.apple.com/legal/privacy/">Privacy Policy</a>{" "}
+          governs its sign-in service.
+        </li>
+        <li>
+          <strong>jsDelivr</strong> (Volentio JSD Limited) supplies Excalidraw styles and MathJax scripts and font data through cdn.jsdelivr.net for web calls and whiteboards. Your browser contacts it directly, including when the call UI preloads whiteboard styles. It and its CDN providers
+          (Cloudflare, Fastly, and Gcore) receive your IP address, user agent, requested asset URL, request time, and any referrer your browser sends. These requests load library assets; Chalk does not send your call audio, chat, or whiteboard text as part of the asset request. See jsDelivr's{" "}
+          <a href="https://www.jsdelivr.com/terms/privacy-policy">Privacy Policy</a> and <a href="https://github.com/jsdelivr/jsdelivr/blob/master/Sub-Processors.md">CDN provider list</a>.
+        </li>
+        <li>
+          <strong>esm.sh</strong> supplies whiteboard fonts through Excalidraw's external asset loader or fallback in the web app. The CDN receives your IP address, user agent, request URL, and any referrer your browser sends to deliver those font files. The mobile app bundles its whiteboard fonts
+          and scripts locally and blocks external whiteboard network requests.
+        </li>
+        <li>
+          <strong>External whiteboard content.</strong> If you add or open an external embed or link in a web whiteboard, its host can receive your IP address, user agent, requested URL, and any referrer your browser sends. Excalidraw supports hosts including YouTube (Google), Vimeo, Figma, GitHub
+          Gist, X/Twitter, Reddit, Giphy, SimplePDF, StackBlitz, Val Town, and Excalidraw's link service. Those hosts use this data to serve the content you selected under their own privacy terms. This is separate from Chalk's call-media processing; the mobile whiteboard blocks external embeds and
+          network requests.
         </li>
         <li>
           <strong>Google Fonts</strong> supplies the web app's fonts through fonts.googleapis.com and fonts.gstatic.com. Your browser requests these files directly from Google, which receives your IP address and user agent. Google handles this request data under its{" "}

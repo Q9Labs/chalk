@@ -6,7 +6,7 @@ import { MOBILE_PRIVACY_EFFECTIVE_DATE, MOBILE_PRIVACY_NOTICE_LINK_TEXT, MOBILE_
 
 const dismissalKey = `chalk:privacy-notice:${MOBILE_PRIVACY_EFFECTIVE_DATE}`;
 
-export function PrivacyNotice(): React.JSX.Element | null {
+export function PrivacyNotice({ topInset = 0 }: { readonly topInset?: number } = {}): React.JSX.Element | null {
   const [revision, setRevision] = useState(0);
   const pending = Date.now() < Date.parse(MOBILE_PRIVACY_EFFECTIVE_DATE);
   useEffect(() => {
@@ -40,7 +40,7 @@ export function PrivacyNotice(): React.JSX.Element | null {
   }
   if (!pending || dismissed) return null;
   return (
-    <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: colors.line }]} testID="privacy.notice">
+    <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: topInset + 8 }]} testID="privacy.notice">
       <ChalkText style={styles.text} variant="meta">
         {MOBILE_PRIVACY_NOTICE_TEXT}{" "}
         <ChalkText

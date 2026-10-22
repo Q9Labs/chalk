@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
 import { LegalPage } from "./LegalPage";
 import { PRIVACY_EFFECTIVE_DATE } from "../../lib/privacy-policy";
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
@@ -27,6 +28,28 @@ afterEach(() => {
 });
 
 describe("Privacy Policy advance notice", () => {
+  it("keeps the static notice shell time-independent across the effective instant", () => {
+    const before = renderToStaticMarkup(<PrivacyNotice />);
+    vi.setSystemTime(new Date(PRIVACY_EFFECTIVE_DATE));
+    expect(renderToStaticMarkup(<PrivacyNotice />)).toBe(before);
+    expect(before).not.toContain("We're updating");
+  });
+  it("hydrates a pre-deadline shell after the deadline without an obsolete notice or mismatch", async () => {
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<PrivacyNotice />);
+    vi.setSystemTime(new Date(PRIVACY_EFFECTIVE_DATE));
+    const recoverableError = vi.fn();
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    try {
+      await act(async () => {
+        root = hydrateRoot(container, <PrivacyNotice />, { onRecoverableError: recoverableError });
+      });
+      expect(container.querySelector("aside")).toBeNull();
+      expect(recoverableError).not.toHaveBeenCalled();
+    } finally {
+      act(() => root?.unmount());
+    }
+  });
   it.each(["privacy", "privacy-previous"] as const)("renders identical %s HTML before and after the replacement date without effects", (kind) => {
     const html = renderToStaticMarkup(<LegalPage kind={kind} />);
     for (const date of [PRIVACY_EFFECTIVE_DATE, "2027-01-01T00:00:00Z"]) {
@@ -65,6 +88,21 @@ describe("Privacy Policy advance notice", () => {
     expect(provider?.textContent).toContain("fonts.googleapis.com");
     expect(provider?.textContent).toContain("fonts.gstatic.com");
     expect(screen.getByText(/Google relies on the EU-US Data Privacy Framework/).textContent).toContain("EU Standard Contractual Clauses");
+  });
+  it.each([
+    ["Google sign-in", "authorization code", "IP address", "authenticate"],
+    ["Apple sign-in", "authorization code", "user agent", "authenticate"],
+    ["jsDelivr", "cdn.jsdelivr.net", "IP address", "MathJax"],
+    ["esm.sh", "whiteboard fonts", "user agent", "request URL"],
+  ])("discloses %s and its request data and purpose", (name, ...details) => {
+    render(<LegalPage kind="privacy" />);
+    const recipient = screen.getByText(name).closest("li");
+    for (const detail of details) expect(recipient?.textContent).toContain(detail);
+  });
+  it("distinguishes user-chosen embeds from Chalk's own processing", () => {
+    render(<LegalPage kind="privacy" />);
+    expect(screen.getByText(/External whiteboard content/).closest("li")?.textContent).toContain("YouTube");
+    expect(screen.getByText(/External whiteboard content/).closest("li")?.textContent).toContain("Vimeo");
   });
   it("dismisses the dashboard notice persistently and links to the summary", () => {
     const notice = render(<PrivacyNotice />);
