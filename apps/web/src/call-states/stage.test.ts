@@ -364,7 +364,7 @@ it("brings a typed text back for both people after Undo and Redo", async () => {
   } finally {
     await context.close();
   }
-||||||| parent of b9e087337 (test(call): lower your hand while another person's raised-hand toast shows)
+});
 
 it("lowers your hand while another person's raised-hand toast is showing", async () => {
   await open("hand-peer-toast");
