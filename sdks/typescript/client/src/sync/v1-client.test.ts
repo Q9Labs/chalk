@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { SnapshotSchema } from "../generated/sync";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
@@ -16,6 +17,55 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 describe("V1SyncClient", () => {
+  it("keeps local media paused after a terminal Off protocol result", async () => {
+    const { client: sync, socket } = await liveClient();
+    const platform = createCoreTestPlatform();
+    const access = opaqueAccessGrant("r9-off-reject");
+    const track = mediaTrack();
+    const localTargets: boolean[] = [];
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => ({ ...access, subject: { ...access.subject, participant_id: ownerId } }) },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => mediaStream(track) },
+          createSyncClient: () => sync,
+          createMediaClient: (input) => ({
+            ...platform.dependencies.createMediaClient(input),
+            setLocalSourceIntent: (_source, enabled) => {
+              if (!enabled) track.enabled = false;
+            },
+            setLocalPublicationTarget: async (target) => {
+              localTargets.push(target.enabled);
+              track.enabled = target.enabled;
+              return { outcome: "confirmed", errorCode: null };
+            },
+          }),
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      const on = client.media.setMicrophoneEnabled(true);
+      await vi.waitFor(() => expect(socket.frames().filter((frame) => frame.type === "live_target")).toHaveLength(1));
+      const first = socket.frames().find((frame) => frame.type === "live_target");
+      if (first?.type !== "live_target") throw new Error("missing On frame");
+      socket.receive({ type: "live_target_result", operation_id: first.operation_id, name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
+      await on;
+      const off = client.media.setMicrophoneEnabled(false).catch((error) => error);
+      await vi.waitFor(() => expect(socket.frames().filter((frame) => frame.type === "live_target")).toHaveLength(2));
+      const last = socket.frames().findLast((frame) => frame.type === "live_target");
+      if (last?.type !== "live_target") throw new Error("missing Off frame");
+      expect(last.enabled).toBe(false);
+      socket.receive({ type: "live_target_result", operation_id: last.operation_id, name: "set_microphone_enabled", outcome: "terminal_failure", error_code: "capability_denied" });
+      await expect(off).resolves.toMatchObject({ message: "capability_denied" });
+      expect({ trackEnabled: track.enabled, localTargets }).toEqual({ trackEnabled: false, localTargets: [false] });
+    } finally {
+      client.dispose();
+      sync.stop();
+    }
+  });
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",

@@ -8,6 +8,36 @@ import { control, observeMicrophonePublication } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
+  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused and reconciles it after recovery", async (source) => {
+    const localTargets: boolean[] = [];
+    const { platform, command, client, setEnabled, track } = createConvergenceScenario(source, {
+      media: {
+        setLocalPublicationTarget: async (target) => {
+          localTargets.push(target.enabled);
+          return { outcome: "confirmed", errorCode: null };
+        },
+      },
+    });
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      command.mockRejectedValueOnce(new V1SyncError("capability_denied", "terminal_failure"));
+      await expect(setEnabled(false)).rejects.toBeDefined();
+      expect(track.enabled).toBe(false);
+      expect(localTargets).toEqual([false]);
+      await enterRecovery({ platform, client });
+      command.mockClear();
+      await resumeWithOff({ platform, command });
+      expect(localTargets).not.toContain(true);
+      expect(track.enabled).toBe(false);
+      command.mockClear();
+      await setEnabled(true);
+      expect(command).toHaveBeenCalledWith(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it.each(["microphone", "camera", "screen"] as const)("blocks captured imperative %s enable during health-only recovery", async (source) => {
     const { platform, capture, command, client } = createConvergenceScenario(source);
     try {
@@ -288,7 +318,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it("pauses a local microphone before Sync confirms and restores it when Sync rejects", async () => {
+  it("keeps a local microphone paused when Sync rejects its Off command", async () => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
     let rejectSync: (reason: Error) => void = () => undefined;
@@ -311,7 +341,7 @@ describe("SpaceClient media convergence", () => {
       expect(target.mock.calls[0]?.[0].enabled).toBe(false);
       rejectSync(new V1SyncError("Sync rejected the media change", "terminal_failure"));
       await expect(muting).rejects.toThrow("Sync rejected the media change");
-      expect(track.enabled).toBe(true);
+      expect(track.enabled).toBe(false);
     } finally {
       client.dispose();
     }

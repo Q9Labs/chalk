@@ -1,6 +1,47 @@
 import { describe, expect, it, vi } from "vitest";
+import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
+import { createSpaceClientForPlatform } from "../space-client/space-client";
+import { V1SyncError } from "../sync/v1-error";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+it("keeps a rejected microphone Off paused in the production adapter", async () => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const microphone = new FakeTrack("r9-mic", "audio");
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("r9-adapter") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(microphone) },
+        createMediaClient: () => harness.client,
+        createSyncClient: () => ({
+          ...platform.sync,
+          setMicrophoneEnabled: async (enabled) => {
+            if (!enabled) throw new V1SyncError("capability_denied", "terminal_failure");
+            const result = await harness.client.setLocalPublicationTarget({ operationId: "r9-on", participantId: "participant-1", source: "microphone", enabled });
+            if (result.outcome !== "confirmed" && result.outcome !== "satisfied") throw new Error(result.errorCode ?? result.outcome);
+            return { operationId: "r9-on", name: "set_microphone_enabled", serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" };
+          },
+        }),
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    await client.media.setMicrophoneEnabled(true);
+    expect(microphone.enabled).toBe(true);
+    expect(harness.peers.some((peer) => peer.getSenders().some((sender) => sender.track?.id === microphone.id))).toBe(true);
+    await expect(client.media.setMicrophoneEnabled(false)).rejects.toBeDefined();
+    const local = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    const senderAttached = harness.peers.some((peer) => peer.getSenders().some((sender) => sender.track?.id === microphone.id));
+    expect({ trackEnabled: microphone.enabled, adapterEnabled: local?.enabled, senderAttached }).toEqual({ trackEnabled: false, adapterEnabled: false, senderAttached: false });
+  } finally {
+    client.dispose();
+    harness.client.stop();
+  }
+});
 it.each(["microphone", "camera", "screen"] as const)("satisfies an off target after the prepared %s track has been cleared", async (source) => {
   const harness = createHarness();
   try {

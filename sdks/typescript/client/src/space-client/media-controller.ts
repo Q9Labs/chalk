@@ -382,17 +382,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
   }
   #failRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, cause: unknown): Effect.Effect<void, unknown> {
-    return Effect.gen({ self: this }, function* () {
+    return Effect.sync(() => {
       const state = this.#sources[source];
       if (!intent.enabled && ports.sync.getSnapshot().connection.phase !== "live") return;
       const previous = intent.previousEnabled;
-      if (!intent.enabled && isSyncRejection(cause)) {
-        state.localEnabled = previous;
-        ports.media.setLocalSourceIntent?.(source, previous);
-        yield* this.#localTarget(ports, source, previous).pipe(Effect.ignore);
-      }
       // This is the result of this operation, never an inference from a projection.
-      if (state.desired.revision === intent.revision) state.result = { revision: intent.revision, status: "failed", cause, cleanup: intent.enabled && !previous };
+      // An Off failure cannot undo the user's local pause; its remote cleanup remains pending.
+      if (state.desired.revision === intent.revision) state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
     });
   }
   #prepareDevice(ports: ConnectionPorts, source: "microphone" | "camera", intent: MediaIntent): Effect.Effect<void, unknown> {
@@ -1163,7 +1159,4 @@ function isAccessInvalid(cause: unknown): boolean {
         }
       ).code === "invalid_access")
   );
-}
-function isSyncRejection(cause: unknown): boolean {
-  return isAccessInvalid(cause) || (cause instanceof V1SyncError && cause.code === "terminal_failure");
 }
