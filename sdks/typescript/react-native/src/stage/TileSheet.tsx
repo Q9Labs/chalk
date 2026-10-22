@@ -1,4 +1,3 @@
-import { runMediaAction } from "@q9labsai/chalk-client";
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 import { useCallback, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -86,8 +85,8 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
             onPress={run(() => {
               const otherCamera = person.otherCamera;
               if (otherCamera)
-                runMediaAction(client, true, () => client.media.selectCamera(otherCamera)).then((applied) => {
-                  if (applied) announce(`Switched to the ${person.back ? "front" : "back"} camera`);
+                client.media.selectCamera(otherCamera).then(() => {
+                  announce(`Switched to the ${person.back ? "front" : "back"} camera`);
                 }, failed("Couldn't switch the camera."));
             })}
             testID="tile-sheet.flip"

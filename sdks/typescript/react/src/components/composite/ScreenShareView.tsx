@@ -1,4 +1,3 @@
-import { runMediaAction } from "@q9labsai/chalk-client";
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -252,14 +251,14 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
       onStopSharing={
         active.isLocal
           ? async () => {
-              await runMediaAction(client, false, () => client.media.setScreenShareEnabled(false));
+              await client.media.setScreenShareEnabled(false);
             }
           : undefined
       }
       onChangeShare={
         active.isLocal && connection.status === "live"
           ? async (options) => {
-              await runMediaAction(client, true, () => client.media.setScreenShareEnabled(true, options));
+              await client.media.setScreenShareEnabled(true, options);
             }
           : undefined
       }

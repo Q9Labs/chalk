@@ -3,7 +3,7 @@ import { act, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { SpaceClientError } from "@q9labsai/chalk-client";
-import { createPreviewClient, createSnapshot } from "./preview-client";
+import { liveMediaClient } from "./live-media.test.helpers";
 import { useSpaceClient } from "../../../react-native/src/context/space-client-context";
 import { useToasts } from "../../../react-native/src/primitives/toast/ToastStack";
 import { createToastStore } from "../../../react-native/src/primitives/toast/toast-store";
@@ -21,13 +21,12 @@ vi.mock("../../../react-native/src/theme/tokens", () => ({ durations: { toastInf
 vi.mock("../../../react-native/src/sounds/sounds", () => ({ playSound: () => {} }));
 
 it.each(["camera", "microphone"] as const)("checks the current connection before retrying native %s", async (permission) => {
-  const base = createSnapshot();
-  const snapshot = { ...base, connection: { ...base.connection, status: "live" as const } };
-  const client = createPreviewClient(snapshot);
+  const fixture = await liveMediaClient();
+  const { client, capture } = fixture;
   const store = createToastStore();
   vi.mocked(useSpaceClient).mockReturnValue(client);
   vi.mocked(useToasts).mockReturnValue(store);
-  const retry = vi.fn();
+  const retry = permission === "microphone" ? () => client.media.setMicrophoneEnabled(true) : () => client.media.setCameraEnabled(true);
   // Render the native hook and real toast store; only native host boundaries are stubbed.
   function Harness({ permission }: { permission: Permission }) {
     const events = useCallEventToasts({});
@@ -54,14 +53,19 @@ it.each(["camera", "microphone"] as const)("checks the current connection before
     await act(async () => container.querySelector("button")?.click());
     const action = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
     if (!action) throw new Error("Missing native media retry");
-    const current = vi.spyOn(client, "getSnapshot").mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting", syncHealth: "recovering" } });
+    await act(async () => fixture.health(true));
     await act(async () => action.click());
-    expect(retry).not.toHaveBeenCalled();
+    await expect(fixture.actions[permission].mock.results.at(-1)?.value).rejects.toMatchObject({ code: "connection.invalid_state" });
+    expect(capture).not.toHaveBeenCalled();
     expect(store.getSnapshot()).toHaveLength(1);
-    current.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+    await act(async () => fixture.health(false));
     await act(async () => action.click());
-    expect(retry).toHaveBeenCalledTimes(1);
-    expect(store.getSnapshot()).toHaveLength(0);
+    await act(async () =>
+      vi.waitFor(() => {
+        expect(capture).toHaveBeenCalledTimes(1);
+        expect(store.getSnapshot()).toHaveLength(0);
+      }),
+    );
   } finally {
     await act(async () => root.unmount());
     store.clear();
@@ -72,9 +76,8 @@ it.each(["camera", "microphone"] as const)("checks the current connection before
 });
 
 it.each(["unmute", "start_camera"] as const)("checks the current connection before accepting native %s requests", async (kind) => {
-  const base = createSnapshot();
-  const client = createPreviewClient({ ...base, connection: { ...base.connection, status: "live" } });
-  const accept = vi.spyOn(client.media, "acceptRequest");
+  const fixture = await liveMediaClient();
+  const { client, capture } = fixture;
   const store = createToastStore();
   vi.mocked(useSpaceClient).mockReturnValue(client);
   vi.mocked(useToasts).mockReturnValue(store);
@@ -99,18 +102,22 @@ it.each(["unmute", "start_camera"] as const)("checks the current connection befo
   const root = createRoot(container);
   try {
     await act(async () => root.render(<Harness />));
-    await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, media: { ...snapshot.media, incomingRequests: [{ requestId: "request", kind, actorParticipantId: "host", actorDisplayName: "Host", expiresAt: new Date(Date.now() + 60_000).toISOString() }] } })));
+    await act(async () => fixture.request(kind));
     const action = container.querySelector("button");
     if (!action) throw new Error("Missing native request acceptance");
-    const snapshot = client.getSnapshot();
-    const current = vi.spyOn(client, "getSnapshot").mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting", syncHealth: "recovering" } });
+    await act(async () => fixture.health(true));
     await act(async () => action.click());
-    expect(accept).not.toHaveBeenCalled();
+    await expect(fixture.actions.request.mock.results.at(-1)?.value).rejects.toMatchObject({ code: "connection.invalid_state" });
+    expect(capture).not.toHaveBeenCalled();
     expect(store.getSnapshot()).toHaveLength(1);
-    current.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+    await act(async () => fixture.health(false));
     await act(async () => action.click());
-    expect(accept).toHaveBeenCalledWith("request");
-    expect(store.getSnapshot()).toHaveLength(0);
+    await act(async () =>
+      vi.waitFor(() => {
+        expect(capture).toHaveBeenCalledOnce();
+        expect(store.getSnapshot()).toHaveLength(0);
+      }),
+    );
   } finally {
     await act(async () => root.unmount());
     store.clear();

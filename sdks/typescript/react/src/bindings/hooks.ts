@@ -1,6 +1,5 @@
 "use client";
 
-import { runMediaAction } from "@q9labsai/chalk-client";
 import type { ScreenShareOptions, Capability, ChatReaction, ChatMessage, ChatSlice, ConnectionSlice, MediaSlice, OfflineSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
@@ -92,7 +91,7 @@ export function useScreenShare() {
   return {
     ...screenShare,
     setEnabled: async (enabled: boolean, options?: ScreenShareOptions) => {
-      await runMediaAction(client, enabled, () => client.media.setScreenShareEnabled(enabled, options));
+      await client.media.setScreenShareEnabled(enabled, options);
     },
   };
 }

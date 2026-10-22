@@ -1,5 +1,4 @@
 "use client";
-import { runMediaAction } from "@q9labsai/chalk-client";
 import { commandFailure } from "../control-bar/command-failure";
 import { SpaceClientError, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
@@ -189,12 +188,12 @@ export function SpaceView({
   const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, commandSource);
   const retryMedia = async () => {
     try {
-      let applied = false;
-      if (commandSource === "screen") applied = await runMediaAction(client, true, () => client.media.setScreenShareEnabled(true));
-      else if (commandSource === "camera") applied = await runMediaAction(client, true, () => client.media.setCameraEnabled(true));
-      else if (commandSource === "microphone") applied = await runMediaAction(client, true, () => client.media.setMicrophoneEnabled(true));
-      if (applied) onCommandError(null);
+      if (commandSource === "screen") await client.media.setScreenShareEnabled(true);
+      else if (commandSource === "camera") await client.media.setCameraEnabled(true);
+      else if (commandSource === "microphone") await client.media.setMicrophoneEnabled(true);
+      onCommandError(null);
     } catch (cause) {
+      if (cause instanceof SpaceClientError && cause.code === "connection.invalid_state") return;
       onCommandError(cause instanceof SpaceClientError ? cause : { code: "client.internal_error", recoverable: true, message: "Your device couldn’t start. Try again." }, commandSource);
     }
   };
@@ -243,8 +242,8 @@ export function SpaceView({
             diagnostics: callDiagnostics(connection, media),
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",
-              onToggleMute: connection.status === "live" || media.local.microphone.state === "enabled" ? () => void runCommand(() => runMediaAction(client, media.local.microphone.state !== "enabled", () => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled"))) : undefined,
-              onToggleVideo: connection.status === "live" || media.local.camera.state === "enabled" ? () => void runCommand(() => runMediaAction(client, media.local.camera.state !== "enabled", () => client.media.setCameraEnabled(media.local.camera.state !== "enabled"))) : undefined,
+              onToggleMute: connection.status === "live" || media.local.microphone.state === "enabled" ? () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled")) : undefined,
+              onToggleVideo: connection.status === "live" || media.local.camera.state === "enabled" ? () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled")) : undefined,
               onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
               onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
@@ -252,7 +251,7 @@ export function SpaceView({
               onClosePanel: () => setActivePanel(null),
               onPushToTalk: (enabled) => {
                 if (enabled && connection.status !== "live") return;
-                void runCommand(() => runMediaAction(client, enabled, () => client.media.setMicrophoneEnabled(enabled)));
+                void runCommand(() => client.media.setMicrophoneEnabled(enabled));
               },
             },
             duration: episodeDuration,
@@ -272,12 +271,12 @@ export function SpaceView({
               onOverflowClick={feature("participants") ? () => setActivePanel("participants") : undefined}
               shareCapture={media.screenShare.capture}
               onStopSharing={async () => {
-                await runMediaAction(client, false, () => client.media.setScreenShareEnabled(false));
+                await client.media.setScreenShareEnabled(false);
               }}
               onChangeShare={
                 connection.status === "live"
                   ? async (options) => {
-                      await runMediaAction(client, true, () => client.media.setScreenShareEnabled(true, options));
+                      await client.media.setScreenShareEnabled(true, options);
                     }
                   : undefined
               }

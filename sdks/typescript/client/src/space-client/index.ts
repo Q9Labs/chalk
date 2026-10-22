@@ -66,5 +66,3 @@ export type {
 } from "./types";
 export { reloadRejoinAccess, readReloadRejoin, writeReloadRejoin, resumeReloadRejoin, reloadRejoinStorageKey } from "./reload-rejoin";
 export type { ReloadRejoinMarker } from "./reload-rejoin";
-
-export { runMediaAction } from "./media-action";

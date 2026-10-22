@@ -6,4 +6,4 @@
 
 Add optional Sync health to connection snapshots without changing the public status union. Treat brief pong loss as non-blocking degradation; require sustained silence for recovery and stable pongs to clear it. Bound ephemeral reaction acknowledgements to five seconds without replaying them. Keep recovery notices non-blocking and chat readable, and disable reaction sending and media enable controls until live while preserving local mute.
 
-Centralize click-time media action guards across web and native, including retries, media requests, share replacement, and camera/device switching. Keep local mute, camera-off, and complete screen capture shutdown available during Sync recovery.
+Guard media enabling at the SDK controller boundary for all web, native, and imperative callers, including retries, requests, and share replacement. Keep private camera preview and media off available during recovery. Retain off intents until Sync confirms them after reconnect, clear video even if screen-audio cleanup fails, and treat already-absent local publications as successfully off. Keep hand controls available while reaction sending is disabled.

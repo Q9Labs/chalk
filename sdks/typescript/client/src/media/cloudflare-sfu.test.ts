@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+it.each(["microphone", "camera", "screen"] as const)("satisfies an off target after the prepared %s track has been cleared", async (source) => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+    await harness.client.clearPreparedLocalTrack(source);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "stop", participantId: "participant-1", source, enabled: false })).resolves.toEqual({ outcome: "satisfied", errorCode: null });
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it("detaches a prepared camera without stopping a controller-owned preview", async () => {
   const harness = createHarness();
   const camera = new FakeTrack("camera", "video");

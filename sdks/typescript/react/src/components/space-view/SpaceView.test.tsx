@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import { SpaceClientError } from "@q9labsai/chalk-client";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
+import { liveMediaClient } from "../../test-support/live-media.test.helpers";
 import { SpaceView } from "./SpaceView";
 
 it.each([
@@ -12,12 +13,10 @@ it.each([
   { capability: "publishAudio", label: "Unmute microphone" },
   { capability: "publishScreen", label: "Share screen" },
 ] as const)("checks the current connection before retrying $capability", async ({ capability, label }) => {
-  const base = createSnapshot([capability]);
-  const snapshot = { ...base, connection: { ...base.connection, status: "live" as const } };
-  const onCommand = vi.fn(() => {
-    throw new SpaceClientError({ code: "media.device_busy", recoverable: true, message: "Device busy" });
-  });
-  const client = createPreviewClient(snapshot, { onCommand, updateCommand: (current) => current });
+  const fixture = await liveMediaClient();
+  const { client } = fixture;
+  const capture = capability === "publishScreen" ? fixture.display : fixture.capture;
+  capture.mockRejectedValue(new DOMException("Device busy", "NotReadableError"));
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -30,17 +29,18 @@ it.each([
       ),
     );
     await act(async () => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click());
-    expect(onCommand).toHaveBeenCalledTimes(1);
+    await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1)));
+    await act(async () => vi.waitFor(() => expect(container.textContent).toContain("Try again")));
     const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
     if (!retry) throw new Error("Missing media retry");
-    // Change the current snapshot without a render: a captured toast callback must not use stale state.
-    const current = vi.spyOn(client, "getSnapshot").mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, status: "reconnecting", syncHealth: "recovering" } });
+    await act(async () => fixture.health(true));
     await act(async () => retry.click());
-    expect(onCommand).toHaveBeenCalledTimes(1);
+    await expect((capability === "publishVideo" ? fixture.actions.camera : capability === "publishAudio" ? fixture.actions.microphone : fixture.actions.screen).mock.results.at(-1)?.value).rejects.toMatchObject({ code: "connection.invalid_state" });
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Try again");
-    current.mockReturnValue({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+    await act(async () => fixture.health(false));
     await act(async () => retry.click());
-    expect(onCommand).toHaveBeenCalledTimes(2);
+    await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2)));
   } finally {
     await act(async () => root.unmount());
     container.remove();

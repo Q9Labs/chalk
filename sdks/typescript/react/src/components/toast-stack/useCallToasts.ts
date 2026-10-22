@@ -1,4 +1,3 @@
-import { runMediaAction } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSpaceClient } from "../../bindings/hooks";
 import { callEventToasts, mediaFailureToast } from "./call-events";
@@ -37,9 +36,9 @@ export function useCallToasts() {
                   label: "Try again",
                   onClick: () => {
                     // The client error event owns any retry failure and its sound.
-                    void runMediaAction(client, true, () => client.media.setScreenShareEnabled(true)).then(
-                      (applied) => {
-                        if (applied) setToasts((current) => current.filter((event) => event.id !== id));
+                    void client.media.setScreenShareEnabled(true).then(
+                      () => {
+                        setToasts((current) => current.filter((event) => event.id !== id));
                       },
                       () => undefined,
                     );
