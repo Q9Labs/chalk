@@ -25,4 +25,35 @@ defmodule ChalkSync.Episodes.AdmissionOrderCompatibilityTest do
       assert Reducer.wire_snapshot(restored) == snapshot
     end
   end
+
+  test "retention replays legacy digests and rejects corruption" do
+    fixture = @fixture |> File.read!() |> JSON.decode!()
+
+    assert {:ok, initial} =
+             Reducer.from_snapshot(
+               fixture["episode_id"],
+               Map.delete(fixture["initial_snapshot"], "state_digest")
+             )
+
+    for legacy_count <- [3, length(fixture["events"])] do
+      fixture["events"]
+      |> Enum.with_index()
+      |> Enum.reduce(initial, fn {event, index}, state ->
+        digest =
+          if index < legacy_count do
+            fixture["legacy_resulting_state_digests"]
+            |> Enum.at(index)
+            |> Base.decode16!(case: :lower)
+          else
+            {:ok, live} = Reducer.apply_event(state, event)
+            Reducer.digest(live)
+          end
+
+        assert {:ok, next} = Reducer.replay_event(state, event, digest)
+        assert Reducer.digest(next) == digest
+        assert {:error, :event_digest_mismatch} = Reducer.replay_event(state, event, <<0::256>>)
+        next
+      end)
+    end
+  end
 end

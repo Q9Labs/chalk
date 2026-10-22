@@ -201,6 +201,19 @@ defmodule ChalkSync.Episodes.Reducer do
 
   def apply_event(%__MODULE__{}, _event), do: {:error, :invalid_event}
 
+  @spec replay_event(t(), event() | map(), binary()) :: {:ok, t()} | {:error, atom()}
+  def replay_event(%__MODULE__{} = state, event, recorded_digest) do
+    with {:ok, next} <- apply_event(state, event) do
+      legacy = %{next | admission_request_order: Enum.sort(next.admission_request_order)}
+
+      cond do
+        digest(next) == recorded_digest -> {:ok, next}
+        digest(legacy) == recorded_digest -> {:ok, legacy}
+        true -> {:error, :event_digest_mismatch}
+      end
+    end
+  end
+
   @spec from_snapshot(String.t(), map()) :: {:ok, t()} | {:error, atom()}
   def from_snapshot(episode_id, snapshot) when is_binary(episode_id) and is_map(snapshot) do
     with :ok <- exact_keys(snapshot, snapshot_keys()),
