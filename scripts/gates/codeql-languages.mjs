@@ -31,8 +31,9 @@ export function codeqlLanguages(files) {
 }
 
 function changedFiles(base) {
-  const output = execFileSync("git", ["diff", "--name-only", "--no-renames", `${base}...HEAD`], { encoding: "utf8" });
-  return output.split("\n").filter(Boolean);
+  // `-z` prints names unquoted, so non-ASCII and special characters still match their language.
+  const output = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", `${base}...HEAD`], { encoding: "utf8" });
+  return output.split("\0").filter(Boolean);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { codeqlLanguages, languages } from "./codeql-languages.mjs";
 
 const script = fileURLToPath(new URL("./codeql-languages.mjs", import.meta.url));
-const run = (...args) => execFileSync("node", [script, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const run = (args, cwd) => execFileSync("node", [script, ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 test("a pull request analyses only the languages whose files it changes", () => {
   assert.deepEqual(codeqlLanguages(["docs/managed-release.md", "apps/web/public/logo.png"]), []);
@@ -27,8 +29,28 @@ test("a change to the CodeQL setup analyses every language", () => {
 
 test("master pushes and a selection that cannot resolve its base analyse every language", () => {
   const all = `languages=${JSON.stringify(languages)}\n`;
-  assert.equal(run("--full"), all);
-  assert.equal(run("origin/codeql-languages-missing-base"), all);
+  assert.equal(run(["--full"]), all);
+  assert.equal(run(["origin/codeql-languages-missing-base"]), all);
+});
+
+test("changed files with non-ASCII or special characters in their names still select their language", () => {
+  const repo = mkdtempSync(path.join(os.tmpdir(), "chalk-codeql-languages-"));
+  const git = (...args) => execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { encoding: "utf8" }).trim();
+  git("init", "-q", "-b", "master");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  const base = git("rev-parse", "HEAD");
+  for (const [file, language] of [
+    ["outside/café.go", "go"],
+    ["outside/café.py", "python"],
+    ['outside/quoted"name.mjs', "javascript-typescript"],
+  ]) {
+    git("switch", "-q", "--detach", base);
+    mkdirSync(path.join(repo, "outside"), { recursive: true });
+    writeFileSync(path.join(repo, file), "x\n");
+    git("add", "--", file);
+    git("commit", "-q", "-m", file);
+    assert.equal(run([base], repo), `languages=${JSON.stringify([language])}\n`, file);
+  }
 });
 
 test("only pull request runs share a concurrency group, so no master scan is replaced", () => {
