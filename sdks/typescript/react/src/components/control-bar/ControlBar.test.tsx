@@ -7,6 +7,7 @@ import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot as createIdleSnapshot } from "../../test-support/preview-client";
 import { ControlBar, ControlBarPresentation } from "./ControlBar";
 import { useConnectedControlBarBehavior } from "./control-bar-behavior";
+import { useScreenShare } from "../../bindings/hooks";
 
 function createSnapshot(...args: Parameters<typeof createIdleSnapshot>) {
   const snapshot = createIdleSnapshot(...args);
@@ -127,6 +128,66 @@ it("requests a replacement without first disabling an active screen share", asyn
 });
 
 describe("Sync availability", () => {
+  it("keeps device menus and phone camera selection available without allowing media enable", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onVideoInputChange = vi.fn();
+    try {
+      await act(async () =>
+        root.render(
+          <ControlBarPresentation
+            isMuted
+            isVideoEnabled={false}
+            mediaEnableDisabled
+            videoInputDevices={[
+              { deviceId: "front", label: "Front" },
+              { deviceId: "back", label: "Back" },
+            ]}
+            selectedVideoInput="front"
+            onVideoInputChange={onVideoInputChange}
+          />,
+        ),
+      );
+      for (const label of ["Unmute microphone", "Turn on camera"]) expect(container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(true);
+      for (const label of ["Select microphone", "Select camera"]) expect(container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(false);
+      await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="More options"]')?.click());
+      const flip = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Flip camera"));
+      expect(flip?.disabled).toBe(false);
+      await act(async () => flip?.click());
+      expect(onVideoInputChange).toHaveBeenCalledWith("back");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("keeps the screen-share action stable across media snapshot updates", async () => {
+    const client = createPreviewClient(createSnapshot(["publishScreen"]));
+    const actions: ReturnType<typeof useScreenShare>["setEnabled"][] = [];
+    function Probe() {
+      actions.push(useScreenShare().setEnabled);
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+    try {
+      await act(async () =>
+        root.render(
+          <ChalkProvider client={client}>
+            <Probe />
+          </ChalkProvider>,
+        ),
+      );
+      const initial = actions.at(-1);
+      await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, media: { ...snapshot.media, screenShare: { ...snapshot.media.screenShare, state: "enabled" } } })));
+      expect(actions.length).toBeGreaterThan(1);
+      expect(actions.at(-1)).toBe(initial);
+    } finally {
+      await act(async () => root.unmount());
+      client.dispose();
+    }
+  });
+
   it("disables media enable and reactions during recovery, preserves mute and chat, and restores on live", async () => {
     const snapshot = createSnapshot(["publishAudio", "publishVideo", "publishScreen", "sendReaction"]);
     const onCommand = vi.fn();

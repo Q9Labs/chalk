@@ -1,6 +1,6 @@
 "use client";
 
-import type { ScreenShareOptions, Capability, ChatReaction, ChatMessage, ChatSlice, ConnectionSlice, MediaSlice, OfflineSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
+import type { Capability, ChatReaction, ChatMessage, ChatSlice, ConnectionSlice, MediaSlice, OfflineSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, SelfSlice, SpaceClient, SpaceSnapshot, WhiteboardSlice } from "@q9labsai/chalk-client";
 import { useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
 import { SpaceClientContext } from "./context";
@@ -88,10 +88,5 @@ export function useCan(capability: Capability): boolean {
 export function useScreenShare() {
   const client = useSpaceClient();
   const { screenShare } = useMedia();
-  return {
-    ...screenShare,
-    setEnabled: async (enabled: boolean, options?: ScreenShareOptions) => {
-      await client.media.setScreenShareEnabled(enabled, options);
-    },
-  };
+  return { ...screenShare, setEnabled: client.media.setScreenShareEnabled };
 }

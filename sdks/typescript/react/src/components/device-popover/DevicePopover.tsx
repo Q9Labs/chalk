@@ -31,6 +31,7 @@ export interface DevicePopoverProps {
   orientation?: "up" | "down";
   className?: string;
   disabled?: boolean;
+  toggleDisabled?: boolean;
   busy?: boolean;
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
@@ -143,6 +144,7 @@ export function DevicePopover({
   orientation = "up",
   className,
   disabled,
+  toggleDisabled,
   busy,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
@@ -153,7 +155,7 @@ export function DevicePopover({
       <ShellStyles />
       <ChalkTooltip
         trigger={
-          <button type="button" className="chalk-shell-main" aria-label={busy ? `Updating ${mic ? "microphone" : "camera"}` : label} aria-pressed={isActive} disabled={disabled || busy} onClick={onToggle}>
+          <button type="button" className="chalk-shell-main" aria-label={busy ? `Updating ${mic ? "microphone" : "camera"}` : label} aria-pressed={isActive} disabled={disabled || toggleDisabled || busy} onClick={onToggle}>
             <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />
           </button>
         }

@@ -79,6 +79,49 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
+  it.each(["microphone", "camera", "screen"] as const)("retains %s off when a queued enable loses its live guard", async (source) => {
+    const platform = createCoreTestPlatform();
+    const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
+    let holdPause = false;
+    let finishPause = () => {};
+    const paused = new Promise<void>((resolve) => {
+      finishPause = resolve;
+    });
+    const target = vi.fn(async (input: { readonly enabled: boolean }) => {
+      track.enabled = input.enabled;
+      if (holdPause && !input.enabled) await paused;
+      return { outcome: "confirmed" as const, errorCode: null };
+    });
+    const command = vi.fn<ConnectionSyncClient["setMicrophoneEnabled"]>(async () => {
+      if (platform.sync.getSnapshot().connection.phase !== "live") throw new V1SyncError("Sync is recovering", "not_live");
+      return { operationId: "target", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
+    });
+    const client = capturedClient(platform, track, { mediaDevices: { getDisplayMedia: async () => mediaStream(track) }, media: { setLocalPublicationTarget: target }, sync: { setMicrophoneEnabled: command, setCameraEnabled: command, setScreenShareEnabled: command } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : source === "camera" ? client.media.setCameraEnabled : client.media.setScreenShareEnabled;
+      await setEnabled(true);
+      command.mockClear();
+      target.mockClear();
+      holdPause = true;
+      const off = setEnabled(false);
+      await vi.waitFor(() => expect(target).toHaveBeenCalledWith(expect.objectContaining({ enabled: false })));
+      const on = expect(setEnabled(true)).rejects.toMatchObject({ code: "connection.invalid_state" });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      finishPause();
+      await off;
+      await on;
+      command.mockClear();
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+      await vi.waitFor(() => expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([false]));
+    } finally {
+      finishPause();
+      client.dispose();
+    }
+  });
+
   it("lets the access backend replace the media binding requested by SFU recovery", async () => {
     const platform = createCoreTestPlatform();
     let replace = async (): Promise<unknown> => {

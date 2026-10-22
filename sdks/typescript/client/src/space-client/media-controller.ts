@@ -275,11 +275,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
       previousIntent = this.#intent[source];
       intentRevision = (this.#intentRevisions.get(source) ?? 0) + 1;
       this.#intentRevisions.set(source, intentRevision);
-      this.#intent[source] = enabled;
-      if (enabled) this.#pendingOffs.delete(source);
-      else if (this.#ports) this.#pendingOffs.set(source, intentRevision);
+      if (!enabled) this.#intent[source] = false;
+      if (!enabled && this.#ports) this.#pendingOffs.set(source, intentRevision);
       if (enabled) this.#pendingEnables.set(source, intentRevision);
-      this.#ports?.media.setLocalSourceIntent?.(source, enabled);
+      if (!enabled) this.#ports?.media.setLocalSourceIntent?.(source, false);
       if (!enabled && this.#ports) earlyPause = this.#beginLocalPause(this.#ports, source);
       return Effect.void;
     });
@@ -294,6 +293,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
               let prepared = false;
               const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
               return Effect.suspend(() => {
+                if (enabled) {
+                  this.#pendingOffs.delete(source);
+                  this.#intent[source] = true;
+                  ports.media.setLocalSourceIntent?.(source, true);
+                }
                 if (!enabled) {
                   let paused = false;
                   return (earlyPause ? foreign(() => earlyPause!) : this.#localTarget(ports, source, false)).pipe(
@@ -388,8 +392,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
       intentRevision = (this.#intentRevisions.get("screen") ?? 0) + 1;
       this.#intentRevisions.set("screen", intentRevision);
       this.#pendingEnables.set("screen", intentRevision);
-      this.#pendingOffs.delete("screen");
-      this.#ports?.media.setLocalSourceIntent?.("screen", true);
     })
       .pipe(
         Effect.andThen(
@@ -399,6 +401,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
               let track: MediaStreamTrack | null = null;
               let prepared = false;
               return Effect.suspend(() => {
+                this.#pendingOffs.delete("screen");
+                ports.media.setLocalSourceIntent?.("screen", true);
                 if (this.#hasTrack("screen") && options === undefined) {
                   return Effect.void;
                 }

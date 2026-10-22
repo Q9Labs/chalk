@@ -59,7 +59,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="mic"
           isActive={!props.isMuted}
           busy={props.microphonePending}
-          disabled={props.mediaEnableDisabled && props.isMuted}
+          toggleDisabled={props.mediaEnableDisabled && props.isMuted}
           onToggle={props.onToggleMute ?? (() => {})}
           devices={effectiveAudioInputDevices}
           selectedDeviceId={props.selectedAudioInput}
@@ -80,7 +80,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="video"
           isActive={props.isVideoEnabled ?? true}
           busy={props.cameraPending}
-          disabled={props.mediaEnableDisabled && !props.isVideoEnabled}
+          toggleDisabled={props.mediaEnableDisabled && !props.isVideoEnabled}
           onToggle={props.onToggleVideo ?? (() => {})}
           devices={effectiveVideoInputDevices}
           selectedDeviceId={props.selectedVideoInput}
@@ -111,7 +111,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             <button
               type="button"
               className="chalk-sheet-row"
-              disabled={!props.onVideoInputChange || props.mediaEnableDisabled}
+              disabled={!props.onVideoInputChange}
               onClick={() => {
                 const camera = nextCamera(effectiveVideoInputDevices, props.selectedVideoInput, props.cameraTrack);
                 if (camera) props.onVideoInputChange?.(camera.deviceId);
