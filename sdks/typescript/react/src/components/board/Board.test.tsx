@@ -529,6 +529,44 @@ it.each(["other", "screen-share:other"])("follows on the first click after pinni
   }
 });
 
+it("returns to the followed board when an explicitly pinned remote share ends", async () => {
+  const client = createPreviewClient();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (sharing: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceStage
+            tiles={[
+              { id: "self", displayName: "Amina", isLocal: true, isScreenSharing: true },
+              { id: "other", displayName: "Omar", isScreenSharing: sharing },
+            ]}
+            layout="focus"
+            generatedAvatars={false}
+            whiteboard={{ isOpen: true, props: {}, sendView: () => true }}
+          />
+        </ChalkProvider>,
+      ),
+    );
+  try {
+    await render(true);
+    await finishOpening(container);
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
+    expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
+    await render(false);
+    expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
+    expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
 it("does not resume following when the board closes and reopens", async () => {
   const client = createPreviewClient();
   const container = document.createElement("div");

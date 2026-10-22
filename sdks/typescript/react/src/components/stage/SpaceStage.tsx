@@ -35,6 +35,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   }, [boardOpen]);
   const canFollow = boardOpen && Boolean(whiteboard?.sendView);
   const followed = canFollow && tiles.some((tile) => tile.id === following) ? following : null;
+  const activePin = items.some((item) => item.id === pin) ? pin : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
   const follow = useCallback((id: string | null) => {
@@ -104,7 +105,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
     <Stage
       items={items}
       layout={layout}
-      pinnedId={pin ?? activeShare ?? (followed ? "whiteboard" : null)}
+      pinnedId={activePin ?? activeShare ?? (followed ? "whiteboard" : null)}
       onPinnedChange={setPin}
       onFollowChange={(id) => follow(followed === id ? null : id)}
       followingId={followed}
