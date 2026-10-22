@@ -12,7 +12,7 @@ export function lapsedExport(recording: RecordingDTO, now: number): boolean {
 }
 
 /** The server closes retention windows at read time, so the page closes them on its own clock too. */
-export function passed(deadline: string | null, now: number): boolean {
+function passed(deadline: string | null, now: number): boolean {
   return deadline !== null && Date.parse(deadline) <= now;
 }
 
