@@ -40,8 +40,8 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
   if (failure.code === "media.device_busy") return { icon, type: "error", message: `Your ${device} is being used by another app. Close it there, then try again.` };
   if (failure.code === "media.device_constraint_invalid") return { icon, type: "error", message: `Your ${device} doesn’t support these settings. Choose another ${device}, then try again.` };
   if (failure.code === "media.capture_failed") return { icon, type: "error", message: `Your ${device} couldn’t start. Check that it is connected and available, then try again.` };
-  if (source && failure.code === "connection.invalid_state") return { icon, type: "error", message: "Wait for the call to reconnect, then try again." };
-  if (source && failure.code === "client.internal_error") return { icon, type: "error", message: `Your ${device} couldn’t start. Try again.` };
+  if (source && failure.code === "connection.invalid_state") return { icon, type: "error", message: "That change was interrupted. Try again." };
+  if (source && failure.code === "client.internal_error") return { icon, type: "error", message: `Couldn’t change ${source === "screen" ? "screen sharing" : `your ${device} settings`}. Try again.` };
   return { icon, type: "error", message: failure.message };
 }
 

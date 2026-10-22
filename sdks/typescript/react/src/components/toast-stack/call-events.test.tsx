@@ -71,7 +71,8 @@ it.each(["client.internal_error", "connection.invalid_state"] as const)("does no
   const toast = mediaFailureToast({ code, recoverable: true, message: "setCameraEnabled belongs to an inactive connection" }, "camera");
   const text = renderToStaticMarkup(<>{toast?.message}</>);
   expect(text).not.toContain("setCameraEnabled");
-  expect(text).toContain(code === "connection.invalid_state" ? "Wait for the call to reconnect" : "Your camera couldn’t start");
+  expect(text).toBe(code === "connection.invalid_state" ? "That change was interrupted. Try again." : "Couldn’t change your camera settings. Try again.");
+  expect(text).not.toMatch(/reconnect|start/);
 });
 
 it.each(["client.internal_error", "connection.invalid_state"] as const)("preserves non-media command guidance for %s", (code) => {
