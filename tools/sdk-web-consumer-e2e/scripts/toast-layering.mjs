@@ -5,7 +5,7 @@ export async function proveToastLayering(browser, styles) {
   try {
     await page.setContent(`<style>${styles}</style>
       <main style="position:relative;height:580px">
-        <div class="chalk-popover-positioner" style="position:absolute;bottom:92px;left:300px">
+        <div style="position:absolute;bottom:92px;left:300px;z-index:50">
           <button style="width:180px;height:48px" onclick="this.dataset.clicked='true'">Send a reaction</button>
         </div>
         <div class="chalk-toasts">
@@ -22,7 +22,7 @@ export async function proveToastLayering(browser, styles) {
         return button.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
       }),
       true,
-      "The error toast must not cover the open reaction popover",
+      "The error toast must not cover the open z-50 reaction tray",
     );
     await reaction.click();
     assert.equal(await reaction.getAttribute("data-clicked"), "true");
