@@ -555,6 +555,49 @@ func (q *Queries) GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAt
 	return i, err
 }
 
+const lockChatAttachmentStream = `-- name: LockChatAttachmentStream :one
+insert into sync_chat_streams (tenant_id, space_id)
+select participant.tenant_id, participant.space_id
+from participants participant
+join episodes episode
+    on episode.tenant_id = participant.tenant_id
+    and episode.space_id = participant.space_id
+    and episode.id = participant.episode_id
+where participant.tenant_id = $1
+    and participant.space_id = $2
+    and participant.episode_id = $3
+    and participant.id = $4
+    and participant.generation = $5
+    and participant.status = 'active'
+    and episode.status = 'active'
+    and participant.capabilities @> array['sendChat']::text[]
+on conflict (tenant_id, space_id) do update set updated_at = sync_chat_streams.updated_at
+returning tenant_id
+`
+
+type LockChatAttachmentStreamParams struct {
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	SpaceID               pgtype.UUID `json:"space_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ParticipantID         pgtype.UUID `json:"participant_id"`
+	ParticipantGeneration int64       `json:"participant_generation"`
+}
+
+// Reservations in one Space wait here, so the per-person count in the next statement sees every
+// reservation committed before it. It returns no row when the Participant may not send chat.
+func (q *Queries) LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockChatAttachmentStream,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.ParticipantID,
+		arg.ParticipantGeneration,
+	)
+	var tenant_id pgtype.UUID
+	err := row.Scan(&tenant_id)
+	return tenant_id, err
+}
+
 const releaseChatAttachmentUploadFinalize = `-- name: ReleaseChatAttachmentUploadFinalize :execrows
 update sync_chat_attachments
 set
@@ -622,6 +665,19 @@ reservation as (
     where sync_chat_streams.space_id = excluded.space_id
         and sync_chat_streams.attachment_count < 1000
         and sync_chat_streams.attachment_bytes + $8 <= 5368709120
+        -- One person may hold at most 40 attachments or 200 MiB of the Space budget, however many
+        -- times they rejoin. chat_person_participant_ids is shared with Sync's message limits.
+        and (
+            select count(*) < 40
+                and coalesce(sum(held.byte_length), 0) + $8 <= 209715200
+            from sync_chat_attachments held
+            where held.tenant_id = $11
+                and held.space_id = $12
+                and held.participant_id = any(array(
+                    select participant_id
+                    from chat_person_participant_ids($11, $12, $14)
+                ))
+        )
     returning
         sync_chat_streams.tenant_id,
         sync_chat_streams.space_id

@@ -70,7 +70,8 @@ defmodule ChalkSync.Admission do
 
   defp prune_actors(actors, cutoff) do
     Map.new(actors, fn {key, timestamps} ->
-      {key, Enum.drop_while(timestamps, &(&1 <= cutoff))}
+      # Callers read the clock before the call, so timestamps can arrive out of order.
+      {key, Enum.filter(timestamps, &(&1 > cutoff))}
     end)
     |> Map.reject(fn {_key, timestamps} -> timestamps == [] end)
   end

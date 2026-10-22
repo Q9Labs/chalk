@@ -110,6 +110,34 @@ defmodule ChalkSync.Chat.Repository.SQL do
     """
   end
 
+  # chat_person_participant_ids is the one definition of a person, shared with the API's
+  # attachment cap, so a rejoin under a new participant row keeps the same limits.
+  def person_recent_messages do
+    """
+    select count(*)
+    from sync_chat_messages message
+    where message.tenant_id = $1
+      and message.space_id = $2
+      and message.created_at > now() - make_interval(secs => $4::bigint / 1000.0)
+      and message.participant_id = any(array(select participant_id from chat_person_participant_ids($1, $2, $3)))
+    """
+  end
+
+  def person_usage do
+    """
+    select
+      count(*),
+      coalesce(sum(message.encoded_bytes), 0)::bigint,
+      count(*) filter (
+        where message.created_at > now() - make_interval(secs => $4::bigint / 1000.0)
+      )
+    from sync_chat_messages message
+    where message.tenant_id = $1
+      and message.space_id = $2
+      and message.participant_id = any(array(select participant_id from chat_person_participant_ids($1, $2, $3)))
+    """
+  end
+
   def reserve_message do
     """
     update sync_chat_streams
@@ -230,7 +258,9 @@ defmodule ChalkSync.Chat.Repository.SQL do
     """
   end
 
-  def lock_attachments do
+  def lock_attachments, do: read_attachments() <> "for update\n"
+
+  def read_attachments do
     """
     select
       attachment_id,
@@ -248,9 +278,11 @@ defmodule ChalkSync.Chat.Repository.SQL do
       and expires_at > now()
       and cleanup_claim_token is null
     order by array_position($4::uuid[], attachment_id)
-    for update
     """
   end
+
+  # Read under the Space stream lock, so message times follow the sequence and share one clock.
+  def database_now, do: "select clock_timestamp()"
 
   def attach_message_files do
     """
