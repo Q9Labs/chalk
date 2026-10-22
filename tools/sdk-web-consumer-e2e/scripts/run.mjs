@@ -10,6 +10,11 @@ import { spawn } from "node:child_process";
 
 const fixtureDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryDirectory = resolve(fixtureDirectory, "../..");
+// Both the workspace test command and direct CI runner enter here before any
+// package build, browser dependency, temporary directory, or server starts.
+await run(process.execPath, ["--test", "--test-concurrency=1", "tools/sdk-web-consumer-e2e/scripts/media-client.test.mjs", "tools/sdk-web-consumer-e2e/scripts/recovery.test.mjs"], repositoryDirectory);
+if (process.argv.includes("--preflight-only")) process.exit(0);
+
 const requireFromClient = createRequire(join(repositoryDirectory, "sdks/typescript/client/package.json"));
 const { chromium, firefox, webkit } = requireFromClient("playwright");
 const arguments_ = new Set(process.argv.slice(2));
