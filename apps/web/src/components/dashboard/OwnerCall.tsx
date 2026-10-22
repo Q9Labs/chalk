@@ -30,8 +30,11 @@ function readOwnerReload(spaceId: string) {
 function ownerAccess(spaceId: string) {
   const joinStorageKey = `chalk.owner-join:${spaceId}`;
   let joinKey = intentKey();
+  let hasStoredJoinKey = false;
   try {
-    joinKey = window.sessionStorage.getItem(joinStorageKey) ?? joinKey;
+    const storedJoinKey = window.sessionStorage.getItem(joinStorageKey);
+    hasStoredJoinKey = storedJoinKey !== null;
+    joinKey = storedJoinKey ?? joinKey;
     window.sessionStorage.setItem(joinStorageKey, joinKey);
   } catch {
     // The pending-seat lease still covers browsers with tab storage disabled.
@@ -62,10 +65,10 @@ function ownerAccess(spaceId: string) {
     } catch {
       /* Tab storage is optional. */
     }
-    if (!saved && !pendingEpisode) return;
+    if (!saved && !pendingEpisode && !hasStoredJoinKey) return;
     const page = await readPage("call", { spaceId });
     if (saved && page.live?.id === saved.episodeId) joinKey = saved.joinKey;
-    else if (pendingEpisode && page.live?.id !== pendingEpisode) {
+    else if (!pendingEpisode || page.live?.id !== pendingEpisode) {
       joinKey = intentKey();
       try {
         window.sessionStorage.setItem(joinStorageKey, joinKey);

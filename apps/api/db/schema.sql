@@ -4450,6 +4450,22 @@ begin
         return 'episode_ended';
     end if;
 
+    if action='retry' and seat.state='pending' and seat.expires_at > now()
+       and exists (select 1 from participants where id=seat_participant
+         and status='joining' and first_joined_at is null) then
+        -- Each explicit attempt owns a new generation, even if cleanup was lost.
+        update participants set generation=generation+1, media_connection_id=null,
+            media_connection_generation=null, updated_at=now() where id=seat_participant;
+        update participant_join_seats set generation=generation+1,
+            expires_at=now()+interval '1 minute', updated_at=now() where participant_id=seat_participant;
+        update sync_lifecycle_intents set participant_generation=seat_generation+1,
+            next_attempt_at=now()+interval '1 minute'
+        where tenant_id=seat_tenant and space_id=seat_space and episode_id=seat_episode
+          and participant_id=seat_participant and participant_generation=seat_generation
+          and intent_name='participant_joined' and status='pending';
+        return 'pending';
+    end if;
+
     if seat.state = 'pending' then
         if action = 'cancel' then
             -- A late failure from an older attempt cannot cancel a newer grant.
@@ -4519,11 +4535,11 @@ begin
           and (select count(*) from participants where tenant_id=seat_tenant and space_id=seat_space
             and episode_id=seat_episode and status in ('joining','active','leaving')) < 500;
         if not found then return 'capacity_exceeded'; end if;
-        update participants set status='joining', left_at=null, media_connection_id=null,
+        update participants set status='joining', generation=generation+1, left_at=null, media_connection_id=null,
             media_connection_generation=null, updated_at=now() where id=seat_participant;
-        update participant_join_seats set state='pending', expires_at=now()+interval '1 minute', updated_at=now()
+        update participant_join_seats set state='pending', generation=generation+1, expires_at=now()+interval '1 minute', updated_at=now()
         where participant_id=seat_participant;
-        update sync_lifecycle_intents set status='pending', terminal_reason=null, completed_at=null,
+        update sync_lifecycle_intents set status='pending', participant_generation=seat_generation+1, terminal_reason=null, completed_at=null,
             attempt_count=0, last_error_code=null, next_attempt_at=now()+interval '1 minute'
         where tenant_id=seat_tenant and space_id=seat_space and episode_id=seat_episode
           and participant_id=seat_participant and participant_generation=seat_generation

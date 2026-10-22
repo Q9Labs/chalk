@@ -24,8 +24,10 @@ try {
     });
     let blockSync = true;
     await page.routeWebSocket(`${syncOrigin}*`, (socket) => {
-      if (blockSync) socket.close({ code: 1008, reason: "fixture blocked Sync" });
-      else socket.connectToServer();
+      // Retained incident evidence: HTTP admission succeeded, but no hello
+      // reached Sync. Hold the connection before forwarding any server frames.
+      // This proves the durable-seat failure, not the unknown Windows cause.
+      if (!blockSync) socket.connectToServer();
     });
     await page.goto(`${origin}/dashboard`);
     await page.getByRole("button", { name: "Start a call", exact: true }).click();
@@ -64,11 +66,22 @@ try {
     const live = (await (await context.request.get(`${origin}/dashboard-api/call?spaceId=${spaceId}`)).json()).live;
     assert.equal(live.count, 1, "normal join counts once");
     const abandoned = await context.newPage();
-    await abandoned.routeWebSocket(`${syncOrigin}*`, (socket) => socket.close({ code: 1008, reason: "blocked Sync" }));
+    await abandoned.routeWebSocket(`${syncOrigin}*`, () => {});
     await abandoned.route("**/cancel-join", (route) => route.abort());
+    await abandoned.goto(`${origin}/dashboard`);
+    const unknownJoinKey = crypto.randomUUID();
+    await abandoned.evaluate(
+      ({ spaceId, unknownJoinKey }) => {
+        sessionStorage.setItem(`chalk.owner-join:${spaceId}`, unknownJoinKey);
+        sessionStorage.removeItem(`chalk.owner-join:${spaceId}:episode`);
+      },
+      { spaceId, unknownJoinKey },
+    );
     const admissionResponse = abandoned.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === "join" && response.status() === 200);
     await abandoned.goto(joinUrl);
-    const abandonedId = (await (await admissionResponse).json()).access.subject.participant_id;
+    const admittedResponse = await admissionResponse;
+    assert.notEqual(admittedResponse.request().postDataJSON().idempotencyKey, unknownJoinKey, "an unknown Episode must not reuse an old stored join key");
+    const abandonedId = (await admittedResponse.json()).access.subject.participant_id;
     await abandoned.close();
     assert.equal(sql(`select (first_joined_at is not null)::text from participants where id='${abandonedId}'`), "false", "closing the tab after HTTP admission must not create attendance");
     sql(`update participant_join_seats set expires_at=now()-interval '1 second' where participant_id='${abandonedId}'; update sync_lifecycle_intents set next_attempt_at=now() where participant_id='${abandonedId}' and status='pending'`);
