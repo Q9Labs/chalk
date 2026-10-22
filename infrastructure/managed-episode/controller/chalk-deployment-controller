@@ -904,7 +904,7 @@ cleanup_unused_images() {
     fi
   done <"$protected_refs"
 
-  local inventory="${stage_root}/image-inventory" containers refs ref protected tags
+  local inventory="${stage_root}/image-inventory" containers refs ref protected
   run_user_podman image list --all --no-trunc --format '{{.Id}} {{.Containers}} {{range .RepoDigests}}{{.}} {{end}}' >"$inventory" || return 1
   while read -r image_id containers refs; do
     image_id="${image_id#sha256:}"
@@ -915,24 +915,21 @@ cleanup_unused_images() {
       if grep -Fq -- "@${ref##*@}" "$protected_refs"; then protected=true; break; fi
     done
     [[ "$protected" == false ]] || continue
-    # Untag by name, then reclaim digestless/dangling images by ID without force.
-    # Podman must refuse any image that gains a container after inventory.
-    if ! tags="$(run_user_podman image inspect --format '{{range .RepoTags}}{{.}} {{end}}' "sha256:${image_id}")"; then
-      printf 'WARN unused image sha256:%s names could not be inspected; continuing cleanup\n' "$image_id" >&2
-      continue
+    # Bind untagging to the checked ID, even if another process moves its names.
+    # Non-force removal refuses any image that gains a container after inventory.
+    if ! run_user_podman image untag "sha256:${image_id}"; then
+      printf 'WARN unused image sha256:%s names could not be removed; continuing cleanup\n' "$image_id" >&2
     fi
-    for ref in $tags "sha256:${image_id}"; do
-      if ! run_user_podman image rm --no-prune "$ref"; then
-        if run_user_podman image exists "sha256:${image_id}"; then
-          printf 'WARN unused image sha256:%s could not be removed; continuing cleanup\n' "$image_id" >&2
-        else
-          status=$?
-          if [[ "$status" != 1 ]]; then
-            printf 'WARN unused image sha256:%s removal could not be verified (status %s); continuing cleanup\n' "$image_id" "$status" >&2
-          fi
+    if ! run_user_podman image rm --no-prune "sha256:${image_id}"; then
+      if run_user_podman image exists "sha256:${image_id}"; then
+        printf 'WARN unused image sha256:%s could not be removed; continuing cleanup\n' "$image_id" >&2
+      else
+        status=$?
+        if [[ "$status" != 1 ]]; then
+          printf 'WARN unused image sha256:%s removal could not be verified (status %s); continuing cleanup\n' "$image_id" "$status" >&2
         fi
       fi
-    done
+    fi
   done <"$inventory"
 }
 

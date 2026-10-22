@@ -183,6 +183,11 @@ cat >"${fixture_root}/bin/podman" <<'PODMAN'
 set -euo pipefail
 printf 'podman %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 state="${FAKE_SECRET_STATE:?}"
+retarget_name() {
+  [[ -n "${FAKE_RETARGET_NAME:-}" && "$1" == "$FAKE_RETARGET_NAME" ]] || return 0
+  jq --arg from "$FAKE_RETARGET_IMAGE_ID" --arg to "$FAKE_RETARGET_DESTINATION_ID" --arg name "$FAKE_RETARGET_NAME" 'map(if .id == $from then .names=((.names // []) - [$name]) elif .id == $to then .names=((.names // []) + [$name]) else . end)' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+  mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+}
 case "${1:-} ${2:-}" in
   "info --format") printf '%s\n' "${CHALK_CONTROLLER_STATE_ROOT:?}" ;;
   "image list")
@@ -199,12 +204,20 @@ case "${1:-} ${2:-}" in
     [[ -n "${FAKE_IMAGE_STATE:-}" ]] || exit 1
     jq -e --arg ref "$3" 'any(.[]; .id == $ref or (.refs | index($ref)))' "$FAKE_IMAGE_STATE" >/dev/null
     ;;
+  "image untag")
+    [[ $# == 3 ]]
+    if [[ "$3" == "${FAKE_RETARGET_IMAGE_ID:-}" ]]; then retarget_name "$FAKE_RETARGET_NAME"; fi
+    jq -e --arg id "$3" 'any(.[]; .id == $id)' "$FAKE_IMAGE_STATE" >/dev/null || exit 1
+    jq --arg id "$3" 'map(if .id == $id then .names=[] else . end)' "$FAKE_IMAGE_STATE" >"${FAKE_IMAGE_STATE}.tmp"
+    mv "${FAKE_IMAGE_STATE}.tmp" "$FAKE_IMAGE_STATE"
+    ;;
   "image rm")
     [[ "$3" == --no-prune ]]
     force=false
     shift 3
     if [[ "$1" == --force ]]; then force=true; shift; fi
     [[ $# == 1 ]]
+    retarget_name "$1"
     [[ "${FAKE_IMAGE_PRUNE_FAILURE:-false}" != true ]] || { echo 'test-only image storage permission denied' >&2; exit 125; }
     removed_id="$(jq -er --arg ref "$1" '.[] | select(.id == $ref or (.refs|index($ref)) or ((.names // [])|index($ref))) | .id' "$FAKE_IMAGE_STATE")" || exit 1
     if [[ "$removed_id" == "${FAKE_LATE_CONTAINER_IMAGE_ID:-}" ]]; then
@@ -510,7 +523,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   dangling_id="sha256:$(printf '2%.0s' {1..64})"
   later_image="example.com/later@sha256:$(printf '3%.0s' {1..64})"
   case "$image_case" in
-    multi-digest|multi-name|parent-refusal|late-container|dangling|ledger-missing|ledger-tampered|ledger-invalid-id)
+    multi-digest|multi-name|parent-refusal|late-container|retargeted-name|dangling|ledger-missing|ledger-tampered|ledger-invalid-id)
       case "$image_case" in
         multi-digest)
           export FAKE_DUPLICATE_IMAGE_ID="${stale_image##*@}"
@@ -528,6 +541,10 @@ if [[ "$test_group" == image-cleanup ]]; then
         late-container)
           export FAKE_LATE_CONTAINER_IMAGE_ID="${stale_image##*@}" FAKE_PRESSURE_IMAGE_ID="${later_image##*@}"
           jq --arg stale "$stale_image" --arg later "$later_image" 'map(if (.refs|index($stale)) then .names=["example.com/unused:old", "example.com/unused:older"] else . end) + [{id:($later|split("@")[1]),refs:[$later],containers:0}]' "$image_state" >"${image_state}.tmp"
+          ;;
+        retargeted-name)
+          export FAKE_RETARGET_IMAGE_ID="${stale_image##*@}" FAKE_RETARGET_DESTINATION_ID="${baseline_image##*@}" FAKE_RETARGET_NAME=example.com/unused:moved
+          jq --arg stale "$stale_image" --arg name "$FAKE_RETARGET_NAME" 'map(if (.refs|index($stale)) then .names=[$name] else . end)' "$image_state" >"${image_state}.tmp"
           ;;
         dangling)
           jq --arg id "$dangling_id" '. + [{id:$id,refs:[],containers:0}]' "$image_state" >"${image_state}.tmp"
@@ -552,7 +569,7 @@ if [[ "$test_group" == image-cleanup ]]; then
       ;;
   esac
   case "$image_case" in
-    active|rollback|previous|candidate|multi-digest|multi-name|parent-refusal|late-container|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|all)
+    active|rollback|previous|candidate|multi-digest|multi-name|parent-refusal|late-container|retargeted-name|dangling|ledger-missing|ledger-tampered|ledger-invalid-id|all)
       run_controller "$cleanup_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/cleanup-case.log" 2>&1 || { tail -n 20 "${fixture_root}/cleanup-case.log" >&2; fail "image cleanup deployment failed"; }
       for protected_class in active rollback previous candidate; do
         case "$image_case" in
@@ -570,6 +587,9 @@ if [[ "$test_group" == image-cleanup ]]; then
       done
       ! grep -Fq 'podman image rm --no-prune example.com/alias@' "${fixture_root}/commands.log" || fail "protected image ID was removed through another digest alias"
       case "$image_case" in
+        retargeted-name)
+          jq -e --arg id "$FAKE_RETARGET_DESTINATION_ID" --arg name "$FAKE_RETARGET_NAME" 'any(.[]; .id == $id and (.names|index($name)))' "$image_state" >/dev/null || fail "cleanup removed the protected image's retargeted name"
+          ;;
         parent-refusal)
           jq -e --arg id "$dangling_id" 'any(.[]; .id == $id)' "$image_state" >/dev/null || fail "intermediate parent of rollback image was removed"
           ! jq -e --arg ref "$later_image" 'any(.[]; .refs|index($ref))' "$image_state" >/dev/null || fail "parent refusal left later unused images behind"
@@ -626,7 +646,7 @@ if [[ "$test_group" == image-cleanup ]]; then
   esac
   unset FAKE_IMAGE_STATE
   if [[ "$image_case" == all ]]; then
-    for image_case in multi-digest multi-name parent-refusal late-container dangling ledger-missing ledger-tampered ledger-invalid-id space image-space boundary cleanup-error cleanup-error-space rollback-health; do
+    for image_case in multi-digest multi-name parent-refusal late-container retargeted-name dangling ledger-missing ledger-tampered ledger-invalid-id space image-space boundary cleanup-error cleanup-error-space rollback-health; do
       CHALK_TEST_IMAGE_CASE="$image_case" "$0" --group image-cleanup
     done
   fi
