@@ -9,6 +9,7 @@ declare global {
     __terminalTestClient: CallStateClient;
     __mediaTestClient: CallStateClient;
     __mediaCalls: boolean[];
+    __rejectMediaCommand: (enabled: boolean) => Promise<void>;
   }
 }
 
@@ -29,6 +30,17 @@ afterAll(async () => {
     await stop?.();
   }
 });
+
+async function exposeFixtureClient(boundary: string, name: "__terminalTestClient" | "__mediaTestClient", mediaMethod?: "setCameraEnabled" | "setMicrophoneEnabled") {
+  await page.route(boundary, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body).toContain("return createCallStateClient(");
+    const client = mediaMethod ? `{ ...client, media: { ...client.media, ${mediaMethod}: (enabled) => window.__rejectMediaCommand(enabled) } }` : "client";
+    const factory = `function exposedClient(...args) { const client = createCallStateClient(...args); return window.${name} = ${client}; }`;
+    await route.fulfill({ response, body: `${factory}\n${body.replace("return createCallStateClient(", "return exposedClient(")}` });
+  });
+}
 
 it("joining exposes consent; the ready card copies the link and announces Copied", async () => {
   await page.goto(`${origin}/call-states.html?state=states-joining-recorded`);
@@ -236,12 +248,7 @@ it.each([
   "preserves terminal flags through the real web page: $title",
   async ({ episodeEnded, removedByHost, title, rejoin }) => {
     const boundary = "**/src/call-states/web-space-boundary.ts";
-    await page.route(boundary, async (route) => {
-      const response = await route.fetch();
-      const body = await response.text();
-      expect(body).toContain("return createCallStateClient(");
-      await route.fulfill({ response, body: body.replace("return createCallStateClient(", "return window.__terminalTestClient = createCallStateClient(") });
-    });
+    await exposeFixtureClient(boundary, "__terminalTestClient");
     try {
       await page.goto(`${origin}/web-space-journey.html`);
       await page.getByTestId("stage").waitFor();
@@ -271,12 +278,7 @@ it.each([
   "keeps internal errors out of the $gesture toast",
   async ({ source, key, release }) => {
     const boundary = "**/src/call-states/states-lane.tsx";
-    await page.route(boundary, async (route) => {
-      const response = await route.fetch();
-      const body = await response.text();
-      expect(body).toContain("return createCallStateClient(");
-      await route.fulfill({ response, body: body.replace("return createCallStateClient(", "return window.__mediaTestClient = createCallStateClient(") });
-    });
+    await exposeFixtureClient(boundary, "__mediaTestClient", source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled");
     try {
       await page.goto(`${origin}/call-states.html?state=states-events`);
       await page.locator('[data-part="call-frame"]').waitFor();
@@ -290,8 +292,7 @@ it.each([
             if (release && enabled) return;
             throw new Error(source === "camera" ? "setCameraEnabled belongs to an inactive connection" : "setMicrophoneEnabled belongs to an inactive connection");
           };
-          if (source === "camera") client.media.setCameraEnabled = reject;
-          else client.media.setMicrophoneEnabled = reject;
+          window.__rejectMediaCommand = reject;
           if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         },
         { source, release },

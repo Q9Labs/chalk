@@ -182,36 +182,43 @@ it("uses safe terminal copy for unknown runtime codes in every media context", (
         }
 });
 
-it("walks every request policy row through integrated Chalk Allow and Decline", async () => {
+it.each([
+  { source: "camera", action: "Allow" },
+  { source: "camera", action: "Not now" },
+  { source: "microphone", action: "Allow" },
+  { source: "microphone", action: "Not now" },
+] as const)("walks integrated Chalk request rows for $source / $action", async ({ source, action }) => {
+  const snapshot = createSnapshot(["publishAudio", "publishVideo"]);
+  const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" } });
+  let failure = new SpaceClientError({ code: "client.internal_error", recoverable: false, message: "Private implementation details" });
+  const command = vi.fn(async (_requestId: string) => {
+    throw failure;
+  });
+  const client = { ...preview, media: { ...preview.media, acceptRequest: command, declineRequest: command } };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
   let rows = 0;
-  for (const { code, family } of Object.values(CASES))
-    for (const source of ["camera", "microphone"] as const)
-      for (const action of ["Allow", "Not now"])
-        for (const recoverable of [false, true]) {
-          const snapshot = createSnapshot(["publishAudio", "publishVideo"]);
-          const request = { requestId: "policy-request", kind: source === "camera" ? "start_camera" : "unmute", actorParticipantId: "requester", actorDisplayName: "Requester", expiresAt: new Date(Date.now() + 60_000).toISOString() } as const;
-          const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" }, media: { ...snapshot.media, incomingRequests: [request] } });
-          const command = vi.fn(async (_requestId: string) => {
-            throw new SpaceClientError({ code, recoverable, message: "Private implementation details" });
-          });
-          const client = { ...preview, media: { ...preview.media, acceptRequest: command, declineRequest: command } };
-          const container = document.body.appendChild(document.createElement("div"));
-          const root = createRoot(container);
-          try {
-            await act(async () => root.render(<Chalk client={client} features={{ sounds: false, whiteboard: false }} />));
-            const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === action);
-            expect(button, `${code}/${source}/${action}`).toBeDefined();
-            await act(async () => button?.click());
-            expect(command).toHaveBeenCalledWith("policy-request");
-            expect(container.textContent, `${code}/${source}/${action}/${recoverable}`).toContain(expectedMessage(family, source, "request", recoverable));
-            expect(container.textContent).not.toContain("Private implementation details");
-            expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Try again")).toBe(false);
-            rows++;
-          } finally {
-            await act(async () => root.unmount());
-            container.remove();
-            preview.dispose();
-          }
-        }
-  expect(rows).toBe(240);
+  try {
+    await act(async () => root.render(<Chalk client={client} features={{ sounds: false, whiteboard: false }} />));
+    for (const { code, family } of Object.values(CASES))
+      for (const recoverable of [false, true]) {
+        failure = new SpaceClientError({ code, recoverable, message: "Private implementation details" });
+        const request = { requestId: `policy-request-${rows}`, kind: source === "camera" ? "start_camera" : "unmute", actorParticipantId: "requester", actorDisplayName: "Requester", expiresAt: new Date(Date.now() + 60_000).toISOString() } as const;
+        await act(async () => preview.updateSnapshot((current) => ({ ...current, media: { ...current.media, incomingRequests: [request] } })));
+        const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === action);
+        expect(button, `${code}/${source}/${action}`).toBeDefined();
+        await act(async () => button?.click());
+        expect(command).toHaveBeenLastCalledWith(request.requestId);
+        expect(command).toHaveBeenCalledTimes(rows + 1);
+        expect(container.textContent, `${code}/${source}/${action}/${recoverable}`).toContain(expectedMessage(family, source, "request", recoverable));
+        expect(container.textContent).not.toContain("Private implementation details");
+        expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Try again")).toBe(false);
+        rows++;
+      }
+    expect(rows).toBe(60);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
+  }
 });
