@@ -1,6 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.AuthorityTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
@@ -332,7 +333,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
              fn {_id, child, _type, _modules} -> child == poller end
            )
 
-    ChalkSync.Episodes.Coordinator.drain_all()
+    Coordinator.drain_all()
 
     refute_receive {:DOWN, ^monitor, :process, ^poller, _reason}, 200
     drain_reads(identity.episode)

@@ -2,9 +2,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
-  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.Transport.SocketWhiteboardV1

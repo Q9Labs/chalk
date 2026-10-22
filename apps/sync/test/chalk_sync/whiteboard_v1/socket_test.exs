@@ -1,6 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.SocketTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -647,7 +648,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   # Starts the Episode's poller for this test process and waits for its first read.
   defp read(state) do
-    ChalkSync.WhiteboardV1.Authority.watch(state.identity.episode)
+    Authority.watch(state.identity.episode)
     assert_receive {:episode_access_read, _episode}, 1_000
 
     wait_for(fn ->
@@ -1380,7 +1381,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   end
 
   defp token(identity) do
-    ChalkSync.Auth.DevTokenVerifier.token(%{
+    DevTokenVerifier.token(%{
       "tenant_id" => identity.episode.tenant_id,
       "space_id" => identity.episode.space_id,
       "episode_id" => identity.episode.episode_id,
