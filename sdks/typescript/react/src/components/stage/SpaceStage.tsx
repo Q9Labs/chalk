@@ -37,6 +37,13 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   const followed = canFollow && tiles.some((tile) => tile.id === following) ? following : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
+  const follow = useCallback((id: string | null) => {
+    if (id) {
+      setPin(null);
+      setSelectedShare(null);
+    }
+    setFollowing(id);
+  }, []);
   const renderContentTile = useCallback(
     (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => {
       if (item.kind === "screen-share")
@@ -78,14 +85,14 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
           media={
             boardProps ? (
               <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={setFollowing} sendView={canFollow ? whiteboard?.sendView : undefined} onClose={onCloseBoard} />
+                <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={follow} sendView={canFollow ? whiteboard?.sendView : undefined} onClose={onCloseBoard} />
               </div>
             ) : null
           }
         />
       );
     },
-    [whiteboard, shares, shareCapture, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, onCloseBoard],
+    [follow, whiteboard, shares, shareCapture, onStopSharing, onChangeShare, colorScheme, tiles, followed, canFollow, onCloseBoard],
   );
   const focusContent = useCallback(
     (item: StageItem) => {
@@ -93,19 +100,13 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
     },
     [onLayoutChange],
   );
-  const pinOrFollow = useCallback(
-    (id: string | null) => {
-      if (!canFollow || !id || !tiles.some((tile) => tile.id === id && !tile.isLocal)) return setPin(id);
-      setFollowing((current) => (current === id ? null : id));
-    },
-    [canFollow, tiles],
-  );
   return (
     <Stage
       items={items}
       layout={layout}
-      pinnedId={pin ?? activeShare}
-      onPinnedChange={pinOrFollow}
+      pinnedId={followed ? "whiteboard" : (pin ?? activeShare)}
+      onPinnedChange={setPin}
+      onFollowChange={(id) => follow(followed === id ? null : id)}
       followingId={followed}
       clickAction={canFollow ? "follow" : "pin"}
       renderContentTile={renderContentTile}

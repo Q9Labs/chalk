@@ -1,4 +1,4 @@
-import { CaptureUpdateAction, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, newElementWith, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
@@ -76,7 +76,7 @@ export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOpt
   canDraw: boolean;
   /** Explicit management authority; omitted hosts keep the original draw-based behavior. */
   canManage?: boolean;
-  submitUpdate: (payload: { sceneId: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }) => Promise<WhiteboardCommit>;
+  submitUpdate: (payload: { sceneId: string; revision?: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }) => Promise<WhiteboardCommit>;
   sendCursor: (payload: { x: number; y: number }) => void;
   requestSnapshot: () => Promise<void>;
   clear: () => Promise<WhiteboardCommit>;
@@ -91,6 +91,7 @@ export interface ExcalidrawCollabEngineOptions extends WhiteboardFileTransferOpt
 
 export class ExcalidrawCollabEngine {
   private sceneId: string | null = null;
+  private sceneRevision: string | null = null;
   private sceneGeneration: string | null = null;
   private canDraw = true;
   private canManage: boolean | undefined;
@@ -163,6 +164,7 @@ export class ExcalidrawCollabEngine {
     const commit = await this.opts.clear();
     this.storedImageFileIds.clear();
     this.sceneId = commit.sceneId;
+    this.sceneRevision = commit.revision;
     this.sceneGeneration = commit.sceneGeneration ?? null;
     this.broadcastedElementVersions.clear();
     this.rejectedElementVersions.clear();
@@ -174,6 +176,18 @@ export class ExcalidrawCollabEngine {
     });
     this.opts.excalidrawAPI.history.clear();
     return commit;
+  }
+
+  /** Restore only into the exact empty scene committed by this clear. */
+  async clearWithUndo(): Promise<() => boolean> {
+    const api = this.opts.excalidrawAPI;
+    const before = api.getSceneElements();
+    const commit = await this.clear();
+    return () => {
+      if (this.disposed || !this.canDraw || this.sceneId !== commit.sceneId || this.sceneRevision !== commit.revision || this.sceneGeneration !== (commit.sceneGeneration ?? null) || api.getSceneElementsIncludingDeleted().length > 0) return false;
+      api.updateScene({ elements: before.map((element) => newElementWith(element, {})), captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+      return true;
+    };
   }
 
   dispose(): void {
@@ -232,6 +246,7 @@ export class ExcalidrawCollabEngine {
       case "snapshot":
         this.handleRemoteSnapshot({
           sceneId: event.sceneId,
+          revision: event.revision,
           ...(event.sceneGeneration ? { sceneGeneration: event.sceneGeneration } : {}),
           elements: event.elements,
           appState: event.appState,
@@ -240,6 +255,7 @@ export class ExcalidrawCollabEngine {
       case "update":
         this.handleRemoteData({
           sceneId: event.sceneId,
+          revision: event.revision,
           ...(event.sceneGeneration ? { sceneGeneration: event.sceneGeneration } : {}),
           syncAll: false,
           elements: event.elements,
@@ -257,13 +273,15 @@ export class ExcalidrawCollabEngine {
       case "view":
         return;
       case "reset_required":
+        this.sceneRevision = null;
         this.requestSnapshot();
     }
   }
 
-  handleRemoteData(payload: { sceneId: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }): void {
+  handleRemoteData(payload: { sceneId: string; revision?: string; sceneGeneration?: string; syncAll: boolean; elements: readonly WhiteboardWireElement[] }): void {
     this.applyRemoteElements({
       sceneId: payload.sceneId,
+      revision: payload.revision,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: payload.syncAll,
       remoteElements: payload.elements.map((element) => withInk(fromWireElement(element), CANONICAL_INK, this.inkColor)),
@@ -271,9 +289,10 @@ export class ExcalidrawCollabEngine {
     });
   }
 
-  handleRemoteSnapshot(payload: { sceneId: string; sceneGeneration?: string; elements: readonly WhiteboardWireElement[]; appState?: SharedWhiteboardAppState }): void {
+  handleRemoteSnapshot(payload: { sceneId: string; revision?: string; sceneGeneration?: string; elements: readonly WhiteboardWireElement[]; appState?: SharedWhiteboardAppState }): void {
     this.applyRemoteElements({
       sceneId: payload.sceneId,
+      revision: payload.revision,
       ...(payload.sceneGeneration ? { sceneGeneration: payload.sceneGeneration } : {}),
       syncAll: true,
       remoteElements: payload.elements.map((element) => withInk(fromWireElement(element), CANONICAL_INK, this.inkColor)),
@@ -401,6 +420,7 @@ export class ExcalidrawCollabEngine {
           this.requestSnapshot();
           return;
         }
+        this.sceneRevision = commit.revision;
         for (const element of submittedElements) {
           const previous = this.broadcastedElementVersions.get(element.id);
           const submittedVersion = { version: element.version, versionNonce: element.version_nonce };
@@ -461,7 +481,7 @@ export class ExcalidrawCollabEngine {
     return submitted;
   }
 
-  private applyRemoteElements(args: { sceneId: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
+  private applyRemoteElements(args: { sceneId: string; revision?: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
     const remoteSceneId = args.sceneId;
     const replacingScene = this.sceneId !== null && remoteSceneId !== this.sceneId;
 
@@ -491,6 +511,7 @@ export class ExcalidrawCollabEngine {
       this.deferredRemoteElements.clear();
       this.resetSubmissionRetries();
     }
+    this.sceneRevision = args.revision ?? null;
     if (args.sceneGeneration) this.sceneGeneration = args.sceneGeneration;
 
     const excalidrawAPI = this.opts.excalidrawAPI;

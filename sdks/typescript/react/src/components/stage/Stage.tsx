@@ -34,6 +34,7 @@ export interface StageProps {
   readonly onItemDoubleClick?: (item: StageItem) => void;
   /** While the board is open, clicking a person follows their board view. */
   readonly followingId?: string | null;
+  readonly onFollowChange?: (id: string) => void;
   readonly clickAction?: "pin" | "follow";
   /** Upper bound of visible tiles; the rest fold into a +N People tile. */
   readonly maxPerPage?: number;
@@ -74,6 +75,7 @@ export function Stage({
   layout,
   pinnedId,
   followingId = null,
+  onFollowChange,
   clickAction = "pin",
   onPinnedChange,
   onOverflowClick,
@@ -226,14 +228,15 @@ export function Stage({
     for (const item of ordered) {
       map.set(item.id, {
         onClick: () => {
-          togglePin(item);
+          if (clickAction === "follow" && item.kind === "participant" && !item.participant.isLocal) onFollowChange?.(item.id);
+          else togglePin(item);
           onItemClick?.(item);
         },
         onDoubleClick: onItemDoubleClick ? () => onItemDoubleClick(item) : undefined,
       });
     }
     return map;
-  }, [interactive, onItemDoubleClick, onItemClick, ordered, togglePin]);
+  }, [clickAction, interactive, onFollowChange, onItemDoubleClick, onItemClick, ordered, togglePin]);
 
   if (ordered.length === 0) {
     return (

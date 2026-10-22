@@ -141,18 +141,6 @@ export async function boardImage(engine: WhiteboardEngineHandle, background: str
   return excalidraw.exportToBlob({ elements: api.getSceneElements(), files: api.getFiles(), appState: { exportBackground: true, viewBackgroundColor: background }, mimeType: "image/png", exportPadding: 24 });
 }
 
-/** Clears the board and returns the way back, while nothing else has changed. */
-export async function clearWithUndo(engine: WhiteboardEngineHandle): Promise<() => boolean> {
-  const before = engine.api.getSceneElements();
-  await engine.clear();
-  return () => {
-    if (engine.api.getSceneElements().length > 0) return false;
-    const { excalidraw } = engine;
-    engine.api.updateScene({ elements: before.map((element) => excalidraw.newElementWith(element, {})), captureUpdate: excalidraw.CaptureUpdateAction.IMMEDIATELY });
-    return true;
-  };
-}
-
 export function sceneSignature(engine: WhiteboardEngineHandle): number {
   return engine.excalidraw.getSceneVersion(engine.api.getSceneElementsIncludingDeleted());
 }

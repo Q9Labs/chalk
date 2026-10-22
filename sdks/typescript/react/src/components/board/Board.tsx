@@ -7,7 +7,7 @@ import { useCan, useConnection, useSelf, useWhiteboard } from "../../bindings/ho
 import { useMediaQuery, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import { applyTool, boardImage, clearWithUndo, hasContent, placeNote, pressHistory, readCamera, restyleSelection, sceneSignature, setCamera, settleNoteText, type PenChoice } from "./board-engine";
+import { applyTool, boardImage, hasContent, placeNote, pressHistory, readCamera, restyleSelection, sceneSignature, setCamera, settleNoteText, type PenChoice } from "./board-engine";
 import {
   ISLAND_PLACES,
   SURFACES,
@@ -85,7 +85,7 @@ type CameraControl = {
 };
 
 /** Owns the camera: glides to a new view, and tells a move by hand from one the board made. */
-function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject<HTMLDivElement | null>, onManualMove: () => void, onMoved: () => void): CameraControl {
+function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject<HTMLDivElement | null>, onManualMove: () => void, onMoved: () => void, onViewportReady: () => void): CameraControl {
   const cameraRef = useRef<Camera>({ scrollX: 0, scrollY: 0, zoom: 1 });
   const viewportRef = useRef<Viewport>({ width: 1, height: 1 });
   const expected = useRef<Camera | null>(null);
@@ -96,6 +96,8 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
   manual.current = onManualMove;
   const moved = useRef(onMoved);
   moved.current = onMoved;
+  const resized = useRef(onViewportReady);
+  resized.current = onViewportReady;
 
   useEffect(() => {
     if (!engine) return;
@@ -134,7 +136,9 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
     if (!element) return;
     viewportRef.current = { width: element.clientWidth || 1, height: element.clientHeight || 1 };
     const observer = new ResizeObserver(([entry]) => {
-      if (entry) viewportRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
+      if (!entry) return;
+      viewportRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) resized.current();
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -303,7 +307,14 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const ownParticipantId = useSelf().participantId;
   const appliedVersions = useRef(new ViewVersions());
   const viewsAvailable = sendView !== undefined;
-  const camera = useCamera(engine, root, stopFollowing, () => shareView.current(false));
+  const reapplyView = useRef<() => void>(() => undefined);
+  const camera = useCamera(
+    engine,
+    root,
+    stopFollowing,
+    () => shareView.current(false),
+    () => reapplyView.current(),
+  );
 
   // A relay preserves the original participant/version; receiving that version again never moves the camera.
   useEffect(() => {
@@ -347,13 +358,17 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const goTo = useCallback(
     (participantId: string, animate: boolean, selected = false) => {
       const view = views.current.get(participantId);
-      if (!view) return;
+      if (!view || viewportRef.current.width <= 0 || viewportRef.current.height <= 0) return;
       if (!selected && !appliedVersions.current.isNew(view)) return;
       appliedVersions.current.remember(view);
       move(cameraForView(view, viewportRef.current), animate);
     },
     [move, viewportRef],
   );
+
+  reapplyView.current = () => {
+    if (followingRef.current) goTo(followingRef.current, false, true);
+  };
 
   // Cursors and views arrive on the board's own event stream, next to the drawing.
   const subscribe = board.collab?.subscribe;
@@ -380,7 +395,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       followingRef.current = event.participantId;
       onFollow(event.participantId);
       toast({ message: `${nameOf(event.participantId)} brought everyone to this view` });
-      move(cameraForView(event, viewportRef.current), true);
+      goTo(event.participantId, true, true);
       return;
     }
     if (followingRef.current === event.participantId) goTo(event.participantId, true);
@@ -525,8 +540,8 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const clear = async () => {
     if (!engine) return;
     try {
-      const restore = await clearWithUndo(engine);
-      toast({ message: "Board cleared", action: { label: "Undo", onClick: () => void restore() } });
+      const restore = await engine.clearWithUndo();
+      toast({ message: "Board cleared", ...(canDraw ? { action: { label: "Undo", onClick: () => void restore() } } : {}) });
     } catch {
       toast({ type: "error", message: "Could not clear the board. Try again." });
     }
