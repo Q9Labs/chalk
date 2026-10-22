@@ -1328,6 +1328,15 @@ func (r Runtime) Leave(ctx context.Context, input PublicInviteLeaveInput) error 
 	if err != nil {
 		return err
 	}
+	if arrival.State == ArrivalPending {
+		arrival, err = r.finishPendingArrival(ctx, arrival, ArrivalUnavailable, "cancelled")
+		if err != nil {
+			return err
+		}
+	}
+	if arrival.State == ArrivalUnavailable || arrival.State == ArrivalRejected || arrival.State == ArrivalLeft {
+		return nil
+	}
 	if arrival.State != ArrivalAdmitted {
 		return ErrArrivalUnavailable
 	}

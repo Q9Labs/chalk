@@ -173,6 +173,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     start({ displayName: automaticName, ...devicesOff });
   }, [automaticName, reloadMarker, start]);
   useEffect(() => {
+    if (preparing) return;
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
     let cancelled = false;
@@ -180,7 +181,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     const poll = async () => {
       try {
         const arrival = await client.getSpacePublicInviteArrival(pending.arrival.arrival_handle ?? "");
-        if (cancelled || !active.current) return;
+        if (cancelled || !active.current || pendingRef.current !== pending) return;
         if (arrival.state === "pending") {
           timer = globalThis.setTimeout(poll, retryDelay(arrival.retry_after));
           return;
@@ -188,13 +189,13 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
         if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
         const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
         const prepared = createPreparedPublicSpace(client, resumed);
-        if (cancelled || !active.current) {
+        if (cancelled || !active.current || pendingRef.current !== pending) {
           await prepared.finish().catch(() => undefined);
           return;
         }
         complete(prepared, pending.inviteLink, pending.spaceName);
       } catch (cause) {
-        if (!cancelled && active.current) {
+        if (!cancelled && active.current && pendingRef.current === pending) {
           pendingRef.current = null;
           setPending(null);
           setError(neutralMessage(cause));
@@ -206,16 +207,18 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
-  }, [client, complete, displayName, pending]);
+  }, [client, complete, displayName, pending, preparing]);
   const cancel = useCallback(async () => {
     const arrivalHandle = pending?.arrival.arrival_handle;
     if (!arrivalHandle || preparing) return;
+    pendingRef.current = null;
     setPreparing(true);
     try {
       await client.leaveSpacePublicInviteArrival(arrivalHandle);
       pendingRef.current = null;
       setPending(null);
     } catch (cause) {
+      pendingRef.current = pending;
       setError(neutralMessage(cause));
     } finally {
       if (active.current) setPreparing(false);

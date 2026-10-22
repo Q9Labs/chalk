@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestToken } from "../../__tests__/space-page.test-support";
+import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestArrival, spacePageTestToken } from "../../__tests__/space-page.test-support";
 import { reloadRejoinStorageKey, writeReloadRejoin } from "@q9labsai/chalk-client";
 import { SpacePage } from "./SpacePage";
 
@@ -131,6 +131,43 @@ describe("public Space entry", () => {
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
     expect(screen.getByText("Chalk could not connect. Check your connection and try entering again.")).toBeDefined();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+  });
+
+  it("ignores an admission response that arrives while Cancel is in flight", async () => {
+    vi.useFakeTimers();
+    try {
+      window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
+      mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-pending", retry_after: 1, space: { slug: "design-lab", name: "Design Lab" } });
+      let resolveStatus: (arrival: typeof spacePageTestArrival) => void = () => {
+        throw new Error("Poll has not started");
+      };
+      mocks.publicClient.getSpacePublicInviteArrival.mockReturnValue(
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }),
+      );
+      let resolveCancel: () => void = () => {
+        throw new Error("Cancel has not started");
+      };
+      mocks.publicClient.leaveSpacePublicInviteArrival.mockReturnValue(
+        new Promise<void>((resolve) => {
+          resolveCancel = resolve;
+        }),
+      );
+      render(<SpacePage slug="design-lab" />);
+      await act(async () => enterName("Ada"));
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(mocks.publicClient.getSpacePublicInviteArrival).toHaveBeenCalledOnce();
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+      await act(async () => resolveStatus(spacePageTestArrival));
+      expect(mocks.createPreparedPublicSpace).not.toHaveBeenCalled();
+      expect(mocks.holder.chalkProps).toBeUndefined();
+      await act(async () => resolveCancel());
+      expect(screen.queryByText("Asking to join Design Lab")).toBeNull();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 
   it.each(["rejected", "unavailable"])("explains %s admission and can ask again", async (state) => {
