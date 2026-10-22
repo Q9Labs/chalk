@@ -936,6 +936,11 @@ type SpaceRole struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type SyncAdmissionInvalidation struct {
+	AdmissionRequestID pgtype.UUID        `json:"admission_request_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
 type SyncAdmissionRequest struct {
 	TenantID                    pgtype.UUID        `json:"tenant_id"`
 	SpaceID                     pgtype.UUID        `json:"space_id"`

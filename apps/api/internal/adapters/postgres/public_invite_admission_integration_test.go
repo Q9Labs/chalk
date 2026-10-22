@@ -26,7 +26,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		t.Skip("isolated PostgreSQL integration database is not configured")
 	}
 	timeout := 30 * time.Second
-	if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") == "1" {
+	if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") == "1" || os.Getenv("CHALK_PROOF_SYNC_FINALIZER") == "1" {
 		timeout = 5 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -48,6 +48,15 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	exec(`insert into tenant_artifact_policies(tenant_id) values($1)`, uuid(tenantID))
 	// These pending lifecycle rows must never escape into another Sync test.
 	defer func() {
+		for _, query := range []string{
+			`update sync_external_operations set status='pending',fence_active=false,last_error_code=null,applied_event_id=null,applied_revision=null,completed_at=null where tenant_id=$1`,
+			`update sync_lifecycle_intents set status='pending',terminal_reason=null,applied_event_id=null,applied_revision=null,completed_at=null where tenant_id=$1`,
+			`delete from sync_control_events where tenant_id=$1`,
+		} {
+			if _, err := pool.Exec(context.Background(), query, uuid(tenantID)); err != nil {
+				t.Errorf("cleanup Sync authority: %v", err)
+			}
+		}
 		for _, table := range []string{"space_public_admission_requests", "space_public_arrivals", "sync_admission_requests", "sync_publication_fences", "sync_external_operations", "sync_lifecycle_intents"} {
 			if _, err := pool.Exec(context.Background(), "delete from "+table+" where tenant_id=$1", uuid(tenantID)); err != nil {
 				t.Errorf("cleanup %s: %v", table, err)
@@ -351,6 +360,29 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		proveAdmissionProvenanceCollection(t, ctx, pool, service, episodeRepository, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
 	})
 
+	t.Run("invalidation never locks request from arrival", func(t *testing.T) {
+		arrival, request := newKnock("Invalidation lock order")
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `select admission_request_id from sync_admission_requests where admission_request_id=$1 for update`, uuid(request.RequestHandle)); err != nil {
+			t.Fatal(err)
+		}
+		// A revocation holds only its arrival lock. Enqueuing a hint must not
+		// wait for this request lock, which the scheduler takes before arrival.
+		bounded, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		if _, err := pool.Exec(bounded, `update space_public_arrivals set state='unavailable',terminal_reason='invite_disabled',terminal_at=now() where arrival_handle=$1`, uuid(arrival.ArrivalHandle)); err != nil {
+			t.Fatalf("arrival -> request reverse lock: %v", err)
+		}
+	})
+
+	t.Run("cleanup retries across Sync finalization", func(t *testing.T) {
+		proveUncollectedCleanupRetries(t, ctx, pool, service, episodeRepository, tenantID, space.ID, host.Episode.ID, accountID, newKnock)
+	})
+
 	t.Run("cleanup query retained history", func(t *testing.T) {
 		if os.Getenv("CHALK_PROOF_CLEANUP_EXPLAIN") != "1" {
 			t.Skip("opt-in seeded EXPLAIN proof")
@@ -362,8 +394,32 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	})
 
 	_, disabled := newKnock("Disabled invite guest")
-	if _, err := service.SetInviteEnabled(ctx, tenantID, space.ID, false, accountID); err != nil {
+	exec(`update sync_admission_requests set requested_at=now()-interval '6 minutes',expires_at=now()-interval '1 minute' where admission_request_id=$1`, uuid(disabled.RequestHandle))
+	start := make(chan struct{})
+	results := make(chan error, 3)
+	go func() {
+		<-start
+		_, err := service.SetInviteEnabled(ctx, tenantID, space.ID, false, accountID)
+		results <- err
+	}()
+	for range 2 {
+		go func() {
+			<-start
+			_, err := episodeRepository.EnqueueDueEpisodeDeadlines(ctx, 50)
+			results <- err
+		}()
+	}
+	close(start)
+	for range 3 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := episodeRepository.EnqueueDueEpisodeDeadlines(ctx, 50); err != nil {
 		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `select count(*) from sync_external_operations where tenant_id=$1 and operation_name='admission_request_expired' and payload->>'admissionRequestId'=$2`, uuid(tenantID), disabled.RequestHandle.String()).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("concurrent invalidation and expiry reserved %d operations, want 1: %v", count, err)
 	}
 	if _, _, err := service.DecideAdmissionRequest(ctx, publicinvites.DecideAdmissionRequestInput{TenantID: tenantID, SpaceID: space.ID, RequestHandle: disabled.RequestHandle, ActorID: accountID, Decision: publicinvites.DecisionApprove}); !errors.Is(err, publicinvites.ErrAdmissionRequestTerminal) {
 		t.Fatalf("approval with disabled invite before any guest poll = %v", err)

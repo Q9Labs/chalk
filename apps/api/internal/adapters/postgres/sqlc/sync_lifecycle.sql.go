@@ -863,6 +863,32 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 	return i, err
 }
 
+const deleteAdmissionInvalidation = `-- name: DeleteAdmissionInvalidation :exec
+delete from sync_admission_invalidations where admission_request_id = $1
+`
+
+func (q *Queries) DeleteAdmissionInvalidation(ctx context.Context, admissionRequestID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAdmissionInvalidation, admissionRequestID)
+	return err
+}
+
+const deleteOrphanAdmissionInvalidations = `-- name: DeleteOrphanAdmissionInvalidations :exec
+delete from sync_admission_invalidations
+where admission_request_id in (
+    select invalidation.admission_request_id from (
+        select admission_request_id from sync_admission_invalidations
+        order by created_at, admission_request_id limit $1::integer
+    ) invalidation
+    left join sync_admission_requests request using (admission_request_id)
+    where request.admission_request_id is null
+)
+`
+
+func (q *Queries) DeleteOrphanAdmissionInvalidations(ctx context.Context, pageSize int32) error {
+	_, err := q.db.Exec(ctx, deleteOrphanAdmissionInvalidations, pageSize)
+	return err
+}
+
 const episodeLingerStillDue = `-- name: EpisodeLingerStillDue :one
 select departure.last_departure_at::timestamptz as last_departure_at, coalesce(
     episodes.status = 'active'
@@ -1110,16 +1136,29 @@ func (q *Queries) IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissi
 }
 
 const listDueAdmissionRequests = `-- name: ListDueAdmissionRequests :many
-with candidates as materialized (
+with deadlines as materialized (
     select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from sync_admission_requests requests
-    left join space_public_admission_requests public
-      on public.tenant_id = requests.tenant_id and public.space_id = requests.space_id
-      and public.request_handle = requests.admission_request_id
-    left join space_public_arrivals arrivals
-      on arrivals.tenant_id = public.tenant_id and arrivals.arrival_handle = public.arrival_handle
+    join episodes on episodes.tenant_id = requests.tenant_id and episodes.id = requests.episode_id
     where requests.status = 'pending' and requests.decision_external_operation_id is null
-      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now())
-    union all
+      and requests.expires_at <= now() and episodes.status = 'active'
+    order by requests.expires_at, requests.admission_request_id
+    limit $1::integer
+), invalidations as materialized (
+    select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from (
+        select admission_request_id from sync_admission_invalidations
+        order by created_at, admission_request_id
+        limit $1::integer
+    ) invalidation
+    cross join lateral (
+        select request.tenant_id, request.space_id, request.episode_id, request.admission_request_id, request.request_key, request.request_fingerprint, request.participant_id, request.display_name, request.role, request.status, request.decision_external_operation_id, request.requested_at, request.expires_at, request.completed_at from sync_admission_requests request
+        where request.admission_request_id = invalidation.admission_request_id
+        offset 0
+    ) requests
+), candidates as materialized (
+    select tenant_id, space_id, episode_id, admission_request_id, request_key, request_fingerprint, participant_id, display_name, role, status, decision_external_operation_id, requested_at, expires_at, completed_at from deadlines
+    union
+    select tenant_id, space_id, episode_id, admission_request_id, request_key, request_fingerprint, participant_id, display_name, role, status, decision_external_operation_id, requested_at, expires_at, completed_at from invalidations
+    union
     select request.tenant_id, request.space_id, request.episode_id, request.admission_request_id, request.request_key, request.request_fingerprint, request.participant_id, request.display_name, request.role, request.status, request.decision_external_operation_id, request.requested_at, request.expires_at, request.completed_at from participants participant
     cross join lateral (
         select requests.tenant_id, requests.space_id, requests.episode_id, requests.admission_request_id, requests.request_key, requests.request_fingerprint, requests.participant_id, requests.display_name, requests.role, requests.status, requests.decision_external_operation_id, requests.requested_at, requests.expires_at, requests.completed_at from sync_admission_requests requests
@@ -1131,6 +1170,14 @@ with candidates as materialized (
         where requests.tenant_id = participant.tenant_id
           and requests.episode_id = participant.episode_id
           and requests.participant_id = participant.id and requests.status = 'admitted'
+          and not exists (
+            select 1 from sync_external_operations cleanup
+            where cleanup.tenant_id = requests.tenant_id and cleanup.episode_id = requests.episode_id
+              and cleanup.operation_name = 'remove_participant'
+              and cleanup.request_key = 'uncollected_' || requests.admission_request_id::text
+              and (cleanup.status <> 'failed' or
+                cleanup.completed_at + make_interval(secs => least(60, power(2, least(cleanup.attempt_count, 6)))::integer) > now())
+          )
           and ((arrivals.state = 'pending'
             and requests.expires_at <= now() and requests.completed_at <= now() - interval '1 minute')
             or arrivals.state in ('unavailable', 'rejected'))
@@ -1152,7 +1199,7 @@ join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id =
   and episodes.id = requests.episode_id
 join participants on participants.tenant_id = requests.tenant_id and participants.episode_id = requests.episode_id
   and participants.id = requests.participant_id
-where episodes.status = 'active'
+where episodes.status = 'active' or exists (select 1 from sync_admission_invalidations invalidation where invalidation.admission_request_id = requests.admission_request_id)
 order by requests.expires_at, requests.admission_request_id
 limit $1::integer
 `
@@ -1178,8 +1225,8 @@ type ListDueAdmissionRequestsRow struct {
 	ProducingSpanID             pgtype.Text        `json:"producing_span_id"`
 }
 
-// Separate pending expiry from admitted cleanup. The lateral lookup starts
-// cleanup at current active seats, never at retained admitted-request history.
+// Deadline and invalidation candidates have separate indexable predicates.
+// UNION deduplicates requests that are both expired and invalidated.
 func (q *Queries) ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error) {
 	rows, err := q.db.Query(ctx, listDueAdmissionRequests, pageSize)
 	if err != nil {
@@ -2052,6 +2099,69 @@ type RequeueFailedAdmissionDecisionParams struct {
 
 func (q *Queries) RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error) {
 	row := q.db.QueryRow(ctx, requeueFailedAdmissionDecision, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
+	var i SyncExternalOperation
+	err := row.Scan(
+		&i.TenantID,
+		&i.SpaceID,
+		&i.EpisodeID,
+		&i.ExternalOperationID,
+		&i.ParentExternalOperationID,
+		&i.RequestKey,
+		&i.RequestFingerprint,
+		&i.OperationName,
+		&i.ActorParticipantID,
+		&i.ActorGeneration,
+		&i.TargetParticipantID,
+		&i.TargetParticipantGeneration,
+		&i.Source,
+		&i.RecordingID,
+		&i.DeadlineGeneration,
+		&i.JourneyID,
+		&i.ParentJourneyEventID,
+		&i.ProducingTraceID,
+		&i.ProducingSpanID,
+		&i.Payload,
+		&i.Status,
+		&i.FenceActive,
+		&i.AttemptCount,
+		&i.NextAttemptAt,
+		&i.LastErrorCode,
+		&i.AppliedEventID,
+		&i.AppliedRevision,
+		&i.CreatedAt,
+		&i.CompletedAt,
+		&i.ProducingTraceparent,
+		&i.ProducingTracestate,
+	)
+	return i, err
+}
+
+const requeueFailedUncollectedRemoval = `-- name: RequeueFailedUncollectedRemoval :one
+update sync_external_operations
+set status = 'pending', fence_active = true, completed_at = null, last_error_code = null,
+    target_participant_generation = $1,
+    attempt_count = least(attempt_count, 99), next_attempt_at = now()
+where tenant_id = $2 and episode_id = $3
+  and external_operation_id = $4 and operation_name = 'remove_participant'
+  and status = 'failed'
+  and completed_at + make_interval(secs => least(60, power(2, least(attempt_count, 6)))::integer) <= now()
+returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+`
+
+type RequeueFailedUncollectedRemovalParams struct {
+	ParticipantGeneration pgtype.Int8 `json:"participant_generation"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	EpisodeID             pgtype.UUID `json:"episode_id"`
+	ExternalOperationID   pgtype.UUID `json:"external_operation_id"`
+}
+
+func (q *Queries) RequeueFailedUncollectedRemoval(ctx context.Context, arg RequeueFailedUncollectedRemovalParams) (SyncExternalOperation, error) {
+	row := q.db.QueryRow(ctx, requeueFailedUncollectedRemoval,
+		arg.ParticipantGeneration,
+		arg.TenantID,
+		arg.EpisodeID,
+		arg.ExternalOperationID,
+	)
 	var i SyncExternalOperation
 	err := row.Scan(
 		&i.TenantID,

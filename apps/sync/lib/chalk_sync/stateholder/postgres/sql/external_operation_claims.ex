@@ -12,6 +12,16 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     """
   end
 
+  def requeue_rolled_back_admission do
+    """
+    update sync_external_operations
+    set next_attempt_at = now() + make_interval(secs => least(8, power(2, least(attempt_count, 4) - 1))::integer)
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and external_operation_id = $4 and attempt_count = $5 and status = 'pending'
+      and operation_name in ('admit_participant', 'deny_admission', 'admission_request_expired')
+    """
+  end
+
   def claim_operations do
     claim_operations_where("operation_name <> 'role_transition_cleanup'")
   end

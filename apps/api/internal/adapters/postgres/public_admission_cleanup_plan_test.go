@@ -41,7 +41,7 @@ func proveAdmissionCleanupPlan(t *testing.T, ctx context.Context, pool *pgxpool.
       join public.space_public_admission_requests public on public.request_handle=r.admission_request_id
       join public.space_public_arrivals a on a.arrival_handle=public.arrival_handle
       where r.admission_request_id=$1`, uuid(handle))
-	for _, table := range []string{"sync_admission_requests", "participants", "space_public_admission_requests", "space_public_arrivals", "episodes", "sync_lifecycle_intents"} {
+	for _, table := range []string{"sync_admission_requests", "participants", "space_public_admission_requests", "space_public_arrivals", "episodes", "sync_lifecycle_intents", "sync_admission_invalidations"} {
 		exec(`create temp table ` + table + ` (like public.` + table + ` including defaults including indexes) on commit drop`)
 	}
 	exec(`insert into episodes select * from public.episodes`)
@@ -63,9 +63,27 @@ func proveAdmissionCleanupPlan(t *testing.T, ctx context.Context, pool *pgxpool.
 	exec(`insert into space_public_arrivals select (jsonb_populate_record(null::space_public_arrivals, arrival || jsonb_build_object(
       'arrival_handle',md5('arrival-'||n)::uuid,'idempotency_key','history_'||lpad(n::text,16,'0'),
       'participant_id',md5('seat-'||n)::uuid,'provider_subject',md5('subject-'||n),
-      'state',case when n<=100000 then 'admitted' when n=100003 then 'unavailable' else 'pending' end))).*
+      'state',case when n<=100000 then 'left' when n=100003 then 'unavailable' else 'pending' end))).*
       from proof_seed cross join generate_series(1,100003) n`)
-	for _, table := range []string{"sync_admission_requests", "participants", "space_public_admission_requests", "space_public_arrivals", "episodes", "sync_lifecycle_intents"} {
+	exec(`insert into participants select (jsonb_populate_record(null::participants, participant || jsonb_build_object(
+      'id',md5('seat-'||n)::uuid,'account_id',null,'media_connection_id',null,'status','joining'))).*
+      from proof_seed cross join generate_series(100004,200006) n`)
+	exec(`insert into sync_admission_requests select (jsonb_populate_record(null::sync_admission_requests, request || jsonb_build_object(
+      'admission_request_id',md5('request-'||n)::uuid,'participant_id',md5('seat-'||n)::uuid,
+      'request_key','pending_'||lpad(n::text,16,'0'),'status','pending',
+      'decision_external_operation_id',null,'completed_at',null,'requested_at',now()-interval '2 hours',
+      'expires_at',case when n in (200004,200006) then now()-interval '1 minute' else now()+interval '5 minutes' end))).*
+      from proof_seed cross join generate_series(100004,200006) n`)
+	exec(`insert into space_public_admission_requests select (jsonb_populate_record(null::space_public_admission_requests, public_request || jsonb_build_object(
+      'request_handle',md5('request-'||n)::uuid,'arrival_handle',md5('arrival-'||n)::uuid,'state','pending'))).*
+      from proof_seed cross join generate_series(100004,200006) n`)
+	exec(`insert into space_public_arrivals select (jsonb_populate_record(null::space_public_arrivals, arrival || jsonb_build_object(
+      'arrival_handle',md5('arrival-'||n)::uuid,'idempotency_key','pending_'||lpad(n::text,16,'0'),
+      'participant_id',null,'participant_generation',null,'episode_id',null,'provider',null,'provider_subject',null,
+      'state',case when n in (200005,200006) then 'unavailable' else 'pending' end))).*
+      from proof_seed cross join generate_series(100004,200006) n`)
+	exec(`insert into sync_admission_invalidations(admission_request_id) select md5('request-'||n)::uuid from generate_series(200005,200006) n`)
+	for _, table := range []string{"sync_admission_requests", "participants", "space_public_admission_requests", "space_public_arrivals", "episodes", "sync_lifecycle_intents", "sync_admission_invalidations"} {
 		exec(`analyze ` + table)
 	}
 	source, err := os.ReadFile(filepath.Join("..", "..", "..", "db", "queries", "sync_lifecycle.sql"))
@@ -92,9 +110,12 @@ func proveAdmissionCleanupPlan(t *testing.T, ctx context.Context, pool *pgxpool.
 	if len(roots) != 1 {
 		t.Fatalf("EXPLAIN roots=%d, want 1", len(roots))
 	}
-	activeIndex, admittedIndex := false, false
+	activeIndex, admittedIndex, invalidatedIndex := false, false, false
 	var inspect func(admissionCleanupPlanNode)
 	inspect = func(node admissionCleanupPlanNode) {
+		if node.Relation == "sync_admission_requests" && node.Removed > 50 {
+			t.Errorf("pending selection filtered %.0f future requests instead of using a due index", node.Removed)
+		}
 		if node.Kind == "Seq Scan" && (node.Relation == "sync_admission_requests" || node.Relation == "participants" || node.Relation == "space_public_admission_requests" || node.Relation == "space_public_arrivals") {
 			t.Errorf("retained-history relation uses sequential scan: %s", node.Relation)
 		}
@@ -106,25 +127,30 @@ func proveAdmissionCleanupPlan(t *testing.T, ctx context.Context, pool *pgxpool.
 		if node.Relation == "sync_admission_requests" && strings.Contains(node.Kind, "Index") && node.Loops == 3 {
 			admittedIndex = true
 		}
+		if node.Relation == "sync_admission_requests" && strings.Contains(node.Kind, "Index") && node.Loops == 2 && strings.Contains(node.IndexCondition, "admission_request_id =") && !strings.Contains(node.IndexCondition, "expires_at") {
+			invalidatedIndex = true
+		}
 		for _, child := range node.Children {
 			inspect(child)
 		}
 	}
 	inspect(roots[0].Plan)
-	if !activeIndex || !admittedIndex {
-		t.Fatalf("cleanup must start at 3 active seats and use 3 indexed admitted lookups: active=%v admitted=%v; plan=%s", activeIndex, admittedIndex, plan)
+	if !activeIndex || !admittedIndex || !invalidatedIndex {
+		t.Fatalf("cleanup must start at 3 active seats and use 3 indexed admitted lookups: active=%v admitted=%v invalidated=%v; plan=%s", activeIndex, admittedIndex, invalidatedIndex, plan)
 	}
 	due, err := sqlc.New(tx).ListDueAdmissionRequests(ctx, 50)
-	if err != nil || len(due) != 2 {
-		t.Fatalf("seeded cleanup due rows=%d want 2, err=%v", len(due), err)
+	if err != nil || len(due) != 5 {
+		t.Fatalf("seeded cleanup due rows=%d want 5, err=%v", len(due), err)
 	}
-	t.Log("EXPLAIN: 100000 retained collected admissions; 3 current seats; 2 due rows; active-seat index + parameterized admission index, no retained-history seq scan")
+	t.Log("EXPLAIN: 100000 retained collected admissions; 100000 future pending admissions; 3 current active seats; 5 unique due rows; indexed deadline, invalidation, and active-seat selection")
 }
 
 type admissionCleanupPlanNode struct {
-	Kind     string                     `json:"Node Type"`
-	Relation string                     `json:"Relation Name"`
-	Rows     float64                    `json:"Actual Rows"`
-	Loops    float64                    `json:"Actual Loops"`
-	Children []admissionCleanupPlanNode `json:"Plans"`
+	IndexCondition string                     `json:"Index Cond"`
+	Kind           string                     `json:"Node Type"`
+	Relation       string                     `json:"Relation Name"`
+	Rows           float64                    `json:"Actual Rows"`
+	Removed        float64                    `json:"Rows Removed by Filter"`
+	Loops          float64                    `json:"Actual Loops"`
+	Children       []admissionCleanupPlanNode `json:"Plans"`
 }

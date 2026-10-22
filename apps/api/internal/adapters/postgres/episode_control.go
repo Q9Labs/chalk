@@ -283,6 +283,10 @@ func createParticipantRemovalOperation(ctx context.Context, queries *sqlc.Querie
 	if err != nil {
 		return sqlc.SyncExternalOperation{}, sqlc.Participant{}, err
 	}
+	return reserveParticipantRemovalOperation(ctx, queries, input, participant, operation)
+}
+
+func reserveParticipantRemovalOperation(ctx context.Context, queries *sqlc.Queries, input tenantExternalOperationInput, participant sqlc.Participant, operation sqlc.SyncExternalOperation) (sqlc.SyncExternalOperation, sqlc.Participant, error) {
 	for _, source := range []string{"microphone", "camera", "screen"} {
 		owner, err := queries.CreateTenantEndPublicationFence(ctx, sqlc.CreateTenantEndPublicationFenceParams{
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
@@ -296,7 +300,7 @@ func createParticipantRemovalOperation(ctx context.Context, queries *sqlc.Querie
 			return sqlc.SyncExternalOperation{}, sqlc.Participant{}, fmt.Errorf("install participant removal publication fence: %w", err)
 		}
 	}
-	participant, err = queries.MarkLifecycleParticipantLeaving(ctx, sqlc.MarkLifecycleParticipantLeavingParams{
+	leaving, err := queries.MarkLifecycleParticipantLeaving(ctx, sqlc.MarkLifecycleParticipantLeavingParams{
 		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 		ParticipantID: participant.ID, ParticipantGeneration: participant.Generation,
 	})
@@ -306,7 +310,7 @@ func createParticipantRemovalOperation(ctx context.Context, queries *sqlc.Querie
 	if err != nil {
 		return sqlc.SyncExternalOperation{}, sqlc.Participant{}, fmt.Errorf("mark removal participant leaving: %w", err)
 	}
-	return operation, participant, nil
+	return operation, leaving, nil
 }
 
 func resolveControlRetry(ctx context.Context, queries *sqlc.Queries, tenantID, spaceID, episodeID utilities.ID, operation sqlc.SyncExternalOperation, result *episodes.ControlRequest) error {

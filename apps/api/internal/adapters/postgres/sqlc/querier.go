@@ -95,6 +95,8 @@ type Querier interface {
 	CreateTranscriptionAttempt(ctx context.Context, arg CreateTranscriptionAttemptParams) (TranscriptionAttempt, error)
 	CreateTranscriptionCleanupJob(ctx context.Context, arg CreateTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg CreateTranscriptionFinalizerJobIfReadyParams) (ArtifactJob, error)
+	DeleteAdmissionInvalidation(ctx context.Context, admissionRequestID pgtype.UUID) error
+	DeleteOrphanAdmissionInvalidations(ctx context.Context, pageSize int32) error
 	DeleteSpaceMember(ctx context.Context, arg DeleteSpaceMemberParams) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
@@ -225,8 +227,8 @@ type Querier interface {
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	IsAdmissionRequestExpiryDue(ctx context.Context, arg IsAdmissionRequestExpiryDueParams) (bool, error)
 	LinkAPIKeyMutation(ctx context.Context, arg LinkAPIKeyMutationParams) error
-	// Separate pending expiry from admitted cleanup. The lateral lookup starts
-	// cleanup at current active seats, never at retained admitted-request history.
+	// Deadline and invalidation candidates have separate indexable predicates.
+	// UNION deduplicates requests that are both expired and invalidated.
 	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
@@ -335,6 +337,7 @@ type Querier interface {
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)
 	RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error)
+	RequeueFailedUncollectedRemoval(ctx context.Context, arg RequeueFailedUncollectedRemovalParams) (SyncExternalOperation, error)
 	ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	ReserveChatAttachmentUpload(ctx context.Context, arg ReserveChatAttachmentUploadParams) (ReserveChatAttachmentUploadRow, error)
 	ReserveEpisodeAdmissionDecision(ctx context.Context, arg ReserveEpisodeAdmissionDecisionParams) (int64, error)

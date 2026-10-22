@@ -95,6 +95,16 @@ control lock, execute provider effects outside the transaction, and finalize
 durable facts only after confirmation. Opening or losing a socket never creates
 a durable join or leave.
 
+### Admission expiry boundaries
+
+`begin_internal_operation` accepts a new expiry operation. It must check the
+shared deadline-or-arrival-invalidation rule before reserving a pending request.
+The API scheduler applies that rule when it creates and reserves an operation.
+Sync finalization consumes either accepted reservation; it does not accept a new
+operation. Keep planner validation: internal callers do not pass through the API
+scheduler. The PostgreSQL lifecycle tests exercise internal acceptance separately
+from the API/Sync cleanup proof.
+
 ## Protocol v1
 
 The language-neutral source is `contract/schema/sync-v1.json`; generated

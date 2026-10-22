@@ -319,6 +319,29 @@ defmodule ChalkSync.Stateholder.Postgres do
         WebhookObservation.external_operation(episode, external_operation_id, decision)
         {:ok, decision}
 
+      {:error, {:admission_finalization_rolled_back, attempt}} ->
+        Logger.warning("sync admission finalization rolled back; retry scheduled",
+          episode_id: episode.episode_id,
+          external_operation_id: external_operation_id,
+          attempt_count: attempt
+        )
+
+        case ExternalOperationClaims.requeue_rolled_back_admission(
+               episode,
+               external_operation_id,
+               attempt
+             ) do
+          {:ok, _result} ->
+            :ok
+
+          {:error, _reason} ->
+            Logger.warning("sync admission retry scheduling failed; lease retained",
+              external_operation_id: external_operation_id
+            )
+        end
+
+        {:retryable, :decision_unavailable}
+
       {:error, {:retryable, reason}} ->
         {:retryable, reason}
 

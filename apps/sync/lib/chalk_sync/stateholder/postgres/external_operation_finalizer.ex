@@ -28,6 +28,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     policy = Authority.lock_episode(connection, episode)
     external = lock_external_operation(connection, episode, external_operation_id)
 
+    finalize_locked_operation(connection, episode, external, control, policy, outcome)
+  end
+
+  defp finalize_locked_operation(connection, episode, external, control, policy, outcome) do
     cond do
       external.status != :pending ->
         ExternalOperationDecision.build(external, :duplicate)
@@ -44,6 +48,21 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
           {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
         end
     end
+  rescue
+    exception in Postgrex.Error ->
+      if external.name in [:admit_participant, :deny_admission, :admission_request_expired] and
+           exception.postgres[:code] in [
+             :lock_not_available,
+             :deadlock_detected,
+             :serialization_failure
+           ] do
+        Postgrex.rollback(
+          connection,
+          {:admission_finalization_rolled_back, external.attempt_count}
+        )
+      else
+        reraise exception, __STACKTRACE__
+      end
   end
 
   defp stale_maximum_duration?(%{name: :maximum_duration_expired} = external, policy) do

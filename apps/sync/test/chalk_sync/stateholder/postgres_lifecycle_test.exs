@@ -35,6 +35,207 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     end
   end
 
+  @tag :admission_rollback
+  test "rolled-back admission finalization releases only its own retry lease", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+
+    fixture =
+      connection
+      |> SyncPostgres.seed_episode(1)
+      |> then(&SyncPostgres.seed_admission_request(connection, &1))
+
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    {:ok, operation} =
+      Operation.new("retry_locked_admission", :admit_participant, %{
+        "admissionRequestId" => fixture.admission_request_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} =
+             Postgres.begin_operation(hd(fixture.identities), operation)
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+    assert Enum.any?(claimed, fn {_episode, op} -> op.external_operation_id == id end)
+
+    assert {:ok, %{num_rows: 0}} =
+             ChalkSync.Stateholder.Postgres.ExternalOperationClaims.requeue_rolled_back_admission(
+               fixture.episode,
+               id,
+               0
+             )
+
+    assert [[true]] =
+             Postgrex.query!(
+               connection,
+               "select next_attempt_at > now()+interval '50 seconds' from sync_external_operations where external_operation_id=$1",
+               [UUID.dump!(id)]
+             ).rows
+
+    assert {:ok, :locked} =
+             Postgrex.transaction(Enum.at(connections, 2), fn tx ->
+               Postgrex.query!(tx, "select id from participants where id=$1 for update", [
+                 UUID.dump!(fixture.admission_participant_id)
+               ])
+
+               assert {:retryable, :decision_unavailable} =
+                        Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+
+               assert [[true, 1, "pending"]] =
+                        Postgrex.query!(
+                          connection,
+                          "select next_attempt_at <= now()+interval '2 seconds', attempt_count, status from sync_external_operations where external_operation_id=$1",
+                          [UUID.dump!(id)]
+                        ).rows
+
+               :locked
+             end)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+
+    assert {:ok, %{delivery: :duplicate}} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+  end
+
+  @tag :internal_admission_expiry
+  test "internal expiry accepts a deadline without a public arrival", %{connections: connections} do
+    connection = hd(connections)
+
+    fixture =
+      connection
+      |> SyncPostgres.seed_episode(1)
+      |> then(&SyncPostgres.seed_admission_request(connection, &1))
+
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    Postgrex.query!(
+      connection,
+      "update sync_admission_requests set requested_at=now()-interval '2 minutes',expires_at=now()-interval '1 second' where admission_request_id=$1",
+      [UUID.dump!(fixture.admission_request_id)]
+    )
+
+    {:ok, operation} =
+      Operation.new("internal_deadline_expiry", :admission_request_expired, %{
+        "admissionRequestId" => fixture.admission_request_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} =
+             Postgres.begin_internal_operation(fixture.episode, operation)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+  end
+
+  for arrival_state <- ["pending", "unavailable", "rejected", "left"] do
+    @arrival_state arrival_state
+    @tag :internal_admission_expiry
+    test "internal expiry validates a new reservation with #{@arrival_state} arrival before the deadline",
+         %{connections: connections} do
+      connection = hd(connections)
+
+      fixture =
+        connection
+        |> SyncPostgres.seed_episode(1)
+        |> then(&SyncPostgres.seed_admission_request(connection, &1))
+
+      episode = fixture.episode
+      tenant = UUID.dump!(episode.tenant_id)
+      space = UUID.dump!(episode.space_id)
+      arrival = UUID.dump!(UUID.generate())
+      handle = :crypto.strong_rand_bytes(32)
+
+      Postgrex.query!(
+        connection,
+        "insert into space_public_invites(tenant_id,space_id,handle) values($1,$2,$3)",
+        [tenant, space, handle]
+      )
+
+      left = @arrival_state == "left"
+
+      Postgrex.query!(
+        connection,
+        """
+        insert into space_public_arrivals(arrival_handle,tenant_id,space_id,invite_handle,invite_generation,invite_state_epoch,
+          identity_mode,display_name,guest_credential_hash,idempotency_key,idempotency_fingerprint,state,expires_at,
+          episode_id,participant_id,participant_generation,provider,provider_subject)
+        values($1,$2,$3,$4,1,1,'guest','Guest',$4,'internal_expiry_witness',$4,$5,now()+interval '5 minutes',$6,$7,$8,$9,$10)
+        """,
+        [
+          arrival,
+          tenant,
+          space,
+          handle,
+          @arrival_state,
+          if(left, do: UUID.dump!(episode.episode_id)),
+          if(left, do: UUID.dump!(fixture.admission_participant_id)),
+          if(left, do: 1),
+          if(left, do: "test"),
+          if(left, do: "old-connection")
+        ]
+      )
+
+      Postgrex.query!(
+        connection,
+        """
+        insert into space_public_admission_requests(request_handle,arrival_handle,tenant_id,space_id,display_name,state,expires_at)
+        values($1,$2,$3,$4,'Guest','pending',now()+interval '5 minutes')
+        """,
+        [UUID.dump!(fixture.admission_request_id), arrival, tenant, space]
+      )
+
+      on_exit(fn ->
+        Postgrex.query!(
+          connection,
+          "delete from space_public_admission_requests where tenant_id=$1",
+          [tenant]
+        )
+
+        Postgrex.query!(connection, "delete from space_public_arrivals where tenant_id=$1", [
+          tenant
+        ])
+
+        SyncPostgres.cleanup(connection, episode)
+      end)
+
+      {:ok, operation} =
+        Operation.new("internal_expiry_#{@arrival_state}", :admission_request_expired, %{
+          "admissionRequestId" => fixture.admission_request_id
+        })
+
+      assert [[nil]] =
+               Postgrex.query!(
+                 connection,
+                 "select decision_external_operation_id from sync_admission_requests where admission_request_id=$1",
+                 [UUID.dump!(fixture.admission_request_id)]
+               ).rows
+
+      if @arrival_state == "pending" do
+        assert {:error, :invalid_state} = Postgres.begin_internal_operation(episode, operation)
+
+        assert [[nil]] =
+                 Postgrex.query!(
+                   connection,
+                   "select decision_external_operation_id from sync_admission_requests where admission_request_id=$1",
+                   [UUID.dump!(fixture.admission_request_id)]
+                 ).rows
+      else
+        assert {:ok, %{external_operation_id: id}} =
+                 Postgres.begin_internal_operation(episode, operation)
+
+        assert {:ok, %{external_operation_id: ^id, delivery: :duplicate}} =
+                 Postgres.begin_internal_operation(episode, operation)
+
+        assert {:ok, %{result: :applied}} =
+                 Postgres.finalize_operation(episode, id, {:confirmed, :local})
+
+        assert {:ok, %{delivery: :duplicate}} =
+                 Postgres.finalize_operation(episode, id, {:confirmed, :local})
+      end
+    end
+  end
+
   for archived <- [false, true],
       endpoint_state <- [:enabled, :deleted, :disabled, :unsubscribed, :absent] do
     @archived archived

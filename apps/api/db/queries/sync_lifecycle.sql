@@ -720,18 +720,31 @@ cross join lateral (
 where episodes.tenant_id = sqlc.arg(tenant_id) and episodes.space_id = sqlc.arg(space_id) and episodes.id = sqlc.arg(episode_id);
 
 -- name: ListDueAdmissionRequests :many
--- Separate pending expiry from admitted cleanup. The lateral lookup starts
--- cleanup at current active seats, never at retained admitted-request history.
-with candidates as materialized (
+-- Deadline and invalidation candidates have separate indexable predicates.
+-- UNION deduplicates requests that are both expired and invalidated.
+with deadlines as materialized (
     select requests.* from sync_admission_requests requests
-    left join space_public_admission_requests public
-      on public.tenant_id = requests.tenant_id and public.space_id = requests.space_id
-      and public.request_handle = requests.admission_request_id
-    left join space_public_arrivals arrivals
-      on arrivals.tenant_id = public.tenant_id and arrivals.arrival_handle = public.arrival_handle
+    join episodes on episodes.tenant_id = requests.tenant_id and episodes.id = requests.episode_id
     where requests.status = 'pending' and requests.decision_external_operation_id is null
-      and sync_admission_expiry_due(requests.expires_at, arrivals.state, now())
-    union all
+      and requests.expires_at <= now() and episodes.status = 'active'
+    order by requests.expires_at, requests.admission_request_id
+    limit sqlc.arg(page_size)::integer
+), invalidations as materialized (
+    select requests.* from (
+        select admission_request_id from sync_admission_invalidations
+        order by created_at, admission_request_id
+        limit sqlc.arg(page_size)::integer
+    ) invalidation
+    cross join lateral (
+        select request.* from sync_admission_requests request
+        where request.admission_request_id = invalidation.admission_request_id
+        offset 0
+    ) requests
+), candidates as materialized (
+    select * from deadlines
+    union
+    select * from invalidations
+    union
     select request.* from participants participant
     cross join lateral (
         select requests.* from sync_admission_requests requests
@@ -743,6 +756,14 @@ with candidates as materialized (
         where requests.tenant_id = participant.tenant_id
           and requests.episode_id = participant.episode_id
           and requests.participant_id = participant.id and requests.status = 'admitted'
+          and not exists (
+            select 1 from sync_external_operations cleanup
+            where cleanup.tenant_id = requests.tenant_id and cleanup.episode_id = requests.episode_id
+              and cleanup.operation_name = 'remove_participant'
+              and cleanup.request_key = 'uncollected_' || requests.admission_request_id::text
+              and (cleanup.status <> 'failed' or
+                cleanup.completed_at + make_interval(secs => least(60, power(2, least(cleanup.attempt_count, 6)))::integer) > now())
+          )
           and ((arrivals.state = 'pending'
             and requests.expires_at <= now() and requests.completed_at <= now() - interval '1 minute')
             or arrivals.state in ('unavailable', 'rejected'))
@@ -764,7 +785,7 @@ join episodes on episodes.tenant_id = requests.tenant_id and episodes.space_id =
   and episodes.id = requests.episode_id
 join participants on participants.tenant_id = requests.tenant_id and participants.episode_id = requests.episode_id
   and participants.id = requests.participant_id
-where episodes.status = 'active'
+where episodes.status = 'active' or exists (select 1 from sync_admission_invalidations invalidation where invalidation.admission_request_id = requests.admission_request_id)
 order by requests.expires_at, requests.admission_request_id
 limit sqlc.arg(page_size)::integer;
 
@@ -806,3 +827,28 @@ where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_hand
 
 -- name: IsAdmissionRequestExpiryDue :one
 select sync_admission_expiry_due(sqlc.arg(expires_at)::timestamptz, sqlc.narg(arrival_state)::text, now())::boolean as due;
+
+-- name: RequeueFailedUncollectedRemoval :one
+update sync_external_operations
+set status = 'pending', fence_active = true, completed_at = null, last_error_code = null,
+    target_participant_generation = sqlc.arg(participant_generation),
+    attempt_count = least(attempt_count, 99), next_attempt_at = now()
+where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
+  and external_operation_id = sqlc.arg(external_operation_id) and operation_name = 'remove_participant'
+  and status = 'failed'
+  and completed_at + make_interval(secs => least(60, power(2, least(attempt_count, 6)))::integer) <= now()
+returning *;
+
+-- name: DeleteAdmissionInvalidation :exec
+delete from sync_admission_invalidations where admission_request_id = sqlc.arg(admission_request_id);
+
+-- name: DeleteOrphanAdmissionInvalidations :exec
+delete from sync_admission_invalidations
+where admission_request_id in (
+    select invalidation.admission_request_id from (
+        select admission_request_id from sync_admission_invalidations
+        order by created_at, admission_request_id limit sqlc.arg(page_size)::integer
+    ) invalidation
+    left join sync_admission_requests request using (admission_request_id)
+    where request.admission_request_id is null
+);

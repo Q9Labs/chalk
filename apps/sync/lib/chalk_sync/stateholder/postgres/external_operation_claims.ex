@@ -50,6 +50,16 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
     :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
+  # Only a confirmed transaction rollback releases a lease. A newer claim wins.
+  def requeue_rolled_back_admission(episode, id, attempt) do
+    Postgrex.query(
+      Database.connection(episode),
+      SQL.requeue_rolled_back_admission(),
+      Scope.episode(episode) ++ [Scope.uuid(id), attempt],
+      timeout: 1_000
+    )
+  end
+
   def read_operation(%EpisodeKey{} = episode, external_operation_id)
       when is_binary(external_operation_id) do
     case UUID.dump(external_operation_id) do
