@@ -43,7 +43,7 @@ env:
 
 jobs:
   # The gate's types lane checks @q9labsai/chalk-mobile whenever it or a package it uses changes, and its build lane
-  # exports the Metro bundles. This workflow only adds the native compiles.
+  # exports the Metro bundles. This workflow adds the generated iOS contract check and native compiles.
   fingerprint:
     name: Mobile native fingerprint
     runs-on: ubuntu-latest
@@ -66,8 +66,12 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version-file: .tool-versions
-          # This job may exit before installing; there may be no store to save.
-          package-manager-cache: false
+          cache: pnpm
+
+      - name: Check generated iOS scene lifecycle
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts --filter '@q9labsai/chalk-mobile...'
+          pnpm --filter @q9labsai/chalk-mobile run test:ios-scene
 
       - name: Compare native fingerprints
         id: compare
