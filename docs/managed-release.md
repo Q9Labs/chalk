@@ -38,6 +38,13 @@ or saved component metadata fails closed rather than silently disabling recordin
 a new explicit Release baseline is required.
 A manual dispatch always attempts a cut, including an unchanged source.
 Manual cuts still require the latest master Gate run/attempt for the pinned SHA to pass.
+A direct Release dispatch that builds fresh artifacts has the same rule: its first
+job fails unless the latest push, schedule or manual Gate run on master for
+`target_sha` passed. A Release that scheduled nightly starts checks only push
+Gate runs, the same rule its plan used. Pull request Gate runs do not count. Only a run that builds
+nothing new skips it: reuse (`manifest_run_id`) deploys artifacts that an earlier
+run built. A `pages_rollback_id` alone does not skip it, because the fresh builds
+still run.
 
 The path-filtered Release contracts PR workflow runs the pre-deploy checks without
 cloud credentials. Release's planning job uses the same `check-contracts.sh --plan`

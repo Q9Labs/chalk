@@ -44,6 +44,22 @@ class ReleasePlan(unittest.TestCase):
             release.plan(api, SimpleNamespace(manual=manual))
             return dict(line.split('=', 1) for line in (Path(directory) / 'output').read_text().splitlines())
 
+    def test_nightly_child_release_applies_the_gate_rule_its_plan_used(self):
+        fresh = dict(TARGET_SHA=SHA, MANIFEST_RUN_ID='', RELEASE_MANAGED='true', DEPLOY_MANAGED='true', DEPLOY_WEB='true')
+        push = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master', event='push', conclusion='success')
+        for scheduled_gate in ('cancelled', None):
+            with self.subTest(scheduled_gate=scheduled_gate):
+                api = MemoryGitHub()
+                api.gates = [push, {**push, 'run_number': 2, 'event': 'schedule', 'conclusion': scheduled_gate}]
+                self.assertEqual(self.cut(api, 8)['should_cut'], 'true')
+                with patch.dict(os.environ, GITHUB_EVENT_NAME='schedule', **fresh):
+                    release.require_gate(api, None)
+                with self.assertRaisesRegex(ValueError, 'is not successful'):
+                    self.cut(api, 8, manual=True)
+                with patch.dict(os.environ, GITHUB_EVENT_NAME='workflow_dispatch', **fresh), \
+                        self.assertRaisesRegex(ValueError, 'no successful Gate run on master'):
+                    release.require_gate(api, None)
+
     def test_green_tip_is_retried_after_cooldown_without_a_new_push(self):
         api = MemoryGitHub()
         api.tip = 'b' * 40

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target_sha:
-        description: Full 40-character commit SHA whose pull request passed the Gate workflow
+        description: Full 40-character commit SHA whose latest Gate run on master passed
         required: true
         type: string
       release_managed:
@@ -157,8 +157,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Every fresh build needs the exact target to have passed the Gate on master, like nightly and promote check.
+  # The check runs the workflow's own release tooling, not the target's.
+  require-gate:
+    name: Require a green master Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require the target's latest master Gate run to pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_RUN_ID: ${{ inputs.manifest_run_id }}
+          RELEASE_MANAGED: ${{ inputs.release_managed }}
+          DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
+          DEPLOY_WEB: ${{ inputs.deploy_web }}
+        run: python3 scripts/releases/release.py require_gate
+
   plan-managed:
     name: Plan managed components
+    needs: require-gate
     if: (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     outputs:
@@ -871,8 +889,9 @@ jobs:
 
   build-web:
     name: Build web-${{ matrix.target }} once
+    needs: require-gate
     if: >-
-      !cancelled() && inputs.deploy_web && inputs.manifest_run_id == ''
+      !cancelled() && needs.require-gate.result == 'success' && inputs.deploy_web && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     strategy:
       matrix:
