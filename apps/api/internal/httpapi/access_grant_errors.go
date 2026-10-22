@@ -26,6 +26,7 @@ var accessGrantTokenErrors = []struct {
 	{accessgrants.ErrLifetimeExceeded, APIError{Status: 400, Code: "media_token.lifetime_exceeded", Message: "Media token lifetime exceeds the limit"}},
 	{accessgrants.ErrInvalidSubject, APIError{Status: 400, Code: "media_token.invalid_subject", Message: "Invalid media token subject"}},
 	{accessgrants.ErrSubjectMismatch, APIError{Status: 403, Code: "media_token.subject_mismatch", Message: "Media token does not match the requested participant"}},
+	{accessgrants.ErrConnectionSuperseded, APIError{Status: 409, Code: "participant.connection_superseded", Message: "Participant media connection has been superseded"}},
 	{accessgrants.ErrGenerationMismatch, apiErrorParticipantGenerationMismatch},
 }
 

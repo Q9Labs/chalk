@@ -12,6 +12,8 @@ import (
 type ActiveRepository interface {
 	synctokens.SubjectRepository
 	SetParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
+	CheckParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
+	ReplaceParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string, string) error
 }
 
 type ActiveAuthorizer struct {
@@ -62,4 +64,18 @@ func (a ActiveAuthorizer) BindParticipantMediaConnection(ctx context.Context, su
 	return a.repository.SetParticipantMediaConnection(ctx, synctokens.SubjectKey{
 		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
 	}, subject.ParticipantGeneration, subject.CloudflareConnectionID)
+}
+
+// CheckParticipantMediaConnection rejects a credential whose connection was replaced.
+func (a ActiveAuthorizer) CheckParticipantMediaConnection(ctx context.Context, subject Subject) error {
+	return a.repository.CheckParticipantMediaConnection(ctx, synctokens.SubjectKey{
+		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
+	}, subject.ParticipantGeneration, subject.CloudflareConnectionID)
+}
+
+// ReplaceParticipantMediaConnection fences concurrent refreshes of the same credential.
+func (a ActiveAuthorizer) ReplaceParticipantMediaConnection(ctx context.Context, previous, next Subject) error {
+	return a.repository.ReplaceParticipantMediaConnection(ctx, synctokens.SubjectKey{
+		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
+	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, next.CloudflareConnectionID)
 }

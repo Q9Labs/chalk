@@ -152,10 +152,11 @@ func (v ParticipantMediaVerifier) Verify(ctx context.Context, credential string)
 	ctx, span := launchTracer.Start(ctx, "participant_media.authenticate")
 	subject, err := v.next.Verify(ctx, credential)
 	authenticationErr := err
+	outcome, reason := participantAuthenticationResult(err)
 	if ctx.Value(accessGrantRefreshContextKey{}) == true && errors.Is(err, accessgrants.ErrExpired) && !subject.ParticipantID.IsZero() {
 		authenticationErr = nil
+		outcome, reason = "accepted", "expired_recovered"
 	}
-	outcome, reason := participantAuthenticationResult(authenticationErr)
 	v.telemetry.recordParticipantAuthentication(ctx, outcome, reason, v.telemetry.now().Sub(startedAt))
 	finishLaunchSpan(span, outcome, reason, authenticationErr)
 	return subject, err

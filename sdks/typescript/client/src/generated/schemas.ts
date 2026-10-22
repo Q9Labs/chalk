@@ -3391,6 +3391,25 @@ export const PaginationInvalidPageSizeErrorSchema = PaginationInvalidPageSizeErr
   }),
 );
 
+export class ParticipantConnectionSupersededError extends Schema.TaggedErrorClass<ParticipantConnectionSupersededError>()("ParticipantConnectionSupersededError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.connection_superseded"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantConnectionSupersededErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.connection_superseded"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantConnectionSupersededErrorSchema = ParticipantConnectionSupersededErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantConnectionSupersededError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantConnectionSupersededError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class ParticipantGenerationMismatchError extends Schema.TaggedErrorClass<ParticipantGenerationMismatchError>()("ParticipantGenerationMismatchError", {
   error: Schema.Struct({
     code: Schema.Literal("participant.generation_mismatch"),
@@ -5182,6 +5201,7 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
   MediaTokenSubjectMismatchErrorSchema,
   MediaTokenUnknownKeyErrorSchema,
   MediaUnavailableErrorSchema,
+  ParticipantConnectionSupersededErrorSchema,
   ParticipantGenerationMismatchErrorSchema,
   ParticipantInvalidIdErrorSchema,
   ParticipantNotFoundErrorSchema,

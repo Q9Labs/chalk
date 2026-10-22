@@ -291,6 +291,7 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.MediaTokenSubjectMismatchErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ParticipantConnectionSupersededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),

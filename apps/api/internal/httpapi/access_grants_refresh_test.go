@@ -232,6 +232,34 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 				t.Fatalf("issued subject=%+v err=%v", issued, err)
 			}
 			if tc.replacement && tc.change != "replace" {
+				retry := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)).WithContext(request.Context())
+				retry.Header.Set("Content-Type", "application/json")
+				retried := httptest.NewRecorder()
+				router.ServeHTTP(retried, retry)
+				if retried.Code != 409 || !strings.Contains(retried.Body.String(), "participant.connection_superseded") || fixture.created != 1 || repo.connection != wantConnection {
+					t.Fatalf("expired replay displaced replacement: status=%d body=%s created=%d connection=%s", retried.Code, retried.Body.String(), fixture.created, repo.connection)
+				}
+				if !strings.Contains(logs.String(), `"reason":"expired_recovered"`) {
+					t.Fatalf("missing recovered authentication reason: %s", logs.String())
+				}
+				// The returned grant still resumes the replacement after the stale retry.
+				retained, err := json.Marshal(issueAccessGrantBody{ParticipantGeneration: generation, CurrentMediaToken: grant.Media.Token})
+				if err != nil {
+					t.Fatal(err)
+				}
+				resume := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(retained)).WithContext(request.Context())
+				resumed := httptest.NewRecorder()
+				router.ServeHTTP(resumed, resume)
+				if resumed.Code != 201 || fixture.created != 1 || fixture.resumed != 1 || repo.connection != wantConnection {
+					t.Fatalf("replacement seat cannot resume after replay: status=%d created=%d resumed=%d", resumed.Code, fixture.created, fixture.resumed)
+				}
+				// If its response was lost, the integration can request explicit recovery.
+				recover := httptest.NewRequest(http.MethodPost, path, strings.NewReader(fmt.Sprintf(`{"participant_generation":%d,"replace_media_connection":true}`, generation))).WithContext(request.Context())
+				recovered := httptest.NewRecorder()
+				router.ServeHTTP(recovered, recover)
+				if recovered.Code != 201 || fixture.created != 2 || repo.connection != wantConnection {
+					t.Fatalf("explicit recovery cannot restore seat: status=%d created=%d", recovered.Code, fixture.created)
+				}
 				logs.Reset()
 				if _, err := observed.Verify(context.Background(), token.Token); !errors.Is(err, accessgrants.ErrExpired) {
 					t.Fatalf("strict authentication accepted expired token: %v", err)
@@ -304,4 +332,17 @@ func TestParticipantMediaStaleGenerationStillForbidden(t *testing.T) {
 	if response.Code != 403 || called {
 		t.Fatalf("status=%d reached media=%v", response.Code, called)
 	}
+}
+
+func (r *refreshGrantRepository) CheckParticipantMediaConnection(_ context.Context, _ synctokens.SubjectKey, _ int64, connection string) error {
+	if r.connection != connection {
+		return accessgrants.ErrConnectionSuperseded
+	}
+	return nil
+}
+func (r *refreshGrantRepository) ReplaceParticipantMediaConnection(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, next string) error {
+	if err := r.CheckParticipantMediaConnection(ctx, key, generation, previous); err != nil {
+		return err
+	}
+	return r.SetParticipantMediaConnection(ctx, key, generation, next)
 }

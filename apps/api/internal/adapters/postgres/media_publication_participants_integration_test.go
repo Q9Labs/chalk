@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -60,6 +61,21 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	}
 	if _, err := tx.Exec(ctx, `update participants set status='active' where id=$1`, uuid(participantID)); err != nil {
 		t.Fatal(err)
+	}
+	if err := repository.CheckParticipantMediaConnection(ctx, key, 1, "initial-join"); err != nil {
+		t.Fatalf("current expired connection cannot recover: %v", err)
+	}
+	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "initial-join", "recovered"); err != nil {
+		t.Fatalf("replace expired connection: %v", err)
+	}
+	if err := repository.CheckParticipantMediaConnection(ctx, key, 1, "initial-join"); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("expired replay was not superseded: %v", err)
+	}
+	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "initial-join", "racing-retry"); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+		t.Fatalf("concurrent expired replay replaced current binding: %v", err)
+	}
+	if err := tx.QueryRow(ctx, `select media_connection_id from participants where id=$1`, uuid(participantID)).Scan(&initialConnection); err != nil || initialConnection != "recovered" {
+		t.Fatalf("expired replay displaced recovered seat: %q, %v", initialConnection, err)
 	}
 	if err := repository.SetParticipantMediaConnection(ctx, key, 1, "authenticated-replacement"); err != nil {
 		t.Fatal(err)

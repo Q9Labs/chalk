@@ -21,6 +21,8 @@ type ParticipantMediaIssuer interface {
 type ParticipantGenerationAuthorizer interface {
 	AuthorizeActiveParticipantGeneration(context.Context, synctokens.SubjectKey, int64) (bool, error)
 	BindParticipantMediaConnection(context.Context, accessgrants.Subject) error
+	CheckParticipantMediaConnection(context.Context, accessgrants.Subject) error
+	ReplaceParticipantMediaConnection(context.Context, accessgrants.Subject, accessgrants.Subject) error
 }
 
 type accessGrantSubjectResponse struct {
@@ -143,6 +145,13 @@ func issueAccessGrantEndpoint(
 			if !isActive {
 				return accessGrantResponse{}, apiErrorForbidden
 			}
+			previous := subject
+			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
+			if implicitReplacement {
+				if err := generations.CheckParticipantMediaConnection(ctx, previous); err != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
+				}
+			}
 			stage = "media_connection"
 			if replaceMediaConnection {
 				join, err = createAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request)
@@ -168,8 +177,13 @@ func issueAccessGrantEndpoint(
 			}
 			if replaceMediaConnection {
 				stage = "media_binding"
-				if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
-					return accessGrantResponse{}, err
+				if implicitReplacement {
+					err = generations.ReplaceParticipantMediaConnection(ctx, previous, subject)
+				} else {
+					err = generations.BindParticipantMediaConnection(ctx, subject)
+				}
+				if err != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)

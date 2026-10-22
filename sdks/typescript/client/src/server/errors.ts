@@ -13,6 +13,7 @@ const accessGrantErrorCodes = [
   "media_token.invalid_subject",
   "media_token.subject_mismatch",
   "participant.generation_mismatch",
+  "participant.connection_superseded",
   "access.forbidden",
 ] as const;
 

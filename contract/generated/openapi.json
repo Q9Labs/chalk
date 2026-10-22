@@ -6032,7 +6032,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["participant.generation_mismatch"]
+            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch"]
           },
           "413": {
             "content": {

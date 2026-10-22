@@ -43,6 +43,7 @@ type replacementGrantFixture struct {
 	SpaceService
 	TenantService
 	ParticipantMediaVerifier
+	ParticipantGenerationAuthorizer
 	ActiveParticipantAuthorizer
 	mediaplane.Plane
 	failure string
