@@ -188,10 +188,13 @@ def require_gate(github, args):
         return
     target = env('TARGET_SHA')
     require(re.fullmatch('[0-9a-f]{40}', target), 'target_sha must be a full lowercase commit SHA')
-    require(github.has_green_gate(target),
-            f'{target} has no successful Gate run on master. Pull request Gate runs do not count: '
+    # A called workflow sees its caller's event. Scheduled nightly plans its cut on the latest push Gate, so its child
+    # applies the same rule; an unfinished 01:17 scheduled Gate must not fail a cut that the plan already accepted.
+    push_only = os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
+    require(github.has_green_gate(target, push_only=push_only),
+            f'{target} has no successful {"push " if push_only else ""}Gate run on master. Pull request Gate runs do not count: '
             'merge the change, wait for its master Gate to pass, then release that commit.')
-    print(f'Release: latest master Gate for {target} passed')
+    print(f'Release: latest master {"push " if push_only else ""}Gate for {target} passed')
 
 
 def validate_choice(github, item):

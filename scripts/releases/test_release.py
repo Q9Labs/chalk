@@ -273,7 +273,7 @@ class CutTests(unittest.TestCase):
         with patch.object(api, 'pages', return_value=[old, {**old, 'run_attempt': 2, 'conclusion': None}]):
             self.assertFalse(api.has_green_gate(SHA))
 
-    FRESH = dict(TARGET_SHA=SHA, MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID='', RELEASE_MANAGED='true', DEPLOY_MANAGED='false', DEPLOY_WEB='false')
+    FRESH = dict(GITHUB_EVENT_NAME='workflow_dispatch', TARGET_SHA=SHA, MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID='', RELEASE_MANAGED='true', DEPLOY_MANAGED='false', DEPLOY_WEB='false')
 
     def require_gate(self, runs, **inputs):
         api = object.__new__(GitHub)
