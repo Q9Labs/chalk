@@ -33,7 +33,10 @@ export function PrivacyNotice() {
   return (
     <aside className="privacy-notice" aria-label="Privacy Policy update">
       <p>
-        {PRIVACY_NOTICE_TEXT} <a href="/privacy#whats-changing">{PRIVACY_NOTICE_LINK_TEXT}</a>
+        {PRIVACY_NOTICE_TEXT}{" "}
+        <a href="/privacy#whats-changing" target="_blank" rel="noopener noreferrer" title="Opens in a new tab">
+          {PRIVACY_NOTICE_LINK_TEXT}
+        </a>
       </p>
       <button type="button" className="privacy-notice-dismiss" onClick={dismiss} aria-label="Dismiss Privacy Policy notice">
         Dismiss

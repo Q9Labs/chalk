@@ -185,6 +185,24 @@ describe("public Space entry", () => {
     expect(screen.queryByLabelText("Your name")).toBeNull();
   });
 
+  it("keeps the same privacy notice mounted through automatic admission until dismissed", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-21T12:00:00Z"));
+    window.history.replaceState({}, "", `/space/design-lab?name=Ada#spaceInviteToken=${spacePageTestToken}`);
+    try {
+      render(<SpacePage slug="design-lab" />);
+      const notice = screen.getByRole("complementary", { name: "Privacy Policy update" });
+      await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ displayName: "Ada" }));
+      expect(screen.getByRole("complementary", { name: "Privacy Policy update" })).toBe(notice);
+      const policyLink = screen.getByRole("link", { name: "See what's changing." });
+      expect(policyLink.getAttribute("target")).toBe("_blank");
+      expect(policyLink.getAttribute("rel")).toBe("noopener noreferrer");
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss Privacy Policy notice" }));
+      expect(screen.queryByRole("complementary", { name: "Privacy Policy update" })).toBeNull();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("keeps access on page hide and remembers only enabled devices", async () => {
     const view = await enterInvite();
 

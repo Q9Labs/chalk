@@ -98,7 +98,10 @@ export function PreviousPrivacyPolicy() {
   return (
     <>
       <h1>{PRIVACY_ARCHIVE_TITLE}</h1>
-      <p className="legal-effective-date">Effective {PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL}</p>
+      <p className="legal-effective-date">Originally effective {PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL}</p>
+      <p>
+        This is a historical record, not the current Privacy Policy. It may not describe how Chalk handles data today. Read the <a href="/privacy">current data-handling disclosures</a>.
+      </p>
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>

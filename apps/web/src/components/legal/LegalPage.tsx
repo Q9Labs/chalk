@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
-import { PRIVACY_EFFECTIVE_DATE_LABEL, PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
+import { PRIVACY_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
 import { Logo } from "@q9labsai/chalk-react";
 
 type LegalPageKind = "privacy" | "privacy-previous" | "terms";
@@ -33,7 +33,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "International transfers",
     content:
-      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
+      "Our providers operate globally, so your data can be processed outside your country. For transfers outside the EEA, Cloudflare and DigitalOcean rely on the EU-US Data Privacy Framework adequacy decision for covered transfers to their certified US entities, with EU Standard Contractual Clauses in their data processing addenda as a fallback. Amazon Web Services, PlanetScale, and Axiom use the EU Standard Contractual Clauses in their data processing addenda for transfers to countries without an EU adequacy decision. Discord relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. Google relies on the EU-US Data Privacy Framework adequacy decision for covered transfers to its certified US entities and EU Standard Contractual Clauses for other applicable transfers. For DeepInfra, we rely on Standard Contractual Clauses or another lawful transfer mechanism. A copy of the relevant safeguards is available on request at privacy@chalkmeet.com.",
   },
   {
     heading: "Children",
@@ -121,7 +121,7 @@ function PrivacyPolicy() {
         <h2 id="privacy-changes-heading">What's changing</h2>
         <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, and our providers and international transfer safeguards.</p>
         <p>
-          This version takes effect on {PRIVACY_EFFECTIVE_DATE_LABEL}. Until then, the <a href="/privacy/previous">Privacy Policy effective {PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL}</a> applies.
+          The data-handling disclosures below describe current practice and apply when this page is published. The update date above does not delay these factual corrections. The <a href="/privacy/previous">Archived Privacy Policy</a> is available only as a historical record.
         </p>
       </section>
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
@@ -204,7 +204,7 @@ function PrivacyPolicy() {
       </table>
 
       <h2>Who processes your data</h2>
-      <p>We use infrastructure providers to process data on our behalf to run Chalk:</p>
+      <p>We use these service providers and third-party services to run Chalk:</p>
       <ul>
         <li>
           <strong>Cloudflare</strong> hosts the web app, routes API traffic, carries real-time audio and video (Realtime SFU), and stores files, recordings, and transcripts (R2). Cloudflare Workers AI can perform speech-to-text when enabled in the transcription configuration.
@@ -227,8 +227,12 @@ function PrivacyPolicy() {
         <li>
           <strong>Discord</strong> receives operational alerts that may include a tenant's display name.
         </li>
+        <li>
+          <strong>Google Fonts</strong> supplies the web app's fonts through fonts.googleapis.com and fonts.gstatic.com. Your browser requests these files directly from Google, which receives your IP address and user agent. Google handles this request data under its{" "}
+          <a href="https://policies.google.com/privacy">Privacy Policy</a>.
+        </li>
       </ul>
-      <p>We do not sell personal data or share it for advertising or tracking. Apart from service providers processing data on our behalf, content you send to other participants, and integrations your tenant chooses, we disclose data only when the law requires it.</p>
+      <p>We do not sell personal data or share it for advertising or tracking. Apart from the providers and third-party services listed above, content you send to other participants, and integrations your tenant chooses, we disclose data only when the law requires it.</p>
 
       <LegalSections sections={PRIVACY_SECTIONS} />
     </>

@@ -33,28 +33,38 @@ describe("Privacy Policy advance notice", () => {
       vi.setSystemTime(new Date(date));
       expect(renderToStaticMarkup(<LegalPage kind={kind} />)).toBe(html);
     }
-    expect(html).not.toContain("current Privacy Policy");
     expect(html).not.toContain("Previous Privacy Policy");
     if (kind === "privacy") {
       expect(html).toContain('id="whats-changing"');
       expect(html).toContain('href="/privacy/previous"');
-      expect(html).toContain("This version takes effect on 4 November 2026. Until then, the ");
-      expect(html).toContain("Privacy Policy effective 7 August 2026");
+      expect(html).not.toContain("Until then");
+      expect(html).toContain("apply when this page is published");
+      expect(html).toContain("Archived Privacy Policy");
     } else {
-      expect(html).toContain("Privacy Policy effective 7 August 2026 (replaced on 4 November 2026)");
+      expect(html).toContain("Archived Privacy Policy — 7 August 2026");
+      expect(html).toContain("not the current Privacy Policy");
+      expect(html).toContain('href="/privacy"');
     }
   });
   it("shows the future effective date, summary, and current-version link", () => {
     render(<LegalPage kind="privacy" />);
     expect(screen.getByText("Effective 4 November 2026")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "What's changing" }).parentElement?.id).toBe("whats-changing");
-    expect(screen.getByRole("link", { name: "Privacy Policy effective 7 August 2026" }).getAttribute("href")).toBe("/privacy/previous");
+    expect(screen.getByRole("link", { name: "Archived Privacy Policy" }).getAttribute("href")).toBe("/privacy/previous");
   });
   it("keeps the previous policy available with its original date and text", () => {
     vi.setSystemTime(new Date(PRIVACY_EFFECTIVE_DATE));
     render(<LegalPage kind="privacy-previous" />);
-    expect(screen.getByText("Effective 7 August 2026")).toBeTruthy();
+    expect(screen.getByText("Originally effective 7 August 2026")).toBeTruthy();
     expect(screen.getByText(/We keep your data while your account or tenant is active/)).toBeTruthy();
+  });
+  it("discloses Google Fonts request data and transfer safeguards", () => {
+    render(<LegalPage kind="privacy" />);
+    const provider = screen.getByText("Google Fonts").closest("li");
+    expect(provider?.textContent).toContain("IP address and user agent");
+    expect(provider?.textContent).toContain("fonts.googleapis.com");
+    expect(provider?.textContent).toContain("fonts.gstatic.com");
+    expect(screen.getByText(/Google relies on the EU-US Data Privacy Framework/).textContent).toContain("EU Standard Contractual Clauses");
   });
   it("dismisses the dashboard notice persistently and links to the summary", () => {
     const notice = render(<PrivacyNotice />);
