@@ -2,13 +2,20 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @moduledoc """
   Whether a live whiteboard socket may keep exchanging frames.
 
-  While any whiteboard socket of an Episode is live on this node, one `Authority.Poller` reads the
-  Episode's lifecycle states every second and stores them here. Sockets only look up the stored
-  result, on every frame and on a one-second tick, so a large call costs one database read per
-  second per node whether its boards are busy or idle.
+  While any whiteboard socket of an Episode is live on this node, one `Authority.Poller` starts a
+  read of the Episode's lifecycle states every second and stores the result here. Sockets only look
+  up the stored result, on every frame and on a one-second tick, so a large call costs one database
+  read per second per node whether its boards are busy or idle.
 
-  Each stored read names the poller that wrote it. This process monitors every poller and drops
-  that poller's reads when it exits, even when a kill skips the poller's own cleanup.
+  Access is fresh only within the stale limit of a successful database read: the start of the
+  stored read that last succeeded, or the socket's own connect check. A failed read, a new poller
+  or a restart never renews it. Each stored read names the poller that wrote it, and this process
+  drops that poller's reads when it exits, so a socket whose poller died closes on its next check
+  unless a newer read succeeded. This process and the pollers restart together.
+
+  The bounds that follow, with P the poll interval and D the read deadline: once a removal or an
+  end is final, the next read starts within P and finishes within D, so frames pass for at most
+  P + D. When reads fail, frames pass until the stale limit after the last good read started.
   """
 
   use GenServer
@@ -19,6 +26,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @table __MODULE__
   @poll_ms 1_000
+  @read_ms 1_000
   # Without a successful read for this long, sockets close so their clients reconnect.
   @stale_ms 3_000
 
@@ -37,6 +45,9 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @spec poll_ms() :: pos_integer()
   def poll_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_poll_ms, @poll_ms)
+
+  @spec read_ms() :: pos_integer()
+  def read_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_read_ms, @read_ms)
 
   @doc "Keeps the Episode's access current while the calling socket is alive."
   @spec watch(EpisodeKey.t()) :: :ok
@@ -59,42 +70,58 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @doc """
   The socket's access from the latest stored read. `connected_at` is when the socket's own connect
-  check started: a read that started no later can predate the Participant's join, so it never denies.
+  check passed: a read that started no later can predate the Participant's join, so it never denies.
   """
   @spec check(Identity.t(), integer() | nil) :: access()
   def check(%Identity{} = identity, connected_at \\ nil) do
-    case :ets.lookup(@table, EpisodeKey.authority_key(identity.episode)) do
-      # The socket passed a fresh check at connect, and the first read is on its way.
-      [] ->
+    case lookup(identity.episode) do
+      # No poller is reading this Episode yet, so only the connect check counts.
+      :missing ->
         watch(identity.episode)
+        freshness(nil, nil, connected_at)
 
-      [{_episode, _poller, :not_found, read_at, _failure}]
+      {:not_found, read_at, _failure}
       when not is_integer(connected_at) or read_at > connected_at ->
         {:error, {:permission_denied, :episode_not_found}}
 
-      [{_episode, _poller, access, read_at, failure}] ->
-        stored(access, read_at, failure, identity, connected_at)
+      {access, read_at, failure} ->
+        with :fresh <- freshness(read_at, failure, connected_at), do: decide(access, identity)
     end
   rescue
     # The table goes away with this process while it restarts.
     ArgumentError -> {:retryable, {:storage_unavailable, "authority"}}
+  catch
+    # The poller supervisor restarts just after this process, so a watch can find it missing.
+    :exit, {:noproc, _call} -> {:retryable, {:storage_unavailable, "authority"}}
   end
 
-  defp stored(access, read_at, failure, identity, connected_at) do
-    # The socket's own connect check read the database too, so it counts as a fresh read.
-    fresh_at = if is_integer(connected_at), do: max(read_at, connected_at), else: read_at
+  defp lookup(episode) do
+    case :ets.lookup(@table, EpisodeKey.authority_key(episode)) do
+      [{_episode, _poller, access, read_at, failure}] -> {access, read_at, failure}
+      [] -> :missing
+    end
+  end
+
+  # :fresh when the stored read decides. The socket's own connect check read the database too, so it
+  # counts as a fresh read, and a stored read that started no later than that check cannot deny.
+  defp freshness(read_at, failure, connected_at) do
+    fresh_at = newest(read_at, connected_at)
 
     cond do
-      System.monotonic_time(:millisecond) - fresh_at > stale_ms() ->
+      is_nil(fresh_at) or System.monotonic_time(:millisecond) - fresh_at > stale_ms() ->
         {:retryable, {:storage_unavailable, failure || "stale"}}
 
-      is_integer(connected_at) and read_at <= connected_at ->
+      is_nil(read_at) or (is_integer(connected_at) and read_at <= connected_at) ->
         :ok
 
       true ->
-        decide(access, identity)
+        :fresh
     end
   end
+
+  defp newest(nil, connected_at), do: connected_at
+  defp newest(read_at, nil), do: read_at
+  defp newest(read_at, connected_at), do: max(read_at, connected_at)
 
   @doc false
   def store(episode, access, read_at, failure),

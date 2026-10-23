@@ -2,6 +2,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
@@ -10,6 +11,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Poller
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.PostgresRepository
   alias ChalkSync.WhiteboardV1.SQL
@@ -353,6 +355,36 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
              PostgresRepository.episode_access(%{host.episode | episode_id: UUID.generate()})
   end
 
+  test "a board access read blocked by a lock gives up at the read deadline", %{host: host} do
+    Application.put_env(:chalk_sync, :whiteboard_authority_read_ms, 300)
+    on_exit(fn -> Application.delete_env(:chalk_sync, :whiteboard_authority_read_ms) end)
+    {:ok, options} = Database.connection_options(@database_url)
+    {:ok, locker} = Postgrex.start_link(options)
+    test = self()
+
+    holder =
+      spawn(fn ->
+        Postgrex.transaction(locker, fn pinned ->
+          Postgrex.query!(pinned, "lock table episodes in access exclusive mode", [])
+          send(test, :locked)
+          receive do: (:release -> :ok)
+        end)
+
+        send(test, :released)
+      end)
+
+    assert_receive :locked, 5_000
+    started_at = System.monotonic_time(:millisecond)
+
+    assert Poller.read_access(host.episode) == {:retryable, {:storage_unavailable, "deadline"}}
+    assert System.monotonic_time(:millisecond) - started_at <= 300 + 200
+
+    send(holder, :release)
+    assert_receive :released, 5_000
+    assert {:ok, %{status: "active"}} = Poller.read_access(host.episode)
+    GenServer.stop(locker)
+  end
+
   test "names a bounded storage failure for close evidence" do
     assert PostgresRepository.storage_failure(%DBConnection.ConnectionError{
              reason: :queue_timeout
@@ -449,6 +481,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity,
         display_name: "Ada",
         scene_id: scene_id,
@@ -552,4 +585,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   defp stop_connection(connection), do: TestProcess.stop(connection)
 
   defp uuid(value), do: UUID.dump!(value)
+
+  # A socket whose connect check passed a second ago, before the reads the test waits for, so
+  # those reads decide its access.
+  defp connected_earlier, do: System.monotonic_time(:millisecond) - 1_000
 end

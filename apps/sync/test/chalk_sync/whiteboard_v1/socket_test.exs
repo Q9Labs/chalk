@@ -396,6 +396,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     live = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4
@@ -469,6 +470,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       state = %{
         initial
         | phase: :live,
+          connected_at: connected_earlier(),
           identity: identity,
           display_name: "Ada",
           scene_id: @scene_id,
@@ -703,7 +705,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     on_exit(fn -> :telemetry.detach(handler) end)
 
     assert {:ok, initial} = SocketWhiteboardV1.init(%{})
-    state = %{initial | phase: :live, scene_id: @scene_id}
+
+    state = %{
+      initial
+      | phase: :live,
+        connected_at: connected_earlier(),
+        scene_id: @scene_id
+    }
 
     for {terminate_reason, reason} <- [
           {:remote, :client_closed},
@@ -747,6 +755,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     live = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         scene_id: @scene_id,
         revision: 4,
         display_name: "Ada"
@@ -861,6 +870,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         scene_id: @scene_id,
         revision: 4,
         display_name: "Ada",
@@ -886,6 +896,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     live = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         scene_id: @scene_id,
         revision: 4,
         display_name: "Ada",
@@ -955,6 +966,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity,
         scene_id: @scene_id,
         revision: 4
@@ -994,6 +1006,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
@@ -1037,6 +1050,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
@@ -1065,6 +1079,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
@@ -1103,6 +1118,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
@@ -1147,6 +1163,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
@@ -1298,6 +1315,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     legacy = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
@@ -1316,6 +1334,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         display_name: "Ada",
         scene_id: @scene_id,
@@ -1409,4 +1428,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       participant_generation: 1
     }
   end
+
+  # A socket whose connect check passed a second ago, before the reads the test waits for, so
+  # those reads decide its access.
+  defp connected_earlier, do: System.monotonic_time(:millisecond) - 1_000
 end

@@ -35,7 +35,8 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   def init(episode) do
     Authority.own(self())
 
-    {:ok, %{episode: episode, sockets: MapSet.new(), access: nil, read_at: now_ms()},
+    # No read has succeeded yet, so read_at stays nil and a failed read cannot make access fresh.
+    {:ok, %{episode: episode, sockets: MapSet.new(), access: nil, read_at: nil},
      {:continue, :read}}
   end
 
@@ -63,19 +64,34 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
       else: {:noreply, %{state | sockets: sockets}}
   end
 
-  # A failed read keeps the last good access and its time, so sockets close only once it is stale.
+  # A failed read keeps the last good access and its start, so sockets close once that is stale.
+  # Reads start at a fixed rate: the next one is due one interval after this one started, so a
+  # slow read does not push the next one out.
   defp read(state) do
     started_at = now_ms()
+    Process.send_after(self(), :read, started_at + Authority.poll_ms(), abs: true)
 
-    state =
-      case Repository.episode_access(state.episode) do
-        {:ok, access} -> store(%{state | access: access, read_at: started_at}, nil)
-        {:error, :not_found} -> store(%{state | access: :not_found, read_at: started_at}, nil)
-        {:retryable, {_reason, failure}} -> store(state, failure)
-      end
+    case read_access(state.episode) do
+      {:ok, access} -> store(%{state | access: access, read_at: started_at}, nil)
+      {:error, :not_found} -> store(%{state | access: :not_found, read_at: started_at}, nil)
+      {:retryable, {_reason, failure}} -> store(state, failure)
+    end
+  end
 
-    Process.send_after(self(), :read, Authority.poll_ms())
-    state
+  @doc false
+  # The deadline covers the whole read, with pool checkout, preparation and retries, because a
+  # query timeout alone restarts on a retry.
+  def read_access(episode) do
+    task =
+      Task.Supervisor.async_nolink(ChalkSync.CommandTaskSupervisor, fn ->
+        Repository.episode_access(episode)
+      end)
+
+    case Task.yield(task, Authority.read_ms()) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      {:exit, _reason} -> {:retryable, {:storage_unavailable, "exit"}}
+      nil -> {:retryable, {:storage_unavailable, "deadline"}}
+    end
   end
 
   defp store(state, failure) do
