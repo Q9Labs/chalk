@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -7,7 +8,7 @@ import { ChalkSheet } from "../chalk-ui";
 import { useStageDimensions } from "./useStageDimensions";
 import { ParticipantTile } from "../participant-tile/ParticipantTile";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, EMPTY_GEOMETRY, fitGrid, fitSpotlight, type StageBox, type StageFrame, type StageGeometry, MORE_TILE_ID } from "./stage-layout";
-import { buildStageItems, choosePrimary, gridOrder, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
+import { buildStageItems, choosePrimary, floatingSpeakerId, gridOrder, speakingParticipantId, isContentItem, stabilizeOrder, type StageItem, type StageLayout } from "./stage-items";
 import { StageMotion } from "./StageMotion";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
 
@@ -36,7 +37,7 @@ export interface StageProps {
   readonly followingId?: string | null;
   readonly onFollowChange?: (id: string) => void;
   readonly clickAction?: "pin" | "follow";
-  /** Upper bound of visible tiles; the rest fold into a +N People tile. */
+  /** Upper bound of grid tiles, or secondary tiles in spotlight; overflow includes shared content. */
   readonly maxPerPage?: number;
   /** Tiles narrower than this fold the rest into overflow. */
   readonly minTileWidth?: number;
@@ -61,6 +62,51 @@ export { buildStageItems };
 
 const FALLBACK_BOX: StageBox = { width: 960, height: 540 };
 const TILE_FILL: CSSProperties = { width: "100%", height: "100%" };
+
+function createContentPlacement() {
+  let host: HTMLDivElement | null = null;
+  let home: HTMLDivElement | null = null;
+  let overflow: HTMLDivElement | null = null;
+  const move = () => {
+    const target = overflow ?? home;
+    if (host && target && host.parentNode !== target) target.appendChild(host);
+  };
+  return {
+    attachHost: (element: HTMLDivElement | null) => {
+      host = element;
+      move();
+    },
+    attachHome: (element: HTMLDivElement | null) => {
+      home = element;
+      move();
+    },
+    attachOverflow: (element: HTMLDivElement | null) => {
+      overflow = element;
+      move();
+    },
+  };
+}
+
+/** Move a stable portal host, never the React subtree that owns its media resources. */
+function PersistentStageContent({ placement, children }: { readonly placement: ReturnType<typeof createContentPlacement>; readonly children: ReactNode }) {
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const element = document.createElement("div");
+    Object.assign(element.style, TILE_FILL);
+    placement.attachHost(element);
+    setHost(element);
+    return () => {
+      placement.attachHost(null);
+      element.remove();
+    };
+  }, [placement]);
+  return (
+    <>
+      <div ref={placement.attachHome} style={TILE_FILL} />
+      {host && createPortal(children, host)}
+    </>
+  );
+}
 
 function frameStyle(frame: StageFrame): CSSProperties {
   return { position: "absolute", left: 0, top: 0, transform: `translate(${frame.x}px, ${frame.y}px)`, width: frame.width, height: frame.height, zIndex: frame.role === "primary" ? 1 : 2 };
@@ -103,6 +149,7 @@ export function Stage({
   const seenAtRef = useRef(new Map<string, number>());
   const nextSeenRef = useRef(0);
   const lastSpeakerRef = useRef<string | null>(null);
+  const lastRemoteSpeakerRef = useRef<string | null>(null);
 
   const ordered = useMemo(() => {
     // A presentation projection must be a pure function of its current frame.
@@ -133,8 +180,10 @@ export function Stage({
 
   useEffect(() => {
     orderRef.current = ordered.map((item) => item.id);
-    const speaking = ordered.find((item) => item.kind === "participant" && (item.participant.isActiveSpeaker || item.participant.isSpeaking));
-    if (speaking) lastSpeakerRef.current = speaking.id;
+    const speaking = speakingParticipantId(ordered);
+    if (speaking) lastSpeakerRef.current = speaking;
+    // The floating column leads with a remote face, so the local person speaking must not replace the last remote speaker.
+    lastRemoteSpeakerRef.current = floatingSpeakerId(ordered, lastRemoteSpeakerRef.current);
   }, [ordered]);
 
   const primary = useMemo(() => (layout === "grid" ? null : choosePrimary(ordered, { layout, pinnedId: activePinnedId, lastSpeakerId: interactive ? lastSpeakerRef.current : null, seenAt: seenAtRef.current })), [activePinnedId, interactive, layout, ordered]);
@@ -159,14 +208,32 @@ export function Stage({
     const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
     const remaining = ordered.filter((item) => item.id !== primary.id);
     const strip = [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))];
+    const speakerId = floatingSpeakerId(remaining, interactive ? lastRemoteSpeakerRef.current : null);
+    const localId = remaining.find((item) => item.kind === "participant" && item.participant.isLocal)?.id ?? null;
     return fitSpotlight(
       box,
       primary.id,
       strip.map((item) => item.id),
-      { ...DEFAULT_SPOTLIGHT_OPTIONS, primaryAspect: aspect, content: primary.kind !== "participant", slimPhoneStrip: primary.kind === "whiteboard", wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds, maxPerPage },
+      {
+        ...DEFAULT_SPOTLIGHT_OPTIONS,
+        primaryAspect: aspect,
+        content: primary.kind !== "participant",
+        floatingPhonePeople: primary.kind === "whiteboard",
+        speakerId,
+        localId,
+        wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds,
+        maxPerPage,
+      },
     );
-  }, [activePinnedId, box, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
+  }, [activePinnedId, box, interactive, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
+  const foldedContent = ordered.filter((item): item is Extract<StageItem, { kind: "screen-share" | "whiteboard" }> => item.kind !== "participant" && !framesById.has(item.id));
+  const renderContent = (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext, primaryRenderer: boolean) => {
+    if (primaryRenderer && renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
+    if (renderContentTile) return renderContentTile(item, context);
+    if (renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
+    return <StageContentTile item={item} {...context} />;
+  };
   const animate = animateOverride ?? !prefersReducedMotion;
   const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean; departedAt?: number }[] }>({
     source: ordered,
@@ -178,6 +245,19 @@ export function Stage({
     const tiles = ordered.map((item) => ({ item, frame: framesById.get(item.id), leaving: false }));
     setDisplayed({ source: ordered, geometry, tiles: [...tiles, ...(animate ? displayed.tiles.filter((tile) => !present.has(tile.item.id)).map((tile) => ({ ...tile, leaving: true, departedAt: tile.departedAt ?? performance.now() })) : [])] });
   }
+  const contentPlacements = useRef(new Map<string, ReturnType<typeof createContentPlacement>>());
+  const contentPlacement = (id: string) => {
+    let placement = contentPlacements.current.get(id);
+    if (!placement) {
+      placement = createContentPlacement();
+      contentPlacements.current.set(id, placement);
+    }
+    return placement;
+  };
+  useEffect(() => {
+    const present = new Set(displayed.tiles.map(({ item }) => item.id));
+    for (const id of contentPlacements.current.keys()) if (!present.has(id)) contentPlacements.current.delete(id);
+  }, [displayed.tiles]);
   useEffect(() => {
     const departing = displayed.tiles.filter((tile) => tile.leaving);
     if (!departing.length) return;
@@ -281,14 +361,11 @@ export function Stage({
                   gradientPreference={gradientPreference}
                 />
               );
-            } else if (frame?.role === "primary" && renderPrimaryContent) {
-              content = <StageContentTileSurface item={item} {...renderContext} mediaVisible media={renderPrimaryContent(item)} />;
-            } else if (renderContentTile) {
-              content = renderContentTile(item, renderContext);
-            } else if (renderPrimaryContent) {
-              content = <StageContentTileSurface item={item} {...renderContext} mediaVisible media={renderPrimaryContent(item)} />;
             } else {
-              content = <StageContentTile item={item} {...renderContext} />;
+              const inOverflow = overflowOpen && foldedContent.some((folded) => folded.id === item.id);
+              const context = inOverflow ? { ...renderContext, active: true, primary: true, hidden: false, onClick: undefined, onDoubleClick: undefined } : renderContext;
+              // Opening the sheet changes presentation, not which caller renderer owns the item.
+              content = <PersistentStageContent placement={contentPlacement(item.id)}>{renderContent(item, context, renderContext.primary)}</PersistentStageContent>;
             }
             return (
               <div
@@ -312,10 +389,11 @@ export function Stage({
                 key={frame.id}
                 type="button"
                 data-stage-item={MORE_TILE_ID}
+                data-stage-role={frame.role}
                 style={frameStyle(frame)}
-                onClick={onOverflowClick ?? (() => setOverflowOpen(true))}
+                onClick={foldedContent.length ? () => setOverflowOpen(true) : (onOverflowClick ?? (() => setOverflowOpen(true)))}
                 disabled={!interactive}
-                aria-label={`Show ${geometry.overflowCount} more participants`}
+                aria-label={`Show ${geometry.overflowCount} more ${foldedContent.length ? "items" : "participants"}`}
                 className="grid place-items-center rounded-[12px] bg-[var(--chalk-raised)] text-[22px] font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-[14px]"
               >
                 +{geometry.overflowCount}
@@ -323,7 +401,8 @@ export function Stage({
             ))}
         </StageMotion>
       </div>
-      <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title="People">
+      <ChalkSheet variant="stage" open={overflowOpen} onOpenChange={setOverflowOpen} title={foldedContent.length ? "People and shared content" : "People"}>
+        {overflowOpen && foldedContent.map((item) => <div key={item.id} ref={contentPlacement(item.id).attachOverflow} className="relative mb-3 aspect-video max-h-full w-full" />)}
         {ordered
           .filter((item) => item.kind === "participant")
           .map((item) => (

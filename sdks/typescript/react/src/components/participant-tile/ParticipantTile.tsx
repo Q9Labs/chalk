@@ -133,12 +133,12 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       corner={
         <>
           {showStatus && hasPoorConnection ? (
-            <span role="img" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
+            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
               <SignalBars />
             </span>
           ) : null}
           {onClick && !phone ? (
-            <span className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
               <ChalkMenu
                 trigger={
                   <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
@@ -157,12 +157,21 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           <>
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             {showName && (
-              <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
-                {participant.displayName}
-                {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
-              </span>
+              <>
+                <span dir="auto" data-part="tile-full-name" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
+                  {participant.displayName}
+                  {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
+                </span>
+                <span dir="auto" data-part="tile-short-name" className="hidden min-w-0 truncate [unicode-bidi:plaintext]">
+                  {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
+                </span>
+              </>
             )}
-            {following ? <span className="shrink-0 font-semibold opacity-80">following</span> : null}
+            {following ? (
+              <span data-part="tile-following" className="shrink-0 font-semibold opacity-80">
+                following
+              </span>
+            ) : null}
             {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
             {showStatus && participant.isHandRaised && (
               <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>

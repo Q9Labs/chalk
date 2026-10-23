@@ -3,11 +3,12 @@ import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
 import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
+import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
 import { STATES_LANE } from "./states-lane";
 import { FoundationKit } from "./foundation";
 import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { PERFORMANCE_STATES } from "./performance";
-import type { SpaceSnapshot } from "@q9labsai/chalk-client";
+import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NameNeeded } from "../components/space/SpacePage";
@@ -37,6 +38,8 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
+  { id: "offline-notice", title: "Expired offline actions join the shared notices", render: () => <OfflineNoticeFixture /> },
+  { id: "notice-band", title: "SDK notices fit the call's available band", render: () => <NoticeBandFixture /> },
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },
   ...PERFORMANCE_STATES,
   ...SHELL_STATES,
@@ -118,6 +121,40 @@ export const CALL_STATES: readonly CallState[] = [
     { id: `board-empty-${scheme}`, title: `Board empty, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} /> },
     { id: `board-people-${scheme}`, title: `Board with two people drawing, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
     {
+      id: `board-notices-${scheme}`,
+      title: `Board with three device notices, ${scheme}`,
+      render: () => {
+        // ?notices=1 raises one notice. ?kind=token raises an error with a long link and error token, and ?kind=join has people with long unbroken names join.
+        // ?embed=320 or ?embed=300x320 renders the call that size inside the window, as a host page does, and ?name= sets the call's name.
+        // ?raise=event waits for a "raise-notices" event on the document, so a test can set the call up first.
+        const params = new URLSearchParams(window.location.search);
+        const count = Number(params.get("notices") ?? 3);
+        const kind = params.get("kind") ?? "device";
+        const [embedWidth, embedHeight] = (params.get("embed") ?? "").split("x").map(Number);
+        const embed = embedHeight === undefined ? { height: embedWidth || undefined } : { width: embedWidth, height: embedHeight };
+        return (
+          <Live
+            initialColorScheme={scheme}
+            snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })}
+            board={{ scene: true, people: [nora, malik] }}
+            then={(client) => {
+              if (params.get("raise") !== "event") return raiseNotices(client, kind, count);
+              document.addEventListener("raise-notices", () => raiseNotices(client, kind, count), { once: true });
+              document.documentElement.dataset.noticesReady = "";
+            }}
+            {...embed}
+            spaceName={params.get("name") ?? undefined}
+          />
+        );
+      },
+    },
+    { id: `board-share-${scheme}`, title: `Board beside a live share, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
+    {
+      id: `board-shares-${scheme}`,
+      title: `Board beside two live shares, ${scheme}`,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }, { ...malik, sharing: true }, akash], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
+    },
+    {
       id: `board-follow-${scheme}`,
       title: `Board following Nora, ${scheme}`,
       actions: [{ click: "Follow Nora" }],
@@ -197,7 +234,38 @@ function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]
 }
 
 /** Mirrors SpacePage's LocalSpace: the SDK's Chalk root, with the app's own entrance already done. */
-function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly initialColorScheme?: "light" | "dark"; readonly snapshot: SpaceSnapshot; readonly layout?: SpaceLayout; readonly then?: (client: CallStateClient) => void; readonly board?: BoardFixture }) {
+const LONG_NAME = "Wolfeschlegelsteinhausenbergerdorffvoralternwarengewissenhaft";
+const LONG_ERROR = "Upload stopped at https://files.example.com/spaces/q9-team/recordings/2026-10-23/segment-0123456789abcdefghijklmnopqrstuvwxyz with ERR_MEDIA_7F3A9C2B1D4E5F60718293A4B5C6D7E8F90123456789ABCDEF.";
+
+function raiseNotices(client: CallStateClient, kind: string, count: number) {
+  if (kind === "join") {
+    const next = liveSnapshot({ others: [nora, malik, ...Array.from({ length: count }, (_, index) => ({ id: `long-${index}`, name: `${LONG_NAME}${index || ""}` }))], board: true, capabilities: HOST });
+    client.updateSnapshot((current) => ({ ...current, participants: next.participants, media: next.media }));
+    return;
+  }
+  const error = kind === "token" ? ({ code: "media.timeout", message: LONG_ERROR } as const) : ({ code: "media.capture_failed", message: "Your camera could not start." } as const);
+  for (let index = 0; index < count; index += 1) client.emit("error", { error: new SpaceClientError({ ...error, recoverable: true }) });
+}
+
+function Live({
+  snapshot,
+  layout,
+  then,
+  initialColorScheme,
+  board,
+  width,
+  height,
+  spaceName = SPACE_NAME,
+}: {
+  readonly initialColorScheme?: "light" | "dark";
+  readonly snapshot: SpaceSnapshot;
+  readonly layout?: SpaceLayout;
+  readonly then?: (client: CallStateClient) => void;
+  readonly board?: BoardFixture;
+  readonly width?: number;
+  readonly height?: number;
+  readonly spaceName?: string;
+}) {
   const [client] = useState(() => createCallStateClient(snapshot, board));
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [transition] = useState(() => then);
@@ -207,7 +275,7 @@ function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly 
     return () => clearTimeout(timer);
   }, [client, transition]);
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
+    <main className="h-dvh min-h-0 w-full overflow-hidden" style={width || height ? { width, height } : undefined}>
       <Chalk
         theme={{ colorScheme }}
         onColorSchemeChange={(next) => {
@@ -216,7 +284,7 @@ function Live({ snapshot, layout, then, initialColorScheme, board }: { readonly 
         }}
         client={client}
         displayName={SELF_NAME}
-        spaceName={SPACE_NAME}
+        spaceName={spaceName}
         layout={layout}
         onLeft={() => undefined}
         onHome={() => undefined}

@@ -158,7 +158,7 @@ it("keeps degraded health live and shows only a subtle notice", async () => {
 it("keeps offline failures visible while health remains degraded", async () => {
   const notice = "Your offline actions were not sent.";
   const snapshot = withOffline("live", { pending: [], notice });
-  const { container } = await mount({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } });
+  const { container } = await mount({ ...snapshot, connection: { ...snapshot.connection, syncHealth: "degraded" } }, <SpaceView spaceName="Team" features={{ sounds: false }} generatedAvatars={false} />);
   expect(container.textContent).toContain(notice);
   expect(container.querySelector('[data-part="toast-stack"]')?.textContent).toContain(notice);
 });

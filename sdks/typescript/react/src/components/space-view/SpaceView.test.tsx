@@ -31,15 +31,19 @@ it.each([
     await act(async () => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click());
     await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1)));
     await act(async () => vi.waitFor(() => expect(container.textContent).toContain("Try again")));
-    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
-    if (!retry) throw new Error("Missing media retry");
+    const retry = () => {
+      const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
+      if (!button) throw new Error("Missing media retry");
+      return button;
+    };
     await act(async () => fixture.health(true));
-    await act(async () => retry.click());
+    await act(async () => retry().click());
     await expect((capability === "publishVideo" ? fixture.actions.camera : capability === "publishAudio" ? fixture.actions.microphone : fixture.actions.screen).mock.results.at(-1)?.value).rejects.toMatchObject({ code: "connection.invalid_state" });
     expect(capture).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("That change was interrupted.");
     expect(container.textContent).toContain("Try again");
     await act(async () => fixture.health(false));
-    await act(async () => retry.click());
+    await act(async () => retry().click());
     await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2)));
   } finally {
     await act(async () => root.unmount());
@@ -197,5 +201,95 @@ it("retries a failed screen Off command as Off, not Start", async () => {
     await act(async () => root.unmount());
     container.remove();
     preview.dispose();
+  }
+});
+
+it("retains live drawing permission updates alongside the offline notice", async () => {
+  const base = createSnapshot(["drawWhiteboard"]);
+  const warning = "Your expired offline actions were not sent.";
+  const client = createPreviewClient({ ...base, connection: { ...base.connection, status: "live" }, offline: { ...base.offline, notice: warning } });
+  const container = document.createElement("main");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} onToggleWhiteboard={() => {}} />
+        </ChalkProvider>,
+      ),
+    );
+    expect(container.querySelector('[aria-label="Board"]')).not.toBeNull();
+    expect(container.textContent).toContain(warning);
+    await act(async () => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, engine: { ...current.whiteboard.engine, status: "ready" }, access: { ...current.whiteboard.access, policy: "everyone", canDraw: false } } })));
+    expect(container.querySelector('[aria-label="Board"]')).toBeNull();
+    expect(container.textContent).toContain(warning);
+    await act(async () => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, access: { ...current.whiteboard.access, canDraw: true } } })));
+    expect(container.querySelector('[aria-label="Board"]')).not.toBeNull();
+    expect(container.textContent).toContain(warning);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it("keeps an expired warning reachable and dismissed through Notices and rotation", async () => {
+  let callHeight = 320;
+  const callbacks = new Set<(entries: ResizeObserverEntry[]) => void>();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private notify: (entries: ResizeObserverEntry[]) => void) {}
+      observe() {
+        callbacks.add(this.notify);
+      }
+      disconnect() {
+        callbacks.delete(this.notify);
+      }
+    },
+  );
+  const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => callHeight);
+  const base = createSnapshot([]);
+  const warning = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+  const client = createPreviewClient({ ...base, connection: { ...base.connection, status: "live" }, offline: { ...base.offline, notice: warning } });
+  const frame = document.createElement("main");
+  document.body.append(frame);
+  const root = createRoot(frame);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} commandError="Camera blocked" />
+        </ChalkProvider>,
+      ),
+    );
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(0);
+    expect(frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label")).toBe("Show 2 notices");
+    await act(async () => frame.querySelector<HTMLButtonElement>("[data-part=notice-button]")!.click());
+    const notice = [...document.querySelectorAll("[data-part=notice]")].find((node) => node.textContent?.includes(warning));
+    expect(notice).toBeDefined();
+    expect(document.querySelectorAll("[data-part=notice]")).toHaveLength(2);
+    await act(async () => notice!.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click());
+    expect(frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label")).toBe("Show 1 notice");
+    expect([...document.querySelectorAll("[data-part=notice]")].some((node) => node.textContent?.includes(warning))).toBe(false);
+    await act(async () => {
+      callHeight = 844;
+      for (const callback of [...callbacks]) callback([]);
+    });
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(1);
+    expect(frame.querySelector("[data-part=toast]")?.textContent).not.toContain(warning);
+    await act(async () => {
+      callHeight = 320;
+      for (const callback of [...callbacks]) callback([]);
+    });
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(0);
+    expect(frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label")).toBe("Show 1 notice");
+  } finally {
+    await act(async () => root.unmount());
+    frame.remove();
+    client.dispose();
+    height.mockRestore();
+    vi.unstubAllGlobals();
   }
 });

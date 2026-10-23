@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { choosePrimary, type StageItem, type PrimaryContext } from "./stage-items";
-import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight } from "./stage-layout";
+import { choosePrimary, floatingSpeakerId, speakingParticipantId, type StageItem, type PrimaryContext } from "./stage-items";
+import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, MORE_TILE_ID } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
 const board: StageItem = { kind: "whiteboard", id: "whiteboard" };
@@ -41,6 +41,11 @@ describe("Spotlight primary content", () => {
 });
 
 describe("Justified rows", () => {
+  it.each([1, 2, 3])("keeps maxPerPage=%i as an upper bound even when shared content follows a pinned person", (maxPerPage) => {
+    const geometry = fitGrid({ width: 1408, height: 756 }, ["pinned", "share-a", "share-b", "other"], { ...DEFAULT_GRID_OPTIONS, maxPerPage }, ["share-a", "share-b"]);
+    expect(geometry.frames.length).toBeLessThanOrEqual(maxPerPage);
+    expect(geometry.frames.some((frame) => frame.id === MORE_TILE_ID)).toBe(true);
+  });
   it.each([3, 5, 7, 12])("fills all rows for %i people without holes", (count) => {
     const box = { width: 1408, height: 756 };
     const geometry = fitGrid(
@@ -77,4 +82,129 @@ it("lets a phone board fill its allotted area instead of forcing a video aspect"
   const board = geometry.frames[0];
   expect(board?.width).toBe(box.width);
   expect(board?.height).toBe(box.height - Math.round(box.height * 0.3) - 8);
+});
+
+describe("a board on a phone", () => {
+  const box = { width: 358, height: 692 };
+  const options = { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, floatingPhonePeople: true, speakerId: "malik", localId: "me" };
+
+  it("keeps the whole stage for the board and floats people at its right edge, speaker first and larger", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik"], options);
+    expect(geometry.frames.map(({ id, x, y, width, height }) => ({ id, x, y, width, height }))).toEqual([
+      { id: "whiteboard", x: 0, y: 0, width: 358, height: 692 },
+      { id: "malik", x: 226, y: 56, width: 120, height: 68 },
+      { id: "nora", x: 270, y: 132, width: 76, height: 44 },
+      { id: "me", x: 270, y: 184, width: 76, height: 44 },
+    ]);
+  });
+
+  it("shows the speaker and the local person, then folds everyone else into a +N tile", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik", "akash", "sofia"], options);
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "malik", "me", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(3);
+  });
+
+  it("floats shared content above the faces and never folds it into +N", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["share", "me", "nora", "malik", "akash"], { ...options, wideIds: ["whiteboard", "share"] });
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "share", "malik", "me", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(2);
+  });
+
+  it("keeps fewer faces on a short stage so the column stays clear of the raised zoom control", () => {
+    const short = { width: 461, height: 246 };
+    const geometry = fitSpotlight(short, "whiteboard", ["me", "nora", "malik"], options);
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(3);
+  });
+
+  it("keeps the regular strip when the column cannot clear the zoom control", () => {
+    const geometry = fitSpotlight({ width: 624, height: 162 }, "whiteboard", ["share", "me", "nora", "malik"], { ...options, wideIds: ["whiteboard", "share"] });
+    expect(geometry.frames.map((frame) => frame.role)).not.toContain("float");
+    expect(geometry.frames[0]?.width).toBeLessThan(624);
+  });
+
+  // The zoom control fills the board's bottom-right 64px and rises 60px while the drawing tools are open; the board menu fills its top 56px.
+  const shares = ["share-1", "share-2", "share-3"];
+  const people = ["me", "nora", "malik", "akash", "sofia"];
+  for (const stage of [box, { width: 624, height: 162 }, { width: 608, height: 162 }, { width: 358, height: 162 }, { width: 461, height: 246 }, { width: 608, height: 202 }]) {
+    for (const ids of [people.slice(0, 3), people, ["share-1", ...people.slice(0, 3)], ["share-1", "share-2", ...people.slice(0, 3)], [...shares, ...people]]) {
+      it(`keeps ${ids.length} tiles inside a ${stage.width}x${stage.height} stage, off the board's controls, and every share out of +N`, () => {
+        const geometry = fitSpotlight(stage, "whiteboard", ids, { ...options, wideIds: ["whiteboard", ...shares] });
+        const [board, ...tiles] = geometry.frames;
+        if (!board) throw new Error("no board frame");
+        for (const tile of tiles) {
+          expect(tile.x, tile.id).toBeGreaterThanOrEqual(0);
+          expect(tile.y, tile.id).toBeGreaterThanOrEqual(0);
+          expect(tile.x + tile.width, tile.id).toBeLessThanOrEqual(stage.width);
+          expect(tile.y + tile.height, tile.id).toBeLessThanOrEqual(stage.height);
+          const overBoard = tile.x < board.x + board.width && tile.x + tile.width > board.x && tile.y < board.y + board.height && tile.y + tile.height > board.y;
+          if (!overBoard) continue;
+          expect(tile.y - board.y, tile.id).toBeGreaterThanOrEqual(56);
+          expect(tile.y + tile.height, tile.id).toBeLessThanOrEqual(board.y + board.height - 64 - 60 - 8);
+        }
+        const shown = tiles.filter((tile) => tile.id !== MORE_TILE_ID).length;
+        if (shown < ids.length) expect(tiles.map((tile) => tile.id)).toContain(MORE_TILE_ID);
+        // +N opens the people list, so a share left out of the stage could never be picked.
+        for (const share of ids.filter((id) => shares.includes(id))) expect(tiles.map((tile) => tile.id)).toContain(share);
+      });
+    }
+  }
+
+  it("honours the visible-tile limit", () => {
+    const geometry = fitSpotlight(box, "whiteboard", ["me", "nora", "malik"], { ...options, maxPerPage: 2 });
+    expect(geometry.frames.map((frame) => frame.id)).toEqual(["whiteboard", "me", MORE_TILE_ID]);
+    expect(geometry.overflowCount).toBe(2);
+  });
+});
+
+it("leads the floating faces with the active speaker before anyone else speaking", () => {
+  const remote = (id: string, flags: { isActiveSpeaker?: boolean; isSpeaking?: boolean }): StageItem => ({ kind: "participant", id, participant: { id, displayName: id, ...flags } });
+  const items = [remote("nora", { isSpeaking: true }), remote("malik", { isActiveSpeaker: true, isSpeaking: true })];
+  expect(floatingSpeakerId(items, null)).toBe("malik");
+  expect(speakingParticipantId(items)).toBe("malik");
+  expect(floatingSpeakerId([remote("nora", {})], "akash")).toBe("akash");
+});
+
+it("preserves the public slim phone strip option", () => {
+  const geometry = fitSpotlight({ width: 358, height: 692 }, "whiteboard", ["a", "b"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, slimPhoneStrip: true });
+  expect(geometry.frames[0]?.height).toBe(692 - 52 - 8);
+});
+
+// Content and the overflow affordance consume the same secondary-stage slots as people.
+it.each([1, 1.5, 2, 2.5, 3])("caps every floating frame, including shares, at maxPerPage=%s", (maxPerPage) => {
+  const ids = ["share-a", "share-b", "speaker", "other", "local"];
+  const geometry = fitSpotlight({ width: 390, height: 692 }, "board", ids, {
+    ...DEFAULT_SPOTLIGHT_OPTIONS,
+    content: true,
+    primaryAspect: null,
+    floatingPhonePeople: true,
+    wideIds: ["share-a", "share-b"],
+    speakerId: "speaker",
+    localId: "local",
+    maxPerPage,
+  });
+  const secondary = geometry.frames.filter((frame) => frame.role !== "primary");
+  expect(secondary.length).toBeLessThanOrEqual(maxPerPage);
+  expect(secondary.some((frame) => frame.id === MORE_TILE_ID)).toBe(true);
+  expect(geometry.overflowCount).toBe(ids.filter((id) => !secondary.some((frame) => frame.id === id)).length);
+});
+
+it.each([0, 0.5])("honors fewer than one secondary slot in the one-person phone spotlight shortcut: %s", (maxPerPage) => {
+  const geometry = fitSpotlight({ width: 390, height: 692 }, "speaker", ["local"], { ...DEFAULT_SPOTLIGHT_OPTIONS, maxPerPage });
+  expect(geometry.frames.filter((frame) => frame.role !== "primary")).toEqual([]);
+});
+
+it.each([1, 2, 3])("keeps the secondary cap on phone/desktop strips, slim strips, and floating fallbacks: %i", (maxPerPage) => {
+  for (const box of [
+    { width: 390, height: 692 },
+    { width: 461, height: 246 },
+    { width: 1408, height: 756 },
+  ]) {
+    for (const mode of [{}, { content: true }, { content: true, slimPhoneStrip: true }, { content: true, floatingPhonePeople: true }]) {
+      const ids = ["share-a", "share-b", "speaker", "other", "local"];
+      const geometry = fitSpotlight(box, "primary", ids, { ...DEFAULT_SPOTLIGHT_OPTIONS, ...mode, wideIds: ["share-a", "share-b"], maxPerPage });
+      expect(geometry.frames.filter((frame) => frame.role !== "primary").length).toBeLessThanOrEqual(maxPerPage);
+      expect(geometry.overflowCount).toBe(ids.filter((id) => !geometry.frames.some((frame) => frame.id === id)).length);
+    }
+  }
 });

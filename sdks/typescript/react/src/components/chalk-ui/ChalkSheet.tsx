@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useCallback, useState, type ReactNode } from "react";
 export interface ChalkSheetProps {
-  readonly variant?: "default" | "details" | "panel" | "ready";
+  readonly variant?: "default" | "details" | "panel" | "ready" | "stage";
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;

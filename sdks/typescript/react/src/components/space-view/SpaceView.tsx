@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -25,6 +25,7 @@ import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { NoticeButton } from "../toast-stack/NoticeButton";
 import { BoardToastContext, type BoardToast } from "../board/board-toasts";
 import { CallCard } from "../call-card/CallCard";
 import { SpacePresentation } from "./SpacePresentation";
@@ -125,6 +126,9 @@ export function SpaceView({
   const callLink = useCallLink(participantsSlice.roster.length <= 1);
   const media = useMedia();
   const connection = useConnection();
+  const offline = useOffline();
+  const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
+  const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
@@ -230,6 +234,20 @@ export function SpaceView({
     setCommandError(null);
     onDismissCommandError?.();
   };
+  const toasts = [
+    ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
+    ...(whiteboard?.isOpen ? boardToasts : []),
+    ...commandToasts,
+    ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
+  ];
+  const dismissToast = (id: string) => {
+    if (id === "space-command-error") dismissCommandError();
+    else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
+    else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
+    else callToasts.dismiss(id);
+  };
+  const [foldedNotices, setFoldedNotices] = useState<readonly string[]>([]);
+  const folded = toasts.filter((toast) => foldedNotices.includes(toast.id));
   return (
     <ParticipantVolumeProvider>
       <BoardToastContext.Provider value={showBoardToast}>
@@ -267,6 +285,7 @@ export function SpaceView({
             isRecording: recording.current?.status === "recording",
             layout,
             onLayoutChange: updateLayout,
+            notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
           }}
           stage={
             <SpaceStage
@@ -336,16 +355,7 @@ export function SpaceView({
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
             </CallCard>
           }
-          toasts={
-            <ToastStack
-              toasts={[...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...(whiteboard?.isOpen ? boardToasts : []), ...commandToasts]}
-              onDismiss={(id) => {
-                if (id === "space-command-error") dismissCommandError();
-                else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
-                else callToasts.dismiss(id);
-              }}
-            />
-          }
+          toasts={<ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setFoldedNotices} />}
           mediaOutput={
             <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
               <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
@@ -356,7 +366,7 @@ export function SpaceView({
               <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
               {overlay}
               {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
-              <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />
+              <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} hasNotice={offlineNotice !== null} />
             </>
           }
           className={className}

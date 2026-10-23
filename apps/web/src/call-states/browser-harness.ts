@@ -18,12 +18,12 @@ export async function startCallHarness(): Promise<{ origin: string; stop: () => 
   const cacheDir = await mkdtemp(join(tmpdir(), "chalk-call-harness-"));
 
   // The stdin lease closes even if the owning worker is killed; the whole process group then exits.
+  // Keep the server alive for the whole file: the full stage suite can exceed six minutes.
   const runner = String.raw`
 import { spawn } from 'node:child_process';
 const stop = () => process.kill(-process.pid, 'SIGTERM');
 process.stdin.resume();
 process.stdin.once('end', stop);
-setTimeout(stop, 360_000).unref();
 const vite = spawn('pnpm', ['exec', 'vite', '--config', 'vite.call-states.config.ts', '--port', process.argv[1], '--strictPort'], { stdio: ['ignore', 'ignore', 'inherit'] });
 vite.once('error', error => { console.error(error); stop(); });
 vite.once('exit', stop);

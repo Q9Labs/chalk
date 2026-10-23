@@ -816,6 +816,38 @@
   height: 12px;
 }
 
+/* Faces float over the board on a narrow stage, so an edge and a shadow lift each face off the drawing. */
+[data-stage-role="float"] [data-part="stage-tile"] {
+  box-shadow:
+    0 0 0 1px var(--chalk-app-line-strong),
+    0 6px 18px rgb(0 0 0 / 0.5);
+}
+
+/* A tile under 70px tall, such as a face floating over a phone board, keeps a small tag with the first name. Its menu would cover the tag, and clicking the tile does the same. */
+@container (max-height: 70px) {
+  [data-part="tile-tag"] {
+    left: 4px;
+    bottom: 4px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+  }
+  [data-part="tile-full-name"],
+  [data-part="tile-following"],
+  [data-part="tile-menu"] {
+    display: none;
+  }
+  [data-part="tile-short-name"] {
+    display: inline;
+  }
+  [data-part="tile-signal"] {
+    top: 4px;
+    left: 4px;
+    height: 18px;
+    padding: 0 5px;
+  }
+}
+
 @container (min-width: 240px) {
   .chalk-sound-bars {
     height: 14px;
@@ -1207,14 +1239,32 @@
   z-index: 45;
   pointer-events: none;
 }
-/* An open board keeps its tools at the bottom of the stage, so toasts rise above them. */
+
+/* Notices sit in the band between the header and the controls under it, and an open reaction tray shrinks that band with padding, because a margin does not shrink a box held by both top and bottom. A call too short for the band's three notices folds them into the header instead (ToastStack's FOLD_BELOW_PX). */
+.chalk-toasts {
+  --chalk-toast-top: 60px;
+  --chalk-toast-lift: 92px;
+  box-sizing: border-box;
+  top: var(--chalk-toast-top);
+  bottom: var(--chalk-toast-lift);
+  margin-bottom: 0;
+  padding-bottom: var(--chalk-reaction-toast-lift, 0px);
+  justify-content: flex-end;
+}
 [data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="bottom"]) .chalk-toasts {
-  bottom: 160px;
+  --chalk-toast-lift: 160px;
+}
+[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="compact"]) .chalk-toasts {
+  --chalk-toast-lift: 182px;
+}
+[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="expanded"]) .chalk-toasts {
+  --chalk-toast-lift: 242px;
 }
 .chalk-toast {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
   min-height: 48px;
   max-width: calc(100% - 32px);
   padding: 6px 6px 6px 14px;
@@ -1229,10 +1279,56 @@
     transform 0.15s ease-out;
 }
 .chalk-toast > span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Long names, links and error tokens wrap inside the notice instead of widening it past the call. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin-right: 4px;
+  line-height: 1.35;
+  padding: 4px 0;
+}
+.chalk-toast[data-type="error"] {
+  max-width: min(560px, calc(100% - 32px));
+}
+/* The header's notice button stays when a phone hides the header's other controls. */
+.chalk-notice-button {
+  margin: 0 8px 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--chalk-danger-surface);
+  color: var(--chalk-danger-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.chalk-notice-list {
+  z-index: 85;
+  display: grid;
+  gap: 4px;
+  /* The room left in the call, not the window, so a short or narrow embedded call shows the list whole and scrolls to its last notice. */
+  width: min(360px, var(--available-width, 360px));
+  max-height: var(--available-height, calc(100vh - 80px));
+  overflow: auto;
+  padding: 6px;
+}
+.chalk-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 10px;
+}
+.chalk-notice > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 .chalk-toast[data-exiting] {
   opacity: 0;
@@ -1344,6 +1440,12 @@
   border-radius: 3px;
   background: var(--chalk-line-strong);
   margin: 4px auto 12px;
+}
+.chalk-sheet[data-variant="stage"] {
+  height: 100%;
+  max-height: max-content;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .chalk-sheet-heading {
   display: flex;
@@ -1457,9 +1559,19 @@
   transform: scale(0.97);
 }
 .chalk-call-timer {
+  flex-shrink: 0;
   color: var(--chalk-muted-text);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+/* A long call name gives way to the timer and the notice button. */
+.chalk-call-name {
+  min-width: 0;
+}
+.chalk-call-name > span[dir="auto"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chalk-frame-stage {
   position: absolute;
@@ -1601,7 +1713,8 @@
     min-height: 48px;
   }
   .chalk-toasts {
-    bottom: 110px;
+    --chalk-toast-top: 52px;
+    --chalk-toast-lift: 110px;
   }
   .chalk-drawer {
     inset: auto 0 0;

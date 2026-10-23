@@ -96,6 +96,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
           </span>
         ) : null}
       </div>
+      {props.notices}
       <div className="chalk-header-layout flex items-center gap-2">
         {props.onTogglePeople ? (
           <button type="button" className="chalk-shell-people-pill" aria-label={`People, ${props.people?.length ?? 0}`} onClick={props.onTogglePeople}>

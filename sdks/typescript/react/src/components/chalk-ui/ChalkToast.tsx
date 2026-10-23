@@ -1,34 +1,44 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChalkButton } from "./ChalkButton";
+import { noticeIdentity } from "../toast-stack/notice-announcement";
 export interface ChalkToastProps {
   readonly message: ReactNode;
+  /** Stable semantic identity for rich message content. Change it when the message changes. */
+  readonly announcementKey?: string;
+  /** Plain speech text for custom message components. Literal text and markup are read without mounting them. */
+  readonly announcementText?: string;
   readonly icon?: ReactNode;
   readonly type?: "info" | "success" | "warning" | "error";
   readonly duration?: number;
   readonly action?: { readonly label: string; readonly onClick: () => void };
+  /** Enables live announcements. Pass false for an already-announced notice; a replacement message can enable the same mounted toast later. */
+  readonly announce?: boolean;
   readonly onDismiss: () => void;
 }
-export function ChalkToast({ message, type = "info", duration = type === "info" ? 5000 : Infinity, action, icon, onDismiss }: ChalkToastProps) {
+export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
-  const [exiting, setExiting] = useState(false);
+  const identity = noticeIdentity({ message, announcementText, announcementKey, type });
+  const [lifetime, setLifetime] = useState({ identity, exiting: false });
+  if (lifetime.identity !== identity) setLifetime({ identity, exiting: false });
+  const exiting = lifetime.identity === identity && lifetime.exiting;
   useEffect(() => {
     if (duration === Infinity) return;
-    const timer = setTimeout(() => setExiting(true), duration);
+    const timer = setTimeout(() => setLifetime({ identity, exiting: true }), duration);
     return () => clearTimeout(timer);
-  }, [duration]);
+  }, [duration, identity]);
   useEffect(() => {
     if (!exiting) return;
     const timer = setTimeout(() => dismissRef.current(), 160);
     return () => clearTimeout(timer);
-  }, [exiting]);
+  }, [exiting, identity]);
   return (
-    <div data-part="toast" data-exiting={exiting || undefined} className="chalk-toast" style={type === "error" ? { maxWidth: "min(560px, calc(100% - 32px))" } : undefined} role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} aria-atomic="true">
+    <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={announce ? (type === "error" ? "alert" : "status") : undefined} aria-live={announce ? (type === "error" ? "assertive" : "polite") : undefined} aria-atomic={announce || undefined}>
       {icon}
-      <span style={type === "error" ? { whiteSpace: "normal", lineHeight: 1.35, padding: "4px 0" } : undefined}>{message}</span>
+      <span>{message}</span>
       {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}
       {type === "error" ? (
-        <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setExiting(true)}>
+        <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setLifetime({ identity, exiting: true })}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
           </svg>
