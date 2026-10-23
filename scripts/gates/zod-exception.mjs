@@ -11,7 +11,7 @@ const dependencyGroups = ["dependencies", "devDependencies", "optionalDependenci
 // sdks/typescript/react-native also reaches that tail through its Expo native peers.
 // Expo's native modules also depend on expo, so ancestors before expo can cycle.
 const allowedImporters = new Set(["importer:apps/mobile", "importer:sdks/typescript/react-native"]);
-export function checkZodException(source) {
+function checkZodException(source) {
   for (const document of loadAll(source)) {
     const { importers = {}, snapshots = {}, packages = {} } = document;
     const parents = new Map();
