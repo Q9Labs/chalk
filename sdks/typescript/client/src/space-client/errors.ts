@@ -60,9 +60,8 @@ export function normalizeMediaError(cause: unknown): SpaceClientError {
 
 export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error", scope?: "media"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
-  if (cause instanceof ChalkChatFileError && cause.code === "unavailable") {
-    return normalizeUnavailableChatFile(cause);
-  }
+  const chatFileError = normalizeChatFileError(cause);
+  if (chatFileError) return chatFileError;
   if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
     return new SpaceClientError({
       code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
@@ -81,7 +80,8 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
   return new SpaceClientError({ code: fallback, recoverable: false, message });
 }
 
-function normalizeUnavailableChatFile(cause: ChalkChatFileError): SpaceClientError {
+function normalizeChatFileError(cause: unknown): SpaceClientError | null {
+  if (!(cause instanceof ChalkChatFileError) || cause.code !== "unavailable") return null;
   if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
     return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.cause instanceof Error ? cause.cause.message : "Access was rejected" });
   }
