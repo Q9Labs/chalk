@@ -8,6 +8,11 @@ defmodule ChalkSync.MixProject do
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      releases: [
+        chalk_sync: [
+          applications: [opentelemetry_exporter: :permanent, opentelemetry: :permanent]
+        ]
+      ],
       deps: deps()
     ]
   end
@@ -28,9 +33,9 @@ defmodule ChalkSync.MixProject do
       {:postgrex, "~> 0.22.4"},
       {:telemetry, "~> 1.3"},
       {:websock_adapter, "~> 0.5"},
+      {:opentelemetry_exporter, "~> 1.10"},
       {:opentelemetry_api, "~> 1.5"},
       {:opentelemetry, "~> 1.7"},
-      {:opentelemetry_exporter, "~> 1.10"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mint_web_socket, "~> 1.0", only: :test},
       {:mint, "~> 1.10.2", only: :test}
