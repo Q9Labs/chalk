@@ -19,6 +19,7 @@ osv_scanner() {
 }
 
 report_directory="$(mktemp -d "${TMPDIR:-/tmp}/chalk-osv.XXXXXX")"
+report_directory="$(cd "${report_directory}" && pwd -P)"
 trap 'find "${report_directory}" -depth -delete' EXIT
 snapshot() {
   mkdir "$2"
