@@ -85,6 +85,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #reservedOperationIds = new Set<string>();
   /** Access changes still being saved, by createdAt, so a later change whose save finishes first still waits its turn. */
   readonly #savingAccessChanges = new Map<string, number>();
+  /** The access change sent on this connection whose receipt or final failure hasn't arrived. Only its retry timer sends it again. */
+  #sentAccessChange: string | null = null;
   readonly #awaitingOperationIds = new Set<string>();
   readonly #pendingStoreWrites = new Set<Promise<void>>();
   readonly #operationRetryTimers = new Map<string, unknown>();
@@ -201,6 +203,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearOperationRetryTimers();
     this.#clearUpdateAssemblies();
     this.#awaitingOperationIds.clear();
+    this.#sentAccessChange = null;
     this.#waitingForOperations = false;
     this.#socket?.close(1000, "whiteboard subscription stopped");
     this.#socket = null;
@@ -616,6 +619,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#clearHeartbeat();
     const pendingOperations = [...this.#operations.values()].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     this.#awaitingOperationIds.clear();
+    this.#sentAccessChange = null;
     this.#waitingForOperations = true;
     const sendable = pendingOperations.filter((entry) => this.#sendable(entry.pending.frame));
     for (const entry of sendable) this.#awaitingOperationIds.add(entry.pending.operationId);
@@ -778,7 +782,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         revision: frame.revision,
       });
     void this.#store.remove(frame.operation_id).catch(() => undefined);
-    if (isAccessChange(entry.pending.frame)) this.#sendNextAccessChange();
+    this.#accessChangeDecided(frame.operation_id);
     this.#requestSnapshotAfterOperations();
   }
 
@@ -805,7 +809,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     entry.deferred && rejectDeferred(entry.deferred, error(operationFailure));
     this.#publishSummary("ready", operationFailure);
     void this.#store.remove(frame.correlation_id).catch(() => undefined);
-    if (isAccessChange(entry.pending.frame)) this.#sendNextAccessChange();
+    this.#accessChangeDecided(frame.correlation_id);
     this.#requestSnapshotAfterOperations();
   }
 
@@ -834,11 +838,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
    * Sync also stores a per-person choice according to the policy it lands under, so their order matters too.
    */
   #sendable(frame: ChalkWhiteboardV1PendingOperation["frame"]): boolean {
-    return !isAccessChange(frame) || this.#nextAccessChangeId() === frame.operation_id;
+    return !isAccessChange(frame) || (this.#sentAccessChange === null && this.#nextAccessChangeId() === frame.operation_id);
   }
 
   #sendNextAccessChange(): void {
-    if (this.#phase !== "live" || this.#snapshots.size > 0) return;
+    if (this.#phase !== "live" || this.#snapshots.size > 0 || this.#sentAccessChange !== null) return;
     const nextId = this.#nextAccessChangeId();
     const next = nextId === undefined ? undefined : this.#operations.get(nextId);
     if (!next) return;
@@ -855,6 +859,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     for (const entry of this.#operations.values()) if (isAccessChange(entry.pending.frame)) consider(entry.pending.operationId, entry.pending.createdAt);
     for (const [id, createdAt] of this.#savingAccessChanges) consider(id, createdAt);
     return next?.id;
+  }
+
+  /** A receipt or a final failure decides an access change, so the next one can go. */
+  #accessChangeDecided(operationId: string): void {
+    if (this.#sentAccessChange !== operationId) return;
+    this.#sentAccessChange = null;
+    this.#sendNextAccessChange();
   }
 
   #abandonAccessChange(operationId: string): void {
@@ -982,6 +993,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #sendOperation(frame: ChalkWhiteboardV1PendingOperation["frame"]): void {
+    if (isAccessChange(frame)) this.#sentAccessChange = frame.operation_id;
     for (const outbound of whiteboardV1OperationFrames(frame)) this.#send(outbound);
   }
 

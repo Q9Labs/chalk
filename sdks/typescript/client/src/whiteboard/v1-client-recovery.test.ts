@@ -635,6 +635,92 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     }
   });
 
+  it("doesn't resend an access change waiting on its receipt when a later save fails", async () => {
+    const { client, sockets, saves } = await twoQueuedPolicyChanges();
+    try {
+      saves[1]?.reject(new Error("disk full"));
+      await settle();
+      expect(sentPolicies(sockets[0])).toEqual(["hosts"]);
+    } finally {
+      for (const save of saves) save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  // Each order sends the first change once per connection until its receipt or failure decides it, and the second only after that.
+  it.each<{ order: string; steps: (queued: Awaited<ReturnType<typeof twoQueuedPolicyChanges>>) => Promise<void>; sent: string[][]; second: "resolves" | "rejects" }>([
+    {
+      order: "the receipt comes first",
+      steps: async ({ sockets, saves, first }) => {
+        commit(sockets[0], first(), "1");
+        await settle();
+        saves[1]?.resolve();
+        await settle();
+      },
+      sent: [["hosts", "picked"]],
+      second: "resolves",
+    },
+    {
+      order: "the later save fails first",
+      steps: async ({ sockets, saves, first }) => {
+        saves[1]?.reject(new Error("disk full"));
+        await settle();
+        commit(sockets[0], first(), "1");
+        await settle();
+      },
+      sent: [["hosts"]],
+      second: "rejects",
+    },
+    {
+      order: "the first change times out on Sync and is retried",
+      steps: async ({ sockets, saves, first, clock }) => {
+        sockets[0]?.receive({ type: "operation_error", correlation_id: first(), operation: "set_draw_policy", code: "storage_unavailable", recoverable: true, message: "Storage timed out." });
+        saves[1]?.resolve();
+        await settle();
+        expect(sentPolicies(sockets[0])).toEqual(["hosts"]);
+        clock.advance(5_000);
+        await settle();
+        commit(sockets[0], first(), "1");
+        await settle();
+      },
+      sent: [["hosts", "hosts", "picked"]],
+      second: "resolves",
+    },
+    {
+      order: "the connection drops before the receipt",
+      steps: async ({ sockets, saves, first, clock }) => {
+        sockets[0]?.close(1006);
+        await redial(clock, sockets, 1);
+        sockets[1]?.receive(welcome());
+        saves[1]?.resolve();
+        await settle();
+        expect(sentPolicies(sockets[1])).toEqual(["hosts"]);
+        commit(sockets[1], first(), "1");
+        await settle();
+        sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+        await settle();
+      },
+      sent: [["hosts"], ["hosts", "picked"]],
+      second: "resolves",
+    },
+  ])("sends each access change once until it is decided when $order", async ({ steps, sent, second }) => {
+    const queued = await twoQueuedPolicyChanges();
+    try {
+      await steps(queued);
+      expect(queued.sockets.slice(0, sent.length).map(sentPolicies)).toEqual(sent);
+      await expect(queued.changes[0]).resolves.toBeUndefined();
+      if (second === "resolves") {
+        commit(queued.sockets[sent.length - 1], sentFrames(queued.sockets[sent.length - 1], "set_draw_policy").at(-1).operation_id, "2");
+        await expect(queued.changes[1]).resolves.toBeUndefined();
+      } else {
+        await expect(queued.changes[1]).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
+      }
+    } finally {
+      for (const save of queued.saves) save.resolve();
+      await queued.client.stopSceneSubscription();
+    }
+  });
+
   it("sends a held access change when a snapshot fails for good", async () => {
     const { client, sockets } = await hostClient();
     const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
@@ -1285,6 +1371,25 @@ function heldPolicyStore(write: "before" | "after") {
     }
   })();
   return { pendingStore, saves };
+}
+
+/** A host whose first policy change is saved and sent, and whose second waits on its save. */
+async function twoQueuedPolicyChanges() {
+  const clock = new ManualClock();
+  const { pendingStore, saves } = heldPolicyStore("before");
+  const { client, sockets } = await hostClient(clock, { pendingStore });
+  const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("picked")];
+  for (const change of changes) void change.catch(() => undefined);
+  await settle();
+  saves[0]?.resolve();
+  await settle();
+  expect(sentPolicies(sockets[0])).toEqual(["hosts"]);
+  const first = () => sentFrames(sockets[0], "set_draw_policy")[0].operation_id;
+  return { client, sockets, saves, changes, first, clock };
+}
+
+function sentPolicies(socket: TestSocket | undefined): string[] {
+  return sentFrames(socket, "set_draw_policy").map((frame) => frame.policy);
 }
 
 /** Lets the reconnect timer dial, then opens the socket it made. */
