@@ -36,6 +36,7 @@ export function parseArguments(arguments_, { isCI = false } = {}) {
   let skipStaging = false;
   let dryRun = false;
   let recoverStaleLock = false;
+  let withoutAssetRetention = false;
 
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -58,6 +59,11 @@ export function parseArguments(arguments_, { isCI = false } = {}) {
       skipStaging = true;
       continue;
     }
+    if (argument === "--without-asset-retention") {
+      if (withoutAssetRetention) throw usageError();
+      withoutAssetRetention = true;
+      continue;
+    }
     if (argument === "--dry-run") {
       if (dryRun) throw usageError();
       dryRun = true;
@@ -77,7 +83,7 @@ export function parseArguments(arguments_, { isCI = false } = {}) {
   if (isCI && recoverStaleLock) {
     throw new Error("--recover-stale-lock is only available for local releases");
   }
-  return { sha, skipStaging, dryRun, recoverStaleLock };
+  return { sha, skipStaging, dryRun, recoverStaleLock, withoutAssetRetention };
 }
 
 export function parseDeploymentURL(output, projectName = STAGING_PROJECT) {
@@ -105,10 +111,12 @@ export function resolveTurboCacheDirectory({ environment = process.env, mainChec
   return cacheDirectory;
 }
 
-export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEFAULT_PRODUCTION_URL, rootDirectory = repositoryRoot, webPath = webDirectory, verifier = verifierPath, turboCacheDirectory = join(resolve(rootDirectory), ".turbo", "cache") }) {
+export function buildReleasePlan({ sha, skipStaging = false, withoutAssetRetention = false, productionURL = DEFAULT_PRODUCTION_URL, rootDirectory = repositoryRoot, webPath = webDirectory, verifier = verifierPath, turboCacheDirectory = join(resolve(rootDirectory), ".turbo", "cache") }) {
   const normalizedSHA = normalizeSHA(sha);
   const cacheDirectory = resolve(turboCacheDirectory);
   const commands = [commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory), commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", cacheDirectory], rootDirectory)];
+
+  commands.push(retentionCommand({ rootDirectory, webPath, productionURL, sha: normalizedSHA, withoutAssetRetention }));
 
   if (!skipStaging) {
     commands.push(
@@ -133,7 +141,7 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
   await assertCleanTree(commandRunner, rootDirectory, executionEnvironment);
 
   const resolvedTurboCacheDirectory = turboCacheDirectory ?? resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
-  const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL, rootDirectory, webPath, turboCacheDirectory: resolvedTurboCacheDirectory });
+  const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, withoutAssetRetention: options.withoutAssetRetention, productionURL, rootDirectory, webPath, turboCacheDirectory: resolvedTurboCacheDirectory });
   if (options.dryRun) {
     printDryRun(expectedSHA, releasePlan);
     return { sha: expectedSHA, dryRun: true, plan: releasePlan };
@@ -146,6 +154,7 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
   await checkPinnedWrangler(commandRunner, webPath, executionEnvironment);
 
   await buildWebArtifact({ build, commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, turboCacheDirectory: resolvedTurboCacheDirectory });
+  await commandRunner({ ...retentionCommand({ rootDirectory, webPath, productionURL, sha: expectedSHA, withoutAssetRetention: options.withoutAssetRetention }), env: executionEnvironment });
   const stagingURL = await deployStagingArtifact({ commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, skipStaging: options.skipStaging, webPath });
 
   await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", PRODUCTION_PROJECT, "--branch", "master", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { env: executionEnvironment }));
@@ -155,6 +164,10 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
 }
 
 export const deployWebRelease = runWebRelease;
+
+function retentionCommand({ rootDirectory, webPath, productionURL, sha, withoutAssetRetention }) {
+  return commandSpec("pnpm", ["exec", "tsx", "apps/web/scripts/retain-public-assets.ts", "--directory", join(webPath, "dist/client"), "--origin", productionURL, "--release", sha, ...(withoutAssetRetention ? ["--without-asset-retention"] : [])], rootDirectory);
+}
 
 function resolveProductionURL(environment) {
   return environment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL;
@@ -212,7 +225,7 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
   const turboCacheDirectory = resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
 
   if (options.dryRun) {
-    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL: resolveProductionURL(executionEnvironment), rootDirectory, webPath: join(rootDirectory, "apps/web"), turboCacheDirectory });
+    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, withoutAssetRetention: options.withoutAssetRetention, productionURL: resolveProductionURL(executionEnvironment), rootDirectory, webPath: join(rootDirectory, "apps/web"), turboCacheDirectory });
     console.log(`Local web release dry-run for ${expectedSHA}; no detached worktree, install, upload, or verification commands were executed.`);
     printDryRun(expectedSHA, plan);
     return { sha: expectedSHA, dryRun: true, plan };
@@ -229,7 +242,7 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
     try {
       await commandRunner(commandSpec("git", ["worktree", "add", "--detach", worktreePath, expectedSHA], rootDirectory, { env: executionEnvironment }));
       worktreeAdded = true;
-      const nestedArguments = ["--sha", expectedSHA, ...(options.skipStaging ? ["--skip-staging"] : [])];
+      const nestedArguments = ["--sha", expectedSHA, ...(options.skipStaging ? ["--skip-staging"] : []), ...(options.withoutAssetRetention ? ["--without-asset-retention"] : [])];
       return await runWebRelease({
         arguments_: nestedArguments,
         environment: executionEnvironment,
@@ -377,7 +390,7 @@ function printDryRun(expectedSHA, releasePlan) {
 }
 
 function usageError() {
-  return new Error("Usage: pnpm run release:web [--sha <40-char-sha>] [--skip-staging] [--recover-stale-lock] [--dry-run]");
+  return new Error("Usage: pnpm run release:web [--sha <40-char-sha>] [--skip-staging] [--recover-stale-lock] [--without-asset-retention] [--dry-run]");
 }
 
 function escapeRegExp(value) {

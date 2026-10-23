@@ -49,6 +49,10 @@ on:
         required: true
         default: false
         type: boolean
+      without_asset_retention:
+        description: Explicitly discard old web assets (bootstrap or emergency only)
+        default: false
+        type: boolean
       web_artifact:
         description: JSON artifact_id and sha256 of the prebuilt target web archive
         type: string
@@ -109,6 +113,9 @@ on:
         type: string
       deploy_web:
         required: false
+        default: false
+        type: boolean
+      without_asset_retention:
         default: false
         type: boolean
       web_artifact:
@@ -1040,9 +1047,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           WEB_TARGET: ${{ inputs.managed_environment }}
+          WITHOUT_ASSET_RETENTION: ${{ inputs.without_asset_retention }}
           ARTIFACT_RUN_ID: ${{ inputs.manifest_run_id || github.run_id }}
           WEB_ARTIFACT: ${{ inputs.web_artifact || toJSON(fromJSON(needs.prepare-web.outputs.web || '{}')[inputs.managed_environment]) }}
-        run: python3 scripts/releases/web.py deploy --target "$WEB_TARGET" --sha "$TARGET_SHA"
+        run: |
+          args=()
+          if [[ "$WITHOUT_ASSET_RETENTION" == "true" ]]; then args+=(--without-asset-retention); fi
+          python3 scripts/releases/web.py deploy --target "$WEB_TARGET" --sha "$TARGET_SHA" "${args[@]}"
       - name: Restore the saved Pages production deployment
         id: restore
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id != '')
