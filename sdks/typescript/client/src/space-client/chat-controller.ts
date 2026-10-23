@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { ChatReactionSetFrameSchema } from "../generated/sync";
 import { Context, Effect, Layer, Scope } from "effect";
 import type { ChalkChatFileTransport } from "../chat-files";
+import { CHAT_FILE_REACHABILITY_MESSAGE } from "../chat-files/types";
 import type { ChalkChatPageResult } from "../collaboration/types";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
@@ -180,7 +181,10 @@ class ChatControllerRuntime implements ChatControllerEffects {
                   Effect.flatMap((upload) =>
                     Effect.void.pipe(
                       Effect.andThen(
-                        foreign(() => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
+                        Effect.tryPromise({
+                          try: () => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes }),
+                          catch: () => new SpaceClientError({ code: "collaboration.unavailable", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }),
+                        }).pipe(
                           Effect.flatMap((response) => {
                             if (!response.ok) {
                               return Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` }));

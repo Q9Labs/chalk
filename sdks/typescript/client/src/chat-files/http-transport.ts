@@ -1,5 +1,5 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachmentMimeType } from "../collaboration/types";
-import { ChalkChatFileError, type ChalkChatFileFailure, type ChalkChatFileOperation, type ChalkChatFileTransport } from "./types";
+import { CHAT_FILE_REACHABILITY_MESSAGE, ChalkChatFileError, type ChalkChatFileFailure, type ChalkChatFileOperation, type ChalkChatFileTransport } from "./types";
 
 export type ChalkChatFileHttpTransportOptions = {
   readonly baseUrl: string;
@@ -55,15 +55,19 @@ function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const baseUrl = options.baseUrl.replace(/\/+$/u, "");
   return async function request<T>(operation: ChalkChatFileOperation, path: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
+    const headers = new Headers(init.headers);
+    try {
+      headers.set("authorization", `Bearer ${await options.token()}`);
+    } catch (cause) {
+      throw new ChalkChatFileError({ operation, code: "unavailable", stage: "token", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
+    }
     let response: Response;
     try {
-      const headers = new Headers(init.headers);
-      headers.set("authorization", `Bearer ${await options.token()}`);
       response = await fetchImplementation(`${baseUrl}${path}`, { ...init, headers });
     } catch (cause) {
-      throw new ChalkChatFileError({ operation, code: "unavailable", recoverable: true, message: "Chat attachment storage is unavailable." }, { cause });
+      throw new ChalkChatFileError({ operation, code: "unavailable", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
     }
-    if (!response.ok) throw responseError(response, operation);
+    if (!response.ok) throw await responseError(response, operation);
     let value: unknown;
     try {
       value = await response.json();
@@ -75,9 +79,14 @@ function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
   };
 }
 
-function responseError(response: Response, operation: ChalkChatFileOperation): ChalkChatFileError {
+async function responseError(response: Response, operation: ChalkChatFileOperation): Promise<ChalkChatFileError> {
   const code = responseErrorCode(response.status);
-  return chatFileError(operation, code, response.status === 429 || response.status >= 500, "Chat attachment request failed.");
+  let message = "Chat attachment request failed.";
+  if (response.status === 503) {
+    const value: unknown = await response.json().catch(() => null);
+    if (isRecord(value) && isRecord(value.error) && value.error.code === "chat.storage_unavailable") message = "Chat attachment storage is unavailable.";
+  }
+  return chatFileError(operation, code, response.status === 429 || response.status >= 500, message);
 }
 
 function responseErrorCode(status: number): ChalkChatFileFailure["code"] {

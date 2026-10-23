@@ -2,6 +2,8 @@ import type { ChalkChatAttachment, ChalkChatAttachmentMimeType } from "../collab
 
 export type ChalkChatFileOperation = "initiate_upload" | "finalize_upload" | "get_download";
 
+export const CHAT_FILE_REACHABILITY_MESSAGE = "Could not reach the chat attachment service (network or browser access failure).";
+
 export type ChalkChatFileErrorCode = "access.invalid" | "unavailable" | "permission_denied" | "invalid_payload" | "conflict" | "not_found" | "expired" | "file_transfer_failed";
 
 export type ChalkChatFileFailure = {
@@ -9,12 +11,14 @@ export type ChalkChatFileFailure = {
   readonly code: ChalkChatFileErrorCode;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly stage?: "token" | "request";
 };
 
 export class ChalkChatFileError extends Error {
   readonly operation: ChalkChatFileOperation;
   readonly code: ChalkChatFileErrorCode;
   readonly recoverable: boolean;
+  readonly stage: "token" | "request";
 
   constructor(failure: ChalkChatFileFailure, options?: ErrorOptions) {
     super(failure.message, options);
@@ -22,6 +26,7 @@ export class ChalkChatFileError extends Error {
     this.operation = failure.operation;
     this.code = failure.code;
     this.recoverable = failure.recoverable;
+    this.stage = failure.stage ?? "request";
   }
 }
 

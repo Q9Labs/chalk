@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import { ChalkChatFileError } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
 import { V1SyncError } from "../sync/v1-error";
@@ -59,6 +60,9 @@ export function normalizeMediaError(cause: unknown): SpaceClientError {
 
 export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error", scope?: "media"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
+  if (cause instanceof ChalkChatFileError && cause.code === "unavailable") {
+    return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message });
+  }
   if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
     return new SpaceClientError({
       code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
