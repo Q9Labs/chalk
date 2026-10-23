@@ -953,6 +953,28 @@ it("receives followed views while the active board is a grid tile", async () => 
   }, false);
 });
 
+it("keeps following when a Bring animation's first frame predates its start", async () => {
+  vi.useFakeTimers();
+  const onFollow = vi.fn();
+  await withOpenBoard(
+    async (container, engine, peer) => {
+      await act(async () => engine.zoom(3));
+      onFollow.mockClear();
+      vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now() - 100), 16));
+      vi.stubGlobal("cancelAnimationFrame", (id: ReturnType<typeof setTimeout>) => clearTimeout(id));
+      await act(async () => {
+        peer.receive("presenter", { x: 0, y: 0, width: 10, height: 10, bring: true });
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      expect(container.querySelector(".chalk-board-chip")?.textContent ?? "").toContain("Following Someone");
+      expect(container.querySelector(".chalk-board-zoom-value")?.textContent).toBe("10%");
+      expect(onFollow).not.toHaveBeenCalledWith(null);
+    },
+    true,
+    { onFollow },
+  );
+});
+
 it("receives Bring while the board tile is off-page and keeps that view on return", async () => {
   vi.useFakeTimers();
   const onFollow = vi.fn();
