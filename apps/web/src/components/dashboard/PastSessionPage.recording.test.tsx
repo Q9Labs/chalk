@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { recordingDTO } from "../../../server/dto";
+import { clock } from "../../lib/dashboard/format";
 import { PastSessionPage } from "./PastSessionPage";
 
 const router = vi.hoisted(() => ({ state: { location: { pathname: "/dashboard/call/space/session/episode" } } }));
@@ -34,6 +35,7 @@ let createHTTPStatus = 200;
 let serverLagMs = 0;
 let legacyExport = false;
 let metadataDelayMs = 0;
+let listedTranscripts: { id: string; status: string; languages: string[]; createdAt: string }[] | undefined;
 const requests: { path: string; action?: string; id?: string; recordingId?: string }[] = [];
 
 // The API derives these states at read time by its own clock (recording_pipeline.sql:663-699), so the mock server does too.
@@ -82,6 +84,7 @@ beforeEach(() => {
   metadataStatus = 200;
   transcriptHTTPStatus = 200;
   extraRecordings = [];
+  listedTranscripts = undefined;
   brokenURL = null;
   stalledTranscripts = null;
   recordingState = null;
@@ -129,7 +132,8 @@ beforeEach(() => {
     }
     if (body?.action === "recording-url" && body.recordingId === brokenURL) return Response.json({ error: { code: "storage_unavailable" } }, { status: 503 });
     if (body?.action === "recording-url") return Response.json({ url: "https://storage.example.test/video.mp4" });
-    if (path === "/dashboard-api/past-session") return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: [recording(), ...extraRecordings], nextCursor: null });
+    if (path === "/dashboard-api/past-session")
+      return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: [{ ...recording(), ...(listedTranscripts ? { transcripts: listedTranscripts } : {}) }, ...extraRecordings], nextCursor: null });
     throw new Error(`Unexpected request: ${path}`);
   });
 });
@@ -222,6 +226,23 @@ it("keeps a newer preparable attempt reachable while an older export plays", asy
   await tick();
   expect(screen.queryByText("Preparing the newer recording")).toBeNull();
   expect(requests.filter((request) => request.action === "recording-url").map((request) => request.recordingId)).toEqual([older, id]);
+});
+
+it("plays an older attempt's video and shows a newer attempt's completed transcript, named by its time", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  // The newest attempt's video expired, but it finished a transcript; the older attempt still has a playable export.
+  source = "expired";
+  artifact = "unavailable";
+  listedTranscripts = [{ id, status: "complete", languages: ["en"], createdAt: date }];
+  extraRecordings = [{ ...recording(), id: older, status: "completed", sourceStatus: "available", exportStatus: "ready", createdAt: "2026-10-22T09:00:00Z", transcripts: [] }];
+  await open();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(requests.filter((request) => request.action === "recording-url").map((request) => request.recordingId)).toEqual([older]);
+  expect(requests.filter((request) => request.action === "transcripts").map((request) => request.recordingId)).toEqual([id]);
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  expect(screen.getByText(`From the ${clock(date)} recording`)).toBeTruthy();
+  // Its lines belong to another attempt's timeline, so they don't seek this video.
+  expect(screen.queryByRole("button", { name: /^Play from/ })).toBeNull();
 });
 
 it("offers an older preparable attempt when the newest attempt failed", async () => {

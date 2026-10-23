@@ -9,7 +9,17 @@ export async function pastSessionPage(engine: Engine, spaceId: string, episodeId
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
   const [recordings, people] = await Promise.all([run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })), attendance(engine, params)]);
-  return { episode: episodeDTO(episode), attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) }, recordings: recordings.recordings.map(recordingDTO), nextCursor: recordings.pagination.next_cursor };
+  // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
+  const withTranscripts = async (recording: (typeof recordings.recordings)[number]) => {
+    const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
+    return { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor };
+  };
+  return {
+    episode: episodeDTO(episode),
+    attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
+    recordings: await Promise.all(recordings.recordings.map(withTranscripts)),
+    nextCursor: recordings.pagination.next_cursor,
+  };
 }
 function artifactDTO(value: { url: string; expires_at: string; method: string; signed_headers: Readonly<Record<string, readonly string[]>> }): ArtifactURLDTO {
   return { url: value.url, expiresAt: value.expires_at, method: value.method, headers: value.signed_headers };

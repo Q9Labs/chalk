@@ -61,7 +61,8 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
   });
   // A deadline only re-renders the page, which marks that recording due; the bounded rotation above then reads it.
   useClock(state.kind === "ready" ? state.data.session.recordings.flatMap((item) => [item.sourceExpiresAt, item.transcriptionExpiresAt]) : []);
-  const replace = useCallback((next: RecordingDTO) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? next : item)) } }), { refresh: false }), [update]);
+  // An export answer carries no transcripts, so a replacement keeps the ones already read.
+  const replace = useCallback((next: RecordingDTO) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? { ...item, ...next } : item)) } }), { refresh: false }), [update]);
   const phone = usePhone();
   const back = (name: string | null) => (
     <Link className="back" to="/dashboard/call/$spaceId" params={{ spaceId }}>
@@ -100,8 +101,10 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
   const recording = recordings.find((item) => videoState(item) === "play") ?? recordings.find(usable) ?? recordings[0];
   // Recordings are newest first, so a later attempt than the one shown sits before it.
   const newer = recording ? recordings.slice(0, recordings.indexOf(recording)).find(usable) : undefined;
-  // Player, transcript and export state belong to one recording, so a new selection starts fresh.
-  return <Session key={recording?.id ?? "none"} ids={ids} back={back(state.data.callName)} session={state.data.session} recording={recording} newer={newer} onRecording={replace} />;
+  // The transcript comes from the newest attempt that finished one, which may not be the attempt whose video plays.
+  const transcribed = recordings.find((item) => item.transcripts?.some(completedTranscript)) ?? recording;
+  // Player, transcript and export state belong to their recordings, so a new selection starts fresh.
+  return <Session key={`${recording?.id ?? "none"}:${transcribed?.id ?? "none"}`} ids={ids} back={back(state.data.callName)} session={state.data.session} recording={recording} transcribed={transcribed} newer={newer} onRecording={replace} />;
 }
 
 function Session({
@@ -109,6 +112,7 @@ function Session({
   back,
   session,
   recording,
+  transcribed,
   newer,
   onRecording,
 }: {
@@ -116,12 +120,13 @@ function Session({
   readonly back: ReactNode;
   readonly session: PastSessionDTO;
   readonly recording: RecordingDTO | undefined;
+  readonly transcribed: RecordingDTO | undefined;
   readonly newer: RecordingDTO | undefined;
   readonly onRecording: (recording: RecordingDTO) => void;
 }) {
   const phone = usePhone();
   const { episode, attendance } = session;
-  const [transcript, setTranscript, rereadTranscript] = useTranscript(ids, recording);
+  const [transcript, setTranscript, rereadTranscript] = useTranscript(ids, transcribed);
   const intents = useIntentKeys();
   const toast = useToast();
   const [time, setTime] = useState(0);
@@ -215,7 +220,8 @@ function Session({
         </div>
       </div>
     );
-  async function createTranscript(recordingId: string) {
+  async function createTranscript(target: RecordingDTO) {
+    const recordingId = target.id;
     try {
       const created = await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
       intents.done(`transcript:${recordingId}`);
@@ -226,10 +232,17 @@ function Session({
       // A refusal means the source closed or a transcript already exists; reread both so a dead action disappears.
       // The refusal is already reported, so a failed reread keeps the current state.
       rereadTranscript();
-      if (recording) await freshRecording(ids.spaceId, recording).then(onRecording, () => undefined);
+      await freshRecording(ids.spaceId, target).then(onRecording, () => undefined);
     }
   }
-  const panel = <TranscriptPanel transcript={transcript} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(recording.id)} />;
+  const target = transcribed ?? recording;
+  // A transcript from another attempt doesn't follow this video, so it names its attempt and its lines don't seek.
+  const panel =
+    target.id === recording.id ? (
+      <TranscriptPanel transcript={transcript} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(target)} />
+    ) : (
+      <TranscriptPanel transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
+    );
 
   if (phone)
     return (
@@ -269,6 +282,7 @@ const languageName = (code: string) => {
 };
 
 const TRANSCRIPT_CHECK_MS = 15000;
+const completedTranscript = (transcript: TranscriptDTO) => transcript.status === "completed" || transcript.status === "complete";
 
 function transcriptView(recording: RecordingDTO, read: TranscriptRead): Transcript {
   if (read.kind === "loading") return read;
@@ -298,8 +312,8 @@ function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly 
     let current = true;
     (async (): Promise<TranscriptRead> => {
       const { transcripts } = await act("past-session", { action: "transcripts", ...ids, recordingId });
-      const transcript = transcripts.find((item) => item.status === "completed" || item.status === "complete") ?? transcripts[0] ?? null;
-      if (!transcript || (transcript.status !== "completed" && transcript.status !== "complete")) return { kind: "loaded", transcript, cues: [], stale: false };
+      const transcript = transcripts.find(completedTranscript) ?? transcripts[0] ?? null;
+      if (!transcript || !completedTranscript(transcript)) return { kind: "loaded", transcript, cues: [], stale: false };
       const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: transcript.id });
       return { kind: "loaded", transcript, cues, stale: false };
     })().then(
@@ -485,7 +499,7 @@ function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids; readon
 
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
 
-function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly transcript: Transcript; readonly time: number; readonly onSeek: (seconds: number) => void; readonly onCreate: () => Promise<void> }) {
+function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonly transcript: Transcript; readonly time: number; readonly from?: string; readonly onSeek?: (seconds: number) => void; readonly onCreate: () => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const search = query.trim().toLowerCase();
@@ -527,8 +541,8 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
     body = lines.map(({ cue, index }) => {
       const at = playbackTime(cue.startMs / 1000);
       const speaker = cue.speaker?.name;
-      return (
-        <button key={index} type="button" className={index === active ? "tline on" : "tline"} aria-label={`Play from ${at}${speaker ? `, ${speaker}` : ""}: ${cue.text}`} aria-current={index === active ? true : undefined} onClick={() => onSeek(cue.startMs / 1000)}>
+      const content = (
+        <>
           <span className="mono num">{at}</span>
           <span>
             {speaker ? (
@@ -539,6 +553,17 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
             ) : null}
             {mark ? cue.text.split(mark).map((part: string, n: number) => (n % 2 ? <mark key={n}>{part}</mark> : part)) : cue.text}
           </span>
+        </>
+      );
+      if (!onSeek)
+        return (
+          <div key={index} className="tline">
+            {content}
+          </div>
+        );
+      return (
+        <button key={index} type="button" className={index === active ? "tline on" : "tline"} aria-label={`Play from ${at}${speaker ? `, ${speaker}` : ""}: ${cue.text}`} aria-current={index === active ? true : undefined} onClick={() => onSeek(cue.startMs / 1000)}>
+          {content}
         </button>
       );
     });
@@ -552,6 +577,8 @@ function TranscriptPanel({ transcript, time, onSeek, onCreate }: { readonly tran
             <span role="status">
               {lines.length} {lines.length === 1 ? "line" : "lines"}
             </span>
+          ) : from ? (
+            <span>From the {from} recording</span>
           ) : null}
         </h2>
         <div className="tsearch">
