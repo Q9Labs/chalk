@@ -161,9 +161,12 @@ receives `CHALK_REMOTE_SLOT`; the worker assigns distinct ports in blocks
 `21000 + slot * 100 + role` and a private temp/state directory. Role 19 is Metro,
 exported as `RCT_METRO_PORT`. Expo CLI binds Metro to it and passes it to Android
 builds, and the mobile dev profile probes it. iOS Debug builds use the prebuilt
-React Native core, which keeps port 8081 compiled in, so an iOS simulator run in
-a slot launches its app with
-`xcrun simctl launch <udid> ai.q9labs.chalk.mobile -RCT_jsLocation 127.0.0.1:$RCT_METRO_PORT`.
+React Native core, which keeps port 8081 compiled in, so in a slot
+`pnpm --filter @q9labsai/chalk-mobile ios --device <udid>` runs
+`apps/mobile/scripts/run-ios.mjs` instead of `expo run:ios`: it starts Metro on
+`RCT_METRO_PORT`, builds the Debug app with `xcodebuild`, and launches it with
+`-RCT_jsLocation 127.0.0.1:$RCT_METRO_PORT`. It drives `simctl` directly, so it
+needs no Simulator.app, which Xcode 27 no longer ships.
 PostgreSQL gate and topology wrappers already allocate ephemeral ports and unique
 databases.
 `--exclusive`, root/full gates, call-performance and performance-budget commands

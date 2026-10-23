@@ -13,7 +13,7 @@ if [[ -n "${CHALK_REMOTE_SLOT:-}" ]]; then
   export CHALK_DASHBOARD_VENDOR_PORT=$((slot_base + 14)) CHALK_DASHBOARD_BRIDGE_PORT=$((slot_base + 15))
   export CHALK_JOIN_WEB_PORT=$((slot_base + 16)) CHALK_JOIN_SYNC_PORT=$((slot_base + 17)) CHALK_OAUTH_PORT=$((slot_base + 18))
   # Expo CLI binds Metro here and passes the port to Android builds. iOS Debug builds use the
-  # prebuilt React Native core, which keeps 8081: launch with -RCT_jsLocation 127.0.0.1:$RCT_METRO_PORT.
+  # prebuilt React Native core, which keeps 8081, so `pnpm ios` passes -RCT_jsLocation at launch.
   export RCT_METRO_PORT=$((slot_base + 19))
   export CHALK_API_ADDR="127.0.0.1:${CHALK_DEV_API_PORT}" CHALK_SYNC_PORT="$CHALK_DEV_SYNC_PORT"
   export CHALK_POSTGRES_PORT="$CHALK_DEV_POSTGRES_PORT" CHALK_REDIS_PORT="$CHALK_DEV_REDIS_PORT"
