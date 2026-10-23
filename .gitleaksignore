@@ -1,0 +1,53 @@
+# Secret-scan findings in past commits that are fixtures, placeholders or host names, not credentials.
+# Each line names one commit, file, rule and line, so a new secret anywhere still fails the scan.
+
+# Go and TypeScript tests: idempotency and request keys, nonces, and placeholder API keys and tokens.
+dc8f4a7af8731b2bdeab38836955e9b68269b502:apps/api/internal/adapters/postgres/public_invites_test.go:generic-api-key:125
+067144c932acc9e358f739c8b694e86a6cab59c2:apps/api/internal/httpapi/access_grants_refresh_test.go:generic-api-key:397
+462ecbdc7a30f2cb9c5d81431f45bb0dc6df92fc:apps/api/internal/httpapi/transcription_worker_auth_test.go:generic-api-key:69
+462ecbdc7a30f2cb9c5d81431f45bb0dc6df92fc:apps/api/internal/httpapi/transcription_worker_auth_test.go:generic-api-key:73
+462ecbdc7a30f2cb9c5d81431f45bb0dc6df92fc:apps/api/internal/httpapi/transcription_worker_auth_test.go:generic-api-key:87
+462ecbdc7a30f2cb9c5d81431f45bb0dc6df92fc:apps/api/internal/httpapi/transcription_worker_auth_test.go:generic-api-key:92
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/api/internal/infrastructure/auth/apikey_test.go:generic-api-key:83
+dc8f4a7af8731b2bdeab38836955e9b68269b502:apps/api/internal/publicinvites/publicinvites_test.go:generic-api-key:591
+dc8f4a7af8731b2bdeab38836955e9b68269b502:apps/api/internal/publicinvites/publicinvites_test.go:generic-api-key:721
+dc8f4a7af8731b2bdeab38836955e9b68269b502:apps/api/internal/publicinvites/publicinvites_test.go:generic-api-key:738
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:97
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:123
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:144
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:157
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:176
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:196
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:216
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:234
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:235
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:247
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:325
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:338
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:349
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:383
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/client.test.ts:generic-api-key:398
+0f05edcd9308da8eea62ce6634f25336e061f4d3:packages/sdk-core/src/__tests__/debug-report-v2.test.ts:jwt:64
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/debug-report-v2.test.ts:jwt:65
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:packages/sdk-core/src/__tests__/debug-report-v2.test.ts:stripe-access-token:75
+557eccc1bfecd353f056bfec153d36a76da8fd93:sdks/typescript/client/src/access/episode-diagnostic-credential.test.ts:generic-api-key:22
+
+# API docs: a JWT cut short with an ellipsis, shown in example requests and responses.
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/docs/src/content/docs/api/authentication.mdx:generic-api-key:43
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/docs/src/content/docs/api/authentication.mdx:generic-api-key:44
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/docs/src/content/docs/api/authentication.mdx:generic-api-key:70
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/docs/src/content/docs/api/authentication.mdx:generic-api-key:79
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/docs/src/content/docs/api/authentication.mdx:generic-api-key:80
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/docs/src/content/docs/api/authentication.mdx:curl-auth-header:92
+
+# App and API code: the API host name chalk-api.q9labs.ai, which the rule reads as a key.
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/api/internal/interfaces/http/handlers/websocket_origins.go:generic-api-key:37
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/mobile/src/lib/chalk.ts:generic-api-key:119
+37f7e8fe2bbe03169fee2f0283db61cb80d7c3cb:apps/web/src/components/WebChalkRuntime.tsx:generic-api-key:30
+
+# Scratchpad notes: an env flag set to 1, a phrase about key storage, and an example hello frame.
+d5f2cb35ccae14ecc30f3054c4ee18609a864c19:scratchpad/composio-integration-session-log-2026-07-06.md:generic-api-key:240
+b83a463efa9f3665ef3c00638904cfef9351c3c7:scratchpad/history/2026-W31.md:generic-api-key:168
+063b5a6230dc11745eb42b2f65dadd34666577cd:scratchpad/react-native-mobile-v2-audit-session-log-2026-07-30.md:generic-api-key:16
+385c7ea4596cfb59749a5d130ecef9992da6c07a:scratchpad/sync-codewalk.html:generic-api-key:1905
+385c7ea4596cfb59749a5d130ecef9992da6c07a:scratchpad/sync-codewalk.html:generic-api-key:1907

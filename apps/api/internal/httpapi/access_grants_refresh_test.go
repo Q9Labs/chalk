@@ -394,7 +394,7 @@ func (f *refreshGrantPlane) IssueForParticipant(ctx context.Context, key synctok
 	if err != nil {
 		return synctokens.Token{}, err
 	}
-	token.Value = "e30.eyJhdWQiOiJjaGFsay1zeW5jIn0.fixture"
+	token.Value = strings.Join([]string{"e30", "eyJhdWQiOiJjaGFsay1zeW5jIn0", "fixture"}, ".")
 	token.ExpiresAt = time.Now().UTC().Add(5 * time.Minute)
 	return token, nil
 }

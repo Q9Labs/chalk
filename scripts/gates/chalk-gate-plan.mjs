@@ -92,7 +92,7 @@ function isKnownPath(file, workspaces) {
   if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/") || file.startsWith(".semgrep/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
-  return [".gitignore", ".gitleaks.toml", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
+  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
 function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
@@ -368,6 +368,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/call-performance-metrics.test.mjs",
       "scripts/prod-proof/*.test.mjs",
       "scripts/web-proof/*.test.mjs",
+      "scripts/gates/gitleaks-policy.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
