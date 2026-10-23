@@ -181,7 +181,13 @@ function reportFocusTarget(scope: HTMLElement | null, opener: HTMLElement | null
 }
 
 function usableReportFocusTarget(target: HTMLElement | null): target is HTMLElement {
-  return target !== null && target.isConnected && !target.matches(':disabled, [aria-disabled="true"]') && !target.closest("[inert]") && target.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  if (!target?.isConnected || target.matches(':disabled, [aria-disabled="true"]') || target.closest("[inert]") || target.getClientRects().length === 0) return false;
+  const visibility = getComputedStyle(target).visibility;
+  if (visibility === "hidden" || visibility === "collapse") return false;
+  for (let element: HTMLElement | null = target; element; element = element.parentElement) {
+    if (getComputedStyle(element).opacity === "0") return false;
+  }
+  return true;
 }
 
 export function CallDetails({
