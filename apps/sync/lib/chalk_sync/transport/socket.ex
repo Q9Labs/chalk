@@ -299,6 +299,9 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp handle_frame({:hello, _hello}, state), do: protocol_error(:already_authenticated, state)
 
+  defp handle_frame(:entered, %{phase: :live, entry_confirmation: false} = state),
+    do: protocol_error(:entry_confirmation_not_negotiated, state)
+
   defp handle_frame(:entered, %{phase: :live, identity: identity} = state) do
     case Stateholder.confirm_admission(identity) do
       {:ok, %{result: result}} when result in [:applied, :already_applied] ->

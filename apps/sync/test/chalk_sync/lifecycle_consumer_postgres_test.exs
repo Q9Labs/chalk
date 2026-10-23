@@ -174,6 +174,38 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert [["active", "joined", true]] = entry_row(connection, fixture)
   end
 
+  @tag :legacy_entry
+  @tag :entered_admission
+  test "entered on a socket that never negotiated entry confirmation is refused", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    {:ok, client} = Client.connect(port, "/v1/sync")
+    on_exit(fn -> Client.close_tcp(client) end)
+    client = Client.send_json(client, hello(fixture.identity))
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    refute Map.has_key?(welcome, "entry_confirmation")
+    client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
+    assert {:json, %{"stream" => "presence"}, client} = Client.recv(client)
+    client = Client.send_json(client, %{"type" => "entered"})
+
+    assert {:json,
+            %{
+              "type" => "error",
+              "code" => "protocol_error",
+              "detail" => "entry_confirmation_not_negotiated"
+            }, client} = Client.recv(client)
+
+    client = Client.send_json(client, %{"type" => "ping"})
+    assert {:json, %{"type" => "pong"}, _client} = Client.recv(client)
+    assert [["active", "joined", true]] = entry_row(connection, fixture)
+  end
+
   @tag :entered_admission
   test "entered immediately after recovery_complete is accepted on reconnect", %{
     connections: connections,
