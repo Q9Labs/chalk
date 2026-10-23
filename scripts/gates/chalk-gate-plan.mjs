@@ -363,6 +363,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/chalk-gate-plan.test.mjs",
       "scripts/gates/with-postgres.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
+      "scripts/gates/codeql-languages.test.mjs",
       "apps/sync/scripts/reliability_harness.test.mjs",
       "scripts/gates/call-performance-metrics.test.mjs",
       "scripts/prod-proof/*.test.mjs",
