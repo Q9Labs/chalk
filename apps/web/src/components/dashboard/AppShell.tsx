@@ -30,6 +30,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
   const ready = useRef<T | undefined>(undefined);
   const invalidate = useRef(() => {});
   const refresh = useRef<(options?: { force?: boolean; background?: boolean; status?: boolean }) => void>(() => {});
+  const resumeAfter = useRef(0);
   latest.current = { load, polling };
   if (state.kind === "ready") ready.current = state.data;
   useEffect(() => {
@@ -94,10 +95,16 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
     const visibleRefresh = () => {
       if (document.visibilityState === "visible") refresh.current({ status: true });
     };
-    const becameVisible = () => {
-      if (document.visibilityState === "visible") refresh.current({ force: true, status: latest.current.polling?.visibility === "status" });
-    };
     const timer = interval === undefined ? undefined : window.setInterval(visibleRefresh, interval);
+    const becameVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (latest.current.polling?.visibility !== "status") return refresh.current({ force: true });
+      // A status page reads only at its paced rate and one read at a time: a running tick picks up within one period,
+      // and an idle page reads at most once per period. A resume never cuts off a read in flight.
+      if (timer !== undefined || Date.now() < resumeAfter.current) return;
+      resumeAfter.current = Date.now() + 5000;
+      refresh.current({ status: true });
+    };
     document.addEventListener("visibilitychange", becameVisible);
     return () => {
       window.clearInterval(timer);

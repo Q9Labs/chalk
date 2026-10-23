@@ -35,6 +35,9 @@ let createHTTPStatus = 200;
 let serverLagMs = 0;
 let legacyExport = false;
 let metadataDelayMs = 0;
+let visibility: DocumentVisibilityState = "visible";
+const inFlight = new Map<string, number>();
+let maxInFlight = 0;
 let listedTranscripts: { id: string; status: string; languages: string[]; createdAt: string }[] | undefined;
 const requests: { path: string; action?: string; id?: string; recordingId?: string }[] = [];
 
@@ -85,6 +88,9 @@ beforeEach(() => {
   transcriptHTTPStatus = 200;
   extraRecordings = [];
   listedTranscripts = undefined;
+  visibility = "visible";
+  inFlight.clear();
+  maxInFlight = 0;
   brokenURL = null;
   stalledTranscripts = null;
   recordingState = null;
@@ -103,7 +109,7 @@ beforeEach(() => {
   transcriptStatus = "complete";
   requests.length = 0;
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = new URL(input, "https://chalk.test");
     const path = url.pathname;
@@ -111,7 +117,13 @@ beforeEach(() => {
     requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined, recordingId: body?.recordingId });
     if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
     if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
-    if (path === "/dashboard-api/call-metadata" && metadataDelayMs) await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
+    if (path === "/dashboard-api/call-metadata") {
+      const key = url.searchParams.get("id") ?? "";
+      inFlight.set(key, (inFlight.get(key) ?? 0) + 1);
+      maxInFlight = Math.max(maxInFlight, inFlight.get(key) ?? 0);
+      if (metadataDelayMs) await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
+      inFlight.set(key, (inFlight.get(key) ?? 1) - 1);
+    }
     if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: { ...recording(), id: url.searchParams.get("id") } }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
     if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
     if (body?.action === "transcripts" && body.recordingId === stalledTranscripts) return new Promise<Response>(() => {});
@@ -772,4 +784,38 @@ it("reads at most one recording per tick when 30 deadlines pass at once", async 
   expect(metadataReads()).toBe(30);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+});
+
+it("keeps resumed tabs to one paced recording read at a time and applies every answer", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  extraRecordings = Array.from({ length: 29 }, (_, index) => ({ ...recording(), id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}` }));
+  // Each read stays in flight for most of a tick, so a resume could overlap or cut one off.
+  metadataDelayMs = 4_000;
+  await open();
+  async function resume() {
+    for (const next of ["hidden", "visible"] as const) {
+      visibility = next;
+      await reactAct(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    }
+  }
+  await advance(60_000);
+  // Thirty hide and show cycles in quick succession with all thirty deadlines due start no read themselves.
+  for (let cycle = 0; cycle < 30; cycle += 1) await resume();
+  expect(metadataReads()).toBe(0);
+  const perTick = [];
+  for (let step = 0; step < 33; step += 1) {
+    const before = metadataReads();
+    await resume();
+    await advance(5_000);
+    perTick.push(metadataReads() - before);
+  }
+  expect(Math.max(...perTick)).toBeLessThanOrEqual(1);
+  expect(maxInFlight).toBe(1);
+  // Every answer is applied, so each recording is read once and all of them close.
+  expect(metadataReads()).toBe(30);
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
 });

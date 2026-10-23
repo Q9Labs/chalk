@@ -154,3 +154,41 @@ it("doesn't poll an ended call when this page's clock runs past a deadline the s
   });
   expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call"]);
 });
+
+it("reads an idle Call overview at most once per period across repeated tab resumes, and never over a read in flight", async () => {
+  let visibility: DocumentVisibilityState = "visible";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+  let resolveStatus: (value: Awaited<ReturnType<typeof readPage>>) => void = () => {};
+  vi.mocked(readPage)
+    .mockResolvedValueOnce({ ...initial, call: { ...initial.call, admission: "anyone" } })
+    .mockImplementationOnce(() => new Promise((resolve) => (resolveStatus = resolve)))
+    .mockResolvedValue({ latestEpisodeId: null, episode: null, knocks: [] });
+  await reactAct(async () => {
+    render(<CallPage spaceId="space" />);
+  });
+  async function resume() {
+    for (const next of ["hidden", "visible"] as const) {
+      visibility = next;
+      await reactAct(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    }
+  }
+  const pages = () => vi.mocked(readPage).mock.calls.map(([page]) => page);
+  for (let cycle = 0; cycle < 10; cycle += 1) await resume();
+  expect(pages()).toEqual(["call", "call-status"]);
+  // A resume after the period still waits for the read in flight.
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  await resume();
+  expect(pages()).toEqual(["call", "call-status"]);
+  await reactAct(async () => {
+    resolveStatus({ latestEpisodeId: null, episode: null, knocks: [] });
+  });
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  await resume();
+  expect(pages()).toEqual(["call", "call-status", "call-status"]);
+});
