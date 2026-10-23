@@ -109,6 +109,20 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 			t.Fatalf("export must reuse automatic job %s: %v", automaticID, err)
 		}
 
+		candidates, err := sqlc.New(pool).ListRecordingRenderBackfillCandidates(ctx, sqlc.ListRecordingRenderBackfillCandidatesParams{BatchSize: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, candidate := range candidates {
+			if candidate.RecordingID.Bytes == reservation.RecordingID.Bytes() {
+				found = candidate.AlreadyQueued && candidate.SourceExpiresAt.Valid
+			}
+		}
+		if !found {
+			t.Fatal("backfill inventory must recognize automatic jobs and their source window")
+		}
+
 		if _, err := pool.Exec(ctx, `update recording_jobs set state='terminal_failure', terminal_at=now(), error_code='render_deadline_exceeded' where id=$1::uuid`, automaticID); err != nil {
 			t.Fatal(err)
 		}

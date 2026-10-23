@@ -351,3 +351,27 @@ func mustRecordingContractID(t *testing.T, value string) utilities.ID {
 	}
 	return id
 }
+
+func TestRecordingExportDeadlineRemainsExpiredWithReason(t *testing.T) {
+	id := mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be002")
+	service := recordingExportHTTPRecordingStub{recording: recordings.Recording{ID: id, TenantID: id}}
+	exports := &recordingExportHTTPStub{state: recordingpipeline.ArtifactState{
+		SourceStatus: recordingpipeline.SourceStatusAvailable, ExportStatus: recordingpipeline.ExportStatusExpired,
+		FailureCode: "render_deadline_exceeded", FailureMessage: "The recording could not be rendered before its deadline.",
+		TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationStatusReady,
+	}}
+	router := chi.NewRouter()
+	requestRecordingExportEndpoint(service, exports, &preparationAuthorizer{}).Mount(router, RateLimitOptions{})
+	request := httptest.NewRequest(http.MethodPost, "/tenants/"+id.String()+"/recordings/"+id.String()+"/export", strings.NewReader(`{}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalSystem}))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	var body requestRecordingExportResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusAccepted || exports.calls != 0 || body.Export.Status != "expired" || body.Export.FailureCode == nil || *body.Export.FailureCode != "render_deadline_exceeded" || body.Export.FailureMessage == nil || body.Recording.TranscriptionPreparation.Status != recordingpipeline.TranscriptionPreparationStatusReady {
+		t.Fatalf("expired response status=%d requeues=%d body=%s", response.Code, exports.calls, response.Body.String())
+	}
+}
