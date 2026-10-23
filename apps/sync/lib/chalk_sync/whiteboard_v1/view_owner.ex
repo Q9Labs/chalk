@@ -8,15 +8,28 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
   @supervisor ChalkSync.WhiteboardV1.ViewSupervisor
   @max_people 256
   @max_streams 1024
+  @join_retry_ms 1_000
 
   def start_link(episode) do
     GenServer.start_link(__MODULE__, episode, name: {:via, Registry, {@registry, episode}})
   end
 
   def join(episode, participant_id) do
+    join(episode, participant_id, System.monotonic_time(:millisecond) + @join_retry_ms)
+  end
+
+  defp join(episode, participant_id, deadline) do
     with {:ok, owner} <- owner(episode) do
       GenServer.call(owner, {:join, self(), participant_id})
     end
+  catch
+    :exit, {reason, _call} when reason in [:noproc, :normal, :shutdown, :killed] ->
+      if System.monotonic_time(:millisecond) < deadline do
+        Process.sleep(5)
+        join(episode, participant_id, deadline)
+      else
+        {:error, :restarting}
+      end
   end
 
   def move(owner, frame, input), do: GenServer.call(owner, {:view, self(), frame, input})

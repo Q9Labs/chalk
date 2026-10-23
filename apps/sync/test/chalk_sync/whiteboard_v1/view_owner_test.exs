@@ -43,13 +43,17 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
 
   test "owner restart replaces the snapshot identity and restarts its counter", c do
     :ok = ViewOwner.move(c.owner, frame(c.person, 10), input(c.stream, 1))
-    ref = Process.monitor(c.owner)
-    Process.exit(c.owner, :kill)
-    assert_receive {:DOWN, ^ref, :process, _, :killed}
-    {:ok, next, id, []} = ViewOwner.join(c.episode, c.person)
-    assert id != c.id
-    :ok = ViewOwner.move(next, frame(c.person, 20), input(c.stream, 2))
-    assert_receive {:whiteboard_v1_frame, %{"owner_id" => ^id, "owner_sequence" => 1}}
+
+    Enum.reduce(1..10, {c.owner, c.id}, fn _, {owner, previous_id} ->
+      ref = Process.monitor(owner)
+      Process.exit(owner, :kill)
+      assert_receive {:DOWN, ^ref, :process, _, :killed}
+      {:ok, next, id, []} = ViewOwner.join(c.episode, c.person)
+      assert id != previous_id
+      :ok = ViewOwner.move(next, frame(c.person, 20), input(c.stream, 2))
+      assert_receive {:whiteboard_v1_frame, %{"owner_id" => ^id, "owner_sequence" => 1}}
+      {next, id}
+    end)
   end
 
   test "relays use the owner's geometry, never the submitted rectangle", c do
