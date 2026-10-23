@@ -134,10 +134,10 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
     stream = {frame["participant_id"], relay_stream(input)}
     previous = Map.get(state.relays, stream)
     version = if source, do: {input.origin_participant_id, source["owner_sequence"]}
-    publisher = Map.get(state.publishers, frame["participant_id"])
+    publisher = Map.get(state.publishers, frame["participant_id"], elem(stream, 1))
 
     cond do
-      publisher && publisher != elem(stream, 1) && !Map.get(input, :move, false) ->
+      publisher != elem(stream, 1) && !Map.get(input, :move, false) ->
         {:ok, state}
 
       is_nil(version) or version == previous ->
