@@ -18,7 +18,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
         if (scenario === "export_expired")
           check(
             `${width}: an expired render names its deadline and still offers transcription`,
-            waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording could not be rendered before its deadline.", { exact: true }).count()) === 1 && (await tab.getByRole("button", { name: "Create transcript", exact: true }).count()) === 1,
+            waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording could not be rendered before its deadline.", { exact: true }).count()) === 1 && (await tab.getByRole("button", { name: "Make a transcript in English", exact: true }).count()) === 1,
           );
         if (scenario === "available") {
           check(`${width}: captured source offers preparation before MP4 exists`, waiting === 0 && prepare === 1);

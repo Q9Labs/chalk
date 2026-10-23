@@ -259,7 +259,7 @@ it("shows a render deadline as expired with the server reason while capture sour
   expect(screen.getByText("The recording could not be rendered before its deadline.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Create transcript" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Make a transcript in English" })).toBeTruthy();
 });
 
 it("names the call from the session's own read, so a failing Call overview can't fail the page", async () => {
