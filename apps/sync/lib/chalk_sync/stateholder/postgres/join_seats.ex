@@ -20,12 +20,12 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     participant =
       Authority.lock_participant(connection, identity.episode, identity.participant_id)
 
-    unless policy.status == "active" && participant &&
-             participant.generation == identity.participant_generation do
-      Postgrex.rollback(connection, {:error, :invalid_admission_intent})
+    if participant && participant.generation != identity.participant_generation do
+      Postgrex.rollback(connection, {:error, :stale_participant_generation})
     end
 
-    if participant.status in ["joining", "active", "leaving"] do
+    if policy.status == "active" && participant &&
+         participant.status in ["joining", "active", "leaving"] do
       allocate_entry(connection, identity, requested)
     else
       # Recovery distinguishes expired admission from cancellation and departure.
