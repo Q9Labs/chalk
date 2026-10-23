@@ -11,6 +11,8 @@
 - UI: round call corners and lift board messages in the stylesheet.
 - UI: stack call notices below the reaction tray instead of over it.
 - Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
+- Client: keep access, Sync, SFU and recovery failure codes and whether they're recoverable in join rejections, snapshots and error events. React: show guidance for the startup step that failed, with a public error-code reference.
+- Client: return recoverable `media.timeout` when media confirmations run out, and recoverable `collaboration.unavailable` when a reaction acknowledgement times out after five seconds. React and React Native: keep recovery notices non-blocking, and disable reaction sending and media enable controls until Sync is live.
 - Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, or in React Native to 30 seconds or `syncStartupTimeoutMs`. The whiteboard, and Sync once the call is live, retry a timed-out attempt. During first join the deadline ends with the startup wait, so a Sync socket that never opens fails the join instead of retrying. Capture a fresh microphone after its track ended.
 - Client: report a chat send that Sync refuses for sending too fast as recoverable `command.rate_limited`, and one it refuses while overloaded as recoverable `collaboration.unavailable`, instead of `chat.payload_invalid`.
 - React: label screen shares of unknown surfaces plainly.
