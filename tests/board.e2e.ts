@@ -126,8 +126,8 @@ test("the live board keeps its canvas and drawing coordinates after person → b
       await page.locator(stageBoard).click();
       await settleStage(page);
     }
-    for (const [index, page] of [a, b].entries()) {
-      await page.screenshot({ path: `${directory}/board-stage-return-${index + 1}.png` });
+    for (const [index, page] of [a, b].entries()) await page.screenshot({ path: `${directory}/board-stage-return-${index + 1}.png` });
+    for (const page of [a, b]) {
       await expect
         .poll(
           async () => {
@@ -150,16 +150,19 @@ test("the live board keeps its canvas and drawing coordinates after person → b
       await page.screenshot({ path: `${directory}/board-stage-drawn-${index + 1}.png` });
     }
   } finally {
-    for (const context of browser.contexts()) {
-      for (const page of context.pages()) {
-        await page
-          .getByRole("button", { name: "Leave call", exact: true })
-          .click({ timeout: 2000 })
-          .catch(() => {});
+    try {
+      for (const context of browser.contexts()) {
+        for (const page of context.pages()) {
+          await page
+            .getByRole("button", { name: "Leave call", exact: true })
+            .click({ timeout: 2000 })
+            .catch(() => {});
+        }
+        await context.close();
       }
-      await context.close();
+    } finally {
+      await browser.close();
     }
-    await browser.close();
   }
 });
 
