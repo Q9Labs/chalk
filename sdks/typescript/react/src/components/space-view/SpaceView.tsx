@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -126,6 +126,9 @@ export function SpaceView({
   const callLink = useCallLink(participantsSlice.roster.length <= 1);
   const media = useMedia();
   const connection = useConnection();
+  const offline = useOffline();
+  const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
+  const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
   const recording = useRecording();
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
@@ -231,9 +234,15 @@ export function SpaceView({
     setCommandError(null);
     onDismissCommandError?.();
   };
-  const toasts = [...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)), ...(whiteboard?.isOpen ? boardToasts : []), ...commandToasts];
+  const toasts = [
+    ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
+    ...(whiteboard?.isOpen ? boardToasts : []),
+    ...commandToasts,
+    ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
+  ];
   const dismissToast = (id: string) => {
     if (id === "space-command-error") dismissCommandError();
+    else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
     else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
     else callToasts.dismiss(id);
   };
@@ -357,7 +366,7 @@ export function SpaceView({
               <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
               {overlay}
               {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
-              <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} />
+              <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} hasNotice={offlineNotice !== null} />
             </>
           }
           className={className}

@@ -1,9 +1,25 @@
 import { useEffect, useState } from "react";
 import { ChalkProvider, ToastStack, type Toast } from "@q9labsai/chalk-react";
+import { SpaceView } from "../../../../sdks/typescript/react/src/components/space-view/SpaceView";
 import { createCallStateClient, liveSnapshot } from "./fixtures";
 import { SpacePresentation } from "../../../../sdks/typescript/react/src/components/space-view/SpacePresentation";
 import { SpaceStage } from "../../../../sdks/typescript/react/src/components/stage/SpaceStage";
 import { NoticeButton } from "../../../../sdks/typescript/react/src/components/toast-stack/NoticeButton";
+
+export function OfflineNoticeFixture() {
+  const [client] = useState(() => {
+    const snapshot = liveSnapshot();
+    return createCallStateClient({ ...snapshot, offline: { ...snapshot.offline, notice: "Your expired offline actions were not sent. Actions are kept for up to 24 hours." } });
+  });
+  useEffect(() => () => client.dispose(), [client]);
+  return (
+    <ChalkProvider client={client}>
+      <div className="h-dvh">
+        <SpaceView spaceName="Team" callLinkOpen={false} features={{ sounds: false }} generatedAvatars={false} commandError="Camera blocked" whiteboard={{ isOpen: true, props: { canDraw: true, theme: "dark" } }} />
+      </div>
+    </ChalkProvider>
+  );
+}
 
 /** SDK-sized notice stacks, including content longer than the call's available band. */
 export function NoticeBandFixture() {

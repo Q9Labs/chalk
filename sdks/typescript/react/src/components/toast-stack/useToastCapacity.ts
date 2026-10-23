@@ -5,9 +5,8 @@ import { noticeAnnouncement } from "./notice-announcement";
 
 /** Measure the actual mounted suffix, never a second copy of caller content. */
 export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candidates: readonly Toast[], enabled: boolean): { readonly count: number; readonly ready: boolean } {
-  const source = JSON.stringify(candidates.map((toast) => [toast.id, noticeAnnouncement(toast), toast.type, toast.announcementKey]));
-  const [fit, setFit] = useState<{ readonly source: string; readonly count: number } | null>(null);
-  const current = fit?.source === source;
+  const [fit, setFit] = useState<{ readonly candidates: readonly Toast[]; readonly count: number } | null>(null);
+  const current = fit !== null && sameCandidates(fit.candidates, candidates);
   useLayoutEffect(() => {
     const node = stack.current;
     if (!enabled) {
@@ -26,14 +25,14 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
     let count = measured.width === 0 ? candidates.length : 0;
     let used = 0;
     if (measured.width > 0) {
-      for (const height of measured.heights.toReversed()) {
+      for (const height of measured.heights.slice().reverse()) {
         const next = used + (count ? measured.gap : 0) + height;
         if (next > measured.available) break;
         used = next;
         count += 1;
       }
     }
-    setFit((previous) => (previous?.source === source && previous.count === count ? previous : { source, count }));
+    setFit((previous) => (previous && sameCandidates(previous.candidates, candidates) && previous.count === count ? previous : { candidates, count }));
     if (typeof ResizeObserver === "undefined") return;
     let active = true;
     const observer = new ResizeObserver(() => {
@@ -49,4 +48,14 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
     };
   });
   return { count: enabled && current ? fit.count : candidates.length, ready: !enabled || current };
+}
+
+function sameCandidates(previous: readonly Toast[], next: readonly Toast[]): boolean {
+  return (
+    previous.length === next.length &&
+    previous.every((toast, index) => {
+      const other = next[index];
+      return other !== undefined && toast.id === other.id && noticeAnnouncement(toast) === noticeAnnouncement(other) && toast.type === other.type && toast.announcementKey === other.announcementKey && toast.action?.label === other.action?.label && toast.icon === other.icon;
+    })
+  );
 }

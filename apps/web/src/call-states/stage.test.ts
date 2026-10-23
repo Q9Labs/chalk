@@ -475,6 +475,36 @@ function noticeCount() {
   });
 }
 
+it("folds an expired offline warning into Notices with the board tools open", async () => {
+  await page.setViewportSize({ width: 640, height: 320 });
+  try {
+    await page.goto(`${origin}/call-states.html?state=offline-notice`);
+    await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
+    await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    if (process.env.STAGE_ARTIFACTS) {
+      await mkdir(process.env.STAGE_ARTIFACTS, { recursive: true });
+      await page.screenshot({ path: resolve(process.env.STAGE_ARTIFACTS, "offline-warning.png") });
+    }
+    expect(await page.locator("[data-part='toast']").count()).toBe(0);
+    const notices = page.getByRole("button", { name: "Show 2 notices", exact: true });
+    await notices.click();
+    const warning = page.locator("[data-part='notice']").filter({ hasText: "Your expired offline actions were not sent." });
+    await expect.poll(() => warning.count()).toBe(1);
+    expect(await page.locator("[data-part='notice']").count()).toBe(2);
+    await warning.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await expect.poll(() => warning.count()).toBe(0);
+    await expect.poll(() => page.getByRole("button", { name: "Show 1 notice", exact: true }).count()).toBe(1);
+    await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.locator("[data-part='toast']").count()).toBe(1);
+    await page.setViewportSize({ width: 640, height: 320 });
+    await expect.poll(() => page.locator("[data-part='toast']").count()).toBe(0);
+    await expect.poll(noticeCount).toBe(1);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
 it.each([false, true])("fits SDK notices to a tall call's actual band, long=%s", async (long) => {
   await page.setViewportSize({ width: 390, height: 620 });
   try {
