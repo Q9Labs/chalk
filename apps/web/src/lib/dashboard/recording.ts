@@ -6,20 +6,20 @@ export function workingRecording(recording: RecordingDTO): boolean {
   return video === "capturing" || video === "preparing" || recording.transcriptionStatus === "pending";
 }
 
-/** The past-session page also polls past a deadline the server still reports open, because its actions depend on that window. */
-export function pendingRecording(recording: RecordingDTO, now = Date.now()): boolean {
-  return workingRecording(recording) || lapsed(recording, now);
+/** The recording still has a window the server could close: a source to prepare from, or a transcription source to make a transcript from. */
+export function openWindow(recording: RecordingDTO): boolean {
+  return recording.sourceStatus === "available" || recording.transcriptionStatus === "ready";
 }
 
 /**
- * The server closes retention windows by its own clock, so the page never closes one itself. Once the page's clock
- * passes a deadline the server still reports open, the recording is due: polling reads it in its one-per-tick rotation
- * until the server agrees. A skewed clock then can't hide an action the server accepts, and a legacy export that
- * outlives its source keeps playing.
+ * The server closes retention windows by its own clock, so the page never closes one itself. Once a deadline has passed
+ * by the server's clock (the page's clock plus the offset from the response that carried the deadline) and the server
+ * still reports the window open, the recording is due for a read until the server agrees. A skewed clock then can't hide
+ * an action the server accepts, and a legacy export that outlives its source keeps playing.
  */
-function lapsed(recording: RecordingDTO, now: number): boolean {
-  if (recording.sourceStatus === "available" && passed(recording.sourceExpiresAt, now)) return true;
-  return recording.transcriptionStatus === "ready" && (passed(recording.transcriptionExpiresAt, now) || passed(recording.sourceExpiresAt, now));
+export function lapsed(recording: RecordingDTO, serverNow: number): boolean {
+  if (recording.sourceStatus === "available" && passed(recording.sourceExpiresAt, serverNow)) return true;
+  return recording.transcriptionStatus === "ready" && (passed(recording.transcriptionExpiresAt, serverNow) || passed(recording.sourceExpiresAt, serverNow));
 }
 
 function passed(deadline: string | null, now: number): boolean {
@@ -66,10 +66,13 @@ export const TRANSCRIPT: Record<TranscriptState, { readonly copy: string; readon
 
 const IN_PROGRESS = new Set(["preparing", "transcribing", "verifying", "retryable_failure", "pending", "processing"]);
 
+export const completedTranscript = (transcript: TranscriptDTO) => transcript.status === "complete" || transcript.status === "completed";
+export const pendingTranscript = (transcript: TranscriptDTO) => IN_PROGRESS.has(transcript.status);
+
 export function transcriptState(recording: RecordingDTO, transcript: TranscriptDTO | null): TranscriptState {
   if (transcript) {
-    if (transcript.status === "complete" || transcript.status === "completed") return "ready";
-    if (IN_PROGRESS.has(transcript.status)) return "preparing";
+    if (completedTranscript(transcript)) return "ready";
+    if (pendingTranscript(transcript)) return "preparing";
     if (transcript.status === "terminal_failure" || transcript.status === "failed") return "failed";
     if (transcript.status === "deleted") return "deleted";
     // Any other row, such as not_requested, still blocks a new request.

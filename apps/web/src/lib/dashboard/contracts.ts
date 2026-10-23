@@ -156,4 +156,4 @@ export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<Epis
 /** `first` is the first page, sent when a call Home doesn't list is among the five newest. */
 export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "archived" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
 
-export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO & Required<Pick<RecordingDTO, "transcripts" | "transcriptsNextCursor">> } | { kind: "transcript"; transcript: TranscriptDTO };
+export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };

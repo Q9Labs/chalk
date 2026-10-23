@@ -1,68 +1,89 @@
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
-import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
-import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
-import { pendingRecording, TRANSCRIPT, transcriptState, VIDEO, videoState, type TranscriptState } from "../../lib/dashboard/recording";
+import type { AttendanceDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
+import { act, errorMessage, failureKind, readPage, readPageTimed } from "../../lib/dashboard/client";
+import { TRANSCRIPT, VIDEO, videoState } from "../../lib/dashboard/recording";
+import { attempt, dueReads, failed, nextDue, nextRead, selection, succeeded, transcriptView, type Attempt, type Due, type TranscriptView } from "../../lib/dashboard/tracking";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { Change, useLoad } from "./AppShell";
 import { ErrorPanel, Menu, MenuItem, Sk, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Ids = { readonly spaceId: string; readonly episodeId: string };
-type Transcript = { readonly kind: "loading" } | { readonly kind: Exclude<TranscriptState, "ready"> } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] };
-/** The transcript row the page last read; what it means comes from the table in recording.ts. */
-type TranscriptRead = { readonly kind: "loading" } | { readonly kind: "gone" } | { readonly kind: "error" } | { readonly kind: "loaded"; readonly transcript: TranscriptDTO | null; readonly cues: readonly CueDTO[]; readonly stale: boolean };
+type Page = { readonly session: Omit<PastSessionDTO, "recordings">; readonly callName: string; readonly attempts: readonly Attempt[] };
 
-/** The current time, moved forward exactly when the next deadline passes so time-bound states change on screen. */
-function useClock(deadlines: readonly (string | null)[]): number {
-  const [now, setNow] = useState(() => Date.now());
-  const next = deadlines.reduce((soonest, deadline) => {
-    const at = deadline === null ? Number.NaN : Date.parse(deadline);
-    return at > now && at < soonest ? at : soonest;
-  }, Number.POSITIVE_INFINITY);
-  useEffect(() => {
-    if (next === Number.POSITIVE_INFINITY) return;
-    const timer = window.setTimeout(() => setNow(Date.now()), Math.min(next - Date.now(), 2_147_483_647));
-    return () => window.clearTimeout(timer);
-  }, [next, now]);
-  return now;
-}
-
-async function freshRecording(spaceId: string, recording: RecordingDTO): Promise<RecordingDTO> {
+/** Reads one due item. A failure lands on that item alone, except a lost session, which stops every read. */
+async function readItem(ids: Ids, due: Due): Promise<(item: Attempt) => Attempt> {
   try {
-    const result = await readPage("call-metadata", { kind: "recording", spaceId, id: recording.id });
-    return result.kind === "recording" ? result.recording : recording;
+    if (due.kind === "cues") {
+      const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: due.transcriptId });
+      return (item) => ({ ...item, cues: { transcriptId: due.transcriptId, cues }, cuesRead: succeeded(Date.now()) });
+    }
+    if (due.kind === "transcripts") {
+      const { transcripts, nextCursor } = await act("past-session", { action: "transcripts", ...ids, recordingId: due.id });
+      return (item) => ({ ...item, recording: { ...item.recording, transcripts, transcriptsNextCursor: nextCursor }, listRead: succeeded(Date.now()) });
+    }
+    const { data, offset } = await readPageTimed("call-metadata", { kind: "recording", spaceId: ids.spaceId, id: due.id });
+    if (data.kind !== "recording") return (item) => item;
+    // The server lists the recording's transcripts in the same read when it can, which also answers the list.
+    const listed = data.recording.transcripts !== undefined;
+    return (item) => ({ ...item, recording: { ...item.recording, ...data.recording }, offset: offset ?? item.offset, read: succeeded(Date.now()), listRead: listed ? succeeded(Date.now()) : item.listRead });
   } catch (error) {
-    if (!(error instanceof DashboardRequestError) || (error.status !== 404 && error.status !== 410)) throw error;
-    return { ...recording, sourceStatus: "expired", exportStatus: "unavailable", transcriptionStatus: "expired", exportRetryable: false, failureMessage: "The recording source is no longer available." };
+    const kind = failureKind(error);
+    if (kind === "sign-in") throw error;
+    const at = Date.now();
+    if (due.kind === "cues") return (item) => ({ ...item, cuesRead: failed(item.cuesRead, kind, error, at) });
+    if (due.kind === "transcripts") return (item) => ({ ...item, listRead: failed(item.listRead, kind, error, at) });
+    return (item) => ({ ...item, read: failed(item.read, kind, error, at) });
   }
 }
 
-async function loadSession({ spaceId, episodeId }: Ids) {
-  const [session, call] = await Promise.all([readPage("past-session", { spaceId, episodeId }), readPage("call", { spaceId })]);
-  return { session, callName: call.call.name };
+async function loadPage(ids: Ids): Promise<Page> {
+  const [{ data, offset }, call] = await Promise.all([readPageTimed("past-session", ids), readPage("call", { spaceId: ids.spaceId })]);
+  const { recordings, ...session } = data;
+  const at = Date.now();
+  const attempts = recordings.map((recording) => attempt(recording, offset ?? 0, at));
+  // The shown transcript's lines load with the page rather than a tick later.
+  const lines = dueReads(attempts, at).find((due) => due.kind === "cues");
+  const apply = lines ? await readItem(ids, lines) : undefined;
+  return { session, callName: call.call.name, attempts: attempts.map((item) => (apply && item.recording.id === lines?.id ? apply(item) : item)) };
+}
+
+const unchanged = new Change<Page>((page) => page);
+
+/** Renders the page again at `at`, so a read that falls due by the clock starts the scheduler's ticks. */
+function useWake(at: number | undefined) {
+  const [woke, setWoke] = useState(0);
+  useEffect(() => {
+    if (at === undefined) return;
+    const timer = window.setTimeout(() => setWoke((value) => value + 1), Math.min(Math.max(at - Date.now(), 0), 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [at, woke]);
 }
 
 export function PastSessionPage({ spaceId, episodeId }: Ids) {
   const ids = useMemo(() => ({ spaceId, episodeId }), [spaceId, episodeId]);
-  const metadata = useRef(0);
-  const { state, reload, update } = useLoad(() => loadSession(ids), `past:${spaceId}:${episodeId}`, {
+  const { state, reload, update } = useLoad(() => loadPage(ids), `past:${spaceId}:${episodeId}`, {
     visibility: "status",
-    interval: (data) => (data.session.recordings.some((item) => pendingRecording(item)) ? 5000 : undefined),
+    interval: (data) => (dueReads(data.attempts, Date.now()).length ? 5000 : undefined),
     read: async (data) => {
-      const pending = data.session.recordings.filter((item) => pendingRecording(item));
-      const recording = pending[metadata.current++ % pending.length];
-      if (!recording) return data;
-      const next = await freshRecording(spaceId, recording);
-      return { ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? next : item)) } };
+      const due = nextRead(data.attempts, Date.now());
+      if (!due) return unchanged;
+      const writes = data.attempts.find((item) => item.recording.id === due.id)?.writes;
+      const apply = await readItem(ids, due);
+      // An answer that started before an action on the same attempt can't undo it, so that attempt is read again.
+      return new Change<Page>((page) => ({ ...page, attempts: page.attempts.map((item) => (item.recording.id !== due.id ? item : item.writes === writes ? apply(item) : { ...item, read: { ...item.read, stale: true }, listRead: { ...item.listRead, stale: true } })) }));
     },
   });
-  // A deadline only re-renders the page, which marks that recording due; the bounded rotation above then reads it.
-  useClock(state.kind === "ready" ? state.data.session.recordings.flatMap((item) => [item.sourceExpiresAt, item.transcriptionExpiresAt]) : []);
+  useWake(state.kind === "ready" ? nextDue(state.data.attempts, Date.now()) : undefined);
+  const change = useCallback((id: string, edit: (item: Attempt) => Attempt) => update((page) => ({ ...page, attempts: page.attempts.map((item) => (item.recording.id === id ? { ...edit(item), writes: item.writes + 1 } : item)) }), { refresh: false }), [update]);
   // An export answer carries no transcripts, so a replacement keeps the ones already read.
-  const replace = useCallback((next: RecordingDTO) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? { ...item, ...next } : item)) } }), { refresh: false }), [update]);
+  const onRecording = useCallback((next: RecordingDTO) => change(next.id, (item) => ({ ...item, recording: { ...item.recording, ...next } })), [change]);
+  const onTranscript = useCallback((id: string, transcript: TranscriptDTO) => change(id, (item) => ({ ...item, recording: { ...item.recording, transcripts: [transcript, ...(item.recording.transcripts ?? [])] } })), [change]);
+  // A refusal can mean a window closed or another request made a transcript, so the scheduler reads both again.
+  const onRefused = useCallback((id: string) => change(id, (item) => ({ ...item, read: { ...item.read, stale: true }, listRead: { ...item.listRead, stale: true } })), [change]);
   const phone = usePhone();
   const back = (name: string | null) => (
     <Link className="back" to="/dashboard/call/$spaceId" params={{ spaceId }}>
@@ -95,38 +116,49 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
         </div>
       </div>
     );
-  const { recordings } = state.data.session;
-  // Show a playable export first, then an attempt that can still be prepared, so a failed newest attempt never hides a usable older one.
-  const usable = (item: RecordingDTO) => ["preparable", "retryable", "preparing"].includes(videoState(item));
-  const recording = recordings.find((item) => videoState(item) === "play") ?? recordings.find(usable) ?? recordings[0];
-  // Recordings are newest first, so a later attempt than the one shown sits before it.
-  const newer = recording ? recordings.slice(0, recordings.indexOf(recording)).find(usable) : undefined;
-  // The transcript comes from the newest attempt that finished one, which may not be the attempt whose video plays.
-  const transcribed = recordings.find((item) => item.transcripts?.some(completedTranscript)) ?? recording;
+  const { video, newer, transcript } = selection(state.data.attempts);
   // Player, transcript and export state belong to their recordings, so a new selection starts fresh.
-  return <Session key={`${recording?.id ?? "none"}:${transcribed?.id ?? "none"}`} ids={ids} back={back(state.data.callName)} session={state.data.session} recording={recording} transcribed={transcribed} newer={newer} onRecording={replace} />;
+  return (
+    <Session
+      key={`${video?.recording.id ?? "none"}:${transcript?.recording.id ?? "none"}`}
+      ids={ids}
+      back={back(state.data.callName)}
+      session={state.data.session}
+      item={video}
+      transcribed={transcript}
+      newer={newer?.recording}
+      onRecording={onRecording}
+      onTranscript={onTranscript}
+      onRefused={onRefused}
+    />
+  );
 }
 
 function Session({
   ids,
   back,
   session,
-  recording,
+  item,
   transcribed,
   newer,
   onRecording,
+  onTranscript,
+  onRefused,
 }: {
   readonly ids: Ids;
   readonly back: ReactNode;
-  readonly session: PastSessionDTO;
-  readonly recording: RecordingDTO | undefined;
-  readonly transcribed: RecordingDTO | undefined;
+  readonly session: Page["session"];
+  readonly item: Attempt | undefined;
+  readonly transcribed: Attempt | undefined;
   readonly newer: RecordingDTO | undefined;
   readonly onRecording: (recording: RecordingDTO) => void;
+  readonly onTranscript: (recordingId: string, transcript: TranscriptDTO) => void;
+  readonly onRefused: (recordingId: string) => void;
 }) {
   const phone = usePhone();
   const { episode, attendance } = session;
-  const [transcript, setTranscript, rereadTranscript] = useTranscript(ids, transcribed);
+  const recording = item?.recording;
+  const transcript: TranscriptView = transcribed ? transcriptView(transcribed) : { kind: "none" };
   const intents = useIntentKeys();
   const toast = useToast();
   const [time, setTime] = useState(0);
@@ -175,9 +207,7 @@ function Session({
       intents.done(`export:${target.id}`);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
-      // A refusal can mean the source expired since the page loaded; reread it so a dead action disappears.
-      // The refusal is already reported, so a failed reread keeps the current state.
-      await freshRecording(ids.spaceId, target).then(onRecording, () => undefined);
+      onRefused(target.id);
     } finally {
       setExporting(false);
     }
@@ -187,55 +217,60 @@ function Session({
   const newerState = newer ? videoState(newer) : null;
   const newerAction = newerState === null ? null : VIDEO[newerState].action;
   const actionLabel = (action: "prepare" | "retry") => (exporting ? "Preparing…" : action === "retry" ? "Try again" : "Prepare recording");
-  const media =
-    video === "play" ? (
-      <>
-        <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
-        {newer && newerState ? (
-          <div className="pnote" role="status">
-            <div>
-              {newerAction ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
-              <b>{newerAction === "retry" ? "A newer recording couldn’t be prepared" : newerAction ? "A newer recording is ready to prepare" : "Preparing the newer recording"}</b>
-              <p>{newerAction === "retry" ? "Try again to watch or download it here." : newerAction ? "Prepare it to watch or download it here." : "It replaces this video here when it’s ready."}</p>
-              {newerAction === "prepare" || newerAction === "retry" ? (
-                <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(newer)}>
-                  {actionLabel(newerAction)}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-      </>
-    ) : (
-      <div className="pnote" role={video === "capture_failed" || video === "retryable" || video === "export_failed" ? "alert" : "status"}>
-        <div>
-          {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
-          <b>{note.title}</b>
-          <p>{note.detail}</p>
-          {note.action === "prepare" || note.action === "retry" ? (
-            <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
-              {actionLabel(note.action)}
-            </button>
-          ) : null}
-        </div>
+  const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
+  const media = unreadable ? (
+    <div className="pnote" role="alert">
+      <div>
+        <Icon name="alert" />
+        <b>Couldn’t load this recording</b>
+        <p>{unreadable}</p>
       </div>
-    );
+    </div>
+  ) : video === "play" ? (
+    <>
+      <Player ids={ids} recording={recording} onTime={setTime} seekRef={seek} />
+      {newer && newerState ? (
+        <div className="pnote" role="status">
+          <div>
+            {newerAction ? <Icon name="film" /> : <span className="spin" aria-hidden="true" />}
+            <b>{newerAction === "retry" ? "A newer recording couldn’t be prepared" : newerAction ? "A newer recording is ready to prepare" : "Preparing the newer recording"}</b>
+            <p>{newerAction === "retry" ? "Try again to watch or download it here." : newerAction ? "Prepare it to watch or download it here." : "It replaces this video here when it’s ready."}</p>
+            {newerAction === "prepare" || newerAction === "retry" ? (
+              <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(newer)}>
+                {actionLabel(newerAction)}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </>
+  ) : (
+    <div className="pnote" role={video === "capture_failed" || video === "retryable" || video === "export_failed" ? "alert" : "status"}>
+      <div>
+        {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
+        <b>{note.title}</b>
+        <p>{note.detail}</p>
+        {note.action === "prepare" || note.action === "retry" ? (
+          <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
+            {actionLabel(note.action)}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
   async function createTranscript(target: RecordingDTO) {
     const recordingId = target.id;
     try {
       const created = await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
       intents.done(`transcript:${recordingId}`);
-      setTranscript(created.transcript);
+      onTranscript(recordingId, created.transcript);
       toast("Making the transcript. It shows here when it’s ready.", { icon: "clock" });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
-      // A refusal means the source closed or a transcript already exists; reread both so a dead action disappears.
-      // The refusal is already reported, so a failed reread keeps the current state.
-      rereadTranscript();
-      await freshRecording(ids.spaceId, target).then(onRecording, () => undefined);
+      onRefused(recordingId);
     }
   }
-  const target = transcribed ?? recording;
+  const target = transcribed?.recording ?? recording;
   // A transcript from another attempt doesn't follow this video, so it names its attempt and its lines don't seek.
   const panel =
     target.id === recording.id ? (
@@ -280,59 +315,6 @@ const languageName = (code: string) => {
     return code;
   }
 };
-
-const TRANSCRIPT_CHECK_MS = 15000;
-const completedTranscript = (transcript: TranscriptDTO) => transcript.status === "completed" || transcript.status === "complete";
-
-function transcriptView(recording: RecordingDTO, read: TranscriptRead): Transcript {
-  if (read.kind === "loading") return read;
-  if (read.kind === "gone") return { kind: "expired" };
-  if (read.kind === "error") return { kind: "failed" };
-  const kind = transcriptState(recording, read.transcript);
-  if (kind !== "ready") return { kind };
-  return read.transcript ? { kind, transcript: read.transcript, cues: read.cues } : { kind: "failed" };
-}
-
-function useTranscript(ids: Ids, recording: RecordingDTO | undefined): readonly [Transcript, (transcript: TranscriptDTO) => void, () => void] {
-  const [read, setRead] = useState<TranscriptRead>({ kind: "loading" });
-  const [check, setCheck] = useState(0);
-  const recordingId = recording?.id ?? null;
-  const transcriptionStatus = recording?.transcriptionStatus;
-  const state = recording ? transcriptView(recording, read) : read.kind === "loading" ? read : ({ kind: "none" } as const);
-  // A transcript being made, or one that failed to load, is checked again, so it shows without a reload.
-  const recheck = state.kind === "preparing" || read.kind === "error" || (read.kind === "loaded" && read.stale);
-  useEffect(() => {
-    if (!recheck || !recordingId) return;
-    const timer = window.setTimeout(() => setCheck((value) => value + 1), TRANSCRIPT_CHECK_MS);
-    return () => window.clearTimeout(timer);
-    // Keyed by the read itself, so the next check waits for the last one to settle and a slow read is never cut off.
-  }, [recheck, recordingId, read]);
-  useEffect(() => {
-    if (!recordingId) return;
-    let current = true;
-    (async (): Promise<TranscriptRead> => {
-      const { transcripts } = await act("past-session", { action: "transcripts", ...ids, recordingId });
-      const transcript = transcripts.find(completedTranscript) ?? transcripts[0] ?? null;
-      if (!transcript || !completedTranscript(transcript)) return { kind: "loaded", transcript, cues: [], stale: false };
-      const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: transcript.id });
-      return { kind: "loaded", transcript, cues, stale: false };
-    })().then(
-      (next) => current && setRead(next),
-      (error: unknown) => {
-        if (!current) return;
-        if (error instanceof DashboardRequestError && (error.status === 404 || error.status === 410)) setRead({ kind: "gone" });
-        // A transient failure keeps showing the last good read, marked stale so it is retried.
-        else setRead((previous) => (previous.kind === "loaded" ? { ...previous, stale: true } : { kind: "error" }));
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [ids, recordingId, check, transcriptionStatus]);
-  const created = useCallback((transcript: TranscriptDTO) => setRead({ kind: "loaded", transcript, cues: [], stale: false }), []);
-  const reread = useCallback(() => setCheck((value) => value + 1), []);
-  return [state, created, reread];
-}
 
 function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly video: boolean; readonly transcript: TranscriptDTO | null }) {
   const toast = useToast();
@@ -499,7 +481,7 @@ function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids; readon
 
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
 
-function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonly transcript: Transcript; readonly time: number; readonly from?: string; readonly onSeek?: (seconds: number) => void; readonly onCreate: () => Promise<void> }) {
+function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonly transcript: TranscriptView; readonly time: number; readonly from?: string; readonly onSeek?: (seconds: number) => void; readonly onCreate: () => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const search = query.trim().toLowerCase();
@@ -514,6 +496,12 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
     body = (
       <div style={{ padding: 14 }}>
         <ErrorPanel title={TRANSCRIPT.failed.copy} detail="The transcript isn’t available for this session." />
+      </div>
+    );
+  else if (transcript.kind === "unreadable")
+    body = (
+      <div style={{ padding: 14 }}>
+        <ErrorPanel title="Couldn’t load the transcript" detail={transcript.message} />
       </div>
     );
   else if (transcript.kind === "creatable")

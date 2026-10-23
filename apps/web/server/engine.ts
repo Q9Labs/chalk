@@ -1,11 +1,12 @@
 import { Effect, Schema } from "effect";
 import { HttpClientError } from "effect/unstable/http";
-import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
+import { createChalkEffectClient, TenantIdSchema, type Recording } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
 import { dashboardWebsiteOrigin } from "../src/lib/dashboard/contracts";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
-import type { AttendanceDTO, LiveDTO } from "../src/lib/dashboard/contracts";
+import type { AttendanceDTO, LiveDTO, RecordingDTO } from "../src/lib/dashboard/contracts";
+import { recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import { readCookie, seal, unseal, writeCookie } from "./cookies";
 
@@ -86,4 +87,14 @@ export async function live(engine: Engine, spaceIds: readonly string[]): Promise
 export async function attendance(engine: Engine, params: Parameters<Engine["api"]["episodes"]["getEpisodeAttendance"]>[0]["params"]): Promise<AttendanceDTO> {
   const result = await run(engine.api.episodes.getEpisodeAttendance({ params }));
   return { kind: "available", participants: result.participants.map((p) => ({ id: p.participant_id, name: p.display_name, kind: p.identity_kind, externalId: p.external_id, firstJoinedAt: p.first_joined_at, isYou: false, lastLeftAt: p.last_left_at })) };
+}
+
+/** A recording with its newest transcripts. A failed list leaves it unlisted instead of failing the read, so a page reads that list on its own. */
+export async function listedRecording(engine: Engine, recording: Recording): Promise<RecordingDTO> {
+  try {
+    const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
+    return { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor };
+  } catch {
+    return recordingDTO(recording);
+  }
 }

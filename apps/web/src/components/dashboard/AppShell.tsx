@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-ro
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ProfileDTO } from "../../lib/dashboard/contracts";
-import { DashboardRequestError, errorMessage, loadSession, needsSignIn, signOut } from "../../lib/dashboard/client";
+import { DashboardRequestError, errorMessage, failureKind, loadSession, needsSignIn, signOut } from "../../lib/dashboard/client";
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -22,8 +22,13 @@ function useSignInRedirect(): () => void {
 
 type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
 
+/** A polling answer applied to the page's latest data, so a write made while the read was in flight is kept and no answer is dropped. */
+export class Change<T> {
+  constructor(readonly apply: (current: T) => T) {}
+}
+
 /** Loads a page; optional polling keeps ready data on screen, including after a failed refresh. */
-export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { interval: (data: T) => number | undefined; read: (data: T) => Promise<T | null>; visibility?: "status" }) {
+export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { interval: (data: T) => number | undefined; read: (data: T) => Promise<T | Change<T> | null>; visibility?: "status" }) {
   const [state, setState] = useState<Load<T>>({ kind: "loading" });
   const toSignIn = useSignInRedirect();
   const latest = useRef({ load, polling });
@@ -35,49 +40,69 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
   if (state.kind === "ready") ready.current = state.data;
   useEffect(() => {
     let current = true;
-    let revision = 0;
-    let pending = false;
+    // Full reads started: an answer from before the newest one is superseded by it.
+    let loads = 0;
+    // Writes made on the page: an answer built from older data can't overwrite one, but a Change applies on top.
+    let writes = 0;
+    let inFlight: { kind: "status" | "load"; loads: number; writes: number } | null = null;
+    let stopped = false;
     let failures = 0;
     let retryAt = 0;
     invalidate.current = () => {
-      revision++;
-      pending = false;
+      writes++;
+      if (inFlight?.kind !== "load") return;
+      loads++;
+      inFlight = null;
     };
     ready.current = undefined;
     setState({ kind: "loading" });
     refresh.current = ({ force = false, background = true, status = false } = {}) => {
-      if (background && Date.now() < retryAt) return;
-      if (pending && !force) return;
-      pending = true;
-      const request = ++revision;
-      const read = async () => {
-        if (status && latest.current.polling && ready.current !== undefined) {
-          const data = await latest.current.polling.read(ready.current);
-          if (!current || request !== revision) return;
-          if (data !== null) return data;
+      if (stopped || (background && Date.now() < retryAt) || (inFlight && !force)) return;
+      const poll = status ? latest.current.polling : undefined;
+      const from = ready.current;
+      const request = poll && from !== undefined ? { kind: "status" as const, loads, writes } : { kind: "load" as const, loads: ++loads, writes };
+      inFlight = request;
+      const read = async (): Promise<{ data: T } | { change: Change<T> }> => {
+        if (poll && from !== undefined) {
+          const answer = await poll.read(from);
+          if (answer instanceof Change) return { change: answer };
+          if (answer !== null) return { data: answer };
+          request.kind = "load";
+          request.loads = ++loads;
         }
-        return latest.current.load();
+        return { data: await latest.current.load() };
       };
       read().then(
-        (data) => {
-          if (!current || request !== revision || data === undefined) return;
-          pending = false;
+        (answer) => {
+          if (!current) return;
+          if (inFlight === request) inFlight = null;
+          if (request.loads !== loads || ("data" in answer && request.kind === "status" && request.writes !== writes)) return;
           failures = 0;
           retryAt = 0;
+          // The latest data moves at once, so the next read starts from this answer whenever React renders it.
+          const data = "data" in answer ? answer.data : ready.current === undefined ? undefined : answer.change.apply(ready.current);
+          if (data === undefined || data === ready.current) return;
           ready.current = data;
           setState({ kind: "ready", data });
         },
         (error: unknown) => {
-          if (!current || request !== revision) return;
-          pending = false;
+          if (!current) return;
+          if (inFlight === request) inFlight = null;
+          if (request.loads !== loads) return;
+          const kind = failureKind(error);
+          if (kind === "sign-in") {
+            // Nothing else can be read until the person signs in again.
+            stopped = true;
+            toSignIn();
+            return;
+          }
           failures = Math.min(failures + 1, 10);
           const interval = ready.current === undefined ? 5000 : (latest.current.polling?.interval(ready.current) ?? 5000);
           const delay = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : Math.min(interval * 2 ** failures, 30000);
           retryAt = Date.now() + delay;
-          const terminal = error instanceof DashboardRequestError && [403, 404, 410].includes(error.status);
+          const terminal = kind === "terminal";
           if (terminal) ready.current = undefined;
-          if (needsSignIn(error)) toSignIn();
-          else setState((value) => (background && !terminal && value.kind === "ready" ? value : { kind: "error", error }));
+          setState((value) => (background && !terminal && value.kind === "ready" ? value : { kind: "error", error }));
         },
       );
     };
@@ -114,7 +139,11 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
   const reload = useCallback(() => refresh.current({ force: true, background: false }), []);
   const update = useCallback((change: (data: T) => T, options: { refresh?: boolean } = {}) => {
     invalidate.current();
-    setState((value) => (value.kind === "ready" ? { kind: "ready", data: change(value.data) } : value));
+    if (ready.current !== undefined) {
+      const data = change(ready.current);
+      ready.current = data;
+      setState({ kind: "ready", data });
+    }
     // Discard stale reads for every update; only writes need a fresh server read.
     if (options.refresh !== false && latest.current.polling) refresh.current({ force: true });
   }, []);

@@ -25,7 +25,6 @@ let metadataStatus = 200;
 let transcriptHTTPStatus = 200;
 let extraRecordings: ReturnType<typeof recording>[] = [];
 let brokenURL: string | null = null;
-let stalledTranscripts: string | null = null;
 let recordingState: string | null = null;
 let transcriptionSource: string | null = null;
 let expiresAt: string | null = null;
@@ -55,6 +54,12 @@ function served() {
     // A closed source window expires every preparation state except one with no source and no job (recording_pipeline.sql:673-684).
     transcription: (preparation !== "none" && sourceClosed) || (preparation === "ready" && closed(transcriptionExpiresAt)) ? "expired" : preparation,
   };
+}
+
+function transcriptsOf(recordingId: string) {
+  const extra = extraRecordings.find((item) => item.id === recordingId);
+  if (extra) return extra.transcripts ?? [];
+  return listedTranscripts ?? (transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : []);
 }
 
 function recording() {
@@ -92,7 +97,6 @@ beforeEach(() => {
   inFlight.clear();
   maxInFlight = 0;
   brokenURL = null;
-  stalledTranscripts = null;
   recordingState = null;
   transcriptionSource = null;
   expiresAt = null;
@@ -111,42 +115,10 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
-    const url = new URL(input, "https://chalk.test");
-    const path = url.pathname;
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
-    requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined, recordingId: body?.recordingId });
-    if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
-    if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
-    if (path === "/dashboard-api/call-metadata") {
-      const key = url.searchParams.get("id") ?? "";
-      inFlight.set(key, (inFlight.get(key) ?? 0) + 1);
-      maxInFlight = Math.max(maxInFlight, inFlight.get(key) ?? 0);
-      if (metadataDelayMs) await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
-      inFlight.set(key, (inFlight.get(key) ?? 1) - 1);
-    }
-    if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: { ...recording(), id: url.searchParams.get("id") } }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
-    if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
-    if (body?.action === "transcripts" && body.recordingId === stalledTranscripts) return new Promise<Response>(() => {});
-    if (body?.action === "transcripts") return Response.json({ transcripts: transcriptStatus ? [{ id, status: transcriptStatus, languages: ["en"], createdAt: date }] : [], nextCursor: null });
-    if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
-    if (body?.action === "export-recording" && exportHTTPStatus !== 202) return Response.json({ error: { code: "recording.not_ready" } }, { status: exportHTTPStatus });
-    // transcripts.go:218-231 refuses a source that isn't ready by the server's clock.
-    if (body?.action === "create-transcript" && served().transcription !== "ready" && transcriptStatus === "") return Response.json({ error: { code: "transcript.source_expired" } }, { status: 409 });
-    if (body?.action === "create-transcript" && createHTTPStatus !== 200) return Response.json({ error: { code: "transcript.source_expired" } }, { status: createHTTPStatus });
-    if (body?.action === "create-transcript") {
-      transcriptStatus = "preparing";
-      return Response.json({ transcript: { id, status: "preparing", languages: ["en"], createdAt: date } });
-    }
-    if (body?.action === "export-recording" && (served().source === "expired" || served().export === "unavailable")) return Response.json({ recording: recording() });
-    if (body?.action === "export-recording") {
-      artifact = "pending";
-      return Response.json({ recording: recording() });
-    }
-    if (body?.action === "recording-url" && body.recordingId === brokenURL) return Response.json({ error: { code: "storage_unavailable" } }, { status: 503 });
-    if (body?.action === "recording-url") return Response.json({ url: "https://storage.example.test/video.mp4" });
-    if (path === "/dashboard-api/past-session")
-      return Response.json({ episode: { id, status: "ended", startedAt: date, endedAt: date }, attendance: { kind: "available", participants: [] }, recordings: [{ ...recording(), ...(listedTranscripts ? { transcripts: listedTranscripts } : {}) }, ...extraRecordings], nextCursor: null });
-    throw new Error(`Unexpected request: ${path}`);
+    const response = await route(input, init);
+    // The page places the server's deadlines on its own clock with this header.
+    response.headers.set("Date", new Date(Date.now() - serverLagMs).toUTCString());
+    return response;
   });
 });
 afterEach(() => {
@@ -155,6 +127,55 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+async function route(input: string, init?: RequestInit): Promise<Response> {
+  const url = new URL(input, "https://chalk.test");
+  const path = url.pathname;
+  const body = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+  requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined, recordingId: body?.recordingId });
+  if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
+  if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
+  if (path === "/dashboard-api/call-metadata") {
+    const key = url.searchParams.get("id") ?? "";
+    inFlight.set(key, (inFlight.get(key) ?? 0) + 1);
+    maxInFlight = Math.max(maxInFlight, inFlight.get(key) ?? 0);
+    if (metadataDelayMs) await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
+    inFlight.set(key, (inFlight.get(key) ?? 1) - 1);
+  }
+  if (path === "/dashboard-api/call-metadata") {
+    const key = url.searchParams.get("id") ?? "";
+    if (metadataStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
+    // The server lists the recording's transcripts in the same read when it can, and leaves them out when it can't (engine.ts).
+    return Response.json({ kind: "recording", recording: { ...recording(), id: key, ...(transcriptHTTPStatus === 200 ? { transcripts: transcriptsOf(key), transcriptsNextCursor: null } : {}) } });
+  }
+  if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
+  if (body?.action === "transcripts") return Response.json({ transcripts: transcriptsOf(body.recordingId), nextCursor: null });
+  if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: "Saved speech", speaker: null }] });
+  if (body?.action === "export-recording" && exportHTTPStatus !== 202) return Response.json({ error: { code: "recording.not_ready" } }, { status: exportHTTPStatus });
+  // transcripts.go:218-231 refuses a source that isn't ready by the server's clock.
+  if (body?.action === "create-transcript" && served().transcription !== "ready" && transcriptStatus === "") return Response.json({ error: { code: "transcript.source_expired" } }, { status: 409 });
+  if (body?.action === "create-transcript" && createHTTPStatus !== 200) return Response.json({ error: { code: "transcript.source_expired" } }, { status: createHTTPStatus });
+  if (body?.action === "create-transcript") {
+    transcriptStatus = "preparing";
+    return Response.json({ transcript: { id, status: "preparing", languages: ["en"], createdAt: date } });
+  }
+  if (body?.action === "export-recording" && (served().source === "expired" || served().export === "unavailable")) return Response.json({ recording: recording() });
+  if (body?.action === "export-recording") {
+    artifact = "pending";
+    return Response.json({ recording: recording() });
+  }
+  if (body?.action === "recording-url" && body.recordingId === brokenURL) return Response.json({ error: { code: "storage_unavailable" } }, { status: 503 });
+  if (body?.action === "recording-url") return Response.json({ url: "https://storage.example.test/video.mp4" });
+  if (path === "/dashboard-api/past-session")
+    return Response.json({
+      episode: { id, status: "ended", startedAt: date, endedAt: date },
+      attendance: { kind: "available", participants: [] },
+      // The server leaves an attempt unlisted when its transcript list fails, rather than failing the session (engine.ts).
+      recordings: [recording(), ...extraRecordings].map((item) => (transcriptHTTPStatus === 200 ? { ...item, transcripts: transcriptsOf(item.id), transcriptsNextCursor: null } : item)),
+      nextCursor: null,
+    });
+  throw new Error(`Unexpected request: ${path}`);
+}
 
 async function open() {
   await reactAct(async () => {
@@ -210,17 +231,20 @@ it("plays a newer attempt once it is ready even after an older attempt's video f
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
 });
 
-it("drops the older attempt's transcript when a newer attempt becomes the selected recording", async () => {
+it("keeps the older attempt's transcript, named by its time, when a newer attempt's video becomes the one shown", async () => {
   const older = "00000000-0000-4000-8000-000000000002";
   artifact = "pending";
-  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready" }];
-  stalledTranscripts = id;
+  transcriptStatus = "";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready", createdAt: "2026-10-22T09:00:00Z", transcripts: [{ id: older, status: "complete", languages: ["en"], createdAt: date }] }];
   await open();
   expect(screen.getByText("Saved speech")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Play from/ })).toBeTruthy();
   artifact = "ready";
   await tick();
-  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
-  expect(screen.queryByText("Saved speech")).toBeNull();
+  expect(requests.filter((request) => request.action === "recording-url").map((request) => request.recordingId)).toEqual([older, id]);
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  expect(screen.getByText(`From the ${clock("2026-10-22T09:00:00Z")} recording`)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Play from/ })).toBeNull();
 });
 
 it("keeps a newer preparable attempt reachable while an older export plays", async () => {
@@ -250,7 +274,7 @@ it("plays an older attempt's video and shows a newer attempt's completed transcr
   await open();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   expect(requests.filter((request) => request.action === "recording-url").map((request) => request.recordingId)).toEqual([older]);
-  expect(requests.filter((request) => request.action === "transcripts").map((request) => request.recordingId)).toEqual([id]);
+  expect(requests.filter((request) => request.action === "transcript-document")).toHaveLength(1);
   expect(screen.getByText("Saved speech")).toBeTruthy();
   expect(screen.getByText(`From the ${clock(date)} recording`)).toBeTruthy();
   // Its lines belong to another attempt's timeline, so they don't seek this video.
@@ -294,6 +318,9 @@ it.each([202, 400, 409])("removes the prepare action when an export is refused b
   await reactAct(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
   });
+  // An accepted request answers with the closed source; a refusal is read again at the next tick.
+  await tick();
+  expect(metadataReads()).toBe(status === 202 ? 0 : 1);
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
 });
@@ -326,15 +353,22 @@ it.each([404, 410])("keeps the session and another recording when one pending re
   expect(requests).toHaveLength(count);
 });
 
-it.each([403, 503])("preserves page-level authorization and transient-error handling: %s", async (status) => {
+it.each([403, 503])("keeps the session when one recording's read is refused or fails: %s", async (status) => {
   source = "pending";
   artifact = "unavailable";
   transcriptStatus = "";
   await open();
   metadataStatus = status;
   await tick();
-  expect(Boolean(screen.queryByText("Couldn’t load this session"))).toBe(status === 403);
+  expect(screen.queryByText("Couldn’t load this session")).toBeNull();
+  expect(screen.getByText("Who came")).toBeTruthy();
+  // A refusal is final for that recording and shows its error; a server failure keeps the last answer and is retried.
+  expect(Boolean(screen.queryByText("Couldn’t load this recording"))).toBe(status === 403);
   expect(Boolean(screen.queryByText("Processing the recording"))).toBe(status === 503);
+  const reads = metadataReads();
+  await tick();
+  await tick();
+  expect(metadataReads() > reads).toBe(status === 503);
 });
 
 it.each([true, false])("offers export retry only when the server permits it: %s", async (allowed) => {
@@ -354,17 +388,20 @@ it("shows a terminal transcript failure rather than polling it forever", async (
   expect(requests).toHaveLength(count);
 });
 
-it.each([404, 410])("shows an unavailable transcript when the selected recording disappears: %s", async (status) => {
+it.each([404, 410])("shows the server's error on the video and the transcript when the selected recording disappears: %s", async (status) => {
   source = "pending";
   artifact = "unavailable";
   transcriptStatus = "";
   await open();
   metadataStatus = status;
-  transcriptHTTPStatus = status;
   await tick();
-  expect(screen.getByText("The recording source is no longer available.")).toBeTruthy();
-  expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
+  expect(screen.getByText("Couldn’t load this recording")).toBeTruthy();
+  expect(screen.getByText("Couldn’t load the transcript")).toBeTruthy();
+  expect(screen.queryByText("Processing the recording")).toBeNull();
   expect(screen.queryByText("The transcript couldn’t be made")).toBeNull();
+  const reads = metadataReads();
+  await advance(60_000);
+  expect(metadataReads()).toBe(reads);
 });
 
 it("shares metadata polling across pending attempts with one request per tick", async () => {
@@ -472,7 +509,11 @@ it("rereads the recording after a refused transcript request so a dead action di
   await reactAct(async () => {
     fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
   });
-  expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata")).toHaveLength(1);
+  // The refusal is read again at the next tick, and only that answer removes the action.
+  expect(metadataReads()).toBe(0);
+  expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
+  await tick();
+  expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
   expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
 });
@@ -496,6 +537,9 @@ it("shows a transcript another request created when this page's request is refus
   await reactAct(async () => {
     fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
   });
+  // One tick reads the recording's transcripts, the next reads the finished one's lines.
+  await tick();
+  await tick();
   expect(screen.getByText("Saved speech")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
 });
@@ -509,6 +553,7 @@ it("reads the transcripts again when the recording's transcription preparation c
   source = "available";
   artifact = "none";
   transcriptStatus = "complete";
+  await tick();
   await tick();
   expect(screen.getByText("Saved speech")).toBeTruthy();
 });
@@ -589,10 +634,15 @@ it("closes the prepare action at a source deadline beyond the longest browser ti
   expiresAt = "2026-11-21T12:00:00Z";
   transcriptStatus = "";
   await open();
-  await advance(29 * 86_400_000);
+  // An idle open window is read again every five minutes, which also keeps every timer short.
+  await advance(5 * 60_000);
+  await tick();
+  expect(metadataReads()).toBe(1);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
-  await advance(86_400_000);
-  await advance(5_000);
+  // The machine sleeps past the deadline; the next timer to fire finds it due.
+  vi.setSystemTime(new Date("2026-11-21T12:00:01Z"));
+  await advance(5 * 60_000);
+  await tick();
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
 });
@@ -654,14 +704,13 @@ it("keeps the actions the server still accepts when this page's clock runs ahead
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
   await open();
-  await advance(60_000);
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
+  // The deadline falls due by the server's clock, 30 seconds after the page's own.
+  await advance(90_000);
+  expect(metadataReads()).toBe(0);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
-  await advance(20_000);
-  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
-  await advance(10_000);
+  await advance(5_000);
+  expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
   const reads = metadataReads();
@@ -710,8 +759,10 @@ it("closes the prepare action on the server's answer when this page's clock runs
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
   await open();
-  // The server has closed the window, but the page's own deadline is still ahead, so it keeps the action until told.
-  await advance(40_000);
+  // The server closes the window early, before any deadline the page knows about, so it keeps the action until told.
+  await advance(20_000);
+  source = "expired";
+  artifact = "unavailable";
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   // recordings.go:161-175 answers a closed source with 202 and its unavailable state, which the page shows at once.
   await reactAct(async () => {
@@ -721,14 +772,16 @@ it("closes the prepare action on the server's answer when this page's clock runs
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
 });
 
-it("asks the server at the page's own deadline when its clock runs behind and nothing was clicked", async () => {
+it("asks the server at its own deadline when this page's clock runs behind and nothing was clicked", async () => {
   vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
   serverLagMs = -30_000;
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
   await open();
-  await advance(60_000);
+  // The server's clock reaches the deadline when the page's shows 12:00:30.
+  await advance(30_000);
   expect(metadataReads()).toBe(0);
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
@@ -741,11 +794,14 @@ it("closes the transcript action on the server's refusal when this page's clock 
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
   await open();
-  await advance(40_000);
+  // The server closes the transcription window early, before any deadline the page knows about.
+  await advance(20_000);
+  transcriptionSource = "expired";
   await reactAct(async () => {
     fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
   });
   expect(requests.filter((request) => request.action === "create-transcript")).toHaveLength(1);
+  await tick();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
   expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
   expect(screen.queryByText("The transcript is being prepared.")).toBeNull();

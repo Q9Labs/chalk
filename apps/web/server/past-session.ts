@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, RecordingIdSchema, SpaceIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, run } from "./engine";
+import { attendance, listedRecording, run } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import type { ArtifactURLDTO, CueDTO, PastSessionAction, PastSessionDTO } from "../src/lib/dashboard/contracts";
@@ -9,15 +9,11 @@ export async function pastSessionPage(engine: Engine, spaceId: string, episodeId
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
   const [recordings, people] = await Promise.all([run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })), attendance(engine, params)]);
-  // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
-  const withTranscripts = async (recording: (typeof recordings.recordings)[number]) => {
-    const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
-    return { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor };
-  };
   return {
     episode: episodeDTO(episode),
     attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
-    recordings: await Promise.all(recordings.recordings.map(withTranscripts)),
+    // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
+    recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording))),
     nextCursor: recordings.pagination.next_cursor,
   };
 }
