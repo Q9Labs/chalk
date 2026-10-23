@@ -14,7 +14,7 @@ import (
 )
 
 // The recent-join index is dropped and built while the running release writes seats, so its migration must never
-// block a seat write, and a rerun must replace an index that an interrupted build left invalid.
+// block a seat write, and a rerun must replace whatever index an earlier run left, finished or not.
 func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	up := spaceActivityIndexMigrationUp(t)
@@ -104,6 +104,31 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "57014" {
 			t.Fatalf("seat update during a plain build returned %v, want a statement timeout", err)
+		}
+	})
+
+	t.Run("a rerun after a finished build that Goose never recorded leaves one valid index", func(t *testing.T) {
+		ctx := t.Context()
+		builder := seatScratchSchema(t, pool)()
+		if err := runStatements(ctx, builder, up); err != nil {
+			t.Fatalf("first run: %v", err)
+		}
+		requireOneValidIndex(t, builder)
+		var built uint32
+		if err := builder.QueryRow(ctx, `select to_regclass('participants_episode_recent_join_idx')::oid`).Scan(&built); err != nil {
+			t.Fatal(err)
+		}
+		// Both statements finished, but Goose failed before recording the version, so it runs the migration again.
+		if err := runStatements(ctx, builder, up); err != nil {
+			t.Fatalf("rerun: %v", err)
+		}
+		requireOneValidIndex(t, builder)
+		var rebuilt uint32
+		if err := builder.QueryRow(ctx, `select to_regclass('participants_episode_recent_join_idx')::oid`).Scan(&rebuilt); err != nil {
+			t.Fatal(err)
+		}
+		if rebuilt == built {
+			t.Fatal("the rerun kept the finished index instead of dropping and building it again")
 		}
 	})
 

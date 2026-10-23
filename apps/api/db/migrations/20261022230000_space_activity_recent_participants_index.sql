@@ -3,9 +3,10 @@
 -- Serves listSpaceActivity's five most recent joins in an Episode without sorting every seat.
 -- The running release keeps writing participant seats while this applies, so the index is dropped
 -- and built concurrently and never holds a lock that blocks those writes. Each statement commits on
--- its own, and Goose records the migration only after both succeed. An interrupted build leaves an
--- invalid index, so every run first drops whatever this migration left and then builds it once.
--- The drop only removes an unfinished build of this same migration, which no release reads.
+-- its own, and Goose records the migration only after both succeed, so a run that stops early is
+-- run again. Every run first drops whatever index an earlier run of this migration left behind,
+-- finished or not, and then builds it again, so the end state is always one valid index.
+-- The marker below covers that recovery inside this same migration; no earlier release used the index.
 -- chalk:removed-in #423
 drop index concurrently if exists participants_episode_recent_join_idx;
 

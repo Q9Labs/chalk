@@ -273,11 +273,19 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	if err := pool.QueryRow(ctx, `select count(*) from participants`).Scan(&seats); err != nil {
 		t.Fatal(err)
 	}
-	built := time.Now()
-	if err := runStatements(ctx, pool, spaceActivityIndexMigrationUp(t)); err != nil {
-		t.Fatalf("recent-join index migration: %v", err)
+	var took [2]time.Duration
+	for index, statement := range spaceActivityIndexMigrationUp(t) {
+		started := time.Now()
+		if err := runStatements(ctx, pool, []string{statement}); err != nil {
+			t.Fatalf("recent-join index migration: %v", err)
+		}
+		took[index] = time.Since(started).Round(time.Millisecond)
 	}
-	t.Logf("recent-join index migration dropped and built the index over %d seats in %s", seats, time.Since(built).Round(time.Millisecond))
+	var size string
+	if err := pool.QueryRow(ctx, `select pg_size_pretty(pg_relation_size('participants_episode_recent_join_idx'))`).Scan(&size); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("recent-join index migration over %d seats: drop %s, build %s, index %s", seats, took[0], took[1], size)
 	if _, err := pool.Exec(ctx, `analyze participants`); err != nil {
 		t.Fatal(err)
 	}
