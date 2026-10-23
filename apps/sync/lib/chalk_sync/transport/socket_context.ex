@@ -16,7 +16,7 @@ defmodule ChalkSync.Transport.SocketContext do
 
     %{
       client_ip: ip |> :inet.ntoa() |> to_string(),
-      user_agent: agent && String.slice(agent, 0, 512),
+      user_agent: if(agent && String.valid?(agent), do: String.slice(agent, 0, 512)),
       close_code: nil
     }
   end

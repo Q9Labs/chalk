@@ -67,7 +67,7 @@ export class ConnectionDiagnostics {
   }
 
   record(input: Omit<ConnectionDiagnostic, "timestamp">): void {
-    const event = Object.freeze({ timestamp: this.#now(), ...input });
+    const event = Object.freeze({ timestamp: this.#now(), ...input, ...(input.sync ? { sync: Object.freeze({ ...input.sync }) } : {}) });
     this.#events.push(event);
     if (this.#events.length > this.#limit) this.#events.splice(0, this.#events.length - this.#limit);
     try {

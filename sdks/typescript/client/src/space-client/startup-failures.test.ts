@@ -6,6 +6,7 @@ import { createSpaceClientForPlatform } from "./space-client";
 import { computeV1StateDigest } from "../sync/v1-reducer";
 import type { V1ControlState } from "../sync/v1-types";
 import type { ClientFailure } from "./types";
+import type { ConnectionDiagnostic } from "../connection/diagnostics";
 
 // Only browser/network boundaries are replaced. The access manager, Sync,
 // SFU, lifecycle, store, and Promise facade are the production implementations.
@@ -42,11 +43,12 @@ function browser() {
   vi.stubGlobal("WebSocket", SilentSocket);
   vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
 }
-function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs = 25, logger?: SpaceClientOptions["logger"]) {
+function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
   return createSpaceClientForPlatform(
     { space: "test", getAccess, logger },
     {
       syncStartupTimeoutMs,
+      onConnectionDiagnostic,
       dependencies: {
         createSyncClient: (input) => createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: new InMemoryV1PendingTargetStore() }),
       },
@@ -256,6 +258,49 @@ describe("public client startup failure contract", () => {
       expect(client.getSnapshot().connection.lastError?.sync?.durationMs).toBeGreaterThan(1);
       expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "sync_connect_failed", sync: expect.objectContaining({ stage: "hello", opened: true, closeCode: 1012, closeReason: "server draining", durationMs: 1 }) }));
       expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "connection_failed", sync: expect.objectContaining({ stage: "upgrade", opened: false, closeCode: null }) }));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("keeps observer mutations out of retained evidence and the public join failure", async () => {
+    browser();
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "WebSocket",
+      class extends EventTarget {
+        constructor() {
+          super();
+          queueMicrotask(() => {
+            this.dispatchEvent(new Event("open"));
+            setTimeout(() => this.dispatchEvent(Object.assign(new Event("close"), { code: 1012, reason: "server draining" })), 1);
+          });
+        }
+        send() {}
+        close() {}
+      },
+    );
+    let retained: ConnectionDiagnostic | undefined;
+    const client = makeClient(
+      async () => accessGrant(),
+      100,
+      undefined,
+      (event) => {
+        if (event.event === "sync_connect_failed" && event.sync) {
+          retained = event;
+          Reflect.set(event.sync, "closeCode", 4999);
+          Reflect.set(event.sync, "closeReason", "observer injected");
+        }
+      },
+    );
+    try {
+      const rejection = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(retained).toBeDefined());
+      await vi.advanceTimersByTimeAsync(101);
+      const expected = { code: "connection.sync_hello_timeout", sync: { stage: "hello", opened: true, closeCode: 1012, closeReason: "server draining" } };
+      expect(await rejection).toMatchObject(expected);
+      expect(client.getSnapshot().connection.lastError).toMatchObject(expected);
+      expect(retained?.sync).toMatchObject(expected.sync);
     } finally {
       client.dispose();
     }

@@ -59,13 +59,18 @@ The edge must replace the IP header before forwarding requests to Sync.
 These lifecycle events include their structured fields in stdout as well as spans.
 `close_code` is null until a server close is selected. Bandit does not expose the
 peer's close frame to WebSock; peer codes remain null rather than guessed.
-No token, authorization header, or request URL is retained.
+Invalid UTF-8 User-Agent values become null before JSON logging; valid values
+remain bounded to 512 characters. No token, authorization header, or request URL
+is retained.
 
 The client retains `stage`, `opened`, `closeCode`, `closeReason`, and `durationMs`
 in `failure.sync` and connection diagnostics. The failure reference shows the same
 short summary. Before `open`, `stage=upgrade` means the opening handshake is pending;
 browser WebSocket APIs do not reveal DNS, TCP, or TLS progress. After `open`, the
 startup stage is `hello` (including initial recovery). Unknown peer reasons become
-`redacted`; only fixed protocol reasons are retained. The codes are
-`connection.sync_websocket_failed`, `connection.sync_dial_timeout`, and the existing
-`connection.sync_hello_timeout`. Retries can still succeed within the startup budget.
+`redacted`; only fixed protocol reasons are retained. These startup failures keep
+the public `connection.sync_hello_timeout` code; use `failure.sync.stage` to
+distinguish upgrade from hello. Internal diagnostic event names such as
+`sync_connect_failed`, `sync_dial_timeout`, and `connection_failed` identify
+telemetry events, not public error codes. Retries can still succeed within the
+startup budget.
