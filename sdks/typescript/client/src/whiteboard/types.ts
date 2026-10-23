@@ -48,7 +48,6 @@ export type ChalkWhiteboardV1Event =
       readonly displayName: string;
       readonly occurredAt: string;
     } & ChalkWhiteboardView)
-  | { readonly type: "views_reset" }
   | {
       readonly type: "reset_required";
       readonly sceneId: string;
@@ -62,6 +61,7 @@ export type ChalkWhiteboardView = {
   readonly width: number;
   readonly height: number;
   readonly bring: boolean;
+  /** Real move by default; false marks a passive refresh or heartbeat. */
   readonly lead?: boolean;
 } & ({ readonly ownerId: string; readonly ownerSequence: number } | { readonly ownerId?: never; readonly ownerSequence?: never }) &
   ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never });

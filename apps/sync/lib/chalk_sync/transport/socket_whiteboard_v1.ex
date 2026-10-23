@@ -720,24 +720,29 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        ) do
     {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :view))
 
-    with :ok <- admit_view(view, identity, admission) do
-      frame = %{
-        "type" => "view",
-        "participant_id" => identity.participant_id,
-        "display_name" => display_name,
-        "x" => view.x,
-        "y" => view.y,
-        "width" => view.width,
-        "height" => view.height,
-        "bring" => view.bring,
-        "occurred_at" =>
-          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-      }
+    case admit_view(view, identity, admission) do
+      :ok ->
+        frame = %{
+          "type" => "view",
+          "participant_id" => identity.participant_id,
+          "display_name" => display_name,
+          "x" => view.x,
+          "y" => view.y,
+          "width" => view.width,
+          "height" => view.height,
+          "bring" => view.bring,
+          "occurred_at" =>
+            DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+        }
 
-      ViewOwner.move(state.view_owner, frame, view)
+        case ViewOwner.move(state.view_owner, frame, view) do
+          :ok -> acknowledge_view(view, next)
+          {:error, :overloaded} -> stop(next, 1013, "view capacity exhausted", :overloaded)
+        end
+
+      _denied ->
+        {:ok, next}
     end
-
-    {:ok, next}
   end
 
   defp handle_frame({:ping, _ping}, state) do
@@ -747,6 +752,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp handle_frame(_frame, state) do
     stop(state, 1008, "operation not available in this phase", :protocol_error)
   end
+
+  defp acknowledge_view(%{input_id: id}, %{view_owner_negotiated: true} = state),
+    do: {:push, {:text, Protocol.encode!(%{"type" => "view_ack", "input_id" => id})}, state}
+
+  defp acknowledge_view(_view, state), do: {:ok, state}
 
   defp compatible_view(frame, %{view_owner_negotiated: true}), do: frame
 

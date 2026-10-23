@@ -289,13 +289,13 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
-  it.each(["initial", "requested"] as const)("sends an accepted bring after the %s snapshot without replacing it with ordinary views", async (phase) => {
+  it.each(["initial", "requested"] as const)("sends an accepted bring after the %s snapshot without replacing it with passive refreshes", async (phase) => {
     const { client, sockets, recovery } = await recoveringViewClient(phase);
     const socket = sockets[0];
     const bring = { x: 10, y: 20, width: 300, height: 200, bring: true };
     try {
       expect(client.sendView(bring)).toBe(true);
-      expect(client.sendView({ ...bring, x: 99, bring: false })).toBe(true);
+      expect(client.sendView({ ...bring, x: 99, bring: false, lead: false })).toBe(true);
       expect(sentFrames(socket, "view")).toEqual([]);
       if (phase === "initial") await acceptSnapshot(sockets);
       else socket?.receive(snapshotPage(socket.requestId()));
@@ -1439,10 +1439,11 @@ async function bringWhileReconnecting() {
   return { clock, client, sockets, bring };
 }
 
-async function startedRecoveryClient(clock: ManualClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
-  const result = recoveryClient(clock, reconnectDelayMs, options);
+async function startedRecoveryClient(clock: ManualClock, reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> & { readonly ownerId?: string } = {}) {
+  const { ownerId, ...clientOptions } = options;
+  const result = recoveryClient(clock, reconnectDelayMs, clientOptions);
   const startup = result.client.startSceneSubscription();
-  await acceptSnapshot(result.sockets);
+  await acceptSnapshot(result.sockets, 0, ownerId);
   await startup;
   return result;
 }
@@ -1453,8 +1454,8 @@ async function recoveringViewClient(phase: "initial" | "requested") {
   return { ...result, recovery };
 }
 
-async function acceptSnapshot(sockets: readonly TestSocket[], index = 0) {
-  const socket = await acceptWelcome(sockets, index);
+async function acceptSnapshot(sockets: readonly TestSocket[], index = 0, ownerId?: string) {
+  const socket = await acceptWelcome(sockets, index, ownerId);
   socket?.receive(snapshotPage(socket.requestId()));
 }
 
@@ -1984,7 +1985,7 @@ it("adopts the owner's snapshot on reconnect and ignores the previous owner's me
     sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
     await startup;
     sockets[0]?.receive(view(owner, 99, 99));
-    expect(views.map((v) => v.x)).toEqual([100]);
+    expect(views.map((v) => v.x)).toEqual([100, 100]);
     sockets[0]?.close(1012);
     const replay: ChalkWhiteboardV1Event[] = [];
     const off = client.subscribe((event) => replay.push(event));
@@ -2000,7 +2001,7 @@ it("adopts the owner's snapshot on reconnect and ignores the previous owner's me
     sockets[1]?.receive(view(owner, 101, 999));
     sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
     await settle();
-    expect(views.map((v) => v.x)).toEqual([100, 20]);
+    expect(views.map((v) => v.x)).toEqual([100, 100, 20, 20]);
   } finally {
     await client.stopSceneSubscription();
   }
@@ -2012,7 +2013,7 @@ it("keeps a real recovery-time move when a heartbeat follows it", async () => {
   try {
     await acceptWelcome(sockets, 0, "40000000-0000-4000-8000-000000000004");
     client.sendView({ x: 12, y: 0, width: 100, height: 100, bring: false, lead: true });
-    client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false });
+    client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false, lead: false });
     sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
     await startup;
     const sent = sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((f) => f.type === "view");
@@ -2023,14 +2024,52 @@ it("keeps a real recovery-time move when a heartbeat follows it", async () => {
 });
 
 it("keeps the canonical source on an intentional Follow selection", async () => {
-  const { client, sockets } = recoveryClient();
-  const startup = client.startSceneSubscription();
+  const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { ownerId: "40000000-0000-4000-8000-000000000004" });
   try {
-    await acceptWelcome(sockets, 0, "40000000-0000-4000-8000-000000000004");
-    sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
-    await startup;
     client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false, lead: true, originParticipantId: sceneId, originSequence: 42 });
     expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ move: true, origin_participant_id: sceneId, origin_sequence: 42 });
+  } finally {
+    await client.stopSceneSubscription();
+  }
+});
+
+it("treats existing sendView callers as real moves unless explicitly passive", async () => {
+  const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { ownerId: "40000000-0000-4000-8000-000000000004" });
+  try {
+    for (const x of [10, 20]) client.sendView({ x, y: 0, width: 100, height: 100, bring: false });
+    client.sendView({ x: 20, y: 0, width: 100, height: 100, bring: false, lead: false });
+    const moves = sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((f) => f.type === "view");
+    expect(moves?.map((frame) => [frame.x, frame.move])).toEqual([
+      [10, true],
+      [20, true],
+      [20, false],
+    ]);
+  } finally {
+    await client.stopSceneSubscription();
+  }
+});
+
+it.each([false, true])("retries an unacknowledged real move with its original input id (Bring %s)", async (bring) => {
+  const clock = new TestClock();
+  const owner = "40000000-0000-4000-8000-000000000004";
+  const { client, sockets } = await startedRecoveryClient(clock, undefined, { ownerId: owner });
+  try {
+    client.sendView({ x: 12, y: 0, width: 100, height: 100, bring, lead: true });
+    const sent = JSON.parse(sockets[0]?.sent.at(-1) ?? "{}");
+    sockets[0]?.close(1012);
+    clock.advance(1_000);
+    await acceptWelcome(sockets, 1, owner);
+    sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+    await settle();
+    expect(JSON.parse(sockets[1]?.sent.at(-1) ?? "{}")).toEqual(sent);
+    sockets[1]?.receive({ type: "view_ack", input_id: sent.input_id });
+    await settle();
+    sockets[1]?.close(1012);
+    clock.advance(1_000);
+    await acceptWelcome(sockets, 2, owner);
+    sockets[2]?.receive(snapshotPage(sockets[2]?.requestId()));
+    await settle();
+    expect(sockets[2]?.sent.map((wire) => JSON.parse(wire)).filter((f) => f.type === "view")).toEqual([]);
   } finally {
     await client.stopSceneSubscription();
   }

@@ -59,7 +59,7 @@ function validateWhiteboardContract(contract) {
 
   requireExactStrings(contract.capabilities, ["drawWhiteboard", "manageWhiteboard"], "capabilities");
   requireExactStrings(contract.clientFrames, ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"], "clientFrames");
-  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "pong"], "serverFrames");
+  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "view_ack", "pong"], "serverFrames");
   requireExactStrings(contract.receiptOperations, ["submit_update", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"], "receiptOperations");
   requireExactStrings(contract.receiptOutcomes, ["committed", "duplicate"], "receiptOutcomes");
   requireExactStrings(contract.resetReasons, ["scene_changed", "cursor_expired", "gap"], "resetReasons");

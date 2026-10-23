@@ -1,4 +1,6 @@
 Code.require_file("apps/sync/lib/chalk_sync/uuid.ex")
+Code.require_file("apps/sync/lib/chalk_sync/canonical_json.ex")
+Code.require_file("apps/sync/lib/chalk_sync/episodes/reducer.ex")
 owner_source = List.first(System.argv()) || "apps/sync/lib/chalk_sync/whiteboard_v1/view_owner.ex"
 Code.require_file(owner_source)
 ExUnit.start(autorun: false)

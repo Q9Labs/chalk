@@ -70,6 +70,7 @@ export type WhiteboardV1ServerFrame =
   | { readonly type: "presentation_updated"; readonly scene_id: string; readonly revision: string; readonly presenting: boolean }
   | { readonly type: "reset_required"; readonly scene_id: string; readonly reason: "scene_changed" | "cursor_expired" | "gap" }
   | { readonly type: "operation_error"; readonly correlation_id: string; readonly operation: "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation"; readonly code: "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "rate_limited" | "overloaded" | "storage_unavailable"; readonly recoverable: boolean; readonly message: string }
+  | { readonly type: "view_ack"; readonly input_id: string }
   | { readonly type: "pong" };
 
 const textEncoder = new TextEncoder();
@@ -210,10 +211,14 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
   }
 }
 
+function isViewInputId(input_id: unknown): boolean {
+  return typeof input_id === "string" && /^[0-9a-fA-F-]{36}:[1-9][0-9]{0,15}$/.test(input_id) && isUuid(input_id.split(":")[0]) && Number.isSafeInteger(Number(input_id.split(":")[1]));
+}
+
 function isViewInput(value: Record<string, unknown>, fields: readonly string[]): boolean {
   if (!("input_id" in value || "move" in value)) return isViewFields(value, fields);
   const { input_id, move, ...rectangle } = value;
-  return typeof input_id === "string" && /^[0-9a-fA-F-]{36}:[1-9][0-9]{0,15}$/.test(input_id) && isUuid(input_id.split(":")[0]) && Number.isSafeInteger(Number(input_id.split(":")[1])) && typeof move === "boolean" && isViewFields(rectangle, fields);
+  return isViewInputId(input_id) && typeof move === "boolean" && isViewFields(rectangle, fields);
 }
 
 function isViewOrder(value: Record<string, unknown>, fields: readonly string[]): boolean {
@@ -296,6 +301,8 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.resetRequired.exactFields) && isUuid(value.scene_id) && typeof value.reason === "string" && WhiteboardV1ProtocolMetadata.resetReasons.some((reason) => reason === value.reason);
     case "operation_error":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.operationError.exactFields) && isBoundedIdentifier(value.correlation_id, WhiteboardV1ProtocolLimits.requestIdMinBytes, WhiteboardV1ProtocolLimits.requestIdMaxBytes) && ["submit_update", "request_snapshot", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"].includes(String(value.operation)) && typeof value.code === "string" && WhiteboardV1ProtocolMetadata.errorCodes.some((code) => code === value.code) && typeof value.recoverable === "boolean" && typeof value.message === "string" && utf8Bytes(value.message) <= WhiteboardV1ProtocolLimits.errorMessageMaxBytes;
+    case "view_ack":
+      return hasExactKeys(value, ["type", "input_id"]) && isViewInputId(value.input_id);
     case "pong":
       return hasExactKeys(value, ["type"]);
     default:

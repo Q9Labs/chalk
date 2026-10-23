@@ -175,7 +175,10 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
         const progress = Math.min(1, (now - started) / GLIDE_MS);
         set(mixCamera(from, target, 1 - (1 - progress) ** 3));
         if (progress < 1) glide.current = requestAnimationFrame(step);
-        else moved.current();
+        else {
+          if (source !== "follow") leading.current();
+          moved.current();
+        }
       };
       glide.current = requestAnimationFrame(step);
     },
@@ -422,7 +425,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   useEffect(
     () =>
       subscribe?.((event) => {
-        if (event.type !== "views_reset") return;
+        if (event.type !== "snapshot") return;
         views.current.clear();
         appliedVersions.current.clear();
       }),
@@ -430,7 +433,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   );
   latestView.current = (event) => {
     const previous = views.current.get(event.participantId);
-    if (event.participantId === ownParticipantId || (!event.ownerId && event.originParticipantId === ownParticipantId)) return;
+    if (!event.bring && (event.participantId === ownParticipantId || (!event.ownerId && event.originParticipantId === ownParticipantId))) return;
     if (!event.bring && !appliedVersions.current.isNew(event, event.participantId)) return;
     if (!event.ownerId && !event.bring && event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originEpoch === previous.originEpoch && event.originSequence <= previous.originSequence) return;
     const newPeer = !previous;

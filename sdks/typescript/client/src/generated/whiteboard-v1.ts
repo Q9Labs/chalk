@@ -170,7 +170,7 @@ export const WhiteboardV1ProtocolMetadata = {
     },
   },
   clientFrames: ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"],
-  serverFrames: ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "pong"],
+  serverFrames: ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "view_ack", "pong"],
   receiptOperations: ["submit_update", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"],
   receiptOutcomes: ["committed", "duplicate"],
   resetReasons: ["scene_changed", "cursor_expired", "gap"],
@@ -295,6 +295,7 @@ export type WhiteboardV1ServerFrame =
       readonly recoverable: boolean;
       readonly message: string;
     }
+  | { readonly type: "view_ack"; readonly input_id: string }
   | { readonly type: "pong" };
 
 const textEncoder = new TextEncoder();
@@ -460,10 +461,14 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
   }
 }
 
+function isViewInputId(input_id: unknown): boolean {
+  return typeof input_id === "string" && /^[0-9a-fA-F-]{36}:[1-9][0-9]{0,15}$/.test(input_id) && isUuid(input_id.split(":")[0]) && Number.isSafeInteger(Number(input_id.split(":")[1]));
+}
+
 function isViewInput(value: Record<string, unknown>, fields: readonly string[]): boolean {
   if (!("input_id" in value || "move" in value)) return isViewFields(value, fields);
   const { input_id, move, ...rectangle } = value;
-  return typeof input_id === "string" && /^[0-9a-fA-F-]{36}:[1-9][0-9]{0,15}$/.test(input_id) && isUuid(input_id.split(":")[0]) && Number.isSafeInteger(Number(input_id.split(":")[1])) && typeof move === "boolean" && isViewFields(rectangle, fields);
+  return isViewInputId(input_id) && typeof move === "boolean" && isViewFields(rectangle, fields);
 }
 
 function isViewOrder(value: Record<string, unknown>, fields: readonly string[]): boolean {
@@ -642,6 +647,8 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
         typeof value.message === "string" &&
         utf8Bytes(value.message) <= WhiteboardV1ProtocolLimits.errorMessageMaxBytes
       );
+    case "view_ack":
+      return hasExactKeys(value, ["type", "input_id"]) && isViewInputId(value.input_id);
     case "pong":
       return hasExactKeys(value, ["type"]);
     default:

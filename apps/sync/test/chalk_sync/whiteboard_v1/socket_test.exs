@@ -285,6 +285,27 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     refute_received {:whiteboard_v1_frame, _}
   end
 
+  test "owner overload closes explicitly and accepted retries echo the same input id" do
+    state = %{live_view_state() | view_owner_negotiated: true}
+    {:ok, owner, _, _} = ViewOwner.join(state.identity.episode, state.identity.participant_id)
+    state = %{state | view_owner: owner}
+    frame = Map.merge(view_frame(false), %{"input_id" => "#{UUID.generate()}:1", "move" => true})
+
+    for _ <- 1..2 do
+      assert {:push, {:text, encoded}, _} = receive_frame(frame, state)
+      assert JSON.decode!(encoded) == %{"type" => "view_ack", "input_id" => frame["input_id"]}
+    end
+
+    assert :sys.get_state(owner).views[state.identity.participant_id]["owner_sequence"] == 1
+
+    :sys.replace_state(owner, fn current ->
+      %{current | admitted: MapSet.new(1..1024)}
+    end)
+
+    fresh = %{frame | "input_id" => "#{UUID.generate()}:1"}
+    assert {:stop, :normal, {1013, "view capacity exhausted"}, _} = receive_frame(fresh, state)
+  end
+
   test "legacy peers do not receive their own Bring, while owner-capable peers do" do
     state = live_view_state()
     frame = server_view(state.identity.participant_id)

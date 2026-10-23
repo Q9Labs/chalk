@@ -14,6 +14,7 @@ describe("whiteboard-v1 codec", () => {
     for (const input_id of [`${sceneId}:0`, `${sceneId}:01`, `${sceneId}:9007199254740992`, "not-a-stream:1"]) {
       expect(() => encodeWhiteboardV1ClientFrame({ ...input, input_id })).toThrow();
     }
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ type: "view_ack", input_id: input.input_id }))).toEqual({ type: "view_ack", input_id: input.input_id });
     const canonical = { ...view, participant_id: sceneId, display_name: "Person", occurred_at: "2026-10-23T00:00:00Z", owner_id: sceneId, owner_sequence: 1 };
     expect(decodeWhiteboardV1ServerFrame(JSON.stringify(canonical))).toEqual(canonical);
     expect(() => decodeWhiteboardV1ServerFrame(JSON.stringify({ ...canonical, input_id: input.input_id, move: true }))).toThrow();

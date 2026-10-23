@@ -166,7 +166,7 @@
     }
   },
   "clientFrames": ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"],
-  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "pong"],
+  "serverFrames": ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "view_ack", "pong"],
   "receiptOperations": ["submit_update", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"],
   "receiptOutcomes": ["committed", "duplicate"],
   "resetReasons": ["scene_changed", "cursor_expired", "gap"],

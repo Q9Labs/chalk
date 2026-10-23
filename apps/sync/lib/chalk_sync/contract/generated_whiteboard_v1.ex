@@ -243,6 +243,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "presentation_updated",
       "reset_required",
       "operation_error",
+      "view_ack",
       "pong"
     ],
     "receiptOperations" => [
@@ -381,6 +382,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
       "operation_error" -> valid_operation_error?(frame)
+      "view_ack" -> exact?(frame, ["type", "input_id"]) and valid_input_id?(frame["input_id"])
       "pong" -> exact?(frame, ["type"])
       _ -> false
     end

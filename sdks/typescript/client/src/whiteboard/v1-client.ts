@@ -121,7 +121,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
   readonly #viewEpoch = crypto.randomUUID();
-  #pendingLeadingView: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView } | null = null;
+  #pendingLeadingView: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView; readonly frame: Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> } | null = null;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
   #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
@@ -300,19 +300,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (!this.#started || !this.#viewExtensionEnabled) return false;
     const frame = this.#viewFrame(view);
     encodeWhiteboardV1ClientFrame(frame);
-    if (!this.#presenceReady) {
-      if (view.bring || view.lead) this.#pendingLeadingView = { sceneId: this.#sceneId, view: { ...view } };
-      return true;
-    }
-    if (view.bring || view.lead) this.#pendingLeadingView = null;
+    if (view.bring || view.lead !== false) this.#pendingLeadingView = { sceneId: this.#sceneId, view: { ...view }, frame };
+    if (!this.#presenceReady) return true;
     this.#send(frame);
+    if (!this.#viewOwnerId && (view.bring || view.lead !== false)) this.#pendingLeadingView = null;
     return true;
   }
 
   #viewFrame(view: ChalkWhiteboardView): Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> {
     const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
     if (this.#viewOwnerId) {
-      const input = { input_id: `${this.#viewEpoch}:${++this.#viewSequence}`, move: view.lead === true || view.bring };
+      const input = { input_id: `${this.#viewEpoch}:${++this.#viewSequence}`, move: view.lead !== false || view.bring };
       return view.originParticipantId ? { ...rectangle, ...input, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence } : { ...rectangle, ...input };
     }
     if (view.bring || !viewOriginsNegotiated(this.#hello)) return rectangle;
@@ -324,8 +322,19 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #flushPendingBring(): void {
     if (!this.#presenceReady) return;
     const pending = this.#pendingLeadingView;
-    this.#pendingLeadingView = null;
-    if (pending && (pending.sceneId === null || pending.sceneId === this.#sceneId)) this.sendView(pending.view);
+    if (!pending) return;
+    if (pending.sceneId !== null && pending.sceneId !== this.#sceneId) {
+      this.#pendingLeadingView = null;
+      return;
+    }
+    if (!this.#viewOwnerId) {
+      this.#pendingLeadingView = null;
+      this.sendView(pending.view);
+      return;
+    }
+    const frame = pending.frame.input_id ? pending.frame : this.#viewFrame(pending.view);
+    this.#pendingLeadingView = { ...pending, frame };
+    this.#send(frame);
   }
 
   requestSnapshot(): Promise<void> {
@@ -518,6 +527,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
           occurredAt: frame.occurred_at,
         });
         return;
+      case "view_ack":
+        this.#requireLive();
+        if (this.#pendingLeadingView?.frame.input_id === frame.input_id) this.#pendingLeadingView = null;
+        return;
       case "view": {
         this.#requireLive();
         if (this.#viewOwnerId && frame.owner_id !== this.#viewOwnerId) return;
@@ -668,7 +681,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#viewOwnerId = ownerId;
     this.#latestViews.clear();
     this.#viewVersions.clear();
-    this.#emit({ type: "views_reset" });
   }
 
   #requestSnapshotAfterOperations(): void {
@@ -1000,7 +1012,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#viewOwnerId = null;
     this.#latestViews.clear();
     this.#viewVersions.clear();
-    this.#emit({ type: "views_reset" });
     this.#socket = null;
     this.#clearDial();
     this.#clearHeartbeat();
@@ -1086,6 +1097,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       }
     }
     for (const listener of this.#listeners) listener(event);
+    // The existing snapshot boundary replaces cached views without a new public event variant.
+    if (event.type === "snapshot") {
+      for (const view of this.#latestViews.values()) {
+        for (const listener of this.#listeners) listener({ ...view, bring: false });
+      }
+    }
   }
 
   #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {

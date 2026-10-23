@@ -22,7 +22,7 @@ Compare each proposal against its own base with Git's built-in line counts:
 
 ```sh
 git diff --shortstat c48de517a309d34cd1c625a9ee1402348951f0a4 18f216766acac609b5570a9baba1acc17a19b93d
-git diff --shortstat 2a2fdf9bcb6c4d10f28b769e2a19deda325f7b7f HEAD
+git diff --shortstat 8a06338b58e7577d53d3461bd8b41dc581192f24 HEAD
 git diff --shortstat 18f216766acac609b5570a9baba1acc17a19b93d HEAD
 ```
 
@@ -52,3 +52,42 @@ ERL_FLAGS='+S 1:1' elixir docs/proofs/follow-view-owner/run-owner-tests.exs /tmp
 The final M4 Sync gate passed 212 tests with two topology cases excluded, strict Credo, and warnings-as-errors compilation.
 All ten selected app lanes passed: scope, format, hygiene, secrets, generated files, contracts, types, tests, build, and depcruise.
 Performance lanes were not selected. The job and browser journey both exited zero.
+
+## Review-round regressions
+
+The revised source preserves the connect diagnostics merged in #457.
+Admission uses the reducer's canonical 500-person limit. Departed sockets retire identities from admission without deleting bounded retry receipts.
+The focused owner suite also fills all 1,024 input slots and updates an existing relay at capacity.
+Owner-capable sockets acknowledge accepted input IDs, including retries; legacy sockets never receive the acknowledgment frame.
+The client retains the original real-move frame until acknowledgment and resends that exact ID after reconnect.
+Direct `sendView` callers lead by default; only explicit `lead: false` refreshes are passive.
+Animated zoom publishes its final real rectangle. The Board regression checks a follower reaches the leader's final logical width of 0.8.
+Self-person and legacy Bring frames bypass ordinary self-echo suppression.
+
+Public event variants match the published 5.1.0 release. The existing drawing snapshot boundary clears Board view caches and replays fresh passive views.
+The exhaustive consumer below compiles against both published 5.1.0 declarations and declarations emitted from the revised source.
+The pre-fix unions fail the same `never` assignment because they contain `views_reset`.
+
+```ts
+import type { ChalkWhiteboardV1Event } from "@q9labsai/chalk-client";
+import type { WhiteboardCollaborationEvent } from "@q9labsai/chalk-whiteboard";
+
+export function consume(event: ChalkWhiteboardV1Event | WhiteboardCollaborationEvent): string {
+  switch (event.type) {
+    case "snapshot":
+    case "update":
+    case "cursor":
+    case "view":
+    case "reset_required":
+      return event.type;
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
+```
+
+The current PostgreSQL verification uses `box run -- '<command>'` on Instabox.
+To keep one final Git push, the harness checks out pushed master, applies the unpublished patch, and verifies each source hash before testing.
+The original M4 recording above remains evidence for ec4b58874, not a recording of this revised source.
