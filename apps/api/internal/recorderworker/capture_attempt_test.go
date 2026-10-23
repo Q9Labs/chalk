@@ -1272,8 +1272,8 @@ func TestCaptureAttemptCheckpointsLongNoPublisherGapBeforeStop(t *testing.T) {
 	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 2)); err != nil {
 		t.Fatalf("run long no-publisher claim: %v", err)
 	}
-	if control.completeCalls != 1 || control.failCalls != 0 {
-		t.Fatalf("capture job lifecycle complete/fail calls = %d/%d, want 1/0; failure=%+v", control.completeCalls, control.failCalls, control.failed)
+	if control.completeCalls.Load() != 1 || control.failCalls != 0 {
+		t.Fatalf("capture job lifecycle complete/fail calls = %d/%d, want 1/0; failure=%+v", control.completeCalls.Load(), control.failCalls, control.failed)
 	}
 	if len(lifecycle.stopped) != 1 {
 		t.Fatalf("capture stopped callbacks = %d, want 1", len(lifecycle.stopped))

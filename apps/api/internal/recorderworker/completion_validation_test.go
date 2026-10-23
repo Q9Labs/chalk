@@ -21,7 +21,7 @@ func TestInvalidCompletionSourceReportsDurableFailureWithoutSpinning(t *testing.
 		t.Fatal(err)
 	}
 	want := "stage=api_complete outcome=returned error_class=http http_status=422 api_error_code=recording.invalid_completion_source"
-	if control.completeCalls != 1 || control.failCalls != 1 || control.failed.ErrorCode != completionFailureCode || control.failed.ErrorDetail != want || control.failed.CaptureEpoch != claim.Envelope.CaptureEpoch {
-		t.Fatalf("completion calls/failures/failure = %d/%d/%+v", control.completeCalls, control.failCalls, control.failed)
+	if control.completeCalls.Load() != 1 || control.failCalls != 1 || control.failed.ErrorCode != completionFailureCode || control.failed.ErrorDetail != want || control.failed.CaptureEpoch != claim.Envelope.CaptureEpoch {
+		t.Fatalf("completion calls/failures/failure = %d/%d/%+v", control.completeCalls.Load(), control.failCalls, control.failed)
 	}
 }

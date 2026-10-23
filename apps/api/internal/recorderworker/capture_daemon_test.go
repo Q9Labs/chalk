@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -32,8 +33,8 @@ func TestCaptureDaemonCompletesSuccessfulServerEpoch(t *testing.T) {
 	if err := daemon.runClaim(context.Background(), claim); err != nil {
 		t.Fatalf("run claim: %v", err)
 	}
-	if control.completeCalls != 1 || control.failCalls != 0 {
-		t.Fatalf("terminal calls = complete %d fail %d", control.completeCalls, control.failCalls)
+	if control.completeCalls.Load() != 1 || control.failCalls != 0 {
+		t.Fatalf("terminal calls = complete %d fail %d", control.completeCalls.Load(), control.failCalls)
 	}
 	if control.completed.CaptureEpoch != 7 || control.completed.AttemptCount != claim.Envelope.AttemptCount {
 		t.Fatalf("completed fence = %+v", control.completed)
@@ -100,7 +101,7 @@ func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *te
 	renewed := make(chan struct{})
 	control := &captureControlStub{}
 	control.complete = func(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
-		if control.completeCalls == 1 {
+		if control.completeCalls.Load() == 1 {
 			close(started)
 			select {
 			case <-renewed:
@@ -131,15 +132,16 @@ func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *te
 	if err := daemon.runClaim(context.Background(), claim); err != nil {
 		t.Fatalf("complete with live lease: %v", err)
 	}
-	if control.completeCalls != 2 || control.heartbeatCalls == 0 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
-		t.Fatalf("completion calls=%d heartbeat=%d failures=%d epoch=%d", control.completeCalls, control.heartbeatCalls, control.failCalls, control.completed.CaptureEpoch)
+	if control.completeCalls.Load() != 2 || control.heartbeatCalls == 0 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
+		t.Fatalf("completion calls=%d heartbeat=%d failures=%d epoch=%d", control.completeCalls.Load(), control.heartbeatCalls, control.failCalls, control.completed.CaptureEpoch)
 	}
 }
 
 func TestCaptureCompletionTimeoutRetainsHTTPAnswerAfterTransportRetry(t *testing.T) {
+	finished := make(chan struct{})
 	control := &captureControlStub{}
 	control.complete = func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
-		if control.completeCalls == 1 {
+		if control.completeCalls.Load() == 1 {
 			return recordingpipeline.Job{}, HTTPError{Status: 503, Code: "recording.invalid_completion_source", Retryable: true}
 		}
 		return recordingpipeline.Job{}, TransportError{Err: errors.New("response lost")}
@@ -149,18 +151,24 @@ func TestCaptureCompletionTimeoutRetainsHTTPAnswerAfterTransportRetry(t *testing
 	}), nil)
 	daemon.config.CompletionTimeout = time.Second
 	daemon.config.Wait = func(ctx context.Context, _ time.Duration) error {
-		if control.completeCalls == 1 {
+		if control.completeCalls.Load() == 1 {
 			return nil
 		}
+		defer close(finished)
 		<-ctx.Done()
 		return ctx.Err()
 	}
 	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7)); err != nil {
 		t.Fatalf("reported completion failure: %v", err)
 	}
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("completion retry did not finish after timeout")
+	}
 	want := "stage=api_complete outcome=timed_out error_class=http http_status=503 api_error_code=recording.invalid_completion_source"
-	if control.completeCalls != 2 || control.failCalls != 1 || control.failed.ErrorDetail != want {
-		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls, control.failCalls, control.failed.ErrorDetail)
+	if control.completeCalls.Load() != 2 || control.failCalls != 1 || control.failed.ErrorDetail != want {
+		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls.Load(), control.failCalls, control.failed.ErrorDetail)
 	}
 }
 
@@ -174,8 +182,8 @@ func TestCaptureCompletionDoesNotRetryTerminalFailure(t *testing.T) {
 	if err := daemon.runClaim(context.Background(), captureDaemonClaim(t, 7)); err != nil {
 		t.Fatalf("reported completion failure: %v", err)
 	}
-	if control.completeCalls != 1 || control.failCalls != 1 || control.failed.ErrorCode != completionFailureCode || control.failed.ErrorDetail != "stage=api_complete outcome=returned error_class=fenced http_status=0" {
-		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls, control.failCalls, control.failed.ErrorDetail)
+	if control.completeCalls.Load() != 1 || control.failCalls != 1 || control.failed.ErrorCode != completionFailureCode || control.failed.ErrorDetail != "stage=api_complete outcome=returned error_class=fenced http_status=0" {
+		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls.Load(), control.failCalls, control.failed.ErrorDetail)
 	}
 }
 
@@ -190,8 +198,8 @@ func TestCaptureCompletionOnlyClaimSkipsMediaAndReportsOutcome(t *testing.T) {
 	if err := daemon.runClaim(context.Background(), claim); err != nil {
 		t.Fatalf("complete stopped capture: %v", err)
 	}
-	if control.completeCalls != 1 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
-		t.Fatalf("completion calls=%d failures=%d epoch=%d", control.completeCalls, control.failCalls, control.completed.CaptureEpoch)
+	if control.completeCalls.Load() != 1 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
+		t.Fatalf("completion calls=%d failures=%d epoch=%d", control.completeCalls.Load(), control.failCalls, control.completed.CaptureEpoch)
 	}
 	if detail := completionFailureDetail(completionStageError{stage: "api_complete", outcome: "returned", cause: HTTPError{Status: 503}}); detail != "stage=api_complete outcome=returned error_class=http http_status=503" {
 		t.Fatalf("HTTP outcome detail = %q", detail)
@@ -264,8 +272,8 @@ func TestCaptureDaemonReportsFailureWithoutIncrementingEpoch(t *testing.T) {
 	if err := daemon.runClaim(context.Background(), claim); err != nil {
 		t.Fatalf("run failed claim: %v", err)
 	}
-	if control.failCalls != 1 || control.completeCalls != 0 {
-		t.Fatalf("terminal calls = fail %d complete %d", control.failCalls, control.completeCalls)
+	if control.failCalls != 1 || control.completeCalls.Load() != 0 {
+		t.Fatalf("terminal calls = fail %d complete %d", control.failCalls, control.completeCalls.Load())
 	}
 	if control.failed.CaptureEpoch != claim.Envelope.CaptureEpoch {
 		t.Fatalf("failure epoch = %d, want server epoch %d", control.failed.CaptureEpoch, claim.Envelope.CaptureEpoch)
@@ -311,8 +319,8 @@ func TestCaptureDaemonRenewsAttemptLeaseBeforeCompletion(t *testing.T) {
 	if err := <-finished; err != nil {
 		t.Fatalf("run claim: %v", err)
 	}
-	if control.heartbeatCalls != 1 || control.completeCalls != 1 {
-		t.Fatalf("calls = heartbeat %d complete %d", control.heartbeatCalls, control.completeCalls)
+	if control.heartbeatCalls != 1 || control.completeCalls.Load() != 1 {
+		t.Fatalf("calls = heartbeat %d complete %d", control.heartbeatCalls, control.completeCalls.Load())
 	}
 }
 
@@ -405,7 +413,7 @@ func TestCaptureDaemonRejectsHeartbeatAuthorityMutation(t *testing.T) {
 	if !errors.Is(err, ErrInvalidCaptureDaemon) {
 		t.Fatalf("heartbeat mutation error = %v", err)
 	}
-	if control.completeCalls != 0 || control.failCalls != 0 {
+	if control.completeCalls.Load() != 0 || control.failCalls != 0 {
 		t.Fatalf("mutated authority reached terminal mutation")
 	}
 }
@@ -474,8 +482,8 @@ func TestCaptureDaemonDrainRelinquishesActiveClaimAfterShutdown(t *testing.T) {
 	if err := <-result; !errors.Is(err, ErrWorkerDraining) {
 		t.Fatalf("drain error = %v", err)
 	}
-	if claimCalls != 1 || control.relinquishCalls != 1 || control.completeCalls != 0 || control.failCalls != 0 {
-		t.Fatalf("claims/relinquishes/completions/failures = %d/%d/%d/%d", claimCalls, control.relinquishCalls, control.completeCalls, control.failCalls)
+	if claimCalls != 1 || control.relinquishCalls != 1 || control.completeCalls.Load() != 0 || control.failCalls != 0 {
+		t.Fatalf("claims/relinquishes/completions/failures = %d/%d/%d/%d", claimCalls, control.relinquishCalls, control.completeCalls.Load(), control.failCalls)
 	}
 }
 
@@ -555,8 +563,8 @@ func TestCaptureDaemonPlannedPionStopStillCompletesOnce(t *testing.T) {
 	if got, want := strings.Join(order, ","), "provider,peer,stopped"; got != want {
 		t.Fatalf("planned stop order = %q, want %q", got, want)
 	}
-	if coordinator.closeCalls != 1 || peer.closeCalls != 1 || len(lifecycle.stopped) != 1 || control.completeCalls != 1 || control.failCalls != 0 || control.relinquishCalls != 0 {
-		t.Fatalf("provider/peer/stopped/complete/fail/relinquish calls = %d/%d/%d/%d/%d/%d", coordinator.closeCalls, peer.closeCalls, len(lifecycle.stopped), control.completeCalls, control.failCalls, control.relinquishCalls)
+	if coordinator.closeCalls != 1 || peer.closeCalls != 1 || len(lifecycle.stopped) != 1 || control.completeCalls.Load() != 1 || control.failCalls != 0 || control.relinquishCalls != 0 {
+		t.Fatalf("provider/peer/stopped/complete/fail/relinquish calls = %d/%d/%d/%d/%d/%d", coordinator.closeCalls, peer.closeCalls, len(lifecycle.stopped), control.completeCalls.Load(), control.failCalls, control.relinquishCalls)
 	}
 }
 
@@ -620,8 +628,8 @@ func TestCaptureDaemonCancellationRelinquishesWithDetachedBoundedContext(t *test
 	if err := <-result; !errors.Is(err, ErrCaptureDaemonStopped) || !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled claim error = %v", err)
 	}
-	if control.relinquishCalls != 1 || control.completeCalls != 0 || control.failCalls != 0 {
-		t.Fatalf("relinquishes/completions/failures = %d/%d/%d", control.relinquishCalls, control.completeCalls, control.failCalls)
+	if control.relinquishCalls != 1 || control.completeCalls.Load() != 0 || control.failCalls != 0 {
+		t.Fatalf("relinquishes/completions/failures = %d/%d/%d", control.relinquishCalls, control.completeCalls.Load(), control.failCalls)
 	}
 }
 
@@ -875,7 +883,7 @@ type captureControlStub struct {
 	heartbeatJob    recordingpipeline.Job
 	heartbeatCalls  int
 	relinquishCalls int
-	completeCalls   int
+	completeCalls   atomic.Int32
 	failCalls       int
 	completed       recordingpipeline.LeaseInput
 	completeContext context.Context
@@ -915,7 +923,7 @@ func (s *captureControlStub) Fail(_ context.Context, input recordingpipeline.Fai
 }
 
 func (s *captureControlStub) Complete(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
-	s.completeCalls++
+	s.completeCalls.Add(1)
 	s.completed = input
 	s.completeContext = ctx
 	if s.complete != nil {
