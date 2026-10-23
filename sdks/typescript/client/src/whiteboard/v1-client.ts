@@ -20,7 +20,7 @@ import {
   type ChalkWhiteboardV1UpdateInput,
   type ChalkWhiteboardView,
 } from "./types";
-import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { decodeWhiteboardV1WireFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
 import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, whiteboardV1PendingOperationBytes } from "./v1-multipart";
 import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 
@@ -116,7 +116,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #presentationSupported = false;
   #viewsSupported = false;
   #presenting = false;
-  #hello: HelloLevel = "draw-policy";
+  #hello: HelloLevel = "owner-view";
   #viewSequence = 0;
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
@@ -171,7 +171,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = "draw-policy";
+    this.#hello = "owner-view";
     this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
@@ -486,7 +486,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       if (typeof data !== "string" || encoder.encode(data).byteLength > WhiteboardV1ProtocolLimits.encodedOutboundFrameBytes) {
         throw new Error("invalid whiteboard frame size");
       }
-      const frame = decodeWhiteboardV1ServerFrame(data);
+      const frame = decodeWhiteboardV1WireFrame(data);
       if (frame.type !== "pong") {
         this.#lastProgressAt = this.#elapsedNow();
         this.#resetProbeState();
@@ -596,7 +596,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #update(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "update" }>): void {
     this.#requireLive();
-    if (this.#sceneId !== frame.scene_id) this.#latestViews.clear();
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#publishSummary("ready", null);
@@ -651,9 +650,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#presentationSupported = "presenting" in frame;
     this.#presenting = "presenting" in frame ? frame.presenting : false;
     // A change restored from the store has no caller to reject, so the summary carries the refusal too.
-    const refused = this.#hello !== "draw-policy" && this.#dropPolicyChanges();
+    const refused = !drawPolicyNegotiated(this.#hello) && this.#dropPolicyChanges();
     this.#publishSummary("loading", refused ? policyUnavailable() : null);
     this.#clearHeartbeat();
+    this.#resumePendingOperations();
+    this.#startHeartbeat(HEARTBEAT_INTERVAL_MS + Math.max(0, this.#nextSlowConnectionReplacementAt - this.#elapsedNow()));
+  }
+
+  #resumePendingOperations(): void {
     // Welcome replays every operation, so a retry timer from the last connection would send one twice.
     this.#clearOperationRetryTimers();
     for (const change of this.#accessChanges) if (change.state === "sent") change.state = "ready";
@@ -661,7 +665,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#waitingForOperations = true;
     this.#sendInCreationOrder([...this.#operations.values()]);
     this.#requestSnapshotAfterOperations();
-    this.#startHeartbeat(HEARTBEAT_INTERVAL_MS + Math.max(0, this.#nextSlowConnectionReplacementAt - this.#elapsedNow()));
   }
 
   /** A Sync without draw_policy_v1 closes the socket on a policy change, so a change saved for a newer Sync is dropped, not replayed. */
@@ -987,7 +990,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (step === "fail") return false;
     if (step === "step-down") return this.#stepDownHello();
     if (step === "retry-hello") return this.#retryHello();
-    if (phase === "live") this.#hello = "draw-policy";
+    if (phase === "live") this.#hello = "owner-view";
     return true;
   }
 
@@ -1371,15 +1374,19 @@ function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonl
 }
 
 // Older Sync servers close an unknown hello, so the client steps down this list.
-const HELLO_LEVELS = ["draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
+const HELLO_LEVELS = ["owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
 type HelloLevel = (typeof HELLO_LEVELS)[number];
 
 function viewsNegotiated(level: HelloLevel): boolean {
-  return level === "draw-policy" || level === "versioned-view" || level === "view";
+  return level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
 }
 
 function viewOriginsNegotiated(level: HelloLevel): boolean {
-  return level === "draw-policy" || level === "versioned-view";
+  return level === "owner-view" || level === "draw-policy" || level === "versioned-view";
+}
+
+function drawPolicyNegotiated(level: HelloLevel): boolean {
+  return level === "owner-view" || level === "draw-policy";
 }
 
 function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
@@ -1388,6 +1395,7 @@ function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_i
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };
+  if (level === "draw-policy") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }] };
   return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] };
 }
 

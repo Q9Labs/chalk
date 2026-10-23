@@ -1207,6 +1207,109 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     })
   end
 
+  for {client, extensions, owner?, policy?} <- [
+        {"published 5.1.0",
+         [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}], false,
+         false},
+        {"current",
+         [
+           %{"name" => "presentation_v1"},
+           %{"name" => "view_v1", "origins" => true, "owner" => true},
+           %{"name" => "draw_policy_v1"}
+         ], true, true}
+      ] do
+    @hello_extensions extensions
+    @hello_owner owner?
+    @hello_policy policy?
+    test "negotiates Follow and drawing access for a #{client} hello" do
+      {:ok, initial} = SocketWhiteboardV1.init(%{})
+      identity = %{identity() | episode: %{identity().episode | episode_id: UUID.generate()}}
+
+      assert {:push, {:text, wire}, live} =
+               receive_frame(
+                 %{
+                   "type" => "hello",
+                   "protocol" => "whiteboard-v1",
+                   "token" => token(identity),
+                   "cursor" => nil,
+                   "extensions" => @hello_extensions
+                 },
+                 initial
+               )
+
+      welcome = JSON.decode!(wire)
+      assert welcome["presenting"] == false
+      assert Map.has_key?(welcome, "view_owner_id") == @hello_owner
+      assert live.view_negotiated
+      assert live.view_origins_negotiated
+      assert live.view_owner_negotiated == @hello_owner
+      assert live.draw_policy_negotiated == @hello_policy
+      assert Process.alive?(live.view_owner)
+      assert is_integer(live.connected_at)
+      assert_received :whiteboard_v1_access_changed
+
+      assert {:push, {:text, access_wire}, refreshed} =
+               SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, live)
+
+      access = JSON.decode!(access_wire)
+      assert access["type"] == if(@hello_policy, do: "draw_access", else: "permission_updated")
+      assert access["can_draw"] == false
+      assert refreshed.can_draw == false
+      assert Map.has_key?(access, "policy") == @hello_policy
+
+      # The same refresh path continues working with an owner attached.
+      Process.put(
+        :whiteboard_draw_access,
+        {:ok, %{draw_policy: "everyone", can_draw: true, capabilities: [], grants: []}}
+      )
+
+      assert {:push, {:text, changed_wire}, changed} =
+               SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, refreshed)
+
+      assert JSON.decode!(changed_wire)["can_draw"] == true
+      assert changed.can_draw
+    end
+  end
+
+  test "closes with 1012 when the owner dies during a view call" do
+    parent = self()
+    episode = new_episode(live_access_state())
+
+    socket =
+      Task.async(fn ->
+        {:ok, owner, owner_id, _snapshot} = ViewOwner.join(episode, @participant_id)
+        state = live_access_state()
+
+        live = %{
+          state
+          | identity: %{state.identity | episode: episode},
+            view_negotiated: true,
+            view_owner: owner,
+            view_owner_ref: Process.monitor(owner)
+        }
+
+        send(parent, {:socket_ready, owner, owner_id})
+
+        receive do
+          :move -> receive_frame(view_frame(false), live)
+        end
+      end)
+
+    assert_receive {:socket_ready, owner, owner_id}
+    on_exit(fn -> if Process.alive?(owner), do: Process.exit(owner, :kill) end)
+    :ok = :sys.suspend(owner)
+    :erlang.trace(owner, true, [:receive])
+    send(socket.pid, :move)
+    assert_receive {:trace, ^owner, :receive, {:"$gen_call", _from, {:view, _, _, _}}}
+    Process.exit(owner, :kill)
+
+    assert {:stop, :normal, {1012, "view owner restarted"}, closed} = Task.await(socket)
+    assert closed.terminal == %{close_code: 1012, reason: :view_owner_restarted}
+    assert {:ok, replacement, replacement_id, []} = ViewOwner.join(episode, @participant_id)
+    assert replacement != owner
+    assert replacement_id != owner_id
+  end
+
   test "stamps canonical views and strips owner fields for published clients" do
     live = live_view_state()
     assert {:ok, _} = receive_frame(view_frame(false), live)

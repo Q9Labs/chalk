@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { decodeWhiteboardV1ServerFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { decodeWhiteboardV1ServerFrame, decodeWhiteboardV1WireFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
 
 const sceneId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 
 describe("whiteboard-v1 codec", () => {
+  it("keeps negotiated drawing access internal while the public decoder stays 5.1 compatible", () => {
+    const frame = { type: "draw_access", policy: "hosts", can_draw: false, capabilities: [], grants: [] };
+    expect(decodeWhiteboardV1WireFrame(JSON.stringify(frame))).toEqual(frame);
+    expect(() => decodeWhiteboardV1ServerFrame(JSON.stringify(frame))).toThrow();
+  });
+
   it("negotiates owner input separately from canonical server sequences", () => {
     const hello = { type: "hello", protocol: "whiteboard-v1", token: "participant-token", cursor: null, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }] } as const;
     expect(JSON.parse(encodeWhiteboardV1ClientFrame(hello))).toEqual(hello);
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame({ ...hello, extensions: [...hello.extensions, { name: "draw_policy_v1" }] }))).toEqual({ ...hello, extensions: [...hello.extensions, { name: "draw_policy_v1" }] });
     const view = { type: "view", x: 0, y: 0, width: 100, height: 100, bring: false } as const;
     const input = { ...view, input_id: `${sceneId}:1`, move: true };
     expect(JSON.parse(encodeWhiteboardV1ClientFrame(input))).toEqual(input);
@@ -14,7 +21,8 @@ describe("whiteboard-v1 codec", () => {
     for (const input_id of [`${sceneId}:0`, `${sceneId}:01`, `${sceneId}:9007199254740992`, "not-a-stream:1"]) {
       expect(() => encodeWhiteboardV1ClientFrame({ ...input, input_id })).toThrow();
     }
-    expect(decodeWhiteboardV1ServerFrame(JSON.stringify({ type: "view_ack", input_id: input.input_id }))).toEqual({ type: "view_ack", input_id: input.input_id });
+    expect(() => decodeWhiteboardV1ServerFrame(JSON.stringify({ type: "view_ack", input_id: input.input_id }))).toThrow();
+    expect(decodeWhiteboardV1WireFrame(JSON.stringify({ type: "view_ack", input_id: input.input_id }))).toEqual({ type: "view_ack", input_id: input.input_id });
     const canonical = { ...view, participant_id: sceneId, display_name: "Person", occurred_at: "2026-10-23T00:00:00Z", owner_id: sceneId, owner_sequence: 1 };
     expect(decodeWhiteboardV1ServerFrame(JSON.stringify(canonical))).toEqual(canonical);
     expect(() => decodeWhiteboardV1ServerFrame(JSON.stringify({ ...canonical, input_id: input.input_id, move: true }))).toThrow();

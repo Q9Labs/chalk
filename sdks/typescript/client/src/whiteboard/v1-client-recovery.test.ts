@@ -3,7 +3,6 @@ import { Schema } from "effect";
 
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
-import { TestClock } from "../test-support/clock.test.helpers";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 import { ManualClock } from "../../tests/helpers/manual-clock";
@@ -66,24 +65,18 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await settle();
       sockets[0]?.open();
       await settle();
-      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }]);
-      sockets[0]?.close(1009);
-      clock.advance(1_000);
-      await settle();
-      sockets[1]?.open();
-      await settle();
-      expect(hello(1)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }]);
-      sockets[1]?.close(1009);
-      clock.advance(1_000);
-      await settle();
-      sockets[2]?.open();
-      await settle();
-      expect(hello(2)).toEqual([{ name: "presentation_v1" }, { name: "view_v1" }]);
-      sockets[2]?.close(1009);
-      clock.advance(1_000);
-      await acceptSnapshot(sockets, 3);
+      const levels = [[{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }], [...withoutDrawPolicy, { name: "draw_policy_v1" }], withoutDrawPolicy, [{ name: "presentation_v1" }, { name: "view_v1" }]];
+      for (const [index, extensions] of levels.entries()) {
+        expect(hello(index)).toEqual(extensions);
+        sockets[index]?.close(1009);
+        clock.advance(5_000);
+        await settle();
+        sockets[index + 1]?.open();
+        await settle();
+      }
+      await acceptSnapshot(sockets, 4);
       await startup;
-      expect(hello(3)).toEqual([{ name: "presentation_v1" }]);
+      expect(hello(4)).toEqual([{ name: "presentation_v1" }]);
       expect(client.supportsViews).toBe(false);
       expect(client.sendView(view)).toBe(false);
     } finally {
@@ -133,18 +126,18 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     const older = recoveryClient(clock);
     const startup = older.client.startSceneSubscription();
     try {
-      for (const index of [0, 1]) {
+      for (const index of [0, 1, 2]) {
         await settle();
         older.sockets[index]?.open();
         await settle();
         older.sockets[index]?.close(1009);
-        clock.advance(1_000);
+        clock.advance(5_000);
       }
-      await acceptSnapshot(older.sockets, 2);
+      await acceptSnapshot(older.sockets, 3);
       await startup;
       expect(older.client.supportsViews).toBe(true);
       older.client.sendView({ ...view, originParticipantId: sceneId, originSequence: 42 });
-      expect(JSON.parse(older.sockets[2]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
+      expect(JSON.parse(older.sockets[3]?.sent.at(-1) ?? "{}")).toEqual({ type: "view", ...view });
     } finally {
       await older.client.stopSceneSubscription();
     }
@@ -185,19 +178,19 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     const { client, sockets } = recoveryClient(clock);
     const startup = client.startSceneSubscription();
     try {
-      for (const index of [0, 1, 2]) {
+      for (const index of [0, 1, 2, 3]) {
         await settle();
         sockets[index]?.open();
         await settle();
         sockets[index]?.close(1009);
-        clock.advance(1_000);
+        clock.advance(5_000);
       }
-      await acceptSnapshot(sockets, 3);
+      await acceptSnapshot(sockets, 4);
       await startup;
       expect(client.supportsViews).toBe(false);
-      sockets[3]?.close(1006);
-      clock.advance(1_000);
-      await acceptSnapshot(sockets, 4);
+      sockets[4]?.close(1006);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 5);
       expect(client.supportsViews).toBe(true);
       expect(client.sendView({ x: 0, y: 0, width: 100, height: 100, bring: false })).toBe(true);
     } finally {
@@ -311,15 +304,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     try {
       expect(client.sendView({ ...bring, x: 40 })).toBe(true);
       clock.advance(1_000);
-      if (fallback) {
-        await settle();
-        sockets[1]?.open();
-        await settle();
-        sockets[1]?.close(1008);
-        clock.advance(1_000);
-      }
-      const index = fallback ? 2 : 1;
-      await acceptSnapshot(sockets, index);
+      await acceptSnapshot(sockets, 1);
       await settle();
       expect(sentFrames(sockets[1], "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
     } finally {
@@ -330,18 +315,18 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
   it("preserves a queued Bring when origin negotiation falls back to plain views", async () => {
     const { clock, client, sockets, bring } = await bringWhileReconnecting();
     try {
-      for (const index of [1, 2]) {
-        clock.advance(1_000);
+      for (const index of [1, 2, 3]) {
+        clock.advance(5_000);
         await settle();
         sockets[index]?.open();
         await settle();
         sockets[index]?.close(1009);
       }
-      clock.advance(1_000);
-      await acceptSnapshot(sockets, 3);
+      clock.advance(5_000);
+      await acceptSnapshot(sockets, 4);
       expect(client.supportsViews).toBe(true);
-      expect(helloExtensions(sockets[3])).toContainEqual({ name: "view_v1" });
-      expect(sentFrames(sockets[3], "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
+      expect(helloExtensions(sockets[4])).toContainEqual({ name: "view_v1" });
+      expect(sentFrames(sockets[4], "view")).toEqual([expect.objectContaining({ type: "view", ...bring })]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -953,20 +938,17 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     try {
       const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
       const caller = settlement(change);
-      sockets[1]?.close(1009);
-      await redial(clock, sockets, 2);
-      sockets[2]?.receive(welcome());
-      await settle();
-      expect(helloExtensions(sockets[2])).toEqual(withoutDrawPolicy);
+      await acceptWithoutDrawPolicy(clock, sockets, 1);
+      expect(helloExtensions(sockets[3])).toEqual(withoutDrawPolicy);
       expect(await unhandled.after()).toEqual([]);
       expect(caller.settled).toBe(true);
 
       if (save === "finishes") saves[0]?.resolve();
       else saves[0]?.reject(new Error("disk full"));
       await settle();
-      sockets[2]?.receive(snapshotPage(sockets[2]?.requestId()));
+      sockets[3]?.receive(snapshotPage(sockets[3]?.requestId()));
       await settle();
-      expect(sentFrames(sockets[2], "set_draw_policy")).toEqual([]);
+      expect(sentFrames(sockets[3], "set_draw_policy")).toEqual([]);
       await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable", message: policyUnavailableMessage });
       await expectNothingLeft(pendingStore, unhandled);
     } finally {
@@ -1000,16 +982,34 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     }
   });
 
+  it("retains drawing policy when an older Sync rejects only the owner capability", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock);
+    try {
+      const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
+      await rejectOwnerHello(clock, sockets, 1);
+      sockets[2]?.receive(welcome());
+      await settle();
+      expect(helloExtensions(sockets[2])).toEqual([...withoutDrawPolicy, { name: "draw_policy_v1" }]);
+      const policies = sentFrames(sockets[2], "set_draw_policy");
+      expect(policies.map((frame) => frame.policy)).toEqual(["hosts"]);
+      commit(sockets[2], policies[0].operation_id, "5");
+      await expect(change).resolves.toBeUndefined();
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("with an older Sync, falls back and refuses a host's policy change that was waiting on the dropped connection", async () => {
     const clock = new ManualClock();
     const { client, sockets } = await hostClient(clock);
     try {
       const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
-      sockets[1]?.close(1009, "invalid whiteboard frame");
-      clock.advance(5_000);
-      await acceptSnapshot(sockets, 2);
-      expect(helloExtensions(sockets[2])).toEqual(withoutDrawPolicy);
-      expect(sentFrames(sockets[2], "set_draw_policy")).toEqual([]);
+      await acceptWithoutDrawPolicy(clock, sockets, 1);
+      sockets[3]?.receive(snapshotPage(sockets[3]?.requestId()));
+      await settle();
+      expect(helloExtensions(sockets[3])).toEqual(withoutDrawPolicy);
+      expect(sentFrames(sockets[3], "set_draw_policy")).toEqual([]);
       await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable", recoverable: true });
     } finally {
       await client.stopSceneSubscription();
@@ -1032,7 +1032,7 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await redial(clock, second.sockets, 2);
       second.sockets[2]?.receive(welcome());
       await settle();
-      expect(helloExtensions(second.sockets[2])).toEqual([...withoutDrawPolicy, { name: "draw_policy_v1" }]);
+      expect(helloExtensions(second.sockets[2])).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }]);
       expect(sentFrames(second.sockets[2], "set_draw_policy").map((frame) => frame.policy)).toEqual(["hosts"]);
     } finally {
       await second.client.stopSceneSubscription();
@@ -1069,19 +1069,16 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     const startup = second.client.startSceneSubscription();
     try {
       await redial(clock, second.sockets, 0, 0);
-      second.sockets[0]?.close(1009, "invalid whiteboard frame");
-      await redial(clock, second.sockets, 1, 1_000);
-      second.sockets[1]?.receive(welcome());
-      await settle();
-      expect(helloExtensions(second.sockets[1])).toEqual(withoutDrawPolicy);
+      await acceptWithoutDrawPolicy(clock, second.sockets, 0);
+      expect(helloExtensions(second.sockets[2])).toEqual(withoutDrawPolicy);
       expect(errors).toContain("set_draw_policy");
-      expect(sentFrames(second.sockets[1], "set_draw_policy")).toEqual([]);
-      const permissions = sentFrames(second.sockets[1], "set_draw_permission");
+      expect(sentFrames(second.sockets[2], "set_draw_policy")).toEqual([]);
+      const permissions = sentFrames(second.sockets[2], "set_draw_permission");
       expect(permissions.map((frame) => frame.can_draw)).toEqual([false]);
       expect((await pendingStore.load()).map((pending) => pending.frame.type)).toEqual(["set_draw_permission"]);
-      commit(second.sockets[1], permissions[0].operation_id, "1");
+      commit(second.sockets[2], permissions[0].operation_id, "1");
       await settle();
-      second.sockets[1]?.receive(snapshotPage(second.sockets[1]?.requestId()));
+      second.sockets[2]?.receive(snapshotPage(second.sockets[2]?.requestId()));
       await startup;
     } finally {
       await second.client.stopSceneSubscription();
@@ -1720,6 +1717,20 @@ function settlement(promise: Promise<unknown>) {
   return state;
 }
 
+/** Refuses only owner fields, preserving #428's drawing-policy hello. */
+async function rejectOwnerHello(clock: ManualClock, sockets: readonly TestSocket[], index: number) {
+  sockets[index]?.close(1009, "invalid whiteboard frame");
+  await redial(clock, sockets, index + 1);
+}
+
+/** Refuses both new capabilities before accepting the older origins-only hello. */
+async function acceptWithoutDrawPolicy(clock: ManualClock, sockets: readonly TestSocket[], index: number) {
+  await rejectOwnerHello(clock, sockets, index);
+  await rejectOwnerHello(clock, sockets, index + 1);
+  sockets[index + 2]?.receive(welcome());
+  await settle();
+}
+
 /** Drops the first connection, then dials and welcomes the second. */
 async function reconnect(clock: ManualClock, sockets: readonly TestSocket[]) {
   sockets[0]?.close(1006);
@@ -1929,12 +1940,9 @@ it("judge: an old-Sync refusal cannot replay after restart while its deletion is
   let restart: Promise<void> | undefined;
   try {
     const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
-    sockets[1]?.close(1009, "invalid whiteboard frame");
-    await redial(clock, sockets, 2);
-    sockets[2]?.receive(welcome());
-    await settle();
+    await acceptWithoutDrawPolicy(clock, sockets, 1);
     await expect(change).rejects.toMatchObject({ code: "unavailable" });
-    expect(sentPolicies(sockets[2])).toEqual([]);
+    expect(sentPolicies(sockets[3])).toEqual([]);
     let stopped = false;
     const stopping = client.stopSceneSubscription().then(() => {
       stopped = true;
@@ -1944,16 +1952,16 @@ it("judge: an old-Sync refusal cannot replay after restart while its deletion is
     void restart.catch(() => undefined);
     await settle();
     expect(stopped).toBe(false);
-    expect(sockets).toHaveLength(3);
+    expect(sockets).toHaveLength(4);
     deletion.resolve();
     await stopping;
     await settle();
-    sockets[3]?.open();
+    sockets[4]?.open();
     await settle();
-    sockets[3]?.receive(welcome());
+    sockets[4]?.receive(welcome());
     await settle();
-    expect(sentPolicies(sockets[3])).toEqual([]);
-    sockets[3]?.receive(snapshotPage(sockets[3]?.requestId()));
+    expect(sentPolicies(sockets[4])).toEqual([]);
+    sockets[4]?.receive(snapshotPage(sockets[4]?.requestId()));
     await restart;
     expect(await pendingStore.load()).toEqual([]);
   } finally {
@@ -1965,7 +1973,7 @@ it("judge: an old-Sync refusal cannot replay after restart while its deletion is
 });
 
 it("adopts the owner's snapshot on reconnect and ignores the previous owner's messages", async () => {
-  const clock = new TestClock();
+  const clock = new ManualClock();
   const { client, sockets } = recoveryClient(clock);
   const startup = client.startSceneSubscription();
   const owner = "40000000-0000-4000-8000-000000000004";
@@ -2024,7 +2032,7 @@ it("keeps a real recovery-time move when a heartbeat follows it", async () => {
 });
 
 it("keeps the canonical source on an intentional Follow selection", async () => {
-  const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { ownerId: "40000000-0000-4000-8000-000000000004" });
+  const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { ownerId: "40000000-0000-4000-8000-000000000004" });
   try {
     client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false, lead: true, originParticipantId: sceneId, originSequence: 42 });
     expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ move: true, origin_participant_id: sceneId, origin_sequence: 42 });
@@ -2034,7 +2042,7 @@ it("keeps the canonical source on an intentional Follow selection", async () => 
 });
 
 it("treats existing sendView callers as real moves unless explicitly passive", async () => {
-  const { client, sockets } = await startedRecoveryClient(new TestClock(), undefined, { ownerId: "40000000-0000-4000-8000-000000000004" });
+  const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { ownerId: "40000000-0000-4000-8000-000000000004" });
   try {
     for (const x of [10, 20]) client.sendView({ x, y: 0, width: 100, height: 100, bring: false });
     client.sendView({ x: 20, y: 0, width: 100, height: 100, bring: false, lead: false });
@@ -2050,7 +2058,7 @@ it("treats existing sendView callers as real moves unless explicitly passive", a
 });
 
 it.each([false, true])("retries an unacknowledged real move with its original input id (Bring %s)", async (bring) => {
-  const clock = new TestClock();
+  const clock = new ManualClock();
   const owner = "40000000-0000-4000-8000-000000000004";
   const { client, sockets } = await startedRecoveryClient(clock, undefined, { ownerId: owner });
   try {

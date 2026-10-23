@@ -22,7 +22,7 @@ Compare each proposal against its own base with Git's built-in line counts:
 
 ```sh
 git diff --shortstat c48de517a309d34cd1c625a9ee1402348951f0a4 18f216766acac609b5570a9baba1acc17a19b93d
-git diff --shortstat 8a06338b58e7577d53d3461bd8b41dc581192f24 HEAD
+git diff --shortstat ebfa2b706dfadff5905e5ce34b4668abdf942da9 HEAD
 git diff --shortstat 18f216766acac609b5570a9baba1acc17a19b93d HEAD
 ```
 
@@ -91,3 +91,11 @@ export function consume(event: ChalkWhiteboardV1Event | WhiteboardCollaborationE
 The current PostgreSQL verification uses `box run -- '<command>'` on Instabox.
 To keep one final Git push, the harness checks out pushed master, applies the unpublished patch, and verifies each source hash before testing.
 The original M4 recording above remains evidence for ec4b58874, not a recording of this revised source.
+
+## Draw-policy rebase compatibility
+
+The schema and both protocol emitters retain draw-policy negotiation together with owner-aware Follow. The socket hello matrix covers the actual published 5.1.0 extension tuple and the current combined tuple, including the initial access refresh and a subsequent permission change. A client rejected for the owner extension first retries the #428 draw-policy hello; it removes drawing policy only after that hello is also refused. Authentication rejections still retry at the same level.
+
+Negotiated `view_ack` and `draw_access` controls are decoded inside the connection. The public decoder retains the published 5.1.0 frame variants; an exhaustive decoded-frame consumer compiles alongside the two high-level event consumers.
+
+An owner killed while a view call is pending closes the socket with 1012 and the `view_owner_restarted` terminal reason. A replacement owner starts with a fresh ID and snapshot.

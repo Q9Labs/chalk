@@ -641,7 +641,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           %{state | phase: :recovering, snapshot: snapshot, awaiting_snapshot: false}
           |> observe_operation("request_snapshot", "accepted")
 
-        nil
         {:push, {:text, Protocol.encode!(first)}, next}
 
       failure ->
@@ -735,10 +734,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
         }
 
-        case ViewOwner.move(state.view_owner, frame, view) do
-          :ok -> acknowledge_view(view, next)
-          {:error, :overloaded} -> stop(next, 1013, "view capacity exhausted", :overloaded)
-        end
+        publish_view(frame, view, next)
 
       _denied ->
         {:ok, next}
@@ -751,6 +747,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame(_frame, state) do
     stop(state, 1008, "operation not available in this phase", :protocol_error)
+  end
+
+  defp publish_view(frame, view, state) do
+    case ViewOwner.move(state.view_owner, frame, view) do
+      :ok -> acknowledge_view(view, state)
+      {:error, :overloaded} -> stop(state, 1013, "view capacity exhausted", :overloaded)
+    end
+  catch
+    :exit, _reason -> stop(state, 1012, "view owner restarted", :view_owner_restarted)
   end
 
   defp acknowledge_view(%{input_id: id}, %{view_owner_negotiated: true} = state),
@@ -1104,6 +1109,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
 
     draw_policy_negotiated = Enum.any?(extensions, &(&1["name"] == "draw_policy_v1"))
+
     view_owner_negotiated =
       Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["owner"] == true))
 
