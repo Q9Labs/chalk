@@ -401,6 +401,59 @@ it.each([false, true])("relays a leader through C → B → A, reduced motion %s
   }
 });
 
+it("ignores unchanged owner refreshes without camera writes or relay echoes", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16));
+  vi.stubGlobal("cancelAnimationFrame", (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle));
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (_container, engine, peer) => {
+      const view = { x: 432, y: 0, width: 100, height: 100, bring: false, ownerId: "owner", ownerSequence: 1 };
+      await act(async () => {
+        peer.receive("remote", view);
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      const before = engine.camera(),
+        writes = engine.cameraWrites();
+      send.mockClear();
+      for (let tick = 0; tick < 6; tick++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2_000);
+          peer.receive("remote", view);
+          await vi.advanceTimersByTimeAsync(200);
+        });
+      }
+      expect(engine.camera()).toEqual(before);
+      expect(engine.cameraWrites()).toBe(writes);
+      expect(send).not.toHaveBeenCalled();
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it("cancels an older glide when the newest owner view returns to the current camera", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16));
+  vi.stubGlobal("cancelAnimationFrame", (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle));
+  await withOpenBoard(async (_container, engine, peer) => {
+    const view = { x: 432, y: 0, width: 100, height: 100, bring: false, ownerId: "owner", ownerSequence: 1 };
+    await act(async () => {
+      peer.receive("remote", view);
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    const baseline = engine.camera(),
+      writes = engine.cameraWrites();
+    await act(async () => {
+      peer.receive("remote", { ...view, x: 999, ownerSequence: 2 });
+      peer.receive("remote", { ...view, ownerSequence: 3 });
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(engine.camera()).toEqual(baseline);
+    expect(engine.cameraWrites()).toBe(writes);
+  });
+});
+
 it("preserves a legacy relay's original person and tab epoch after Bring", async () => {
   vi.useFakeTimers();
   const peer = createPeer();
