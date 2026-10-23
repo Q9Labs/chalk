@@ -15,10 +15,17 @@ The journey checks follower reconnect during a move, idle tab refreshes, a real 
 It also checks the published 5.1.0 package in both directions and rejects an own-Bring echo to that older client.
 Published 5.0.0 completes its drawing snapshot. That release has no Follow-view capability.
 
-`result.json` records the tested source hashes. `baseline-451.txt` records #400's different winners for the six arrival orders.
+`result.json` records the tested source hashes at `ec4b58874fe7b725f2d3e0e32c1e37b64c43c393`, before the behavior-preserving fallow cleanup.
+`baseline-451.txt` records #400's different winners for the six arrival orders.
 `source-hashes.json` covers all 32 implementation files copied to the M4, including the generated contract and tests.
-The proof-only files in this directory do not change those runtime sources.
-Run `node docs/proofs/follow-view-owner/count-lines.mjs <head>` to compare the two proposals.
+Compare each proposal against its own base with Git's built-in line counts:
+
+```sh
+git diff --shortstat c48de517a309d34cd1c625a9ee1402348951f0a4 18f216766acac609b5570a9baba1acc17a19b93d
+git diff --shortstat 2a2fdf9bcb6c4d10f28b769e2a19deda325f7b7f HEAD
+git diff --shortstat 18f216766acac609b5570a9baba1acc17a19b93d HEAD
+```
+
 The direct comparison includes unrelated changes on master between the proposals. Binary assets do not contribute line counts.
 
 Run the owner cases from the repository root without installing the Sync application's dependencies:

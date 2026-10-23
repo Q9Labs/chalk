@@ -623,10 +623,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
     this.#viewsSupported = this.#viewExtensionEnabled;
-    this.#viewOwnerId = "view_owner_id" in frame ? (frame.view_owner_id ?? null) : null;
-    this.#latestViews.clear();
-    this.#viewVersions.clear();
-    this.#emit({ type: "views_reset" });
+    this.#adoptViewOwner("view_owner_id" in frame ? (frame.view_owner_id ?? null) : null);
     this.#reconnectAttempt = 0;
     this.#rejectedHelloRetries = 0;
     this.#participantId = frame.participant_id;
@@ -665,6 +662,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#discardStoredOperation(operationId);
     }
     return dropped.length > 0;
+  }
+
+  #adoptViewOwner(ownerId: string | null): void {
+    this.#viewOwnerId = ownerId;
+    this.#latestViews.clear();
+    this.#viewVersions.clear();
+    this.#emit({ type: "views_reset" });
   }
 
   #requestSnapshotAfterOperations(): void {

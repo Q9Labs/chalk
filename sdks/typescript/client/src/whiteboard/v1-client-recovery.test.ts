@@ -3,6 +3,7 @@ import { Schema } from "effect";
 
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
+import { TestClock } from "../test-support/clock.test.helpers";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 import { ManualClock } from "../../tests/helpers/manual-clock";
@@ -310,7 +311,15 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     try {
       expect(client.sendView({ ...bring, x: 40 })).toBe(true);
       clock.advance(1_000);
-      await acceptSnapshot(sockets, 1);
+      if (fallback) {
+        await settle();
+        sockets[1]?.open();
+        await settle();
+        sockets[1]?.close(1008);
+        clock.advance(1_000);
+      }
+      const index = fallback ? 2 : 1;
+      await acceptSnapshot(sockets, index);
       await settle();
       expect(sentFrames(sockets[1], "view")).toEqual([expect.objectContaining({ type: "view", ...bring, x: 40 })]);
     } finally {
@@ -1445,13 +1454,18 @@ async function recoveringViewClient(phase: "initial" | "requested") {
 }
 
 async function acceptSnapshot(sockets: readonly TestSocket[], index = 0) {
+  const socket = await acceptWelcome(sockets, index);
+  socket?.receive(snapshotPage(socket.requestId()));
+}
+
+async function acceptWelcome(sockets: readonly TestSocket[], index = 0, ownerId?: string) {
   await settle();
   const socket = sockets[index];
   socket?.open();
   await settle();
-  socket?.receive(welcome());
+  socket?.receive({ ...welcome(), ...(ownerId ? { view_owner_id: ownerId } : {}) });
   await settle();
-  socket?.receive(snapshotPage(socket.requestId()));
+  return socket;
 }
 
 function welcome(): Record<string, unknown> {
@@ -1996,11 +2010,7 @@ it("keeps a real recovery-time move when a heartbeat follows it", async () => {
   const { client, sockets } = recoveryClient();
   const startup = client.startSceneSubscription();
   try {
-    await settle();
-    sockets[0]?.open();
-    await settle();
-    sockets[0]?.receive({ ...welcome(), view_owner_id: "40000000-0000-4000-8000-000000000004" });
-    await settle();
+    await acceptWelcome(sockets, 0, "40000000-0000-4000-8000-000000000004");
     client.sendView({ x: 12, y: 0, width: 100, height: 100, bring: false, lead: true });
     client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false });
     sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
@@ -2016,11 +2026,7 @@ it("keeps the canonical source on an intentional Follow selection", async () => 
   const { client, sockets } = recoveryClient();
   const startup = client.startSceneSubscription();
   try {
-    await settle();
-    sockets[0]?.open();
-    await settle();
-    sockets[0]?.receive({ ...welcome(), view_owner_id: "40000000-0000-4000-8000-000000000004" });
-    await settle();
+    await acceptWelcome(sockets, 0, "40000000-0000-4000-8000-000000000004");
     sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
     await startup;
     client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false, lead: true, originParticipantId: sceneId, originSequence: 42 });
