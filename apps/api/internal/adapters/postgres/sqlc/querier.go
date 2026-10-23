@@ -333,8 +333,8 @@ type Querier interface {
 	ReleaseRecordingReservation(ctx context.Context, arg ReleaseRecordingReservationParams) (ReleaseRecordingReservationRow, error)
 	ReleaseRecordingTranscriptionSource(ctx context.Context, arg ReleaseRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	RelinquishCaptureRecordingJob(ctx context.Context, arg RelinquishCaptureRecordingJobParams) (RelinquishCaptureRecordingJobRow, error)
-	// Capture completion queues the canonical MP4 export. Requests reuse it,
-	// or create it for retained captures from before automatic rendering. A
+	// Automatic capture completion queues the canonical MP4 export. Requests
+	// reuse it, or create it for retained on-demand captures. A
 	// terminally failed job may be manually retried five times; each old failure
 	// is copied to append-only history before the same fenced job is requeued.
 	RequestDeferredRecordingRender(ctx context.Context, arg RequestDeferredRecordingRenderParams) (RequestDeferredRecordingRenderRow, error)

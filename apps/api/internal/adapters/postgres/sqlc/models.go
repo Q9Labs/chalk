@@ -1366,6 +1366,7 @@ type SyncWhiteboardScene struct {
 }
 
 type Tenant struct {
+	RecordingRenderMode      string             `json:"recording_render_mode"`
 	ID                       pgtype.UUID        `json:"id"`
 	Name                     string             `json:"name"`
 	DefaultRegion            pgtype.Text        `json:"default_region"`

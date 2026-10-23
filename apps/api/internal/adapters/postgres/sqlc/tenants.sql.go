@@ -39,7 +39,7 @@ insert into tenants (
 ON CONFLICT (created_by_service_id, external_id) DO UPDATE
     SET external_id = tenants.external_id
 returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
-    cors_allowed_origins, logo_key, website, updated_at, created_at
+    cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
     select id
@@ -65,6 +65,7 @@ select
     inserted.cors_allowed_origins,
     inserted.logo_key,
     inserted.website,
+    inserted.recording_render_mode,
     seeded.transcription_ceiling,
     seeded.transcription_default_mode,
     seeded.provider_policy_version,
@@ -101,6 +102,7 @@ type CreateTenantRow struct {
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
+	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
@@ -136,6 +138,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
+		&i.RecordingRenderMode,
 		&i.TranscriptionCeiling,
 		&i.TranscriptionDefaultMode,
 		&i.ProviderPolicyVersion,
@@ -177,6 +180,7 @@ select
     tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
+    tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
     tenant_artifact_policies.provider_policy_version,
@@ -201,6 +205,7 @@ type GetTenantRow struct {
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
+	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
@@ -225,6 +230,7 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
+		&i.RecordingRenderMode,
 		&i.TranscriptionCeiling,
 		&i.TranscriptionDefaultMode,
 		&i.ProviderPolicyVersion,
@@ -262,6 +268,7 @@ select
     tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
+    tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
     tenant_artifact_policies.provider_policy_version,
@@ -304,6 +311,7 @@ type ListTenantsRow struct {
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
+	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
@@ -340,6 +348,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 			&i.CorsAllowedOrigins,
 			&i.LogoKey,
 			&i.Website,
+			&i.RecordingRenderMode,
 			&i.TranscriptionCeiling,
 			&i.TranscriptionDefaultMode,
 			&i.ProviderPolicyVersion,
@@ -363,63 +372,67 @@ const updateTenant = `-- name: UpdateTenant :one
 with updated_tenant as (
 update tenants
 set
-    name = case
+    recording_render_mode = case
         when $1::boolean then $2::text
+        else recording_render_mode
+    end,
+    name = case
+        when $3::boolean then $4::text
         else name
     end,
     default_media_plane = case
-        when $3::boolean then $4::text
+        when $5::boolean then $6::text
         else default_media_plane
     end,
     media_plane_provider_config = case
-        when $5::boolean then $6::jsonb
+        when $7::boolean then $8::jsonb
         else media_plane_provider_config
     end,
     storage_provider_config = case
-        when $7::boolean then $8::jsonb
+        when $9::boolean then $10::jsonb
         else storage_provider_config
     end,
     cors_allowed_origins = case
-        when $9::boolean then $10::text[]
+        when $11::boolean then $12::text[]
         else cors_allowed_origins
     end,
     logo_key = case
-        when $11::boolean then $12::text
+        when $13::boolean then $14::text
         else logo_key
     end,
     website = case
-        when $13::boolean then $14::text
+        when $15::boolean then $16::text
         else website
     end,
     updated_at = now()
-where id = $15
+where id = $17
 returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
-    cors_allowed_origins, logo_key, website, updated_at, created_at
+    cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
 set
     transcription_ceiling = case
-        when $16::boolean then $17::text
+        when $18::boolean then $19::text
         else transcription_ceiling
     end,
     transcription_default_mode = case
-        when $18::boolean then $19::text
+        when $20::boolean then $21::text
         else transcription_default_mode
     end,
     provider_policy_version = case
-        when $20::boolean then $21::text
+        when $22::boolean then $23::text
         else provider_policy_version
     end,
     recording_retention_seconds = case
-        when $22::boolean then $23::bigint
+        when $24::boolean then $25::bigint
         else recording_retention_seconds
     end,
     transcript_retention_seconds = case
-        when $24::boolean then $25::bigint
+        when $26::boolean then $27::bigint
         else transcript_retention_seconds
     end,
     source_window_seconds = case
-        when $26::boolean then $27::bigint
+        when $28::boolean then $29::bigint
         else source_window_seconds
     end,
     updated_at = now()
@@ -437,6 +450,7 @@ select
     updated_tenant.cors_allowed_origins,
     updated_tenant.logo_key,
     updated_tenant.website,
+    updated_tenant.recording_render_mode,
     updated_policy.transcription_ceiling,
     updated_policy.transcription_default_mode,
     updated_policy.provider_policy_version,
@@ -450,6 +464,8 @@ join updated_policy on updated_policy.tenant_id = updated_tenant.id
 `
 
 type UpdateTenantParams struct {
+	RecordingRenderModeSet        bool        `json:"recording_render_mode_set"`
+	RecordingRenderMode           string      `json:"recording_render_mode"`
 	NameSet                       bool        `json:"name_set"`
 	Name                          string      `json:"name"`
 	DefaultMediaPlaneSet          bool        `json:"default_media_plane_set"`
@@ -490,6 +506,7 @@ type UpdateTenantRow struct {
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
 	LogoKey                    pgtype.Text        `json:"logo_key"`
 	Website                    pgtype.Text        `json:"website"`
+	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
@@ -502,6 +519,8 @@ type UpdateTenantRow struct {
 
 func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (UpdateTenantRow, error) {
 	row := q.db.QueryRow(ctx, updateTenant,
+		arg.RecordingRenderModeSet,
+		arg.RecordingRenderMode,
 		arg.NameSet,
 		arg.Name,
 		arg.DefaultMediaPlaneSet,
@@ -542,6 +561,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		&i.CorsAllowedOrigins,
 		&i.LogoKey,
 		&i.Website,
+		&i.RecordingRenderMode,
 		&i.TranscriptionCeiling,
 		&i.TranscriptionDefaultMode,
 		&i.ProviderPolicyVersion,

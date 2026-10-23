@@ -1821,6 +1821,8 @@ export interface components {
       media_plane_provider_config: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name: string;
       provider_policy_version: string;
+      /** @enum {string} */
+      recording_render_mode: "on_demand" | "automatic";
       recording_retention_seconds: number;
       storage_provider_config: components["schemas"]["StorageProviderConfig"] | null;
       transcript_retention_seconds: number;
@@ -1955,6 +1957,8 @@ export interface components {
       media_plane_provider_config?: components["schemas"]["MediaPlaneProviderConfig"] | null;
       name?: string;
       provider_policy_version?: string;
+      /** @enum {string} */
+      recording_render_mode?: "on_demand" | "automatic";
       recording_retention_seconds?: number | null;
       storage_provider_config?: components["schemas"]["StorageProviderConfig"] | null;
       transcript_retention_seconds?: number | null;

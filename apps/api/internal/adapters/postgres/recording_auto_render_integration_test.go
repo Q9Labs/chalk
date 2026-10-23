@@ -13,11 +13,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// Capture completion must queue rendering without an export request.
+// Only opted-in Tenants queue rendering at capture completion.
 func TestCaptureCompletionRenderMode(t *testing.T) {
 	for _, mode := range []string{"on_demand", "automatic"} {
 		t.Run(mode, func(t *testing.T) { testCaptureCompletionRenderMode(t, mode) })
@@ -98,16 +100,38 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 		if err != nil || claimed.Authority == nil {
 			t.Fatalf("claim %d: %v", i, err)
 		}
-		_, err = sqlc.New(pool).CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
-			ID: pgtype.UUID{Bytes: claimed.ID.Bytes(), Valid: true}, AttemptCount: int32(claimed.AttemptCount),
-			FencingGeneration: claimed.FencingGeneration,
-			LeaseToken:        pgtype.Text{String: claimed.Authority.LeaseToken, Valid: true},
-			LeaseOwner:        pgtype.Text{String: claimed.Authority.LeaseOwner, Valid: true},
-			CaptureEpoch:      claimed.Authority.Envelope.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest,
-			RenderJobID:          pgtype.UUID{Bytes: newID().Bytes(), Valid: true},
-			PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
-			JourneyID: pgtype.UUID{Bytes: episodeID.Bytes(), Valid: true}, TraceID: pgtype.Text{String: "0123456789abcdef0123456789abcdef", Valid: true}, SpanID: pgtype.Text{String: "0123456789abcdef", Valid: true},
-		})
+		lease := recordingpipeline.LeaseInput{
+			JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
+			LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner,
+			CaptureEpoch: claimed.Authority.Envelope.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest,
+		}
+		traceID, err := trace.TraceIDFromHex("0123456789abcdef0123456789abcdef")
+		if err != nil {
+			t.Fatal(err)
+		}
+		spanID, err := trace.SpanIDFromHex("0123456789abcdef")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx = trace.ContextWithSpanContext(observability.ContextWithJourneyID(ctx, episodeID), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled}))
+		if mode == "automatic" {
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(ctx)
+			if _, err := postgres.NewRecordingPipelineRepository(sqlc.New(tx)).CompleteCapture(ctx, lease, newID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Rollback(ctx); err != nil {
+				t.Fatal(err)
+			}
+			var count int
+			if err := pool.QueryRow(ctx, `select (select count(*) from recording_jobs where recording_id=$1 and kind='render') + (select count(*) from observability_journey_events where attributes->>'recording_id'=$2)`, reservation.RecordingID.Bytes(), reservation.RecordingID.String()).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("rollback must discard both the render job and its journey: count=%d err=%v", count, err)
+			}
+		}
+		_, err = repository.CompleteCapture(ctx, lease, newID())
 		if err != nil {
 			t.Fatalf("complete %d: %v", i, err)
 		}
@@ -145,11 +169,6 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 		var automaticID string
 		if err := pool.QueryRow(ctx, `select id::text from recording_jobs where recording_id=$1 and kind='render' and state='pending'`, reservation.RecordingID.Bytes()).Scan(&automaticID); err != nil {
 			t.Fatalf("capture completion must queue a render without an export request: %v", err)
-		}
-		lease := recordingpipeline.LeaseInput{
-			JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
-			LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner,
-			CaptureEpoch: claimed.Authority.Envelope.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest,
 		}
 		if _, err := repository.CompleteCapture(ctx, lease, newID()); err != nil {
 			t.Fatalf("capture completion replay: %v", err)

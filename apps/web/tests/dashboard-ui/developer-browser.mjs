@@ -15,6 +15,10 @@ try {
     open: async (route) => {
       await fixture("reset");
       const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, ...(evidence ? { recordVideo: { dir: resolve(evidence, "videos"), size: { width: 1440, height: 1000 } } } : {}) });
+      await context.addCookies([
+        { name: "fx_session", value: "hasan", url: origin },
+        { name: "chalk_theme", value: "dark", url: origin },
+      ]);
       const tab = await context.newPage();
       await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });
       if (evidence) {
@@ -28,6 +32,10 @@ try {
   if (evidence) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     try {
+      await context.addCookies([
+        { name: "fx_session", value: "hasan", url: origin },
+        { name: "chalk_theme", value: "dark", url: origin },
+      ]);
       const tab = await context.newPage();
       await tab.goto(`${origin}/dashboard/developer`, { waitUntil: "networkidle" });
       await tab.getByRole("combobox", { name: "Make recording videos" }).selectOption("automatic");
