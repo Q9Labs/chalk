@@ -1,3 +1,4 @@
+import { commandFailure, commandFailureMessage } from "../control-bar/command-failure";
 import { useEffect, useMemo, useState } from "react";
 import type { IncomingMediaRequest } from "@q9labsai/chalk-client";
 
@@ -20,10 +21,6 @@ export interface MediaRequestDialogState {
   readonly pendingAction: MediaRequestAction | null;
   readonly errorMessage: string | null;
   readonly runAction: (action: MediaRequestAction) => void;
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "This media request could not be completed.";
 }
 
 function formatExpiryLabel(expiresAtMs: number, now: number): string | null {
@@ -66,7 +63,7 @@ export function useMediaRequestDialogState({ request, onDecline, onAllow, onActi
       .then(handler)
       .then(() => onActionError?.(null, action))
       .catch((cause: unknown) => {
-        const message = errorMessage(cause);
+        const message = commandFailureMessage(commandFailure(cause), request.kind === "start_camera" ? "camera" : "microphone", "request");
         setErrorMessage(message);
         onActionError?.(message, action);
       })

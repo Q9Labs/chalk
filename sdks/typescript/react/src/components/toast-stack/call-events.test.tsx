@@ -66,3 +66,46 @@ it("announces someone else's raised hand, but never your own, so no toast covers
   expect(events).toHaveLength(1);
   expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("Nora</b> raised a hand");
 });
+
+it.each(["client.internal_error", "connection.invalid_state"] as const)("does not expose internal media details for %s", (code) => {
+  const toast = mediaFailureToast({ code, recoverable: true, message: "setCameraEnabled belongs to an inactive connection" }, "camera");
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).not.toContain("setCameraEnabled");
+  expect(text).toBe(code === "connection.invalid_state" ? "That change was interrupted. Try again." : "Couldn’t change your camera settings. Try again.");
+  expect(text).not.toMatch(/reconnect|start/);
+});
+
+it.each(["client.internal_error", "connection.invalid_state"] as const)("preserves non-media command guidance for %s", (code) => {
+  const toast = mediaFailureToast({ code, recoverable: false, message: "Recording is not allowed for this participant." });
+  expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("Recording is not allowed for this participant.");
+});
+
+it.each([undefined, "camera", "microphone", "screen"] as const)("hides unhandled media failure details with source %s", (source) => {
+  const toast = mediaFailureToast({ code: "media.timeout", recoverable: true, message: "setCameraEnabled belongs to an inactive connection" }, source);
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).not.toContain("setCameraEnabled");
+  expect(text).not.toContain("inactive connection");
+});
+
+it("gives unsupported speaker selection safe non-retry guidance", () => {
+  const toast = mediaFailureToast({ code: "environment.unsupported", recoverable: false, message: "selectSpeaker internal implementation details" }, "speaker");
+  expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("This browser can’t change your speaker. Use your system sound settings to choose an output device.");
+});
+
+it.each([undefined, "camera", "microphone", "screen"] as const)("keeps expired request guidance terminal for %s", (source) => {
+  const toast = mediaFailureToast({ code: "media.request_invalid", recoverable: false, message: "private request details" }, source, "request");
+  expect(renderToStaticMarkup(<>{toast?.message}</>)).toBe("The media request is no longer active.");
+});
+
+it.each(["media.timeout", "media.capture_failed", "media.device_busy", "media.device_constraint_invalid", "media.permission_denied", "client.internal_error", "connection.invalid_state"] as const)("does not suggest retrying terminal %s failures", (code) => {
+  const toast = mediaFailureToast({ code, recoverable: false, message: "private media details" }, "camera", "start");
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).not.toContain("private media details");
+  expect(text).not.toMatch(/try again/i);
+});
+
+it.each(["camera", "microphone", "screen"] as const)("does not give start-permission advice when stopping %s fails", (source) => {
+  const toast = mediaFailureToast({ code: "media.permission_denied", recoverable: true, message: "private media details" }, source, "stop");
+  const text = renderToStaticMarkup(<>{toast?.message}</>);
+  expect(text).toBe(source === "screen" ? "Couldn’t stop screen sharing. Try again." : `Couldn’t change your ${source} settings. Try again.`);
+});

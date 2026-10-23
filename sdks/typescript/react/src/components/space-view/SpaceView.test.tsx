@@ -142,3 +142,60 @@ it.each(["observer", "custom-reader"])("keeps chat history available without wri
     client.dispose();
   }
 });
+
+it.each(["camera", "microphone", "push-to-talk"] as const)("keeps start intent in %s shortcut failures", async (shortcut) => {
+  const snapshot = createSnapshot(["publishAudio", "publishVideo"]);
+  const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" } });
+  const fail = async () => {
+    throw new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Capture implementation details" });
+  };
+  const client = { ...preview, media: { ...preview.media, setCameraEnabled: fail, setMicrophoneEnabled: fail } };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: shortcut === "camera" ? "e" : shortcut === "microphone" ? "d" : " ", code: shortcut === "push-to-talk" ? "Space" : undefined, ctrlKey: shortcut !== "push-to-talk", bubbles: true, cancelable: true })));
+    expect(container.textContent).toContain(`Your ${shortcut === "camera" ? "camera" : "microphone"} couldn’t start.`);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
+  }
+});
+
+it("retries a failed screen Off command as Off, not Start", async () => {
+  const snapshot = createSnapshot(["publishScreen"]);
+  const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" } });
+  await preview.media.setScreenShareEnabled(true);
+  const stop = vi.fn(async () => {
+    throw new SpaceClientError({ code: "media.capture_failed", recoverable: true, message: "Could not pause screen" });
+  });
+  const client = { ...preview, media: { ...preview.media, setScreenShareEnabled: stop } };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-part="share-split"] .chalk-shell-main')?.click());
+    expect(container.textContent).toContain("Couldn’t stop screen sharing.");
+    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
+    expect(retry).toBeDefined();
+    await act(async () => retry?.click());
+    expect(stop.mock.calls).toEqual([[false], [false]]);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
+  }
+});

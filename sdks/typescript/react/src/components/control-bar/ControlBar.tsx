@@ -1,3 +1,4 @@
+import { commandFailureMessage } from "./command-failure";
 import React, { useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
@@ -177,11 +178,11 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError } = useConnectedControlBarBehavior(props);
+  const { surfaceProps, commandError, commandSource, commandAction } = useConnectedControlBarBehavior(props);
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      {!props.onCommandError ? <CommandErrorAlert message={commandError?.message} /> : null}
+      {!props.onCommandError ? <CommandErrorAlert message={commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined} /> : null}
     </>
   );
 }

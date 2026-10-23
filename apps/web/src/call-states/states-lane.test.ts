@@ -7,6 +7,9 @@ import type { CallStateClient } from "./fixtures";
 declare global {
   interface Window {
     __terminalTestClient: CallStateClient;
+    __mediaTestClient: CallStateClient;
+    __mediaCalls: boolean[];
+    __rejectMediaCommand: (enabled: boolean) => Promise<void>;
   }
 }
 
@@ -27,6 +30,17 @@ afterAll(async () => {
     await stop?.();
   }
 });
+
+async function exposeFixtureClient(boundary: string, name: "__terminalTestClient" | "__mediaTestClient", mediaMethod?: "setCameraEnabled" | "setMicrophoneEnabled") {
+  await page.route(boundary, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    expect(body).toContain("return createCallStateClient(");
+    const client = mediaMethod ? `{ ...client, media: { ...client.media, ${mediaMethod}: (enabled) => window.__rejectMediaCommand(enabled) } }` : "client";
+    const factory = `function exposedClient(...args) { const client = createCallStateClient(...args); return window.${name} = ${client}; }`;
+    await route.fulfill({ response, body: `${factory}\n${body.replace("return createCallStateClient(", "return exposedClient(")}` });
+  });
+}
 
 it("joining exposes consent; the ready card copies the link and announces Copied", async () => {
   await page.goto(`${origin}/call-states.html?state=states-joining-recorded`);
@@ -147,8 +161,8 @@ it("maps typed command failures to source-specific recovery guidance", async () 
       ["media.device_not_found", `No ${source} found`],
       ["media.device_busy", `Your ${source} is being used by another app`],
       ["media.device_constraint_invalid", `Your ${source} doesn’t support these settings`],
-      ["media.capture_failed", `Your ${source} couldn’t start`],
-      ["client.internal_error", "The command could not be completed"],
+      ["media.capture_failed", `Couldn’t change your ${source} settings`],
+      ["client.internal_error", `Couldn’t change your ${source} settings. Try again.`],
     ]) {
       await page.getByRole("button", { name: code, exact: true }).click();
       await page.getByRole("alert").filter({ hasText: copy }).waitFor();
@@ -234,12 +248,7 @@ it.each([
   "preserves terminal flags through the real web page: $title",
   async ({ episodeEnded, removedByHost, title, rejoin }) => {
     const boundary = "**/src/call-states/web-space-boundary.ts";
-    await page.route(boundary, async (route) => {
-      const response = await route.fetch();
-      const body = await response.text();
-      expect(body).toContain("return createCallStateClient(");
-      await route.fulfill({ response, body: body.replace("return createCallStateClient(", "return window.__terminalTestClient = createCallStateClient(") });
-    });
+    await exposeFixtureClient(boundary, "__terminalTestClient");
     try {
       await page.goto(`${origin}/web-space-journey.html`);
       await page.getByTestId("stage").waitFor();
@@ -254,6 +263,51 @@ it.each([
       await page.getByRole("heading", { name: title, exact: true }).waitFor({ timeout: 5_000 });
       expect(await page.getByRole("button", { name: "Rejoin", exact: true }).count()).toBe(rejoin ? 1 : 0);
     } finally {
+      await page.unroute(boundary);
+    }
+  },
+  30_000,
+);
+
+it.each([
+  { gesture: "camera shortcut", source: "camera", key: "Control+e", release: false },
+  { gesture: "microphone shortcut", source: "microphone", key: "Control+d", release: false },
+  { gesture: "push-to-talk press", source: "microphone", key: "Space", release: false },
+  { gesture: "push-to-talk release", source: "microphone", key: "Space", release: true },
+])(
+  "keeps internal errors out of the $gesture toast",
+  async ({ source, key, release }) => {
+    const boundary = "**/src/call-states/states-lane.tsx";
+    await exposeFixtureClient(boundary, "__mediaTestClient", source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled");
+    try {
+      await page.goto(`${origin}/call-states.html?state=states-events`);
+      await page.locator('[data-part="call-frame"]').waitFor();
+      await page.evaluate(
+        ({ source, release }) => {
+          const client = window.__mediaTestClient;
+          window.__mediaCalls = [];
+          client.updateSnapshot((current) => ({ ...current, media: { ...current.media, local: { ...current.media.local, microphone: { ...current.media.local.microphone, state: "disabled" } } } }));
+          const reject = async (enabled: boolean) => {
+            window.__mediaCalls.push(enabled);
+            if (release && enabled) return;
+            throw new Error(source === "camera" ? "setCameraEnabled belongs to an inactive connection" : "setMicrophoneEnabled belongs to an inactive connection");
+          };
+          window.__rejectMediaCommand = reject;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        },
+        { source, release },
+      );
+      if (key === "Space") {
+        await page.keyboard.down(key);
+        if (release) await page.keyboard.up(key);
+      } else await page.keyboard.press(key);
+      const copy = release || source === "camera" ? `Couldn’t change your ${source} settings.` : `Your ${source} couldn’t start.`;
+      const notice = page.getByRole("alert").filter({ hasText: copy });
+      await notice.waitFor({ timeout: 5_000 });
+      expect(await page.getByRole("alert").allTextContents()).not.toEqual(expect.arrayContaining([expect.stringMatching(/setCameraEnabled|setMicrophoneEnabled|inactive connection/)]));
+      expect(await page.evaluate(() => window.__mediaCalls)).toEqual(release ? [true, false] : [source !== "camera"]);
+    } finally {
+      await page.keyboard.up("Space");
       await page.unroute(boundary);
     }
   },

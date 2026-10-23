@@ -1,6 +1,7 @@
 "use client";
+import { commandFailure, type MediaCommandAction, type MediaCommandSource } from "../control-bar/command-failure";
 import { CallLimbo } from "../call-limbo/CallLimbo";
-import { createSpaceClient, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
+import { createSpaceClient, type ClientFailure, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ChatUploadFile, type ClientEventMap, type GetAccess, type JoinOptions, type SpaceClient } from "@q9labsai/chalk-client";
 import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
@@ -227,13 +228,19 @@ function SpaceSurface(
   const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCan("drawWhiteboard");
-  const [commandError, setCommandError] = useState<string | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError.message : null));
-  const runCommand = useCallback(async (command: () => Promise<unknown>) => {
+  const [commandError, setCommandError] = useState<string | ClientFailure | null>(() => (connection.lastError?.recoverable && connection.lastError.code.startsWith("media.") ? connection.lastError : null));
+  const [commandSource, setCommandSource] = useState<MediaCommandSource>();
+  const [commandAction, setCommandAction] = useState<MediaCommandAction>();
+  const runCommand = useCallback(async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
     try {
       await command();
       setCommandError(null);
+      setCommandSource(undefined);
+      setCommandAction(undefined);
     } catch (cause) {
-      setCommandError(cause instanceof Error ? cause.message : "This command could not be completed.");
+      setCommandError(commandFailure(cause));
+      setCommandSource(source);
+      setCommandAction(action);
     }
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
@@ -278,6 +285,8 @@ function SpaceSurface(
       inviteLink={props.inviteLink}
       pickChatFiles={props.pickChatFiles}
       commandError={commandError ?? undefined}
+      commandSource={commandSource}
+      commandAction={commandAction}
       onDismissCommandError={() => setCommandError(null)}
       layout={props.layout}
       onLayoutChange={props.onLayoutChange}
@@ -290,7 +299,11 @@ function SpaceSurface(
       overlay={
         <>
           {media.incomingRequests[0] ? (
-            <MediaRequestDialog request={media.incomingRequests[0]} onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId))} onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId))} />
+            <MediaRequestDialog
+              request={media.incomingRequests[0]}
+              onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId), media.incomingRequests[0]!.kind === "start_camera" ? "camera" : "microphone", "request")}
+              onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId), media.incomingRequests[0]!.kind === "start_camera" ? "camera" : "microphone", "request")}
+            />
           ) : null}
         </>
       }

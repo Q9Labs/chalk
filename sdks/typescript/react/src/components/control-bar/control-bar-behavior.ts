@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { commandFailure } from "./command-failure";
+import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -105,7 +105,8 @@ export interface ControlBarProps {
   /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
   readonly onEndForEveryone?: () => void;
   readonly onLeft?: () => void;
-  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource) => void;
+  /** The second argument retains the published MediaSource contract; the third also identifies speaker commands. */
+  readonly onCommandError?: (failure: ClientFailure | null, source?: MediaSource, commandSource?: MediaCommandSource, action?: MediaCommandAction, retryCommand?: () => Promise<unknown>) => void;
   readonly participantColorSeed?: string;
   readonly participantGradientPreference?: ParticipantGradientPreference;
   readonly className?: string;
@@ -226,6 +227,8 @@ export function useControlBarSurfaceBehavior({
 interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
   readonly commandError: ClientFailure | null;
+  readonly commandSource?: MediaCommandSource;
+  readonly commandAction?: MediaCommandAction;
 }
 
 export function useConnectedControlBarBehavior(props: ControlBarProps): ConnectedControlBarBehavior {
@@ -250,17 +253,25 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const isRecordingPending = recordingStatus === "starting" || recordingStatus === "stopping";
   const [noiseSuppression, setNoiseSuppression] = useState(true);
   const [commandError, setCommandError] = useState<ClientFailure | null>(null);
+  const [commandSource, setCommandSource] = useState<MediaCommandSource>();
+  const [commandAction, setCommandAction] = useState<MediaCommandAction>();
 
   const run = useCallback(
-    async (command: () => Promise<unknown>, source?: MediaSource) => {
+    async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
       setCommandError(null);
-      props.onCommandError?.(null, source);
+      setCommandSource(undefined);
+      setCommandAction(undefined);
+      props.onCommandError?.(null, source === "speaker" ? undefined : source, source, action);
       try {
         await command();
       } catch (cause) {
         const failure = commandFailure(cause);
-        if (!props.onCommandError) setCommandError(failure);
-        props.onCommandError?.(failure, source);
+        if (!props.onCommandError) {
+          setCommandError(failure);
+          setCommandSource(source);
+          setCommandAction(action);
+        }
+        props.onCommandError?.(failure, source === "speaker" ? undefined : source, source, action, command);
       }
     },
     [props.onCommandError],
@@ -308,9 +319,13 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
           }, "microphone")
       : undefined,
     onStartScreenShare: (options) =>
-      void run(async () => {
-        await client.media.setScreenShareEnabled(true, options);
-      }, "screen"),
+      void run(
+        async () => {
+          await client.media.setScreenShareEnabled(true, options);
+        },
+        "screen",
+        "start",
+      ),
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
@@ -333,39 +348,43 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     selectedAudioOutput: media.selection.speaker ?? undefined,
     selectedVideoInput: media.selection.camera ?? undefined,
     onTestSpeaker: () =>
-      void run(async () => {
-        const context = new AudioContext();
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        const output = context.createMediaStreamDestination();
-        const audio = new Audio();
-        try {
-          if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
-          audio.srcObject = output.stream;
-          oscillator.connect(gain).connect(output);
-          gain.gain.value = 0.15;
-          oscillator.frequency.value = 440;
-          oscillator.start();
-          await audio.play();
-          await new Promise<void>((resolve) => {
-            oscillator.onended = () => resolve();
-            oscillator.stop(context.currentTime + 0.4);
-          });
-        } finally {
-          audio.pause();
-          audio.srcObject = null;
-          oscillator.disconnect();
-          gain.disconnect();
-          output.stream.getTracks().forEach((track) => track.stop());
-          await context.close();
-        }
-      }),
-    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone"),
-    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera"),
-    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone"),
-    onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId)),
-    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera"),
-    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen"),
+      void run(
+        async () => {
+          const context = new AudioContext();
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          const output = context.createMediaStreamDestination();
+          const audio = new Audio();
+          try {
+            if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
+            audio.srcObject = output.stream;
+            oscillator.connect(gain).connect(output);
+            gain.gain.value = 0.15;
+            oscillator.frequency.value = 440;
+            oscillator.start();
+            await audio.play();
+            await new Promise<void>((resolve) => {
+              oscillator.onended = () => resolve();
+              oscillator.stop(context.currentTime + 0.4);
+            });
+          } finally {
+            audio.pause();
+            audio.srcObject = null;
+            oscillator.disconnect();
+            gain.disconnect();
+            output.stream.getTracks().forEach((track) => track.stop());
+            await context.close();
+          }
+        },
+        "speaker",
+        "test",
+      ),
+    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone", microphoneEnabled ? "stop" : "start"),
+    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera", cameraEnabled ? "stop" : "start"),
+    onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone", "select"),
+    onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
+    onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),
+    onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
     onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
@@ -376,5 +395,5 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onEndForEveryone: props.onEndForEveryone,
   };
 
-  return { surfaceProps, commandError };
+  return { surfaceProps, commandError, commandSource, commandAction };
 }
