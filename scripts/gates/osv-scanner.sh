@@ -11,6 +11,14 @@ while IFS= read -r file; do
   esac
 done < <(git ls-files)
 
+# Enforce the importer scope that OSV's advisory-wide zod ignore cannot express.
+# Run before both the scan and the PR baseline filter: an old runtime copy fails too.
+for file in "${lockfiles[@]}"; do
+  case "${file}" in
+    pnpm-lock.yaml | */pnpm-lock.yaml) node "${script_directory}/zod-exception.mjs" "$file" ;;
+  esac
+done
+
 # The transitive resolver currently crashes on the Python requirements file.
 args=(scan source --no-resolve)
 for file in "${lockfiles[@]}"; do
