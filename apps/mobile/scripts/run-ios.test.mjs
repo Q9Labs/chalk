@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,6 +21,7 @@ function fixture({ state = "Shutdown", failure = false, signal } = {}) {
   const launched = path.join(root, "launched");
   const devices = path.join(root, "devices.json");
   const resources = path.join(root, "resources");
+  const reservations = path.join(root, "reservations");
   mkdirSync(resources);
   writeFileSync(
     devices,
@@ -35,6 +36,9 @@ function fixture({ state = "Shutdown", failure = false, signal } = {}) {
   );
   for (const directory of [path.join(mobile, "scripts"), path.join(mobile, "ios"), bin]) mkdirSync(directory, { recursive: true });
   cpSync(fileURLToPath(new URL("./run-ios.mjs", import.meta.url)), path.join(mobile, "scripts", "run-ios.mjs"));
+  const queue = path.join(root, "scripts", "gates", "remote-queue.py");
+  mkdirSync(path.dirname(queue), { recursive: true });
+  cpSync(fileURLToPath(new URL("../../../scripts/gates/remote-queue.py", import.meta.url)), queue);
   const tool = (name, body) => {
     writeFileSync(path.join(bin, name), `#!/usr/bin/env node\nconst fs = require("fs");\nconst args = process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(calls)}, ${JSON.stringify(name)} + " " + args.join(" ") + "\\n");\n${body}\n`);
     chmodSync(path.join(bin, name), 0o755);
@@ -49,6 +53,10 @@ if (["bootstatus", "shutdown"].includes(args[1])) {
   data.devices["iOS-27-0"].find(device => device.udid === args[2]).state = args[1] === "shutdown" ? "Shutdown" : "Booted";
   fs.writeFileSync(devicesPath, JSON.stringify(data));
 }
+if (args[1] === "shutdown" && process.env.CHALK_TEST_SHUTDOWN_GAP) {
+  fs.writeFileSync(process.env.CHALK_TEST_SHUTDOWN_GAP, "");
+  setTimeout(() => process.exit(0), 15000);
+}
 if (args[1] === "launch") fs.writeFileSync(${JSON.stringify(launched)}, "");`,
   );
   tool(
@@ -58,7 +66,15 @@ const app = require("path").join(args[args.indexOf("-derivedDataPath") + 1], "Bu
 fs.mkdirSync(app, { recursive: true });
 fs.writeFileSync(app + "/Info.plist", "");`,
   );
-  if (failure) tool("xcodebuild", "process.exit(42);");
+  if (failure)
+    tool(
+      "xcodebuild",
+      `
+if (process.env.CHALK_TEST_BUILD_READY) {
+  fs.writeFileSync(process.env.CHALK_TEST_BUILD_READY, "");
+  setTimeout(() => process.exit(42), 15000);
+} else process.exit(42);`,
+    );
   if (signal) tool("xcodebuild", `process.kill(process.ppid, ${JSON.stringify(signal)}); setTimeout(() => process.exit(0), 200);`);
   tool("plutil", `console.log("ai.q9labs.chalk.mobile");`);
   tool("pod", "");
@@ -74,18 +90,17 @@ if (args[0] === "start") {
   }, 50);
 }`,
   );
-  const launch = (env) =>
-    spawnSync(process.execPath, [path.join(mobile, "scripts", "run-ios.mjs"), "--device", "lane-slot-90"], {
-      env: { ...env, CHALK_REMOTE_RESOURCE_DIR: resources, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
-      encoding: "utf8",
-      timeout: 30000,
-    });
-  return { root, launch, resources, devices: () => JSON.parse(readFileSync(devices, "utf8")).devices["iOS-27-0"], calls: () => readFileSync(calls, "utf8").trim().split("\n") };
+  const environment = (env) => ({ ...process.env, CHALK_REMOTE_RESOURCE_DIR: resources, CHALK_SIMULATOR_RESERVATION_ROOT: reservations, ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}` });
+  const command = [path.join(mobile, "scripts", "run-ios.mjs"), "--device", "lane-slot-90"];
+  const launch = (env) => spawnSync(process.execPath, command, { env: environment(env), encoding: "utf8", timeout: 30000 });
+  const start = (env) => spawn(process.execPath, command, { env: environment(env), stdio: "ignore", detached: true });
+  const cleanup = () => spawnSync("python3", ["-c", "import runpy,sys; from pathlib import Path; runpy.run_path(sys.argv[1])['cleanup_resources'](Path(sys.argv[2]), 0)", queue, root], { env: environment({}), encoding: "utf8", timeout: 30000 });
+  return { root, launch, start, cleanup, resources, reservations, devices: () => JSON.parse(readFileSync(devices, "utf8")).devices["iOS-27-0"], calls: () => readFileSync(calls, "utf8").trim().split("\n") };
 }
 
 function freePort() {
   return new Promise((resolve) => {
-    const server = createServer().listen(0, "127.0.0.1", () => {
+    const server = createServer().listen(Number(process.env.CHALK_TEST_METRO_PORT ?? 0), "127.0.0.1", () => {
       const { port } = server.address();
       server.close(() => resolve(port));
     });
@@ -150,7 +165,7 @@ test("SIGKILL leaves a durable owned-simulator receipt for queue recovery", asyn
     assert.ifError(result.error);
     assert.equal(result.signal, "SIGKILL");
     assert.equal(fixtureRun.devices()[0].state, "Booted");
-    assert.equal(readFileSync(path.join(fixtureRun.resources, `simulator-${ownedUDID}`), "utf8"), `${ownedUDID}\n`);
+    assert.equal(JSON.parse(readFileSync(path.join(fixtureRun.resources, `simulator-${ownedUDID}`), "utf8")).shutdown, true);
   } finally {
     rmSync(fixtureRun.root, { recursive: true, force: true });
   }
@@ -170,3 +185,75 @@ for (const port of [undefined, "8081"]) {
     }
   });
 }
+
+async function waitForFile(file) {
+  const deadline = Date.now() + 10000;
+  while (!existsSync(file) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.ok(existsSync(file), `did not reach ${file}`);
+}
+
+async function stop(child) {
+  if (!child) return;
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
+  if (child.exitCode === null && child.signalCode === null) await new Promise((resolve) => child.once("close", resolve));
+}
+
+test("an already-booted simulator is reserved against other jobs", async () => {
+  const f = fixture({ state: "Booted", failure: true });
+  let owner;
+  try {
+    const ready = path.join(f.root, "owner-build");
+    owner = f.start({ RCT_METRO_PORT: String(await freePort()), CHALK_TEST_BUILD_READY: ready });
+    await waitForFile(ready);
+    const before = f.calls().length;
+    const second = f.launch({ RCT_METRO_PORT: String(Number(process.env.CHALK_TEST_SECOND_METRO_PORT ?? (await freePort()))), CHALK_REMOTE_RESOURCE_DIR: path.join(f.root, "other-job", "resources") });
+    assert.equal(second.status, 1, second.stdout + second.stderr);
+    assert.ok(
+      !f
+        .calls()
+        .slice(before)
+        .some((line) => line.startsWith("xcodebuild ")),
+      "another job reached the native build on a reserved Booted simulator",
+    );
+    assert.equal(f.devices()[0].state, "Booted");
+  } finally {
+    await stop(owner);
+    const cleanup = f.cleanup();
+    assert.equal(cleanup.status, 0, cleanup.stderr);
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+for (const sameJob of [false, true])
+  test(`stale cleanup after a shutdown crash cannot stop a new simulator owner (${sameJob ? "new generation" : "new job"})`, async () => {
+    const f = fixture({ failure: true });
+    let old;
+    let next;
+    try {
+      const gap = path.join(f.root, "shutdown-gap");
+      old = f.start({ RCT_METRO_PORT: String(await freePort()), CHALK_TEST_SHUTDOWN_GAP: gap });
+      await waitForFile(gap);
+      await stop(old);
+      assert.equal(f.devices()[0].state, "Shutdown");
+      const receipt = path.join(f.resources, `simulator-${ownedUDID}`);
+      const stale = readFileSync(receipt);
+      const recovered = f.cleanup();
+      assert.equal(recovered.status, 0, recovered.stderr);
+      const ready = path.join(f.root, "new-build");
+      next = f.start({ RCT_METRO_PORT: String(await freePort()), CHALK_REMOTE_RESOURCE_DIR: sameJob ? f.resources : path.join(f.root, "new-job", "resources"), CHALK_TEST_BUILD_READY: ready });
+      await waitForFile(ready);
+      assert.equal(f.devices()[0].state, "Booted");
+      writeFileSync(receipt, stale);
+      const cleanup = f.cleanup();
+      assert.equal(cleanup.status, 0, cleanup.stderr);
+      assert.equal(f.devices()[0].state, "Booted", "old job cleanup shut down the new owner's simulator");
+    } finally {
+      await stop(old);
+      await stop(next);
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });

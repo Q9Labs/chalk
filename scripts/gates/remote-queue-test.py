@@ -29,6 +29,7 @@ class QueueTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.old_environment = dict(os.environ)
         os.environ['CHALK_REMOTE_SLOTS'] = '1'
+        os.environ['CHALK_SIMULATOR_RESERVATION_ROOT'] = str(self.root / 'simulator-reservations')
         os.environ['PATH'] = str(self.root) + ':' + os.environ['PATH']
         vm_stat = self.root / 'vm_stat'
         vm_stat.write_text('#!/bin/sh\necho "Mach Virtual Memory Statistics: (page size of 16384 bytes)"\necho "Pages free: 524288."\necho "Pages inactive: 0."\necho "Pages speculative: 0."\n')
@@ -502,28 +503,30 @@ def pause(point):
         foreign = '22222222-2222-4222-8222-222222222222'
         state = self.root / 'simulators.json'
         state.write_text(json.dumps({'devices': {'iOS': [
-            {'udid': owned, 'state': 'Booted'}, {'udid': foreign, 'state': 'Booted'}]}}))
+            {'udid': owned, 'state': 'Shutdown'}, {'udid': foreign, 'state': 'Booted'}]}}))
         xcrun = self.root / 'xcrun'
         xcrun.write_text('#!/usr/bin/env python3\n' + f'''
 import json,pathlib,sys
 path=pathlib.Path({str(state)!r}); data=json.loads(path.read_text()); args=sys.argv[1:]
 if args[:3]==['simctl','list','devices']: print(json.dumps(data))
-elif args[:2]==['simctl','shutdown']:
-    next(device for device in data['devices']['iOS'] if device['udid']==args[2])['state']='Shutdown'
+elif args[:2] in (['simctl','shutdown'], ['simctl','bootstatus']):
+    next(device for device in data['devices']['iOS'] if device['udid']==args[2])['state']='Shutdown' if args[1]=='shutdown' else 'Booted'
     path.write_text(json.dumps(data))
 else: sys.exit(2)
 ''')
         xcrun.chmod(0o700)
         ready = self.root / 'simulator-ready'
-        self.submit('simulator-kill', f'mkdir -p "$CHALK_REMOTE_RESOURCE_DIR"\n'
-                    f'printf "%s\\n" {owned} > "$CHALK_REMOTE_RESOURCE_DIR/simulator-{owned}"\n'
+        self.submit('simulator-kill', f'export PATH={shlex.quote(str(self.root))}:"$PATH"\n'
+                    f'mkdir -p "$CHALK_REMOTE_RESOURCE_DIR"\n'
+                    f'{shlex.quote(sys.executable)} {shlex.quote(str(HELPER.resolve()))} simulator-reserve "$CHALK_REMOTE_RESOURCE_DIR" {owned} {"a" * 32}\n'
+                    f'xcrun simctl bootstatus {owned} -b\n'
                     f'touch "{ready}"\nsleep 15')
         self.release_dispatcher()
         row = self.wait('simulator-kill', 'running')
         deadline = time.monotonic() + 5
         while not ready.exists() and time.monotonic() < deadline:
             time.sleep(.02)
-        self.assertTrue(ready.exists())
+        self.assertTrue(ready.exists(), (self.root / 'jobs/simulator-kill/output.log').read_text())
         os.kill(row['pid'], signal.SIGKILL)
         self.assertEqual(self.wait('simulator-kill')['result'], 137)
         self.assertEqual([device['state'] for device in json.loads(state.read_text())['devices']['iOS']],

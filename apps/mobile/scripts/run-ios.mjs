@@ -1,5 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,8 +21,10 @@ if (!port || port === "8081") {
 let activeTool;
 let metro;
 let interrupted;
-let ownedDevice;
-let simulatorReceipt;
+let reservedDevice;
+const generation = randomUUID().replaceAll("-", "");
+const resources = process.env.CHALK_REMOTE_RESOURCE_DIR ?? path.join(tmpdir(), `chalk-ios-${generation}`);
+const queue = fileURLToPath(new URL("../../../scripts/gates/remote-queue.py", import.meta.url));
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     interrupted ??= signal;
@@ -73,18 +77,8 @@ async function waitForMetro(metro) {
 
 try {
   const device = await simulator();
-  if (!["Booted", "Shutdown"].includes(device.state)) throw new Error(`simulator ${device.udid} is ${device.state}; wait for it to settle before launching`);
-  if (device.state === "Shutdown") {
-    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(device.udid)) throw new Error(`invalid simulator UDID: ${device.udid}`);
-    if (process.env.CHALK_REMOTE_RESOURCE_DIR) {
-      mkdirSync(process.env.CHALK_REMOTE_RESOURCE_DIR, { recursive: true });
-      const receipt = path.join(process.env.CHALK_REMOTE_RESOURCE_DIR, `simulator-${device.udid}`);
-      // Record the boot intent first: SIGKILL can land immediately after simctl boots the device.
-      writeFileSync(receipt, `${device.udid}\n`, { flag: "wx" });
-      simulatorReceipt = receipt;
-    }
-    ownedDevice = device.udid;
-  }
+  reservedDevice = device.udid.toUpperCase();
+  await run("python3", [queue, "simulator-reserve", resources, reservedDevice, generation]);
   await run("xcrun", ["simctl", "bootstatus", device.udid, "-b"]);
   const lock = (file) => (existsSync(file) ? readFileSync(file, "utf8") : undefined);
   const podfileLock = lock(path.join(ios, "Podfile.lock"));
@@ -116,11 +110,10 @@ try {
 } finally {
   if (interrupted) process.exitCode = interrupted === "SIGINT" ? 130 : 143;
   metro?.kill(interrupted ?? "SIGTERM");
-  if (ownedDevice) {
+  if (reservedDevice) {
     try {
-      const result = spawnSync("xcrun", ["simctl", "shutdown", ownedDevice], { stdio: "inherit", timeout: 30_000 });
-      if (result.status !== 0) throw new Error(`simulator ${ownedDevice} shutdown exited with ${result.status ?? result.error ?? result.signal}`);
-      if (simulatorReceipt) unlinkSync(simulatorReceipt);
+      const result = spawnSync("python3", [queue, "simulator-release", resources, reservedDevice, generation], { stdio: "inherit", timeout: 90_000 });
+      if (result.status !== 0) throw new Error(`simulator ${reservedDevice} release exited with ${result.status ?? result.error ?? result.signal}`);
     } catch (error) {
       console.error(`[ios] ${error.message}; retaining simulator receipt for queue cleanup`);
       process.exitCode = 1;

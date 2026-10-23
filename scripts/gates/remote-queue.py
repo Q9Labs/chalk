@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Durable M4 queue. Standard library only; helpers are installed by content hash."""
 import argparse
+from contextlib import contextmanager
 import ctypes
 import fcntl
 import hashlib
@@ -243,25 +244,74 @@ def stop_job(job, pid, started, slot=None):
         time.sleep(.05)
 
 
+@contextmanager
+def simulator_lock(udid):
+    if not re.fullmatch(r'[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}', udid):
+        raise ValueError('invalid simulator UDID')
+    root = Path(os.environ.get('CHALK_SIMULATOR_RESERVATION_ROOT',
+                               Path.home() / '.local/share/chalk-remote/simulators'))
+    root.mkdir(parents=True, exist_ok=True)
+    # Never unlink the guard: replacing its inode would let two callers hold different locks.
+    with (root / (udid + '.lock')).open('a') as guard:
+        fcntl.flock(guard, fcntl.LOCK_EX)
+        yield root / (udid + '.json')
+
+
+def simulator_states():
+    found = subprocess.run(['xcrun', 'simctl', 'list', 'devices', '-j'], check=True,
+                           capture_output=True, text=True, timeout=30)
+    return {device['udid'].upper(): device['state']
+            for group in json.loads(found.stdout)['devices'].values() for device in group}
+
+
+def reserve_simulator(resources, udid, generation):
+    resources = resources.resolve()
+    if not re.fullmatch(r'[0-9a-f]{32}', generation):
+        raise ValueError('invalid simulator generation')
+    with simulator_lock(udid) as owner:
+        if owner.exists():
+            raise RuntimeError(f'simulator {udid} is reserved; its owning job must finish cleanup before reuse')
+        state = simulator_states().get(udid)
+        if state not in ('Booted', 'Shutdown'):
+            raise RuntimeError(f'simulator {udid} is {state}; wait for it to settle before launching')
+        claim = {'job': str(resources), 'generation': generation, 'shutdown': state == 'Shutdown'}
+        resources.mkdir(parents=True, exist_ok=True)
+        with (resources / ('simulator-' + udid)).open('x') as receipt:
+            receipt.write(json.dumps(claim))
+        temporary = owner.with_suffix('.' + generation)
+        temporary.write_text(json.dumps(claim))
+        temporary.replace(owner)
+
+
+def release_simulator(resources, udid, generation=None):
+    resources = resources.resolve()
+    with simulator_lock(udid) as owner:
+        receipt = resources / ('simulator-' + udid)
+        if not receipt.exists():
+            return
+        if receipt.is_symlink():
+            raise ValueError('invalid simulator resource receipt')
+        claim = json.loads(receipt.read_text())
+        if (claim.get('job') != str(resources) or not re.fullmatch(r'[0-9a-f]{32}', claim.get('generation', ''))
+                or type(claim.get('shutdown')) is not bool):
+            raise ValueError('invalid simulator resource receipt')
+        if generation is not None and claim['generation'] != generation:
+            return
+        if owner.exists() and json.loads(owner.read_text()) == claim:
+            if claim['shutdown'] and simulator_states().get(udid, 'Shutdown') != 'Shutdown':
+                subprocess.run(['xcrun', 'simctl', 'shutdown', udid], check=True, capture_output=True, timeout=30)
+            # A crash here retains the reservation. After retiring it, any leftover receipt is
+            # stale and cannot match a later job/generation, even if it reuses this job directory.
+            owner.unlink()
+        receipt.unlink()
+
+
 def cleanup_resources(job, slot):
     resources = job / 'resources'
     if not resources.is_dir():
         return
-    simulator_receipts = list(resources.glob('simulator-*'))
-    for receipt in simulator_receipts:
-        udid = receipt.name.removeprefix('simulator-')
-        if (not re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', udid)
-                or receipt.is_symlink() or receipt.read_text() != udid + '\n'):
-            raise ValueError('invalid simulator resource receipt')
-    if simulator_receipts:
-        found = subprocess.run(['xcrun', 'simctl', 'list', 'devices', '-j'], check=True,
-                               capture_output=True, text=True, timeout=30)
-        devices = {device['udid']: device['state'] for group in json.loads(found.stdout)['devices'].values() for device in group}
-        for receipt in simulator_receipts:
-            udid = receipt.name.removeprefix('simulator-')
-            if devices.get(udid, 'Shutdown') != 'Shutdown':
-                subprocess.run(['xcrun', 'simctl', 'shutdown', udid], check=True, capture_output=True, timeout=30)
-            receipt.unlink()
+    for receipt in resources.glob('simulator-*'):
+        release_simulator(resources, receipt.name.removeprefix('simulator-'))
     receipts = []
     for service, prefix in [('postgres', 'chalk-postgres-slot'), ('redis', 'chalk-slot')]:
         receipt = resources / service
@@ -680,6 +730,11 @@ def main():
     parser.add_argument('--root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--isolated', action='store_true', help='fake workloads only; bypass shared M4 admission')
     sub = parser.add_subparsers(dest='action', required=True)
+    for action in ('simulator-reserve', 'simulator-release'):
+        command = sub.add_parser(action)
+        command.add_argument('resources', type=Path)
+        command.add_argument('udid')
+        command.add_argument('generation')
     submit_parser = sub.add_parser('submit')
     submit_parser.add_argument('id')
     submit_parser.add_argument('--exclusive', action='store_true')
@@ -695,6 +750,10 @@ def main():
     worker_parser.add_argument('id')
     worker_parser.add_argument('work')
     args = parser.parse_args()
+    if args.action in ('simulator-reserve', 'simulator-release'):
+        operation = reserve_simulator if args.action == 'simulator-reserve' else release_simulator
+        operation(args.resources, args.udid, args.generation)
+        return
     if hasattr(args, 'id') and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}', args.id):
         parser.error('run ID must contain 1-128 letters, digits, underscores or hyphens')
     root = args.root.resolve()
