@@ -1,4 +1,4 @@
 [[IgnoredVulns]]
 id = "GO-2026-5932"
-ignoreUntil = 2026-10-09
-reason = "The advisory covers golang.org/x/crypto/openpgp, which is unmaintained and has no fixed version. This module depends on x/crypto but does not import openpgp; revisit if openpgp usage is added or OSV publishes a fix path."
+ignoreUntil = 2026-11-24
+reason = "The advisory covers golang.org/x/crypto/openpgp, which is unmaintained and has no fixed version. Call analysis with govulncheck -scan=symbol -show=verbose ./... on 2026-10-24 reports no vulnerable calls or imported vulnerable packages; Chalk does not import openpgp. Revisit if openpgp usage is added or OSV publishes a fix path."
