@@ -202,6 +202,24 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
                "extensions" => [%{"name" => "unknown"}]
              })
 
+    hello = fn extensions ->
+      GeneratedWhiteboardV1.decode_client_frame(%{
+        "type" => "hello",
+        "protocol" => "whiteboard-v1",
+        "token" => "participant-token",
+        "cursor" => nil,
+        "extensions" => extensions
+      })
+    end
+
+    # The TypeScript contract accepts the drawing policy on its own, so Sync must too.
+    assert {:ok, {:hello, _hello}} = hello.([%{"name" => "draw_policy_v1"}])
+
+    assert {:ok, {:hello, _hello}} =
+             hello.([%{"name" => "presentation_v1"}, %{"name" => "draw_policy_v1"}])
+
+    assert {:error, :invalid_hello} = hello.([%{"name" => "draw_policy_v1", "extra" => true}])
+
     assert GeneratedWhiteboardV1.valid_server_frame?(%{
              "type" => "presentation_updated",
              "scene_id" => @scene_id,

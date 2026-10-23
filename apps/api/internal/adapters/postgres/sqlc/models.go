@@ -1263,6 +1263,25 @@ type SyncScreenShareLease struct {
 	HardExpiresAt      pgtype.Timestamptz `json:"hard_expires_at"`
 }
 
+type SyncWhiteboardDrawPolicy struct {
+	TenantID               pgtype.UUID        `json:"tenant_id"`
+	SpaceID                pgtype.UUID        `json:"space_id"`
+	EpisodeID              pgtype.UUID        `json:"episode_id"`
+	Policy                 string             `json:"policy"`
+	UpdatedByParticipantID pgtype.UUID        `json:"updated_by_participant_id"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SyncWhiteboardDrawPolicyReceipt struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	SpaceID       pgtype.UUID        `json:"space_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ParticipantID pgtype.UUID        `json:"participant_id"`
+	OperationID   string             `json:"operation_id"`
+	Policy        string             `json:"policy"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+}
+
 type SyncWhiteboardElement struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	SpaceID      pgtype.UUID        `json:"space_id"`

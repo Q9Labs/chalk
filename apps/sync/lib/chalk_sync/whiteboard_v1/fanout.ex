@@ -1,5 +1,5 @@
 defmodule ChalkSync.WhiteboardV1.Fanout do
-  @moduledoc "Disposable local and Postgres whiteboard-v1 durable-head/transient fan-out."
+  @moduledoc "Disposable local and Postgres whiteboard-v1 durable-head/access/transient fan-out."
 
   use GenServer
 
@@ -11,6 +11,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
 
   @head_channel "chalk_whiteboard_v1_heads"
   @cursor_channel "chalk_whiteboard_v1_cursors"
+  @access_channel "chalk_whiteboard_v1_access"
   @server __MODULE__
 
   def start_link(options \\ []) do
@@ -24,6 +25,10 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
     Enum.each(:pg.get_members(group(episode)), &send(&1, {:whiteboard_v1_frame, frame}))
     :ok
   end
+
+  @doc "Payload for the access channel, notified in the transaction that changes who can draw."
+  def access_payload(%EpisodeKey{} = episode),
+    do: Enum.join([episode.tenant_id, episode.space_id, episode.episode_id], ":")
 
   def publish_cursor(%EpisodeKey{} = episode, frame, server \\ @server) do
     publish_transient(episode, frame, server)
@@ -51,6 +56,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
 
     {:ok, head_ref} = Postgrex.Notifications.listen(notifications, @head_channel)
     {:ok, cursor_ref} = Postgrex.Notifications.listen(notifications, @cursor_channel)
+    {:ok, access_ref} = Postgrex.Notifications.listen(notifications, @access_channel)
     {:ok, publisher} = Postgrex.start_link(connection_options)
 
     {:ok,
@@ -58,6 +64,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
        notifications: notifications,
        head_ref: head_ref,
        cursor_ref: cursor_ref,
+       access_ref: access_ref,
        publisher: publisher,
        source_id: source_id
      }}
@@ -99,6 +106,25 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
 
       :error ->
         Logger.warning("discarded malformed whiteboard-v1 head notification")
+    end
+
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {:notification, notifications, access_ref, @access_channel, payload},
+        %{notifications: notifications, access_ref: access_ref} = state
+      ) do
+    with [tenant_id, space_id, episode_id] <- String.split(payload, ":"),
+         {:ok, episode} <-
+           episode_key(%{
+             "tenant_id" => tenant_id,
+             "space_id" => space_id,
+             "episode_id" => episode_id
+           }) do
+      Enum.each(:pg.get_members(group(episode)), &send(&1, :whiteboard_v1_access_changed))
+    else
+      _ -> Logger.warning("discarded malformed whiteboard-v1 access notification")
     end
 
     {:noreply, state}

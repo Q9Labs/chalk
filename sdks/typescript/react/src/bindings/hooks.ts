@@ -84,6 +84,15 @@ export function useCan(capability: Capability): boolean {
   return useSelf().can(capability);
 }
 
+/** Whether this person can draw on the board. Sync decides from the call's policy, their role and the host's choice for them; until the board subscription is live, the role default stands in. A Sync without the drawing policy doesn't report role changes to the board, so there the live role still limits drawing. */
+export function useCanDrawWhiteboard(): boolean {
+  const whiteboard = useWhiteboard();
+  const roleDefault = useCan("drawWhiteboard");
+  if (whiteboard.engine.status === "unsubscribed") return roleDefault;
+  if (whiteboard.access.policy === null) return roleDefault && whiteboard.access.canDraw;
+  return whiteboard.access.canDraw;
+}
+
 /** Local capture state and the action that opens the browser's share picker. */
 export function useScreenShare() {
   const client = useSpaceClient();

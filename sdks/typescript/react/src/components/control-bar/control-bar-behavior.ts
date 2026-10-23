@@ -4,7 +4,7 @@ import type React from "react";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
-import { useCan, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MediaDevice {
@@ -242,7 +242,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const canPublishScreen = useCan("publishScreen");
   const canSendReaction = useCan("sendReaction");
   const canRaiseHand = useCan("raiseHand");
-  const canDrawWhiteboard = useCan("drawWhiteboard");
+  const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageRecording = useCan("manageRecording");
   const live = useConnection().status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";

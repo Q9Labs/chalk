@@ -69,7 +69,16 @@ export type ChalkWhiteboardV1Commit = {
   readonly revision: string;
 };
 
-export type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_presentation" | "get_file_download";
+export type ChalkWhiteboardV1Operation = "start_scene_subscription" | "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" | "get_file_download";
+
+/** Who can draw in the call. Hosts, the people whose role can manage the board, can always draw under `hosts` and `picked`. */
+export type ChalkWhiteboardDrawPolicy = WhiteboardV1DrawPolicy;
+
+/** A host's choice for one person. Under `everyone` it overrides the role default; under `picked` `true` means picked; under `hosts` it is kept but ignored. */
+export type ChalkWhiteboardDrawPermission = {
+  readonly participantId: string;
+  readonly canDraw: boolean;
+};
 
 export type ChalkWhiteboardV1ErrorCode = "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "storage_unavailable" | "file_transfer_failed";
 
@@ -115,13 +124,15 @@ export type ChalkWhiteboardV1Transport = {
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;
   readonly setDrawPermission: (participantId: string, canDraw: boolean) => Promise<void>;
+  /** Sets the call-wide drawing policy. Requires manageWhiteboard and a Sync server with draw_policy_v1. */
+  readonly setDrawPolicy?: (policy: ChalkWhiteboardDrawPolicy) => Promise<void>;
   readonly setPresentation?: (presenting: boolean) => Promise<void>;
   readonly files: ChalkWhiteboardV1FileTransport;
 };
 
 export type ChalkWhiteboardV1PendingOperation = {
   readonly operationId: string;
-  readonly frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_presentation" }>;
+  readonly frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" }>;
   readonly createdAt: number;
   readonly bytes: number;
 };
@@ -157,12 +168,17 @@ export type ChalkWhiteboardSummary = {
   readonly sceneId: string | null;
   readonly revision: string | null;
   readonly capabilities: readonly ChalkWhiteboardV1Capability[];
+  /** This person's drawing permission, computed by Sync from the policy, their role and the host's choice for them. */
   readonly canDraw: boolean;
   readonly canClear: boolean;
+  /** The call-wide policy, or null when the Sync server predates draw_policy_v1. */
+  readonly drawPolicy: ChalkWhiteboardDrawPolicy | null;
+  /** The host's per-person choices for people in the call. Empty unless this person is a host. */
+  readonly drawPermissions: readonly ChalkWhiteboardDrawPermission[];
   readonly presenting: boolean;
   readonly error: ChalkWhiteboardV1Failure | null;
 };
-import type { WhiteboardV1ClientFrame } from "../generated/whiteboard-v1";
+import type { WhiteboardV1ClientFrame, WhiteboardV1DrawPolicy } from "../generated/whiteboard-v1";
 import type { ChalkWhiteboardV1Capability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncWebSocketFactory } from "../sync/types";
 

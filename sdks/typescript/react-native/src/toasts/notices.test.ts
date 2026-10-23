@@ -43,7 +43,7 @@ function snapshot({ status = "live", roster = [], selfCapabilities = [], microph
     chat: { status: "ready", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
     recording: { current: recording ? { recordingId: "r1", status: recording, failureCode: null } : null },
-    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null } },
+    whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }, access: { canDraw: false, policy: null, permissions: [] } },
     offline: { pending: [], decisionNeeded: false, policy: "ask" },
   };
 }

@@ -74,6 +74,21 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
          }}
     end
 
+    def draw_access(_identity) do
+      Process.get(:whiteboard_draw_access) ||
+        {:ok,
+         %{
+           draw_policy: "hosts",
+           can_draw: false,
+           capabilities: ["drawWhiteboard"],
+           grants: []
+         }}
+    end
+
+    def set_draw_policy(_identity, _operation) do
+      Process.get(:whiteboard_draw_policy_failure)
+    end
+
     def read_after(_identity, scene_id, 4) do
       {:ok,
        Process.get(:whiteboard_events_after_four) ||
@@ -131,6 +146,112 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert JSON.decode!(encoded) == latest
     assert delivered.pending_bring == nil
     refute_received {:whiteboard_v1_frame, _}
+  end
+
+  test "sends a drawing access change that arrives during recovery after the final ACK" do
+    state = recovering_state()
+
+    assert {:ok, deferred} = SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, state)
+    assert deferred.access_stale
+    refute_received :whiteboard_v1_access_changed
+
+    assert {:ok, live} = receive_frame(snapshot_ack(deferred), deferred)
+    assert live.phase == :live
+    assert_received :whiteboard_v1_access_changed
+
+    assert {:push, {:text, encoded}, _state} =
+             SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, %{
+               live
+               | can_draw: true
+             })
+
+    assert %{"type" => "permission_updated", "can_draw" => false} = JSON.decode!(encoded)
+  end
+
+  test "reads drawing access again later, so a missed notification is repaired" do
+    state = %{live_access_state() | draw_policy_negotiated: true}
+
+    assert {:push, {:text, encoded}, read} =
+             SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, state)
+
+    assert %{"type" => "draw_access", "policy" => "hosts"} = JSON.decode!(encoded)
+    assert Process.read_timer(read.access_timer) > 25_000
+
+    assert {:ok, unchanged} = SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, read)
+    refute Process.read_timer(read.access_timer)
+
+    Process.put(
+      :whiteboard_draw_access,
+      {:ok,
+       %{draw_policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard"], grants: []}}
+    )
+
+    assert {:push, {:text, encoded}, _state} =
+             SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, unchanged)
+
+    assert %{"type" => "draw_access", "policy" => "everyone", "can_draw" => true} =
+             JSON.decode!(encoded)
+  end
+
+  test "keeps one access retry however many changes arrive while Sync is unavailable" do
+    Process.put(:whiteboard_draw_access, {:retryable, :storage_unavailable})
+
+    assert {:ok, first} =
+             SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, live_access_state())
+
+    assert {:ok, second} = SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, first)
+    refute Process.read_timer(first.access_timer)
+    assert Process.read_timer(second.access_timer) <= 1_000
+  end
+
+  test "rejects a policy change from a client that did not negotiate draw_policy_v1" do
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+    Process.cancel_timer(initial.hello_timer)
+
+    state = %{
+      initial
+      | phase: :live,
+        connected_at: connected_earlier(),
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4
+    }
+
+    frame = %{
+      "type" => "set_draw_policy",
+      "operation_id" => "whiteboard-policy-00001",
+      "policy" => "hosts"
+    }
+
+    assert {:push, {:text, encoded}, _state} = receive_frame(frame, state)
+
+    assert %{
+             "type" => "operation_error",
+             "operation" => "set_draw_policy",
+             "code" => "unavailable"
+           } =
+             JSON.decode!(encoded)
+  end
+
+  test "names the policy cap when an Episode has used up its policy changes" do
+    Process.put(:whiteboard_draw_policy_failure, {:error, :draw_policy_limit})
+    state = %{live_access_state() | draw_policy_negotiated: true}
+
+    frame = %{
+      "type" => "set_draw_policy",
+      "operation_id" => "whiteboard-policy-00001",
+      "policy" => "hosts"
+    }
+
+    assert {:push, {:text, encoded}, _state} = receive_frame(frame, state)
+
+    assert %{
+             "type" => "operation_error",
+             "operation" => "set_draw_policy",
+             "code" => "rate_limited",
+             "recoverable" => false,
+             "message" => "This Episode has reached its limit of drawing policy changes"
+           } = JSON.decode!(encoded)
   end
 
   test "serializes overlapping snapshot requests without interrupting recovery" do
@@ -337,6 +458,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         "participant_id" => @participant_id,
         "can_draw" => true
       },
+      %{"type" => "set_draw_policy", "operation_id" => operation_id, "policy" => "hosts"},
       %{"type" => "set_presentation", "operation_id" => operation_id, "presenting" => true}
     ]
 
@@ -387,6 +509,21 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                },
                state
              )
+  end
+
+  defp live_access_state do
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+    Process.cancel_timer(initial.hello_timer)
+
+    %{
+      initial
+      | phase: :live,
+        connected_at: connected_earlier(),
+        identity: identity(),
+        can_draw: false,
+        scene_id: @scene_id,
+        revision: 4
+    }
   end
 
   defp recovering_state do

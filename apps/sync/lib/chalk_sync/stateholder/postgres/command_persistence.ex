@@ -9,6 +9,8 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Command, as: SQL
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Fanout, as: WhiteboardFanout
+  alias ChalkSync.WhiteboardV1.SQL, as: WhiteboardSQL
 
   @max_event_bytes 32 * 1024
 
@@ -185,6 +187,14 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
       Scope.episode(identity.episode) ++
         [Scope.uuid(event.payload["participant_id"]), event.payload["role"]]
     )
+
+    # A role change can make someone a host or stop them being one, which
+    # changes who can draw on the board.
+    Postgrex.query!(connection, WhiteboardSQL.notify_access(), [
+      WhiteboardFanout.access_payload(identity.episode)
+    ])
+
+    :ok
   end
 
   defp update_command_product(_connection, _identity, _event), do: :ok

@@ -96,7 +96,11 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
           policy: "ask",
         }
       : base.offline,
-    whiteboard: { open: Boolean(options.board), engine: { status: options.board ? "ready" : "unsubscribed", sceneId: options.board ? "scene-1" : null, revision: options.board ? "1" : null, presenting: Boolean(options.board), error: null } },
+    whiteboard: {
+      open: Boolean(options.board),
+      engine: { status: options.board ? "ready" : "unsubscribed", sceneId: options.board ? "scene-1" : null, revision: options.board ? "1" : null, presenting: Boolean(options.board), error: null },
+      access: { canDraw: capabilities.includes("drawWhiteboard"), policy: "everyone", permissions: [] },
+    },
   };
 }
 
@@ -149,7 +153,11 @@ export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixtu
   const emit = <TEvent extends ClientEventName>(event: TEvent, payload: ClientEventMap[TEvent]) => {
     for (const handler of handlers.get(event) ?? []) (handler as (event: ClientEventMap[TEvent]) => void)(payload);
   };
-  const transport = boardTransport(board, (presenting) => client.updateSnapshot((current) => ({ ...current, whiteboard: { open: presenting, engine: { ...current.whiteboard.engine, status: "ready", sceneId: "scene-1", revision: "1", presenting } } })));
+  const transport = boardTransport(
+    board,
+    (presenting) => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, open: presenting, engine: { ...current.whiteboard.engine, status: "ready", sceneId: "scene-1", revision: "1", presenting } } })),
+    (access) => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, access: access(current.whiteboard.access) } })),
+  );
   // The live client goes from leaving to left once the connection closes; the preview client stops at leaving.
   const previewLeave = client.leave.bind(client);
   const leave = async () => {
@@ -159,7 +167,9 @@ export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixtu
   return Object.assign(client, { on, emit, leave, whiteboard: { transport: () => transport } });
 }
 
-function boardTransport(board: BoardFixture, present: (presenting: boolean) => void): ChalkWhiteboardV1Transport {
+type WhiteboardAccess = SpaceSnapshot["whiteboard"]["access"];
+
+function boardTransport(board: BoardFixture, present: (presenting: boolean) => void, access: (change: (current: WhiteboardAccess) => WhiteboardAccess) => void): ChalkWhiteboardV1Transport {
   const listeners = new Set<(event: ChalkWhiteboardV1Event) => void>();
   let revision = 1;
   let stopActivity: (() => void) | undefined;
@@ -196,7 +206,9 @@ function boardTransport(board: BoardFixture, present: (presenting: boolean) => v
       for (const listener of listeners) listener(snapshot());
     },
     clear: async () => commit(),
-    setDrawPermission: async () => undefined,
+    // Like Sync, a host's choice for one person replaces the earlier one.
+    setDrawPermission: async (participantId, canDraw) => access((current) => ({ ...current, permissions: [...current.permissions.filter((permission) => permission.participantId !== participantId), { participantId, canDraw }] })),
+    setDrawPolicy: async (policy) => access((current) => ({ ...current, policy })),
     setPresentation: async (presenting) => present(presenting),
     files: {
       getDownloadUrl: async () => ({ downloadUrl: "about:blank", expiresAt: new Date(Date.now() + 60_000).toISOString() }),

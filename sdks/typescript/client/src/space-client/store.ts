@@ -22,7 +22,7 @@ const EMPTY = empty({
   reactions: empty({ active: empty([]) }),
   recording: empty({ current: null }),
   offline: empty({ pending: empty([]), decisionNeeded: false, policy: "send" }),
-  whiteboard: empty({ open: false, engine: empty({ status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }) }),
+  whiteboard: empty({ open: false, engine: empty({ status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }), access: empty({ canDraw: false, policy: null, permissions: empty([]) }) }),
 }) satisfies SpaceSnapshot;
 
 export class SpaceStore {

@@ -10,12 +10,23 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
+  # The one effective drawing rule. A host is a participant whose role has
+  # manageWhiteboard. A per-person row is the host's choice for that person:
+  # under everyone it overrides the role default, under picked a true row is
+  # the pick, and under hosts it is kept but ignored. Unpicking under picked
+  # deletes the row, so it can't turn into a hidden block under everyone.
   def lock_authority do
     """
     select
       participant.role,
       participant.capabilities,
-      coalesce(permission.can_draw, 'drawWhiteboard' = any(participant.capabilities)) as can_draw
+      case coalesce(policy.policy, 'everyone')
+        when 'hosts' then 'manageWhiteboard' = any(participant.capabilities)
+        when 'picked' then 'manageWhiteboard' = any(participant.capabilities)
+          or coalesce(permission.can_draw, false)
+        else coalesce(permission.can_draw, 'drawWhiteboard' = any(participant.capabilities))
+      end as can_draw,
+      coalesce(policy.policy, 'everyone') as draw_policy
     from participants participant
     join episodes episode
       on episode.tenant_id = participant.tenant_id
@@ -25,6 +36,10 @@ defmodule ChalkSync.WhiteboardV1.SQL do
       on permission.tenant_id = participant.tenant_id
       and permission.episode_id = participant.episode_id
       and permission.participant_id = participant.id
+    left join sync_whiteboard_draw_policies policy
+      on policy.tenant_id = participant.tenant_id
+      and policy.space_id = participant.space_id
+      and policy.episode_id = participant.episode_id
     where participant.tenant_id = $1
       and participant.space_id = $2
       and participant.episode_id = $3
@@ -202,6 +217,66 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
+  def delete_permission do
+    """
+    delete from sync_whiteboard_permissions
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and participant_id = $4
+    """
+  end
+
+  def upsert_draw_policy do
+    """
+    insert into sync_whiteboard_draw_policies (
+      tenant_id, space_id, episode_id, policy, updated_by_participant_id
+    ) values ($1, $2, $3, $4, $5)
+    on conflict (tenant_id, space_id, episode_id)
+    do update set
+      policy = excluded.policy,
+      updated_by_participant_id = excluded.updated_by_participant_id,
+      updated_at = now()
+    """
+  end
+
+  def select_draw_policy_receipt do
+    """
+    select policy
+    from sync_whiteboard_draw_policy_receipts
+    where tenant_id = $1 and space_id = $2 and participant_id = $3 and operation_id = $4
+    """
+  end
+
+  def insert_draw_policy_receipt do
+    """
+    insert into sync_whiteboard_draw_policy_receipts (
+      tenant_id, space_id, episode_id, participant_id, operation_id, policy
+    ) values ($1, $2, $3, $4, $5, $6)
+    """
+  end
+
+  def count_draw_policy_receipts do
+    """
+    select count(*)
+    from sync_whiteboard_draw_policy_receipts
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+    """
+  end
+
+  def draw_grants do
+    """
+    select permission.participant_id::text, permission.can_draw
+    from sync_whiteboard_permissions permission
+    join participants participant
+      on participant.tenant_id = permission.tenant_id
+      and participant.space_id = permission.space_id
+      and participant.episode_id = permission.episode_id
+      and participant.id = permission.participant_id
+      and participant.status = 'active'
+    where permission.tenant_id = $1 and permission.space_id = $2 and permission.episode_id = $3
+    order by permission.participant_id
+    limit $4
+    """
+  end
+
   def snapshot_elements do
     """
     select
@@ -240,4 +315,5 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   end
 
   def notify_head, do: "select pg_notify('chalk_whiteboard_v1_heads', $1)"
+  def notify_access, do: "select pg_notify('chalk_whiteboard_v1_access', $1)"
 end
