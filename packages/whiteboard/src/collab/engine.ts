@@ -64,8 +64,7 @@ export type WhiteboardCollaborationEvent =
       readonly height: number;
       readonly bring: boolean;
       readonly occurredAt: string;
-      readonly originEpoch?: string;
-    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }) &
+    } & ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never }) &
       ({ readonly ownerId: string; readonly ownerSequence: number } | { readonly ownerId?: never; readonly ownerSequence?: never }))
   | { readonly type: "views_reset" }
   | {
