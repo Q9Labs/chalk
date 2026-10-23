@@ -28,10 +28,11 @@ git diff --shortstat 18f216766acac609b5570a9baba1acc17a19b93d HEAD
 
 The direct comparison includes unrelated changes on master between the proposals. Binary assets do not contribute line counts.
 
-Run the owner cases from the repository root without installing the Sync application's dependencies:
+Run the owner cases through the Sync application's normal test setup:
 
 ```sh
-ERL_FLAGS='+S 1:1' elixir docs/proofs/follow-view-owner/run-owner-tests.exs
+cd apps/sync
+MIX_ENV=test mix test test/chalk_sync/whiteboard_v1/view_owner_test.exs
 ```
 
 The delayed-relay regression failed in both negotiated and legacy modes before the owner tracked the active publisher.
@@ -41,13 +42,6 @@ The owner now keeps one active publishing stream per person.
 Only a real move or an explicit Follow selection changes that stream; an idle tab cannot reclaim it.
 The browser journey caught this when a published 5.1.0 tab brought everyone while its other tab still followed the host.
 Legacy clients without input IDs use geometry and epoch heuristics rather than new-protocol retry IDs.
-
-Reproduce that red result with the earlier owner and the current tests:
-
-```sh
-git show 1dc90d4335d37f371edcb9c1aa29bc4a1323e9d1:apps/sync/lib/chalk_sync/whiteboard_v1/view_owner.ex > /tmp/chalk-follow-owner-before.ex
-ERL_FLAGS='+S 1:1' elixir docs/proofs/follow-view-owner/run-owner-tests.exs /tmp/chalk-follow-owner-before.ex
-```
 
 The final M4 Sync gate passed 212 tests with two topology cases excluded, strict Credo, and warnings-as-errors compilation.
 All ten selected app lanes passed: scope, format, hygiene, secrets, generated files, contracts, types, tests, build, and depcruise.

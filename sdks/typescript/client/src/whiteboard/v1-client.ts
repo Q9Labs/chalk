@@ -1,4 +1,3 @@
-import { ChalkWhiteboardViewBounds } from "./view-bounds";
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
@@ -1095,7 +1094,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (event.type === "view") {
       this.#latestViews.delete(event.participantId);
       this.#latestViews.set(event.participantId, event);
-      if (this.#latestViews.size > ChalkWhiteboardViewBounds.maxPeople) {
+      if (this.#latestViews.size > WhiteboardV1ProtocolLimits.viewPeopleMaxItems) {
         const oldest = this.#latestViews.keys().next().value;
         if (oldest !== undefined) this.#latestViews.delete(oldest);
       }
