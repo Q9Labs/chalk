@@ -597,6 +597,21 @@ func captureGonePullResult(requestErr error, response captureTracksResponse, inp
 	byIdentity := make(map[captureTrackKey]captureTrackResult, len(response.Tracks))
 	for _, result := range response.Tracks {
 		key := captureTrackKey{owner: result.ConnectionReference, track: result.TrackName}
+		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "not_found_track_error") && (key.owner == "" || key.track == "") {
+			// Error entries may omit optional TrackObject identity fields. Infer
+			// only a unique requested identity; never guess by response order.
+			matches := 0
+			for _, requested := range input.Tracks {
+				if (result.ConnectionReference == "" || result.ConnectionReference == requested.OwnerReference.String()) &&
+					(result.TrackName == "" || result.TrackName == requested.TrackReference.String()) {
+					key = captureTrackKey{owner: requested.OwnerReference.String(), track: requested.TrackReference.String()}
+					matches++
+				}
+			}
+			if matches != 1 {
+				return captureplane.PullCaptureTracksResult{}, false, nil
+			}
+		}
 		if _, exists := byIdentity[key]; exists || (result.Location != "" && result.Location != "remote") {
 			return captureplane.PullCaptureTracksResult{}, false, nil
 		}
@@ -627,7 +642,7 @@ func captureGonePullResult(requestErr error, response captureTracksResponse, inp
 		}
 		pulled = append(pulled, captureplane.PulledCaptureTrack{CaptureTrack: track, MID: mid})
 	}
-	if len(gone) == 0 || (len(pulled) == 0 && (response.Description != nil || response.RequiresImmediateRenegotiation)) {
+	if len(gone) == 0 {
 		return captureplane.PullCaptureTracksResult{}, false, nil
 	}
 	negotiation, err := captureNegotiation(input.Metadata, input.Connection, captureplane.OperationPullCaptureTracks, response.Description, response.RequiresImmediateRenegotiation)
