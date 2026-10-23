@@ -29,10 +29,11 @@ async function proveViewport(page, baseURL, { screenshotDirectory, label, notice
   await page.goto(url.href);
   if (noticeBottom !== undefined) await page.addStyleTag({ content: `.chalk-toasts { bottom: ${noticeBottom}px; }` });
   const error = "setCameraEnabled belongs to an inactive connection";
-  // A call shorter than 620px keeps its notices behind the header's notice button and reads them out from a hidden announcer instead of toasts.
-  const notice = (text, live) => (place === "header" ? page.locator(`[data-part='notice-announcer'] [aria-live='${live}']`, { hasText: text }) : page.getByRole(live === "assertive" ? "alert" : "status").filter({ hasText: text }));
+  // One text-only announcer handles speech in both placements; visual notices own interactions.
+  const notice = (text, live) => (place === "header" ? page.locator(`[data-part='notice-announcer'] [aria-live='${live}']`, { hasText: text }) : page.locator("[data-part=toast]").filter({ hasText: text }));
   const alert = notice(error, "assertive");
   await alert.waitFor();
+  await page.locator("[data-part=notice-announcer] [aria-live=assertive]", { hasText: error }).waitFor();
   await page.getByRole("button", { name: "Reactions", exact: true }).click();
   await page.getByRole("button", { name: "React with 👍", exact: true }).click();
   await page.waitForFunction(() => window.__toastLayering.state().reactions.includes("👍"));
@@ -42,6 +43,7 @@ async function proveViewport(page, baseURL, { screenshotDirectory, label, notice
   await page.waitForFunction(() => window.__toastLayering.state().raised);
   await page.evaluate(() => window.__toastLayering.peerHand());
   await notice("Nora raised a hand", "polite").waitFor();
+  await page.locator("[data-part=notice-announcer] [aria-live=polite]", { hasText: "Nora raised a hand" }).waitFor();
   await hand.click();
   await page.waitForFunction(() => !window.__toastLayering.state().raised);
   const reactions = await page.evaluate(() => window.__toastLayering.state().reactions);

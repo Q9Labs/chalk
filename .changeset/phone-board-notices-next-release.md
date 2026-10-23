@@ -14,7 +14,10 @@ button starts its timer only once it shows. The header stays visible while
 the button holds notices. Long names, links and error tokens wrap inside
 their notice, and a long call name shortens to make room for the timer and
 the notice button. A screen share beside a short board always keeps its own
-tile instead of folding into the people overflow.
+tile when there is no explicit cap. A capped strip or floating column counts
+shared content and its overflow button against that cap; folded shares stay
+readable in the shared-content overflow. One text-only announcer handles
+notice speech independently of its stage or header presentation.
 
 New optional props: `ToastStackProps.onFold` reports the ids of the notices
 the stage has no room for, `ChalkToastProps.announce` lets a host that already

@@ -169,3 +169,42 @@ it("preserves the public slim phone strip option", () => {
   const geometry = fitSpotlight({ width: 358, height: 692 }, "whiteboard", ["a", "b"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, slimPhoneStrip: true });
   expect(geometry.frames[0]?.height).toBe(692 - 52 - 8);
 });
+
+// Content and the overflow affordance consume the same secondary-stage slots as people.
+it.each([1, 1.5, 2, 2.5, 3])("caps every floating frame, including shares, at maxPerPage=%s", (maxPerPage) => {
+  const ids = ["share-a", "share-b", "speaker", "other", "local"];
+  const geometry = fitSpotlight({ width: 390, height: 692 }, "board", ids, {
+    ...DEFAULT_SPOTLIGHT_OPTIONS,
+    content: true,
+    primaryAspect: null,
+    floatingPhonePeople: true,
+    wideIds: ["share-a", "share-b"],
+    speakerId: "speaker",
+    localId: "local",
+    maxPerPage,
+  });
+  const secondary = geometry.frames.filter((frame) => frame.role !== "primary");
+  expect(secondary.length).toBeLessThanOrEqual(maxPerPage);
+  expect(secondary.some((frame) => frame.id === MORE_TILE_ID)).toBe(true);
+  expect(geometry.overflowCount).toBe(ids.filter((id) => !secondary.some((frame) => frame.id === id)).length);
+});
+
+it.each([0, 0.5])("honors fewer than one secondary slot in the one-person phone spotlight shortcut: %s", (maxPerPage) => {
+  const geometry = fitSpotlight({ width: 390, height: 692 }, "speaker", ["local"], { ...DEFAULT_SPOTLIGHT_OPTIONS, maxPerPage });
+  expect(geometry.frames.filter((frame) => frame.role !== "primary")).toEqual([]);
+});
+
+it.each([1, 2, 3])("keeps the secondary cap on phone/desktop strips, slim strips, and floating fallbacks: %i", (maxPerPage) => {
+  for (const box of [
+    { width: 390, height: 692 },
+    { width: 461, height: 246 },
+    { width: 1408, height: 756 },
+  ]) {
+    for (const mode of [{}, { content: true }, { content: true, slimPhoneStrip: true }, { content: true, floatingPhonePeople: true }]) {
+      const ids = ["share-a", "share-b", "speaker", "other", "local"];
+      const geometry = fitSpotlight(box, "primary", ids, { ...DEFAULT_SPOTLIGHT_OPTIONS, ...mode, wideIds: ["share-a", "share-b"], maxPerPage });
+      expect(geometry.frames.filter((frame) => frame.role !== "primary").length).toBeLessThanOrEqual(maxPerPage);
+      expect(geometry.overflowCount).toBe(ids.filter((id) => !geometry.frames.some((frame) => frame.id === id)).length);
+    }
+  }
+});

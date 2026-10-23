@@ -36,7 +36,7 @@ export interface StageProps {
   readonly followingId?: string | null;
   readonly onFollowChange?: (id: string) => void;
   readonly clickAction?: "pin" | "follow";
-  /** Upper bound of visible tiles; the rest fold into a +N People tile. */
+  /** Upper bound of grid tiles, or secondary tiles in spotlight; overflow includes shared content. */
   readonly maxPerPage?: number;
   /** Tiles narrower than this fold the rest into overflow. */
   readonly minTileWidth?: number;
@@ -274,6 +274,8 @@ export function Stage({
       <div ref={boxRef} className="relative h-full w-full outline-none" role="group" aria-label={`Stage with ${participantCount} ${participantCount === 1 ? "participant" : "participants"}`} aria-disabled={interactive ? undefined : true} data-testid="stage">
         <StageMotion rootRef={tilesRef} motionKey={motionKey} animate={animate}>
           {displayed.tiles.map(({ item, frame, leaving }) => {
+            // The sheet takes ownership of folded content, including a tile's leaving animation.
+            if (overflowOpen && isContentItem(item) && !framesById.has(item.id)) return null;
             const onPage = Boolean(frame) && !leaving;
             const style = TILE_FILL;
             const pinned = activePinnedId === item.id;

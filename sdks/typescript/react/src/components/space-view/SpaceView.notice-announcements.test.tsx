@@ -41,7 +41,7 @@ it("announces a new external commandError after rotation, through the real Space
     const frame = container.querySelector<HTMLElement>('[data-part="call-frame"]');
     if (!frame) throw new Error("No frame");
     Object.defineProperty(frame, "clientHeight", { get: () => height });
-    expect(frame.querySelector('[role="alert"]')?.textContent).toContain("Camera is blocked");
+    expect(frame.querySelector('[data-part="notice-announcer"] [aria-live="assertive"]')?.textContent).toContain("Camera is blocked");
     await act(async () => {
       height = 320;
       resize();

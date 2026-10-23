@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChalkButton } from "./ChalkButton";
-import { noticeAnnouncement } from "../toast-stack/notice-announcement";
+import { noticeIdentity } from "../toast-stack/notice-announcement";
 export interface ChalkToastProps {
   readonly message: ReactNode;
   /** Stable semantic identity for rich message content. Change it when the message changes. */
@@ -18,14 +18,10 @@ export interface ChalkToastProps {
 export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
-  const identity = JSON.stringify([noticeAnnouncement({ message, announcementText }), announcementKey, type]);
+  const identity = noticeIdentity({ message, announcementText, announcementKey, type });
   const [lifetime, setLifetime] = useState({ identity, exiting: false });
   if (lifetime.identity !== identity) setLifetime({ identity, exiting: false });
   const exiting = lifetime.identity === identity && lifetime.exiting;
-  const [live, setLive] = useState(announce);
-  useEffect(() => {
-    if (announce) setLive(true);
-  }, [announce]);
   useEffect(() => {
     if (duration === Infinity) return;
     const timer = setTimeout(() => setLifetime({ identity, exiting: true }), duration);
@@ -37,7 +33,7 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
     return () => clearTimeout(timer);
   }, [exiting, identity]);
   return (
-    <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={live ? (type === "error" ? "alert" : "status") : undefined} aria-live={live ? (type === "error" ? "assertive" : "polite") : undefined} aria-atomic={live || undefined}>
+    <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={announce ? (type === "error" ? "alert" : "status") : undefined} aria-live={announce ? (type === "error" ? "assertive" : "polite") : undefined} aria-atomic={announce || undefined}>
       {icon}
       <span>{message}</span>
       {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}

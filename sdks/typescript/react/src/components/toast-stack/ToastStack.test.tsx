@@ -35,12 +35,21 @@ function renderCall(height: number) {
       }
     },
   );
+  const updates: string[] = [];
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      if (target?.closest("[data-part=notice-announcer]")) updates.push(target.textContent ?? "");
+    }
+  });
+  observer.observe(frame, { subtree: true, childList: true, characterData: true });
   const root = createRoot(frame);
   const folds: (readonly string[])[] = [];
   const reportFold = (ids: readonly string[]) => folds.push(ids);
   return {
     frame,
     folds,
+    updates,
     render: (toasts: readonly Toast[], options: Partial<Pick<ToastStackProps, "onFold" | "onDismiss" | "maxVisible">> = { onFold: reportFold }) =>
       act(async () => root.render(<ToastStack toasts={toasts} onDismiss={options.onDismiss ?? (() => undefined)} onFold={options.onFold} maxVisible={options.maxVisible} />)),
     resize: (next: number) =>
@@ -50,7 +59,11 @@ function renderCall(height: number) {
       }),
     shown: () => [...frame.querySelectorAll("[data-part='toast']")].map((toast) => toast.textContent),
     live: () => [...frame.querySelectorAll("[aria-live]")].map((region) => `${region.getAttribute("aria-live")}: ${region.textContent}`),
-    unmount: () => act(async () => root.unmount()),
+    unmount: () =>
+      act(async () => {
+        root.unmount();
+        observer.disconnect();
+      }),
   };
 }
 
@@ -145,7 +158,7 @@ it("shows the newest three in a call 620px tall and announces folded rich messag
   expect(call.shown()).toEqual(["Ben joined", "Cy joined", "Di joined"]);
   expect(call.folds.at(-1)).toEqual(["Ana"]);
   expect(mounts.sort()).toEqual(["Ben joined", "Cy joined", "Di joined"]);
-  expect(call.live()).toContain("polite: Ana joined");
+  expect(call.live()).toEqual(["polite: Ana joinedBen joinedCy joinedDi joined", "assertive: "]);
   await call.unmount();
 });
 
@@ -156,11 +169,12 @@ it("announces a folded notice once, politely for news and assertively for errors
     { id: "camera", message: "Camera blocked", type: "error" },
   ]);
   expect(call.live()).toEqual(["polite: Nora joined", "assertive: Camera blocked"]);
+  call.updates.length = 0;
   await call.resize(844);
   expect(call.shown()).toEqual(["Nora joined", "Camera blocked"]);
-  expect(call.live()).toEqual(["polite: ", "assertive: "]);
+  expect(call.updates).toEqual([]);
   await call.resize(320);
-  expect(call.live()).toEqual(["polite: ", "assertive: "]);
+  expect(call.updates).toEqual([]);
   await call.unmount();
 });
 
@@ -170,9 +184,10 @@ it("doesn't announce a notice again when a newer one pushes it into the header",
   await call.render(people.slice(0, 3));
   await call.render(people);
   expect(call.folds.at(-1)).toEqual(["Ana"]);
-  expect(call.live()).toEqual(["polite: Ben joined", "polite: Cy joined", "polite: Di joined", "polite: ", "assertive: "]);
-  // The announcer leaves the status and alert roles to toasts, so a host's query for a toast by role finds only toasts.
-  expect([...call.frame.querySelectorAll("[role='status'], [role='alert']")].map((toast) => toast.textContent)).toEqual(["Ben joined", "Cy joined", "Di joined"]);
+  expect(call.live()).toEqual(["polite: Di joined", "assertive: "]);
+  expect(call.shown()).toEqual(["Ben joined", "Cy joined", "Di joined"]);
+  // Speech has one owner; the rich visual toasts have no implicit live roles.
+  expect(call.frame.querySelectorAll("[data-part=toast][aria-live], [data-part=toast][role]")).toHaveLength(0);
   await call.unmount();
 });
 
@@ -182,14 +197,16 @@ it("announces a replacement after a previously folded notice returns to the stag
   const replacement: Toast = { ...first, message: "Screen sharing was denied" };
   try {
     await call.render([first]);
+    call.updates.length = 0;
     await call.resize(320);
     await call.resize(844);
-    expect(call.live()).toEqual(["polite: ", "assertive: "]);
+    expect(call.updates).toEqual([]);
     await call.render([replacement]);
     expect(call.live()).toContain("assertive: Screen sharing was denied");
+    call.updates.length = 0;
     await call.resize(320);
     await call.render([{ ...replacement }]);
-    expect(call.live()).toEqual(["polite: ", "assertive: "]);
+    expect(call.updates).toEqual([]);
   } finally {
     await call.unmount();
   }
@@ -207,11 +224,12 @@ it("preserves focus and stays quiet when an unchanged typed media failure is rem
     const dismiss = call.frame.querySelector<HTMLButtonElement>("[data-part='toast-dismiss']");
     if (!dismiss) throw new Error("Missing Dismiss button");
     dismiss.focus();
+    call.updates.length = 0;
     await call.render([toast()]);
     expect(document.activeElement).toBe(dismiss);
     await call.resize(320);
     await call.render([toast()]);
-    expect(call.live()).toEqual(["polite: ", "assertive: "]);
+    expect(call.updates).toEqual([]);
     await call.render([toast("media.device_not_found")]);
     expect(call.live().some((message) => message.includes("assertive: No camera found."))).toBe(true);
   } finally {

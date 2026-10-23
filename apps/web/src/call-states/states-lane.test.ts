@@ -119,16 +119,17 @@ it("announces a join, raised hand and recording through event toasts", async () 
     { control: "Simulate recording", notice: /Recording started/ },
   ]) {
     await page.getByRole("button", { name: event.control, exact: true }).click();
-    const toast = page.getByRole("status").filter({ hasText: event.notice }).first();
+    const toast = page.locator("[data-part=toast]").filter({ hasText: event.notice }).first();
     await toast.waitFor();
-    expect(await toast.getAttribute("aria-live")).toBe("polite");
+    await page.locator("[data-part=notice-announcer] [aria-live=polite]").filter({ hasText: event.notice }).waitFor();
+    expect(await toast.getAttribute("aria-live")).toBeNull();
   }
 }, 30_000);
 
 it("explains how to allow a blocked camera and allows dismissal", async () => {
   await page.goto(`${origin}/call-states.html?state=states-events`);
   await page.getByRole("button", { name: "Simulate blocked camera" }).click();
-  const toast = page.getByRole("alert");
+  const toast = page.locator("[data-part=toast][data-type=error]");
   await toast.waitFor();
   expect(await toast.textContent()).toContain("Click the camera icon in the address bar and allow Camera.");
   await toast.getByRole("button", { name: "Dismiss" }).click();
@@ -165,14 +166,14 @@ it("maps typed command failures to source-specific recovery guidance", async () 
       ["client.internal_error", `Couldn’t change your ${source} settings. Try again.`],
     ]) {
       await page.getByRole("button", { name: code, exact: true }).click();
-      await page.getByRole("alert").filter({ hasText: copy }).waitFor();
+      await page.locator("[data-part=toast][data-type=error]").filter({ hasText: copy }).waitFor();
     }
   }
   await page.getByRole("button", { name: "screen", exact: true }).click();
   await page.getByRole("button", { name: "media.permission_denied", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "Allow screen recording for your browser in System Settings" }).waitFor();
-  await page.getByRole("alert").getByRole("button", { name: "Dismiss" }).click();
-  await page.getByRole("alert").waitFor({ state: "detached" });
+  await page.locator("[data-part=toast][data-type=error]").filter({ hasText: "Allow screen recording for your browser in System Settings" }).waitFor();
+  await page.locator("[data-part=toast][data-type=error]").getByRole("button", { name: "Dismiss" }).click();
+  await page.locator("[data-part=toast][data-type=error]").waitFor({ state: "detached" });
 }, 30_000);
 
 it("reopens the controlled call link and restores trigger focus when closed", async () => {
@@ -215,7 +216,7 @@ it("waits two seconds for reconnecting without blocking message input", async ()
 it("names the blocked camera when its error arrives before the media snapshot", async () => {
   await page.goto(`${origin}/call-states.html?state=states-events`);
   await page.getByRole("button", { name: "Simulate blocked camera", exact: true }).click();
-  const notice = page.getByRole("alert");
+  const notice = page.locator("[data-part=toast][data-type=error]");
   await notice.waitFor();
   expect(await notice.count()).toBe(1);
   expect(await notice.textContent()).toContain("Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.");
@@ -302,9 +303,9 @@ it.each([
         if (release) await page.keyboard.up(key);
       } else await page.keyboard.press(key);
       const copy = release || source === "camera" ? `Couldn’t change your ${source} settings.` : `Your ${source} couldn’t start.`;
-      const notice = page.getByRole("alert").filter({ hasText: copy });
+      const notice = page.locator("[data-part=toast][data-type=error]").filter({ hasText: copy });
       await notice.waitFor({ timeout: 5_000 });
-      expect(await page.getByRole("alert").allTextContents()).not.toEqual(expect.arrayContaining([expect.stringMatching(/setCameraEnabled|setMicrophoneEnabled|inactive connection/)]));
+      expect(await page.locator("[data-part=toast][data-type=error]").allTextContents()).not.toEqual(expect.arrayContaining([expect.stringMatching(/setCameraEnabled|setMicrophoneEnabled|inactive connection/)]));
       expect(await page.evaluate(() => window.__mediaCalls)).toEqual(release ? [true, false] : [source !== "camera"]);
     } finally {
       await page.keyboard.up("Space");

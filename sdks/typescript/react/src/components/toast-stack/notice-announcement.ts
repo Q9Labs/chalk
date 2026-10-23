@@ -13,3 +13,8 @@ function literalText(node: ReactNode): string {
 export function noticeAnnouncement(toast: Pick<ChalkToastProps, "message" | "announcementText">): string {
   return toast.announcementText ?? literalText(toast.message);
 }
+
+/** Semantic speech/lifetime revision, independent of JSX and layout chrome. */
+export function noticeIdentity(toast: Pick<ChalkToastProps, "message" | "announcementText" | "announcementKey" | "type">): string {
+  return JSON.stringify([noticeAnnouncement(toast), toast.announcementKey, toast.type ?? "info"]);
+}

@@ -2,7 +2,7 @@ import { memo, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
-import { noticeAnnouncement } from "./notice-announcement";
+import { noticeAnnouncement, noticeIdentity } from "./notice-announcement";
 import { useToastCapacity } from "./useToastCapacity";
 export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
   readonly id: string;
@@ -29,21 +29,21 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   const short = useShortCall(stack, onFold !== undefined);
   // Until the call's height is known, a folding stack shows nothing, so no notice mounts and then folds.
   const candidates = maxVisible > 0 ? toasts.slice(-maxVisible) : [];
-  const capacity = useToastCapacity(stack, candidates, onFold !== undefined && short === false);
-  const shown = onFold !== undefined && short !== false ? [] : candidates.slice(candidates.length - capacity.count);
-  const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !shown.includes(toast)) : [];
+  const [ownedIds, setOwnedIds] = useState<readonly string[]>([]);
+  const fold = useRef(onFold);
+  const capacity = useToastCapacity(stack, candidates, onFold !== undefined && short === false, ownedIds);
+  const selected = onFold !== undefined && short !== false ? [] : candidates.slice(candidates.length - capacity.count);
+  // Relinquish the header's ownership before adding a caller tree to the stage.
+  // The callback and this state update commit together in the host, avoiding a
+  // second resource instance even for one synchronous layout-effect commit.
+  const shown = onFold || fold.current ? selected.filter((toast) => ownedIds.includes(toast.id)) : selected;
+  const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !selected.includes(toast)) : [];
   const foldedIds = folded.map((toast) => toast.id);
   // Each message is announced once, even when a host reuses a notice id for a new failure.
-  const announced = useRef(new Map<string, { readonly text: string; readonly type: Toast["type"]; readonly key: Toast["announcementKey"] }>());
-  const wasAnnounced = (toast: Toast) => {
-    const previous = announced.current.get(toast.id);
-    if (!previous) return false;
-    const sameMessage = previous.text === noticeAnnouncement(toast) && previous.key === toast.announcementKey;
-    return sameMessage && (previous.type ?? "info") === (toast.type ?? "info");
-  };
+  const announced = useRef(new Map<string, string>());
+  const wasAnnounced = (toast: Toast) => announced.current.get(toast.id) === noticeIdentity(toast);
   const [unheard, setUnheard] = useState<readonly string[]>([]);
   const reported = useRef<readonly string[]>([]);
-  const fold = useRef(onFold);
   const reporting = useRef(false);
   useLayoutEffect(() => {
     const replacement = fold.current !== onFold;
@@ -51,15 +51,8 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
       if (!onFold) fold.current?.([]);
       fold.current = onFold;
     }
-    if (!capacity.ready) return;
-    const present = new Set(toasts.map((toast) => toast.id));
-    for (const id of announced.current.keys()) if (!present.has(id)) announced.current.delete(id);
-    const fresh = folded.filter((toast) => !wasAnnounced(toast)).map((toast) => toast.id);
-    for (const toast of [...folded, ...shown]) announced.current.set(toast.id, { text: noticeAnnouncement(toast), type: toast.type, key: toast.announcementKey });
-    // A notice leaves the announcer once it shows or goes, so folding again doesn't read it twice.
-    const kept = unheard.filter((id) => foldedIds.includes(id));
-    if (fresh.length) setUnheard(fresh);
-    else if (kept.length < unheard.length) setUnheard(kept);
+    const selectedIds = selected.map((toast) => toast.id);
+    setOwnedIds((previous) => (sameIds(previous, selectedIds) ? previous : selectedIds));
     const unchanged = sameIds(reported.current, foldedIds);
     if (!unchanged) reported.current = foldedIds;
     // A callback can update its host and be recreated by that update. Do not echo
@@ -71,6 +64,17 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
       });
       fold.current?.(reported.current);
     }
+    if (!capacity.ready) return;
+    const present = new Set(toasts.map((toast) => toast.id));
+    for (const id of announced.current.keys()) if (!present.has(id)) announced.current.delete(id);
+    const eligible = onFold ? toasts : shown;
+    const fresh = eligible.filter((toast) => !wasAnnounced(toast)).map((toast) => toast.id);
+    for (const toast of eligible) announced.current.set(toast.id, noticeIdentity(toast));
+    // Keep the last announcement unchanged across stage/header moves. Only a
+    // new semantic message or removal mutates this text-only live region.
+    const kept = unheard.filter((id) => eligible.some((toast) => toast.id === id));
+    if (fresh.length) setUnheard(fresh);
+    else if (kept.length < unheard.length) setUnheard(kept);
   });
   useLayoutEffect(
     () => () => {
@@ -79,33 +83,31 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     },
     [],
   );
-  const announcing = folded.filter((toast) => unheard.includes(toast.id));
+  const announcing = (onFold ? toasts : shown).filter((toast) => unheard.includes(toast.id));
   return (
     <>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
-          <ChalkToast key={toast.id} {...toast} announce={!wasAnnounced(toast)} onDismiss={() => onDismiss(toast.id)} />
+          <ChalkToast key={toast.id} {...toast} announce={false} onDismiss={() => onDismiss(toast.id)} />
         ))}
       </div>
-      {onFold ? (
-        // Live regions without the status and alert roles, so a query for a toast's role finds only toasts.
-        <div data-part="notice-announcer" className="sr-only">
-          <div aria-live="polite">
-            {announcing
-              .filter((toast) => toast.type !== "error")
-              .map((toast) => (
-                <div key={toast.id}>{noticeAnnouncement(toast)}</div>
-              ))}
-          </div>
-          <div aria-live="assertive">
-            {announcing
-              .filter((toast) => toast.type === "error")
-              .map((toast) => (
-                <div key={toast.id}>{noticeAnnouncement(toast)}</div>
-              ))}
-          </div>
+      {/* One text-only announcer owns speech, independent of caller-tree presentation. */}
+      <div data-part="notice-announcer" className="sr-only">
+        <div aria-live="polite">
+          {announcing
+            .filter((toast) => toast.type !== "error")
+            .map((toast) => (
+              <div key={JSON.stringify([toast.id, noticeIdentity(toast)])}>{noticeAnnouncement(toast)}</div>
+            ))}
         </div>
-      ) : null}
+        <div aria-live="assertive">
+          {announcing
+            .filter((toast) => toast.type === "error")
+            .map((toast) => (
+              <div key={JSON.stringify([toast.id, noticeIdentity(toast)])}>{noticeAnnouncement(toast)}</div>
+            ))}
+        </div>
+      </div>
     </>
   );
 });
