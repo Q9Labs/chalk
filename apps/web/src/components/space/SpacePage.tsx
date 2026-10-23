@@ -46,7 +46,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
-  const reportTrigger = useRef<HTMLButtonElement>(null);
+  const reportFocusScope = useRef<HTMLDivElement>(null);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
     try {
@@ -276,7 +276,6 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
             onReportProblem={
               reportsAvailable && terminal.reportProblem && !reportExpired
                 ? () => {
-                    reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
                     setReportOpen(true);
                   }
                 : undefined
@@ -310,7 +309,6 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
           reportsAvailable={reportsAvailable}
           reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
           onOpenReportProblem={(send, diagnostics) => {
-            reportTrigger.current = document.querySelector<HTMLButtonElement>('button[data-part="call-name"]');
             setReportDialog({ send, diagnostics });
             setReportOpen(true);
           }}
@@ -362,20 +360,20 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   };
   const sendReport = terminal?.reportProblem ?? reportDialog?.send;
   return (
-    <>
+    <div ref={reportFocusScope} className="contents">
       {renderSurface()}
       {sendReport ? (
         <ReportProblemDialog
           unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
           diagnostics={terminal ? `Connection: ${terminal.phase}\nLast error: ${terminal.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
-          returnFocus={reportTrigger}
+          focusScope={reportFocusScope}
           open={reportOpen}
           onClose={() => setReportOpen(false)}
           onReportProblem={sendReport}
           colorScheme={mode}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 type JoinedSpaceAccess = {

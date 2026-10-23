@@ -24,6 +24,7 @@ export function CallDialog({
   onReportProblem,
   diagnostics,
   returnFocus,
+  focusScope,
   unavailableReason,
 }: {
   readonly kind: "shortcuts" | "report";
@@ -31,7 +32,8 @@ export function CallDialog({
   readonly onClose: () => void;
   readonly onReportProblem?: SpaceHeaderProps["onReportProblem"];
   readonly diagnostics: string;
-  readonly returnFocus: RefObject<HTMLButtonElement | null>;
+  readonly returnFocus?: RefObject<HTMLButtonElement | null>;
+  readonly focusScope: RefObject<HTMLElement | null>;
   readonly unavailableReason?: string;
 }) {
   const container = useRef<HTMLElement>(null);
@@ -67,7 +69,7 @@ export function CallDialog({
       >
         <Dialog.Portal container={container}>
           <Dialog.Backdrop className="chalk-shell-modal-backdrop" />
-          <Dialog.Popup initialFocus={kind === "report" ? reportInput : undefined} finalFocus={returnFocus} className="chalk-shell-modal">
+          <Dialog.Popup initialFocus={kind === "report" ? reportInput : undefined} finalFocus={kind === "report" ? () => reportFocusTarget(focusScope.current) : returnFocus} className="chalk-shell-modal">
             {kind === "report" && status === "sent" ? null : (
               <div className="chalk-shell-modal-heading">
                 <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
@@ -150,6 +152,18 @@ export function CallDialog({
       </Dialog.Root>
     </span>
   );
+}
+
+function reportFocusTarget(scope: HTMLElement | null): HTMLElement | false {
+  if (!scope?.isConnected) return false;
+  for (const selector of ['button[data-part="call-name"]', '[data-part="status-actions"] button:not(:disabled)', 'main, [role="main"]']) {
+    const target = scope.matches(selector) ? scope : scope.querySelector<HTMLElement>(selector);
+    if (target?.isConnected) {
+      if (target.matches('main, [role="main"]')) target.tabIndex = -1;
+      return target;
+    }
+  }
+  return false;
 }
 
 export function CallDetails({

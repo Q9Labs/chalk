@@ -3,16 +3,56 @@ import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { ReportProblemDialog } from "./ReportProblemDialog";
+import { StatusSurface } from "./StatusSurface";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+it.each([true, false])("resolves a mounted terminal focus target at close time (primary control: %s)", async (primary) => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scope = createRef<HTMLDivElement>();
+  let ended = false;
+  let open = true;
+  const render = () =>
+    root.render(
+      <div ref={scope}>
+        {ended ? <StatusSurface phase="episode-ended" onHome={primary ? () => {} : undefined} /> : <button data-part="call-name">Call details</button>}
+        <ReportProblemDialog
+          open={open}
+          focusScope={scope}
+          colorScheme="light"
+          onReportProblem={async () => {}}
+          onClose={() => {
+            open = false;
+            render();
+          }}
+        />
+      </div>,
+    );
+  try {
+    await act(async () => render());
+    const oldTrigger = container.querySelector('button[data-part="call-name"]');
+    await act(async () => {
+      ended = true;
+      render();
+    });
+    expect(oldTrigger?.isConnected).toBe(false);
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    await vi.waitFor(() => expect(document.activeElement).toBe(container.querySelector(primary ? '[data-part="status-actions"] button' : "main")));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
 
 it("opens the report form from a terminal screen and submits without diagnostics", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   const send = vi.fn().mockResolvedValue(undefined);
-  const returnFocus = createRef<HTMLButtonElement>();
-  const render = (open: boolean) => act(async () => root.render(<ReportProblemDialog open={open} onClose={() => {}} onReportProblem={send} colorScheme="light" returnFocus={returnFocus} />));
+  const focusScope = createRef<HTMLElement>();
+  const render = (open: boolean) => act(async () => root.render(<ReportProblemDialog open={open} onClose={() => {}} onReportProblem={send} colorScheme="light" focusScope={focusScope} />));
   try {
     await render(false);
     expect(container.querySelector("textarea")).toBeNull();
@@ -46,7 +86,7 @@ it.each(["Close", "Escape", "backdrop"])("blocks %s dismissal until the pending 
   );
   const onClose = vi.fn();
   try {
-    await act(async () => root.render(<ReportProblemDialog open onClose={onClose} onReportProblem={send} colorScheme="light" returnFocus={createRef<HTMLButtonElement>()} />));
+    await act(async () => root.render(<ReportProblemDialog open onClose={onClose} onReportProblem={send} colorScheme="light" focusScope={createRef<HTMLElement>()} />));
     const textarea = container.querySelector("textarea");
     if (!textarea) throw new Error("Report form missing");
     await act(async () => {
@@ -88,7 +128,7 @@ it.each(["Connection: failed\nLast error: media.connect_failed", undefined])("us
   const root = createRoot(container);
   const send = vi.fn().mockResolvedValue(undefined);
   try {
-    await act(async () => root.render(<ReportProblemDialog open onClose={() => {}} onReportProblem={send} diagnostics={diagnostics} colorScheme="light" returnFocus={createRef<HTMLButtonElement>()} />));
+    await act(async () => root.render(<ReportProblemDialog open onClose={() => {}} onReportProblem={send} diagnostics={diagnostics} colorScheme="light" focusScope={createRef<HTMLElement>()} />));
     const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
     if (diagnostics === undefined) {
       expect(checkbox).toBeNull();

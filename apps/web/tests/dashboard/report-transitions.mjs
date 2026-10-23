@@ -73,10 +73,10 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
 
   await check("guest: renewal retains the mounted draft and restores successful sending", async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+    const renewal = Promise.withResolvers();
     try {
       const guest = await context.newPage();
       await guest.clock.install();
-      let recover = false;
       let shortened = false;
       await guest.route("**/v1/public/space-invite-arrivals", async (route) => {
         const response = await route.fetch();
@@ -89,7 +89,10 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
         shortened = true;
         await route.fulfill({ response, json: arrival });
       });
-      await guest.route("**/v1/public/space-invite-arrival/access-grants", (route) => (recover ? route.continue() : route.fulfill({ status: 503, body: "{}" })));
+      await guest.route("**/v1/public/space-invite-arrival/access-grants", async (route) => {
+        await renewal.promise;
+        await route.continue();
+      });
       const invite = new URL(call.inviteUrl);
       await guest.goto(`${origin}${invite.pathname}${invite.search}${invite.hash}`);
       await guest.getByLabel("Your name").fill("Report renewal guest");
@@ -102,17 +105,18 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
       const input = await draft.elementHandle();
       const text = "Keep this draft across expiry and real access renewal";
       await draft.fill(text);
-      const failed = guest.waitForResponse((response) => response.url().endsWith("/access-grants") && response.status() === 503);
+      const refreshing = guest.waitForRequest((request) => request.url().endsWith("/access-grants"));
       await guest.clock.fastForward(91_000);
-      await failed;
+      await refreshing;
       await guest.clock.runFor(50);
       assert(await guest.getByRole("button", { name: "Send", exact: true }).isDisabled(), "Expired proof must disable Send");
       assert.equal(await draft.inputValue(), text);
       await guest.screenshot({ path: resolve(evidence, "renewal-expired-draft.png"), animations: "disabled" });
-      recover = true;
-      const renewed = guest.waitForResponse((response) => response.url().endsWith("/access-grants") && response.status() === 200);
-      await guest.clock.fastForward(5_000);
-      await renewed;
+      const renewed = guest.waitForResponse((response) => response.url().endsWith("/access-grants"));
+      renewal.resolve();
+      const renewalResponse = await renewed;
+      assert.equal(renewalResponse.status(), 201, "The real API must issue a renewed access grant");
+      const renewedAccess = await renewalResponse.json();
       await guest.clock.runFor(50);
       assert(await input.evaluate((element) => element.isConnected), "Renewal must keep the same textarea mounted");
       assert.equal(await draft.inputValue(), text);
@@ -120,13 +124,17 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
       await guest.screenshot({ path: resolve(evidence, "renewal-restored-draft.png"), animations: "disabled" });
       const delivery = guest.waitForResponse((response) => response.url().endsWith("/problem-reports") && response.request().method() === "POST");
       await guest.getByRole("button", { name: "Send", exact: true }).click();
-      assert.equal((await delivery).status(), 200, "The preserved draft must send with the renewed real proof to fake Discord");
+      const delivered = await delivery;
+      assert.equal(delivered.status(), 200, "The preserved draft must send with the renewed real proof to fake Discord");
+      assert((await delivered.request().headerValue("authorization")) === `Bearer ${renewedAccess.media.token}`, "Send must use the renewed proof");
+      assert.equal(delivered.request().postDataJSON().description, text, "Send must carry the unchanged draft");
       await guest.getByRole("button", { name: "Done", exact: true }).click();
       await guest.clock.runFor(500);
       const left = guest.waitForResponse((response) => response.url().endsWith("/v1/public/space-invite-arrival") && response.request().method() === "DELETE");
       await guest.getByRole("button", { name: "Leave call", exact: true }).press("Enter");
       assert.equal((await left).status(), 204);
     } finally {
+      renewal.resolve();
       await context.close();
     }
   });

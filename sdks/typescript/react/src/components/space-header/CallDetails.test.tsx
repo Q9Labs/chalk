@@ -12,7 +12,7 @@ it("accepts 1,000 emoji and caps report input by Unicode code points", async () 
   const root = createRoot(container);
   const send = vi.fn().mockResolvedValue(undefined);
   try {
-    await act(async () => root.render(<CallDialog kind="report" open onClose={() => {}} onReportProblem={send} diagnostics="" returnFocus={createRef<HTMLButtonElement>()} />));
+    await act(async () => root.render(<CallDialog kind="report" open onClose={() => {}} onReportProblem={send} diagnostics="" focusScope={createRef<HTMLElement>()} />));
     const textarea = document.querySelector("textarea");
     expect(textarea).not.toBeNull();
     if (!textarea) throw new Error("Report form missing");
@@ -38,7 +38,7 @@ it("keeps rejected text editable and shows safe retry guidance", async () => {
   const send = vi.fn().mockRejectedValueOnce(reason);
   send.mockResolvedValueOnce(undefined);
   try {
-    await act(async () => root.render(<CallDialog kind="report" open onClose={() => {}} onReportProblem={send} diagnostics="" returnFocus={createRef<HTMLButtonElement>()} />));
+    await act(async () => root.render(<CallDialog kind="report" open onClose={() => {}} onReportProblem={send} diagnostics="" focusScope={createRef<HTMLElement>()} />));
     const textarea = document.querySelector("textarea");
     if (!textarea) throw new Error("Report form missing");
     const enter = async (value: string) =>

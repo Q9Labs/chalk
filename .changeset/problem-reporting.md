@@ -9,3 +9,5 @@ call screens can expose reporting when an integration supplies a delivery callba
 Use `reportUnavailableReason` to show expired access inside an editable report.
 Live report drafts survive call termination. Integrations with their own terminal
 screens can use `onOpenReportProblem` to keep one app-owned dialog across those screens.
+Give `ReportProblemDialog` a `focusScope` containing the current call or terminal screen,
+so closing it returns focus to a control that is still mounted.

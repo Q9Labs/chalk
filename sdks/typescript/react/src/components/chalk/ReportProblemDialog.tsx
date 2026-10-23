@@ -10,7 +10,7 @@ export function ReportProblemDialog({
   onClose,
   onReportProblem,
   colorScheme,
-  returnFocus,
+  focusScope,
   diagnostics = "",
   unavailableReason,
 }: {
@@ -20,12 +20,12 @@ export function ReportProblemDialog({
   readonly onClose: () => void;
   readonly onReportProblem: NonNullable<ChalkProps["onReportProblem"]>;
   readonly colorScheme: "light" | "dark";
-  readonly returnFocus: RefObject<HTMLButtonElement | null>;
+  readonly focusScope: RefObject<HTMLElement | null>;
 }) {
   return (
     <div data-chalk data-chalk-theme={colorScheme} className="chalk-root" style={chalkThemeStyle({ colorScheme }, colorScheme)}>
       <ShellStyles />
-      <CallDialog kind="report" open={open} onClose={onClose} onReportProblem={onReportProblem} diagnostics={diagnostics} returnFocus={returnFocus} unavailableReason={unavailableReason} />
+      <CallDialog kind="report" open={open} onClose={onClose} onReportProblem={onReportProblem} diagnostics={diagnostics} focusScope={focusScope} unavailableReason={unavailableReason} />
     </div>
   );
 }

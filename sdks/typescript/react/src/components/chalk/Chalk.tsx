@@ -87,12 +87,10 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     props.onColorSchemeChange?.(next);
   };
   const [reportOpen, setReportOpen] = useState(false);
-  const reportTrigger = useRef<HTMLButtonElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const openReport =
     props.onReportProblem && !props.reportUnavailableReason
       ? () => {
-          reportTrigger.current = container.current?.querySelector<HTMLButtonElement>('button[data-part="call-name"]') ?? (document.activeElement instanceof HTMLButtonElement ? document.activeElement : null);
           if (props.onOpenReportProblem) props.onOpenReportProblem();
           else setReportOpen(true);
         }
@@ -135,7 +133,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
                 onReportProblem={props.onReportProblem}
                 unavailableReason={props.reportUnavailableReason}
                 diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`}
-                returnFocus={reportTrigger}
+                focusScope={container}
               />
             </>
           ) : null}
