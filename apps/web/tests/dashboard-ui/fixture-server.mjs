@@ -325,7 +325,14 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
     if (page === "developer")
-      return send(response, 200, { allowedWebsites: data.origins, keys: data.keys.filter((key) => !key.revokedAt), webhooks: data.webhooks.map((webhook) => ({ ...webhook, lastDelivery: data.deliveries[webhook.id]?.[0] ?? null })), nextKeyCursor: null, nextWebhookCursor: null });
+      return send(response, 200, {
+        recordingRenderMode: data.recordingRenderMode ?? "on_demand",
+        allowedWebsites: data.origins,
+        keys: data.keys.filter((key) => !key.revokedAt),
+        webhooks: data.webhooks.map((webhook) => ({ ...webhook, lastDelivery: data.deliveries[webhook.id]?.[0] ?? null })),
+        nextKeyCursor: null,
+        nextWebhookCursor: null,
+      });
     return fail(response, 404, "route_not_found");
   }
   const action = await readBody(request);
@@ -374,6 +381,9 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, { cues: TRANSCRIPT.map(([seconds, name, text]) => ({ startMs: seconds * 1000, endMs: seconds * 1000 + 5000, text, speaker: { name, participantRef: SEAT(name) } })) });
     case "transcript-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/transcript.txt`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
+    case "set-recording-render-mode":
+      data.recordingRenderMode = action.mode;
+      return send(response, 200, { recordingRenderMode: data.recordingRenderMode });
     case "set-allowed-websites":
       data.origins = [...new Set(["https://chalkmeet.com", ...action.origins])];
       return send(response, 200, { allowedWebsites: data.origins });

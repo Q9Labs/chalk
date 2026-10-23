@@ -1058,12 +1058,12 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		})
 	}
 	var renderJobs int
-	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&renderJobs); err != nil || renderJobs != 1 {
-		t.Fatalf("capture completion must queue exactly one MP4 without an export request: render jobs=%d err=%v", renderJobs, err)
+	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&renderJobs); err != nil || renderJobs != 0 {
+		t.Fatalf("on-demand capture completion must not queue an MP4: render jobs=%d err=%v", renderJobs, err)
 	}
 	requestedRenderID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be048")
 	requestedRender, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, requestedRenderID)
-	if err != nil || requestedRender.ID == requestedRenderID || requestedRender.Kind != recordingpipeline.JobKindRender {
+	if err != nil || requestedRender.ID != requestedRenderID || requestedRender.Kind != recordingpipeline.JobKindRender {
 		t.Fatalf("request deferred MP4 export=%+v: %v", requestedRender, err)
 	}
 	reusedRender, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be049"))

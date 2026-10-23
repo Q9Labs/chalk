@@ -18,6 +18,7 @@ select recordings.id as recording_id, recordings.tenant_id,
         where presentations.recording_id = recordings.id
     )::text[] as object_keys
 from recordings
+join tenants on tenants.id = recordings.tenant_id and tenants.recording_render_mode = 'automatic'
 join episodes on episodes.id = recordings.episode_id
 join recording_pipelines pipelines on pipelines.recording_id = recordings.id
 join recording_jobs capture on capture.recording_id = recordings.id and capture.kind = 'capture' and capture.state = 'succeeded'

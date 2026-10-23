@@ -1,5 +1,6 @@
 import type {
   AllowedWebsitesDTO,
+  RecordingRenderSettingsDTO,
   ArtifactURLDTO,
   CallAction,
   CallDTO,
@@ -66,6 +67,7 @@ type Results = {
   "delete-transcript": Ok;
   "allowed-websites": AllowedWebsitesDTO;
   "set-allowed-websites": AllowedWebsitesDTO;
+  "set-recording-render-mode": RecordingRenderSettingsDTO;
   "create-key": SecretDTO;
   "rotate-key": SecretDTO;
   "revoke-key": Ok;

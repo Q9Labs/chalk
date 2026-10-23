@@ -41,9 +41,10 @@ type TenantService interface {
 }
 
 type tenantResponse struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	ExternalID *string `json:"external_id"`
+	RecordingRenderMode tenants.RecordingRenderMode `json:"recording_render_mode"`
+	ID                  string                      `json:"id"`
+	Name                string                      `json:"name"`
+	ExternalID          *string                     `json:"external_id"`
 
 	DefaultMediaPlane                *string                          `json:"default_media_plane"`
 	MediaPlaneProviderConfig         any                              `json:"media_plane_provider_config"`
@@ -79,7 +80,8 @@ type createTenantRequest struct {
 }
 
 type updateTenantRequest struct {
-	Name utilities.OptionalString `json:"name"`
+	RecordingRenderMode utilities.OptionalString `json:"recording_render_mode"`
+	Name                utilities.OptionalString `json:"name"`
 
 	DefaultMediaPlane                utilities.OptionalString    `json:"default_media_plane"`
 	MediaPlaneProviderConfig         utilities.OptionalJSON      `json:"media_plane_provider_config"`
@@ -323,12 +325,17 @@ func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	}
 	var body updateTenantRequest
 	for field := range fields {
-		if field != "cors_allowed_origins" {
+		if field != "cors_allowed_origins" && field != "recording_render_mode" {
 			return updateTenantRequest{}, apiErrorForbidden
 		}
 	}
 	if value, ok := fields["cors_allowed_origins"]; ok {
 		if err := json.Unmarshal(value, &body.CORSAllowedOrigins); err != nil {
+			return updateTenantRequest{}, apiErrorInvalidRequest
+		}
+	}
+	if value, ok := fields["recording_render_mode"]; ok {
+		if err := json.Unmarshal(value, &body.RecordingRenderMode); err != nil {
 			return updateTenantRequest{}, apiErrorInvalidRequest
 		}
 	}
@@ -398,9 +405,10 @@ func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) 
 
 func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 	return tenantResponse{
-		ID:         tenant.ID.String(),
-		Name:       tenant.Name,
-		ExternalID: tenant.ExternalID,
+		RecordingRenderMode: tenant.RecordingRenderMode,
+		ID:                  tenant.ID.String(),
+		Name:                tenant.Name,
+		ExternalID:          tenant.ExternalID,
 
 		DefaultMediaPlane:                tenant.DefaultMediaPlane,
 		MediaPlaneProviderConfig:         utilities.RedactJSONSecrets(tenant.MediaPlaneProviderConfig),
@@ -434,7 +442,8 @@ func (r createTenantRequest) input() tenants.CreateTenantInput {
 
 func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 	return tenants.UpdateTenantInput{
-		Name: r.Name,
+		RecordingRenderMode: r.RecordingRenderMode,
+		Name:                r.Name,
 
 		DefaultMediaPlane:        r.DefaultMediaPlane,
 		MediaPlaneProviderConfig: r.MediaPlaneProviderConfig,

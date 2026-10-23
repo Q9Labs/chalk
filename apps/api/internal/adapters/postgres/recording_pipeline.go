@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -821,7 +822,9 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 }
 
 func completeCaptureParams(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID, transcriptionEnabled bool) sqlc.CompleteCaptureRecordingJobParams {
+	journeyID, _ := observability.JourneyIDFromContext(ctx)
 	params := sqlc.CompleteCaptureRecordingJobParams{
+		JourneyID: uuid(journeyID),
 		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),

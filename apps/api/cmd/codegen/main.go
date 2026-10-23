@@ -679,6 +679,8 @@ func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 
 func fieldEnum(schemaName string, fieldName string) []string {
 	switch fieldName {
+	case "recording_render_mode":
+		return []string{"on_demand", "automatic"}
 	case "admission":
 		if schemaName == "AdmitEpisodeParticipantRequest" {
 			return []string{string(episodes.AdmissionPolicy), string(episodes.AdmissionDirect)}

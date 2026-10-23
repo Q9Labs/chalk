@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AccessGrant, Recording } from "@q9labsai/chalk-client/effect";
+import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
 
 const id = z.uuid();
 const name = z.string().trim().min(1).max(120);
@@ -90,6 +90,7 @@ const allowedWebsites = z
   .transform((origins) => [...new Set([dashboardWebsiteOrigin, ...origins])])
   .refine((origins) => origins.length <= 32, "At most 32 origins including chalkmeet.com");
 export const developerAction = z.discriminatedUnion("action", [
+  z.strictObject({ action: z.literal("set-recording-render-mode"), mode: z.enum(["on_demand", "automatic"]) }),
   z.strictObject({ action: z.literal("allowed-websites") }),
   z.strictObject({ action: z.literal("set-allowed-websites"), origins: allowedWebsites }),
   z.strictObject({ action: z.literal("create-key"), name, scopes: z.array(scope).min(1).max(10), expiresAt: z.iso.datetime(), idempotencyKey }),
@@ -144,7 +145,8 @@ export type CallPageDTO = {
 };
 export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
-export type DeveloperDTO = AllowedWebsitesDTO & { keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
+export type RecordingRenderSettingsDTO = { recordingRenderMode: Tenant["recording_render_mode"] };
+export type DeveloperDTO = AllowedWebsitesDTO & RecordingRenderSettingsDTO & { keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
 export type SecretDTO = { id: string; secret: string };
 export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; headers: Readonly<Record<string, readonly string[]>> };
 export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };

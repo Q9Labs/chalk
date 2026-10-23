@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { DeliveryDTO, DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
+import type { DeliveryDTO, DeveloperDTO, RecordingRenderSettingsDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, clock, expiresSoon, fullDate, sessionDay } from "../../lib/dashboard/format";
@@ -32,7 +32,7 @@ export function DeveloperPage() {
         <h1>Developer</h1>
       </div>
       <p className="intro">
-        API keys, allowed websites and webhooks for your app. Here a call is a Space and one session is an Episode, the same words the API uses. <a href="/docs/quickstart">Read the docs</a>
+        Recording preferences, API keys, allowed websites and webhooks for your app. Here a call is a Space and one session is an Episode, the same words the API uses. <a href="/docs/quickstart">Read the docs</a>
       </p>
     </>
   );
@@ -69,7 +69,8 @@ export function DeveloperPage() {
   return (
     <div className="wrap">
       {intro}
-      <div className="secth">
+      <RecordingSettings mode={data.recordingRenderMode} onSaved={(recordingRenderMode) => update((value) => ({ ...value, recordingRenderMode }))} />
+      <div className="secth" style={{ marginTop: 48 }}>
         <h2>API keys</h2>
         <button type="button" className="btn sec" onClick={() => setOpen({ kind: "create-key" })}>
           <Icon name="plus" />
@@ -447,5 +448,56 @@ function EndpointDetails({ webhook, onRotate, onEdit, onLatest }: { readonly web
         )}
       </div>
     </div>
+  );
+}
+
+function RecordingSettings({ mode, onSaved }: { readonly mode: RecordingRenderSettingsDTO["recordingRenderMode"]; readonly onSaved: (mode: RecordingRenderSettingsDTO["recordingRenderMode"]) => void }) {
+  const [draft, setDraft] = useState(mode);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  useEffect(() => setDraft(mode), [mode]);
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (busy || draft === mode) return;
+        setBusy(true);
+        setError(null);
+        try {
+          const result = await act("developer", { action: "set-recording-render-mode", mode: draft });
+          onSaved(result.recordingRenderMode);
+          toast("Recording settings saved");
+        } catch (cause) {
+          setError(errorMessage(cause));
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="secth">
+        <h2>Recordings</h2>
+      </div>
+      <div className="field">
+        <label htmlFor="recording-render-mode">Make recording videos</label>
+        <select
+          id="recording-render-mode"
+          value={draft}
+          disabled={busy}
+          onChange={(event) => {
+            setDraft(event.target.value === "automatic" ? "automatic" : "on_demand");
+          }}
+          aria-describedby="recording-render-help"
+        >
+          <option value="on_demand">On demand</option>
+          <option value="automatic">Automatically</option>
+        </select>
+        <p id="recording-render-help">On demand makes an MP4 when you request a video. Automatic makes it after each recorded call ends. This setting applies to all calls in your account.</p>
+      </div>
+      {error ? <p role="alert">{error}</p> : null}
+      <button type="submit" className="btn sec" disabled={busy || draft === mode}>
+        {busy ? "Saving…" : "Save recording settings"}
+      </button>
+    </form>
   );
 }

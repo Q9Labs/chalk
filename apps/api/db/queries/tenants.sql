@@ -10,6 +10,7 @@ select
     tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
+    tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
     tenant_artifact_policies.provider_policy_version,
@@ -34,6 +35,7 @@ select
     tenants.cors_allowed_origins,
     tenants.logo_key,
     tenants.website,
+    tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
     tenant_artifact_policies.provider_policy_version,
@@ -84,7 +86,7 @@ insert into tenants (
 ON CONFLICT (created_by_service_id, external_id) DO UPDATE
     SET external_id = tenants.external_id
 returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
-    cors_allowed_origins, logo_key, website, updated_at, created_at
+    cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
     select id
@@ -110,6 +112,7 @@ select
     inserted.cors_allowed_origins,
     inserted.logo_key,
     inserted.website,
+    inserted.recording_render_mode,
     seeded.transcription_ceiling,
     seeded.transcription_default_mode,
     seeded.provider_policy_version,
@@ -125,6 +128,10 @@ join seeded on seeded.tenant_id = inserted.id;
 with updated_tenant as (
 update tenants
 set
+    recording_render_mode = case
+        when sqlc.arg(recording_render_mode_set)::boolean then sqlc.arg(recording_render_mode)::text
+        else recording_render_mode
+    end,
     name = case
         when sqlc.arg(name_set)::boolean then sqlc.arg(name)::text
         else name
@@ -156,7 +163,7 @@ set
     updated_at = now()
 where id = sqlc.arg(id)
 returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
-    cors_allowed_origins, logo_key, website, updated_at, created_at
+    cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
 set
@@ -199,6 +206,7 @@ select
     updated_tenant.cors_allowed_origins,
     updated_tenant.logo_key,
     updated_tenant.website,
+    updated_tenant.recording_render_mode,
     updated_policy.transcription_ceiling,
     updated_policy.transcription_default_mode,
     updated_policy.provider_policy_version,

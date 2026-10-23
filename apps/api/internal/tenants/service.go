@@ -27,6 +27,13 @@ var (
 	ErrInvalidArtifactPolicy = errors.New("invalid Tenant Artifact policy")
 )
 
+type RecordingRenderMode string
+
+const (
+	RecordingRenderOnDemand  RecordingRenderMode = "on_demand"
+	RecordingRenderAutomatic RecordingRenderMode = "automatic"
+)
+
 type Tenant struct {
 	ID                 utilities.ID
 	Name               string
@@ -39,6 +46,7 @@ type Tenant struct {
 	CORSAllowedOrigins       []string
 	LogoKey                  *string
 	Website                  *string
+	RecordingRenderMode      RecordingRenderMode
 	ArtifactPolicy           artifactpolicy.TenantPolicy
 	UpdatedAt                time.Time
 	CreatedAt                time.Time
@@ -81,6 +89,7 @@ type UpdateTenantInput struct {
 	CORSAllowedOrigins       OptionalCORSOrigins
 	LogoKey                  utilities.OptionalString
 	Website                  utilities.OptionalString
+	RecordingRenderMode      utilities.OptionalString
 	ArtifactPolicy           ArtifactPolicyUpdate
 }
 
@@ -239,6 +248,16 @@ func prepareCreateNullableFields(input *CreateTenantInput) error {
 }
 
 func prepareUpdateTenantInput(input *UpdateTenantInput) error {
+	if input.RecordingRenderMode.Set {
+		if input.RecordingRenderMode.Value == nil {
+			return ErrInvalidTenantField
+		}
+		switch RecordingRenderMode(*input.RecordingRenderMode.Value) {
+		case RecordingRenderOnDemand, RecordingRenderAutomatic:
+		default:
+			return ErrInvalidTenantField
+		}
+	}
 	if input.Name.Set {
 		if input.Name.Value == nil {
 			return ErrInvalidTenantName

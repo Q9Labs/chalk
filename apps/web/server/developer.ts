@@ -5,7 +5,7 @@ import type { Engine } from "./engine";
 import { run } from "./engine";
 import { DashboardError } from "./http";
 import { keyDTO, webhookDTO } from "./dto";
-import type { AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
+import type { RecordingRenderSettingsDTO, AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
 export async function developerPage(engine: Engine, cursors: { keyCursor?: string; webhookCursor?: string }): Promise<DeveloperDTO> {
   const params = { tenant_id: engine.tenantId };
   const [keys, webhooks, tenant] = await Promise.all([
@@ -15,6 +15,7 @@ export async function developerPage(engine: Engine, cursors: { keyCursor?: strin
   ]);
   return {
     allowedWebsites: tenant.cors_allowed_origins,
+    recordingRenderMode: tenant.recording_render_mode,
     keys: keys.api_keys.map(keyDTO),
     webhooks: await Promise.all(
       webhooks.webhook_endpoints.map(async (webhook) => {
@@ -34,6 +35,10 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
   const api = engine.api.default;
   const params = { tenant_id: engine.tenantId };
   switch (action.action) {
+    case "set-recording-render-mode": {
+      const tenant = await run(engine.api.tenants.updateTenant({ params, payload: { recording_render_mode: action.mode } }));
+      return { recordingRenderMode: tenant.recording_render_mode } satisfies RecordingRenderSettingsDTO;
+    }
     case "allowed-websites": {
       const tenant = await run(engine.api.tenants.getTenant({ params }));
       return { allowedWebsites: tenant.cors_allowed_origins } satisfies AllowedWebsitesDTO;

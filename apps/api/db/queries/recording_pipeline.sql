@@ -510,8 +510,8 @@ returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     error_code, error_detail, terminal_at, updated_at, created_at, result_metadata;
 
 -- name: RequestDeferredRecordingRender :one
--- Capture completion queues the canonical MP4 export. Requests reuse it,
--- or create it for retained captures from before automatic rendering. A
+-- Automatic capture completion queues the canonical MP4 export. Requests
+-- reuse it, or create it for retained on-demand captures. A
 -- terminally failed job may be manually retried five times; each old failure
 -- is copied to append-only history before the same fenced job is requeued.
 with candidate as (
@@ -520,10 +520,12 @@ with candidate as (
     from recording_pipelines pipelines
     join recordings on recordings.id = pipelines.recording_id
     join episodes on episodes.id = recordings.episode_id
-    where pipelines.recording_id = sqlc.arg(recording_id)
+    join tenants on tenants.id = pipelines.tenant_id
+    where (sqlc.arg(allow_manual_retry)::boolean or tenants.recording_render_mode = 'automatic')
+      and pipelines.recording_id = sqlc.arg(recording_id)
       and pipelines.tenant_id = sqlc.arg(tenant_id)
       and recordings.tenant_id = sqlc.arg(tenant_id)
-    for update of pipelines
+    for update of pipelines for share of tenants
 ), existing as (
     select jobs.*
     from recording_jobs jobs
@@ -756,8 +758,10 @@ with completion_eligibility as materialized (
     returning recording_jobs.*
 ), pipeline as (
     update recording_pipelines
-    set state = 'render_queued', capture_completed_at = now(), updated_at = now()
+    set state = case when tenants.recording_render_mode = 'automatic' then 'render_queued' else 'capture_complete' end,
+        capture_completed_at = now(), updated_at = now()
     from completed
+    join tenants on tenants.id = completed.tenant_id
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
 ), salvage_event as (
@@ -810,8 +814,25 @@ with completion_eligibility as materialized (
         'render', 'render:' || completed.recording_id::text,
         sqlc.arg(payload_schema_version), 'pending', sqlc.arg(priority), now(), sqlc.arg(attempt_limit)
     from completed
+    join tenants on tenants.id = completed.tenant_id
     where exists (select 1 from reservation_release)
+      and tenants.recording_render_mode = 'automatic'
     on conflict (recording_id, kind) do nothing
+    returning *
+), render_journey as (
+    insert into observability_journey_events (
+        event_id, journey_id, sequence, occurred_at, name, phase, state,
+        origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes
+    )
+    select render_job.id, coalesce(sqlc.narg(journey_id)::uuid, render_job.recording_id),
+        coalesce((select max(sequence) + 1 from observability_journey_events
+                  where journey_id = coalesce(sqlc.narg(journey_id)::uuid, render_job.recording_id)), 0),
+        now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
+        sqlc.narg(trace_id)::text, sqlc.narg(span_id)::text,
+        jsonb_build_object('tenant_id', render_job.tenant_id, 'episode_id', render_job.episode_id,
+            'recording_id', render_job.recording_id, 'capture_job_id', completed.id,
+            'render_job_id', render_job.id, 'trigger', 'automatic')
+    from render_job join completed on completed.recording_id = render_job.recording_id
 ), transcription_job as (
     insert into recording_jobs (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,

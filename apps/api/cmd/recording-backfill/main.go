@@ -26,15 +26,16 @@ import (
 )
 
 type report struct {
-	DryRun        bool   `json:"dry_run"`
-	Inspected     int    `json:"inspected"`
-	Recoverable   int    `json:"recoverable"`
-	AlreadyQueued int    `json:"already_queued"`
-	Expired       int    `json:"expired"`
-	MissingSource int    `json:"missing_source"`
-	Unverifiable  int    `json:"unverifiable"`
-	Queued        int    `json:"queued"`
-	NextAfter     string `json:"next_after_recording,omitempty"`
+	DryRun           bool   `json:"dry_run"`
+	Inspected        int    `json:"inspected"`
+	Recoverable      int    `json:"recoverable"`
+	AlreadyQueued    int    `json:"already_queued"`
+	Expired          int    `json:"expired"`
+	NoLongerEligible int    `json:"no_longer_eligible"`
+	MissingSource    int    `json:"missing_source"`
+	Unverifiable     int    `json:"unverifiable"`
+	Queued           int    `json:"queued"`
+	NextAfter        string `json:"next_after_recording,omitempty"`
 }
 
 func main() {
@@ -141,7 +142,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		}, jobID)
 		if errors.Is(err, recordingpipeline.ErrExportUnavailable) {
 			result.Recoverable--
-			result.Expired++
+			result.NoLongerEligible++
 			continue
 		}
 		if err != nil {

@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -17,7 +18,13 @@ import (
 )
 
 // Capture completion must queue rendering without an export request.
-func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
+func TestCaptureCompletionRenderMode(t *testing.T) {
+	for _, mode := range []string{"on_demand", "automatic"} {
+		t.Run(mode, func(t *testing.T) { testCaptureCompletionRenderMode(t, mode) })
+	}
+}
+
+func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 	url := os.Getenv(config.DatabaseURL)
 	if url == "" {
 		t.Skip("CHALK_DATABASE_URL is not set")
@@ -51,6 +58,17 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
 		t.Fatal(err)
 	}
+	if mode == "automatic" {
+		if _, err := pool.Exec(ctx, `update tenants set recording_render_mode='automatic' where id=$1`, tenantID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer func() {
+		_, err := pool.Exec(ctx, `delete from observability_journey_events where attributes->>'tenant_id'=$1`, tenantID.String())
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
 	newID := func() utilities.ID {
 		id, err := utilities.NewID()
@@ -88,9 +106,41 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 			CaptureEpoch:      claimed.Authority.Envelope.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest,
 			RenderJobID:          pgtype.UUID{Bytes: newID().Bytes(), Valid: true},
 			PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
+			JourneyID: pgtype.UUID{Bytes: episodeID.Bytes(), Valid: true}, TraceID: pgtype.Text{String: "0123456789abcdef0123456789abcdef", Valid: true}, SpanID: pgtype.Text{String: "0123456789abcdef", Valid: true},
 		})
 		if err != nil {
 			t.Fatalf("complete %d: %v", i, err)
+		}
+		if mode == "on_demand" {
+			var count int
+			if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != 0 {
+				t.Fatalf("on-demand tenant must not queue a render at capture completion: got %d jobs", count)
+			}
+			if _, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID()); !errors.Is(err, recordingpipeline.ErrExportUnavailable) {
+				t.Fatalf("backfill must reject on-demand tenant: %v", err)
+			}
+			candidates, err := sqlc.New(pool).ListRecordingRenderBackfillCandidates(ctx, sqlc.ListRecordingRenderBackfillCandidatesParams{BatchSize: 100})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, candidate := range candidates {
+				if candidate.RecordingID.Bytes == reservation.RecordingID.Bytes() {
+					t.Fatal("on-demand tenant included in backfill")
+				}
+			}
+			manualID := newID()
+			exported, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, manualID)
+			if err != nil || exported.ID != manualID {
+				t.Fatalf("on-demand export did not create the job: %+v %v", exported, err)
+			}
+			reused, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID())
+			if err != nil || reused.ID != manualID {
+				t.Fatalf("on-demand export replay did not reuse job: %+v %v", reused, err)
+			}
+			continue
 		}
 		var automaticID string
 		if err := pool.QueryRow(ctx, `select id::text from recording_jobs where recording_id=$1 and kind='render' and state='pending'`, reservation.RecordingID.Bytes()).Scan(&automaticID); err != nil {
@@ -107,6 +157,11 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 		requested, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID())
 		if err != nil || requested.ID.String() != automaticID {
 			t.Fatalf("export must reuse automatic job %s: %v", automaticID, err)
+		}
+
+		var events int
+		if err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where event_id=$1::uuid and journey_id=$2 and name='recording.render.queued' and state='queued' and trace_id='0123456789abcdef0123456789abcdef' and span_id='0123456789abcdef' and attributes->>'capture_job_id'=$3 and attributes->>'recording_id'=$4 and attributes->>'trigger'='automatic'`, automaticID, episodeID.Bytes(), claimed.ID.String(), reservation.RecordingID.String()).Scan(&events); err != nil || events != 1 {
+			t.Fatalf("automatic render must persist exactly one linked journey event after completion replay/export: events=%d err=%v", events, err)
 		}
 
 		candidates, err := sqlc.New(pool).ListRecordingRenderBackfillCandidates(ctx, sqlc.ListRecordingRenderBackfillCandidatesParams{BatchSize: 100})
@@ -128,6 +183,15 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := pool.Exec(ctx, `update recording_pipelines set state='capture_complete' where recording_id=$1`, reservation.RecordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `update tenants set recording_render_mode='on_demand' where id=$1`, tenantID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID()); !errors.Is(err, recordingpipeline.ErrExportUnavailable) {
+			t.Fatalf("backfill must recheck opt-in after inventory: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `update tenants set recording_render_mode='automatic' where id=$1`, tenantID.Bytes()); err != nil {
 			t.Fatal(err)
 		}
 		backfillID := newID()
