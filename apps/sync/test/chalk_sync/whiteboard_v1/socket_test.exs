@@ -207,7 +207,15 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   test "rejects a policy change from a client that did not negotiate draw_policy_v1" do
     {:ok, initial} = SocketWhiteboardV1.init(%{})
     Process.cancel_timer(initial.hello_timer)
-    state = %{initial | phase: :live, identity: identity(), scene_id: @scene_id, revision: 4}
+
+    state = %{
+      initial
+      | phase: :live,
+        connected_at: connected_earlier(),
+        identity: identity(),
+        scene_id: @scene_id,
+        revision: 4
+    }
 
     frame = %{
       "type" => "set_draw_policy",
@@ -510,6 +518,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     %{
       initial
       | phase: :live,
+        connected_at: connected_earlier(),
         identity: identity(),
         can_draw: false,
         scene_id: @scene_id,

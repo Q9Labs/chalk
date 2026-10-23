@@ -436,6 +436,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     %{
       initial
       | phase: :live,
+        connected_at: System.monotonic_time(:millisecond),
         identity: identity,
         draw_policy_negotiated: draw_policy_negotiated,
         can_draw: can_draw,
