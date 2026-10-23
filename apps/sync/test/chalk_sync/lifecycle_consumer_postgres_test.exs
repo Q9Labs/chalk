@@ -41,6 +41,71 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     end
   end
 
+  @tag :entry_ownership
+  test "a newer confirmed entry voids an accepted older Leave through finalization", %{connections: connections} do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    first = entry_identity(fixture.identity, 1, "before-reentry")
+    current = entry_identity(fixture.identity, 2, "after-reentry")
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
+    assert {:ok, _} = Postgres.recover(current, nil)
+    {:ok, leave} = Operation.new("inflight_entry_leave_001", :participant_leave, %{})
+    assert {:ok, %{result: :pending, external_operation_id: id}} = Postgres.begin_operation(first, leave)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
+    assert {:ok, %{result: :failed}} = Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+    assert [["active", "joined"]] = entry_rows(connection, current)
+    assert [[0]] = Postgrex.query!(connection, "select count(*) from sync_publication_fences where participant_id=$1", [UUID.dump!(current.participant_id)]).rows
+    assert [["rejected"]] = Postgrex.query!(connection, "select outcome from sync_command_receipts where external_operation_id=$1", [UUID.dump!(id)]).rows
+    leave_entry(connection, current, "newer_entry_leave_001")
+  end
+
+  @tag :entry_ownership
+  test "an older confirmation retry cannot reclaim Leave or cancel the newer entry's Leave", %{connections: connections} do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    first = entry_identity(fixture.identity, 1, "older-entry")
+    current = entry_identity(fixture.identity, 2, "newer-entry")
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(first)
+    {:ok, stale} = Operation.new("retried_older_leave_001", :participant_leave, %{})
+    assert {:ok, %{result: :rejected, reason: :participant_inactive}} = Postgres.begin_operation(first, stale)
+    {:ok, own} = Operation.new("newer_own_leave_001", :participant_leave, %{})
+    assert {:ok, %{result: :pending, external_operation_id: id}} = Postgres.begin_operation(current, own)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(first)
+    assert {:ok, %{result: :applied}} = Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+    assert [["left", "left"]] = entry_rows(connection, current)
+  end
+
+  @tag :entry_ownership
+  test "a refreshed reconnect Leaves the same entry without another entered", %{connections: connections} do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    original = entry_identity(fixture.identity, 1, "before-refresh")
+    refreshed = entry_identity(fixture.identity, 1, "after-refresh")
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(original)
+    assert {:ok, _} = Postgres.recover(refreshed, nil)
+    leave_entry(connection, refreshed, "refreshed_entry_leave_001")
+  end
+
+  defp entry_identity(identity, generation, old_token) do
+    identity |> Map.put(:entry_generation, generation) |> Map.put(:entry_token_id, old_token)
+  end
+
+  defp entry_rows(connection, identity) do
+    Postgrex.query!(connection, "select p.status,s.state from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1", [UUID.dump!(identity.participant_id)]).rows
+  end
+
+  defp leave_entry(connection, identity, key) do
+    {:ok, leave} = Operation.new(key, :participant_leave, %{})
+    assert {:ok, %{result: :pending, external_operation_id: id}} = Postgres.begin_operation(identity, leave)
+    assert {:ok, %{result: :applied}} = Postgres.finalize_operation(identity.episode, id, {:confirmed, :provider})
+    assert [["left", "left"]] = entry_rows(connection, identity)
+  end
+
   @tag :join_seat_retry
   test "a completed reentry fences an older entry's delayed Leave", %{connections: connections} do
     connection = hd(connections)
