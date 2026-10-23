@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
@@ -61,6 +62,51 @@ export { buildStageItems };
 
 const FALLBACK_BOX: StageBox = { width: 960, height: 540 };
 const TILE_FILL: CSSProperties = { width: "100%", height: "100%" };
+
+function createContentPlacement() {
+  let host: HTMLDivElement | null = null;
+  let home: HTMLDivElement | null = null;
+  let overflow: HTMLDivElement | null = null;
+  const move = () => {
+    const target = overflow ?? home;
+    if (host && target && host.parentNode !== target) target.appendChild(host);
+  };
+  return {
+    attachHost: (element: HTMLDivElement | null) => {
+      host = element;
+      move();
+    },
+    attachHome: (element: HTMLDivElement | null) => {
+      home = element;
+      move();
+    },
+    attachOverflow: (element: HTMLDivElement | null) => {
+      overflow = element;
+      move();
+    },
+  };
+}
+
+/** Move a stable portal host, never the React subtree that owns its media resources. */
+function PersistentStageContent({ placement, children }: { readonly placement: ReturnType<typeof createContentPlacement>; readonly children: ReactNode }) {
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const element = document.createElement("div");
+    Object.assign(element.style, TILE_FILL);
+    placement.attachHost(element);
+    setHost(element);
+    return () => {
+      placement.attachHost(null);
+      element.remove();
+    };
+  }, [placement]);
+  return (
+    <>
+      <div ref={placement.attachHome} style={TILE_FILL} />
+      {host && createPortal(children, host)}
+    </>
+  );
+}
 
 function frameStyle(frame: StageFrame): CSSProperties {
   return { position: "absolute", left: 0, top: 0, transform: `translate(${frame.x}px, ${frame.y}px)`, width: frame.width, height: frame.height, zIndex: frame.role === "primary" ? 1 : 2 };
@@ -182,8 +228,8 @@ export function Stage({
   }, [activePinnedId, box, interactive, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
   const foldedContent = ordered.filter((item): item is Extract<StageItem, { kind: "screen-share" | "whiteboard" }> => item.kind !== "participant" && !framesById.has(item.id));
-  const renderContent = (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => {
-    if (context.primary && renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
+  const renderContent = (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext, primaryRenderer: boolean) => {
+    if (primaryRenderer && renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
     if (renderContentTile) return renderContentTile(item, context);
     if (renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
     return <StageContentTile item={item} {...context} />;
@@ -199,6 +245,19 @@ export function Stage({
     const tiles = ordered.map((item) => ({ item, frame: framesById.get(item.id), leaving: false }));
     setDisplayed({ source: ordered, geometry, tiles: [...tiles, ...(animate ? displayed.tiles.filter((tile) => !present.has(tile.item.id)).map((tile) => ({ ...tile, leaving: true, departedAt: tile.departedAt ?? performance.now() })) : [])] });
   }
+  const contentPlacements = useRef(new Map<string, ReturnType<typeof createContentPlacement>>());
+  const contentPlacement = (id: string) => {
+    let placement = contentPlacements.current.get(id);
+    if (!placement) {
+      placement = createContentPlacement();
+      contentPlacements.current.set(id, placement);
+    }
+    return placement;
+  };
+  useEffect(() => {
+    const present = new Set(displayed.tiles.map(({ item }) => item.id));
+    for (const id of contentPlacements.current.keys()) if (!present.has(id)) contentPlacements.current.delete(id);
+  }, [displayed.tiles]);
   useEffect(() => {
     const departing = displayed.tiles.filter((tile) => tile.leaving);
     if (!departing.length) return;
@@ -274,8 +333,6 @@ export function Stage({
       <div ref={boxRef} className="relative h-full w-full outline-none" role="group" aria-label={`Stage with ${participantCount} ${participantCount === 1 ? "participant" : "participants"}`} aria-disabled={interactive ? undefined : true} data-testid="stage">
         <StageMotion rootRef={tilesRef} motionKey={motionKey} animate={animate}>
           {displayed.tiles.map(({ item, frame, leaving }) => {
-            // The sheet takes ownership of folded content, including a tile's leaving animation.
-            if (overflowOpen && isContentItem(item) && !framesById.has(item.id)) return null;
             const onPage = Boolean(frame) && !leaving;
             const style = TILE_FILL;
             const pinned = activePinnedId === item.id;
@@ -305,7 +362,10 @@ export function Stage({
                 />
               );
             } else {
-              content = renderContent(item, renderContext);
+              const inOverflow = overflowOpen && foldedContent.some((folded) => folded.id === item.id);
+              const context = inOverflow ? { ...renderContext, active: true, primary: true, hidden: false, onClick: undefined, onDoubleClick: undefined } : renderContext;
+              // Opening the sheet changes presentation, not which caller renderer owns the item.
+              content = <PersistentStageContent placement={contentPlacement(item.id)}>{renderContent(item, context, renderContext.primary)}</PersistentStageContent>;
             }
             return (
               <div
@@ -342,12 +402,7 @@ export function Stage({
         </StageMotion>
       </div>
       <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title={foldedContent.length ? "People and shared content" : "People"}>
-        {overflowOpen &&
-          foldedContent.map((item) => (
-            <div key={item.id} className="relative mb-3 aspect-video w-full">
-              {renderContent(item, { active: true, primary: true, pinned: activePinnedId === item.id, hidden: false, style: undefined, onClick: undefined, onDoubleClick: undefined })}
-            </div>
-          ))}
+        {overflowOpen && foldedContent.map((item) => <div key={item.id} ref={contentPlacement(item.id).attachOverflow} className="relative mb-3 aspect-video w-full" />)}
         {ordered
           .filter((item) => item.kind === "participant")
           .map((item) => (
