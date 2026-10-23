@@ -119,21 +119,8 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       </div>
     );
   const { video, newer, transcript } = selection(state.data.attempts);
-  // Player, transcript and export state belong to their recordings, so a new selection starts fresh.
-  return (
-    <Session
-      key={`${video?.recording.id ?? "none"}:${transcript?.recording.id ?? "none"}`}
-      ids={ids}
-      back={back(state.data.callName)}
-      session={state.data.session}
-      item={video}
-      transcribed={transcript}
-      newer={newer?.recording}
-      onRecording={onRecording}
-      onTranscript={onTranscript}
-      onRefused={onRefused}
-    />
-  );
+  // Only a different video resets playback; transcript selection resets its own panel below.
+  return <Session key={video?.recording.id ?? "none"} ids={ids} back={back(state.data.callName)} session={state.data.session} item={video} transcribed={transcript} newer={newer?.recording} onRecording={onRecording} onTranscript={onTranscript} onRefused={onRefused} />;
 }
 
 function Session({
@@ -276,9 +263,9 @@ function Session({
   // A transcript from another attempt doesn't follow this video, so it names its attempt and its lines don't seek.
   const panel =
     target.id === recording.id ? (
-      <TranscriptPanel transcript={transcript} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(target)} />
+      <TranscriptPanel key={target.id} transcript={transcript} time={time} onSeek={(seconds) => seek.current(seconds)} onCreate={() => createTranscript(target)} />
     ) : (
-      <TranscriptPanel transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
+      <TranscriptPanel key={target.id} transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
     );
 
   if (phone)

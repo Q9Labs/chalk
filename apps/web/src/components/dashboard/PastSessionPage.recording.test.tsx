@@ -243,6 +243,25 @@ it("polls a newer pending transcript while an older finished transcript is shown
   expect(screen.queryByText("Older speech")).toBeNull();
 });
 
+it("preserves playback when a different attempt's transcript completes and resets only its search", async () => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  transcriptStatus = "preparing";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready", transcripts: [{ id: "older-transcript", status: "complete", languages: ["en"], createdAt: date }] }];
+  await open();
+  const before = document.querySelector("video");
+  if (!before) throw new Error("Expected the older recording to play");
+  before.currentTime = 42;
+  fireEvent.change(screen.getByLabelText("Search transcript"), { target: { value: "Older" } });
+  transcriptStatus = "complete";
+  await tick();
+  expect(document.querySelector("video")).toBe(before);
+  expect(before.currentTime).toBe(42);
+  expect(requests.filter((request) => request.action === "recording-url")).toHaveLength(1);
+  await tick();
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  expect(screen.getByLabelText<HTMLInputElement>("Search transcript").value).toBe("");
+});
+
 it("keeps an export write when an older metadata read lands, then rereads that attempt", async () => {
   vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
   transcriptStatus = "";

@@ -32,6 +32,44 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
     }
   }
   if (process.env.DASHBOARD_RECORDING_BASELINE) return;
+  {
+    const { tab, context } = await open(session, { set: "recordingScenario=export_ready" });
+    const newerId = "00000000-0000-4000-8000-000000000801";
+    const transcriptId = "00000000-0000-4000-8000-000000000901";
+    let finished = false;
+    const newerTranscript = () => ({ id: transcriptId, status: finished ? "complete" : "transcribing", languages: ["en"], createdAt: new Date().toISOString() });
+    try {
+      // Two attempts at the dashboard boundary: an older playable video and a newer pending transcript.
+      await tab.route("**/dashboard-api/past-session**", async (route) => {
+        if (route.request().method() === "GET") {
+          const response = await route.fetch();
+          const data = await response.json();
+          const older = data.recordings[0];
+          const newer = { ...older, id: newerId, status: "pending", exportStatus: "none", createdAt: new Date().toISOString(), transcripts: [newerTranscript()] };
+          return route.fulfill({ response, json: { ...data, recordings: [newer, older] } });
+        }
+        const action = route.request().postDataJSON();
+        if (action.action === "transcripts" && action.recordingId === newerId) return route.fulfill({ json: { transcripts: [newerTranscript()], nextCursor: null } });
+        if (action.action === "transcript-document" && action.transcriptId === transcriptId) return route.fulfill({ json: { cues: [{ startMs: 0, endMs: 1000, text: "Newer finished transcript", speaker: null }] } });
+        return route.continue();
+      });
+      await tab.reload({ waitUntil: "networkidle" });
+      await tab.getByRole("button", { name: "Play", exact: true }).click();
+      await tab.waitForFunction(() => document.querySelector("video")?.currentTime > 1);
+      const player = await tab.locator("video").elementHandle();
+      const before = await player.evaluate((video) => video.currentTime);
+      const urlsBefore = (await fixture("log")).filter((entry) => entry.body?.action === "recording-url").length;
+      if (evidence) await tab.screenshot({ path: resolve(evidence, "transcript-switch-before.png"), fullPage: true });
+      finished = true;
+      await tab.getByText("Newer finished transcript", { exact: true }).waitFor({ timeout: 15_000 });
+      const kept = await player.evaluate((video, at) => video.isConnected && video === document.querySelector("video") && !video.paused && video.currentTime > at, before);
+      const urlsAfter = (await fixture("log")).filter((entry) => entry.body?.action === "recording-url").length;
+      check("a newer finished transcript preserves the older video's playback and URL", kept && urlsAfter === urlsBefore);
+      if (evidence) await tab.screenshot({ path: resolve(evidence, "transcript-switch-after.png"), fullPage: true });
+    } finally {
+      await context.close();
+    }
+  }
   // The page's clock runs an hour behind the server's, so it must move the server's deadline onto its own clock.
   {
     const { tab, context } = await open(session, { set: "recordingScenario=available&expireIn=8", clock: -3_600_000 });
