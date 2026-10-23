@@ -198,6 +198,7 @@ type ParticipantJoinSeat struct {
 	State         string             `json:"state"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	EntryTokenID  pgtype.Text        `json:"entry_token_id"`
 }
 
 type ParticipantMediaRefresh struct {

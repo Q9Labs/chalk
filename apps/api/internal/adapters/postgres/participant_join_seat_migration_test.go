@@ -12,7 +12,7 @@ import (
 
 func TestJoinSeatMigrationDefersExistingGenerationForeignKey(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
-	migration, err := migrations.Files.ReadFile("20261023100000_participant_join_seats.sql")
+	migration, err := migrations.Files.ReadFile("20261023190000_participant_join_seats.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestJoinSeatConfirmationLocksEpisodeBeforeParticipant(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	migration, err := migrations.Files.ReadFile("20261023100000_participant_join_seats.sql")
+	migration, err := migrations.Files.ReadFile("20261023190000_participant_join_seats.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
