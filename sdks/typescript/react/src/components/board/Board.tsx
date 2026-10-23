@@ -173,7 +173,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
       const from = cameraRef.current;
       const started = performance.now();
       const step = (now: number) => {
-        const progress = Math.min(1, (now - started) / GLIDE_MS);
+        const progress = Math.max(0, Math.min(1, (now - started) / GLIDE_MS));
         set(mixCamera(from, target, 1 - (1 - progress) ** 3));
         if (progress < 1) glide.current = requestAnimationFrame(step);
         else {
