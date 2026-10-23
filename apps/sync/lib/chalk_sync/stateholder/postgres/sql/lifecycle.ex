@@ -25,6 +25,16 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Lifecycle do
     """
   end
 
+  def read_entry_confirmation do
+    """
+    select exists (
+      select 1 from participant_join_seats
+      where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4
+        and generation=$5 and confirmed_entry_generation >= $6
+    )
+    """
+  end
+
   def read_lifecycle_intent_outcome do
     """
     select status, terminal_reason, applied_event_id, applied_revision

@@ -17,6 +17,7 @@ let welcomes = 0;
 let generation = null;
 let operation;
 let operationReply;
+let recoveryMode;
 const waitFor = async (predicate) => {
   const deadline = Date.now() + 3000;
   while (!predicate()) {
@@ -24,14 +25,14 @@ const waitFor = async (predicate) => {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 };
-const status = () => ({ entered, acknowledged, generation, welcomes, operation, operationReply, phase: client?.getSnapshot().connection.phase });
+const status = () => ({ entered, acknowledged, generation, welcomes, operation, operationReply, recoveryMode, phase: client?.getSnapshot().connection.phase });
 const commands = {
   async start(input) {
     client?.stop();
     upgraded = false;
     token = input.token;
     entered = acknowledged = welcomes = 0;
-    generation = operation = operationReply = null;
+    generation = operation = operationReply = recoveryMode = null;
     client = new V1SyncClient({
       url: `ws://127.0.0.1:${input.port}/v1/sync`,
       token: async () => token,
@@ -55,6 +56,7 @@ const commands = {
             if (frame.type === "welcome") {
               welcomes++;
               generation = frame.entry_generation ?? null;
+              recoveryMode = frame.mode;
             }
             if (frame.type === "entered_ack") acknowledged++;
             if (frame.command_id === operation) operationReply = frame.type;
@@ -80,7 +82,11 @@ const commands = {
     const before = welcomes;
     const beforeAck = acknowledged;
     client.restartTransport();
-    await waitFor(() => welcomes > before && client.getSnapshot().connection.phase === "live");
+    try {
+      await waitFor(() => welcomes > before && client.getSnapshot().connection.phase === "live");
+    } catch {
+      return status();
+    }
     if (upgraded) await waitFor(() => acknowledged > beforeAck).catch(() => {});
     return status();
   },

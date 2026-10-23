@@ -124,7 +124,7 @@ defmodule ChalkSync.Stateholder.Postgres do
             {:error, reason}
 
           {:error, _reason} ->
-            Lifecycle.resolve_uncertain(episode, lifecycle_intent_id)
+            Lifecycle.resolve_uncertain(episode, lifecycle_intent_id, identity)
         end
 
       :error ->
@@ -133,11 +133,11 @@ defmodule ChalkSync.Stateholder.Postgres do
   rescue
     exception ->
       Logger.error("sync lifecycle transaction became uncertain: #{Exception.message(exception)}")
-      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id)
+      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id, identity)
   catch
     :exit, reason ->
       Logger.error("sync lifecycle transaction exited before resolution: #{inspect(reason)}")
-      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id)
+      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id, identity)
   end
 
   @impl ChalkSync.Stateholder

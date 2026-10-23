@@ -112,6 +112,28 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
   defp validate_entry_dispatch(_connection, _identity, _generation), do: :ok
 
+  def awaiting_entry?(connection, identity) do
+    params =
+      Scope.participant(identity) ++ [identity.participant_generation, identity.entry_generation]
+
+    [[awaiting]] =
+      Postgrex.query!(
+        connection,
+        """
+        select exists (
+          select 1 from participant_join_seats
+          where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4
+            and generation=$5 and state='joined'
+            and confirmed_entry_generation < $6 and $6 <= issued_entry_generation
+            and issued_entry_expires_at > clock_timestamp()
+        )
+        """,
+        params
+      ).rows
+
+    awaiting
+  end
+
   def claim_entry(_connection, nil), do: :ok
   def claim_entry(_connection, %{entry_generation: nil}), do: :ok
 

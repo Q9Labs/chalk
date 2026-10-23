@@ -39,6 +39,9 @@ Legacy sockets receive a server generation internally without changing their
 welcome frame, and still confirm at hello. Participants created before seat
 storage acquire it on their first live hello. When recovery replaces the Sync
 client, it confirms the replacement entry before reporting recovery complete.
+Completed startup also survives reconnecting from an older Sync to an upgraded
+one. Recovery can finish while a previous entry's Leave is pending, and an
+uncertain confirmation reply checks that entry's generation before acknowledging it.
 A claimed Leave blocks later entry
 admission until its provider work settles. An entry admitted before that claim
 defers the older provider work until confirmation or its two-minute startup

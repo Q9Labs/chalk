@@ -17,6 +17,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
@@ -595,13 +596,16 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
     case Postgrex.query!(connection, SQL.lock_authority(), params).rows do
       [["active", generation, status, display_name, _role, capabilities]]
-      when generation == identity.participant_generation and is_binary(display_name) and
-             (status == "active" or (allow_pending and status == "joining")) ->
-        {:ok,
-         %{
-           display_name: display_name,
-           capabilities: ordered_capabilities(capabilities)
-         }}
+      when generation == identity.participant_generation and is_binary(display_name) ->
+        if participant_available?(connection, identity, status, allow_pending) do
+          {:ok,
+           %{
+             display_name: display_name,
+             capabilities: ordered_capabilities(capabilities)
+           }}
+        else
+          {:error, :participant_stale}
+        end
 
       [[episode_status, _generation, _participant_status, _display_name, _role, _capabilities]]
       when episode_status != "active" ->
@@ -614,6 +618,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
         {:error, :participant_stale}
     end
   end
+
+  defp participant_available?(_connection, _identity, "active", _allow_pending), do: true
+  defp participant_available?(_connection, _identity, "joining", true), do: true
+
+  defp participant_available?(connection, identity, "leaving", true),
+    do: JoinSeats.awaiting_entry?(connection, identity)
+
+  defp participant_available?(_connection, _identity, _status, _allow_pending), do: false
 
   defp require_capability(profile, capability) do
     if capability in profile.capabilities, do: :ok, else: {:error, :capability_denied}

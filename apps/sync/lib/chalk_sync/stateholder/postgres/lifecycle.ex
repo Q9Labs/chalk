@@ -663,7 +663,20 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   defp lifecycle_terminal_reason("participant_generation_replaced"),
     do: :participant_generation_replaced
 
-  def resolve_uncertain(episode, lifecycle_intent_id) do
+  def resolve_uncertain(episode, lifecycle_intent_id, %{entry_generation: generation} = identity)
+      when is_integer(generation) and generation > 0 do
+    connection = Database.connection(episode, 1)
+    params = Scope.participant(identity) ++ [identity.participant_generation, generation]
+
+    case Postgrex.query(connection, SQL.read_entry_confirmation(), params, timeout: 1_000) do
+      {:ok, %{rows: [[true]]}} -> resolve_uncertain(episode, lifecycle_intent_id, nil)
+      _ -> {:retryable, :decision_unavailable}
+    end
+  catch
+    :exit, _reason -> {:retryable, :decision_unavailable}
+  end
+
+  def resolve_uncertain(episode, lifecycle_intent_id, _identity) do
     connection = Database.connection(episode, 1)
     params = Scope.lifecycle_intent(episode, lifecycle_intent_id)
 

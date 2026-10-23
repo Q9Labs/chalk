@@ -207,9 +207,11 @@ export class V1SyncClient implements V1CollaborationClient {
   /** Announces completed startup; transport recovery resends until acknowledged. */
   async confirmEntered(): Promise<void> {
     this.#requireLive();
+    // Completed startup survives an older Sync that confirms at hello. A later
+    // connection may negotiate confirmation for the first time.
+    this.#entryPending = true;
     // Without negotiation, Sync confirmed the entry at hello.
     if (!this.#entryNegotiated) return;
-    this.#entryPending = true;
     this.#send({ type: "entered" });
   }
   getSnapshot(): V1EpisodeSnapshot {
@@ -583,7 +585,6 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
-    if (!this.#entryNegotiated) this.#entryPending = false;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
     this.#updateLocalMediaStates();

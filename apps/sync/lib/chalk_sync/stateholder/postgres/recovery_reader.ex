@@ -6,6 +6,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Postgres.Control
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Recovery, as: SQL
   alias ChalkSync.Stateholder.Recovery
@@ -90,6 +91,11 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
       [[_generation, status]] when status in ["active", "joining"] ->
         validate_admission_intent(connection, identity, status)
 
+      [[_generation, "leaving"]] ->
+        if JoinSeats.awaiting_entry?(connection, identity),
+          do: validate_admission_intent(connection, identity, "leaving"),
+          else: expired_entry(connection, identity)
+
       [[_generation, _status]] ->
         expired_entry(connection, identity)
 
@@ -101,15 +107,16 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   defp validate_admission_intent(
          _connection,
          %Identity{admission_lifecycle_intent_id: nil},
-         "active"
-       ),
+         status
+       )
+       when status in ["active", "leaving"],
        do: :ok
 
   defp validate_admission_intent(connection, identity, status) do
     params = Scope.participant(identity) ++ [Scope.uuid(identity.admission_lifecycle_intent_id)]
 
     case Postgrex.query!(connection, SQL.read_admission_intent(), params).rows do
-      [["applied", _state, _valid]] when status == "active" -> :ok
+      [["applied", _state, _valid]] when status in ["active", "leaving"] -> :ok
       [["pending", "pending", true]] when status == "joining" -> :ok
       [["pending", "pending", false]] when status == "joining" -> {:error, :entry_expired}
       [["pending", nil, nil]] when status == "joining" -> :ok

@@ -2,6 +2,8 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Chat.Repository.Postgres, as: ChatPostgres
+  alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -21,6 +23,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     previous = Application.get_env(:chalk_sync, :database_connections)
     stateholder = Application.fetch_env!(:chalk_sync, :stateholder)
     connections = SyncPostgres.start_connections(@database_url)
+    Enum.each(connections, &Process.unlink/1)
     Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
     Application.put_env(:chalk_sync, :stateholder, Postgres)
     connection = hd(connections)
@@ -74,7 +77,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
 
     scenarios =
       for initial <- [:modern, "5.0.0", "5.1.0"],
-          fault <- [:none, :lost_reply, :rollback],
+          confirmation <- [:normal, :reply_lost, :commit_not_applied],
           {name, entry, old} <- [
             {:entry, [:admit, :recover, :confirm], [:accept_old, :finalize_old]},
             {:refresh, [:admit, :refresh, :recover, :confirm], [:accept_old, :finalize_old]},
@@ -82,8 +85,22 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
           ],
           steps <- interleave(entry, old),
           before?(steps, :admit, :finalize_old),
-          do: %{name: name, initial: initial, fault: fault, steps: steps}
+          do: %{name: name, initial: initial, confirmation: confirmation, steps: steps}
 
+    legacy_scenarios =
+      for version <- ["5.0.0", "5.1.0"],
+          frame <- ["reconnect_hello", "retry_hello"],
+          steps <- interleave([:published_hello], [:accept_old, :finalize_old]),
+          before?(steps, :published_hello, :finalize_old),
+          do: %{
+            name: :legacy_reentry,
+            initial: version,
+            frame: frame,
+            confirmation: :normal,
+            steps: steps
+          }
+
+    scenarios = scenarios ++ legacy_scenarios
     failures = scenarios |> Enum.shuffle() |> Enum.flat_map(&run_scenario(&1, context))
     sdk_steps = interleave([:upgrade, :reconnect], [:refresh, :accept_old, :finalize_old])
     sdk_steps = Enum.filter(sdk_steps, &before?(&1, :reconnect, :finalize_old))
@@ -93,7 +110,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
       try do
         Enum.flat_map(sdk_steps, fn steps ->
           run_scenario(
-            %{name: :sync_upgrade, initial: :sdk, fault: :none, steps: steps},
+            %{name: :sync_upgrade, initial: :sdk, confirmation: :normal, steps: steps},
             Map.put(context, :bridge, bridge)
           )
         end)
@@ -104,8 +121,21 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     all_failures = failures ++ sdk_failures
 
     IO.puts(
-      "ENTRY_INTERLEAVINGS seed=#{inspect(@seed)} postgres=#{length(scenarios)} sdk_upgrade=#{length(sdk_steps)} executed=#{length(scenarios) + length(sdk_steps)} failures=#{length(all_failures)}"
+      "ENTRY_ORDERINGS seed=#{inspect(@seed)} postgres=#{length(scenarios)} sdk_upgrade=#{length(sdk_steps)} executed=#{length(scenarios) + length(sdk_steps)} failures=#{length(all_failures)}"
     )
+
+    if path = System.get_env("CHALK_ENTRY_INTERLEAVING_REPORT") do
+      File.write!(
+        path,
+        JSON.encode!(%{
+          seed: Tuple.to_list(@seed),
+          postgres: length(scenarios),
+          sdk_upgrade: length(sdk_steps),
+          failures:
+            Enum.map(all_failures, &%{scenario: inspect(&1.scenario), violation: &1.violation})
+        })
+      )
+    end
 
     assert all_failures == [], Enum.map_join(Enum.take(all_failures, 12), "\n", &inspect/1)
   end
@@ -151,6 +181,12 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     %{state | current: current, step: :admit}
   end
 
+  defp execute(:published_hello, state, scenario, context) do
+    current = published_entry(scenario.initial, scenario.frame, state.older, context)
+    assert current.entry_generation > state.older.entry_generation
+    %{state | current: current, confirmed: current.entry_generation, step: :published_hello}
+  end
+
   defp execute(:recover, state, _scenario, _context) do
     assert {:ok, recovery} = Postgres.recover(state.current, nil)
 
@@ -161,7 +197,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   end
 
   defp execute(:confirm, state, scenario, context) do
-    result = confirm_with_fault(state.current, scenario.fault, context.connections)
+    result = confirm_entry(state.current, scenario.confirmation, context.connections)
     actual = row(context.connection, state.older)
 
     if match?({:ok, _}, result),
@@ -201,7 +237,18 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   end
 
   defp execute(:refresh, state, _scenario, _context) do
-    refreshed = %{state.current | entry_token_id: "refreshed-credential"}
+    assert {:ok, claims} = DevTokenVerifier.verify(token(state.current, 2))
+
+    refreshed = %Identity{
+      episode: state.current.episode,
+      participant_id: claims.participant_id,
+      participant_generation: claims.participant_generation,
+      admission_lifecycle_intent_id: claims.admission_lifecycle_intent_id,
+      role: claims.role,
+      capabilities: claims.capabilities,
+      entry_generation: state.current.entry_generation
+    }
+
     assert {:ok, resumed} = Postgres.admit_entry(refreshed, refreshed.entry_generation)
     assert resumed.entry_generation == state.current.entry_generation
     %{state | current: resumed, step: :refresh}
@@ -244,6 +291,11 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
 
       assert recovery.mode != :terminal,
              "admitted current entry turned terminal after #{state.step}"
+
+      if actual.status == "leaving" do
+        assert {:ok, _} = ChatPostgres.participant_capabilities(state.current)
+        assert {:error, :participant_stale} = ChatPostgres.participant_capabilities(state.older)
+      end
     end
 
     # Acceptance probe is rolled back, so checking leaveability cannot alter the
@@ -254,25 +306,44 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     probe_leave(context.connection, current, state, actual)
   end
 
-  defp probe_leave(connection, current, state, actual) do
+  defp probe_leave(connection, current, state, actual, retries \\ 2) do
     selector = Application.fetch_env!(:chalk_sync, :database_connections)
 
-    try do
-      assert {:error, :probe_complete} =
-               Postgrex.transaction(connection, fn transaction ->
-                 Application.put_env(:chalk_sync, :database_connections, fn _episode, _offset ->
-                   transaction
-                 end)
+    result =
+      try do
+        Postgrex.transaction(connection, fn transaction ->
+          Application.put_env(:chalk_sync, :database_connections, fn _episode, _offset ->
+            transaction
+          end)
 
-                 {:ok, fresh} =
-                   Operation.new("interleaving_probe_leave_0001", :participant_leave, %{})
+          {:ok, fresh} =
+            Operation.new("interleaving_probe_leave_0001", :participant_leave, %{})
 
-                 operation = if actual.status == "leaving", do: state.operation, else: fresh
-                 assert {:ok, %{result: :pending}} = Postgres.begin_operation(current, operation)
-                 Postgrex.rollback(transaction, :probe_complete)
-               end)
-    after
-      Application.put_env(:chalk_sync, :database_connections, selector)
+          operation = if actual.status == "leaving", do: state.operation, else: fresh
+
+          case Postgres.begin_operation(current, operation) do
+            {:retryable, _reason} -> Postgrex.rollback(transaction, :probe_retry)
+            decision -> assert {:ok, %{result: :pending}} = decision
+          end
+
+          Postgrex.rollback(transaction, :probe_complete)
+        end)
+      after
+        Application.put_env(:chalk_sync, :database_connections, selector)
+      end
+
+    case result do
+      {:error, :probe_complete} ->
+        :ok
+
+      {:error, :probe_retry} when retries > 0 ->
+        # A deliberately aborted COMMIT can disconnect Postgrex. Re-check the
+        # recovered connection before retrying; never retry a permanent rejection.
+        Postgrex.query!(connection, "select 1", [])
+        probe_leave(connection, current, state, actual, retries - 1)
+
+      other ->
+        flunk("current entry cannot Leave: #{inspect(other)}")
     end
   end
 
@@ -333,18 +404,18 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     end
   end
 
-  defp confirm_with_fault(identity, fault, connections) do
+  defp confirm_entry(identity, confirmation, connections) do
     previous = Application.get_env(:chalk_sync, :lifecycle_fault_hook)
 
     try do
-      if fault == :lost_reply,
+      if confirmation == :reply_lost,
         do:
           Application.put_env(:chalk_sync, :lifecycle_fault_hook, fn
             :after_commit_before_reply, _ -> raise "injected lost confirmation reply"
             _, _ -> :ok
           end)
 
-      if fault == :rollback,
+      if confirmation == :commit_not_applied,
         do:
           Enum.each(
             connections,
@@ -359,7 +430,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     after
       restore_env(:lifecycle_fault_hook, previous)
 
-      if fault == :rollback,
+      if confirmation == :commit_not_applied,
         do:
           Enum.each(
             connections,
@@ -385,9 +456,13 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   end
 
   defp initial_entry(version, identity, context) do
+    published_entry(version, "hello", identity, context)
+  end
+
+  defp published_entry(version, frame, identity, context) do
     capture = Enum.find(@captures, &(&1["version"] == version))
     {:ok, client} = Client.connect(context.port, capture["path"])
-    client = Client.send_json(client, Map.put(capture["hello"], "token", token(identity, 1)))
+    client = Client.send_json(client, Map.put(capture[frame], "token", token(identity, 2)))
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
     client = Client.acknowledge_recovery(client, welcome)
     assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
@@ -443,8 +518,9 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
 
     receive do
       {^port, {:data, {:eol, line}}} ->
-        assert %{"result" => result} = JSON.decode!(line), "SDK bridge failed: #{line}"
-        result
+        decoded = JSON.decode!(line)
+        assert Map.has_key?(decoded, "result"), "SDK bridge failed: #{line}"
+        decoded["result"]
 
       {^port, {:exit_status, status}} ->
         flunk("SDK bridge exited #{status}")
