@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { z } from "zod";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { act, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
@@ -56,6 +56,16 @@ function ownerAccess(spaceId: string, userId: string) {
       // Storage may be disabled; intentional leave must still work.
     }
   };
+  const rotateJoinKey = () => {
+    joinKey = intentKey();
+    try {
+      window.sessionStorage.setItem(joinStorageKey, joinKey);
+      window.sessionStorage.removeItem(episodeStorageKey);
+    } catch {
+      /* The old seat is terminal even without tab storage. */
+    }
+  };
+  const join = () => act("call", { action: "join", spaceId, idempotencyKey: joinKey });
   const restore = async () => {
     if (recovery === undefined) recovery = readOwnerReload(spaceId, userId);
     const saved = recovery;
@@ -68,15 +78,7 @@ function ownerAccess(spaceId: string, userId: string) {
     if (!saved && !pendingEpisode && !hasStoredJoinKey) return;
     const page = await readPage("call", { spaceId });
     if (saved && page.live?.id === saved.episodeId) joinKey = saved.joinKey;
-    else if (!pendingEpisode || page.live?.id !== pendingEpisode) {
-      joinKey = intentKey();
-      try {
-        window.sessionStorage.setItem(joinStorageKey, joinKey);
-        window.sessionStorage.removeItem(episodeStorageKey);
-      } catch {
-        /* The old Episode is terminal even without tab storage. */
-      }
-    }
+    else if (!pendingEpisode || page.live?.id !== pendingEpisode) rotateJoinKey();
   };
   const getAccess: GetAccess = async ({ reason, replaceMediaConnection }) => {
     await (restoring ??= restore().catch((error) => {
@@ -85,7 +87,12 @@ function ownerAccess(spaceId: string, userId: string) {
     }));
     const { access } =
       reason === "join"
-        ? await act("call", { action: "join", spaceId, idempotencyKey: joinKey })
+        ? // A Leave can commit while its acknowledgement is lost; its seat then refuses the retained key.
+          await join().catch((error: unknown) => {
+            if (!(error instanceof DashboardRequestError && error.code === "participant_not_active")) throw error;
+            rotateJoinKey();
+            return join();
+          })
         : // Without the current token the server replaces the media connection.
           await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
