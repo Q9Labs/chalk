@@ -79,7 +79,11 @@ async function joinBoardParticipants(contexts: BrowserContext[]) {
   const [a, b] = await Promise.all(contexts.map((context) => context.newPage()));
   await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? "http://localhost:3000").href);
   await a.getByLabel("Your name", { exact: true }).fill("BoardA");
+  const created = a.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces");
   await a.getByRole("button", { name: "Join call", exact: true }).click();
+  expect((await created).status()).toBe(201);
+  await a.getByRole("button", { name: "Video tile for BoardA", exact: true }).waitFor();
+  await expect.poll(() => a.getByRole("button", { name: /^Video tile for / }).count()).toBe(1);
   await a.getByRole("button", { name: "Close call link", exact: true }).click();
   await b.goto(a.url());
   await b.getByLabel("Your name", { exact: true }).fill("BoardB");
@@ -87,6 +91,7 @@ async function joinBoardParticipants(contexts: BrowserContext[]) {
   for (const page of [a, b]) {
     await page.getByRole("button", { name: "Video tile for BoardA", exact: true }).waitFor();
     await page.getByRole("button", { name: "Video tile for BoardB", exact: true }).waitFor();
+    await expect.poll(() => page.getByRole("button", { name: /^Video tile for / }).count()).toBe(2);
   }
   return [a, b];
 }
