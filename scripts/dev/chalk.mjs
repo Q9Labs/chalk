@@ -139,7 +139,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       };
     }
     if (serviceId === "web") return { ...base, VITE_API_URL: config.urls.api, VITE_CHALK_SYNC_URL: base.CHALK_SYNC_URL, VITE_CHALK_DEV_SYNC_URL: base.CHALK_SYNC_URL, VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu" };
-    if (serviceId === "mobile") return base;
+    if (serviceId === "mobile") return { ...base, RCT_METRO_PORT: String(config.metro.port) };
     return {};
   }
 }
@@ -160,7 +160,7 @@ function defaultServiceSpecs(config) {
       args: ["--filter", "@q9labsai/chalk-mobile", "run", "start:raw"],
       cwd: config.root,
       dependsOn: ["web"],
-      readiness: { url: "http://127.0.0.1:8081/status", bodyIncludes: "packager-status:running" },
+      readiness: { url: `http://127.0.0.1:${config.metro.port}/status`, bodyIncludes: "packager-status:running" },
       optional: true,
     });
   return specs;

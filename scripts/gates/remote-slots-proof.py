@@ -40,7 +40,7 @@ print(f'PASS slot={slot}: isolated SQL, {len(ports)} port listeners, tmp={os.env
                   f'bash {shlex.quote(str(repository / "scripts/gates/with-postgres.sh"))} -- python3 {shlex.quote(str(callback))}')
         for name in ('pg-one', 'pg-two', 'pg-three'):
             self.submit(name, script)
-        self.lock.close()
+        self.release_dispatcher()
         import time
         deadline = time.monotonic() + 90
         while len(list(self.root.glob('slot-*.json'))) < 3 and time.monotonic() < deadline:

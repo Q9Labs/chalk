@@ -18,6 +18,7 @@ import tempfile
 import time
 
 DEFAULT_ROOT = Path.home() / '.local/share/chalk-remote/v1'
+REAP_SECONDS = 300
 if sys.platform == 'darwin':
     LIBC = ctypes.CDLL(None, use_errno=True)
     LIBPROC = ctypes.CDLL('/usr/lib/libproc.dylib')
@@ -270,12 +271,13 @@ def check_slot_ports(job, slot):
         return
     if ports.is_symlink() or ports.read_text().strip() != str(slot):
         raise ValueError('invalid slot port receipt')
-    base = 21000 + slot * 100
+    # remote-slot-env.sh assigns roles 1-19 in this block; 19 is Metro.
+    first, last = 21000 + slot * 100 + 1, 21000 + slot * 100 + 19
     holders = {}
     omitted = False
     owner = command = ''
-    with subprocess.Popen(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}',
-                            f'-iUDP:{base+1}-{base+18}', '-Fpcn'], stdout=subprocess.PIPE,
+    with subprocess.Popen(['lsof', '-nP', f'-iTCP:{first}-{last}',
+                            f'-iUDP:{first}-{last}', '-Fpcn'], stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL, text=True) as found:
         for line in found.stdout:
             line = line.rstrip('\n')
@@ -287,7 +289,7 @@ def check_slot_ports(job, slot):
                 # Remote endpoints and connection churn do not change slot ownership.
                 local = line[1:].split('->', 1)[0]
                 port = local.rsplit(':', 1)[-1]
-                if port.isdigit() and base + 1 <= int(port) <= base + 18:
+                if port.isdigit() and first <= int(port) <= last:
                     key = (owner, command, local)
                     if key not in holders:
                         if len(holders) < 8:
@@ -440,8 +442,11 @@ def admission(isolated, owner):
     if isolated:
         return True
     lock = Path('/tmp/chalk-remote-admission.lock')
-    if lock.exists() and lock.read_text().strip() == str(owner):
-        return True
+    try:
+        if lock.read_text().strip() == str(owner):
+            return True
+    except FileNotFoundError:
+        pass  # A legacy owner released it; shlock decides atomically.
     return subprocess.run(['shlock', '-p', str(owner), '-f', str(lock)]).returncode == 0
 
 
@@ -502,21 +507,36 @@ def expire_waiters(root, db):
 
 
 def daemon(root, db, isolated):
+    # Wakes never wait behind an active dispatcher. It re-checks the queue after releasing
+    # its lock, so a ticket registered before a refused wake still runs.
+    while dispatch(root, db, isolated):
+        if db.execute("SELECT 1 FROM jobs WHERE state!='done' LIMIT 1").fetchone() is None:
+            return
+
+
+def dispatch(root, db, isolated):
     slots = int(os.environ.get('CHALK_REMOTE_SLOTS', '3'))
     if not 1 <= slots <= 100:
         raise ValueError('CHALK_REMOTE_SLOTS must be between 1 and 100')
-    # Only this process writes admissions. Additional wakes take over after its idle exit.
+    # Only this process writes admissions.
     with (root / 'dispatcher.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
         (root / 'dispatcher.pid').write_text(str(os.getpid()))
         running = {}
         legacy_handoff_until = None
         for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
             running[row['ticket']] = (row, None, row['started'])
-        reap(root, db)
         if not isolated:
             reap_legacy()
+        reap_due = time.monotonic()
         while True:
+            if time.monotonic() >= reap_due:
+                # A wait on low disk or memory can keep this process alive indefinitely.
+                reap(root, db)
+                reap_due = time.monotonic() + REAP_SECONDS
             for ticket, (row, child, started) in list(running.items()):
                 if child is not None:
                     result = child.poll()
@@ -538,7 +558,7 @@ def daemon(root, db, isolated):
             busy = db.execute("SELECT * FROM jobs WHERE state IN ('running','quarantined')").fetchall()
             row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
             if row is None and not busy:
-                return
+                return True
             if row is None or len(busy) >= slots or any(r['exclusive'] for r, _, _ in running.values()):
                 time.sleep(0.2)
                 continue
@@ -651,13 +671,15 @@ def main():
         if args.action == 'attach' and row['state'] != 'done':
             wake(root, args.isolated)
         if args.action == 'read' and row['state'] != 'done':
+            # Release the probe before waking: a woken dispatcher never waits for this lock.
             with (root / 'dispatcher.lock').open('a') as lock:
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    idle = True
                 except BlockingIOError:
-                    pass
-                else:
-                    wake(root, args.isolated)
+                    idle = False
+            if idle:
+                wake(root, args.isolated)
         if args.action != 'read':
             print(json.dumps(describe(db, row)))
         else:

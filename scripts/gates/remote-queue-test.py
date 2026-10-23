@@ -42,8 +42,7 @@ class QueueTest(unittest.TestCase):
         # Wait for every detached dispatcher using this root, including pending wakes.
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            commands = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True)
-            active = [line for line in commands.splitlines() if ' daemon' in line and str(self.root) in line]
+            active = self.dispatchers()
             if not active:
                 break
             time.sleep(0.05)
@@ -55,6 +54,17 @@ class QueueTest(unittest.TestCase):
 
     def invoke(self, *args, **kwargs):
         return subprocess.run([*self.command, *args], capture_output=True, check=True, **kwargs)
+
+    def dispatchers(self):
+        commands = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True)
+        return [int(line.split()[0]) for line in commands.splitlines() if line.endswith(' daemon') and str(self.root) in line]
+
+    def release_dispatcher(self):
+        # Wakes refused while the test held the lock have exited, as they would behind a busy
+        # dispatcher. Start the one that dispatcher's exit re-check would, detached like a wake.
+        self.lock.close()
+        subprocess.run(['sh', '-c', '"$@" </dev/null >>"$0" 2>&1 &', str(self.root / 'daemon.log'), *self.command, 'daemon'],
+                       check=True)
 
     def payload(self, script, request=None):
         archive = io.BytesIO()
@@ -107,7 +117,7 @@ class QueueTest(unittest.TestCase):
         script = f'echo "$CHALK_REMOTE_SLOT"; end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
         for name in ('one', 'two', 'three'):
             self.submit(name, script)
-        self.lock.close()
+        self.release_dispatcher()
         for slot, name in enumerate(('one', 'two', 'three')):
             self.assertEqual(self.wait(name, 'running')['slot'], slot)
         self.submit('exclusive', 'sleep .3', '--exclusive')
@@ -127,7 +137,7 @@ class QueueTest(unittest.TestCase):
         helper.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(legacy_lock))
                           .replace('if legacy_busy(cutover):', 'if False:')
                           .replace('return legacy_active()', 'return False')
-                          .replace('                reap_legacy()', '                pass')
+                          .replace('            reap_legacy()', '            pass')
                           .replace("if __name__ == '__main__':", "def legacy_active():\n    return False\n\nif 'legacy_waiters' in globals():\n    actual_legacy_waiters = legacy_waiters\n    def legacy_waiters():\n        return set()\n\nif __name__ == '__main__':"))
         self.command = [sys.executable, str(helper), '--root', str(self.root)]
 
@@ -137,8 +147,8 @@ class QueueTest(unittest.TestCase):
         (job / 'resources').mkdir(parents=True)
         for slot in range(90, 100):
             base = 21000 + slot * 100
-            found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}',
-                                    f'-iUDP:{base+1}-{base+18}', '-t'], capture_output=True, text=True)
+            found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+19}',
+                                    f'-iUDP:{base+1}-{base+19}', '-t'], capture_output=True, text=True)
             if not found.stdout:
                 break
         else:
@@ -222,24 +232,112 @@ class QueueTest(unittest.TestCase):
         queue = runpy.run_path(str(HELPER))
         job = self.root / 'jobs/origin'
         job.mkdir(parents=True)
-        old = os.environ.get('CHALK_REMOTE_JOB_TOKEN')
+        release = self.root / 'release'
         try:
-            os.environ['CHALK_REMOTE_JOB_TOKEN'] = queue['job_token'](job)
-            queue['wake'](self.root, True)
+            self.submit('busy', f'end=$((SECONDS+20)); while [ ! -f "{release}" ] && ((SECONDS<end)); do sleep .05; done')
+            self.wait_for_dispatchers([])
+            self.lock.close()
+            old = os.environ.get('CHALK_REMOTE_JOB_TOKEN')
+            try:
+                os.environ['CHALK_REMOTE_JOB_TOKEN'] = queue['job_token'](job)
+                queue['wake'](self.root, True)
+            finally:
+                if old is None:
+                    os.environ.pop('CHALK_REMOTE_JOB_TOKEN', None)
+                else:
+                    os.environ['CHALK_REMOTE_JOB_TOKEN'] = old
+            self.wait('busy', 'running')
+            processes = self.dispatchers()
+            self.assertEqual(len(processes), 1)
+            queue['stop_job'](job, None, None)
+            self.assertTrue(queue['process_start'](processes[0]), 'workload cleanup killed the shared dispatcher it woke')
         finally:
-            if old is None:
-                os.environ.pop('CHALK_REMOTE_JOB_TOKEN', None)
-            else:
-                os.environ['CHALK_REMOTE_JOB_TOKEN'] = old
-        deadline = time.monotonic() + 4
-        processes = []
-        while not processes and time.monotonic() < deadline:
-            lines = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True).splitlines()
-            processes = [int(line.split()[0]) for line in lines if str(self.root) in line and line.endswith(' daemon')]
+            release.touch()
+        self.wait('busy')
+
+    def wait_for_dispatchers(self, expected, message='a refused wake stayed resident'):
+        deadline = time.monotonic() + 3
+        while self.dispatchers() != expected and time.monotonic() < deadline:
+            time.sleep(.05)
+        self.assertEqual(self.dispatchers(), expected, message)
+
+    def test_wakes_exit_while_a_dispatcher_runs(self):
+        release = self.root / 'release'
+        self.submit('long', f'end=$((SECONDS+20)); while [ ! -f "{release}" ] && ((SECONDS<end)); do sleep .05; done')
+        self.release_dispatcher()
+        try:
+            self.wait('long', 'running')
+            dispatcher = int((self.root / 'dispatcher.pid').read_text())
+            for name in ('second', 'third'):
+                self.submit(name)
+            for _ in range(3):
+                self.invoke('attach', 'long')
+            self.wait_for_dispatchers([dispatcher], 'submissions and attaches left daemons queued behind the dispatcher')
+            print('PASS 2 submissions and 3 attaches during a running job left only the active dispatcher', flush=True)
+        finally:
+            release.touch()
+        for name in ('long', 'second', 'third'):
+            self.assertEqual(self.wait(name)['result'], 0)
+
+    def test_ticket_registered_as_the_dispatcher_exits_still_runs(self):
+        # Pause the exiting dispatcher once at each point: still holding the lock, then just after release.
+        helper = self.root / 'remote-queue.py'
+        pause = f'''
+def pause(point):
+    reached = Path({str(self.root)!r}) / (point + '-reached')
+    if not reached.exists():
+        reached.touch()
+        deadline = time.monotonic() + 10
+        while not reached.with_name(point + '-go').exists() and time.monotonic() < deadline:
             time.sleep(.02)
-        self.assertEqual(len(processes), 1)
-        queue['stop_job'](job, None, None)
-        self.assertTrue(queue['process_start'](processes[0]), 'workload cleanup killed the shared dispatcher it woke')
+
+'''
+        helper.write_text(HELPER.read_text()
+                          .replace("            if row is None and not busy:\n                return True",
+                                   "            if row is None and not busy:\n                pause('holding')\n                return True")
+                          .replace("    while dispatch(root, db, isolated):\n",
+                                   "    while dispatch(root, db, isolated):\n        pause('released')\n")
+                          .replace("if __name__ == '__main__':", pause + "if __name__ == '__main__':"))
+        self.command = [sys.executable, str(helper), '--root', str(self.root), '--isolated']
+        release = self.root / 'release'
+        try:
+            (self.root / 'released-reached').touch()
+            self.submit('first')
+            self.release_dispatcher()
+            self.wait_for_file(self.root / 'holding-reached')
+            holder = int((self.root / 'dispatcher.pid').read_text())
+            self.submit('while-holding', 'exit 7')
+            self.wait_for_dispatchers([holder])
+            self.assertEqual(self.status('while-holding')['state'], 'queued')
+            (self.root / 'holding-go').touch()
+            self.assertEqual(self.wait('while-holding')['result'], 7)
+            self.assertEqual(int((self.root / 'dispatcher.pid').read_text()), holder)
+            print('PASS refused wake exited while the dispatcher held the lock; its re-check ran exit 7', flush=True)
+
+            self.wait_for_dispatchers([])
+            (self.root / 'released-reached').unlink()
+            self.submit('third')
+            self.wait_for_file(self.root / 'released-reached')
+            exiting = int((self.root / 'dispatcher.pid').read_text())
+            self.submit('after-release', f'end=$((SECONDS+20)); while [ ! -f "{release}" ] && ((SECONDS<end)); do sleep .05; done; exit 9')
+            self.wait('after-release', 'running')
+            successor = int((self.root / 'dispatcher.pid').read_text())
+            self.assertNotEqual(successor, exiting)
+            self.assertEqual(sorted(self.dispatchers()), sorted([exiting, successor]))
+            (self.root / 'released-go').touch()
+            self.wait_for_dispatchers([successor], 'the released dispatcher waited behind its successor')
+            release.touch()
+            self.assertEqual(self.wait('after-release')['result'], 9)
+            print('PASS a wake after release took over; the old dispatcher re-checked and exited', flush=True)
+        finally:
+            for name in ('holding-go', 'released-go', 'release'):
+                (self.root / name).touch()
+
+    def wait_for_file(self, path):
+        deadline = time.monotonic() + 5
+        while not path.exists() and time.monotonic() < deadline:
+            time.sleep(.02)
+        self.assertTrue(path.exists(), f'{path.name} missing; daemon log: ' + (self.root / 'daemon.log').read_text())
 
     def test_absent_original_worker_cannot_authorize_a_later_session(self):
         queue = runpy.run_path(str(HELPER))
@@ -305,7 +403,7 @@ class QueueTest(unittest.TestCase):
         try:
             for slot in range(90, 100):
                 base = 21000 + slot * 100
-                found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+18}', '-t'], capture_output=True, text=True)
+                found = subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+19}', '-t'], capture_output=True, text=True)
                 if not found.stdout:
                     listener.bind(('127.0.0.1', base + 4))
                     break
@@ -348,6 +446,54 @@ class QueueTest(unittest.TestCase):
             listener.close()
             db.close()
 
+    def test_metro_gets_a_private_slot_port_that_blocks_release(self):
+        queue = runpy.run_path(str(HELPER))
+        def slot_ports(slot):
+            # Never let this probe write a surrounding queue job's slot receipt.
+            environment = {key: value for key, value in os.environ.items() if not key.startswith('CHALK_REMOTE_')}
+            output = subprocess.run(['bash', '-c', 'source "$1" && env', 'slot-env', str(HELPER.with_name('remote-slot-env.sh'))],
+                                    env={**environment, 'CHALK_REMOTE_SLOT': str(slot)},
+                                    capture_output=True, text=True, check=True).stdout
+            return {name: int(value) for name, _, value in (line.partition('=') for line in output.splitlines())
+                    if name.endswith('_PORT') and value.isdigit()}
+        metro = {}
+        for slot in (0, 1):
+            ports = slot_ports(slot)
+            metro[slot] = ports.pop('RCT_METRO_PORT', None)
+            self.assertIsNotNone(metro[slot], 'Metro keeps the shared default port 8081')
+            self.assertTrue(21000 + slot * 100 < metro[slot] < 21100 + slot * 100, metro[slot])
+            self.assertNotIn(metro[slot], ports.values(), 'Metro shares a port with another slot role')
+        self.assertNotEqual(metro[0], metro[1])
+        for slot in range(90, 100):
+            base = 21000 + slot * 100
+            if not subprocess.run(['lsof', '-nP', f'-iTCP:{base+1}-{base+19}', '-t'], capture_output=True, text=True).stdout:
+                break
+        else:
+            self.fail('no unused port block')
+        job = self.root / 'jobs/ended'
+        (job / 'resources').mkdir(parents=True)
+        (job / 'resources/slot').write_text(str(slot))
+        db = queue['database'](self.root)
+        listener = socket.socket()
+        try:
+            port = slot_ports(slot)['RCT_METRO_PORT']
+            listener.bind(('127.0.0.1', port))
+            listener.listen()
+            with db:
+                db.execute("INSERT INTO jobs(id,priority,submitted,wait_seconds,state,slot) VALUES('ended',0,?,0,'running',?)", (time.time(), slot))
+            row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+            queue['complete'](self.root, db, row, 0, 'test', False)
+            row = db.execute('SELECT * FROM jobs WHERE id="ended"').fetchone()
+            self.assertEqual(row['state'], 'quarantined', 'release ignored a listener on the slot Metro port')
+            self.assertIn(f':{port}', row['cleanup_error'])
+            listener.close()
+            queue['complete'](self.root, db, row, 0, 'test', False)
+            self.assertEqual(db.execute('SELECT state FROM jobs WHERE id="ended"').fetchone()['state'], 'done')
+            print(f'PASS slots 0 and 1 got Metro ports {metro[0]} and {metro[1]}; a listener on slot {slot} Metro port {port} held release', flush=True)
+        finally:
+            listener.close()
+            db.close()
+
     def test_waiting_client_sees_quarantined_jobs_errors_and_retry_times(self):
         os.environ['CHALK_REMOTE_SLOTS'] = '3'
         for slot in range(3):
@@ -358,7 +504,7 @@ class QueueTest(unittest.TestCase):
             with closing(sqlite3.connect(self.root / 'queue.sqlite')) as db, db:
                 db.execute("UPDATE jobs SET state='quarantined',slot=?,result=0 WHERE id=?", (slot, f'blocked{slot}'))
         self.submit('waiting', 'exit 7')
-        self.lock.close()
+        self.release_dispatcher()
         try:
             deadline = time.monotonic() + 5
             while not self.status('blocked2')['cleanup_error'] and time.monotonic() < deadline:
@@ -404,7 +550,7 @@ class QueueTest(unittest.TestCase):
         name = 'chalk-postgres-slot-0-' + runpy.run_path(str(HELPER))['job_token'](job)
         receipt = job / 'resources/postgres'
         receipt.write_text(name + '\n' + name + '\n')
-        self.lock.close()
+        self.release_dispatcher()
         try:
             healthy = self.wait('healthy', 'running')
             deadline = time.monotonic() + 4
@@ -481,6 +627,29 @@ class QueueTest(unittest.TestCase):
                 child.terminate()
                 child.wait()
 
+    @unittest.skipUnless(shutil.which('shlock'), 'requires the macOS legacy shlock binary')
+    def test_legacy_lock_released_during_admission_is_acquired(self):
+        lock = self.root / 'legacy.lock'
+        fixture = self.root / 'admission.py'
+        fixture.write_text(HELPER.read_text().replace('/tmp/chalk-remote-admission.lock', str(lock)))
+        admission = runpy.run_path(str(fixture))['admission']
+        legacy = subprocess.Popen(['sleep', '10'])
+        worker = subprocess.Popen(['sleep', '10'])
+        lock.write_text(str(legacy.pid))
+        class ReleasedDuringRead(type(self.root)):
+            def read_text(path, *args, **kwargs):
+                path.unlink(missing_ok=True)  # The legacy owner exits after any existence check.
+                return super().read_text(*args, **kwargs)
+        try:
+            admission.__globals__['Path'] = ReleasedDuringRead
+            self.assertTrue(admission(False, worker.pid), 'a released legacy lock refused admission')
+            self.assertEqual(int(lock.read_text()), worker.pid)
+            print('PASS legacy lock vanished between check and read; shlock admitted the worker', flush=True)
+        finally:
+            for child in (legacy, worker):
+                child.terminate()
+                child.wait()
+
     def test_detached_changed_directory_listener_is_gone_before_slot_reuse(self):
         receipt = self.root / 'listener.json'
         detached = self.root / 'detached.py'
@@ -493,7 +662,7 @@ class QueueTest(unittest.TestCase):
                     f'for i in {{1..100}}; do [ ! -f "{receipt}" ] || break; sleep .02; done\nkill -KILL $$')
         bind = 'import json,socket,sys; s=socket.socket(); s.bind(("127.0.0.1",json.load(open(sys.argv[1]))[1]))'
         self.submit('after', 'python3 -c ' + shlex.quote(bind) + ' ' + shlex.quote(str(receipt)))
-        self.lock.close()
+        self.release_dispatcher()
         try:
             self.assertEqual(self.wait('crash')['result'], 137)
             self.assertEqual(self.wait('after')['result'], 0, 'orphan still owns the port when its slot is reused')
@@ -530,7 +699,7 @@ elif args[:2]==['volume','rm']: data['volume']=False
 path.write_text(json.dumps(data)); sys.exit(result)
 ''')
         docker.chmod(0o700)
-        self.lock.close()
+        self.release_dispatcher()
         for kind in ('container', 'volume'):
             with self.subTest(inspection=kind):
                 recovered.unlink(missing_ok=True)
@@ -617,7 +786,7 @@ path.write_text(json.dumps(data)); sys.exit(result)
                    f'mkdir -p "$1/tmp"; export TMPDIR="$1/tmp"\nsource {slot_env}\n'
                    f'bash {postgres} start\nbash {redis} start\n')
         self.submit('finish', startup + f'bash {postgres} stop\nbash {redis} stop')
-        self.lock.close()
+        self.release_dispatcher()
         self.assertEqual(self.wait('finish')['result'], 0, (self.root / 'jobs/finish/output.log').read_text())
         self.assertEqual(json.loads(state.read_text()), foreign, 'successful teardown leaked private containers or volumes')
         ready = self.root / 'resources-ready'
@@ -646,7 +815,7 @@ path.write_text(json.dumps(data)); sys.exit(result)
         admitted = self.root / 'admitted'
         tried = self.root / 'tried'
         self.submit('first', f'while [ ! -f "{release_first}" ]; do sleep .02; done', '--exclusive')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('first', 'running')
         script = '''lock="$3"; admitted="$4"; tried="$5"
 started=$SECONDS
@@ -696,7 +865,7 @@ done
             db.execute("INSERT INTO jobs(id,priority,submitted,wait_seconds,state) VALUES(?,0,?,0,'queued')",
                        ('old-invalid', time.time()))
         self.submit('valid')
-        self.lock.close()
+        self.release_dispatcher()
         self.assertEqual(self.wait('old-invalid')['result'], 64)
         self.assertEqual(self.wait('valid')['result'], 0)
 
@@ -706,7 +875,7 @@ done
         self.shared_fixture(legacy_lock)
         ready = self.root / 'worker-ready'
         self.submit('exclusive', f'touch "{ready}"; sleep 10', '--exclusive')
-        self.lock.close()
+        self.release_dispatcher()
         row = self.wait('exclusive', 'running')
         deadline = time.monotonic() + 3
         while not ready.exists() and time.monotonic() < deadline:
@@ -751,7 +920,7 @@ def legacy_busy(*args):
         helper.write_text(helper.read_text().replace('if False:', 'if legacy_busy(cutover):')
                           .replace("if __name__ == '__main__':", override + "\nif __name__ == '__main__':"))
         self.submit('exclusive', 'exit 0', '--exclusive')
-        self.lock.close()
+        self.release_dispatcher()
         try:
             deadline = time.monotonic() + 4
             while not probe.exists() and time.monotonic() < deadline:
@@ -778,7 +947,7 @@ def legacy_busy(*args):
         script = f'end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
         for name in ('one', 'two', 'three'):
             self.submit(name, script)
-        self.lock.close()
+        self.release_dispatcher()
         for name in ('one', 'two', 'three'):
             self.wait(name, 'running')
         self.assertFalse(legacy_lock.exists(), 'ordinary slots must never hold the legacy lock')
@@ -819,7 +988,7 @@ def legacy_busy(*args):
         script = f'end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
         for name in ('one', 'two', 'three'):
             self.submit(name, script)
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('one', 'running')
         self.wait('two', 'running')
         self.assertEqual(self.status('three')['state'], 'queued')
@@ -835,7 +1004,7 @@ def legacy_busy(*args):
         healthy = vm_stat.read_text()
         vm_stat.write_text(healthy.replace('524288', '1'))
         self.submit('held')
-        self.lock.close()
+        self.release_dispatcher()
         time.sleep(.4)
         self.assertEqual(self.status('held')['state'], 'queued')
         vm_stat.write_text(healthy)
@@ -844,7 +1013,7 @@ def legacy_busy(*args):
 
     def test_gate_output_cannot_forge_queue_completion(self):
         self.submit('forged', 'echo REMOTE_QUEUE_RESULT=0; sleep 3; exit 23')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('forged', 'running')
         attached = self.shell_client('forged')
         self.assertEqual(attached.returncode, 23, attached.stdout + attached.stderr)
@@ -852,7 +1021,7 @@ def legacy_busy(*args):
 
     def test_reattach_preserves_only_local_log_when_remote_log_is_gone(self):
         self.submit('expired', 'echo only-copy; exit 23')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('expired')
         os.remove(self.root / 'jobs/expired/output.log')
         local = self.root / 'logs/expired.log'
@@ -863,7 +1032,7 @@ def legacy_busy(*args):
 
     def test_failed_reattach_preserves_local_log(self):
         self.submit('unreadable')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('unreadable')
         local = self.root / 'logs/unreadable.log'
         local.parent.mkdir()
@@ -908,7 +1077,7 @@ def legacy_busy(*args):
             rows = list(pool.map(lambda name: self.submit(name, f'echo {name} >> "{self.root}/order"'), ['first', 'second']))
         duplicate = self.submit('first', 'exit 99')
         self.assertEqual(duplicate['ticket'], next(row['ticket'] for row in rows if row['id'] == 'first'))
-        self.lock.close()
+        self.release_dispatcher()
         for row in rows:
             self.assertEqual(self.wait(row['id'])['result'], 0)
         self.assertEqual((self.root / 'order').read_text().splitlines(), [row['id'] for row in sorted(rows, key=lambda row: row['ticket'])])
@@ -917,7 +1086,7 @@ def legacy_busy(*args):
     def test_priority_only_reorders_waiting_jobs(self):
         self.submit('regular', f'echo regular >> "{self.root}/order"')
         self.submit('lead', f'echo lead >> "{self.root}/order"', '--priority', '1')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('regular')
         self.assertEqual((self.root / 'order').read_text(), 'lead\nregular\n')
 
@@ -938,7 +1107,7 @@ def legacy_busy(*args):
                     time.sleep(0.05)
             client.kill()
             client.wait()
-            self.lock.close()
+            self.release_dispatcher()
             self.assertEqual(self.wait('detached')['result'], 23)
             output = self.invoke('read', 'detached', '0').stdout.decode()
             self.assertIn('detached', output)
@@ -952,7 +1121,7 @@ def legacy_busy(*args):
     def test_crashed_shell_reaps_orphan_and_releases_queue(self):
         self.submit('crash', f'sleep 8 &\necho $! > "{self.root}/child"\nkill -KILL $$')
         self.submit('next', 'exit 7')
-        self.lock.close()
+        self.release_dispatcher()
         self.assertEqual(self.wait('crash')['result'], 137)
         self.assertEqual(self.wait('next')['result'], 7)
         pid = int((self.root / 'child').read_text())
@@ -962,7 +1131,7 @@ def legacy_busy(*args):
 
     def test_dispatcher_crash_is_recovered_on_attach(self):
         self.submit('interrupted', 'sleep 1; exit 23')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('interrupted', 'running')
         os.kill(int((self.root / 'dispatcher.pid').read_text()), signal.SIGKILL)
         self.invoke('attach', 'interrupted')
@@ -977,7 +1146,7 @@ def legacy_busy(*args):
         child.write_text(f'import os,time,pathlib\nos.setpgrp()\nos.chdir("/")\npathlib.Path({str(receipt)!r}).write_text(str(os.getpid()))\ntime.sleep(8)\n')
         self.submit('moved', f'python3 "{child}" &\nfor i in {{1..100}}; do test ! -f "{receipt}" || break; sleep .02; done\nkill -KILL $$')
         self.submit('after-moved')
-        self.lock.close()
+        self.release_dispatcher()
         self.assertEqual(self.wait('moved')['result'], 137)
         self.assertEqual(self.wait('after-moved')['result'], 0)
         pid = int(receipt.read_text())
@@ -987,7 +1156,7 @@ def legacy_busy(*args):
     def test_wait_timeout_and_bad_transfer(self):
         self.submit('expired', 'exit 99', '--wait-seconds', '1')
         time.sleep(1.1)
-        self.lock.close()
+        self.release_dispatcher()
         self.assertEqual(self.wait('expired')['result'], 76)
         bad = subprocess.run([*self.command, 'submit', 'bad'], input=b'incomplete', capture_output=True)
         self.assertNotEqual(bad.returncode, 0)
@@ -1001,13 +1170,13 @@ def legacy_busy(*args):
                          f'def cleanup(*args):\n time.sleep(.6)\n pathlib.Path({str(cleaned)!r}).touch()\n sys.exit(0)\n'
                          f'signal.signal(signal.SIGTERM,cleanup)\npathlib.Path({str(ready)!r}).touch()\ntime.sleep(8)\n')
         self.submit('grace', f'python3 "{child}" &\nfor i in {{1..100}}; do test ! -f "{ready}" || break; sleep .02; done\nkill -KILL $$')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('grace')
         self.assertTrue(cleaned.exists(), 'signal cleanup was killed before it could finish')
 
     def test_wait_timeout_returns_while_another_job_is_running(self):
         self.submit('active', 'sleep 3')
-        self.lock.close()
+        self.release_dispatcher()
         self.wait('active', 'running')
         self.submit('limited', 'exit 99', '--wait-seconds', '1')
         self.assertEqual(self.wait('limited')['result'], 76)
@@ -1018,7 +1187,7 @@ def legacy_busy(*args):
         ticket = self.submit('old-ticket')
         with sqlite3.connect(self.root / 'queue.sqlite') as db:
             db.execute('UPDATE jobs SET submitted=? WHERE id=?', (time.time() - 10000, 'old-ticket'))
-        self.lock.close()
+        self.release_dispatcher()
         self.assertEqual(self.wait('old-ticket')['result'], 0)
         with sqlite3.connect(self.root / 'queue.sqlite') as db:
             db.execute('UPDATE jobs SET finished=? WHERE id=?', (time.time() - 8 * 86400, 'old-ticket'))
@@ -1032,6 +1201,49 @@ def legacy_busy(*args):
         self.assertFalse((self.root / 'jobs/old-ticket').exists())
         self.assertEqual(self.submit('old-ticket', 'exit 99')['ticket'], ticket['ticket'])
         self.assertEqual(self.status('old-ticket')['result'], 0)
+
+    def test_waiting_dispatcher_keeps_expiring_old_files(self):
+        helper = self.root / 'remote-queue.py'
+        helper.write_text(HELPER.read_text().replace('REAP_SECONDS = 300', 'REAP_SECONDS = .2'))
+        self.command = [sys.executable, str(helper), '--root', str(self.root), '--isolated']
+        vm_stat = self.root / 'vm_stat'
+        healthy = vm_stat.read_text()
+        vm_stat.write_text(healthy.replace('524288', '1'))
+        self.submit('held')
+        def expired_upload(name):
+            upload = self.root / name
+            upload.mkdir()
+            (upload / 'lease').touch()
+            os.utime(upload, (time.time() - 7200,) * 2)
+            return upload
+        try:
+            startup = expired_upload('upload-before-start')
+            self.release_dispatcher()
+            deadline = time.monotonic() + 5
+            while startup.exists() and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertFalse(startup.exists(), 'startup retention did not run')
+            dispatcher = int((self.root / 'dispatcher.pid').read_text())
+            upload = expired_upload('upload-while-waiting')
+            orphan = self.root / 'jobs/orphan'
+            orphan.mkdir()
+            os.utime(orphan, (time.time() - 7200,) * 2)
+            finished = self.root / 'jobs/finished-long-ago'
+            finished.mkdir()
+            with closing(sqlite3.connect(self.root / 'queue.sqlite')) as db, db:
+                db.execute("INSERT INTO jobs(id,priority,submitted,wait_seconds,state,result,finished) VALUES(?,0,?,0,'done',0,?)",
+                           (finished.name, time.time() - 9 * 86400, time.time() - 8 * 86400))
+            deadline = time.monotonic() + 5
+            while any(path.exists() for path in (upload, orphan, finished)) and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertEqual([path.name for path in (upload, orphan, finished) if path.exists()], [],
+                             'a waiting dispatcher kept expired files')
+            self.assertEqual(self.status('held')['state'], 'queued')
+            self.assertEqual(int((self.root / 'dispatcher.pid').read_text()), dispatcher)
+            print('PASS dispatcher waiting on memory removed an expired upload, orphan job and week-old log', flush=True)
+        finally:
+            vm_stat.write_text(healthy)
+        self.assertEqual(self.wait('held')['result'], 0)
 
 
 if __name__ == '__main__':

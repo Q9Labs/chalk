@@ -160,6 +160,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       container: env.CHALK_REDIS_CONTAINER || "chalk-dev-redis",
       volume: env.CHALK_REDIS_VOLUME || "chalk-dev-redis",
     },
+    // Outside `ports`: preflight must not fail the core profile, or the optional Metro, on a busy 8081.
+    metro: { port: numberFromEnv(env, "RCT_METRO_PORT", 8081) },
     ports,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,

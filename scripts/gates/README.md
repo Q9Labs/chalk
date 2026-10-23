@@ -136,18 +136,28 @@ bounded as before.
 State lives under `~/.local/share/chalk-remote/v1` on the M4. A dispatcher owns
 admissions and reaps dead worker descendants and their queue-owned
 `/tmp/chalk-queue-work-*` checkouts when each ticket finishes. It exits
-when idle. A later submission or attach restarts it; live log reads also restart a
-dead dispatcher and record exit 137 for interrupted work. Logs and submission
-files expire after seven days, on the next dispatcher start. Small result
-tombstones remain so an old run ID cannot execute twice. Abandoned partial uploads
-expire after an hour; an active upload holds a lease and cannot be reaped.
+when idle, after one more queue check outside its lock, so a ticket registered
+while it exits still runs. A later submission or attach restarts it; a wake that
+finds a dispatcher running exits at once instead of waiting. Live log reads also
+restart a dead dispatcher and record exit 137 for interrupted work. Logs and
+submission files expire after seven days. Abandoned partial uploads expire after
+an hour; an active upload holds a lease and cannot be reaped. The dispatcher
+applies both limits when it starts and every five minutes while it runs, so a
+long wait for disk or memory still frees them. Small result tombstones remain so
+an old run ID cannot execute twice.
 
 ### Cut-over and undo
 
 New submissions use three FIFO slots (`CHALK_REMOTE_SLOTS`, 1–100). Each job
 receives `CHALK_REMOTE_SLOT`; the worker assigns distinct ports in blocks
-`21000 + slot * 100 + role` and a private temp/state directory. PostgreSQL gate
-and topology wrappers already allocate ephemeral ports and unique databases.
+`21000 + slot * 100 + role` and a private temp/state directory. Role 19 is Metro,
+exported as `RCT_METRO_PORT`. Expo CLI binds Metro to it and passes it to Android
+builds, and the mobile dev profile probes it. iOS Debug builds use the prebuilt
+React Native core, which keeps port 8081 compiled in, so an iOS simulator run in
+a slot launches its app with
+`xcrun simctl launch <udid> ai.q9labs.chalk.mobile -RCT_jsLocation 127.0.0.1:$RCT_METRO_PORT`.
+PostgreSQL gate and topology wrappers already allocate ephemeral ports and unique
+databases.
 `--exclusive`, root/full gates, call-performance and performance-budget commands
 wait for running slots to drain, then hold admission alone. A queued exclusive
 ticket blocks later tickets; priority only changes waiting ticket order.
