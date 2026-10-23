@@ -518,6 +518,7 @@ it.each([
       peer.receive("origin", reconnected);
       await vi.advanceTimersByTimeAsync(400);
     });
+    expect(sendView).toHaveBeenLastCalledWith(expect.objectContaining({ x: 432, lead: true, originParticipantId: "origin", originSequence: 101 }));
     const current = follower.camera();
     await act(async () => {
       peer.receive("origin", { ...view, x: 999, ownerSequence: 100 });
@@ -529,7 +530,7 @@ it.each([
       await vi.advanceTimersByTimeAsync(400);
     });
     expect(follower.camera()).not.toEqual(current);
-    expect(sendView).toHaveBeenLastCalledWith(expect.objectContaining({ x: 456, originParticipantId: "origin", originSequence: 102 }));
+    expect(sendView).toHaveBeenLastCalledWith(expect.objectContaining({ x: 456, lead: false, originParticipantId: "origin", originSequence: 102 }));
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -1445,7 +1446,7 @@ const cameraMoveCases: readonly { name: string; follow?: true; run: (container: 
       })(),
   })),
   { name: "first-content fit", run: (_container, engine) => engine.select("note") },
-  { name: "follow apply", follow: true, run: (_container, _engine, peer) => peer.receive("remote", { x: 200, y: 0, width: 100, height: 100, bring: false, originParticipantId: "remote", originEpoch: "camera-table", originSequence: 1 }) },
+  { name: "follow apply", follow: true, run: (_container, _engine, peer) => peer.receive("remote", { x: 200, y: 0, width: 100, height: 100, bring: false, originParticipantId: "remote", originEpoch: "camera-table", originSequence: 2 }) },
 ];
 it.each(cameraMoveCases)("camera API leadership: $name", async ({ follow, run }) => {
   vi.useFakeTimers();
@@ -1457,7 +1458,13 @@ it.each(cameraMoveCases)("camera API leadership: $name", async ({ follow, run })
         engine.zoom(1.25);
         await vi.advanceTimersByTimeAsync(600);
       });
-      if (follow) await render({ following: "remote" });
+      if (follow) {
+        await act(async () => {
+          peer.receive("remote", { x: 100, y: 0, width: 100, height: 100, bring: false, originParticipantId: "remote", originEpoch: "camera-table", originSequence: 1 });
+        });
+        await render({ following: "remote" });
+        await act(async () => vi.advanceTimersByTimeAsync(400));
+      }
       send.mockClear();
       await act(async () => {
         run(container, engine, peer);

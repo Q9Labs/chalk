@@ -2011,3 +2011,21 @@ it("keeps a real recovery-time move when a heartbeat follows it", async () => {
     await client.stopSceneSubscription();
   }
 });
+
+it("keeps the canonical source on an intentional Follow selection", async () => {
+  const { client, sockets } = recoveryClient();
+  const startup = client.startSceneSubscription();
+  try {
+    await settle();
+    sockets[0]?.open();
+    await settle();
+    sockets[0]?.receive({ ...welcome(), view_owner_id: "40000000-0000-4000-8000-000000000004" });
+    await settle();
+    sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+    await startup;
+    client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false, lead: true, originParticipantId: sceneId, originSequence: 42 });
+    expect(JSON.parse(sockets[0]?.sent.at(-1) ?? "{}")).toMatchObject({ move: true, origin_participant_id: sceneId, origin_sequence: 42 });
+  } finally {
+    await client.stopSceneSubscription();
+  }
+});

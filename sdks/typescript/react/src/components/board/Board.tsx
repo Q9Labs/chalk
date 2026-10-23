@@ -318,6 +318,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   const shareView = useRef<(bring: boolean, lead?: boolean) => boolean>(() => false);
   const viewSender = useRef(sendView);
   viewSender.current = sendView;
+  const selectedFollow = useRef<string | null>(following);
   const ownParticipantId = useSelf().participantId;
   const appliedVersions = useRef(new ViewVersions());
   const { roster } = useParticipants();
@@ -357,12 +358,13 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       const lead = pendingLead || bring;
       pendingLead = false;
       const followedView = followingRef.current ? views.current.get(followingRef.current) : undefined;
+      const selected = followedView !== undefined && selectedFollow.current === followingRef.current;
       // Older view_v1 peers cannot mark a relay's origin, so never relay their inherited motion.
       if (followedView && !followedView.originParticipantId && !followedView.ownerId && !bring) return true;
       // Relay the logical view, not the letterboxing added to fit my screen.
       const view = followedView ?? visibleView(camera.cameraRef.current, camera.viewportRef.current);
       last = performance.now();
-      const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring, lead: lead || bring };
+      const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring, lead: lead || selected };
       let outgoing: ChalkWhiteboardView = rectangle;
       if (followedView && !lead) {
         if (followedView.ownerId) {
@@ -372,7 +374,9 @@ export function Board({ board, primary, visible, colorScheme, people, following,
         }
       }
       try {
-        return viewSender.current?.(outgoing) ?? false;
+        const sent = viewSender.current?.(outgoing) ?? false;
+        if (sent && selected) selectedFollow.current = null;
+        return sent;
       } catch (error) {
         console.warn("Board view dropped.", { operation: "sendView", error });
         return false;
@@ -459,7 +463,11 @@ export function Board({ board, primary, visible, colorScheme, people, following,
   }, [subscribe]);
 
   useEffect(() => {
-    if (following) goTo(following, true, true);
+    selectedFollow.current = following;
+    if (following) {
+      goTo(following, true, true);
+      shareView.current(false);
+    }
   }, [following, goTo]);
 
   // The engine: tools, styles, emptiness and note text.

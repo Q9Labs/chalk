@@ -55,6 +55,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
        sockets: %{},
        people: MapSet.new(),
        views: %{},
+       publishers: %{},
        streams: %{},
        relays: %{},
        legacy_views: %{}
@@ -133,8 +134,12 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
     stream = {frame["participant_id"], relay_stream(input)}
     previous = Map.get(state.relays, stream)
     version = if source, do: {input.origin_participant_id, source["owner_sequence"]}
+    publisher = Map.get(state.publishers, frame["participant_id"])
 
     cond do
+      publisher && publisher != elem(stream, 1) && !Map.get(input, :move, false) ->
+        {:ok, state}
+
       is_nil(version) or version == previous ->
         {:ok, state}
 
@@ -204,6 +209,11 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
     person = frame["participant_id"]
     previous = Map.get(state.views, person)
     candidate = canonical_rectangle(frame, input, state.views)
+
+    state =
+      if candidate && (is_nil(previous) || Map.get(input, :move, true)),
+        do: %{state | publishers: Map.put(state.publishers, person, relay_stream(input))},
+        else: state
 
     if candidate && (frame["bring"] || changed?(previous, candidate)) do
       sequence = if previous, do: previous["owner_sequence"] + 1, else: 1

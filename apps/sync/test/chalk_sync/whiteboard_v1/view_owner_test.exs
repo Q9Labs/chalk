@@ -94,9 +94,15 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
       socket =
         spawn(fn ->
           {:ok, owner, _, _} = ViewOwner.join(c.episode, source)
-          :ok = ViewOwner.move(owner, frame(source, 10), input(UUID.generate(), 1))
+          stream = UUID.generate()
+          :ok = ViewOwner.move(owner, frame(source, 10), input(stream, 1))
           send(test, :source_moved)
-          receive do: (:stop -> :ok)
+
+          receive do
+            :move_again ->
+              :ok = ViewOwner.move(owner, frame(source, 11), input(stream, 2))
+              receive do: (:stop -> :ok)
+          end
         end)
 
       on_exit(fn -> Process.exit(socket, :kill) end)
@@ -113,6 +119,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
       assert_receive {:whiteboard_v1_frame, %{"x" => 10, "owner_sequence" => 1}}
       :ok = ViewOwner.move(c.owner, frame(c.person, 20), input(UUID.generate(), 1))
       assert_receive {:whiteboard_v1_frame, %{"x" => 20, "owner_sequence" => 2}}
+      send(socket, :move_again)
+      assert_receive {:whiteboard_v1_frame, %{"participant_id" => ^source, "x" => 11}}
       relay = if @protocol == :owner, do: %{relay | input_id: "#{c.stream}:2"}, else: relay
       :ok = ViewOwner.move(c.owner, frame(c.person, 900), relay)
       refute_receive {:whiteboard_v1_frame, _}
@@ -120,8 +128,9 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
       if @protocol == :owner do
         :ok = ViewOwner.move(c.owner, frame(c.person, 30), input(c.stream, 3))
         assert_receive {:whiteboard_v1_frame, %{"x" => 30, "owner_sequence" => 3}}
-        :ok = ViewOwner.move(c.owner, frame(c.person, 900), %{relay | input_id: "#{c.stream}:4"})
-        assert_receive {:whiteboard_v1_frame, %{"x" => 10, "owner_sequence" => 4}}
+        selection = %{relay | input_id: "#{c.stream}:4", move: true}
+        :ok = ViewOwner.move(c.owner, frame(c.person, 900), selection)
+        assert_receive {:whiteboard_v1_frame, %{"x" => 11, "owner_sequence" => 4}}
       end
     end
   end

@@ -313,7 +313,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
     if (this.#viewOwnerId) {
       const input = { input_id: `${this.#viewEpoch}:${++this.#viewSequence}`, move: view.lead === true || view.bring };
-      return view.originParticipantId && !input.move ? { ...rectangle, ...input, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence } : { ...rectangle, ...input };
+      return view.originParticipantId ? { ...rectangle, ...input, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence } : { ...rectangle, ...input };
     }
     if (view.bring || !viewOriginsNegotiated(this.#hello)) return rectangle;
     if (view.originParticipantId !== undefined) return { ...rectangle, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence, ...(view.originEpoch !== undefined ? { origin_epoch: view.originEpoch } : {}) };
