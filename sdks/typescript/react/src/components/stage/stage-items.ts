@@ -92,9 +92,9 @@ export function speakingParticipantId(items: readonly StageItem[], accept: (part
   return (participantWhere(items, (participant) => accept(participant) && participant.isActiveSpeaker === true) ?? participantWhere(items, (participant) => accept(participant) && participant.isSpeaking === true))?.id;
 }
 
-/** The remote person whose face leads the floating column: whoever is speaking now, else the last speaker. */
-export function floatingSpeakerId(items: readonly StageItem[], lastSpeakerId: string | null): string | null {
-  return speakingParticipantId(items, (participant) => !participant.isLocal) ?? lastSpeakerId;
+/** The remote person whose face leads the floating column: whoever is speaking now, else the last remote speaker. */
+export function floatingSpeakerId(items: readonly StageItem[], lastRemoteSpeakerId: string | null): string | null {
+  return speakingParticipantId(items, (participant) => !participant.isLocal) ?? lastRemoteSpeakerId;
 }
 
 /** Grid order: pinned item first, everything else in stable order. */

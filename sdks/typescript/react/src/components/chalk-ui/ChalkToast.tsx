@@ -24,16 +24,25 @@ export function ChalkToast({ message, type = "info", duration = type === "info" 
   }, [exiting]);
   return (
     <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={type === "error" ? "alert" : "status"} aria-live={type === "error" ? "assertive" : "polite"} aria-atomic="true">
+      <ToastFace message={message} type={type} action={action} icon={icon} onDismiss={() => setExiting(true)} />
+    </div>
+  );
+}
+
+/** What a notice shows. A toast stack also renders it inert to measure a notice before it mounts the toast. */
+export function ToastFace({ message, type, action, icon, onDismiss }: Pick<ChalkToastProps, "message" | "type" | "action" | "icon" | "onDismiss">) {
+  return (
+    <>
       {icon}
       <span>{message}</span>
       {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}
       {type === "error" ? (
-        <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setExiting(true)}>
+        <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={onDismiss}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
           </svg>
         </button>
       ) : null}
-    </div>
+    </>
   );
 }

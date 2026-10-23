@@ -237,7 +237,8 @@ export function SpaceView({
     else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
     else callToasts.dismiss(id);
   };
-  const [noticesFolded, setNoticesFolded] = useState(false);
+  const [foldedNotices, setFoldedNotices] = useState<readonly string[]>([]);
+  const folded = toasts.filter((toast) => foldedNotices.includes(toast.id));
   return (
     <ParticipantVolumeProvider>
       <BoardToastContext.Provider value={showBoardToast}>
@@ -275,7 +276,7 @@ export function SpaceView({
             isRecording: recording.current?.status === "recording",
             layout,
             onLayoutChange: updateLayout,
-            notices: noticesFolded ? <NoticeButton toasts={toasts} onDismiss={dismissToast} /> : undefined,
+            notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
           }}
           stage={
             <SpaceStage
@@ -345,7 +346,7 @@ export function SpaceView({
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
             </CallCard>
           }
-          toasts={<ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setNoticesFolded} />}
+          toasts={<ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setFoldedNotices} />}
           mediaOutput={
             <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
               <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />

@@ -432,7 +432,7 @@ it("keeps a live share selectable when a phone guest pins the board", async () =
   }
 });
 
-// Full windows, and 320px-tall calls inside an 844px-tall window, as a host page embeds them.
+// Full windows, calls embedded in taller host pages, and a short and narrow call in a taller and wider page. The header still picks its phone layout from the window, so the wider page stays phone-sized.
 const noticeCalls = [
   ...[
     { width: 640, height: 320 },
@@ -440,17 +440,45 @@ const noticeCalls = [
     { width: 568, height: 320 },
     { width: 844, height: 390 },
     { width: 390, height: 844 },
-  ].map(({ width, height }) => ({ name: `${width}x${height}`, width, height, embed: 0 })),
-  ...[390, 640, 844].map((width) => ({ name: `${width}x320 embed`, width, height: 844, embed: 320 })),
+  ].map(({ width, height }) => ({ name: `${width}x${height}`, width, height, embed: "" })),
+  ...[390, 640, 844].map((width) => ({ name: `${width}x320 embed`, width, height: 844, embed: "320" })),
+  { name: "300x320 embed in 600x760", width: 600, height: 760, embed: "300x320" },
 ];
-const noticeCases = noticeCalls.flatMap((call) => (["dark", "light"] as const).flatMap((scheme) => [false, true].flatMap((tools) => [false, true].flatMap((tray) => [1, 3].map((notices) => ({ ...call, scheme, tools, tray, notices }))))));
+const LONG_CALL_NAME = "Year 11 chemistry revision for the whole of 11B with Ms Rahman, Mr Okafor, the lab technicians and every parent who asked to listen in";
+// Device errors, an error carrying a long link and error token, and joins from people with long unbroken names. The new content and the narrow call also carry a long call name.
+const noticeContents = [
+  { kind: "device", notices: 1 },
+  { kind: "device", notices: 3 },
+  { kind: "token", notices: 1 },
+  { kind: "join", notices: 2 },
+];
+const noticeCases = noticeCalls.flatMap((call) =>
+  (["dark", "light"] as const).flatMap((scheme) => [false, true].flatMap((tools) => [false, true].flatMap((tray) => noticeContents.map((content) => ({ ...call, ...content, scheme, tools, tray, callName: content.kind !== "device" || call.embed === "300x320" ? LONG_CALL_NAME : "" }))))),
+);
 
-it.each(noticeCases)("shows notices whole and off every control: $name, $scheme, tools open $tools, reactions open $tray, $notices notices", async ({ width, height, embed, scheme, tools, tray, notices }) => {
+function noticeState(scheme: string, { kind, notices, embed, callName, raise = "" }: { readonly kind: string; readonly notices: number; readonly embed: string; readonly callName: string; readonly raise?: string }) {
+  const params = new URLSearchParams({ notices: String(notices), kind });
+  if (raise) params.set("raise", raise);
+  if (embed) params.set("embed", embed);
+  if (callName) params.set("name", callName);
+  return `board-notices-${scheme}&${params}`;
+}
+
+/** Notices shown on the stage plus those the header's notice button holds. */
+function noticeCount() {
+  return page.evaluate(() => {
+    const shown = document.querySelectorAll("[data-part='toast-stack'] [data-part='toast']").length;
+    const label = document.querySelector("[data-part='notice-button']")?.getAttribute("aria-label") ?? "";
+    return shown + Number(/Show (\d+) notice/.exec(label)?.[1] ?? 0);
+  });
+}
+
+it.each(noticeCases)("shows notices whole and off every control: $name, $scheme, tools open $tools, reactions open $tray, $notices $kind notices", async ({ width, height, scheme, tools, tray, ...content }) => {
   await page.setViewportSize({ width, height });
   try {
-    await open(`board-notices-${scheme}&notices=${notices}${embed ? `&embed=${embed}` : ""}`);
+    await open(noticeState(scheme, content));
     await page.locator(".chalk-board[data-primary] .chalk-board-zoom").waitFor();
-    await expect.poll(() => page.locator(".chalk-toast").count()).toBe(notices);
+    await expect.poll(noticeCount).toBe(content.notices);
     if (tools) {
       await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
       await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
@@ -459,7 +487,8 @@ it.each(noticeCases)("shows notices whole and off every control: $name, $scheme,
       await page.getByRole("button", { name: "Reactions", exact: true }).click();
       await page.locator(".chalk-shell-reactions").waitFor();
     }
-    await page.waitForFunction(() => [...document.querySelectorAll(".chalk-board-zoom, .chalk-toast, .chalk-shell-reactions")].every((element) => element.getAnimations().every((animation) => animation.playState !== "running")));
+    await page.waitForFunction(() => [...document.querySelectorAll(".chalk-board-zoom, [data-part='toast'], .chalk-shell-reactions")].every((element) => element.getAnimations().every((animation) => animation.playState !== "running")));
+    expect(await noticeCount()).toBe(content.notices);
     const problems = await page.evaluate(() => {
       const found: string[] = [];
       const frame = document.querySelector("[data-part='call-frame']")?.getBoundingClientRect();
@@ -474,34 +503,46 @@ it.each(noticeCases)("shows notices whole and off every control: $name, $scheme,
         }
         return box;
       };
+      const name = (control: Element) => control.getAttribute("aria-label") ?? control.textContent?.trim();
       const controls = document.querySelectorAll(".chalk-frame-header :is(button, a), .chalk-board[data-primary] :is(.chalk-board-zoom button, .chalk-board-island button, .chalk-board-menu-button), .chalk-shell-reactions button, [data-part='dock'] button");
       for (const control of controls) {
         const box = visible(control);
         if (box.right - box.left < 1 || box.bottom - box.top < 1 || getComputedStyle(control).visibility === "hidden") continue;
         for (const at of [0.15, 0.5, 0.85]) {
           const target = document.elementFromPoint(box.left + (box.right - box.left) * at, (box.top + box.bottom) / 2);
-          if (target?.closest(".chalk-toast")) found.push(`a notice takes ${control.getAttribute("aria-label") ?? control.textContent?.trim()}'s click at ${Math.round(at * 100)}%`);
+          if (target?.closest("[data-part='toast']")) found.push(`a notice takes ${name(control)}'s click at ${Math.round(at * 100)}%`);
         }
       }
-      const shown = [...document.querySelectorAll<HTMLElement>(".chalk-toast")].filter((toast) => !toast.hasAttribute("data-folded"));
+      // The header's controls and timer stay apart and inside the call, however long the call's name.
+      const header = [...document.querySelectorAll(".chalk-frame-header :is(button, a, [data-part='call-timer'])")].filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+      for (const [index, a] of header.entries()) {
+        const box = a.getBoundingClientRect();
+        if (box.left < frame.left - 0.5 || box.right > frame.right + 0.5) found.push(`${name(a)} leaves the call's header`);
+        for (const b of header.slice(index + 1)) {
+          if (a.contains(b) || b.contains(a)) continue;
+          const other = b.getBoundingClientRect();
+          if (box.left < other.right - 0.5 && other.left < box.right - 0.5 && box.top < other.bottom - 0.5 && other.top < box.bottom - 0.5) found.push(`${name(a)} overlaps ${name(b)} in the header`);
+        }
+      }
+      const shown = [...document.querySelectorAll<HTMLElement>("[data-part='toast-stack'] [data-part='toast']")];
       for (const toast of shown) {
         const box = toast.getBoundingClientRect();
         const text = toast.querySelector<HTMLElement>(":scope > span");
         if (box.height < 47.5) found.push(`a notice is ${box.height}px tall`);
-        if (box.top < frame.top - 0.5 || box.bottom > frame.bottom + 0.5) found.push("a notice leaves the call");
+        if (box.top < frame.top - 0.5 || box.bottom > frame.bottom + 0.5 || box.left < frame.left - 0.5 || box.right > frame.right + 0.5) found.push("a notice leaves the call");
         if (text && (text.scrollHeight > text.clientHeight + 1 || text.scrollWidth > text.clientWidth + 1 || getComputedStyle(text).textOverflow === "ellipsis")) found.push("a notice cuts its message");
+        if (toast.scrollWidth > toast.clientWidth + 1) found.push("a notice's text or controls spill out of it");
+        for (const part of toast.children) {
+          const inner = part.getBoundingClientRect();
+          if (inner.left < box.left - 0.5 || inner.right > box.right + 0.5) found.push("a notice's text or controls spill out of it");
+        }
       }
-      for (const control of document.querySelectorAll<HTMLElement>(".chalk-toast[data-folded] :is(button, a)")) {
-        control.focus();
-        if (document.activeElement === control) found.push(`a hidden notice's ${control.getAttribute("aria-label") ?? control.textContent?.trim()} takes keyboard focus`);
-      }
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       const button = document.querySelector("[data-part='notice-button']");
       const place = button?.getBoundingClientRect();
       const reachable = Boolean(button && place && place.width > 0 && button.contains(document.elementFromPoint(place.left + place.width / 2, place.top + place.height / 2)));
-      if (shown.length === 0 && !reachable) found.push("no notice shows and the header has no notice button to click");
-      if (shown.length > 0 && button) found.push("the header offers notices that already show");
-      return found;
+      if (button && !reachable) found.push("the header's notice button can't be clicked");
+      if (shown.length === 0 && !button) found.push("no notice shows and the header has no notice button");
+      return [...new Set(found)];
     });
     expect(problems).toEqual([]);
   } finally {
@@ -509,31 +550,110 @@ it.each(noticeCases)("shows notices whole and off every control: $name, $scheme,
   }
 });
 
-it.each(["dark", "light"])("opens every folded notice whole from the header of a 320px-tall embedded call by keyboard in %s", async (scheme) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+it.each([
+  { name: "390x320 embed", width: 390, height: 844, embed: "320" },
+  { name: "300x320 embed in 600x760", width: 600, height: 760, embed: "300x320" },
+])(
+  "reaches every notice by keyboard, never a hidden control, in a $name call with eight notices",
+  async ({ width, height, embed }) => {
+    await page.setViewportSize({ width, height });
+    try {
+      await open(noticeState("dark", { kind: "device", notices: 8, embed, callName: "" }));
+      await page.locator(".chalk-board[data-primary] .chalk-board-zoom").waitFor();
+      await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
+      await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+      await expect.poll(noticeCount).toBe(8);
+      // A stop counts as seen when it is visible inside the host's box for the call. A notice's own controls must also be uncovered at their centre.
+      const stop = () =>
+        page.evaluate(() => {
+          const active = document.activeElement;
+          const call = document.querySelector("main")?.getBoundingClientRect();
+          if (!(active instanceof HTMLElement) || active === document.body || !call) return { name: "", hidden: false, notices: false };
+          const box = active.getBoundingClientRect();
+          const x = box.left + box.width / 2;
+          const y = box.top + box.height / 2;
+          const notice = Boolean(active.closest("[data-part='notice-button'], .chalk-notice-list, [data-part='toast']"));
+          const seen = active.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && box.width > 1 && x >= call.left && x <= call.right && y >= call.top && y <= call.bottom && (!notice || active.contains(document.elementFromPoint(x, y)));
+          return { name: active.getAttribute("aria-label") ?? active.textContent?.trim() ?? "", hidden: !seen, notices: active.dataset.part === "notice-button" };
+        });
+      const stops = await page.locator("main :is(button, a[href], [tabindex]:not([tabindex='-1']))").count();
+      const hidden: string[] = [];
+      let reachedButton = false;
+      for (let step = 0; step < stops + 2; step += 1) {
+        await page.keyboard.press("Tab");
+        const at = await stop();
+        if (at.hidden) hidden.push(at.name);
+        reachedButton ||= at.notices;
+      }
+      expect(hidden).toEqual([]);
+      expect(reachedButton).toBe(true);
+      const button = page.locator("[data-part='notice-button']");
+      const folded = Number(/Show (\d+) notice/.exec((await button.getAttribute("aria-label")) ?? "")?.[1] ?? 0);
+      await button.focus();
+      await page.keyboard.press("Enter");
+      const list = page.getByRole("dialog", { name: "Notices" });
+      await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(folded);
+      const inside = await list.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const call = document.querySelector("main")?.getBoundingClientRect();
+        return Boolean(call && box.left >= call.left - 0.5 && box.right <= call.right + 0.5 && box.top >= call.top - 0.5 && box.bottom <= call.bottom + 0.5);
+      });
+      expect(inside).toBe(true);
+      const messages = await list.locator("[data-part='notice'] > span").evaluateAll((spans) => spans.map((span) => span.scrollHeight <= span.clientHeight + 1 && span.scrollWidth <= span.clientWidth + 1));
+      expect(messages.every(Boolean)).toBe(true);
+      // Tab through the list's controls until focus leaves it, which closes it.
+      // Opening the list focuses its first control, which counts as the first stop.
+      let inList = 0;
+      let left = false;
+      for (let step = 0; step < folded * 2 + 2; step += 1) {
+        if (step > 0) await page.keyboard.press("Tab");
+        if (!(await page.evaluate(() => Boolean(document.activeElement?.closest(".chalk-notice-list"))))) {
+          left = step > 0;
+          if (left) break;
+          continue;
+        }
+        inList += 1;
+        const at = await stop();
+        if (at.hidden) hidden.push(at.name);
+      }
+      expect(hidden).toEqual([]);
+      expect(inList).toBeGreaterThanOrEqual(folded);
+      if (left) {
+        await list.waitFor({ state: "hidden" });
+        await button.focus();
+        await page.keyboard.press("Enter");
+      }
+      await list.getByRole("button", { name: "Dismiss" }).last().click();
+      await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(folded - 1);
+    } finally {
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+  },
+  90_000,
+);
+
+it("keeps a join notice while it has no room, then lets it time out once it shows", async () => {
+  await page.setViewportSize({ width: 640, height: 320 });
   try {
-    await open(`board-notices-${scheme}&notices=3&embed=320`);
+    await open(noticeState("dark", { kind: "join", notices: 1, embed: "", callName: "", raise: "event" }));
     await page.locator(".chalk-board[data-primary] .chalk-board-zoom").waitFor();
     await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
-    const button = page.getByRole("button", { name: "Show 3 notices" });
+    await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    // The join arrives only once the tools are open, so it never shows before it waits.
+    await page.locator("html[data-notices-ready]").waitFor({ state: "attached" });
+    await page.evaluate(() => document.dispatchEvent(new Event("raise-notices")));
+    const button = page.getByRole("button", { name: "Show 1 notice" });
     await button.waitFor();
-    // Walk the whole Tab order: it reaches the notice button and never a hidden notice's controls.
-    const stops = await page.locator("button, a[href], [tabindex]").count();
-    const reached: { readonly folded: boolean; readonly notices: boolean }[] = [];
-    for (let step = 0; step < stops + 2; step += 1) {
-      await page.keyboard.press("Tab");
-      reached.push(await page.evaluate(() => ({ folded: Boolean(document.activeElement?.closest(".chalk-toast[data-folded]")), notices: document.activeElement?.getAttribute("data-part") === "notice-button" })));
-    }
-    expect(reached.filter((stop) => stop.folded)).toEqual([]);
-    expect(reached.some((stop) => stop.notices)).toBe(true);
-    await button.focus();
-    await page.keyboard.press("Enter");
-    const list = page.getByRole("dialog", { name: "Notices" });
-    await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(3);
-    const messages = await list.locator("[data-part='notice'] > span").evaluateAll((spans) => spans.map((span) => ({ text: span.textContent ?? "", whole: span.scrollHeight <= span.clientHeight + 1 && span.scrollWidth <= span.clientWidth + 1 })));
-    for (const message of messages) expect(message).toEqual({ text: "Your device couldn’t start. Check that it is connected and available, then try again.", whole: true });
-    await list.getByRole("button", { name: "Dismiss" }).first().click();
-    await expect.poll(() => list.locator("[data-part='notice']").count()).toBe(2);
+    // Longer than a join notice's five seconds on the stage.
+    await page.waitForTimeout(6_500);
+    expect(await button.count()).toBe(1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const toast = page.locator("[data-part='toast-stack'] [data-part='toast']");
+    await toast.waitFor();
+    expect(await button.count()).toBe(0);
+    await page.waitForTimeout(4_000);
+    expect(await toast.count()).toBe(1);
+    await expect.poll(() => toast.count(), { timeout: 3_000 }).toBe(0);
   } finally {
     await page.setViewportSize({ width: 1440, height: 900 });
   }

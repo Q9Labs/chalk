@@ -1,5 +1,6 @@
-import { memo, useLayoutEffect, useRef } from "react";
-import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
+import { memo, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { ChalkToast, ToastFace, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
 export interface Toast extends Omit<ChalkToastProps, "onDismiss"> {
   readonly id: string;
@@ -9,71 +10,104 @@ export interface ToastStackProps {
   readonly onDismiss: (id: string) => void;
   readonly maxVisible?: number;
   readonly className?: string;
-  /** Called with true when even the newest notice has no room on the stage, so the host can offer the notices elsewhere, such as from the header. Without it, the newest notice always shows. */
-  readonly onFold?: (folded: boolean) => void;
+  /** Called with the ids of the notices that have no room on the stage, so the host can offer them elsewhere, such as from the header. Without it, the newest notice always shows. */
+  readonly onFold?: (folded: readonly string[]) => void;
 }
 /** Controls a notice must never cover. Board controls are clipped by the board, so only their part inside it counts. */
 const RESERVED = ".chalk-frame-header :is(button, a, [role='button']), .chalk-board[data-primary] :is(.chalk-board-zoom, .chalk-board-island, .chalk-board-menu-button, .chalk-board-chip), .chalk-shell-reactions, [data-part='dock']";
+/**
+ * Shows each notice as a toast only where it fits whole. To decide, the stack mounts an inert, hidden copy of the newest
+ * notices, measures it, and removes it in the same commit, so the copy never paints or doubles a notice's text on the page.
+ * Only the notices that fit mount as toasts, so a folded notice runs no timer and has no controls on the page.
+ */
 export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisible = 3, className, onFold }: ToastStackProps) {
   const stack = useRef<HTMLDivElement>(null);
-  const shown = toasts.slice(-maxVisible);
+  const measure = useRef<HTMLDivElement>(null);
+  const candidates = toasts.slice(-maxVisible);
+  const ids = candidates.map((toast) => toast.id).join(" ");
+  const [shownIds, setShownIds] = useState<readonly string[]>([]);
+  const [measuredIds, setMeasuredIds] = useState<string | null>(null);
+  const [refit, setRefit] = useState(false);
+  const measuring = refit || measuredIds !== ids;
   const fold = useRef(onFold);
   fold.current = onFold;
-  const ids = shown.map((toast) => toast.id).join(" ");
   useLayoutEffect(() => {
-    const element = stack.current;
-    if (!element) return;
-    let folded = false;
-    const place = () => {
-      const next = fitNotices(element, Boolean(fold.current));
-      if (next === folded) return;
-      folded = next;
-      fold.current?.(next);
-    };
-    place();
-    let queued = 0;
-    let live = true;
-    const queue = () => {
-      if (live && !queued) queued = requestAnimationFrame(() => ((queued = 0), place()));
-    };
-    const frame = element.closest<HTMLElement>("[data-part='call-frame']") ?? element.parentElement;
-    const resize = new ResizeObserver(place);
-    resize.observe(element);
-    if (frame) resize.observe(frame);
+    const layer = measure.current;
+    if (!measuring || !layer) return;
+    const all = ids ? ids.split(" ") : [];
+    const next = all.slice(all.length - fitNotices(layer, Boolean(fold.current)));
+    setShownIds((current) => (current.join(" ") === next.join(" ") ? current : next));
+    setMeasuredIds(ids);
+    setRefit(false);
+  }, [ids, measuring]);
+  const shownKey = shownIds.join(" ");
+  useLayoutEffect(() => {
+    const layer = measure.current;
+    if (!layer) return;
+    // Outside React, measure and apply the fit before the next paint or click.
+    const place = () => flushSync(() => setRefit(true));
+    const frame = layer.closest<HTMLElement>("[data-part='call-frame']") ?? layer.parentElement;
+    // Hosts that render in jsdom or on the server have no ResizeObserver, so there the stack keeps its first fit.
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    resize?.observe(layer);
+    if (frame) resize?.observe(frame);
     // A notice also widens on its own, such as when the call's font loads.
-    for (const notice of element.children) resize.observe(notice);
-    if ("fonts" in document) void document.fonts.ready.then(queue);
-    // Controls also appear or change place without resizing the stack first, such as the board's menu once the board is ready, or the tools opening and lifting the band's bottom. Refit in the same task, so no click lands while a notice still covers them.
-    const changes = new MutationObserver(place);
-    if (frame) changes.observe(frame, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-ready", "data-place", "data-primary", "data-stage-role", "hidden"] });
-    frame?.addEventListener("transitionend", queue);
+    for (const notice of stack.current?.children ?? []) resize?.observe(notice);
+    let live = true;
+    if ("fonts" in document) void document.fonts.ready.then(() => live && place());
+    // Controls appear or change place without resizing the stack first, such as the board's menu once the board is ready, or the tools opening and lifting the band's bottom. Refit in the same task, so no click lands while a notice still covers them. The hidden copy's own changes don't count.
+    const changes =
+      typeof MutationObserver === "undefined"
+        ? null
+        : new MutationObserver((records) => {
+            if (records.some((record) => !layer.contains(record.target))) place();
+          });
+    if (frame) changes?.observe(frame, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-ready", "data-place", "data-primary", "data-stage-role", "hidden"] });
+    frame?.addEventListener("transitionend", place);
     return () => {
       live = false;
-      resize.disconnect();
-      changes.disconnect();
-      cancelAnimationFrame(queued);
-      frame?.removeEventListener("transitionend", queue);
-      if (folded) fold.current?.(false);
+      resize?.disconnect();
+      changes?.disconnect();
+      frame?.removeEventListener("transitionend", place);
     };
-  }, [ids]);
+  }, [ids, shownKey]);
+  const shown = candidates.filter((toast) => shownIds.includes(toast.id));
+  const foldedIds = toasts
+    .filter((toast) => !shownIds.includes(toast.id))
+    .map((toast) => toast.id)
+    .join(" ");
+  useLayoutEffect(() => {
+    fold.current?.(foldedIds ? foldedIds.split(" ") : []);
+  }, [foldedIds]);
+  useLayoutEffect(() => () => fold.current?.([]), []);
   return (
-    <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
-      {shown.map((toast) => (
-        <ChalkToast key={toast.id} {...toast} onDismiss={() => onDismiss(toast.id)} />
-      ))}
-    </div>
+    <>
+      <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
+        {shown.map((toast) => (
+          <ChalkToast key={toast.id} {...toast} onDismiss={() => onDismiss(toast.id)} />
+        ))}
+      </div>
+      <div ref={measure} data-measure="" className={cn("chalk-toasts", className)} aria-hidden="true" inert>
+        {measuring
+          ? candidates.map((toast) => (
+              <div key={toast.id} data-type={toast.type ?? "info"} className="chalk-toast">
+                <ToastFace message={toast.message} type={toast.type ?? "info"} action={toast.action} icon={toast.icon} onDismiss={() => undefined} />
+              </div>
+            ))
+          : null}
+      </div>
+    </>
   );
 });
 
-/** Shows the newest notices that fit the stack's band whole and clear of every reserved control, folds the rest, and returns whether none fit. */
-function fitNotices(stack: HTMLElement, foldable: boolean): boolean {
-  const notices = [...stack.children].filter((child): child is HTMLElement => child instanceof HTMLElement);
-  for (const notice of notices) notice.removeAttribute("data-folded");
-  const band = stack.getBoundingClientRect();
-  const style = getComputedStyle(stack);
+/** Counts the newest notices that fit the stack's band whole and clear of every reserved control. */
+function fitNotices(layer: HTMLElement, foldable: boolean): number {
+  const notices = [...layer.children].filter((child): child is HTMLElement => child instanceof HTMLElement);
+  const band = layer.getBoundingClientRect();
+  const style = getComputedStyle(layer);
   const top = band.top + Number.parseFloat(style.paddingTop);
   const bottom = band.bottom - Number.parseFloat(style.paddingBottom);
-  const frame = stack.closest("[data-part='call-frame']");
+  const frame = layer.closest("[data-part='call-frame']");
   const reserved = frame ? [...frame.querySelectorAll(RESERVED)].map(visibleBox) : [];
   let fitting = 0;
   for (const notice of notices.slice().reverse()) {
@@ -81,12 +115,13 @@ function fitNotices(stack: HTMLElement, foldable: boolean): boolean {
     const left = band.left + notice.offsetLeft;
     const noticeTop = band.top + notice.offsetTop;
     const box = { left, right: left + notice.offsetWidth, top: noticeTop, bottom: noticeTop + notice.offsetHeight };
-    if (box.top < top - 0.5 || box.bottom > bottom + 0.5 || reserved.some((control) => overlaps(box, control))) break;
+    // Content wider or taller than its box would spill text or controls out of the notice.
+    const spills = notice.scrollWidth > notice.clientWidth + 1 || notice.scrollHeight > notice.clientHeight + 1;
+    const outside = box.top < top - 0.5 || box.bottom > bottom + 0.5 || box.left < band.left - 0.5 || box.right > band.right + 0.5;
+    if (spills || outside || reserved.some((control) => overlaps(box, control))) break;
     fitting += 1;
   }
-  if (!foldable) fitting = Math.max(fitting, Math.min(1, notices.length));
-  for (const notice of notices.slice(0, notices.length - fitting)) notice.setAttribute("data-folded", "");
-  return notices.length > 0 && fitting === 0;
+  return foldable ? fitting : Math.max(fitting, Math.min(1, notices.length));
 }
 
 interface Box {

@@ -103,6 +103,7 @@ export function Stage({
   const seenAtRef = useRef(new Map<string, number>());
   const nextSeenRef = useRef(0);
   const lastSpeakerRef = useRef<string | null>(null);
+  const lastRemoteSpeakerRef = useRef<string | null>(null);
 
   const ordered = useMemo(() => {
     // A presentation projection must be a pure function of its current frame.
@@ -135,6 +136,8 @@ export function Stage({
     orderRef.current = ordered.map((item) => item.id);
     const speaking = speakingParticipantId(ordered);
     if (speaking) lastSpeakerRef.current = speaking;
+    // The floating column leads with a remote face, so the local person speaking must not replace the last remote speaker.
+    lastRemoteSpeakerRef.current = floatingSpeakerId(ordered, lastRemoteSpeakerRef.current);
   }, [ordered]);
 
   const primary = useMemo(() => (layout === "grid" ? null : choosePrimary(ordered, { layout, pinnedId: activePinnedId, lastSpeakerId: interactive ? lastSpeakerRef.current : null, seenAt: seenAtRef.current })), [activePinnedId, interactive, layout, ordered]);
@@ -159,7 +162,7 @@ export function Stage({
     const aspect = primary.kind === "whiteboard" ? null : (observedAspect ?? (primary.kind === "screen-share" && primary.participant.screenShareAspect ? primary.participant.screenShareAspect : settings?.width && settings.height ? settings.width / settings.height : 16 / 9));
     const remaining = ordered.filter((item) => item.id !== primary.id);
     const strip = [...remaining.filter(isContentItem), ...remaining.filter((item) => !isContentItem(item))];
-    const speakerId = floatingSpeakerId(remaining, interactive ? lastSpeakerRef.current : null);
+    const speakerId = floatingSpeakerId(remaining, interactive ? lastRemoteSpeakerRef.current : null);
     const localId = remaining.find((item) => item.kind === "participant" && item.participant.isLocal)?.id ?? null;
     return fitSpotlight(
       box,

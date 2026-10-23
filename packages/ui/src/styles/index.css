@@ -1279,6 +1279,9 @@
     transform 0.15s ease-out;
 }
 .chalk-toast > span {
+  /* Long names, links and error tokens wrap inside the notice instead of widening it past the call. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin-right: 4px;
   line-height: 1.35;
   padding: 4px 0;
@@ -1286,19 +1289,12 @@
 .chalk-toast[data-type="error"] {
   max-width: min(560px, calc(100% - 32px));
 }
-/* A notice with no room stays readable to screen readers, and the header's notice button shows it. */
-.chalk-toast[data-folded] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  pointer-events: none;
-}
-/* Its text stays for screen readers, but its controls leave the Tab order, since the notice button's list offers them. */
-.chalk-toast[data-folded] :is(button, a) {
+/* ToastStack's inert copy of the newest notices, measured where they would show before any of them mounts. */
+.chalk-toasts[data-measure] {
   visibility: hidden;
+}
+.chalk-toasts[data-measure] > .chalk-toast {
+  animation: none;
 }
 /* The header's notice button stays when a phone hides the header's other controls. */
 .chalk-notice-button {
@@ -1307,6 +1303,7 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
+  flex-shrink: 0;
   min-width: 44px;
   height: 44px;
   padding: 0 12px;
@@ -1320,8 +1317,9 @@
   z-index: 85;
   display: grid;
   gap: 4px;
-  width: 360px;
-  max-height: calc(100vh - 80px);
+  /* The room left in the call, not the window, so a short or narrow embedded call shows the list whole and scrolls to its last notice. */
+  width: min(360px, var(--available-width, 360px));
+  max-height: var(--available-height, calc(100vh - 80px));
   overflow: auto;
   padding: 6px;
 }
@@ -1335,6 +1333,8 @@
 }
 .chalk-notice > span {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
   line-height: 1.35;
 }
 .chalk-toast[data-exiting] {
@@ -1560,9 +1560,19 @@
   transform: scale(0.97);
 }
 .chalk-call-timer {
+  flex-shrink: 0;
   color: var(--chalk-muted-text);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+/* A long call name gives way to the timer and the notice button. */
+.chalk-call-name {
+  min-width: 0;
+}
+.chalk-call-name > span[dir="auto"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chalk-frame-stage {
   position: absolute;
