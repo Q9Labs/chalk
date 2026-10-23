@@ -742,13 +742,13 @@ with completed as (
 ), salvage_event as (
     insert into observability_journey_events (
         event_id, journey_id, sequence, occurred_at, name, phase, state,
-        origin_kind, first_observed_layer, upstream_visibility, parent_event_id, attributes
+        origin_kind, first_observed_layer, upstream_visibility, parent_event_id, trace_id, span_id, attributes
     )
     select gen_random_uuid(), coalesce(start_operation.journey_id, completed.recording_id),
         coalesce((select max(sequence) + 1 from observability_journey_events
                   where journey_id = coalesce(start_operation.journey_id, completed.recording_id)), 0),
         now(), 'recording.capture.salvaged', 'capture_completion', 'succeeded', 'server', 'api', 'visible',
-        start_operation.parent_journey_event_id,
+        start_operation.parent_journey_event_id, sqlc.narg(trace_id), sqlc.narg(span_id),
         jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', sqlc.arg(capture_epoch)::bigint,
                            'reason', 'stop_unconfirmed', 'source', 'committed_bundles')
     from completed

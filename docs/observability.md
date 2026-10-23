@@ -33,7 +33,8 @@ attributes. Policy admissions carry no `admission` attribute.
 A capture completed from retained bundles without a confirmed stopped callback
 adds `recording.capture.salvaged` to the durable journey ledger in the same
 transaction as completion. It links to the recording's start journey and parent
-event when available. Legacy rows without journey metadata use the recording ID
+event when available, with the trace and span IDs of the current database
+completion span. Legacy rows without journey metadata use the recording ID
 as the journey ID. Its attributes contain only the recording ID, capture epoch,
 `reason=stop_unconfirmed`, and `source=committed_bundles`. Confirmed stops do not
 emit this event, and replaying a completed lease cannot emit it twice.

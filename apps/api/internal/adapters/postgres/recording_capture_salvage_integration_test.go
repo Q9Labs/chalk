@@ -6,7 +6,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T) {
@@ -97,11 +102,17 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 			}
 			execCleanupFixture(t, tx, `insert into recording_job_attempt_authorities(job_id,attempt_count,fencing_generation,capture_epoch,claim_request_id,kind,lease_owner,lease_token,lease_expires_at,envelope_bytes,envelope_digest)
 				select id,attempt_count,fencing_generation,$2,gen_random_uuid(),kind,lease_owner,lease_token,lease_expires_at,'{"completion_only":true}',$3 from recording_jobs where id=$1`, f.jobID.Bytes(), f.captureEpoch, f.digest)
-			completed, err := queries.CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
-				ID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
-				LeaseOwner: claimed.LeaseOwner, LeaseToken: claimed.LeaseToken, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: f.digest,
-			})
-			if err != nil || completed.State != "succeeded" {
+			completionSpans := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(completionSpans))
+			previousProvider := otel.GetTracerProvider()
+			otel.SetTracerProvider(provider)
+			completed, err := postgres.NewRecordingPipelineRepository(queries).CompleteCapture(ctx, recordingpipeline.LeaseInput{
+				JobID: f.jobID, AttemptCount: int(claimed.AttemptCount), FencingGeneration: claimed.FencingGeneration,
+				LeaseOwner: claimed.LeaseOwner.String, LeaseToken: claimed.LeaseToken.String, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: f.digest,
+			}, f.recordingID)
+			otel.SetTracerProvider(previousProvider)
+			_ = provider.Shutdown(ctx)
+			if err != nil || completed.State != recordingpipeline.JobStateSucceeded {
 				t.Fatalf("complete committed source: completed=%+v err=%v", completed, err)
 			}
 			var salvageEvents int
@@ -113,6 +124,26 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 				and name='recording.capture.salvaged' and phase='capture_completion' and state='succeeded'
 				and attributes=jsonb_build_object('recording_id',$2::uuid,'capture_epoch',1,'reason','stop_unconfirmed','source','committed_bundles')`, f.jobID.Bytes(), f.recordingID.Bytes()).Scan(&salvageEvents); err != nil || salvageEvents != wantSalvageEvents {
 				t.Fatalf("salvaged completion must leave bounded journey evidence: count=%d err=%v", salvageEvents, err)
+			}
+			if !scenario.confirmedStop {
+				var traceID, spanID pgtype.Text
+				if err := tx.QueryRow(ctx, `select trace_id,span_id from observability_journey_events where journey_id=$1 and name='recording.capture.salvaged'`, f.jobID.Bytes()).Scan(&traceID, &spanID); err != nil {
+					t.Fatal(err)
+				}
+				foundCommitSpan := false
+				for _, span := range completionSpans.Ended() {
+					if span.Name() != "recording.capture.complete.db_commit" {
+						continue
+					}
+					foundCommitSpan = true
+					context := span.SpanContext()
+					if !traceID.Valid || !spanID.Valid || traceID.String != context.TraceID().String() || spanID.String != context.SpanID().String() {
+						t.Fatalf("salvage event must link the current DB completion span: trace=%+v span=%+v want=%s/%s", traceID, spanID, context.TraceID(), context.SpanID())
+					}
+				}
+				if !foundCommitSpan {
+					t.Fatal("capture completion did not emit its DB commit span")
+				}
 			}
 			if _, err := queries.CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
 				ID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,

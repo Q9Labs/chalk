@@ -495,13 +495,13 @@ with completed as (
 ), salvage_event as (
     insert into observability_journey_events (
         event_id, journey_id, sequence, occurred_at, name, phase, state,
-        origin_kind, first_observed_layer, upstream_visibility, parent_event_id, attributes
+        origin_kind, first_observed_layer, upstream_visibility, parent_event_id, trace_id, span_id, attributes
     )
     select gen_random_uuid(), coalesce(start_operation.journey_id, completed.recording_id),
         coalesce((select max(sequence) + 1 from observability_journey_events
                   where journey_id = coalesce(start_operation.journey_id, completed.recording_id)), 0),
         now(), 'recording.capture.salvaged', 'capture_completion', 'succeeded', 'server', 'api', 'visible',
-        start_operation.parent_journey_event_id,
+        start_operation.parent_journey_event_id, $8, $9,
         jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', $6::bigint,
                            'reason', 'stop_unconfirmed', 'source', 'committed_bundles')
     from completed
@@ -538,13 +538,13 @@ with completed as (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $8, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
-        'transcription:' || completed.recording_id::text, $9, 'pending',
-        $10, now(), $11
+    select $10, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
+        'transcription:' || completed.recording_id::text, $11, 'pending',
+        $12, now(), $13
     from completed
     join episodes on episodes.id = completed.episode_id
     where exists (select 1 from reservation_release)
-      and $12::boolean
+      and $14::boolean
       and episodes.config_snapshot -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('automatic', 'on_demand')
     on conflict (recording_id, kind) do nothing
 ), source_cleanup_objects as (
@@ -596,6 +596,8 @@ type CompleteCaptureRecordingJobParams struct {
 	LeaseOwner           pgtype.Text `json:"lease_owner"`
 	CaptureEpoch         int64       `json:"capture_epoch"`
 	EnvelopeDigest       []byte      `json:"envelope_digest"`
+	TraceID              pgtype.Text `json:"trace_id"`
+	SpanID               pgtype.Text `json:"span_id"`
 	RenderJobID          pgtype.UUID `json:"render_job_id"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
@@ -637,6 +639,8 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.LeaseOwner,
 		arg.CaptureEpoch,
 		arg.EnvelopeDigest,
+		arg.TraceID,
+		arg.SpanID,
 		arg.RenderJobID,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
