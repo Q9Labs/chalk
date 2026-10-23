@@ -10,6 +10,7 @@ it("creates and finds a Tenant with an opaque external account ID through the ge
     name: "Personal Tenant",
     external_id: externalID,
     cors_allowed_origins: [],
+    recording_render_mode: "on_demand",
     default_media_plane: null,
     media_plane_provider_config: null,
     storage_provider_config: null,
@@ -33,6 +34,11 @@ it("creates and finds a Tenant with an opaque external account ID through the ge
           expect(await request.json()).toEqual({ name: tenant.name, external_id: externalID });
           return Response.json(tenant, { status: 201 });
         }
+        if (request.method === "PATCH") {
+          expect(new URL(request.url).pathname).toBe(`/v1/tenants/${tenant.id}`);
+          expect(await request.json()).toEqual({ recording_render_mode: "automatic" });
+          return Response.json({ ...tenant, recording_render_mode: "automatic" });
+        }
         expect(new URL(request.url).searchParams.get("external_id")).toBe(externalID);
         return Response.json(tenant);
       },
@@ -42,6 +48,9 @@ it("creates and finds a Tenant with an opaque external account ID through the ge
   const found = await Effect.runPromise(client.tenants.findTenantByExternalID({ query: Schema.decodeUnknownSync(FindTenantByExternalIDQueryParamsSchema)({ external_id: externalID }) }));
   expect(created).toEqual(tenant);
   expect(found).toEqual(Schema.decodeUnknownSync(TenantSchema)(tenant));
+  expect(found.recording_render_mode).toBe("on_demand");
+  const updated = await Effect.runPromise(client.tenants.updateTenant({ params: { tenant_id: found.id }, payload: { recording_render_mode: "automatic" } }));
+  expect(updated.recording_render_mode).toBe("automatic");
 });
 
 it("counts an external account ID in Unicode code points, as the server does", async () => {
@@ -53,6 +62,7 @@ it("counts an external account ID in Unicode code points, as the server does", a
     name: "Personal Tenant",
     external_id: externalID,
     cors_allowed_origins: [],
+    recording_render_mode: "on_demand",
     default_media_plane: null,
     media_plane_provider_config: null,
     storage_provider_config: null,

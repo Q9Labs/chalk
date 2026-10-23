@@ -31,6 +31,7 @@ function tenantLookup() {
       name: "Personal",
       external_id: "google:test:subject",
       cors_allowed_origins: [],
+      recording_render_mode: "on_demand",
       default_media_plane: null,
       media_plane_provider_config: null,
       storage_provider_config: null,
