@@ -235,8 +235,11 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await expect(following).not.toBeVisible();
 
     // Bring everyone makes the web follow the guest again, with a toast that says who did it.
-    expect(await guest.board.view({ x: 0, y: 0, width: 2000, height: 1250, bring: true })).toBe(true);
+    const bring = { x: 0, y: 0, width: 2000, height: 1250, bring: true };
+    const bringZoom = await browser.evaluate(fittedZoomLabel, bring);
+    expect(await guest.board.view(bring)).toBe(true);
     await expect.poll(() => browser.locator('[data-part="toast"]').filter({ hasText: "Proof brought everyone to this view" }).isVisible()).toBe(true);
+    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe(bringZoom);
     await expect(following).toBeVisible();
     await app.screenshot("board-web");
 
