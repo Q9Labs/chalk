@@ -3,6 +3,11 @@ import { resolve } from "node:path";
 
 const ARCHIVED = "00000000-0000-4000-8000-000000000100";
 
+async function startVisibleRead(tab, started) {
+  await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  return Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
+}
+
 export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   for (const final of ["complete", "terminal_failure"]) {
@@ -299,8 +304,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       await stale;
       await route.fulfill({ response });
     });
-    await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    const raced = await Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
+    const raced = await startVisibleRead(tab, started);
     await tab.getByRole("button", { name: "Deny", exact: true }).click();
     await tab.getByRole("button", { name: "Denying…", exact: true }).waitFor();
     await tab.evaluate(() => (window.__denyTrace.armed = true));
@@ -344,8 +348,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       { times: 1 },
     );
     // Force a read before the write, then deliver its stale response after the write.
-    await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    const raced = await Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
+    const raced = await startVisibleRead(tab, started);
     if (action === "admission") await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
     if (action === "rename") {
       await tab.getByRole("button", { name: "More actions for Q9 team" }).click();

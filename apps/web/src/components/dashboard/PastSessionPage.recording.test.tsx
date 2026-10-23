@@ -182,6 +182,36 @@ async function route(input: string, init?: RequestInit): Promise<Response> {
   throw new Error(`Unexpected request: ${path}`);
 }
 
+async function clickButton(name: string | RegExp) {
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  });
+}
+
+async function setVisibility(next: DocumentVisibilityState) {
+  visibility = next;
+  await reactAct(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+
+function manyAttempts() {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  extraRecordings = Array.from({ length: 29 }, (_, index) => ({ ...recording(), id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}` }));
+}
+
+async function readDeadline() {
+  await advance(5_000);
+  expect(metadataReads()).toBe(1);
+}
+
+function expectActionsClosed() {
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+}
+
 async function open() {
   await reactAct(async () => {
     render(<PastSessionPage spaceId={id} episodeId={id} />);
@@ -271,9 +301,7 @@ it("keeps an export write when an older metadata read lands, then rereads that a
   await tick();
   expect(metadataReads()).toBe(1);
   expect(inFlight.get(id)).toBe(1);
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
-  });
+  await clickButton("Prepare recording");
   expect(screen.getByText("Preparing the recording")).toBeTruthy();
   await advance(4_000);
   expect(screen.getByText("Preparing the recording")).toBeTruthy();
@@ -288,9 +316,7 @@ it("shows canonical complete transcripts before export and prepares a playable r
   await open();
   expect(screen.getByText("Saved speech")).toBeTruthy();
   expect(screen.queryByRole("region", { name: "Recording" })).toBeNull();
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
-  });
+  await clickButton("Prepare recording");
   expect(requests.filter((request) => request.action === "export-recording")).toHaveLength(1);
   expect(screen.getByText("Preparing the recording")).toBeTruthy();
   artifact = "ready";
@@ -336,9 +362,7 @@ it("keeps a newer preparable attempt reachable while an older export plays", asy
   await open();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   expect(screen.getByText("A newer recording is ready to prepare")).toBeTruthy();
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
-  });
+  await clickButton("Prepare recording");
   expect(requests.filter((request) => request.action === "export-recording").map((request) => request.recordingId)).toEqual([id]);
   expect(screen.getByText("Preparing the newer recording")).toBeTruthy();
   artifact = "ready";
@@ -371,9 +395,7 @@ it("offers an older preparable attempt when the newest attempt failed", async ()
   artifact = "unavailable";
   await open();
   expect(screen.getByText("The recording is ready to prepare")).toBeTruthy();
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
-  });
+  await clickButton("Prepare recording");
   expect(requests.filter((request) => request.action === "export-recording").map((request) => request.recordingId)).toEqual([older]);
 });
 
@@ -398,9 +420,7 @@ it.each([202, 400, 409])("removes the prepare action when an export is refused b
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   source = "expired";
   artifact = "unavailable";
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
-  });
+  await clickButton("Prepare recording");
   // An accepted request answers with the closed source; a refusal is read again at the next tick.
   await tick();
   expect(metadataReads()).toBe(status === 202 ? 0 : 1);
@@ -589,9 +609,7 @@ it("rereads the recording after a refused transcript request so a dead action di
   await open();
   transcriptionSource = "expired";
   createHTTPStatus = 409;
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
-  });
+  await clickButton(/^Make a transcript/);
   // The refusal is read again at the next tick, and only that answer removes the action.
   expect(metadataReads()).toBe(0);
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
@@ -604,9 +622,7 @@ it("rereads the recording after a refused transcript request so a dead action di
 it("shows the new transcript as being prepared once its request is accepted", async () => {
   transcriptStatus = "";
   await open();
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
-  });
+  await clickButton(/^Make a transcript/);
   expect(requests.filter((request) => request.action === "create-transcript")).toHaveLength(1);
   expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
@@ -617,9 +633,7 @@ it("shows a transcript another request created when this page's request is refus
   await open();
   transcriptStatus = "complete";
   createHTTPStatus = 409;
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
-  });
+  await clickButton(/^Make a transcript/);
   // One tick reads the recording's transcripts, the next reads the finished one's lines.
   await tick();
   await tick();
@@ -700,8 +714,7 @@ it("marks the recording due when its source window ends and closes the actions o
   // The deadline schedules a read in the polling rotation; until the server answers, the action stays.
   expect(metadataReads()).toBe(0);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
+  await readDeadline();
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
@@ -721,8 +734,7 @@ it.each([
   await open();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   await advance(60_000);
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
+  await readDeadline();
   expect(screen.queryByRole("region", { name: "Recording" }) !== null).toBe(legacy);
   if (!legacy) expect(screen.getByText("The recording is no longer available")).toBeTruthy();
   await tick();
@@ -787,8 +799,7 @@ it.each([
   expect(metadataReads()).toBe(0);
   await advance(1_000);
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
+  await readDeadline();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
   expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
   // The video keeps its own, later deadline.
@@ -810,10 +821,8 @@ it("keeps the actions the server still accepts when this page's clock runs ahead
   expect(metadataReads()).toBe(0);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
-  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
-  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+  await readDeadline();
+  expectActionsClosed();
   const reads = metadataReads();
   await tick();
   expect(metadataReads()).toBe(reads);
@@ -826,8 +835,7 @@ it("keeps asking about a lapsed export when the server's first answer fails", as
   await open();
   metadataStatus = 503;
   await advance(60_000);
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
+  await readDeadline();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   metadataStatus = 200;
   await tick();
@@ -865,9 +873,7 @@ it("closes the prepare action on the server's answer when this page's clock runs
   artifact = "unavailable";
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   // recordings.go:161-175 answers a closed source with 202 and its unavailable state, which the page shows at once.
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Prepare recording" }));
-  });
+  await clickButton("Prepare recording");
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
 });
@@ -882,10 +888,8 @@ it("asks the server at its own deadline when this page's clock runs behind and n
   await advance(30_000);
   expect(metadataReads()).toBe(0);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
-  await advance(5_000);
-  expect(metadataReads()).toBe(1);
-  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
-  expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
+  await readDeadline();
+  expectActionsClosed();
 });
 
 it("closes the transcript action on the server's refusal when this page's clock runs behind", async () => {
@@ -897,9 +901,7 @@ it("closes the transcript action on the server's refusal when this page's clock 
   // The server closes the transcription window early, before any deadline the page knows about.
   await advance(20_000);
   transcriptionSource = "expired";
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /^Make a transcript/ }));
-  });
+  await clickButton(/^Make a transcript/);
   expect(requests.filter((request) => request.action === "create-transcript")).toHaveLength(1);
   await tick();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
@@ -922,11 +924,7 @@ it("moves a transcript still being prepared to closed when the server closes the
 });
 
 it("reads at most one recording per tick when 30 deadlines pass at once", async () => {
-  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
-  expiresAt = "2026-10-22T12:01:00Z";
-  transcriptStatus = "";
-  // The past-session endpoint returns up to 30 attempts.
-  extraRecordings = Array.from({ length: 29 }, (_, index) => ({ ...recording(), id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}` }));
+  manyAttempts();
   await open();
   // Count from the tick before the deadline, so a burst of reads at the deadline lands inside a counted tick.
   await advance(55_000);
@@ -943,19 +941,13 @@ it("reads at most one recording per tick when 30 deadlines pass at once", async 
 });
 
 it("keeps resumed tabs to one paced recording read at a time and applies every answer", async () => {
-  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
-  expiresAt = "2026-10-22T12:01:00Z";
-  transcriptStatus = "";
-  extraRecordings = Array.from({ length: 29 }, (_, index) => ({ ...recording(), id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}` }));
+  manyAttempts();
   // Each read stays in flight for most of a tick, so a resume could overlap or cut one off.
   metadataDelayMs = 4_000;
   await open();
   async function resume() {
     for (const next of ["hidden", "visible"] as const) {
-      visibility = next;
-      await reactAct(async () => {
-        document.dispatchEvent(new Event("visibilitychange"));
-      });
+      await setVisibility(next);
     }
   }
   await advance(60_000);
@@ -974,4 +966,27 @@ it("keeps resumed tabs to one paced recording read at a time and applies every a
   // Every answer is applied, so each recording is read once and all of them close.
   expect(metadataReads()).toBe(30);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+});
+
+it.each(["ready", "pending"])("keeps a newer %s transcript source reachable beside an older playable video", async (preparation) => {
+  transcriptStatus = "";
+  artifact = "failed";
+  retryable = false;
+  transcriptionSource = preparation;
+  const panel = () => (preparation === "ready" ? screen.getByRole("button", { name: /Make a transcript/ }) : screen.getByText("The transcript is being prepared."));
+  await open();
+  expect(panel()).toBeTruthy();
+  cleanup();
+  const older = "00000000-0000-4000-8000-000000000002";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", sourceStatus: "expired", exportStatus: "ready", transcriptionStatus: "none", transcripts: [], createdAt: "2026-10-22T09:00:00Z" }];
+  await open();
+  expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+  expect(requests.filter((request) => request.action === "recording-url").at(-1)?.recordingId).toBe(older);
+  expect(panel()).toBeTruthy();
+  if (preparation === "ready") {
+    await reactAct(async () => {
+      fireEvent.click(panel());
+    });
+    expect(requests.find((request) => request.action === "create-transcript")?.recordingId).toBe(id);
+  }
 });

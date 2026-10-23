@@ -17,10 +17,7 @@ import { PastSessionPage } from "./PastSessionPage";
 // clock, and each read fails on its own.
 
 const router = vi.hoisted(() => ({ state: { location: { pathname: "/dashboard/call/space/session/episode" } }, navigate: vi.fn() }));
-vi.mock("@tanstack/react-router", async () => {
-  const { createElement } = await import("react");
-  return { Link: ({ children }: { children: ReactNode }) => createElement("a", null, children), useRouter: () => router };
-});
+vi.mock("@tanstack/react-router", () => ({ Link: ({ children }: { children: ReactNode }) => <a>{children}</a>, useRouter: () => router }));
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const TENANT = uuid(1);
@@ -96,7 +93,7 @@ const TABLE: Record<Item, Record<Place, Record<State, Expectation>>> = {
       "transient failure": { polled: true, retried: true, shown: [SPEECH], hidden: [UNREAD], plays: "other", midway: { at: 10_000, shown: ["Who came"] }, codex: "r4355336039" },
       "401": SIGNED_OUT,
       "other 4xx": { polled: true, retried: false, shown: [UNREAD], hidden: [LOST], plays: "other" },
-      "window closed early": { polled: true, retried: false, shown: [], hidden: [MAKE], plays: "other" },
+      "window closed early": { polled: true, retried: false, shown: [], hidden: [MAKE], plays: "other", midway: { at: 10_000, shown: [MAKE] }, codex: "r4358870378" },
     },
   },
 };
@@ -126,7 +123,12 @@ function itemRecording() {
     return { status: ready ? "completed" : "pending", source, export: { status: ready ? "ready" : "pending", retryable: false }, transcription_preparation: { status: "none" } };
   }
   // A transcript item's attempt plays when it is the selected one, and can only be prepared when it isn't.
-  const video = cell.place === "selected" ? { status: "completed", export: { status: "ready", retryable: false } } : { status: "pending", export: { status: "none", retryable: false } };
+  const video =
+    cell.place === "unselected" && cell.state === "window closed early"
+      ? { status: "pending", export: { status: "failed", retryable: false } }
+      : cell.place === "selected"
+        ? { status: "completed", export: { status: "ready", retryable: false } }
+        : { status: "pending", export: { status: "none", retryable: false } };
   return { ...video, source, transcription_preparation: closedEarly() ? { status: "expired" } : { status: "ready", expires_at: WINDOW_END() } };
 }
 

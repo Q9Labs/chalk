@@ -42,7 +42,7 @@ export type Due = ({ readonly kind: "recording" | "transcripts" } | { readonly k
  * deadlines are already read on time, so five minutes caps how long a dead action can show at one small read per open
  * attempt, and only while the tab is visible.
  */
-export const REVALIDATE_MS = 5 * 60_000;
+const REVALIDATE_MS = 5 * 60_000;
 const RETRY_MS = 5_000;
 const RETRY_CAP_MS = 60_000;
 
@@ -73,7 +73,7 @@ export function reread(item: Attempt, kind: Due["kind"]): Attempt {
   return item;
 }
 
-/** What the page shows: the newest playable video, and separately the newest finished transcript. */
+/** What the page shows: the newest playable video, and separately the newest useful transcript source. */
 export function selection(attempts: readonly Attempt[]) {
   const usable = (item: Attempt) => ["preparable", "retryable", "preparing"].includes(videoState(item.recording));
   // A playable export first, then an attempt that can still be prepared, so a failed newest attempt never hides a usable older one.
@@ -81,7 +81,11 @@ export function selection(attempts: readonly Attempt[]) {
   // Attempts are newest first, so a later attempt than the one shown sits before it.
   const newer = video ? attempts.slice(0, attempts.indexOf(video)).find(usable) : undefined;
   // Until a transcript finishes, the newest one being made is shown, so the page doesn't offer to make a second.
-  const transcript = attempts.find((item) => item.recording.transcripts?.some(completedTranscript)) ?? attempts.find((item) => item.recording.transcripts?.some(pendingTranscript)) ?? video;
+  const transcript =
+    attempts.find((item) => item.recording.transcripts?.some(completedTranscript)) ??
+    attempts.find((item) => item.recording.transcripts?.some(pendingTranscript)) ??
+    attempts.find((item) => ["creatable", "preparing"].includes(transcriptState(item.recording, item.recording.transcripts?.[0] ?? null))) ??
+    video;
   return { video, newer, transcript };
 }
 

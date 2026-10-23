@@ -1,3 +1,4 @@
+import { installClock } from "./browser-clock.mjs";
 // Drives the dashboard build against the DTO fixture in headless Chromium and prints one line per check.
 // Usage: node dashboard-checks.mjs <playwright index.mjs> <fixture origin>
 const [playwrightPath, origin] = process.argv.slice(2);
@@ -18,12 +19,7 @@ async function open(route, { account = "hasan", set = "", signedOut = false, the
   if (!signedOut) cookies.push({ name: "fx_session", value: account, url: origin });
   await context.addCookies(cookies);
   const tab = await context.newPage();
-  // `clock` is true, or how far the page's clock runs ahead of the fixture server's, in milliseconds.
-  if (clock !== false) {
-    const skew = clock === true ? 0 : clock;
-    await tab.clock.install({ time: Date.now() + skew });
-    await tab.clock.pauseAt(new Date(Date.now() + skew + 1000));
-  }
+  await installClock(tab, clock);
   tab.on("console", (message) => message.type() === "error" && errors.push(`${route}: ${message.text()}`));
   tab.on("pageerror", (error) => errors.push(`${route}: ${error.message}`));
   await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });

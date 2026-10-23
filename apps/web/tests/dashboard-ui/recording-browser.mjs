@@ -1,3 +1,4 @@
+import { installClock } from "./browser-clock.mjs";
 import { recordingChecks } from "./recording-checks.mjs";
 import { resolve } from "node:path";
 
@@ -28,12 +29,7 @@ try {
       ]);
       const tab = await context.newPage();
       tab.on("pageerror", (error) => errors.push(error.message));
-      // `clock` is true, or how far the page's clock runs ahead of the fixture server's, in milliseconds.
-      if (clock !== false) {
-        const skew = clock === true ? 0 : clock;
-        await tab.clock.install({ time: Date.now() + skew });
-        await tab.clock.pauseAt(new Date(Date.now() + skew + 1000));
-      }
+      await installClock(tab, clock);
       await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });
       return { tab, context };
     },
