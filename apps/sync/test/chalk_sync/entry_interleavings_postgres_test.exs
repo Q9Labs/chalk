@@ -23,10 +23,13 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     previous = Application.get_env(:chalk_sync, :database_connections)
     stateholder = Application.fetch_env!(:chalk_sync, :stateholder)
     connections = SyncPostgres.start_connections(@database_url)
-    Enum.each(connections, &Process.unlink/1)
+
+    # The observer must survive the deliberately disconnected confirmation
+    # connections so each assertion reads committed state independently.
+    [connection] = SyncPostgres.start_connections(@database_url, 1)
+    Enum.each([connection | connections], &Process.unlink/1)
     Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
     Application.put_env(:chalk_sync, :stateholder, Postgres)
-    connection = hd(connections)
 
     # Fail at real PostgreSQL COMMIT, after the confirmation transaction's body
     # succeeded. The historical join intent is already applied in every case.
@@ -65,7 +68,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
       Postgrex.query!(connection, "drop function chalk_test_entry_commit_failure()", [])
       Application.put_env(:chalk_sync, :stateholder, stateholder)
       restore_env(:database_connections, previous)
-      Enum.each(connections, &TestProcess.stop/1)
+      Enum.each([connection | connections], &TestProcess.stop/1)
     end)
 
     {:ok, connection: connection, connections: connections}
