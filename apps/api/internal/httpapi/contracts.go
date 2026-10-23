@@ -59,6 +59,7 @@ type APIRouteContract struct {
 
 func PreviewRouteContracts() []APIRouteContract {
 	endpoints := make([]RouteEndpoint, 0)
+	endpoints = append(endpoints, problemReportEndpoints(nil, nil, RateLimitOptions{})...)
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 
 	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)

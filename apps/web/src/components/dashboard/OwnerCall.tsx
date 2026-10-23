@@ -2,7 +2,7 @@ import { readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeRelo
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { z } from "zod";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
@@ -11,6 +11,8 @@ import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
 
+import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
+import { publicAPIBaseURL } from "../../lib/chalk-access";
 const ownerReloadIntent = z.object({ ownerJoinKey: z.uuid() });
 
 function readOwnerReload(spaceId: string) {
@@ -28,6 +30,7 @@ function readOwnerReload(spaceId: string) {
 function ownerAccess(spaceId: string) {
   let joinKey = intentKey();
   let current: OwnerAccessDTO["access"] | undefined;
+  const listeners = new Set<() => void>();
   let recovery: ReturnType<typeof readOwnerReload> | undefined;
   let restoring: Promise<void> | undefined;
   const clearReload = () => {
@@ -55,6 +58,7 @@ function ownerAccess(spaceId: string) {
         : // Without the current token the server replaces the media connection.
           await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
+    for (const listener of listeners) listener();
     return access;
   };
   const saveReload = (snapshot: ReturnType<SpaceClient["getSnapshot"]>) => {
@@ -74,7 +78,19 @@ function ownerAccess(spaceId: string) {
       // Reload recovery is unavailable with tab storage disabled.
     }
   };
-  return { getAccess, saveReload, clearReload };
+  return {
+    getAccess,
+    saveReload,
+    clearReload,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    reportAccess: () => current,
+    reportCredential: () => current?.media.token,
+  };
 }
 
 /** The call screen for the call's owner, through the React SDK's own call UI. */
@@ -83,10 +99,11 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { state, reload } = useLoad(() => readPage("call", { spaceId }), `call:${spaceId}`);
   const { theme, setTheme } = useSiteTheme();
   const navigate = useNavigate();
+  const apiBaseURL = publicAPIBaseURL();
   const owner = useMemo(() => ownerAccess(spaceId), [spaceId]);
   const [client, setClient] = useState<SpaceClient | null>(null);
   useEffect(() => {
-    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: import.meta.env.VITE_API_URL?.trim() || undefined }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });
+    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
     };
@@ -99,7 +116,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
         .catch(() => undefined)
         .finally(() => owned.dispose());
     };
-  }, [spaceId, owner]);
+  }, [spaceId, owner, apiBaseURL]);
   const leave = () => {
     owner.clearReload();
     void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
@@ -128,7 +145,34 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     );
   return (
     <div style={{ position: "absolute", inset: 0 }}>
-      <Chalk client={client} inviteLink={state.data.inviteUrl} spaceName={state.data.call.name} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
+      <OwnerCallSurface
+        client={client}
+        owner={owner}
+        baseURL={apiBaseURL}
+        inviteLink={state.data.inviteUrl}
+        spaceName={state.data.call.name}
+        displayName={profile.name}
+        theme={{ colorScheme: theme }}
+        onColorSchemeChange={setTheme}
+        onLeft={() => {
+          if (client.getSnapshot().connection.episodeEnded) owner.clearReload();
+          else leave();
+        }}
+        onEpisodeEnded={owner.clearReload}
+        onHome={() => {
+          owner.clearReload();
+          void navigate({ to: "/dashboard" });
+        }}
+      />
     </div>
   );
+}
+
+function OwnerCallSurface({ client, owner, baseURL, ...props }: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string }) {
+  const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
+  const tenantId = access?.subject.tenant_id;
+  const reportsAvailable = useProblemReports(baseURL, tenantId);
+  const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
+  const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection }), [baseURL, tenantId, owner, client]);
+  return <Chalk {...props} client={client} onReportProblem={reportsAvailable ? onReportProblem : undefined} reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined} />;
 }

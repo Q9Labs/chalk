@@ -141,11 +141,11 @@ func TestArrivalStatusTerminalAdmissionRequiresWriteBudget(t *testing.T) {
 				t.Fatalf("persistent updates=%d want%d", repo.updates, wantUpdates)
 			}
 			for i := 0; i < authenticatedWriteRateLimit.Limit-wantUpdates; i++ {
-				if !options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now).Allowed {
+				if options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now).State != ratelimit.Allowed {
 					t.Fatal("status spent too many writes")
 				}
 			}
-			if options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now).Allowed {
+			if options.Limiter.Allow(context.Background(), key, authenticatedWriteRateLimit, now).State == ratelimit.Allowed {
 				t.Fatal("terminal resolution did not spend one write")
 			}
 		})

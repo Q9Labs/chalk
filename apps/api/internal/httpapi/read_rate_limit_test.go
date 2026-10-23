@@ -26,16 +26,16 @@ func TestAdmissionPollingPreservesWriteCapacity(t *testing.T) {
 	ctx, now := context.Background(), time.Now()
 	// Two reads per three-second status tick across five pages for a full minute.
 	for i := 0; i < 200; i++ {
-		if !limiter.Allow(ctx, "tenant", policy, now).Allowed {
+		if limiter.Allow(ctx, "tenant", policy, now).State != ratelimit.Allowed {
 			t.Fatalf("read capacity exhausted at poll %d", i)
 		}
 	}
 	for i := 0; i < authenticatedWriteRateLimit.Limit; i++ {
-		if !limiter.Allow(ctx, "tenant", authenticatedWriteRateLimit, now).Allowed {
+		if limiter.Allow(ctx, "tenant", authenticatedWriteRateLimit, now).State != ratelimit.Allowed {
 			t.Fatalf("polling consumed write capacity: write %d rejected", i)
 		}
 	}
-	if limiter.Allow(ctx, "tenant", authenticatedWriteRateLimit, now).Allowed {
+	if limiter.Allow(ctx, "tenant", authenticatedWriteRateLimit, now).State == ratelimit.Allowed {
 		t.Fatal("write limit is not enforced")
 	}
 }

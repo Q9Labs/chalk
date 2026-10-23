@@ -2,13 +2,14 @@ import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import type { ThemeMode } from "../../lib/theme";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
+import { Chalk, CallLimbo, ChalkButton, StatusSurface, ReportProblemDialog } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
+import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
@@ -33,8 +34,19 @@ export function SpacePage(props: SpacePageProps = {}) {
 }
 function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
-  const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string | undefined; readonly failure: ClientFailure | null | undefined; readonly cleanup: () => Promise<void> } | null>(null);
+  const [terminal, setTerminal] = useState<{
+    readonly phase: ExitPhase;
+    readonly tenantId: string | undefined;
+    readonly callName: string | undefined;
+    readonly failure: ClientFailure | null | undefined;
+    readonly cleanup: () => Promise<void>;
+    readonly reportProblem?: ReportProblem;
+    readonly reportExpiresAt?: number;
+  } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
+  const reportFocusScope = useRef<HTMLDivElement>(null);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
     try {
@@ -59,6 +71,11 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const autoArrivalAttempted = useRef(false);
   const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
+  const subscribeReportAccess = useCallback((listener: () => void) => spaceAccess?.prepared.subscribe(listener) ?? (() => undefined), [spaceAccess]);
+  const reportAccessExpiry = useCallback(() => spaceAccess?.prepared.reportCredentialExpiresAt(), [spaceAccess]);
+  const liveReportExpiresAt = useSyncExternalStore(subscribeReportAccess, reportAccessExpiry, reportAccessExpiry);
+  const reportExpired = useReportCredentialExpired(terminal?.reportExpiresAt ?? liveReportExpiresAt);
+  const reportsAvailable = useProblemReports(publicAPIBaseURL(), spaceAccess?.prepared.reloadMarker().tenantId ?? terminal?.tenantId);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<EntryFailure | null>(null);
   const [preparing, setPreparing] = useState(Boolean(reloadMarker));
@@ -246,77 +263,117 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     },
     [spaceAccess],
   );
-  if (terminal)
-    return (
-      <main className="relative h-full">
-        <StatusSurface
-          phase={terminal.phase}
-          callName={terminal.callName}
-          errorCode={terminal.failure?.code}
-          sync={terminal.failure?.sync}
-          theme={{ colorScheme: mode }}
-          rejoinDisabled={Boolean(spaceAccess) || preparing}
-          onRejoin={() => {
-            setTerminal(null);
-            start(entranceSettings ?? defaultJoinOptions);
+  const renderSurface = () => {
+    if (terminal)
+      return (
+        <main className="relative h-full">
+          <StatusSurface
+            phase={terminal.phase}
+            callName={terminal.callName}
+            errorCode={terminal.failure?.code}
+            sync={terminal.failure?.sync}
+            theme={{ colorScheme: mode }}
+            onReportProblem={
+              reportsAvailable && terminal.reportProblem && !reportExpired
+                ? () => {
+                    setReportOpen(true);
+                  }
+                : undefined
+            }
+            rejoinDisabled={Boolean(spaceAccess) || preparing}
+            onRejoin={() => {
+              setTerminal(null);
+              start(entranceSettings ?? defaultJoinOptions);
+            }}
+            onHome={() => {
+              void terminal
+                .cleanup()
+                .then(() => globalThis.location.assign("/"))
+                .catch(() => setError({ message: "Couldn’t leave the call. Try again.", retryable: true }));
+            }}
+          />
+          {error ? (
+            <p role="alert" className="absolute inset-x-6 bottom-6 text-center text-sm">
+              {error.message}
+            </p>
+          ) : null}
+        </main>
+      );
+    if (spaceAccess) {
+      const settings = entranceSettings ?? defaultJoinOptions;
+      return (
+        <LocalSpace
+          reloadMarker={spaceAccess.prepared.reloadMarker}
+          reportCredential={spaceAccess.prepared.reportCredential}
+          reportCredentialExpiresAt={spaceAccess.prepared.reportCredentialExpiresAt}
+          reportsAvailable={reportsAvailable}
+          reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
+          onOpenReportProblem={(send, diagnostics) => {
+            setReportDialog({ send, diagnostics });
+            setReportOpen(true);
           }}
-          onHome={() => {
-            void terminal
-              .cleanup()
-              .then(() => globalThis.location.assign("/"))
-              .catch(() => setError({ message: "Couldn’t leave the call. Try again.", retryable: true }));
+          credential={spaceAccess.prepared.credential}
+          displayName={settings.displayName}
+          defaults={{ microphone: settings.microphone, camera: settings.camera }}
+          getAccess={spaceAccess.prepared.getAccess}
+          connectionAccess={spaceAccess.prepared.connectionAccess}
+          onFinish={finish}
+          spaceName={spaceAccess.spaceName}
+          inviteLink={spaceAccess.inviteLink}
+          onTerminal={(phase, cleanup, failure, reportProblem, reportExpiresAt) => {
+            setTerminal({ phase, cleanup, failure, tenantId: spaceAccess.prepared.reloadMarker().tenantId, callName: spaceAccess.spaceName, reportProblem, reportExpiresAt });
+            void cleanup().catch(() => setError({ message: "Couldn’t leave the call. Try Home again.", retryable: true }));
           }}
         />
-        {error ? (
-          <p role="alert" className="absolute inset-x-6 bottom-6 text-center text-sm">
-            {error.message}
-          </p>
-        ) : null}
+      );
+    }
+    return (
+      <main data-chalk data-chalk-theme={mode} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+        <div className="min-h-0 flex-1">
+          {pending ? (
+            <CallLimbo
+              theme={{ colorScheme: mode }}
+              spaceName={pending.spaceName}
+              message={error?.message ?? `Asking to join ${pending.spaceName ?? "the call"}`}
+              detail={error ? undefined : "The host will let you in."}
+              action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }}
+            />
+          ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
+          ) : error ? (
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
+          ) : (
+            <NameNeeded
+              spaceName={callName}
+              theme={mode}
+              displayName={displayName}
+              onDisplayNameChange={(name) => {
+                nameEdited.current = true;
+                setDisplayName(name);
+              }}
+              onJoin={() => start()}
+            />
+          )}
+        </div>
       </main>
     );
-  if (spaceAccess) {
-    const settings = entranceSettings ?? defaultJoinOptions;
-    return (
-      <LocalSpace
-        reloadMarker={spaceAccess.prepared.reloadMarker}
-        credential={spaceAccess.prepared.credential}
-        displayName={settings.displayName}
-        defaults={{ microphone: settings.microphone, camera: settings.camera }}
-        getAccess={spaceAccess.prepared.getAccess}
-        connectionAccess={spaceAccess.prepared.connectionAccess}
-        onFinish={finish}
-        spaceName={spaceAccess.spaceName}
-        inviteLink={spaceAccess.inviteLink}
-        onTerminal={(phase, cleanup, failure) => {
-          setTerminal({ phase, cleanup, failure, callName: spaceAccess.spaceName });
-          void cleanup().catch(() => setError({ message: "Couldn’t leave the call. Try Home again.", retryable: true }));
-        }}
-      />
-    );
-  }
+  };
+  const sendReport = terminal?.reportProblem ?? reportDialog?.send;
   return (
-    <main data-chalk data-chalk-theme={mode} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="min-h-0 flex-1">
-        {pending ? (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName ?? "the call"}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
-        ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
-        ) : error ? (
-          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
-        ) : (
-          <NameNeeded
-            spaceName={callName}
-            theme={mode}
-            displayName={displayName}
-            onDisplayNameChange={(name) => {
-              nameEdited.current = true;
-              setDisplayName(name);
-            }}
-            onJoin={() => start()}
-          />
-        )}
-      </div>
-    </main>
+    <div ref={reportFocusScope} className="contents">
+      {renderSurface()}
+      {sendReport ? (
+        <ReportProblemDialog
+          unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
+          diagnostics={terminal ? `Connection: ${terminal.phase}\nLast error: ${terminal.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
+          focusScope={reportFocusScope}
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          onReportProblem={sendReport}
+          colorScheme={mode}
+        />
+      ) : null}
+    </div>
   );
 }
 type JoinedSpaceAccess = {
@@ -324,7 +381,7 @@ type JoinedSpaceAccess = {
   readonly inviteLink?: string;
   readonly spaceName?: string;
 };
-type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess"> & {
+type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess" | "subscribe" | "reportCredential" | "reportCredentialExpiresAt"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
@@ -401,6 +458,11 @@ function neutralMessage(cause: unknown): EntryFailure {
 }
 
 function LocalSpace({
+  reportCredential,
+  reportCredentialExpiresAt,
+  reportsAvailable,
+  reportUnavailableReason,
+  onOpenReportProblem,
   reloadMarker,
   credential,
   displayName,
@@ -412,6 +474,11 @@ function LocalSpace({
   inviteLink,
   onTerminal,
 }: {
+  readonly reportCredential: () => string;
+  readonly reportCredentialExpiresAt: () => number;
+  readonly reportsAvailable: boolean;
+  readonly reportUnavailableReason?: string;
+  readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential;
   readonly displayName: string;
@@ -424,13 +491,15 @@ function LocalSpace({
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName?: string;
-  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, failure?: ClientFailure | null) => void;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, failure?: ClientFailure | null, reportProblem?: ReportProblem, reportExpiresAt?: number) => void;
 }) {
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
   const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
   const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
+  const tenantId = reloadMarker().tenantId;
+  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: reportCredential, connection: () => client.getSnapshot().connection }), [credential.apiBaseURL, tenantId, reportCredential, client]);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
@@ -444,9 +513,10 @@ function LocalSpace({
       } catch {
         /* Storage may be disabled. */
       }
-      onTerminal(phase, release, failure);
+      const terminalProof = reportCredential();
+      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }), reportCredentialExpiresAt());
     },
-    [onTerminal, release],
+    [onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt],
   );
   useEffect(() => {
     if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
@@ -494,6 +564,9 @@ function LocalSpace({
         theme={{ colorScheme: mode }}
         onColorSchemeChange={setPreference}
         client={client}
+        onReportProblem={reportsAvailable ? reportProblem : undefined}
+        reportUnavailableReason={reportUnavailableReason}
+        onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
         displayName={displayName}
         defaults={defaults}
         spaceName={spaceName}

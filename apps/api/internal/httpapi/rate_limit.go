@@ -13,8 +13,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -79,7 +85,11 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := checkRateLimit(options, policy, w, r); err != nil {
-				writeAPIError(w, apiErrorRateLimited)
+				apiErr, ok := errorAsAPIError(err)
+				if !ok {
+					apiErr = apiErrorInternal
+				}
+				writeAPIError(w, apiErr)
 				return
 			}
 			ctx := context.WithValue(r.Context(), writeBudgetContextKey{}, func() error {
@@ -126,22 +136,25 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 		}
 		if policy.Limit > 0 {
 			decision := options.Limiter.Allow(r.Context(), key, ceiling, now())
-			if !decision.Allowed {
+			if decision.State != ratelimit.Allowed {
 				writeRateLimitHeaders(w, ceiling, decision)
-				return rateLimitFailure(w, decision)
+				return rateLimitFailure(r.Context(), w, ceiling, decision)
 			}
 		}
 		key += ":tenant:" + tenantID.String()
 	}
 	decision := options.Limiter.Allow(r.Context(), key, policy, now())
 	writeRateLimitHeaders(w, policy, decision)
-	if !decision.Allowed {
-		return rateLimitFailure(w, decision)
+	if decision.State != ratelimit.Allowed {
+		return rateLimitFailure(r.Context(), w, policy, decision)
 	}
 	return nil
 }
 
 func writeRateLimitHeaders(w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) {
+	if decision.State != ratelimit.Allowed && decision.State != ratelimit.Exhausted {
+		return
+	}
 	w.Header().Set(ratelimit.HeaderLimit, strconv.Itoa(policy.Limit))
 	w.Header().Set(ratelimit.HeaderRemaining, strconv.Itoa(decision.Remaining))
 }
@@ -237,7 +250,14 @@ func remoteIP(remoteAddr string) string {
 	return remoteAddr
 }
 
-func rateLimitFailure(w http.ResponseWriter, decision ratelimit.Decision) error {
+func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) APIError {
+	if decision.State != ratelimit.Exhausted {
+		recordRateLimiterUnavailable(ctx, policy.Name)
+		w.Header().Del(ratelimit.HeaderLimit)
+		w.Header().Del(ratelimit.HeaderRemaining)
+		w.Header().Del(ratelimit.HeaderRetryAfter)
+		return apiErrorServiceUnavailable
+	}
 	retryAfter := int(math.Ceil(decision.RetryAfter.Seconds()))
 	if retryAfter < 1 {
 		retryAfter = 1
@@ -245,4 +265,23 @@ func rateLimitFailure(w http.ResponseWriter, decision ratelimit.Decision) error 
 
 	w.Header().Set(ratelimit.HeaderRetryAfter, strconv.Itoa(retryAfter))
 	return apiErrorRateLimited
+}
+
+func recordRateLimiterUnavailable(ctx context.Context, policy string) {
+	switch policy {
+	case ratelimit.PolicyNameCORSPolicyLookup, ratelimit.PolicyNameAuthenticatedRead, ratelimit.PolicyNameAuthenticatedWrite,
+		ratelimit.PolicyNameWebhookRead, ratelimit.PolicyNameTelemetryIntake,
+		ratelimit.PolicyNameAuthenticatedRead + ".service_ceiling", ratelimit.PolicyNameAuthenticatedWrite + ".service_ceiling",
+		reportParticipantLimit.Name, reportIPLimit.Name, reportAccountLimit.Name, reportEpisodeLimit.Name:
+	default:
+		policy = "unknown"
+	}
+	const cause = "limiter_unavailable"
+	attrs := []attribute.KeyValue{attribute.String("policy", policy), attribute.String("cause", cause)}
+	counter, _ := otel.Meter("github.com/q9labs/chalk/apps/api/internal/httpapi").Int64Counter("chalk.api.rate_limit.unavailable")
+	counter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	observability.RequestLogger(ctx).ErrorContext(ctx, "rate limiter unavailable", "event", "rate_limit.unavailable", "policy", policy, "cause", cause)
+	span := trace.SpanFromContext(ctx)
+	span.AddEvent("rate_limit.unavailable", trace.WithAttributes(attrs...))
+	span.SetStatus(codes.Error, cause)
 }

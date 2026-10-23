@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
@@ -640,6 +641,8 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErr, true
 	}
 	switch {
+	case errors.Is(err, spaces.ErrInvalidSpaceName):
+		return apiErrorInvalidRequest, true
 	case errors.Is(err, publicinvites.ErrInvalidToken), errors.Is(err, publicinvites.ErrUnknownKey), errors.Is(err, publicinvites.ErrInvalidHandle), errors.Is(err, publicinvites.ErrInvalidGeneration), errors.Is(err, publicinvites.ErrInvalidKeyID), errors.Is(err, publicinvites.ErrInvalidPayload), errors.Is(err, publicinvites.ErrTokenTooLarge), errors.Is(err, publicinvites.ErrInviteNotFound), errors.Is(err, publicinvites.ErrInviteUnavailable), errors.Is(err, publicinvites.ErrAutoLifecycleNotFound):
 		return apiErrorPublicInviteUnavailable, true
 	case errors.Is(err, publicinvites.ErrAdmissionRequestNotFound):
@@ -774,7 +777,7 @@ func isNativePublicRequest(r *http.Request) bool {
 
 func guestCredentialFromRequest(r *http.Request, arrivalHandle string) string {
 	if isNativePublicRequest(r) {
-		scheme, credential, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+		scheme, credential, ok := authorizationCredential(r.Header.Get("Authorization"))
 		if !ok || !strings.EqualFold(scheme, publicGuestScheme) {
 			return ""
 		}
@@ -783,11 +786,12 @@ func guestCredentialFromRequest(r *http.Request, arrivalHandle string) string {
 	if arrivalHandle == "" {
 		return ""
 	}
-	cookie, err := r.Cookie(publicGuestCookiePrefix + arrivalHandle)
-	if err != nil {
-		return ""
+	for _, cookie := range requestCredentialCookies(r) {
+		if cookie.Name == publicGuestCookiePrefix+arrivalHandle {
+			return strings.TrimSpace(cookie.Value)
+		}
 	}
-	return strings.TrimSpace(cookie.Value)
+	return ""
 }
 
 func rejectNativePublicCookies(next http.Handler) http.Handler {

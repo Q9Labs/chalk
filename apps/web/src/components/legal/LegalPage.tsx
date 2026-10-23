@@ -23,7 +23,7 @@ const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
     heading: "Retention and deletion",
     content:
-      "Account records remain stored until deleted. Space, Episode, and participant records (including participant ID, display name, role, and join and leave times) are kept while the tenant that owns the Space exists and are deleted from active systems when that tenant is purged. This includes web and mobile guests, even after they leave an Episode; the seven-day collaboration cleanup does not delete these records. Chat messages, read receipts, whiteboard scenes and changes, and their attached files are scheduled for cleanup seven days after an Episode ends. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Webhook event bodies, deliveries, and attempt logs are scheduled for cleanup after 30 days. Endpoint settings and revision history remain while the endpoint is active; after deletion, cleanup is scheduled after 30 days once delivery references are removed, or when the tenant is purged. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data in active systems within 30 days. Backup copies may remain longer; tenant-deletion archives are retained for at least 14 days.",
+      "Account records remain stored until deleted. Space, Episode, and participant records (including participant ID, display name, role, and join and leave times) are kept while the tenant that owns the Space exists and are deleted from active systems when that tenant is purged. This includes web and mobile guests, even after they leave an Episode; the seven-day collaboration cleanup does not delete these records. Chat messages, read receipts, whiteboard scenes and changes, and their attached files are scheduled for cleanup seven days after an Episode ends. Recordings and transcripts follow the retention policy set for the Episode by its tenant. Webhook event bodies, deliveries, and attempt logs are scheduled for cleanup after 30 days. Endpoint settings and revision history remain while the endpoint is active; after deletion, cleanup is scheduled after 30 days once delivery references are removed, or when the tenant is purged. Log retention depends on the service and its configured provider settings. To request deletion of your web account or content, or your mobile guest data, email privacy@chalkmeet.com with enough detail to identify it (for example, the Space link, display name, and approximate date). We will delete or anonymize the data in active systems within 30 days. Backup copies may remain longer; tenant-deletion archives are retained for at least 14 days. Problem reports remain in our Discord channel until we delete them; Chalk does not automatically expire problem reports. You can request deletion at privacy@chalkmeet.com.",
   },
   {
     heading: "Your rights",
@@ -119,7 +119,7 @@ function PrivacyPolicy() {
       <p className="legal-effective-date">Effective {PRIVACY_EFFECTIVE_DATE_LABEL}</p>
       <section id="whats-changing" aria-labelledby="privacy-changes-heading">
         <h2 id="privacy-changes-heading">What's changing</h2>
-        <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, and our providers and international transfer safeguards.</p>
+        <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, problem reports, and our providers and international transfer safeguards.</p>
         <p>
           The data-handling disclosures below describe current practice and apply when this page is published. The update date above does not delay these factual corrections. The <a href="/privacy/previous">Archived Privacy Policy</a> is available only as a historical record.
         </p>
@@ -234,7 +234,9 @@ function PrivacyPolicy() {
           <strong>Axiom</strong> receives API request logs and Sync diagnostic traces, including request paths, outcomes, timing, and journey and trace identifiers, to help us run and secure the service.
         </li>
         <li>
-          <strong>Discord</strong> receives operational alerts that may include a tenant's display name.
+          <strong>Discord</strong> receives operational alerts that may include a tenant's display name. Our private Discord channel also receives problem reports you submit through Chalk: what you type, your display name and role, and the Space name and Episode ID. If you choose to include
+          diagnostics, the report also sends connection status, last error code, browser or user agent, and app version. We do not add your account email address, server configuration, logs or server error text. Please do not include passwords or keys in your report. URLs beginning with http://,
+          https:// or www. are sent as non-clickable text with query strings and fragments removed. Stack traces and commit IDs you include are kept.
         </li>
         <li>
           <strong>Google sign-in</strong> lets you authenticate your dashboard account. If you choose it, your browser contacts accounts.google.com and our server exchanges an authorization code with oauth2.googleapis.com and verifies Google's keys from www.googleapis.com. Google receives the

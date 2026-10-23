@@ -15,6 +15,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const focusScope = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<{ kind: "shortcuts" | "report"; open: boolean }>({ kind: "shortcuts", open: false });
   const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
@@ -37,17 +38,19 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const content = (
     <CallDetails
       {...props}
+      onReportProblem={props.reportUnavailableReason ? undefined : props.onReportProblem}
       onClose={() => setOpen(false)}
       sounds={sounds}
       onSoundsChange={setSounds}
       onDialog={(kind) => {
         setOpen(false);
-        setDialog({ kind, open: true });
+        if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
+        else setDialog({ kind, open: true });
       }}
     />
   );
   return (
-    <header data-part="header-region" className={cn("chalk-header", className)} role="banner">
+    <header ref={focusScope} data-part="header-region" className={cn("chalk-header", className)} role="banner">
       <ShellStyles />
       <div className="chalk-header-title flex min-w-0 items-center gap-3">
         {phone ? (
@@ -111,7 +114,16 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
         ) : null}
         {onLayoutChange ? <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} /> : null}
       </div>
-      <CallDialog returnFocus={triggerRef} kind={dialog.kind} open={dialog.open} onClose={() => setDialog((current) => ({ ...current, open: false }))} onReportProblem={props.onReportProblem} diagnostics={props.diagnostics?.map(({ label, value }) => `${label}: ${value}`).join("\n") ?? ""} />
+      <CallDialog
+        focusScope={focusScope}
+        returnFocus={triggerRef}
+        kind={dialog.kind}
+        open={dialog.open}
+        onClose={() => setDialog((current) => ({ ...current, open: false }))}
+        onReportProblem={props.onReportProblem}
+        unavailableReason={props.reportUnavailableReason}
+        diagnostics={props.diagnostics?.map(({ label, value }) => `${label}: ${value}`).join("\n") ?? ""}
+      />
     </header>
   );
 });

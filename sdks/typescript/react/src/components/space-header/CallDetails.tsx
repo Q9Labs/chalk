@@ -24,23 +24,29 @@ export function CallDialog({
   onReportProblem,
   diagnostics,
   returnFocus,
+  focusScope,
+  unavailableReason,
 }: {
   readonly kind: "shortcuts" | "report";
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onReportProblem?: SpaceHeaderProps["onReportProblem"];
   readonly diagnostics: string;
-  readonly returnFocus: RefObject<HTMLButtonElement | null>;
+  readonly returnFocus?: RefObject<HTMLButtonElement | null>;
+  readonly focusScope: RefObject<HTMLElement | null>;
+  readonly unavailableReason?: string;
 }) {
   const container = useRef<HTMLElement>(null);
   const reportInput = useRef<HTMLTextAreaElement>(null);
+  const reportOpener = useRef<HTMLElement>(null);
   const [text, setText] = useState("");
-  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
+  const [includeDiagnostics, setIncludeDiagnostics] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
   useEffect(() => {
     if (open && kind === "report") {
       setText("");
+      setIncludeDiagnostics(false);
       setError("");
       setStatus("idle");
     }
@@ -54,17 +60,34 @@ export function CallDialog({
     >
       <Dialog.Root
         open={open}
-        onOpenChange={(open) => {
+        onOpenChange={(open, event) => {
+          if (!open && status === "sending") {
+            event.cancel();
+            return;
+          }
           if (!open) onClose();
         }}
       >
         <Dialog.Portal container={container}>
           <Dialog.Backdrop className="chalk-shell-modal-backdrop" />
-          <Dialog.Popup initialFocus={kind === "report" ? reportInput : undefined} finalFocus={returnFocus} className="chalk-shell-modal">
+          <Dialog.Popup
+            initialFocus={
+              kind === "report"
+                ? () => {
+                    const opener = reportInput.current?.ownerDocument.activeElement;
+                    reportOpener.current = opener instanceof HTMLElement && focusScope.current?.contains(opener) ? opener : null;
+                    return reportInput.current;
+                  }
+                : undefined
+            }
+            finalFocus={kind === "report" ? () => reportFocusTarget(focusScope.current, reportOpener.current) : returnFocus}
+            className="chalk-shell-modal"
+          >
             {kind === "report" && status === "sent" ? null : (
               <div className="chalk-shell-modal-heading">
                 <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
                 <Dialog.Close
+                  disabled={status === "sending"}
                   render={
                     <ChalkIconButton aria-label="Close" size="sm">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
@@ -104,11 +127,11 @@ export function CallDialog({
                 className="chalk-shell-report"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (!text.trim() || !onReportProblem || status === "sending") return;
+                  if (!text.trim() || !onReportProblem || status === "sending" || unavailableReason) return;
                   setStatus("sending");
                   setError("");
                   void Promise.resolve()
-                    .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics ? diagnostics : undefined }))
+                    .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics && diagnostics.trim() ? diagnostics : undefined }))
                     .then(
                       () => setStatus("sent"),
                       () => {
@@ -119,16 +142,19 @@ export function CallDialog({
                 }}
               >
                 <label htmlFor="chalk-problem">What went wrong?</label>
-                <textarea ref={reportInput} id="chalk-problem" rows={4} required disabled={status === "sending"} value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
-                <label className="chalk-shell-report-check">
-                  <input type="checkbox" disabled={status === "sending"} checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
-                </label>
+                <textarea ref={reportInput} id="chalk-problem" rows={4} required disabled={status === "sending"} value={text} onChange={(event) => setText(Array.from(event.target.value).slice(0, 1000).join(""))} placeholder="Tell us what happened…" />
+                {diagnostics.trim() ? (
+                  <label className="chalk-shell-report-check">
+                    <input type="checkbox" disabled={status === "sending"} checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
+                  </label>
+                ) : null}
                 {error ? <p role="alert">{error}</p> : null}
+                {unavailableReason ? <p role="alert">{unavailableReason}</p> : null}
                 <div className="chalk-shell-report-actions">
                   <ChalkButton onClick={onClose} disabled={status === "sending"}>
                     Cancel
                   </ChalkButton>
-                  <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending"}>
+                  <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending" || Boolean(unavailableReason)}>
                     {status === "sending" ? "Sending…" : "Send"}
                   </ChalkButton>
                 </div>
@@ -139,6 +165,29 @@ export function CallDialog({
       </Dialog.Root>
     </span>
   );
+}
+
+function reportFocusTarget(scope: HTMLElement | null, opener: HTMLElement | null): HTMLElement | false {
+  if (usableReportFocusTarget(opener)) return opener;
+  if (!scope?.isConnected) return false;
+  for (const selector of ['button[data-part="call-name"]', '[data-part="status-actions"] button', 'main, [role="main"]']) {
+    for (const target of [scope, ...scope.querySelectorAll<HTMLElement>(selector)]) {
+      if (!target.matches(selector) || !usableReportFocusTarget(target)) continue;
+      if (target.matches('main, [role="main"]')) target.tabIndex = -1;
+      return target;
+    }
+  }
+  return false;
+}
+
+function usableReportFocusTarget(target: HTMLElement | null): target is HTMLElement {
+  if (!target?.isConnected || target.matches(':disabled, [aria-disabled="true"]') || target.closest("[inert]") || target.getClientRects().length === 0) return false;
+  const visibility = getComputedStyle(target).visibility;
+  if (visibility === "hidden" || visibility === "collapse") return false;
+  for (let element: HTMLElement | null = target; element; element = element.parentElement) {
+    if (getComputedStyle(element).opacity === "0") return false;
+  }
+  return true;
 }
 
 export function CallDetails({

@@ -49,6 +49,105 @@ describe("public Space entry", () => {
     expect(screen.queryByText(/check the invite link/)).toBeNull();
   });
 
+  it("disables an expired live report and reenables the retained draft on renewal", async () => {
+    mocks.reportsAvailable.mockReturnValue(true);
+    vi.useFakeTimers();
+    mocks.renewReportAccess(Date.now() + 1_000);
+    await enterInvite();
+    const open = mocks.holder.chalkProps?.onOpenReportProblem;
+    if (typeof open !== "function") throw new Error("Missing report action");
+    await act(async () => open());
+    const input = screen.getByLabelText<HTMLTextAreaElement>("What went wrong?");
+    fireEvent.change(input, { target: { value: "Keep this while access recovers" } });
+    try {
+      await act(async () => vi.advanceTimersByTimeAsync(1_001));
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByText(/Your call access has expired/)).toBeDefined();
+      expect(screen.getByLabelText("What went wrong?")).toBe(input);
+      await act(async () => mocks.renewReportAccess(Date.now() + 300_000));
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+      expect(screen.queryByText(/Your call access has expired/)).toBeNull();
+      expect(input.value).toBe("Keep this while access recovers");
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads live diagnostics at submission rather than when the dialog opened", async () => {
+    mocks.reportsAvailable.mockReturnValue(true);
+    const request = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", request);
+    vi.stubGlobal("__APP_VERSION__", "report-test");
+    const snapshot = mocks.client.getSnapshot();
+    try {
+      await enterInvite();
+      const open = mocks.holder.chalkProps?.onOpenReportProblem;
+      if (typeof open !== "function") throw new Error("Missing report action");
+      await act(async () => open());
+      fireEvent.change(screen.getByLabelText("What went wrong?"), { target: { value: "The call stopped connecting" } });
+      mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "reconnecting", lastError: { code: "connection.media_start_failed" } }) });
+      fireEvent.click(screen.getByRole("checkbox", { name: "Include diagnostics" }));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+      expect(request).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ body: expect.stringContaining("Connection: reconnecting") }));
+      expect(request).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ body: expect.stringContaining("Last error: connection.media_start_failed") }));
+    } finally {
+      mocks.client.getSnapshot.mockReturnValue(snapshot);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps an app-owned live report draft when the call view unmounts after Leave", async () => {
+    mocks.reportsAvailable.mockReturnValue(true);
+    await enterInvite();
+    const open = mocks.holder.chalkProps?.onOpenReportProblem;
+    if (typeof open !== "function") throw new Error("Missing app-owned report action");
+    await act(async () => open());
+    const input = screen.getByLabelText<HTMLTextAreaElement>("What went wrong?");
+    fireEvent.change(input, { target: { value: "Keep my live draft after leaving" } });
+    await leaveCall();
+    expect(screen.getByRole("heading", { name: "You left Design Lab" })).toBeDefined();
+    expect(screen.getByLabelText("What went wrong?")).toBe(input);
+    expect(input.value).toBe("Keep my live draft after leaving");
+    expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it.each(["left", "failed", "episode-ended"])("expires terminal report access without erasing the %s form", async (phase) => {
+    mocks.reportsAvailable.mockReturnValue(true);
+    vi.useFakeTimers();
+    mocks.renewReportAccess(Date.now() + 300_000);
+    const view = await enterInvite();
+    const snapshot = mocks.client.getSnapshot();
+    try {
+      if (phase === "left") await leaveCall();
+      else {
+        mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code: phase === "episode-ended" ? "episode.ended" : "connection.media_start_failed", message: "Connection failed" } }) });
+        await act(async () => view.rerender(<SpacePage slug="design-lab" />));
+      }
+      const report = screen.getByRole("button", { name: "Report a problem" });
+      await act(async () => fireEvent.click(report));
+      const input = screen.getByLabelText("What went wrong?");
+      fireEvent.change(input, { target: { value: "My camera froze after joining." } });
+      await act(async () => vi.advanceTimersByTimeAsync(299_999));
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+      await act(async () => vi.advanceTimersByTimeAsync(1));
+      expect(screen.queryByRole("button", { name: "Report a problem" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByText(/Your call access has expired/)).toBeDefined();
+      expect(input).toHaveProperty("value", "My camera froze after joining.");
+      expect(input.hasAttribute("disabled")).toBe(false);
+      fireEvent.change(input, { target: { value: "I can still edit and copy this." } });
+      expect(input).toHaveProperty("value", "I can still edit and copy this.");
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+      await act(async () => vi.advanceTimersByTimeAsync(200));
+      expect(screen.queryByRole("button", { name: "Report a problem" })).toBeNull();
+    } finally {
+      cleanup();
+      mocks.client.getSnapshot.mockReturnValue(snapshot);
+      vi.useRealTimers();
+    }
+  });
+
   it("requests a fresh admission when rejoining after Leave", async () => {
     await enterInvite();
     await leaveCall();
@@ -334,7 +433,7 @@ async function enterInvite() {
   window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
   const view = render(<SpacePage slug="design-lab" />);
   await act(async () => enterName("Ada"));
-  await waitFor(() => expect(mocks.holder.chalkProps).toBeDefined());
+  expect(mocks.holder.chalkProps).toBeDefined();
   return view;
 }
 

@@ -69,3 +69,5 @@ export { SpaceHeader } from "./components/space-header/SpaceHeader";
 export type { SpaceHeaderProps } from "./components/space-header/SpaceHeader";
 export { CallReady, type CallReadyProps } from "./components/call-limbo/CallReady";
 export { StatusSurface, type StatusSurfaceProps, type StatusSurfacePhase } from "./components/chalk/StatusSurface";
+
+export { ReportProblemDialog } from "./components/chalk/ReportProblemDialog";

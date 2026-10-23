@@ -1,5 +1,6 @@
 import { createChalkPublicClient, reloadRejoinAccess, resumeReloadRejoin, type ReloadRejoinMarker, type AccessGrant, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
 import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
+import { z } from "zod";
 export type PublicSpaceCredential = {
   readonly apiBaseURL: string;
   readonly syncURL: string;
@@ -24,7 +25,10 @@ export type PublicInviteClient = {
   readonly leaveSpacePublicInviteArrival: (arrivalHandle: string, options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 export type PreparedPublicSpace = {
-  readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle">;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly reportCredential: () => string;
+  readonly reportCredentialExpiresAt: () => number;
+  readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly arrival: PublicSpaceArrival;
   readonly credential: PublicSpaceCredential;
   readonly getAccess: GetAccess;
@@ -52,6 +56,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
   let current = access;
   let left = false;
   let initial = true;
+  const listeners = new Set<() => void>();
   const connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]> = async (request) => {
     if (left) throw new Error("This Space access has been released.");
     if (initial && (!request || request.reason === "join")) {
@@ -61,6 +66,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     mediaProof = request?.currentMediaToken ?? mediaProof;
     current = await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof, { replaceMediaConnection: request?.replaceMediaConnection, signal: request?.signal });
     mediaProof = accessMediaProof(current);
+    listeners.forEach((listener) => listener());
     return current;
   };
   const getAccess: GetAccess = async ({ reason, signal }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection: reason === "retry", signal });
@@ -71,6 +77,14 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     left = true;
   };
   return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    reportCredential: () => mediaProof,
+    reportCredentialExpiresAt: () => Date.parse(reportMediaAccess.parse(current).media.expires_at),
     reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle: arrival.arrival_handle ?? undefined }),
     arrival,
     credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), space: publicSpaceSlug(arrival) },
@@ -79,7 +93,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     finish,
   };
 }
-function publicAPIBaseURL(): string {
+export function publicAPIBaseURL(): string {
   const configured = import.meta.env.VITE_API_URL?.trim();
   if (configured) return configured;
   if (globalThis.location?.origin) return globalThis.location.origin;
@@ -110,6 +124,7 @@ function accessMediaProof(access: AccessGrant): string {
   }
   return value.media.token;
 }
+const reportMediaAccess = z.object({ media: z.object({ expires_at: z.iso.datetime() }) });
 function publicSpaceSlug(arrival: PublicSpaceArrival): string {
   const slug = arrival.space?.slug?.trim();
   if (!slug) throw new Error("This Space is unavailable.");

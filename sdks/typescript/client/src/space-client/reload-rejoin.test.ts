@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseAccessGrant } from "../access/grant";
-import { readReloadRejoin, reloadRejoinLifetimeMs, reloadRejoinStorageKey, resumeReloadRejoin, writeReloadRejoin } from "./reload-rejoin";
+import { readReloadRejoin, reloadRejoinAccess, reloadRejoinLifetimeMs, reloadRejoinStorageKey, resumeReloadRejoin, writeReloadRejoin } from "./reload-rejoin";
 
 const marker = { space: "design-lab", episodeId: "episode-1", participantId: "participant-1", participantGeneration: 1, arrivalHandle: "arrival-1", mediaProof: "proof", displayName: "Ada", microphone: false, camera: false };
 function storage() {
@@ -23,6 +23,9 @@ function grant(episodeId = marker.episodeId, participantId = marker.participantI
   });
 }
 describe("reload recovery", () => {
+  it("retains the authoritative tenant scope for participant requests", () => {
+    expect(reloadRejoinAccess(grant())).toMatchObject({ tenantId: "tenant-1", episodeId: marker.episodeId, participantId: marker.participantId });
+  });
   it.each([
     [false, false],
     [true, false],

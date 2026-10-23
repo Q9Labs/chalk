@@ -10,11 +10,15 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+// MaxNameCodePoints is shared by Space creation, renaming and problem reporting.
+const MaxNameCodePoints = 120
 
 var (
 	ErrInvalidSpaceID             = errors.New("invalid space id")
@@ -328,7 +332,7 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	}
 
 	name, err := utilities.RequiredString(input.Name)
-	if err != nil {
+	if err != nil || utf8.RuneCountInString(input.Name) > MaxNameCodePoints {
 		return ErrInvalidSpaceName
 	}
 	input.Name = name
@@ -388,6 +392,9 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 	var err error
 
+	if input.Name.Set && input.Name.Value != nil && utf8.RuneCountInString(*input.Name.Value) > MaxNameCodePoints {
+		return ErrInvalidSpaceName
+	}
 	input.Name, err = requiredOptionalString(input.Name, ErrInvalidSpaceName)
 	if err != nil {
 		return err

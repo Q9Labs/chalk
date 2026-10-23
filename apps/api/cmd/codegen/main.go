@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -631,6 +632,21 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["minLength"] = 36
 		schema["maxLength"] = 36
 	}
+	if schemaName == "ProblemReportRequest" {
+		switch fieldName {
+		case "description":
+			schema["maxLength"] = problemreports.MaxDescriptionCodePoints
+			// Match Go strings.TrimSpace, including NEL (not JS \s) and excluding BOM.
+			schema["pattern"] = `[^\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]`
+		case "diagnostics":
+			schema["maxLength"] = problemreports.MaxDiagnosticsCodePoints
+		}
+		schema[lengthUnitExtension] = codePointLengthUnit
+	}
+	if request && fieldName == "name" && (schemaName == "CreateSpaceRequest" || schemaName == "UpdateSpaceRequest") {
+		schema["maxLength"] = spaces.MaxNameCodePoints
+		schema[lengthUnitExtension] = codePointLengthUnit
+	}
 	if fieldName == "external_id" {
 		schema["minLength"] = 1
 		schema["maxLength"] = 512
@@ -674,7 +690,8 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 }
 
 func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
-	return schemaName == "RequestTranscriptRequest" && fieldName == "language"
+	return (schemaName == "RequestTranscriptRequest" && fieldName == "language") ||
+		(schemaName == "ProblemReportRequest" && fieldName == "diagnostics")
 }
 
 func fieldEnum(schemaName string, fieldName string) []string {

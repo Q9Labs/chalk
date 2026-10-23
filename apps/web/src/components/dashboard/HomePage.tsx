@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
-import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
+import { HOME_STATUS_ROWS, spaceNameMaxCodePoints, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Avatar, Faces } from "../site/Avatar";
@@ -451,12 +451,13 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
           id="rename-input"
           className={bad ? "inp bad" : "inp"}
           value={value}
-          maxLength={120}
           autoComplete="off"
           aria-invalid={bad}
           aria-describedby={bad ? "rename-error" : undefined}
           onChange={(event) => {
-            setValue(event.target.value);
+            const next = event.target.value;
+            const nextLength = Array.from(next).length;
+            if (nextLength <= spaceNameMaxCodePoints || nextLength <= Array.from(value).length) setValue(next);
             setBad(false);
           }}
         />

@@ -18,8 +18,16 @@ type Limiter interface {
 	Allow(ctx context.Context, key string, policy Policy, now time.Time) Decision
 }
 
+type State uint8
+
+const (
+	Unavailable State = iota
+	Allowed
+	Exhausted
+)
+
 type Decision struct {
-	Allowed    bool
+	State      State
 	Remaining  int
 	RetryAfter time.Duration
 }
@@ -45,7 +53,7 @@ func NewLocalLimiter() *LocalLimiter {
 func (l *LocalLimiter) Allow(ctx context.Context, key string, policy Policy, now time.Time) Decision {
 	_ = ctx
 	if policy.Limit <= 0 || policy.Window <= 0 {
-		return Decision{Allowed: true}
+		return Decision{State: Allowed}
 	}
 
 	mapKey := policy.Name + ":" + key
@@ -68,7 +76,7 @@ func (l *LocalLimiter) Allow(ctx context.Context, key string, policy Policy, now
 	if bucket.Tokens < 1 {
 		l.buckets[mapKey] = bucket
 		return Decision{
-			Allowed:    false,
+			State:      Exhausted,
 			Remaining:  0,
 			RetryAfter: RetryAfter(bucket.Tokens, policy),
 		}
@@ -78,7 +86,7 @@ func (l *LocalLimiter) Allow(ctx context.Context, key string, policy Policy, now
 	l.buckets[mapKey] = bucket
 
 	return Decision{
-		Allowed:   true,
+		State:     Allowed,
 		Remaining: int(math.Floor(bucket.Tokens)),
 	}
 }

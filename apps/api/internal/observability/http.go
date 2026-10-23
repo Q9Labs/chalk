@@ -15,14 +15,21 @@ import (
 
 type requestLoggerContextKey struct{}
 
+// RequestLogger returns the configured request diagnostics logger.
+func RequestLogger(ctx context.Context) *slog.Logger {
+	logger, _ := ctx.Value(requestLoggerContextKey{}).(*slog.Logger)
+	if logger == nil {
+		return slog.Default()
+	}
+	return logger
+}
+
 // LogHTTPError retains the cause at the HTTP boundary without exposing it in
 // the client response. Transaction-local queries need this even when they do
 // not pass through the instrumented query adapter.
 func LogHTTPError(ctx context.Context, method, route, code string, err error) {
-	logger, _ := ctx.Value(requestLoggerContextKey{}).(*slog.Logger)
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger := RequestLogger(ctx)
+
 	detail := err.Error()
 	var requestErr *url.Error
 	if errors.As(err, &requestErr) {

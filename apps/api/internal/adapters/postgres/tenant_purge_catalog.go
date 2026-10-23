@@ -216,6 +216,14 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 	if len(journeys) > 0 && len(events) > 0 {
 		selected["observability_journey_events"] = `journey_id::text in (` + strings.Join(journeys, " union ") + `) or event_id::text in (` + strings.Join(events, " union ") + `)`
 	}
+	if _, ok := c.table("observability_journey_events"); ok {
+		// The JSON association also covers concurrent writers from the previous API.
+		reports := `name='problem_report.delivered' and attributes->>'tenant_id' in(select unnest($1::uuid[])::text)`
+		if linked, ok := selected["observability_journey_events"]; ok {
+			reports = "(" + linked + ") or (" + reports + ")"
+		}
+		selected["observability_journey_events"] = reports
+	}
 	for _, table := range c.Tables {
 		if condition, ok := selected[table.Name]; ok && condition != "false" && len(table.Primary) == 0 {
 			return nil, fmt.Errorf("selected table %s has no primary key", table.Name)

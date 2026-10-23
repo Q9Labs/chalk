@@ -1,0 +1,10 @@
+TypeError: Cannot read properties of undefined (reading 'camera')
+    at connect (/private/tmp/chalk-judge-348-r3/stack-sample.js:1:62)
+    at Object.<anonymous> (/private/tmp/chalk-judge-348-r3/stack-sample.js:2:7)
+    at Module._compile (node:internal/modules/cjs/loader:1956:14)
+    at Object..js (node:internal/modules/cjs/loader:2096:10)
+    at Module.load (node:internal/modules/cjs/loader:1678:32)
+    at Module._load (node:internal/modules/cjs/loader:1470:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:33:47

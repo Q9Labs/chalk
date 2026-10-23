@@ -65,6 +65,8 @@ export interface SpaceViewProps {
   readonly callLinkOpen?: boolean;
   readonly onCallLinkToggle?: () => void;
   readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
+  readonly reportUnavailableReason?: string;
+  readonly onOpenReportProblem?: () => void;
   readonly inviteLink?: string;
   readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
   readonly stageBackground?: boolean;
@@ -97,6 +99,8 @@ export function SpaceView({
   callLinkOpen,
   onCallLinkToggle,
   onReportProblem,
+  reportUnavailableReason,
+  onOpenReportProblem,
   inviteLink,
   pickChatFiles,
   stageBackground = true,
@@ -265,6 +269,8 @@ export function SpaceView({
             callLinkOpen: callLinkOpen ?? callLink.open,
             onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
             onReportProblem,
+            onOpenReportProblem,
+            reportUnavailableReason,
             diagnostics: callDiagnostics(connection, media),
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",

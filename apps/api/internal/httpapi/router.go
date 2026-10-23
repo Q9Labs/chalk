@@ -104,6 +104,7 @@ type Options struct {
 	WhiteboardFiles        WhiteboardFileService
 	WhiteboardParticipants WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
+	ProblemReports         ProblemReportService
 }
 
 func NewRouter(options Options) http.Handler {

@@ -132,6 +132,7 @@ type Querier interface {
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
 	GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEpisodeForPublicJoinParams) (Episode, error)
+	GetProblemReportAttribution(ctx context.Context, arg GetProblemReportAttributionParams) (GetProblemReportAttributionRow, error)
 	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)
 	GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
 	GetReadyWhiteboardFile(ctx context.Context, arg GetReadyWhiteboardFileParams) (GetReadyWhiteboardFileRow, error)

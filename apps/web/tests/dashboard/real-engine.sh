@@ -17,13 +17,17 @@ if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
 else
   export CHALK_API_RATE_LIMITS="${CHALK_API_RATE_LIMITS:-off}"
 fi
-export CHALK_API_ADDR=127.0.0.1:${CHALK_DASHBOARD_API_PORT:-18080}
-export CHALK_API_CORS_ALLOWED_ORIGINS=http://127.0.0.1:${CHALK_JOIN_WEB_PORT:-18797}
+dashboard_api_port="${CHALK_DASHBOARD_API_PORT:-18080}"
+dashboard_vendor_port="${CHALK_DASHBOARD_VENDOR_PORT:-18081}"
+dashboard_web_port="${CHALK_JOIN_WEB_PORT:-${CHALK_DASHBOARD_WEB_PORT:-18797}}"
+dashboard_bridge_port="${CHALK_DASHBOARD_BRIDGE_PORT:-18444}"
+export CHALK_API_ADDR=127.0.0.1:${dashboard_api_port}
+export CHALK_API_CORS_ALLOWED_ORIGINS=http://127.0.0.1:${dashboard_web_port}
 export CHALK_API_LOCAL_SYSTEM_TOKEN=fixture-local-system-not-a-secret
 export CHALK_API_SERVICE_ID=dashboard-runtime-proof
 export CHALK_API_SERVICE_SECRETS=fixture-dashboard-service-token-not-a-secret
 export CHALK_API_SERVICE_SCOPES=tenants:read,tenants:write,spaces:read,spaces:write,episodes:read,episodes:write,recordings:read,recordings:write,transcriptions:read,transcriptions:write,transcriptions:delete,api_keys:read,api_keys:write,api_keys:delete,webhooks:read,webhooks:write,webhooks:delete
-export DASHBOARD_TEST_API_ORIGIN=http://127.0.0.1:${CHALK_DASHBOARD_API_PORT:-18080}
+export DASHBOARD_TEST_API_ORIGIN=http://127.0.0.1:${dashboard_api_port}
 export CHALK_SYNC_TOKEN_ISSUER=dashboard-proof
 export CHALK_SYNC_TOKEN_AUDIENCE=chalk-sync
 export CHALK_SYNC_TOKEN_KEY_ID=dashboard-proof
@@ -32,7 +36,7 @@ CHALK_SYNC_TOKEN_PRIVATE_KEY="$(node --input-type=module -e 'import {generateKey
 export CHALK_SYNC_TOKEN_PRIVATE_KEY
 export CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID=00000000-0000-4000-8000-000000000001
 export CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu
-export CHALK_PUBLIC_INVITE_WEB_ORIGIN=http://127.0.0.1:${CHALK_DASHBOARD_API_PORT:-18080}
+export CHALK_PUBLIC_INVITE_WEB_ORIGIN=http://127.0.0.1:${dashboard_api_port}
 export CHALK_PUBLIC_INVITE_KEY_ID=dashboard-proof
 export CHALK_PUBLIC_INVITE_PRIVATE_KEY="$CHALK_SYNC_TOKEN_PRIVATE_KEY"
 CHALK_PUBLIC_INVITE_VERIFICATION_KEYS="$(node --input-type=module -e 'process.stdout.write(JSON.stringify({"dashboard-proof":Buffer.from(process.env.CHALK_SYNC_TOKEN_PRIVATE_KEY,"base64url").subarray(32).toString("base64url")}))')"
@@ -40,12 +44,12 @@ export CHALK_PUBLIC_INVITE_VERIFICATION_KEYS
 export CHALK_DEFAULT_MEDIA_PLANE=cf_sfu
 export CHALK_CLOUDFLARE_REALTIME_APP_ID=dashboard-proof
 export CHALK_CLOUDFLARE_REALTIME_APP_SECRET=fixture-cloudflare-not-a-secret
-export CHALK_CLOUDFLARE_REALTIME_BASE_URL=http://127.0.0.1:${CHALK_DASHBOARD_VENDOR_PORT:-18081}
+export CHALK_CLOUDFLARE_REALTIME_BASE_URL=http://127.0.0.1:${dashboard_vendor_port}
 # Enable the real historical-artifact routes without contacting vendor services.
 export CHALK_RECORDING_ENABLED=true
 export CHALK_TRANSCRIPTION_ENABLED=true
 export CHALK_R2_BUCKET=dashboard-proof
-export CHALK_R2_ENDPOINT=http://127.0.0.1:${CHALK_DASHBOARD_VENDOR_PORT:-18081}
+export CHALK_R2_ENDPOINT=http://127.0.0.1:${dashboard_vendor_port}
 export CHALK_R2_ACCESS_KEY_ID=fixture-r2-key
 export CHALK_R2_SECRET_ACCESS_KEY=fixture-r2-not-a-secret
 export CHALK_RECORDING_KMS_KEY_ID=alias/dashboard-proof
@@ -55,7 +59,7 @@ export CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME=dashboard-proof
 export AWS_ACCESS_KEY_ID=fixture-aws-key
 export AWS_SECRET_ACCESS_KEY=fixture-aws-not-a-secret
 export AWS_EC2_METADATA_DISABLED=true
-export AWS_ENDPOINT_URL=http://127.0.0.1:${CHALK_DASHBOARD_VENDOR_PORT:-18081}
+export AWS_ENDPOINT_URL=http://127.0.0.1:${dashboard_vendor_port}
 export GOFLAGS=-buildvcs=false
 if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
   pnpm exec turbo run build --filter=web...
@@ -106,12 +110,12 @@ CERT
 openssl x509 -req -in "$certificate_dir/sync.csr" -CA "$certificate_dir/ca.pem" \
   -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
   -extfile "$certificate_dir/sync.ext" -out "$certificate_dir/sync.pem" >> artifacts/dashboard-certificates.log 2>&1
-export CHALK_PROVIDER_BRIDGE_ADDRESS=127.0.0.1:${CHALK_DASHBOARD_BRIDGE_PORT:-18444}
+export CHALK_PROVIDER_BRIDGE_ADDRESS=127.0.0.1:${dashboard_bridge_port}
 export CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE="$certificate_dir/server.pem"
 export CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE="$certificate_dir/server.key"
 export CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE="$certificate_dir/ca.pem"
 export CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN=chalk.local
-export CHALK_SYNC_PROVIDER_BRIDGE_URL=https://localhost:${CHALK_DASHBOARD_BRIDGE_PORT:-18444}
+export CHALK_SYNC_PROVIDER_BRIDGE_URL=https://localhost:${dashboard_bridge_port}
 export CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE="$certificate_dir/sync.pem"
 export CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE="$certificate_dir/sync.key"
 export CHALK_SYNC_PROVIDER_BRIDGE_CAFILE="$certificate_dir/ca.pem"

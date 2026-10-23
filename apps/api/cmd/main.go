@@ -22,6 +22,7 @@ import (
 	recordingkms "github.com/q9labs/chalk/apps/api/internal/adapters/aws/recordingkms"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/discordreports"
 	mediaplaneprovideradapter "github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -44,6 +45,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
+	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridgeserver"
 	"github.com/q9labs/chalk/apps/api/internal/publicinviteapp"
@@ -83,6 +85,10 @@ func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+	reportAdapter, err := discordreports.NewAdapter(cfg.ProblemReportsDiscordWebhookURL)
+	if err != nil {
+		return fmt.Errorf("configure CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL: %w", err)
 	}
 	telemetry, err := observability.Start(context.Background(), observability.Config{
 		Environment:  cfg.Observability.Environment,
@@ -529,6 +535,10 @@ func run() error {
 		}
 		publicInviteLifecycleScheduler = publicinvites.NewLifecycleScheduler(lifecycleWorker, publicInviteConfig.SchedulerInterval, logger)
 	}
+	var reportSender problemreports.Sender
+	if reportAdapter != nil {
+		reportSender = reportAdapter
+	}
 	routerOptions := httpapi.Options{
 		RecorderWorkerLogger: logger,
 		Capabilities: httpapi.CapabilityStatus{
@@ -551,6 +561,7 @@ func run() error {
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,
 
+		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender),
 		ParticipantMediaVerify: participantMediaVerifier,
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,

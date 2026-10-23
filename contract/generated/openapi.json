@@ -3173,6 +3173,203 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/problem-reports": {
+      "post": {
+        "operationId": "sendProblemReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProblemReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemReportSent"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway",
+            "x-chalk-error-codes": ["reports.delivery_failed"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["reports.unavailable", "service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Send problem report",
+        "x-chalk-max-body-bytes": 37024,
+        "x-chalk-rate-limit": {
+          "limit": 3,
+          "name": "problem_reports.participant",
+          "window_seconds": 3600
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/problem-reports/availability": {
+      "get": {
+        "operationId": "getProblemReportAvailability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemReportAvailability"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["tenant.invalid_id"]
+          }
+        },
+        "security": [],
+        "summary": "Get problem report availability"
+      }
+    },
     "/v1/tenants/{tenant_id}/recordings": {
       "get": {
         "operationId": "listRecordings",
@@ -12421,8 +12618,10 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "name": {
+            "maxLength": 120,
             "minLength": 1,
-            "type": "string"
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
           },
           "recording_policy": {
             "minLength": 1,
@@ -13184,6 +13383,45 @@
           }
         },
         "required": ["expected_revision", "starts_at"],
+        "type": "object"
+      },
+      "ProblemReportAvailability": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "required": ["available"],
+        "type": "object"
+      },
+      "ProblemReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "pattern": "[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
+          },
+          "diagnostics": {
+            "maxLength": 2000,
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
+          }
+        },
+        "required": ["description"],
+        "type": "object"
+      },
+      "ProblemReportSent": {
+        "additionalProperties": false,
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": ["sent"],
         "type": "object"
       },
       "PublicAdmissionRequest": {
@@ -14477,8 +14715,10 @@
             "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "name": {
+            "maxLength": 120,
             "minLength": 1,
-            "type": "string"
+            "type": "string",
+            "x-chalk-length-unit": "code-points"
           },
           "recording_policy": {
             "minLength": 1,

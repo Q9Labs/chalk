@@ -61,6 +61,10 @@ export type ChalkProps = SpaceIntegration &
     readonly theme?: ChalkTheme;
     readonly shareUrl?: string;
     readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
+    /** Opens an app-owned dialog that can outlive this call view. */
+    readonly onOpenReportProblem?: () => void;
+    /** Hides new report actions and disables Send without discarding an open report. */
+    readonly reportUnavailableReason?: string;
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
@@ -83,13 +87,14 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     props.onColorSchemeChange?.(next);
   };
   const [reportOpen, setReportOpen] = useState(false);
-  const reportTrigger = useRef<HTMLButtonElement>(null);
-  const openReport = props.onReportProblem
-    ? () => {
-        reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
-        setReportOpen(true);
-      }
-    : undefined;
+  const container = useRef<HTMLDivElement>(null);
+  const openReport =
+    props.onReportProblem && !props.reportUnavailableReason
+      ? () => {
+          if (props.onOpenReportProblem) props.onOpenReportProblem();
+          else setReportOpen(true);
+        }
+      : undefined;
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -115,13 +120,21 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   }, [ownedClient]);
   return (
     <>
-      <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+      <div ref={container} data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
           <SpaceExperience {...props} theme={{ ...props.theme, colorScheme }} onColorSchemeChange={changeColorScheme} resolvedColorScheme={colorScheme} onOpenReport={openReport} />
-          {props.onReportProblem ? (
+          {props.onReportProblem && !props.onOpenReportProblem ? (
             <>
               <ShellStyles />
-              <CallDialog kind="report" open={reportOpen} onClose={() => setReportOpen(false)} onReportProblem={props.onReportProblem} diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`} returnFocus={reportTrigger} />
+              <CallDialog
+                kind="report"
+                open={reportOpen}
+                onClose={() => setReportOpen(false)}
+                onReportProblem={props.onReportProblem}
+                unavailableReason={props.reportUnavailableReason}
+                diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`}
+                focusScope={container}
+              />
             </>
           ) : null}
         </ChalkProvider>
@@ -208,7 +221,17 @@ function SpaceExperience(
     return <StatusSurface phase="failed" callName={callName} errorCode={connection.lastError?.code} sync={connection.lastError?.sync} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
   if (connection.status === "leaving" || connection.status === "left")
-    return <StatusSurface phase={episodeEnded ? "episode-ended" : "left"} callName={callName} theme={statusTheme} onReportProblem={props.onOpenReport} onRejoin={props.onRejoin ?? retryAutomaticJoin} rejoinDisabled={connection.status === "leaving" || retryPending} onHome={props.onHome} />;
+    return (
+      <StatusSurface
+        phase={episodeEnded ? "episode-ended" : "left"}
+        callName={callName}
+        theme={statusTheme}
+        onReportProblem={connection.status === "leaving" ? undefined : props.onOpenReport}
+        onRejoin={props.onRejoin ?? retryAutomaticJoin}
+        rejoinDisabled={connection.status === "leaving" || retryPending}
+        onHome={props.onHome}
+      />
+    );
   return (
     <div className="relative h-full min-h-0">
       <SpaceSurface {...props} spaceName={spaceName} />
@@ -220,6 +243,7 @@ function SpaceSurface(
   props: ChalkProps & {
     readonly resolvedColorScheme: ChalkColorScheme;
     readonly spaceName: string;
+    readonly onOpenReport?: () => void;
   },
 ): React.JSX.Element {
   const client = useSpaceClient();
@@ -280,6 +304,8 @@ function SpaceSurface(
       colorScheme={props.resolvedColorScheme}
       shareUrl={props.shareUrl}
       onReportProblem={props.onReportProblem}
+      onOpenReportProblem={props.onOpenReport}
+      reportUnavailableReason={props.reportUnavailableReason}
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
       inviteLink={props.inviteLink}

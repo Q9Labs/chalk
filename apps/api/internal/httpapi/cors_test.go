@@ -108,7 +108,7 @@ func TestCORSPolicyLookupReceivesOuterMiddlewareContext(t *testing.T) {
 
 func TestCORSPolicyLookupIsRateLimitedBeforeTenantAuthorizer(t *testing.T) {
 	authorizer := &corsTestTenantAuthorizer{}
-	limiter := &corsTestLimiter{decision: ratelimit.Decision{Allowed: false, RetryAfter: time.Second}}
+	limiter := &corsTestLimiter{decision: ratelimit.Decision{State: ratelimit.Exhausted, RetryAfter: time.Second}}
 	response := executeCORSRequestWithRateLimits(t, CORSOptions{TenantOrigins: authorizer}, RateLimitOptions{Limiter: limiter}, http.MethodOptions, "/v1/tenants/"+corsTestTenantID+"/spaces", "https://app.example")
 	if response.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusTooManyRequests)

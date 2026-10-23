@@ -67,11 +67,11 @@ func TestInviteLazyCreationUsesWriteBudget(t *testing.T) {
 				t.Fatalf("available creation: status=%d inserts=%d", w.Code, repo.creates)
 			}
 			for i := 0; i < policy.Limit-1; i++ {
-				if !options.Limiter.Allow(context.Background(), key, policy, now).Allowed {
+				if options.Limiter.Allow(context.Background(), key, policy, now).State != ratelimit.Allowed {
 					t.Fatalf("creation spent more than one write at %d", i)
 				}
 			}
-			if options.Limiter.Allow(context.Background(), key, policy, now).Allowed {
+			if options.Limiter.Allow(context.Background(), key, policy, now).State == ratelimit.Allowed {
 				t.Fatal("creation did not spend a write")
 			}
 		})

@@ -1,8 +1,14 @@
 import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
+import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 
 const id = z.uuid();
-const name = z.string().trim().min(1).max(120);
+export const spaceNameMaxCodePoints = ChalkCodePointLimits["CreateSpaceRequest.name"];
+const name = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => Array.from(value).length <= spaceNameMaxCodePoints, "Call name is too long");
 const idempotencyKey = z.uuid();
 const admission = z.enum(["anyone", "knock"]);
 export const knockDecisionState = z.enum(["none", "in_flight", "retryable"]);

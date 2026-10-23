@@ -242,8 +242,9 @@ type DeadlineSchedulerConfig struct {
 }
 
 type Config struct {
-	TenantLimits tenantlimits.Config
-	API          APIConfig
+	ProblemReportsDiscordWebhookURL string
+	TenantLimits                    tenantlimits.Config
+	API                             APIConfig
 
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
@@ -500,9 +501,10 @@ func Load() (Config, error) {
 
 			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
 		},
-		Capabilities:       capabilities,
-		CloudflareRealtime: cloudflareRealtime,
-		DefaultMediaPlane:  defaultMediaPlane,
+		ProblemReportsDiscordWebhookURL: strings.TrimSpace(os.Getenv("CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL")),
+		Capabilities:                    capabilities,
+		CloudflareRealtime:              cloudflareRealtime,
+		DefaultMediaPlane:               defaultMediaPlane,
 		Database: DatabaseConfig{
 			URL:      databaseURL,
 			MaxConns: maxConns,

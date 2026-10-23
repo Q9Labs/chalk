@@ -1,12 +1,33 @@
 package httpapi
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestSpaceNameValidationErrorsAreClientErrors(t *testing.T) {
+	err := fmt.Errorf("create public Space: %w", spaces.ErrInvalidSpaceName)
+	for _, tc := range []struct {
+		name     string
+		mapError func(error) (APIError, bool)
+		want     APIError
+	}{
+		{"public start", publicInviteEndpointAPIError, apiErrorInvalidRequest},
+		{"dashboard create and rename", spaceEndpointAPIError, apiErrorInvalidSpaceName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := tc.mapError(err)
+			if !ok || got != tc.want || got.Status != 400 {
+				t.Fatalf("wrapped invalid name = %+v, %v; want %+v (400)", got, ok, tc.want)
+			}
+		})
+	}
+}
 
 func TestPublicInviteEndpointMapsEndingEpisodeToConflict(t *testing.T) {
 	got, ok := publicInviteEndpointAPIError(episodes.ErrEpisodeNotActive)

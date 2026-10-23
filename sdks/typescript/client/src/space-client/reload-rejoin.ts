@@ -72,7 +72,7 @@ export async function resumeReloadRejoin(marker: ReloadRejoinMarker, refresh: ()
   return access;
 }
 
-export function reloadRejoinAccess(access: unknown): Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof"> {
+export function reloadRejoinAccess(access: unknown): Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "tenantId"> {
   const parsed = parseParsedAccessGrant(access);
-  return { episodeId: parsed.subject.episodeId, participantId: parsed.subject.participantId, participantGeneration: parsed.subject.participantGeneration, mediaProof: parsed.media.token };
+  return { tenantId: parsed.subject.tenantId, episodeId: parsed.subject.episodeId, participantId: parsed.subject.participantId, participantGeneration: parsed.subject.participantGeneration, mediaProof: parsed.media.token };
 }

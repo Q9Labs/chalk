@@ -15,11 +15,11 @@ func TestEpisodeHistoryReadsDoNotExhaustMutationBudget(t *testing.T) {
 	limiter := ratelimit.NewLocalLimiter()
 	now := time.Now()
 	for i := 0; i < 180; i++ {
-		if !limiter.Allow(context.Background(), "account", endpoint.contract.RateLimit, now).Allowed {
+		if limiter.Allow(context.Background(), "account", endpoint.contract.RateLimit, now).State != ratelimit.Allowed {
 			t.Fatalf("normal 30-Space history view throttled at request %d", i)
 		}
 	}
-	if !limiter.Allow(context.Background(), "account", authenticatedWriteRateLimit, now).Allowed {
+	if limiter.Allow(context.Background(), "account", authenticatedWriteRateLimit, now).State != ratelimit.Allowed {
 		t.Fatal("reads consumed write budget")
 	}
 }

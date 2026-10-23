@@ -21,12 +21,13 @@ type EndpointErrorMapper func(err error) (APIError, bool)
 type EndpointWriter[Response any] func(w http.ResponseWriter, r *http.Request, status int, response Response)
 
 type Endpoint[Request any, Response any] struct {
-	contract    APIRouteContract
-	decode      EndpointDecoder[Request]
-	handle      EndpointHandler[Request, Response]
-	mapError    EndpointErrorMapper
-	middlewares []func(http.Handler) http.Handler
-	write       EndpointWriter[Response]
+	contract       APIRouteContract
+	decode         EndpointDecoder[Request]
+	handle         EndpointHandler[Request, Response]
+	mapError       EndpointErrorMapper
+	middlewares    []func(http.Handler) http.Handler
+	afterRateLimit []func(http.Handler) http.Handler
+	write          EndpointWriter[Response]
 }
 
 func Get[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
@@ -82,8 +83,12 @@ func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint
 }
 
 func (e Endpoint[Request, Response]) RequestBody(name string, sample any) Endpoint[Request, Response] {
+	return e.RequestBodyWithLimit(name, sample, maxRequestBodyBytes)
+}
+
+func (e Endpoint[Request, Response]) RequestBodyWithLimit(name string, sample any, limit int64) Endpoint[Request, Response] {
 	e.contract.Request = &APISchemaRef{Name: name, Type: sample}
-	e.contract.BodyLimitBytes = maxRequestBodyBytes
+	e.contract.BodyLimitBytes = limit
 	e.contract.Errors = appendAPIError(e.contract.Errors, apiErrorPayloadTooLarge)
 	return e
 }
@@ -133,6 +138,12 @@ func (e Endpoint[Request, Response]) Middleware(middlewares ...func(http.Handler
 	return e
 }
 
+// AfterRateLimit runs after the endpoint's participant/principal quota succeeds.
+func (e Endpoint[Request, Response]) AfterRateLimit(middlewares ...func(http.Handler) http.Handler) Endpoint[Request, Response] {
+	e.afterRateLimit = append(e.afterRateLimit, middlewares...)
+	return e
+}
+
 func (e Endpoint[Request, Response]) WriteWith(writer EndpointWriter[Response]) Endpoint[Request, Response] {
 	e.write = writer
 	return e
@@ -140,6 +151,9 @@ func (e Endpoint[Request, Response]) WriteWith(writer EndpointWriter[Response]) 
 
 func (e Endpoint[Request, Response]) Mount(r chi.Router, limits RateLimitOptions) {
 	var handler http.Handler = e
+	for i := len(e.afterRateLimit) - 1; i >= 0; i-- {
+		handler = e.afterRateLimit[i](handler)
+	}
 	if e.contract.RateLimit.Name != "" {
 		handler = rateLimit(limits, e.contract.RateLimit)(handler)
 	}
