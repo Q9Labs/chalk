@@ -2,7 +2,7 @@
 export function captureToastLayout(toast: HTMLElement): HTMLDivElement {
   const snapshot = document.createElement("div");
   copyAttributes(toast, snapshot);
-  for (const child of toast.childNodes) snapshot.append(copyLayout(child));
+  for (const child of toast.childNodes) snapshot.appendChild(copyLayout(child));
   return snapshot;
 }
 
@@ -23,7 +23,7 @@ function copyLayout(node: Node): Node {
   }
   const copy = document.createElementNS(node.namespaceURI, node.localName);
   copyAttributes(node, copy);
-  for (const child of node.childNodes) copy.append(copyLayout(child));
+  for (const child of node.childNodes) copy.appendChild(copyLayout(child));
   return copy;
 }
 
@@ -34,7 +34,7 @@ export function measureToastLayout(stack: HTMLElement, snapshot: HTMLDivElement)
   probe.inert = true;
   probe.setAttribute("aria-hidden", "true");
   Object.assign(probe.style, { position: "absolute", left: "0", top: "0", width: "max-content", visibility: "hidden", pointerEvents: "none", animation: "none", transition: "none", transform: "none" });
-  stack.append(probe);
+  stack.appendChild(probe);
   try {
     return Math.max(probe.offsetHeight, Math.ceil(probe.getBoundingClientRect().height));
   } finally {
