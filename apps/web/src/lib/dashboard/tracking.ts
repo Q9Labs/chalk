@@ -82,6 +82,10 @@ export function selection(attempts: readonly Attempt[]) {
   const newer = video ? attempts.slice(0, attempts.indexOf(video)).find(usable) : undefined;
   // Until a transcript finishes, the newest one being made is shown, so the page doesn't offer to make a second.
   const transcript =
+    attempts.find((item) => {
+      const completed = item.recording.transcripts?.find(completedTranscript);
+      return completed && (item.lines?.transcriptId !== completed.id || item.lines.read.failure?.kind !== "terminal");
+    }) ??
     attempts.find((item) => item.recording.transcripts?.some(completedTranscript)) ??
     attempts.find((item) => item.recording.transcripts?.some(pendingTranscript)) ??
     attempts.find((item) => ["creatable", "preparing"].includes(transcriptState(item.recording, item.recording.transcripts?.[0] ?? null))) ??

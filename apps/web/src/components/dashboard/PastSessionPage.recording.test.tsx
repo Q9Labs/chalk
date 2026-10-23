@@ -35,6 +35,7 @@ let serverLagMs = 0;
 let legacyExport = false;
 let metadataDelayMs = 0;
 let failedDocument: string | null = null;
+let documentHTTPStatus = 404;
 let visibility: DocumentVisibilityState = "visible";
 const inFlight = new Map<string, number>();
 let maxInFlight = 0;
@@ -108,6 +109,7 @@ beforeEach(() => {
   legacyExport = false;
   metadataDelayMs = 0;
   failedDocument = null;
+  documentHTTPStatus = 404;
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -153,7 +155,7 @@ async function route(input: string, init?: RequestInit): Promise<Response> {
   }
   if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
   if (body?.action === "transcripts") return Response.json({ transcripts: transcriptsOf(body.recordingId), nextCursor: null });
-  if (body?.action === "transcript-document" && body.transcriptId === failedDocument) return Response.json({ error: { code: "transcript_not_found" } }, { status: 404 });
+  if (body?.action === "transcript-document" && body.transcriptId === failedDocument) return Response.json({ error: { code: "transcript_not_found" } }, { status: documentHTTPStatus });
   if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: body.transcriptId === "older-transcript" ? "Older speech" : "Saved speech", speaker: null }] });
   if (body?.action === "export-recording" && exportHTTPStatus !== 202) return Response.json({ error: { code: "recording.not_ready" } }, { status: exportHTTPStatus });
   // transcripts.go:218-231 refuses a source that isn't ready by the server's clock.
@@ -243,7 +245,8 @@ it("names the call from the session's own read, so a failing Call overview can't
   expect(requests.filter((request) => request.path === "/dashboard-api/call")).toEqual([]);
 });
 
-it("reads a new transcript's lines after the previous transcript's lines failed terminally", async () => {
+it.each([404, 410])("reads a new transcript's lines after the previous transcript's lines returned %s", async (status) => {
+  documentHTTPStatus = status;
   artifact = "pending";
   failedDocument = id;
   await open();
@@ -254,6 +257,21 @@ it("reads a new transcript's lines after the previous transcript's lines failed 
   const documents = requests.filter((request) => request.action === "transcript-document");
   expect(documents.filter((request) => request.transcriptId === id)).toHaveLength(1);
   expect(documents.filter((request) => request.transcriptId === "replacement-transcript")).toHaveLength(1);
+});
+
+it.each([404, 410])("falls back to an older readable transcript when the newest document returns %s", async (status) => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  documentHTTPStatus = status;
+  failedDocument = id;
+  extraRecordings = [{ ...recording(), id: older, transcripts: [{ id: "older-transcript", status: "complete", languages: ["en"], createdAt: date }] }];
+  await open();
+  await tick();
+  expect(screen.getByText("Older speech")).toBeTruthy();
+  expect(screen.queryByText("Couldn’t load the transcript")).toBeNull();
+  await tick();
+  const documents = requests.filter((request) => request.action === "transcript-document");
+  expect(documents.filter((request) => request.transcriptId === id)).toHaveLength(1);
+  expect(documents.filter((request) => request.transcriptId === "older-transcript")).toHaveLength(1);
 });
 
 it("polls a newer pending transcript while an older finished transcript is shown", async () => {
