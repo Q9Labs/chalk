@@ -106,7 +106,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		result.Inspected++
 		recordingID := utilities.IDFromBytes(candidate.RecordingID.Bytes)
 		result.NextAfter = recordingID.String()
-		if candidate.AlreadyQueued {
+		if candidate.AlreadyQueued.Bool {
 			result.AlreadyQueued++
 			continue
 		}

@@ -78,7 +78,16 @@ function recording() {
       export: {
         status: state.export,
         retryable: state.retryable,
-        failure_message: state.export === "expired" ? "The recording could not be rendered before its deadline." : state.source === "failed" ? "The recording capture did not complete." : state.source === "expired" ? "The recording source is no longer available." : state.export === "failed" ? "The recording export could not be completed." : null,
+        failure_message:
+          state.export === "expired"
+            ? "The recording could not be rendered before its deadline."
+            : state.source === "failed"
+              ? "The recording capture did not complete."
+              : state.source === "expired"
+                ? "The recording source is no longer available."
+                : state.export === "failed"
+                  ? "The recording export could not be completed."
+                  : null,
       },
       transcription_preparation: { status: state.transcription, ...(transcriptionExpiresAt ? { expires_at: transcriptionExpiresAt } : {}) },
       transcription_policy: "automatic",

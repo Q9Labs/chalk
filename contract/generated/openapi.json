@@ -13418,7 +13418,7 @@
             ]
           },
           "status": {
-            "enum": ["none", "pending", "ready", "failed", "unavailable"],
+            "enum": ["none", "pending", "ready", "failed", "unavailable", "expired"],
             "type": "string"
           }
         },
@@ -13532,6 +13532,9 @@
                 "type": "null"
               }
             ]
+          },
+          "failure_code": {
+            "type": "string"
           },
           "status": {
             "enum": ["none", "pending", "ready", "failed", "expired"],

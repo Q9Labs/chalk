@@ -238,6 +238,7 @@ type Querier interface {
 	ListRecordingJobsForReconciliation(ctx context.Context, arg ListRecordingJobsForReconciliationParams) ([]RecordingJob, error)
 	ListRecordingPresentationAssetsForRender(ctx context.Context, arg ListRecordingPresentationAssetsForRenderParams) ([]ListRecordingPresentationAssetsForRenderRow, error)
 	ListRecordingPresentationReactions(ctx context.Context, arg ListRecordingPresentationReactionsParams) ([]RecordingPresentationReaction, error)
+	ListRecordingRenderBackfillCandidates(ctx context.Context, arg ListRecordingRenderBackfillCandidatesParams) ([]ListRecordingRenderBackfillCandidatesRow, error)
 	ListRecordingRenderCaptureObjects(ctx context.Context, arg ListRecordingRenderCaptureObjectsParams) ([]ListRecordingRenderCaptureObjectsRow, error)
 	ListRecordingTranscriptionSourceChunks(ctx context.Context, arg ListRecordingTranscriptionSourceChunksParams) ([]RecordingTranscriptionSourceChunk, error)
 	ListRecordingTranscriptionSourcesNeedingCleanup(ctx context.Context, arg ListRecordingTranscriptionSourcesNeedingCleanupParams) ([]RecordingTranscriptionSource, error)
@@ -332,8 +333,8 @@ type Querier interface {
 	ReleaseRecordingReservation(ctx context.Context, arg ReleaseRecordingReservationParams) (ReleaseRecordingReservationRow, error)
 	ReleaseRecordingTranscriptionSource(ctx context.Context, arg ReleaseRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	RelinquishCaptureRecordingJob(ctx context.Context, arg RelinquishCaptureRecordingJobParams) (RelinquishCaptureRecordingJobRow, error)
-	// A Recording has one canonical MP4 export. The first authorized request
-	// creates its render job; active and completed jobs remain idempotent. A
+	// Capture completion queues the canonical MP4 export. Requests reuse it,
+	// or create it for retained captures from before automatic rendering. A
 	// terminally failed job may be manually retried five times; each old failure
 	// is copied to append-only history before the same fenced job is requeued.
 	RequestDeferredRecordingRender(ctx context.Context, arg RequestDeferredRecordingRenderParams) (RequestDeferredRecordingRenderRow, error)

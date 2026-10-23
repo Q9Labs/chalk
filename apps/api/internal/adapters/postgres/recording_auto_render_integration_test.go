@@ -116,7 +116,7 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 		found := false
 		for _, candidate := range candidates {
 			if candidate.RecordingID.Bytes == reservation.RecordingID.Bytes() {
-				found = candidate.AlreadyQueued && candidate.SourceExpiresAt.Valid
+				found = candidate.AlreadyQueued.Bool && candidate.SourceExpiresAt.Valid
 			}
 		}
 		if !found {

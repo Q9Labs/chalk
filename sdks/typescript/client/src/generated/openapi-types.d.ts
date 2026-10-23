@@ -1620,7 +1620,7 @@ export interface components {
       retryable: boolean;
       source_expires_at?: components["schemas"]["DateTimeString"] | null;
       /** @enum {string} */
-      status: "none" | "pending" | "ready" | "failed" | "unavailable";
+      status: "none" | "pending" | "ready" | "failed" | "unavailable" | "expired";
     };
     RecordingExportRequestAcceptedResponse: {
       export: components["schemas"]["RecordingExport"];
@@ -1652,6 +1652,7 @@ export interface components {
     };
     RecordingTranscriptionPreparation: {
       expires_at?: components["schemas"]["DateTimeString"] | null;
+      failure_code?: string;
       /** @enum {string} */
       status: "none" | "pending" | "ready" | "failed" | "expired";
     };

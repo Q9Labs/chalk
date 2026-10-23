@@ -172,9 +172,18 @@ function recordingScenario() {
   return {
     status: mode === "export_ready" ? "completed" : "pending",
     sourceStatus: failed ? "failed" : expired ? "expired" : pending ? "pending" : "available",
-    exportStatus: failed || expired || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
+    exportStatus: mode === "export_expired" || expired ? "expired" : failed || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
     exportRetryable: mode === "export_failed",
-    failureMessage: failed ? "The recording capture did not complete." : expired ? "The recording source is no longer available." : ["export_failed", "export_exhausted"].includes(mode) ? "The recording export could not be completed." : null,
+    failureMessage:
+      mode === "export_expired"
+        ? "The recording could not be rendered before its deadline."
+        : failed
+          ? "The recording capture did not complete."
+          : expired
+            ? "The recording source is no longer available."
+            : ["export_failed", "export_exhausted"].includes(mode)
+              ? "The recording export could not be completed."
+              : null,
     sourceExpiresAt: state.expireAt ? new Date(state.expireAt).toISOString() : null,
     transcriptionExpiresAt: null,
     transcriptionStatus: failed || mode === "transcript_failed" ? "failed" : expired ? "expired" : pending ? "pending" : "ready",

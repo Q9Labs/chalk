@@ -657,7 +657,7 @@ export const RecordingExportSchema = Schema.Struct({
   job_id: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))),
   retryable: Schema.Boolean,
   source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
+  status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable", "expired"]),
 });
 export type RecordingExport = typeof RecordingExportSchema.Type;
 
@@ -673,6 +673,7 @@ export type RecordingSource = typeof RecordingSourceSchema.Type;
 
 export const RecordingTranscriptionPreparationSchema = Schema.Struct({
   expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  failure_code: Schema.optional(Schema.String),
   status: Schema.Literals(["none", "pending", "ready", "failed", "expired"]),
 });
 export type RecordingTranscriptionPreparation = typeof RecordingTranscriptionPreparationSchema.Type;
