@@ -28,7 +28,7 @@ function boardPixels() {
     if (right <= left || bottom <= top) return false;
     const pixels = context.getImageData(left, top, right - left, bottom - top).data;
     for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index + 3] > 0 && pixels[index] < 180 && pixels[index + 1] < 180 && pixels[index + 2] < 180) return true;
+      if (pixels[index + 3] > 32) return true;
     }
     return false;
   };
@@ -99,6 +99,12 @@ test("the live board keeps its canvas and drawing coordinates after person → b
     }
     await a.getByRole("button", { name: "Board", exact: true }).click();
     await Promise.all([a, b].map(settleStage));
+    for (const page of [a, b]) {
+      const pixels = await page.evaluate(boardPixels);
+      expect(pixels?.upperLeft).toBe(false);
+      expect(pixels?.lowerRight).toBe(false);
+      expect(pixels?.newLowerRight).toBe(false);
+    }
     await drawStroke(a, { x: 0.15, y: 0.2 }, { x: 0.24, y: 0.25 });
     await drawStroke(a, { x: 0.72, y: 0.68 }, { x: 0.82, y: 0.74 });
     for (const page of [a, b]) {
