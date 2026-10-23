@@ -85,13 +85,14 @@ defmodule ChalkSync.ProtocolV1 do
         do: Map.put(frame, "entry_confirmation", true),
         else: frame
 
-    frame =
-      if identity.entry_generation && Map.get(options, :entry_generation, false),
-        do: Map.put(frame, "entry_generation", identity.entry_generation),
-        else: frame
-
-    encode!(frame)
+    frame |> maybe_entry_generation(identity, options) |> encode!()
   end
+
+  defp maybe_entry_generation(frame, %{entry_generation: generation}, %{entry_generation: true})
+       when is_integer(generation),
+       do: Map.put(frame, "entry_generation", generation)
+
+  defp maybe_entry_generation(frame, _identity, _options), do: frame
 
   def recovery_page([_ | _] = events, recovery_id) do
     page = Enum.take(events, @replay_page_events)

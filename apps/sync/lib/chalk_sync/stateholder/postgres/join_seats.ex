@@ -34,22 +34,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   end
 
   defp allocate_entry(connection, identity, requested) do
-    if requested == :new do
-      case Postgrex.query!(
-             connection,
-             """
-             select 1 from sync_external_operations
-             where tenant_id=$1 and space_id=$2 and episode_id=$3 and target_participant_id=$4
-               and target_participant_generation=$5 and operation_name='participant_leave'
-               and status='pending' and attempt_count > 0 limit 1
-             """,
-             Scope.participant(identity) ++ [identity.participant_generation]
-           ).rows do
-        [] -> :ok
-        _ -> Postgrex.rollback(connection, {:retryable, :admission_pending})
-      end
-    end
-
+    validate_entry_dispatch(connection, identity, requested)
     params = Scope.participant(identity) ++ [identity.participant_generation]
 
     case Postgrex.query!(
@@ -92,6 +77,24 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
         %{identity | entry_generation: generation}
     end
   end
+
+  defp validate_entry_dispatch(connection, identity, :new) do
+    case Postgrex.query!(
+           connection,
+           """
+           select 1 from sync_external_operations
+           where tenant_id=$1 and space_id=$2 and episode_id=$3 and target_participant_id=$4
+             and target_participant_generation=$5 and operation_name='participant_leave'
+             and status='pending' and attempt_count > 0 limit 1
+           """,
+           Scope.participant(identity) ++ [identity.participant_generation]
+         ).rows do
+      [] -> :ok
+      _ -> Postgrex.rollback(connection, {:retryable, :admission_pending})
+    end
+  end
+
+  defp validate_entry_dispatch(_connection, _identity, _generation), do: :ok
 
   def claim_entry(_connection, nil), do: :ok
   def claim_entry(_connection, %{entry_generation: nil}), do: :ok

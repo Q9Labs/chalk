@@ -152,22 +152,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
     result =
-      case prepare_entry_leave(episode, operation) do
-        :ready ->
-          dispatch_with_context(
-            episode,
-            operation,
-            media_plane,
-            recording_plane,
-            adapter_timeout_ms
-          )
-
-        :pending ->
-          :pending
-
-        :superseded ->
-          {:terminal_failure, :participant_inactive}
-      end
+      dispatch_with_context(episode, operation, media_plane, recording_plane, adapter_timeout_ms)
 
     case result do
       {:confirmed, authority} ->
@@ -500,6 +485,15 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp dispatch_with_context(episode, operation, media_plane, recording_plane, timeout_ms) do
+    with :ready <- prepare_entry_leave(episode, operation) do
+      dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms)
+    else
+      :pending -> :pending
+      :superseded -> {:terminal_failure, :participant_inactive}
+    end
+  end
+
+  defp dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms) do
     if provider_bridge_adapter?(media_plane) or provider_bridge_adapter?(recording_plane) do
       Observability.with_worker_span(
         persisted_provider_context(operation),
