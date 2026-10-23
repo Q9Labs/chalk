@@ -28,9 +28,11 @@ try {
       ]);
       const tab = await context.newPage();
       tab.on("pageerror", (error) => errors.push(error.message));
-      if (clock) {
-        await tab.clock.install();
-        await tab.clock.pauseAt(new Date(Date.now() + 1000));
+      // `clock` is true, or how far the page's clock runs ahead of the fixture server's, in milliseconds.
+      if (clock !== false) {
+        const skew = clock === true ? 0 : clock;
+        await tab.clock.install({ time: Date.now() + skew });
+        await tab.clock.pauseAt(new Date(Date.now() + skew + 1000));
       }
       await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });
       return { tab, context };

@@ -164,7 +164,8 @@ const inviteURL = (call) => `https://chalkmeet.com/space/${call.slug}#invite=fx$
 const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
 function recordingScenario() {
   if (!state.recordingScenario) return {};
-  const mode = state.recordingScenario;
+  // A deadline set with expireIn closes the source window by this server's clock, as the API does.
+  const mode = state.expireAt && Date.now() >= state.expireAt ? "expired" : state.recordingScenario;
   const failed = mode === "failed";
   const expired = mode === "expired";
   const pending = mode === "pending";
@@ -174,7 +175,7 @@ function recordingScenario() {
     exportStatus: failed || expired || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
     exportRetryable: mode === "export_failed",
     failureMessage: failed ? "The recording capture did not complete." : expired ? "The recording source is no longer available." : ["export_failed", "export_exhausted"].includes(mode) ? "The recording export could not be completed." : null,
-    sourceExpiresAt: null,
+    sourceExpiresAt: state.expireAt ? new Date(state.expireAt).toISOString() : null,
     transcriptionExpiresAt: null,
     transcriptionStatus: failed || mode === "transcript_failed" ? "failed" : expired ? "expired" : pending ? "pending" : "ready",
   };
@@ -494,7 +495,8 @@ const server = createServer(async (request, response) => {
             state.transcript = ["available", "export_pending", "export_ready", "export_failed", "export_exhausted"].includes(value) ? "complete" : value === "transcript_failed" ? "terminal_failure" : "none";
             accounts.hasan.live = false;
             accounts.hasan.calls[0].admission = "anyone";
-          } else if (key === "transcript") state.transcript = value;
+          } else if (key === "expireIn") state.expireAt = Date.now() + Number(value) * 1000;
+          else if (key === "transcript") state.transcript = value;
           else if (key === "signInError") state.signInError = value === "1";
           else if (key === "newCall") accounts.hasan.calls.unshift({ id: uuid(0x1000 + accounts.hasan.calls.length), slug: "made-elsewhere", name: value, archived: false, admission: "knock", createdAt: new Date().toISOString() });
         }

@@ -32,6 +32,26 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
     }
   }
   if (process.env.DASHBOARD_RECORDING_BASELINE) return;
+  // The page's clock runs an hour behind the server's, so it must move the server's deadline onto its own clock.
+  {
+    const { tab, context } = await open(session, { set: "recordingScenario=available&expireIn=8", clock: -3_600_000 });
+    try {
+      const prepare = tab.getByRole("button", { name: "Prepare recording", exact: true });
+      const offered = await prepare.count();
+      await tab.waitForTimeout(9000);
+      // The deadline's wake and the read's tick are separate timers, so the page renders between the two runs.
+      await tab.clock.runFor(8000);
+      await tab.waitForTimeout(200);
+      await tab.clock.runFor(8000);
+      await tab
+        .getByText("The recording is no longer available", { exact: true })
+        .waitFor({ timeout: 5000 })
+        .catch(() => {});
+      check("a page an hour behind the server closes Prepare at the server's deadline", offered === 1 && (await prepare.count()) === 0 && (await reads()) === 1, `offered=${offered} reads=${await reads()}`);
+    } finally {
+      await context.close();
+    }
+  }
   {
     const { tab, context } = await open(session, { set: "recordingScenario=pending", clock: true });
     try {
