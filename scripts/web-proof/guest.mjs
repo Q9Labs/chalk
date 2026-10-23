@@ -15,7 +15,7 @@ export async function withProofCall({ app, screen }, run) {
   try {
     await app.open(invite);
     await screen.getByLabel("Your name").fill("Web proof A");
-    await screen.getByRole("button", "Join", { exact: true }).click();
+    await screen.getByRole("button", "Join call", { exact: true }).click();
     await run(guest);
   } finally {
     await guest.dispose();

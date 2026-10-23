@@ -3,8 +3,8 @@ import { test } from "@e2e-dev/web";
 import { withProofCall } from "../scripts/web-proof/guest.mjs";
 import { audioEvidence, incomingAudioLevel, remoteVideoFrames } from "../scripts/web-proof/media.mjs";
 
-// The web app has invite entry, not account sign-in. The runner authenticates to
-// the proof Tenant to create this Space; the browser never receives its API key.
+// This proof enters by invite and does not check account sign-in. The runner
+// creates the Space with the proof Tenant key; the browser never receives it.
 test("the real web app and SDK guest receive live video and audio", async ({ app, browser, screen }) => {
   await withProofCall({ app, screen }, async (guest) => {
     await screen.getByRole("button", "Unmute microphone", { exact: true }).click();

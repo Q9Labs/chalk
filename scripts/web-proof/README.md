@@ -8,8 +8,8 @@ video frames and a positive incoming audio level on both sides. The web app must
 also show the guest's live video tile. Both leave before
 cleanup ends the Episode, archives the Space, and revokes the temporary key.
 
-Chalk currently has no account sign-in screen. The runner authenticates with the
-environment's proof Tenant key; the browser uses the real public-invite flow and
+The runner authenticates with the environment's proof Tenant key. It does not
+check account sign-in; the browser uses the real public-invite flow and
 never receives that key. This suite does not claim to test account sign-in.
 
 ## Run
