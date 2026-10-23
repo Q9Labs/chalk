@@ -27,6 +27,7 @@ test("OSV discovery enforces the tooling exception for every discovered format",
     ]),
     ["nested/pnpm-lock.yaml", "nested/pnpm-lock.yaml", pnpm],
     ["tracked gitignored lockfile", "runtime/package-lock.json", npm],
+    ["tracked export-ignored lockfile", "runtime/package-lock.json", npm],
     ["tracked symlinked lockfile", "runtime/package-lock.json", npm],
     ["ignored fixtures and excluded directories", null, null],
   ];
@@ -46,6 +47,10 @@ test("OSV discovery enforces the tooling exception for every discovered format",
         assert.equal(result.status, 0, result.stderr);
       };
       git(["init", "-q"]);
+      if (name === "tracked export-ignored lockfile") {
+        writeFileSync(path.join(root, ".gitattributes"), "runtime/ export-ignore\n");
+        git(["add", ".gitattributes"]);
+      }
       if (file) {
         mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
         if (name === "tracked symlinked lockfile") {
@@ -56,7 +61,7 @@ test("OSV discovery enforces the tooling exception for every discovered format",
         git(["add", "-f", file]);
       }
       if (name === "ignored fixtures and excluded directories") {
-        for (const directory of ["ignored-fixtures", "node_modules/fixture", "nested/node_modules/fixture", ".git/fixture", ".worktrees/fixture", "nested/.worktrees/fixture"]) {
+        for (const directory of ["ignored-fixtures", "untracked-fixtures", "node_modules/fixture", "nested/node_modules/fixture", ".git/fixture", ".worktrees/fixture", "nested/.worktrees/fixture"]) {
           mkdirSync(path.join(root, directory), { recursive: true });
           writeFileSync(path.join(root, directory, "npm-shrinkwrap.json"), npm);
         }
@@ -68,7 +73,7 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       if (file) assert.match(result.stderr, /Zod exception rejects OSV finding GHSA-mrhx-c7xc-m3w5/);
       else {
         assert.match(result.stdout, /Zod tooling exception accepted/);
-        assert.doesNotMatch(result.stdout, /OSV input: .*?(?:ignored-fixtures|node_modules|\.git\/|\.worktrees)/);
+        assert.doesNotMatch(result.stdout, /OSV input: .*?(?:ignored-fixtures|untracked-fixtures|node_modules|\.git\/|\.worktrees)/);
       }
     });
   }

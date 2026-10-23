@@ -22,7 +22,8 @@ report_directory="$(mktemp -d "${TMPDIR:-/tmp}/chalk-osv.XXXXXX")"
 trap 'find "${report_directory}" -depth -delete' EXIT
 snapshot() {
   mkdir "$2"
-  git archive "$1" | tar -x -C "$2"
+  GIT_INDEX_FILE="${2}.index" git read-tree "$1"
+  GIT_INDEX_FILE="${2}.index" git -c core.symlinks=true checkout-index --all --prefix="$2/"
   node "${script_directory}/osv-snapshot.mjs" "$2"
 }
 scan_report() {

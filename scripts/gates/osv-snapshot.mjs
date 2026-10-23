@@ -1,7 +1,7 @@
 import { copyFileSync, lstatSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
 import path from "node:path";
 
-// The archive contains only tracked content. Never follow a link out of that view.
+// Never follow a link out of the tracked-content view.
 const root = realpathSync(process.argv[2]);
 for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
   if (!entry.isSymbolicLink()) continue;
