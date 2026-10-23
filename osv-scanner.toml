@@ -16,7 +16,7 @@ reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, wh
 [[IgnoredVulns]]
 id = "GHSA-mrhx-c7xc-m3w5"
 ignoreUntil = 2026-11-22
-reason = "zod 3.25.76 is locked only under @expo/cli 55.0.19, which Expo loads from its Node CLI binary, not its runtime entrypoint. Its only zod imports validate local Metro dev-tools plugin and MCP extension schemas; Chalk never imports @expo/cli in a service, SDK or browser bundle. All zod 4 consumers use 4.6.7. Both the latest SDK-55 CLI 55.0.37 and latest CLI 58.1.14 still require zod ^3.25.76, so no parent release fixes this path. Revisit when Expo CLI accepts a fixed zod, or if a Chalk runtime begins importing the CLI."
+reason = "scripts/gates/zod-exception.mjs runs before OSV and its PR baseline filter. It permits vulnerable zod only on apps/mobile or sdks/typescript/react-native -> ... -> expo@55.0.9 -> @expo/cli@55.0.19 -> zod@3.25.76; any other version, consumer or workspace fails. Expo loads the CLI from its Node binary, not its runtime entrypoint. Its zod imports validate local dev-tools and MCP schemas. All zod 4 consumers use 4.6.7. CLI 55.0.37 and latest 58.1.14 still require zod ^3.25.76; forcing v4 breaks the MCP tunnel's v3 JSON-schema converter. Revisit when Expo accepts a fixed zod or the allowed chain changes."
 
 [[IgnoredVulns]]
 id = "GHSA-9j65-hcg3-gc64"
