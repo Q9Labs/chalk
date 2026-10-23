@@ -510,16 +510,18 @@ async function advance(ms: number) {
   });
 }
 
-it("asks the server the moment the source window ends and closes the prepare and transcript actions on its answer", async () => {
+it("marks the recording due when its source window ends and closes the actions only on the server's answer", async () => {
   vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
   await open();
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
-  await advance(59_000);
+  await advance(60_000);
+  // The deadline schedules a read in the polling rotation; until the server answers, the action stays.
   expect(metadataReads()).toBe(0);
-  await advance(1_000);
+  expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
+  await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
@@ -540,6 +542,7 @@ it.each([
   await open();
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   await advance(60_000);
+  await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("region", { name: "Recording" }) !== null).toBe(legacy);
   if (!legacy) expect(screen.getByText("The recording is no longer available")).toBeTruthy();
@@ -556,6 +559,7 @@ it("closes the prepare action at a source deadline beyond the longest browser ti
   await advance(29 * 86_400_000);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   await advance(86_400_000);
+  await advance(5_000);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.getByText("The recording is no longer available")).toBeTruthy();
 });
@@ -598,12 +602,15 @@ it.each([
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
   expect(metadataReads()).toBe(0);
   await advance(1_000);
+  expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
+  await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
   expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
   // The video keeps its own, later deadline.
   expect(screen.queryByRole("button", { name: "Prepare recording" }) !== null).toBe(at < 60_000);
-  await advance(60_000 - at);
+  if (at < 60_000) await advance(55_000 - at);
+  await advance(5_000);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
 });
 
@@ -615,10 +622,11 @@ it("keeps the actions the server still accepts when this page's clock runs ahead
   transcriptStatus = "";
   await open();
   await advance(60_000);
+  await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   expect(screen.getByRole("button", { name: /^Make a transcript/ })).toBeTruthy();
-  await advance(25_000);
+  await advance(20_000);
   expect(screen.getByRole("button", { name: "Prepare recording" })).toBeTruthy();
   await advance(10_000);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
@@ -635,6 +643,7 @@ it("keeps asking about a lapsed export when the server's first answer fails", as
   await open();
   metadataStatus = 503;
   await advance(60_000);
+  await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
   metadataStatus = 200;
@@ -685,9 +694,9 @@ it("asks the server at the page's own deadline when its clock runs behind and no
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
   await open();
-  await advance(59_000);
+  await advance(60_000);
   expect(metadataReads()).toBe(0);
-  await advance(1_000);
+  await advance(5_000);
   expect(metadataReads()).toBe(1);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.queryByRole("button", { name: /^Make a transcript/ })).toBeNull();
@@ -723,23 +732,23 @@ it("moves a transcript still being prepared to closed when the server closes the
   expect(metadataReads()).toBe(reads);
 });
 
-it("reads attempts that reach their deadline together one at a time", async () => {
+it("reads at most one recording per tick when 30 deadlines pass at once", async () => {
   vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
   expiresAt = "2026-10-22T12:01:00Z";
   transcriptStatus = "";
-  const ids = ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
-  extraRecordings = ids.map((older) => ({ ...recording(), id: older }));
-  metadataDelayMs = 1_000;
+  // The past-session endpoint returns up to 30 attempts.
+  extraRecordings = Array.from({ length: 29 }, (_, index) => ({ ...recording(), id: `00000000-0000-4000-8000-${String(index + 2).padStart(12, "0")}` }));
   await open();
-  await advance(60_000);
-  expect(metadataReads()).toBe(1);
-  await advance(1_000);
-  expect(metadataReads()).toBe(2);
-  await advance(1_000);
-  expect(metadataReads()).toBe(3);
-  await advance(1_000);
+  // Count from the tick before the deadline, so a burst of reads at the deadline lands inside a counted tick.
+  await advance(55_000);
+  const perTick = [];
+  for (let step = 0; step < 33; step += 1) {
+    const before = metadataReads();
+    await tick();
+    perTick.push(metadataReads() - before);
+  }
+  expect(Math.max(...perTick)).toBeLessThanOrEqual(1);
+  expect(metadataReads()).toBe(30);
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
-  const reads = metadataReads();
-  await tick();
-  expect(metadataReads()).toBe(reads);
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
 });

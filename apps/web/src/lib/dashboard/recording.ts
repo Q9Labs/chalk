@@ -8,10 +8,11 @@ export function pendingRecording(recording: RecordingDTO, now = Date.now()): boo
 
 /**
  * The server closes retention windows by its own clock, so the page never closes one itself. Once the page's clock
- * passes a deadline the server still reports open, the page asks the server until it agrees: a skewed clock then can't
- * hide an action the server accepts, and a legacy export that outlives its source keeps playing.
+ * passes a deadline the server still reports open, the recording is due: polling reads it in its one-per-tick rotation
+ * until the server agrees. A skewed clock then can't hide an action the server accepts, and a legacy export that
+ * outlives its source keeps playing.
  */
-export function lapsed(recording: RecordingDTO, now: number): boolean {
+function lapsed(recording: RecordingDTO, now: number): boolean {
   if (recording.sourceStatus === "available" && passed(recording.sourceExpiresAt, now)) return true;
   return recording.transcriptionStatus === "ready" && (passed(recording.transcriptionExpiresAt, now) || passed(recording.sourceExpiresAt, now));
 }

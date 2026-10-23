@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import type { AttendanceDTO, CueDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
-import { lapsed, pendingRecording, TRANSCRIPT, transcriptState, VIDEO, videoState, type TranscriptState } from "../../lib/dashboard/recording";
+import { pendingRecording, TRANSCRIPT, transcriptState, VIDEO, videoState, type TranscriptState } from "../../lib/dashboard/recording";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -59,16 +59,9 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       return { ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === recording.id ? next : item)) } };
     },
   });
-  const now = useClock(state.kind === "ready" ? state.data.session.recordings.flatMap((item) => [item.sourceExpiresAt, item.transcriptionExpiresAt]) : []);
+  // A deadline only re-renders the page, which marks that recording due; the bounded rotation above then reads it.
+  useClock(state.kind === "ready" ? state.data.session.recordings.flatMap((item) => [item.sourceExpiresAt, item.transcriptionExpiresAt]) : []);
   const replace = useCallback((next: RecordingDTO) => update((data) => ({ ...data, session: { ...data.session, recordings: data.session.recordings.map((item) => (item.id === next.id ? next : item)) } }), { refresh: false }), [update]);
-  // Ask the server at the deadline itself rather than on the next poll, which then keeps asking until it agrees.
-  const due = state.kind === "ready" ? state.data.session.recordings.filter((item) => lapsed(item, now)) : [];
-  const dueIds = due.map((item) => item.id).join();
-  useEffect(() => {
-    // One read at a time, like polling: an answer that changes the due set reads the next one, and polling covers the rest.
-    const [first] = due;
-    if (first) void freshRecording(spaceId, first).then(replace, () => undefined);
-  }, [dueIds, spaceId, replace]);
   const phone = usePhone();
   const back = (name: string | null) => (
     <Link className="back" to="/dashboard/call/$spaceId" params={{ spaceId }}>
