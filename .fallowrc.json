@@ -50,6 +50,7 @@
     "apps/web/tests/selfhost-assets/*.mjs",
     "apps/web/public/fonts/*.css",
     "apps/web/functions/**/*.ts",
+    "apps/web/server/vendor-assets.ts",
     "apps/web/tests/dashboard/fixture-entry.ts",
     "apps/web/vitest.oauth.config.ts",
     "apps/web/tests/dashboard/*.mjs",

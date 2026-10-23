@@ -1,146 +1,10 @@
 import { strict as assert } from "node:assert";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { runAssetScript, setupAssetScripts } from "./fixture.mjs";
-
-const webRoot = resolve(import.meta.dirname, "../..");
-const require = createRequire(import.meta.url);
-const { Miniflare } = createRequire(require.resolve("wrangler/package.json"))("miniflare");
-
-const runtimeOptions = { modules: true, script: "export default { fetch(request, env) { return env.ASSETS.fetch(request) } }", compatibilityDate: "2026-07-01", host: "127.0.0.1", port: 0 };
-const manifestName = "chalk-asset-manifest.json";
-const releaseSHA = (number) => number.toString(16).padStart(40, "0");
-
-async function serve(directory) {
-  const runtime = new Miniflare({ ...runtimeOptions, assets: { directory, binding: "ASSETS" } });
-  await runtime.ready;
-  return runtime;
-}
-
-async function manifest(directory) {
-  return JSON.parse(await readFile(join(directory, manifestName), "utf8"));
-}
-
-test("live-origin retention keeps four distinct generations and expires the oldest", async (t) => {
-  const assets = await createFixture(1);
-  let runtime;
-  const published = [];
-  try {
-    async function deploy(number) {
-      await rm(assets.publicDir, { recursive: true, force: true });
-      await writeFile(join(assets.excalidraw, "dist/prod/fonts/0.woff2"), `font release ${number}`);
-      await writeFile(join(assets.mathJax, "tex-svg.js"), `math release ${number}`);
-      await assets.pinDigests();
-      // A warm build's abandoned directory must not leak into a deployment either.
-      await mkdir(join(assets.publicDir, "chalk-whiteboard/obsolete"));
-      await writeFile(join(assets.publicDir, "chalk-whiteboard/obsolete/old.woff2"), "obsolete");
-      const bootstrap = !runtime;
-      if (bootstrap) runtime = await serve(assets.publicDir);
-      const result = await assets.retain((await runtime.ready).origin, releaseSHA(number), bootstrap);
-      assert.equal(result.status, 0, result.stderr);
-      const directory = join(assets.fixture, `deployed-${number}`);
-      await cp(assets.publicDir, directory, { recursive: true });
-      const next = await serve(directory);
-      await runtime?.dispose();
-      runtime = next;
-      const data = await manifest(directory);
-      const files = [`${data.current[0]}/fonts/0.woff2`, `${data.current[1]}/tex-svg.js`];
-      const bytes = await Promise.all(files.map((path) => readFile(join(directory, path.slice(1)))));
-      published.push({ files, bytes });
-      assert.equal((await runtime.dispatchFetch("http://chalk.test/chalk-whiteboard/obsolete/old.woff2")).status, 404);
-    }
-    async function assertServes(number) {
-      for (const [index, path] of published[number - 1].files.entries()) {
-        const response = await runtime.dispatchFetch(`http://chalk.test${path}`);
-        assert.equal(response.status, 200, path);
-        assert.deepEqual(Buffer.from(await response.arrayBuffer()), published[number - 1].bytes[index]);
-      }
-    }
-    await deploy(1);
-    await t.test("A's bytes still serve after clean B and C", async () => {
-      await deploy(2);
-      await assertServes(1);
-      await deploy(3);
-      await assertServes(1);
-      await assertServes(2);
-    });
-    await t.test("the fifth distinct generation drops A, while B remains", async () => {
-      await deploy(4);
-      await assertServes(1);
-      await deploy(5);
-      for (const path of published[0].files) assert.equal((await runtime.dispatchFetch(`http://chalk.test${path}`)).status, 404, path);
-      for (const number of [2, 3, 4, 5]) await assertServes(number);
-      const data = await manifest(assets.publicDir);
-      assert.deepEqual(
-        data.generations.map((entries) => entries.length),
-        [4, 4],
-      );
-      assert.equal(data.trees.length, 8);
-      const retry = await assets.retain((await runtime.ready).origin, releaseSHA(5));
-      assert.equal(retry.status, 0, retry.stderr);
-      assert.deepEqual(await manifest(assets.publicDir), data, "retry consumed a generation slot");
-    });
-  } finally {
-    await runtime?.dispose();
-    await assets.remove();
-  }
-});
-
-test("a fetched tree with the wrong digest stops the deploy before publishing retention", async () => {
-  const assets = await createFixture(1);
-  let runtime;
-  try {
-    await assets.pinDigests();
-    runtime = await serve(assets.publicDir);
-    const initial = await assets.retain((await runtime.ready).origin, releaseSHA(1), true);
-    assert.equal(initial.status, 0, initial.stderr);
-    const old = await manifest(assets.publicDir);
-    const live = join(assets.fixture, "live-corrupted");
-    await cp(assets.publicDir, live, { recursive: true });
-    await writeFile(join(live, old.current[0], "fonts/0.woff2"), "corrupted origin bytes");
-    await runtime.dispose();
-    runtime = await serve(live);
-    await rm(assets.publicDir, { recursive: true });
-    await writeFile(join(assets.excalidraw, "dist/prod/fonts/0.woff2"), "release B");
-    await assets.pinDigests();
-    const before = await manifest(assets.publicDir);
-    const result = await assets.retain((await runtime.ready).origin, releaseSHA(2));
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Retained asset digest mismatch:.*deploy stopped/);
-    assert.deepEqual(await manifest(assets.publicDir), before);
-    assert.deepEqual(await readdir(join(assets.publicDir, "chalk-whiteboard")), [before.current[0].split("/").at(-1)]);
-  } finally {
-    await runtime?.dispose();
-    await assets.remove();
-  }
-});
-
-test("an unreadable live origin fails closed; the explicit bypass deploys only current trees", async () => {
-  const assets = await createFixture(1);
-  const runtime = new Miniflare({ ...runtimeOptions, script: 'export default { fetch() { return new Response("offline", { status: 503 }) } }' });
-  try {
-    const origin = (await runtime.ready).origin;
-    await assets.pinDigests();
-    const result = await assets.retain(origin, releaseSHA(1));
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Cannot retain assets.*HTTP 503.*--without-asset-retention/);
-    const bypass = await assets.retain(origin, releaseSHA(1), true);
-    assert.equal(bypass.status, 0, bypass.stderr);
-    const data = await manifest(assets.publicDir);
-    assert.deepEqual(
-      data.generations.map((entries) => entries.length),
-      [1, 1],
-    );
-    assert.equal(data.trees.length, 2);
-  } finally {
-    await runtime.dispose();
-    await assets.remove();
-  }
-});
 
 test("parallel Vite starts publish public assets once, without racing or rewriting served files", async () => {
   const assets = await createFixture();
@@ -226,9 +90,6 @@ async function createFixture(scale = 100) {
       const results = await sync(count);
       if (count > 1) for (const { status, stderr } of results) assert.equal(status, 0, stderr);
       return results;
-    },
-    retain(origin, release, withoutRetention = false) {
-      return runAssetScript(join(dirname(script), "retain-public-assets.ts"), ["--directory", this.publicDir, "--origin", origin, "--release", release, ...(withoutRetention ? ["--without-asset-retention"] : [])]);
     },
     /** Pins the digests the sync reports for the fixture's bytes, the way a developer would. */
     async pinDigests() {

@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ASSET_MANIFEST, sourceFiles, treeDigest } from "./retain-public-assets";
+import { assetFiles, treeDigest } from "./vendor-asset-files";
 import { EXCALIDRAW_ASSET_DIGEST, EXCALIDRAW_ASSET_ROOT, EXCALIDRAW_ASSET_VERSION, MATHJAX_ASSET_DIGEST, MATHJAX_ASSET_ROOT, MATHJAX_ASSET_VERSION } from "../src/lib/whiteboard-asset-versions";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ const stagingDir = resolve(scriptDir, "../node_modules/.cache/chalk-public-asset
 
 // A tree is reused only under the digest of the bytes installed now, so warm and clean builds agree.
 function publishVersionedTree(urlRoot: string, digestName: string, pinnedDigest: string, entries: [source: string, relativePath: string][]) {
-  const digest = treeDigest(sourceFiles(entries));
+  const digest = treeDigest(assetFiles(entries));
   if (digest !== pinnedDigest) {
     throw new Error(`Asset digest mismatch: ${urlRoot} copies different bytes; set ${digestName} to "${digest}" so they get a new immutable URL`);
   }
@@ -78,14 +78,3 @@ publishVersionedTree(MATHJAX_ASSET_ROOT, "MATHJAX_ASSET_DIGEST", MATHJAX_ASSET_D
   [join(mathFontRoot, "svg"), "fonts/mathjax-newcm-font/svg"],
   [join(mathFontRoot, "svg.js"), "fonts/mathjax-newcm-font/svg.js"],
 ]);
-
-const roots = [EXCALIDRAW_ASSET_ROOT, MATHJAX_ASSET_ROOT];
-writePublicFile(
-  ASSET_MANIFEST,
-  JSON.stringify({
-    format: 1,
-    current: roots,
-    generations: roots.map((root) => [root]),
-    trees: roots.map((root) => ({ root, files: sourceFiles([[resolve(publicDir, root.slice(1)), ""]]).map(([, path]) => path) })),
-  }) + "\n",
-);

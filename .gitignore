@@ -134,6 +134,5 @@ hasan.md
 .pi-subagents/
 
 # Web assets copied from pinned whiteboard dependencies by sync:public.
-apps/web/public/chalk-asset-manifest.json
 apps/web/public/chalk-whiteboard/
 apps/web/public/chalk-mathjax/

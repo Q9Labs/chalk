@@ -11,7 +11,7 @@ export async function setupAssetScripts(fixture) {
   await mkdir(dirname(script), { recursive: true });
   await mkdir(dirname(versions), { recursive: true });
   await cp(join(webRoot, "scripts/sync-public-assets.ts"), script);
-  await cp(join(webRoot, "scripts/retain-public-assets.ts"), join(dirname(script), "retain-public-assets.ts"));
+  await cp(join(webRoot, "scripts/vendor-asset-files.ts"), join(dirname(script), "vendor-asset-files.ts"));
   await symlink(join(webRoot, "node_modules"), join(fixture, "apps/web/node_modules"), "dir");
   await cp(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), versions);
   await writeFile(join(fixture, "package.json"), JSON.stringify({ type: "module" }));
