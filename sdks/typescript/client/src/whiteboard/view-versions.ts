@@ -1,3 +1,4 @@
+import { ChalkWhiteboardViewBounds } from "./view-bounds";
 import type { ChalkWhiteboardView } from "./types";
 
 /** Owner sequences are compared only within a connection's authoritative snapshot. */
@@ -16,7 +17,7 @@ export class ChalkWhiteboardViewVersions {
     if (key === undefined || sequence === undefined || !this.isNew(view, participantId)) return;
     this.#versions.delete(key);
     this.#versions.set(key, sequence);
-    if (this.#versions.size > 256) {
+    if (this.#versions.size > ChalkWhiteboardViewBounds.maxPeople) {
       const oldest = this.#versions.keys().next().value;
       if (oldest !== undefined) this.#versions.delete(oldest);
     }

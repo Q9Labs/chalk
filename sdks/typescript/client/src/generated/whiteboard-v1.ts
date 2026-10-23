@@ -71,6 +71,7 @@ export const WhiteboardV1ProtocolMetadata = {
     socketQueueMaxAgeMs: 5000,
     cursorTtlMs: 10000,
     cursorRatePerSecond: 60,
+    viewPeopleMaxItems: 500,
     pendingOperationMaxItems: 128,
     multipartUpdateMaxParts: 128,
     multipartUpdateMaxItems: 10000,

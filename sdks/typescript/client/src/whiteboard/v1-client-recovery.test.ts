@@ -198,19 +198,19 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
-  it("bounds replay to the 256 most recently active peer views", async () => {
+  it("bounds replay to the 500 most recently active peer views", async () => {
     const { client, sockets } = await startedRecoveryClient(new ManualClock());
     const events: ChalkWhiteboardV1Event[] = [];
     try {
-      for (let index = 0; index < 300; index++) {
+      for (let index = 0; index < 501; index++) {
         sockets[0]?.receive({ type: "view", participant_id: `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`, display_name: "Peer", x: index, y: 0, width: 100, height: 100, bring: false, occurred_at: "2026-10-21T00:00:00Z" });
         await settle();
       }
       const unsubscribe = client.subscribe((event) => events.push(event));
       const views = events.filter((event) => event.type === "view");
-      expect(views).toHaveLength(256);
-      expect(views[0]).toMatchObject({ x: 44 });
-      expect(views.at(-1)).toMatchObject({ x: 299 });
+      expect(views).toHaveLength(500);
+      expect(views[0]).toMatchObject({ x: 1 });
+      expect(views.at(-1)).toMatchObject({ x: 500 });
       unsubscribe();
     } finally {
       await client.stopSceneSubscription();
@@ -2079,6 +2079,49 @@ it.each([false, true])("retries an unacknowledged real move with its original in
     await settle();
     expect(sockets[2]?.sent.map((wire) => JSON.parse(wire)).filter((f) => f.type === "view")).toEqual([]);
   } finally {
+    await client.stopSceneSubscription();
+  }
+});
+
+it("retains all 500 active owner views for a board mounting later", async () => {
+  const ownerId = "40000000-0000-4000-8000-000000000004";
+  const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { ownerId });
+  try {
+    for (let index = 0; index < 500; index++) {
+      sockets[0]?.receive({ type: "view", participant_id: `20000000-0000-4000-8000-${String(index).padStart(12, "0")}`, display_name: "Active", x: index, y: 0, width: 100, height: 100, bring: false, occurred_at: "2026-10-23T00:00:00Z", owner_id: ownerId, owner_sequence: 1 });
+      await settle();
+    }
+    const events: ChalkWhiteboardV1Event[] = [];
+    const unsubscribe = client.subscribe((event) => events.push(event));
+    unsubscribe();
+    expect(events.filter((event) => event.type === "view")).toHaveLength(500);
+    expect(events).toContainEqual(expect.objectContaining({ type: "view", x: 0 }));
+  } finally {
+    await client.stopSceneSubscription();
+  }
+});
+
+it("recovery delivery preserves Bring intent and the newer rectangle", async () => {
+  const { readFileSync } = await import("node:fs");
+  const bring = { type: "view", participant_id: "30000000-0000-4000-8000-000000000003", display_name: "Host", owner_id: "40000000-0000-4000-8000-000000000004", owner_sequence: 1, x: 10, y: 0, width: 100, height: 100, bring: true, occurred_at: "2026-10-23T00:00:00Z" };
+  const fixture = process.env.CHALK_FOLLOW_RECOVERY_WIRE_FIXTURE;
+  const frames = fixture ? JSON.parse(readFileSync(fixture, "utf8")) : [bring, { ...bring, owner_sequence: 2, x: 20, bring: false }];
+  const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { ownerId: frames[0].owner_id });
+  let following: string | null = null;
+  let finalX: number | undefined;
+  const unsubscribe = client.subscribe((event) => {
+    if (event.type === "view") {
+      if (event.bring) following = event.participantId;
+      finalX = event.x;
+    }
+  });
+  try {
+    for (const frame of frames) sockets[0]?.receive(frame);
+    await settle();
+    expect(following).toBe(frames[0].participant_id);
+    expect(finalX).toBe(20);
+  } finally {
+    unsubscribe();
     await client.stopSceneSubscription();
   }
 });

@@ -1,10 +1,4 @@
-import { WhiteboardV1ProtocolMetadata } from "../generated/whiteboard-v1";
-
-/** Bounds for camera rectangles shared with other participants. */
-export const ChalkWhiteboardViewBounds = {
-  maxCoordinate: WhiteboardV1ProtocolMetadata.frames.view.maxCoordinate,
-  maxExtent: WhiteboardV1ProtocolMetadata.frames.view.maxExtent,
-};
+export { ChalkWhiteboardViewBounds } from "./view-bounds";
 
 export { createChalkWhiteboardV1FileDownloadTransport, type ChalkWhiteboardV1FileDownloadTransportOptions } from "./file-download-transport";
 export * from "./types";

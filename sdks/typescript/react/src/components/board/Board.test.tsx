@@ -1545,3 +1545,17 @@ it("review repro: queued initial fit must not cancel a newer Bring", async () =>
     { onFollow },
   );
 });
+
+it.each([2, 500])("follows an idle leader with %i active views", async (count) => {
+  vi.useFakeTimers();
+  await withOpenBoard(async (_container, engine, peer, _toast, render) => {
+    await render({ following: null });
+    await act(async () => vi.advanceTimersByTimeAsync(2200));
+    await act(async () => {
+      for (let index = 0; index < count; index++) peer.receive(`active-${index}`, { x: 432 + index, y: 25, width: 1, height: 1, bring: false, ownerId: "owner", ownerSequence: 1 });
+    });
+    await render({ following: "active-0" });
+    await act(async () => vi.advanceTimersByTimeAsync(2200));
+    expect(engine.camera().x).toBeCloseTo(-432, 2);
+  }, true);
+});

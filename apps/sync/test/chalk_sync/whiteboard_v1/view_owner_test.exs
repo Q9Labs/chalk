@@ -157,6 +157,9 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   end
 
   test "admits all 500 canonical Episode participants", c do
+    assert ChalkSync.Contract.GeneratedWhiteboardV1.limits()["viewPeopleMaxItems"] ==
+             ChalkSync.Episodes.Reducer.max_participants()
+
     for _ <- 2..500 do
       assert {:ok, owner, _, []} = ViewOwner.join(c.episode, UUID.generate())
       assert owner == c.owner
@@ -214,6 +217,72 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
 
     state = :sys.get_state(c.owner)
     assert state.views[c.person]["x"] == 20
+  end
+
+  test "snapshots exclude 600 durable departures but keep a disconnected active person's view" do
+    episode = %ChalkSync.Stateholder.EpisodeKey{
+      tenant_id: UUID.generate(),
+      space_id: UUID.generate(),
+      episode_id: UUID.generate()
+    }
+
+    active = UUID.generate()
+    stream = UUID.generate()
+    test = self()
+    {:ok, owner, _, []} = ViewOwner.join(episode, UUID.generate())
+    publish_then_disconnect(episode, active, stream, test)
+    for _ <- 1..600, do: publish_then_disconnect(episode, UUID.generate(), UUID.generate(), test)
+
+    ChalkSync.WhiteboardV1.Authority.store(
+      episode,
+      %{status: "active", participants: %{{active, 1} => "active"}},
+      System.monotonic_time(:millisecond),
+      nil
+    )
+
+    {:ok, ^owner, _, snapshot} = ViewOwner.join(episode, UUID.generate())
+    assert [%{"participant_id" => ^active, "x" => 10, "owner_sequence" => 1}] = snapshot
+    {:ok, ^owner, _, snapshot} = ViewOwner.join(episode, active)
+    assert length(snapshot) == 1
+    :ok = ViewOwner.move(owner, frame(active, 10), input(stream, 1))
+    {:ok, ^owner, _, [%{"owner_sequence" => 1}]} = ViewOwner.join(episode, active)
+  end
+
+  test "reversible leaving retains a view, durable left excludes it", c do
+    episode = %ChalkSync.Stateholder.EpisodeKey{
+      tenant_id: UUID.generate(),
+      space_id: UUID.generate(),
+      episode_id: UUID.generate()
+    }
+
+    {:ok, owner, _, []} = ViewOwner.join(episode, c.person)
+    :ok = ViewOwner.move(owner, frame(c.person, 10), input(c.stream, 1))
+
+    for {status, count} <- [{"leaving", 1}, {"left", 0}] do
+      ChalkSync.WhiteboardV1.Authority.store(
+        episode,
+        %{status: "active", participants: %{{c.person, 1} => status}},
+        System.monotonic_time(:millisecond),
+        nil
+      )
+
+      {:ok, ^owner, _, snapshot} = ViewOwner.join(episode, UUID.generate())
+      assert length(snapshot) == count
+    end
+  end
+
+  defp publish_then_disconnect(episode, person, stream, test) do
+    {socket, ref} =
+      spawn_monitor(fn ->
+        {:ok, owner, _, _} = ViewOwner.join(episode, person)
+        :ok = ViewOwner.move(owner, frame(person, 10), input(stream, 1))
+        send(test, :published)
+        receive do: (:disconnect -> :ok)
+      end)
+
+    assert_receive :published
+    send(socket, :disconnect)
+    assert_receive {:DOWN, ^ref, :process, ^socket, :normal}
   end
 
   defp input(stream, sequence), do: %{input_id: "#{stream}:#{sequence}", move: true}

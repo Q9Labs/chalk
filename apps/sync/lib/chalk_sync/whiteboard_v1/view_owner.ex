@@ -4,6 +4,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
 
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Authority
 
   @registry ChalkSync.WhiteboardV1.ViewRegistry
   @supervisor ChalkSync.WhiteboardV1.ViewSupervisor
@@ -48,10 +49,11 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
   end
 
   @impl true
-  def init(_episode) do
+  def init(episode) do
     {:ok,
      %{
        id: UUID.generate(),
+       episode: episode,
        sockets: %{},
        people: MapSet.new(),
        views: %{},
@@ -70,7 +72,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
             MapSet.size(state.people) < Reducer.max_participants()) do
       ref = Process.monitor(socket)
       sockets = Map.put(state.sockets, ref, {socket, person})
-      snapshot = Enum.map(state.views, fn {_person, view} -> %{view | "bring" => false} end)
+      snapshot = snapshot(state, person)
       Enum.each(snapshot, &send(socket, {:whiteboard_v1_frame, &1}))
 
       {:reply, {:ok, self(), state.id, snapshot},
@@ -96,6 +98,16 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
     else
       {:reply, {:error, :permission_denied}, state}
     end
+  end
+
+  defp snapshot(state, joining_person) do
+    active = Authority.active_people(state.episode)
+
+    state.views
+    |> Enum.filter(fn {person, _view} ->
+      is_nil(active) or person == joining_person or MapSet.member?(active, person)
+    end)
+    |> Enum.map(fn {_person, view} -> %{view | "bring" => false} end)
   end
 
   @impl true

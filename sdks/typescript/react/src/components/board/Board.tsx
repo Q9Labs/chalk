@@ -1,4 +1,4 @@
-import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { ChalkWhiteboardViewBounds, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import { useEngineHistory } from "./board-history";
 import { ViewVersions } from "./board-view-versions";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
@@ -439,7 +439,7 @@ export function Board({ board, primary, visible, colorScheme, people, following,
     const newPeer = !previous;
     views.current.delete(event.participantId);
     views.current.set(event.participantId, { ...event, bring: false });
-    if (views.current.size > 256) {
+    if (views.current.size > ChalkWhiteboardViewBounds.maxPeople) {
       const oldest = views.current.keys().next().value;
       if (oldest !== undefined) views.current.delete(oldest);
     }

@@ -113,6 +113,33 @@ defmodule ChalkSync.WhiteboardV1.Authority do
     ArgumentError -> {:retryable, {:storage_unavailable, "authority"}}
   end
 
+  @doc "Fresh durable members for view snapshots; unknown reads never imply a leave."
+  @spec active_people(EpisodeKey.t()) :: MapSet.t(String.t()) | nil
+  def active_people(%EpisodeKey{} = episode) do
+    case lookup(episode) do
+      {access, read_at, failure} when is_map(access) ->
+        if freshness(read_at, failure, nil) == :fresh do
+          if access.status == "ended" do
+            MapSet.new()
+          else
+            access.participants
+            |> Enum.reject(fn {_person, status} -> status == "left" end)
+            |> MapSet.new(fn {{person, _generation}, _status} -> person end)
+          end
+        end
+
+      {:not_found, read_at, failure} ->
+        if freshness(read_at, failure, nil) == :fresh, do: MapSet.new()
+
+      _unknown ->
+        nil
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  def active_people(_local_episode), do: nil
+
   defp lookup(episode) do
     case :ets.lookup(@table, EpisodeKey.authority_key(episode)) do
       [{_episode, _poller, access, read_at, failure}] -> {access, read_at, failure}

@@ -105,6 +105,37 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     end
   end
 
+  test "recovery delivers Bring before an already queued newer owner view" do
+    owner = UUID.generate()
+    state = %{recovering_state() | view_negotiated: true, view_owner_negotiated: true}
+
+    bring =
+      Map.merge(server_view(UUID.generate()), %{
+        "owner_id" => owner,
+        "owner_sequence" => 1,
+        "x" => 10
+      })
+
+    newest = Map.merge(bring, %{"bring" => false, "owner_sequence" => 2, "x" => 20})
+    assert {:ok, queued} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, bring}, state)
+    send(self(), {:whiteboard_v1_frame, newest})
+    assert {:ok, live} = receive_frame(snapshot_ack(queued), queued)
+    assert_receive {:whiteboard_v1_frame, ^newest}
+
+    assert {:push, {:text, first}, next} =
+             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, newest}, live)
+
+    assert_receive :whiteboard_drain
+    assert {:push, {:text, second}, _} = SocketWhiteboardV1.handle_info(:whiteboard_drain, next)
+    frames = Enum.map([first, second], &JSON.decode!/1)
+    assert Enum.map(frames, & &1["owner_sequence"]) == [1, 2]
+    assert Enum.map(frames, & &1["bring"]) == [true, false]
+    assert Enum.map(frames, & &1["x"]) == [10, 20]
+
+    if path = System.get_env("CHALK_FOLLOW_RECOVERY_WIRE_FIXTURE"),
+      do: File.write!(path, JSON.encode!(frames))
+  end
+
   test "coalesces recovering Bring commands and delivers the latest after the final snapshot ACK" do
     count = GeneratedWhiteboardV1.limits()["snapshotPageMaxItems"] + 1
     elements = Enum.map(1..count, fn index -> Map.put(element(), "id", "element-#{index}") end)
@@ -139,10 +170,10 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     refute_received {:whiteboard_v1_frame, _}
     assert {:ok, live} = receive_frame(snapshot_ack(recovering), recovering)
     assert live.phase == :live
-    assert_receive {:whiteboard_v1_frame, ^latest}
+    assert_receive :whiteboard_drain
 
     assert {:push, {:text, encoded}, delivered} =
-             SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, latest}, live)
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, live)
 
     assert JSON.decode!(encoded) == latest
     assert delivered.pending_bring == nil

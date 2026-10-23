@@ -126,9 +126,11 @@ Legacy origin-capable clients receive canonical sequences as their existing
 origin fields. Other legacy clients receive plain view frames. Owner fields
 never go to clients that did not negotiate them.
 
-Each owner retains at most 256 people and 1,024 input streams. Admission stops
-at those bounds rather than evicting deduplication watermarks. Socket scene
-recovery retains only the newest view per person before resuming delivery.
+Each owner admits at most 500 active people and retains at most 1,024 input
+streams, a separate bound on retry receipts. Admission stops at those bounds
+rather than evicting deduplication watermarks. Snapshots exclude durable
+departures; a socket disconnect alone does not retire a person’s view. Socket
+scene recovery retains only the newest view per person before resuming delivery.
 
 The language-neutral source is `contract/schema/sync-v1.json`; generated
 Elixir and TypeScript bindings are checked by the root codegen gate. V1 has

@@ -388,13 +388,17 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp resume_pending_bring(state) do
-    if state.pending_bring, do: send(self(), {:whiteboard_v1_frame, state.pending_bring})
+    frames = if state.pending_bring, do: [compatible_view(state.pending_bring, state)], else: []
 
-    Enum.each(state.pending_views, fn {_person, frame} ->
-      send(self(), {:whiteboard_v1_frame, frame})
-    end)
+    with {:ok, outbound} <- enqueue_frames(state.outbound, frames) do
+      if frames != [], do: send(self(), :whiteboard_drain)
 
-    %{state | pending_bring: nil, pending_views: %{}}
+      Enum.each(state.pending_views, fn {_person, frame} ->
+        send(self(), {:whiteboard_v1_frame, frame})
+      end)
+
+      {:ok, %{state | outbound: outbound, pending_bring: nil, pending_views: %{}}}
+    end
   end
 
   defp catch_up_after_snapshot(state, nil) do
@@ -677,9 +681,14 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               missed_head: nil
           }
 
-          next = next |> resume_pending_bring() |> resume_stale_access()
-          resume_snapshot_requests(next)
-          catch_up_after_snapshot(next, state.missed_head)
+          with {:ok, resumed} <- resume_pending_bring(next) do
+            resumed = resume_stale_access(resumed)
+            resume_snapshot_requests(resumed)
+            catch_up_after_snapshot(resumed, state.missed_head)
+          else
+            {:error, _reason} ->
+              stop(next, 1012, "whiteboard delivery recovery required", :delivery_unavailable)
+          end
       end
     else
       stop(state, 1008, "invalid snapshot acknowledgement", :invalid_acknowledgement)
