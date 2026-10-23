@@ -93,7 +93,7 @@ def rollback(project, deployment_id):
     outputs({'pages_deployment_id': deployment_id})
 
 
-def deploy(target, sha, run, member, project):
+def deploy(target, sha, run, member, project, without_asset_retention=False):
     require(len(member['sha256']) == 64, 'web artifact requires a SHA256 hash')
     require(project and os.environ.get('CLOUDFLARE_ACCOUNT_ID'), 'missing Pages destination')
     data = GitHub().artifact(run, member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
@@ -101,6 +101,10 @@ def deploy(target, sha, run, member, project):
     with tempfile.TemporaryDirectory() as directory:
         with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
             archive.extractall(directory, filter='data')
+        subprocess.run([str(ROOT / 'node_modules/.bin/tsx'), str(ROOT / 'apps/web/scripts/retain-public-assets.ts'),
+                        '--directory', str(Path(directory) / 'dist/client'),
+                        '--origin', public_config(target, sha)['VITE_PUBLIC_APP_URL'], '--release', sha,
+                        *(['--without-asset-retention'] if without_asset_retention else [])], check=True)
         subprocess.run([str(ROOT / 'node_modules/.bin/wrangler'), 'pages', 'deploy', 'dist/client',
                         '--project-name', project, '--branch', 'master', '--commit-hash', sha,
                         '--commit-dirty=false'], cwd=directory, check=True)
@@ -114,6 +118,7 @@ if __name__ == '__main__':
     parser.add_argument('command', choices=('build', 'deploy', 'current', 'rollback'))
     parser.add_argument('--target', choices=('nightly', 'production'))
     parser.add_argument('--sha')
+    parser.add_argument('--without-asset-retention', action='store_true', help='Explicitly discard old assets; required to bootstrap a site without an asset manifest')
     parser.add_argument('--output', type=Path, default=Path('web-output'))
     parser.add_argument('--source-root', type=Path)
     args = parser.parse_args()
@@ -125,4 +130,4 @@ if __name__ == '__main__':
     elif args.command == 'rollback':
         rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'])
     else:
-        deploy(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), os.environ['PAGES_PROJECT'])
+        deploy(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), os.environ['PAGES_PROJECT'], args.without_asset_retention)

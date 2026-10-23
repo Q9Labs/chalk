@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ASSET_MANIFEST, sourceFiles, treeDigest } from "./retain-public-assets";
 import { EXCALIDRAW_ASSET_DIGEST, EXCALIDRAW_ASSET_ROOT, EXCALIDRAW_ASSET_VERSION, MATHJAX_ASSET_DIGEST, MATHJAX_ASSET_ROOT, MATHJAX_ASSET_VERSION } from "../src/lib/whiteboard-asset-versions";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -43,29 +42,6 @@ assertAssetVersion(join(mathFontRoot, "package.json"), MATHJAX_ASSET_VERSION);
 // so a start killed mid-copy can't leave a stray tree for the next build to deploy.
 const stagingDir = resolve(scriptDir, "../node_modules/.cache/chalk-public-assets");
 
-function sourceFiles(entries: [source: string, relativePath: string][]): [source: string, relativePath: string][] {
-  const files: [string, string][] = [];
-  for (const [source, relativePath] of entries) {
-    if (!statSync(source).isDirectory()) {
-      files.push([source, relativePath]);
-      continue;
-    }
-    for (const name of readdirSync(source, { recursive: true })) {
-      if (typeof name === "string" && statSync(join(source, name)).isFile()) files.push([join(source, name), join(relativePath, name)]);
-    }
-  }
-  return files.sort(([, left], [, right]) => (left < right ? -1 : left > right ? 1 : 0));
-}
-
-function treeDigest(files: [source: string, relativePath: string][]): string {
-  const hash = createHash("sha256");
-  for (const [source, relativePath] of files) {
-    const bytes = readFileSync(source);
-    hash.update(`${relativePath.replaceAll("\\", "/")}\0${bytes.byteLength}\0`).update(bytes);
-  }
-  return hash.digest("hex").slice(0, 16);
-}
-
 // A tree is reused only under the digest of the bytes installed now, so warm and clean builds agree.
 function publishVersionedTree(urlRoot: string, digestName: string, pinnedDigest: string, entries: [source: string, relativePath: string][]) {
   const digest = treeDigest(sourceFiles(entries));
@@ -103,17 +79,13 @@ publishVersionedTree(MATHJAX_ASSET_ROOT, "MATHJAX_ASSET_DIGEST", MATHJAX_ASSET_D
   [join(mathFontRoot, "svg.js"), "fonts/mathjax-newcm-font/svg.js"],
 ]);
 
-// Fresh release checkouts need every published tree, not just the installed dependencies.
-for (const family of ["chalk-whiteboard", "chalk-mathjax"]) {
-  const archives = resolve(scriptDir, "../immutable-assets", family);
-  if (!existsSync(archives)) continue;
-  for (const archive of readdirSync(archives)) {
-    if (!archive.endsWith(".tar.gz")) continue;
-    const version = archive.slice(0, -".tar.gz".length);
-    publishTree(`/${family}/${version}`, (staging) => {
-      execFileSync("tar", ["-xzf", join(archives, archive), "-C", staging]);
-      const digest = treeDigest(sourceFiles([[staging, ""]]));
-      if (!version.endsWith(`-${digest}`)) throw new Error(`Retained asset digest mismatch: ${family}/${archive}; extracted bytes have digest ${digest}`);
-    });
-  }
-}
+const roots = [EXCALIDRAW_ASSET_ROOT, MATHJAX_ASSET_ROOT];
+writePublicFile(
+  ASSET_MANIFEST,
+  JSON.stringify({
+    format: 1,
+    current: roots,
+    releases: [],
+    trees: roots.map((root) => ({ root, files: sourceFiles([[resolve(publicDir, root.slice(1)), ""]]).map(([, path]) => path) })),
+  }) + "\n",
+);

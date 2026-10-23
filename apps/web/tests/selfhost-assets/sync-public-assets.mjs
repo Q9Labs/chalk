@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -12,35 +12,126 @@ const repoRoot = resolve(webRoot, "../..");
 const require = createRequire(import.meta.url);
 const { Miniflare } = createRequire(require.resolve("wrangler/package.json"))("miniflare");
 
-test("a clean release serves the previous release's lazy-loaded immutable assets", async () => {
-  const assets = await createFixture();
-  let runtime;
-  try {
-    const source = await readFile(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), "utf8");
-    const pinned = Object.fromEntries([...source.matchAll(/(\w+_ASSET_(?:VERSION|DIGEST)) = "([^"]+)"/g)].map(([, name, value]) => [name, value]));
-    const oldFiles = [`chalk-whiteboard/${pinned.EXCALIDRAW_ASSET_VERSION}-${pinned.EXCALIDRAW_ASSET_DIGEST}/fonts/Assistant/Assistant-Regular.woff2`, `chalk-mathjax/${pinned.MATHJAX_ASSET_VERSION}-${pinned.MATHJAX_ASSET_DIGEST}/tex-svg.js`];
-    const oldBytes = await Promise.all(oldFiles.map((path) => readFile(join(webRoot, "public", path))));
+const runtimeOptions = { modules: true, script: "export default { fetch(request, env) { return env.ASSETS.fetch(request) } }", compatibilityDate: "2026-07-01", host: "127.0.0.1", port: 0 };
+const manifestName = "chalk-asset-manifest.json";
+const releaseSHA = (number) => number.toString(16).padStart(40, "0");
 
-    // Only Git inputs survive the fresh checkout used by both release builders.
-    const tracked = spawnSync("git", ["ls-files", "-z", "--", "apps/web/immutable-assets"], { cwd: repoRoot, encoding: "utf8" });
-    assert.equal(tracked.status, 0, tracked.stderr);
-    for (const path of tracked.stdout.split("\0").filter(Boolean)) {
-      const destination = join(assets.fixture, path);
-      await mkdir(dirname(destination), { recursive: true });
-      await cp(join(repoRoot, path), destination);
+async function serve(directory) {
+  const runtime = new Miniflare({ ...runtimeOptions, assets: { directory, binding: "ASSETS" } });
+  await runtime.ready;
+  return runtime;
+}
+
+async function manifest(directory) {
+  return JSON.parse(await readFile(join(directory, manifestName), "utf8"));
+}
+
+test("live-origin retention covers three prior releases and expires the fourth", async (t) => {
+  const assets = await createFixture(1);
+  let runtime;
+  const published = [];
+  try {
+    async function deploy(number) {
+      await rm(assets.publicDir, { recursive: true, force: true });
+      await writeFile(join(assets.excalidraw, "dist/prod/fonts/0.woff2"), `font release ${number}`);
+      await writeFile(join(assets.mathJax, "tex-svg.js"), `math release ${number}`);
+      await assets.pinDigests();
+      // A warm build's abandoned directory must not leak into a deployment either.
+      await mkdir(join(assets.publicDir, "chalk-whiteboard/obsolete"));
+      await writeFile(join(assets.publicDir, "chalk-whiteboard/obsolete/old.woff2"), "obsolete");
+      const result = await assets.retain(runtime ? (await runtime.ready).origin : "http://unused.test", releaseSHA(number), !runtime);
+      assert.equal(result.status, 0, result.stderr);
+      const directory = join(assets.fixture, `deployed-${number}`);
+      await cp(assets.publicDir, directory, { recursive: true });
+      const next = await serve(directory);
+      await runtime?.dispose();
+      runtime = next;
+      const data = await manifest(directory);
+      const files = [`${data.current[0]}/fonts/0.woff2`, `${data.current[1]}/tex-svg.js`];
+      const bytes = await Promise.all(files.map((path) => readFile(join(directory, path.slice(1)))));
+      published.push({ files, bytes });
+      assert.equal((await runtime.dispatchFetch("http://chalk.test/chalk-whiteboard/obsolete/old.woff2")).status, 404);
     }
-    // The newly installed fixture bytes give both libraries new digest URLs.
-    const current = await assets.pinDigests();
-    assert.notEqual(current.EXCALIDRAW_ASSET_DIGEST, pinned.EXCALIDRAW_ASSET_DIGEST);
-    assert.notEqual(current.MATHJAX_ASSET_DIGEST, pinned.MATHJAX_ASSET_DIGEST);
-    runtime = new Miniflare({ modules: true, script: "export default { fetch(request, env) { return env.ASSETS.fetch(request) } }", compatibilityDate: "2026-07-01", assets: { directory: assets.publicDir, binding: "ASSETS" } });
-    for (const [index, path] of oldFiles.entries()) {
-      const response = await runtime.dispatchFetch(`http://chalk.test/${path}`);
-      assert.equal(response.status, 200, `previous release's ${path}`);
-      assert.deepEqual(Buffer.from(await response.arrayBuffer()), oldBytes[index]);
+    async function assertServes(number) {
+      for (const [index, path] of published[number - 1].files.entries()) {
+        const response = await runtime.dispatchFetch(`http://chalk.test${path}`);
+        assert.equal(response.status, 200, path);
+        assert.deepEqual(Buffer.from(await response.arrayBuffer()), published[number - 1].bytes[index]);
+      }
     }
+    await deploy(1);
+    await t.test("A's bytes still serve after clean B and C", async () => {
+      await deploy(2);
+      await assertServes(1);
+      await deploy(3);
+      await assertServes(1);
+      await assertServes(2);
+    });
+    await t.test("the fourth newer release drops A, while B remains", async () => {
+      await deploy(4);
+      await assertServes(1);
+      await deploy(5);
+      for (const path of published[0].files) assert.equal((await runtime.dispatchFetch(`http://chalk.test${path}`)).status, 404, path);
+      for (const number of [2, 3, 4, 5]) await assertServes(number);
+      const data = await manifest(assets.publicDir);
+      assert.deepEqual(
+        data.releases.map((entry) => entry.id),
+        [5, 4, 3, 2].map(releaseSHA),
+      );
+      assert.equal(data.trees.length, 8);
+      const retry = await assets.retain((await runtime.ready).origin, releaseSHA(5));
+      assert.equal(retry.status, 0, retry.stderr);
+      assert.deepEqual(await manifest(assets.publicDir), data, "retry consumed a release slot");
+    });
   } finally {
     await runtime?.dispose();
+    await assets.remove();
+  }
+});
+
+test("a fetched tree with the wrong digest stops the deploy before publishing retention", async () => {
+  const assets = await createFixture(1);
+  let runtime;
+  try {
+    await assets.pinDigests();
+    const initial = await assets.retain("http://unused.test", releaseSHA(1), true);
+    assert.equal(initial.status, 0, initial.stderr);
+    const old = await manifest(assets.publicDir);
+    const live = join(assets.fixture, "live-corrupted");
+    await cp(assets.publicDir, live, { recursive: true });
+    await writeFile(join(live, old.current[0], "fonts/0.woff2"), "corrupted origin bytes");
+    runtime = await serve(live);
+    await rm(assets.publicDir, { recursive: true });
+    await writeFile(join(assets.excalidraw, "dist/prod/fonts/0.woff2"), "release B");
+    await assets.pinDigests();
+    const before = await manifest(assets.publicDir);
+    const result = await assets.retain((await runtime.ready).origin, releaseSHA(2));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Retained asset digest mismatch:.*deploy stopped/);
+    assert.deepEqual(await manifest(assets.publicDir), before);
+    assert.deepEqual(await readdir(join(assets.publicDir, "chalk-whiteboard")), [before.current[0].split("/").at(-1)]);
+  } finally {
+    await runtime?.dispose();
+    await assets.remove();
+  }
+});
+
+test("an unreadable live origin fails closed; the explicit bypass deploys only current trees", async () => {
+  const assets = await createFixture(1);
+  const runtime = new Miniflare({ ...runtimeOptions, script: 'export default { fetch() { return new Response("offline", { status: 503 }) } }' });
+  try {
+    const origin = (await runtime.ready).origin;
+    await assets.pinDigests();
+    const result = await assets.retain(origin, releaseSHA(1));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Cannot retain assets.*HTTP 503.*--without-asset-retention/);
+    const bypass = await assets.retain(origin, releaseSHA(1), true);
+    assert.equal(bypass.status, 0, bypass.stderr);
+    const data = await manifest(assets.publicDir);
+    assert.equal(data.releases.length, 1);
+    assert.equal(data.trees.length, 2);
+  } finally {
+    await runtime.dispose();
     await assets.remove();
   }
 });
@@ -101,13 +192,15 @@ test("a same-version dependency patch gets a new asset URL in warm and clean bui
   }
 });
 
-async function createFixture() {
+async function createFixture(scale = 100) {
   const fixture = await mkdtemp(join(tmpdir(), "chalk-public-assets-"));
   const script = join(fixture, "apps/web/scripts/sync-public-assets.ts");
   const versions = join(fixture, "apps/web/src/lib/whiteboard-asset-versions.ts");
   await mkdir(dirname(script), { recursive: true });
   await mkdir(dirname(versions), { recursive: true });
   await cp(join(webRoot, "scripts/sync-public-assets.ts"), script);
+  await cp(join(webRoot, "scripts/retain-public-assets.ts"), join(dirname(script), "retain-public-assets.ts"));
+  await symlink(join(webRoot, "node_modules"), join(fixture, "apps/web/node_modules"), "dir");
   await cp(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), versions);
   await writeFile(join(fixture, "package.json"), JSON.stringify({ type: "module" }));
   const packageRoot = join(fixture, "packages/whiteboard");
@@ -120,11 +213,11 @@ async function createFixture() {
   await writePackage(mathJax, "mathjax", "4.1.3", "index.js");
   await writePackage(mathFont, "@mathjax/mathjax-newcm-font", "4.1.3", "index.js");
   await writeFile(join(excalidraw, "dist/prod/index.css"), "");
-  await writeFiles(join(excalidraw, "dist/prod/fonts"), 200);
-  for (const directory of ["input", "output", "a11y", "ui", "sre"]) await writeFiles(join(mathJax, directory), 100);
+  await writeFiles(join(excalidraw, "dist/prod/fonts"), scale * 2);
+  for (const directory of ["input", "output", "a11y", "ui", "sre"]) await writeFiles(join(mathJax, directory), scale);
   await writeFile(join(mathJax, "tex-svg.js"), "");
   await writeFile(join(mathJax, "LICENSE"), "");
-  await writeFiles(join(mathFont, "svg"), 200);
+  await writeFiles(join(mathFont, "svg"), scale * 2);
   await writeFile(join(mathFont, "svg.js"), "");
 
   const sync = (count) =>
@@ -140,11 +233,22 @@ async function createFixture() {
   return {
     fixture,
     excalidraw,
+    mathJax,
     publicDir: join(fixture, "apps/web/public"),
     async sync(count) {
       const results = await sync(count);
       if (count > 1) for (const { status, stderr } of results) assert.equal(status, 0, stderr);
       return results;
+    },
+    async retain(origin, release, withoutRetention = false) {
+      const child = spawn(process.execPath, ["--import", "tsx", join(dirname(script), "retain-public-assets.ts"), "--directory", this.publicDir, "--origin", origin, "--release", release, ...(withoutRetention ? ["--without-asset-retention"] : [])], {
+        cwd: repoRoot,
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      let stderr = "";
+      child.stderr.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
+      const [status] = await once(child, "close");
+      return { status, stderr };
     },
     /** Pins the digests the sync reports for the fixture's bytes, the way a developer would. */
     async pinDigests() {
