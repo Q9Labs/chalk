@@ -510,8 +510,8 @@ returning id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     error_code, error_detail, terminal_at, updated_at, created_at, result_metadata;
 
 -- name: RequestDeferredRecordingRender :one
--- A Recording has one canonical MP4 export. The first authorized request
--- creates its render job; active and completed jobs remain idempotent. A
+-- Capture completion queues the canonical MP4 export. Requests reuse it,
+-- or create it for retained captures from before automatic rendering. A
 -- terminally failed job may be manually retried five times; each old failure
 -- is copied to append-only history before the same fenced job is requeued.
 with candidate as (
@@ -609,7 +609,8 @@ with selected as (
 		end::text as transcription_policy,
 		artifacts.recording_id is not null as has_artifact,
 		artifacts.expires_at as artifact_expires_at,
-        coalesce(capture.result_metadata ->> 'capture_stop_reason', '')::text as capture_stop_reason
+        coalesce(capture.result_metadata ->> 'capture_stop_reason', '')::text as capture_stop_reason,
+        capture.error_code as capture_error_code
     from recordings
     left join recording_pipelines pipelines on pipelines.recording_id = recordings.id
     join episodes on episodes.id = recordings.episode_id
@@ -623,7 +624,7 @@ with selected as (
     join selected on selected.id = jobs.recording_id
     where jobs.kind = 'render'
 ), transcription_job as (
-    select jobs.recording_id, jobs.state
+    select jobs.recording_id, jobs.state, jobs.error_code
     from recording_jobs jobs
     join selected on selected.id = jobs.recording_id
     where jobs.kind = 'transcription'
@@ -643,6 +644,7 @@ select selected.id as recording_id,
 		when selected.transcription_policy = 'disabled' then 'none'
 		when transcription_source.status = 'ready' and transcription_source.expires_at > clock_timestamp() then 'ready'
 		when transcription_source.expires_at <= clock_timestamp() or transcription_source.status in ('cleanup_pending', 'deleting', 'deleted') then 'expired'
+        when transcription_job.error_code in ('recording_source_expired', 'render_deadline_exceeded') then 'expired'
 		when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'failed'
 		when selected.capture_completed_at is null and selected.recording_status = 'completed' then 'expired'
 		when selected.capture_completed_at is null then 'pending'
@@ -653,31 +655,42 @@ select selected.id as recording_id,
 	end::text as transcription_preparation_status,
 	-- The transcription source has its own window, never longer than the recording source window; a disabled policy has none.
 	(case when selected.transcription_policy = 'disabled' then null else transcription_source.expires_at end)::timestamptz as transcription_source_expires_at,
+    coalesce(transcription_job.error_code, '')::text as transcription_failure_code,
 	export_job.id as export_job_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported
         -- legacy completed MP4s have a null expiry and remain readable.
-        when selected.has_artifact and selected.artifact_expires_at is not null and selected.artifact_expires_at <= clock_timestamp() then 'unavailable'
+        when selected.has_artifact and selected.artifact_expires_at is not null and selected.artifact_expires_at <= clock_timestamp() then 'expired'
         when selected.has_artifact then 'ready'
         when selected.recording_status = 'completed' and selected.storage_key is not null then 'ready'
-        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'unavailable'
-        when export_job.state in ('pending', 'leased') then 'pending'
+        when selected.capture_completed_at is null then 'unavailable'
+        when selected.source_expires_at <= clock_timestamp() then 'expired'
+        when export_job.error_code in ('recording_source_expired', 'render_deadline_exceeded') then 'expired'
+        when export_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
         when export_job.state = 'terminal_failure' then 'failed'
         else 'none'
     end as export_status,
     case when export_job.state = 'terminal_failure'
+        and coalesce(export_job.error_code, '') not in ('recording_source_expired', 'render_deadline_exceeded')
         and (select count(*) from recording_job_failure_history history where history.job_id = export_job.id) < 5
         and selected.source_expires_at > clock_timestamp() then true else false end as retryable,
     case
-        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'capture_failed'
-        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'recording_source_expired'
+        when selected.has_artifact and selected.artifact_expires_at <= clock_timestamp() then 'recording_expired'
+        when selected.has_artifact or (selected.recording_status = 'completed' and selected.storage_key is not null) then ''
+        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then coalesce(selected.capture_error_code, 'capture_failed')
+        when selected.capture_completed_at is null then ''
+        when selected.source_expires_at <= clock_timestamp() then 'recording_source_expired'
         when export_job.state = 'terminal_failure' then coalesce(export_job.error_code, 'render_failed')
         else ''
     end::text as failure_code,
     case
+        when selected.has_artifact and selected.artifact_expires_at <= clock_timestamp() then 'The recording has expired.'
+        when selected.has_artifact or (selected.recording_status = 'completed' and selected.storage_key is not null) then ''
         when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'The recording capture did not complete.'
-        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'The recording source is no longer available.'
-        when export_job.state = 'terminal_failure' then 'The recording export could not be completed.'
+        when selected.capture_completed_at is null then ''
+        when selected.source_expires_at <= clock_timestamp() or export_job.error_code = 'recording_source_expired' then 'The recording source expired before rendering completed.'
+        when export_job.error_code = 'render_deadline_exceeded' then 'The recording could not be rendered before its deadline.'
+        when export_job.state = 'terminal_failure' then 'The recording could not be rendered.'
         else ''
     end::text as failure_message
 from selected
@@ -742,7 +755,7 @@ with completion_eligibility as materialized (
     returning recording_jobs.*
 ), pipeline as (
     update recording_pipelines
-    set state = 'capture_complete', capture_completed_at = now(), updated_at = now()
+    set state = 'render_queued', capture_completed_at = now(), updated_at = now()
     from completed
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
@@ -787,6 +800,17 @@ with completion_eligibility as materialized (
     where id in (select id from reservation)
       and exists (select 1 from capacity_release)
     returning id
+), render_job as (
+    insert into recording_jobs (
+        id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+        payload_schema_version, state, priority, available_at, attempt_limit
+    )
+    select gen_random_uuid(), completed.tenant_id, completed.episode_id, completed.recording_id,
+        'render', 'render:' || completed.recording_id::text,
+        sqlc.arg(payload_schema_version), 'pending', sqlc.arg(priority), now(), sqlc.arg(attempt_limit)
+    from completed
+    where exists (select 1 from reservation_release)
+    on conflict (recording_id, kind) do nothing
 ), transcription_job as (
     insert into recording_jobs (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,

@@ -95,8 +95,9 @@ type recordingSourceResponse struct {
 }
 
 type recordingTranscriptionPreparationResponse struct {
-	Status    recordingpipeline.TranscriptionPreparationStatus `json:"status"`
-	ExpiresAt *string                                          `json:"expires_at,omitempty"`
+	Status      recordingpipeline.TranscriptionPreparationStatus `json:"status"`
+	ExpiresAt   *string                                          `json:"expires_at,omitempty"`
+	FailureCode string                                           `json:"failure_code,omitempty"`
 }
 
 type requestRecordingExportResponse struct {
@@ -163,7 +164,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		if err != nil {
 			return requestRecordingExportResponse{}, err
 		}
-		if state.ExportStatus != recordingpipeline.ExportStatusReady && state.ExportStatus != recordingpipeline.ExportStatusUnavailable {
+		if state.ExportStatus != recordingpipeline.ExportStatusReady && state.ExportStatus != recordingpipeline.ExportStatusUnavailable && state.ExportStatus != recordingpipeline.ExportStatusExpired {
 			if _, err := exports.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: request.TenantID, RecordingID: request.RecordingID}); err != nil {
 				return requestRecordingExportResponse{}, err
 			}
@@ -488,7 +489,7 @@ func newRecordingResponse(recording recordings.Recording, state recordingpipelin
 }
 
 func newRecordingTranscriptionPreparationResponse(state recordingpipeline.ArtifactState) recordingTranscriptionPreparationResponse {
-	response := recordingTranscriptionPreparationResponse{Status: state.TranscriptionPreparationStatus}
+	response := recordingTranscriptionPreparationResponse{Status: state.TranscriptionPreparationStatus, FailureCode: state.TranscriptionFailureCode}
 	if state.TranscriptionSourceExpiresAt != nil {
 		expiresAt := utilities.FormatTimestamp(*state.TranscriptionSourceExpiresAt)
 		response.ExpiresAt = &expiresAt

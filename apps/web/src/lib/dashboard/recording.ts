@@ -45,7 +45,7 @@ export function videoState(recording: RecordingDTO): VideoState {
   if (recording.exportStatus === "ready") return recording.status === "completed" ? "play" : "preparing";
   if (recording.sourceStatus === "failed") return "capture_failed";
   if (recording.sourceStatus === "pending") return "capturing";
-  if (recording.sourceStatus === "expired" || recording.exportStatus === "unavailable") return "expired";
+  if (recording.sourceStatus === "expired" || recording.exportStatus === "expired" || recording.exportStatus === "unavailable") return "expired";
   if (recording.exportStatus === "pending") return "preparing";
   if (recording.exportStatus === "failed") return recording.exportRetryable ? "retryable" : "export_failed";
   return "preparable";

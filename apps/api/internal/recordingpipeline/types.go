@@ -117,6 +117,7 @@ const (
 	ExportStatusReady       ExportStatus = "ready"
 	ExportStatusFailed      ExportStatus = "failed"
 	ExportStatusUnavailable ExportStatus = "unavailable"
+	ExportStatusExpired     ExportStatus = "expired"
 )
 
 // TranscriptionPreparationStatus describes audio preparation independently of
@@ -151,6 +152,7 @@ type ArtifactState struct {
 	Retryable                    bool
 	FailureCode                  string
 	FailureMessage               string
+	TranscriptionFailureCode     string
 }
 
 type JobState string

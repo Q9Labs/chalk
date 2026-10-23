@@ -240,7 +240,7 @@ function Session({
       <div>
         {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
         <b>{note.title}</b>
-        <p>{note.detail}</p>
+        <p>{recording.failureMessage || note.detail}</p>
         {note.action === "prepare" || note.action === "retry" ? (
           <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
             {actionLabel(note.action)}

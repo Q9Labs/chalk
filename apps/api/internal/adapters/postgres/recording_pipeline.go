@@ -130,6 +130,7 @@ func mapDeferredRecordingArtifactState(row sqlc.ListRecordingDeferredArtifactSta
 		TranscriptionPolicy:            artifactpolicy.TranscriptionMode(row.TranscriptionPolicy),
 		TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationStatus(row.TranscriptionPreparationStatus),
 		TranscriptionSourceExpiresAt:   nullableTimestamp(row.TranscriptionSourceExpiresAt),
+		TranscriptionFailureCode:       row.TranscriptionFailureCode,
 		FailureCode:                    row.FailureCode, FailureMessage: row.FailureMessage,
 	}
 	if row.ExportJobID.Valid {
