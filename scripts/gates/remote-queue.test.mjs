@@ -25,7 +25,7 @@ test("queue cases that need lsof skip on hosts without it", () => {
 });
 
 test("detached queue preserves FIFO, run IDs, results and crash cleanup", () => {
-  // The suite takes about 100 s on a MacBook Air; twice that keeps a loaded runner from timing out.
+  // The suite takes about 100 s on a MacBook Air; 240 s, more than twice that, keeps a loaded runner from timing out.
   const result = spawnSync("python3", [new URL("./remote-queue-test.py", import.meta.url).pathname], { encoding: "utf8", timeout: 240000 });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stdout + result.stderr);

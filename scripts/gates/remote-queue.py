@@ -418,9 +418,14 @@ def resource_blocker(root, request):
     return None
 
 
+def waiting_kind(reason):
+    return reason and re.sub(r' [0-9]+\.[0-9] GiB <', ' <', reason)
+
+
 def record_waiting(db, reason):
-    # One queue-wide line; status shows it to every waiting client.
-    if db.execute('SELECT waiting FROM queue').fetchone()[0] != reason:
+    # One queue-wide line; status shows it to every waiting client. Readings drift on every
+    # check, so only a new kind or floor replaces it and clients print one line per wait.
+    if waiting_kind(db.execute('SELECT waiting FROM queue').fetchone()[0]) != waiting_kind(reason):
         with db:
             db.execute('UPDATE queue SET waiting=?', (reason,))
 

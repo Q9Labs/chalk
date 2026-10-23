@@ -1017,29 +1017,39 @@ def legacy_busy(*args):
     def test_resource_wait_reports_one_blocker_line_to_status_clients_and_expiry(self):
         vm_stat = self.root / 'vm_stat'
         healthy = vm_stat.read_text()
-        vm_stat.write_text(healthy.replace('524288', '1'))
+        calls = self.root / 'vm_stat.calls'
+        # Real readings drift between checks: about 1.5 to 1.8 GiB, always under the 3 GiB floor.
+        vm_stat.write_text('#!/bin/sh\n'
+                           f'n=$(cat "{calls}" 2>/dev/null || echo 0); echo $((n + 1)) > "{calls}"\n'
+                           'echo "Mach Virtual Memory Statistics: (page size of 16384 bytes)"\n'
+                           'echo "Pages free: $((98304 + n % 4 * 6554))."\necho "Pages inactive: 0."\necho "Pages speculative: 0."\n')
         self.submit('held')
         self.release_dispatcher()
-        line = 'waiting: available memory 0.0 GiB < 3 GiB floor'
+        memory = r'waiting: available memory 1\.[5-8] GiB < 3 GiB floor'
         try:
             deadline = time.monotonic() + 5
-            while self.status('held').get('waiting') != line and time.monotonic() < deadline:
+            while not self.status('held').get('waiting') and time.monotonic() < deadline:
                 time.sleep(.05)
-            self.assertEqual(self.status('held').get('waiting'), line)
+            self.assertRegex(self.status('held').get('waiting') or '', memory)
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(self.shell_client, 'held')
-                time.sleep(2.5)
+                time.sleep(5.5)  # at least two client polls while the reading drifts
                 vm_stat.write_text(healthy)
                 attached = future.result(timeout=14)
         finally:
             vm_stat.write_text(healthy)
         self.assertEqual(attached.returncode, 0, attached.stdout + attached.stderr)
-        self.assertEqual(attached.stdout.count('[remote] ' + line), 1, attached.stdout)
-        self.invoke('submit', 'disk', '--wait-seconds', '1', input=self.payload('exit 99', ['fake', 'fake', '999999999', 'fake']))
-        self.assertEqual(self.wait('disk')['result'], 76)
-        self.assertRegex((self.root / 'jobs/disk/output.log').read_text(),
-                         r'\[remote\] queue wait limit expired; waiting: free disk \d+\.\d GiB < 999999999 GiB floor\n')
-        print(f'PASS low memory showed "{line}" in status and once in the attached client; disk wait expiry named its floor', flush=True)
+        reports = [line for line in attached.stdout.splitlines() if line.startswith('[remote] waiting:')]
+        self.assertEqual(len(reports), 1, attached.stdout)
+        self.assertRegex(reports[0], memory)
+        self.invoke('submit', 'disk', '--wait-seconds', '4', input=self.payload('exit 99', ['fake', 'fake', '999999999', 'fake']))
+        expired = self.shell_client('disk')
+        self.assertEqual(expired.returncode, 76, expired.stdout + expired.stderr)
+        disk = r'waiting: free disk \d+\.\d GiB < 999999999 GiB floor'
+        self.assertEqual(len([line for line in expired.stdout.splitlines() if line.startswith('[remote] waiting:')]), 1, expired.stdout)
+        self.assertRegex(expired.stdout, r'\[remote\] queue wait limit expired; ' + disk + '\n')
+        self.assertNotIn('resource wait cleared', expired.stdout)
+        print('PASS a drifting memory reading printed one waiting line; an expired disk wait named its floor without a cleared line', flush=True)
 
     def test_slot_count_comes_from_the_queue_not_the_waker(self):
         barrier = self.root / 'release'

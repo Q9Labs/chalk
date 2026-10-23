@@ -190,10 +190,11 @@ command and socket appear in job status and logs. Cleanup failures also quaranti
 only that slot, with a 30-second retry. Evidence has at most eight holder records
 and 2,048 UTF-8 bytes; repeated connections do not append equivalent evidence.
 Queued status and clients report the blocking job IDs, errors and retry times;
-client output changes only when that report changes. While free disk or memory is
-below the admission floor, queued status carries one line such as
-`waiting: free disk 3.1 GiB < 8 GiB floor`; clients print it when it changes, and
-a wait limit that expires adds it to the final `[remote]` line. Healthy slots keep running. After a
+client output changes only when that report changes. When the next ticket has a
+free slot but free disk or memory is below its admission floor, queued status
+carries one line such as `waiting: free disk 3.1 GiB < 8 GiB floor`, with the
+reading taken when that wait began. Clients print it once per wait, and a wait
+limit that expires adds it to the final `[remote]` line. Healthy slots keep running. After a
 dispatcher restart, surviving supervisors finish and supply their saved exit codes.
 Job-specific Postgres and Redis container and volume receipts survive dispatcher crashes;
 completion and recovery remove those resources before releasing the slot.

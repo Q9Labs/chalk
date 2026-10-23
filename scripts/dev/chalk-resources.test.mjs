@@ -29,6 +29,9 @@ test("reset approval lists exactly the slot Postgres and Redis resources that re
       },
       runner: async (command, args, options) => {
         const env = options.env || {};
+        // The dev scripts fall back to the shared containers when the variable is missing.
+        if (args[0]?.endsWith("dev-postgres.sh")) touched.containers.add(env.CHALK_POSTGRES_CONTAINER ?? "chalk-postgres");
+        if (args[0]?.endsWith("dev-redis.sh")) touched.containers.add(env.CHALK_REDIS_CONTAINER ?? "chalk-redis");
         for (const name of [env.CHALK_POSTGRES_CONTAINER, env.CHALK_REDIS_CONTAINER]) if (name) touched.containers.add(name);
         for (const name of [env.CHALK_POSTGRES_VOLUME, env.CHALK_REDIS_VOLUME]) if (name) touched.volumes.add(name);
         if (command === "docker" && args[0] === "exec") {
