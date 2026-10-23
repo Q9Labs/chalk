@@ -13,8 +13,6 @@ const pnpm = `lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n     
 
 // These tests deliberately require the real scanner, not a report or CLI mock.
 test("OSV discovery enforces the tooling exception for every discovered format", { timeout: 240_000 }, async (context) => {
-  const scanner = spawnSync("osv-scanner", ["--version"], { encoding: "utf8" });
-  assert.equal(scanner.status, 0, "Install OSV-Scanner >=2.6.0 to run the real-lane regressions.");
   const formats = [
     ["npm-shrinkwrap.json", npm],
     ["package-lock.json", npm],
@@ -32,8 +30,10 @@ test("OSV discovery enforces the tooling exception for every discovered format",
   ];
   for (const [name, file, content] of cases) {
     await context.test(name, (subtest) => {
-      const root = mkdtempSync(path.join(tmpdir(), "chalk-osv-discovery-"));
-      subtest.after(() => rmSync(root, { recursive: true, force: true }));
+      const temporary = mkdtempSync(path.join(tmpdir(), "chalk-osv-discovery-"));
+      subtest.after(() => rmSync(temporary, { recursive: true, force: true }));
+      const root = path.join(temporary, ".worktrees", "checkout");
+      mkdirSync(root, { recursive: true });
       for (const script of ["osv-scanner.sh", "zod-exception.mjs", "new-vulnerabilities.mjs"]) symlinkSync(new URL(`./${script}`, import.meta.url), path.join(root, script));
       copyFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), path.join(root, "pnpm-lock.yaml"));
       copyFileSync(new URL("../../osv-scanner.toml", import.meta.url), path.join(root, "osv-scanner.toml"));
