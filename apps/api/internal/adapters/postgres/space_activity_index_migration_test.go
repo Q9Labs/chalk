@@ -13,8 +13,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/db/migrations"
 )
 
-// The recent-join index builds while the running release writes seats, so its migration must never block a seat
-// write, and a rerun must rebuild an index that an interrupted build left invalid.
+// The recent-join index is dropped and built while the running release writes seats, so its migration must never
+// block a seat write, and a rerun must replace an index that an interrupted build left invalid.
 func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 	pool := accountTenantIntegrationPool(t)
 	up := spaceActivityIndexMigrationUp(t)
@@ -36,15 +36,7 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 		go func() { built <- runStatements(ctx, builder, up) }()
 		requireWaitingOnLock(t, pool, builder)
 
-		if _, err := writer.Exec(ctx, `set statement_timeout = '2s'`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := writer.Exec(ctx, `update participants set first_joined_at = now(), name = 'Rejoined'`); err != nil {
-			t.Fatalf("seat update while the index builds: %v", err)
-		}
-		if _, err := writer.Exec(ctx, `insert into participants (tenant_id, space_id, episode_id, name, joined_at) select tenant_id, space_id, episode_id, 'New seat', now() from participants limit 1`); err != nil {
-			t.Fatalf("seat insert while the index builds: %v", err)
-		}
+		requireSeatWrites(t, writer)
 		select {
 		case err := <-built:
 			t.Fatalf("the build finished while an older transaction was open (err %v), so it never waited", err)
@@ -56,7 +48,41 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 		if err := <-built; err != nil {
 			t.Fatalf("migration: %v", err)
 		}
-		requireIndexValid(t, writer)
+		requireOneValidIndex(t, writer)
+	})
+
+	t.Run("a held-open drop leaves seat writes unblocked", func(t *testing.T) {
+		ctx := t.Context()
+		connect := seatScratchSchema(t, pool)
+		holder, builder, writer := connect(), connect(), connect()
+		if err := runStatements(ctx, writer, up[1:]); err != nil {
+			t.Fatal(err)
+		}
+		// An open transaction that read the table makes a concurrent drop wait before it can remove the index.
+		holding, err := holder.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer holding.Rollback(ctx)
+		if _, err := holding.Exec(ctx, `select count(*) from participants`); err != nil {
+			t.Fatal(err)
+		}
+		built := make(chan error, 1)
+		go func() { built <- runStatements(ctx, builder, up) }()
+		requireWaitingOnLock(t, pool, builder)
+		requireSeatWrites(t, writer)
+		select {
+		case err := <-built:
+			t.Fatalf("the drop finished while an older transaction was open (err %v), so it never waited", err)
+		default:
+		}
+		if err := holding.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-built; err != nil {
+			t.Fatalf("migration: %v", err)
+		}
+		requireOneValidIndex(t, writer)
 	})
 
 	t.Run("a plain build in a transaction would block seat writes", func(t *testing.T) {
@@ -81,45 +107,42 @@ func TestSpaceActivityIndexMigrationKeepsSeatWritesFlowing(t *testing.T) {
 		}
 	})
 
-	t.Run("a rerun rebuilds an index an interrupted build left invalid", func(t *testing.T) {
+	t.Run("a rerun after two interrupted builds leaves one valid index", func(t *testing.T) {
 		ctx := t.Context()
 		connect := seatScratchSchema(t, pool)
 		holder, builder, checker := connect(), connect(), connect()
-		holding, err := holder.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer holding.Rollback(ctx)
-		if _, err := holding.Exec(ctx, `select count(*) from participants`); err != nil {
-			t.Fatal(err)
-		}
-		interrupted := make(chan error, 1)
-		go func() {
-			_, err := builder.Exec(ctx, `create index concurrently participants_episode_recent_join_idx on participants(tenant_id, space_id, episode_id, (coalesce(first_joined_at, joined_at)) desc, id) where coalesce(first_joined_at, joined_at) is not null`)
-			interrupted <- err
-		}()
-		requireWaitingOnLock(t, pool, builder)
-		if _, err := pool.Exec(ctx, `select pg_cancel_backend($1)`, builder.PgConn().PID()); err != nil {
-			t.Fatal(err)
-		}
-		if err := <-interrupted; err == nil {
-			t.Fatal("the interrupted build succeeded")
-		}
-		if err := holding.Commit(ctx); err != nil {
-			t.Fatal(err)
-		}
-		var valid bool
-		if err := checker.QueryRow(ctx, `select indisvalid from pg_index where indexrelid = to_regclass('participants_episode_recent_join_idx')`).Scan(&valid); err != nil || valid {
-			t.Fatalf("expected an invalid leftover index: valid=%v, err=%v", valid, err)
+		for attempt := 1; attempt <= 2; attempt++ {
+			// Goose runs each statement on its own, so the drop of any earlier leftover finishes before the build starts.
+			if err := runStatements(ctx, builder, up[:1]); err != nil {
+				t.Fatalf("attempt %d drop: %v", attempt, err)
+			}
+			holding, err := holder.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := holding.Exec(ctx, `select count(*) from participants`); err != nil {
+				t.Fatal(err)
+			}
+			interrupted := make(chan error, 1)
+			go func() { interrupted <- runStatements(ctx, builder, up[1:]) }()
+			requireWaitingOnLock(t, pool, builder)
+			if _, err := pool.Exec(ctx, `select pg_cancel_backend($1)`, builder.PgConn().PID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-interrupted; err == nil {
+				t.Fatalf("attempt %d: the interrupted build succeeded", attempt)
+			}
+			if err := holding.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if valid, invalid := indexCounts(t, checker); valid != 0 || invalid != 1 {
+				t.Fatalf("attempt %d left %d valid and %d invalid indexes, want one invalid leftover", attempt, valid, invalid)
+			}
 		}
 		if err := runStatements(ctx, checker, up); err != nil {
 			t.Fatalf("rerun: %v", err)
 		}
-		requireIndexValid(t, checker)
-		var invalid int
-		if err := checker.QueryRow(ctx, `select count(*) from pg_index where indrelid = to_regclass('participants') and not indisvalid`).Scan(&invalid); err != nil || invalid != 0 {
-			t.Fatalf("the rerun left %d invalid indexes on participants (err %v)", invalid, err)
-		}
+		requireOneValidIndex(t, checker)
 	})
 }
 
@@ -153,9 +176,13 @@ func spaceActivityIndexMigrationUp(t *testing.T) []string {
 	return statements
 }
 
-func runStatements(ctx context.Context, conn *pgx.Conn, statements []string) error {
+type executor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func runStatements(ctx context.Context, db executor, statements []string) error {
 	for _, statement := range statements {
-		if _, err := conn.Exec(ctx, statement); err != nil {
+		if _, err := db.Exec(ctx, statement); err != nil {
 			return err
 		}
 	}
@@ -208,8 +235,36 @@ func requireWaitingOnLock(t *testing.T, pool *pgxpool.Pool, conn *pgx.Conn) {
 	t.Fatal("the index build never waited on the open transaction")
 }
 
-func requireIndexValid(t *testing.T, conn *pgx.Conn) {
+// requireSeatWrites updates and inserts seats with a 2 s statement timeout, so a lock that blocks seat writes fails it.
+func requireSeatWrites(t *testing.T, writer *pgx.Conn) {
 	t.Helper()
+	ctx := t.Context()
+	if _, err := writer.Exec(ctx, `set statement_timeout = '2s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Exec(ctx, `update participants set first_joined_at = now(), name = 'Rejoined'`); err != nil {
+		t.Fatalf("seat update during the migration: %v", err)
+	}
+	if _, err := writer.Exec(ctx, `insert into participants (tenant_id, space_id, episode_id, name, joined_at) select tenant_id, space_id, episode_id, 'New seat', now() from participants limit 1`); err != nil {
+		t.Fatalf("seat insert during the migration: %v", err)
+	}
+}
+
+// indexCounts counts the valid and invalid indexes on participants besides its primary key.
+func indexCounts(t *testing.T, conn *pgx.Conn) (valid, invalid int) {
+	t.Helper()
+	if err := conn.QueryRow(t.Context(), `select count(*) filter (where indisvalid), count(*) filter (where not indisvalid) from pg_index where indrelid = to_regclass('participants') and not indisprimary`).Scan(&valid, &invalid); err != nil {
+		t.Fatal(err)
+	}
+	return valid, invalid
+}
+
+// requireOneValidIndex requires the recent-join index to be the only index besides the primary key, and valid.
+func requireOneValidIndex(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	if valid, invalid := indexCounts(t, conn); valid != 1 || invalid != 0 {
+		t.Fatalf("participants has %d valid and %d invalid indexes, want only the recent-join index", valid, invalid)
+	}
 	var valid bool
 	if err := conn.QueryRow(t.Context(), `select indisvalid from pg_index where indexrelid = to_regclass('participants_episode_recent_join_idx')`).Scan(&valid); err != nil || !valid {
 		t.Fatalf("index not valid after the migration: valid=%v, err=%v", valid, err)

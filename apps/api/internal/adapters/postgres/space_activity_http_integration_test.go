@@ -264,6 +264,16 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 		select gen_random_uuid(),$1,$2,$3,'Seat '||n,array['publishAudio'],1,'left','guest',now()-n*interval '1 second',now()-n*interval '1 second' from generate_series(1,5000) n`, uuid(tenantID), uuid(liveSpaceID), uuid(liveEpisodeID)); err != nil {
 		t.Fatal(err)
 	}
+	// Time the migration's rebuild of the recent-join index on these seats.
+	var seats int
+	if err := pool.QueryRow(ctx, `select count(*) from participants`).Scan(&seats); err != nil {
+		t.Fatal(err)
+	}
+	built := time.Now()
+	if err := runStatements(ctx, pool, spaceActivityIndexMigrationUp(t)); err != nil {
+		t.Fatalf("recent-join index migration: %v", err)
+	}
+	t.Logf("recent-join index migration dropped and built the index over %d seats in %s", seats, time.Since(built).Round(time.Millisecond))
 	if _, err := pool.Exec(ctx, `analyze participants`); err != nil {
 		t.Fatal(err)
 	}
