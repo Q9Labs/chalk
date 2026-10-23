@@ -15,6 +15,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -30,6 +33,16 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 	if url == "" {
 		t.Skip("CHALK_DATABASE_URL is not set")
 	}
+	spans := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		if err := provider.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
@@ -177,8 +190,17 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 			t.Fatalf("export must reuse automatic job %s: %v", automaticID, err)
 		}
 
+		committedSpanID := ""
+		for _, span := range spans.Ended() {
+			if span.Name() == "recording.capture.complete.db_commit" {
+				committedSpanID = span.SpanContext().SpanID().String()
+			}
+		}
+		if committedSpanID == "" || committedSpanID == spanID.String() {
+			t.Fatal("completion must export its own span")
+		}
 		var events int
-		if err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where event_id=$1::uuid and journey_id=$2 and name='recording.render.queued' and state='queued' and trace_id='0123456789abcdef0123456789abcdef' and span_id='0123456789abcdef' and attributes->>'capture_job_id'=$3 and attributes->>'recording_id'=$4 and attributes->>'trigger'='automatic'`, automaticID, episodeID.Bytes(), claimed.ID.String(), reservation.RecordingID.String()).Scan(&events); err != nil || events != 1 {
+		if err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where event_id=$1::uuid and journey_id=$2 and name='recording.render.queued' and state='queued' and trace_id='0123456789abcdef0123456789abcdef' and span_id=$5 and attributes->>'capture_job_id'=$3 and attributes->>'recording_id'=$4 and attributes->>'trigger'='automatic'`, automaticID, episodeID.Bytes(), claimed.ID.String(), reservation.RecordingID.String(), committedSpanID).Scan(&events); err != nil || events != 1 {
 			t.Fatalf("automatic render must persist exactly one linked journey event after completion replay/export: events=%d err=%v", events, err)
 		}
 
