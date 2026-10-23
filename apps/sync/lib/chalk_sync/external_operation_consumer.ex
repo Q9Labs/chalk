@@ -152,13 +152,22 @@ defmodule ChalkSync.ExternalOperationConsumer do
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
     result =
-      dispatch_with_context(
-        episode,
-        operation,
-        media_plane,
-        recording_plane,
-        adapter_timeout_ms
-      )
+      case prepare_entry_leave(episode, operation) do
+        :ready ->
+          dispatch_with_context(
+            episode,
+            operation,
+            media_plane,
+            recording_plane,
+            adapter_timeout_ms
+          )
+
+        :pending ->
+          :pending
+
+        :superseded ->
+          {:terminal_failure, :participant_inactive}
+      end
 
     case result do
       {:confirmed, authority} ->
@@ -175,6 +184,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
           else: :pending
     end
   end
+
+  defp prepare_entry_leave(episode, %{name: :participant_leave} = operation),
+    do: Stateholder.prepare_entry_leave(episode, operation.external_operation_id)
+
+  defp prepare_entry_leave(_episode, _operation), do: :ready
 
   defp poll(state) do
     case state.claim_operations.(state.page_size) do

@@ -86,7 +86,7 @@ defmodule ChalkSync.ProtocolV1 do
         else: frame
 
     frame =
-      if identity.entry_generation,
+      if identity.entry_generation && Map.get(options, :entry_generation, false),
         do: Map.put(frame, "entry_generation", identity.entry_generation),
         else: frame
 

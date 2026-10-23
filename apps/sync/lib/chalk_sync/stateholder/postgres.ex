@@ -86,8 +86,25 @@ defmodule ChalkSync.Stateholder.Postgres do
          ) do
       {:ok, admitted} -> {:ok, admitted}
       {:error, {:error, reason}} -> {:error, reason}
+      {:error, {:retryable, reason}} -> {:retryable, reason}
       {:error, _reason} -> {:retryable, :dependency_unavailable}
     end
+  end
+
+  @impl ChalkSync.Stateholder
+  def prepare_entry_leave(episode, operation_id) do
+    case Postgrex.transaction(
+           Database.connection(episode),
+           &JoinSeats.prepare_leave(&1, episode, operation_id),
+           timeout: @transaction_timeout_ms
+         ) do
+      {:ok, disposition} -> disposition
+      {:error, _reason} -> :pending
+    end
+  rescue
+    _exception -> :pending
+  catch
+    :exit, _reason -> :pending
   end
 
   defp apply_lifecycle(episode, lifecycle_intent_id, identity)

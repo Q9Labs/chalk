@@ -82,6 +82,9 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:admit_entry, identity, requested})
 
   @impl ChalkSync.Stateholder
+  def prepare_entry_leave(_episode, _operation_id), do: :ready
+
+  @impl ChalkSync.Stateholder
   def record_lifecycle_failure(_episode, _lifecycle_intent_id, _reason), do: :ok
 
   @impl ChalkSync.Stateholder

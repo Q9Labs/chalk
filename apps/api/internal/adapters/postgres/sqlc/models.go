@@ -201,6 +201,7 @@ type ParticipantJoinSeat struct {
 	EntryTokenID             pgtype.Text        `json:"entry_token_id"`
 	IssuedEntryGeneration    int64              `json:"issued_entry_generation"`
 	ConfirmedEntryGeneration int64              `json:"confirmed_entry_generation"`
+	IssuedEntryExpiresAt     pgtype.Timestamptz `json:"issued_entry_expires_at"`
 }
 
 type ParticipantMediaRefresh struct {

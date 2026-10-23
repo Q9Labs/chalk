@@ -35,6 +35,7 @@ defmodule ChalkSync.Stateholder do
 
   @callback admit_entry(Identity.t(), :new | pos_integer()) ::
               {:ok, Identity.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback prepare_entry_leave(EpisodeKey.t(), String.t()) :: :ready | :pending | :superseded
   @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
               :ok | {:retryable, atom()}
   @callback pending_lifecycle_intents(pos_integer()) ::
@@ -153,9 +154,12 @@ defmodule ChalkSync.Stateholder do
     result
   end
 
-  def admit_entry(%Identity{} = identity, :legacy), do: {:ok, identity}
+  def admit_entry(%Identity{} = identity, :legacy), do: impl().admit_entry(identity, :new)
   def admit_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
   def admit_entry(%Identity{} = identity, requested), do: impl().admit_entry(identity, requested)
+
+  def prepare_entry_leave(%EpisodeKey{} = episode, operation_id),
+    do: impl().prepare_entry_leave(episode, operation_id)
 
   @spec record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
           :ok | {:retryable, atom()}

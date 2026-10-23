@@ -18,7 +18,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
   if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
-  @entry_path "/v1/sync?entry_confirmation=1"
+  @entry_path "/v1/sync?entry_confirmation=1&entry_generation=new"
 
   setup_all do
     if @database_url do
@@ -145,6 +145,128 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(resumed)
     leave_entry(connection, current, "allocated_entry_leave_001")
     assert {:error, :invalid_admission_intent} = Postgres.confirm_admission(current)
+  end
+
+  @tag :entry_generation
+  test "a claimed older Leave never reaches the provider across an admitted newer entry", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    assert {:ok, first} = Postgres.admit_entry(fixture.identity, :new)
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
+    assert {:ok, current} = Postgres.admit_entry(fixture.identity, :new)
+    {:ok, leave} = Operation.new("provider_entry_leave_001", :participant_leave, %{})
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(first, leave)
+    assert {:ok, operations} = Postgres.claim_operations(64)
+
+    {_, claimed} =
+      Enum.find(operations, fn {_, operation} -> operation.external_operation_id == id end)
+
+    {:ok, adapter} = ChalkSync.Live.MediaPlaneTestAdapter.start_link()
+    media = {ChalkSync.Live.MediaPlaneTestAdapter, adapter}
+    finalize = &Postgres.finalize_operation/3
+
+    assert :pending =
+             ChalkSync.ExternalOperationConsumer.execute_operation(
+               fixture.episode,
+               claimed,
+               media,
+               nil,
+               finalize
+             )
+
+    assert [] == ChalkSync.Live.MediaPlaneTestAdapter.calls(adapter)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
+
+    assert :terminal_failure =
+             ChalkSync.ExternalOperationConsumer.execute_operation(
+               fixture.episode,
+               claimed,
+               media,
+               nil,
+               finalize
+             )
+
+    assert [] == ChalkSync.Live.MediaPlaneTestAdapter.calls(adapter)
+    assert [["active", "joined"]] = entry_rows(connection, current)
+    leave_entry(connection, current, "provider_current_leave_001")
+  end
+
+  @tag :entry_generation
+  test "entry admission waits for already claimed provider work and an abandoned admission expires",
+       %{
+         connections: connections
+       } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    assert {:ok, first} = Postgres.admit_entry(fixture.identity, :new)
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
+    {:ok, leave} = Operation.new("claimed_entry_leave_001", :participant_leave, %{})
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(first, leave)
+    assert {:ok, _} = Postgres.claim_operations(64)
+    assert :ready = Postgres.prepare_entry_leave(fixture.episode, id)
+    assert {:retryable, :admission_pending} = Postgres.admit_entry(fixture.identity, :new)
+
+    assert {:ok, %{result: :failed}} =
+             Postgres.finalize_operation(
+               fixture.episode,
+               id,
+               {:terminal_failure, :provider_unavailable}
+             )
+
+    assert {:ok, abandoned} = Postgres.admit_entry(fixture.identity, :new)
+    {:ok, retry} = Operation.new("abandoned_entry_leave_001", :participant_leave, %{})
+    assert {:ok, %{external_operation_id: retry_id}} = Postgres.begin_operation(first, retry)
+    assert :pending = Postgres.prepare_entry_leave(fixture.episode, retry_id)
+
+    Postgrex.query!(
+      connection,
+      "update participant_join_seats set issued_entry_expires_at=now()-interval '1 second' where participant_id=$1",
+      [UUID.dump!(first.participant_id)]
+    )
+
+    assert {:error, :entry_expired} = Postgres.confirm_admission(abandoned)
+    assert :ready = Postgres.prepare_entry_leave(fixture.episode, retry_id)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, retry_id, {:confirmed, :provider})
+  end
+
+  @tag :entry_generation
+  test "legacy hello allocates ownership without extending the legacy welcome", %{
+    connections: connections,
+    port: port
+  } do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    for expected <- [3, 4] do
+      {:ok, client} = Client.connect(port, "/v1/sync")
+      on_exit(fn -> Client.close_tcp(client) end)
+      client = Client.send_json(client, hello(fixture.identity))
+      assert {:json, %{"type" => "welcome"} = welcome, _client} = Client.recv(client)
+      refute Map.has_key?(welcome, "entry_generation")
+
+      assert [[^expected]] =
+               Postgrex.query!(
+                 connection,
+                 "select confirmed_entry_generation from participant_join_seats where participant_id=$1",
+                 [UUID.dump!(fixture.identity.participant_id)]
+               ).rows
+    end
+
+    old = %{fixture.identity | entry_generation: 3}
+    current = %{fixture.identity | entry_generation: 4}
+    {:ok, leave} = Operation.new("legacy_old_entry_leave_001", :participant_leave, %{})
+
+    assert {:ok, %{result: :rejected, reason: :participant_inactive}} =
+             Postgres.begin_operation(old, leave)
+
+    leave_entry(connection, current, "legacy_current_entry_leave_001")
   end
 
   defp entry_identity(identity, generation, old_token) do

@@ -317,6 +317,9 @@ defmodule ChalkSync.Transport.SocketV1 do
       {:ok, %{result: :superseded}} ->
         stop(state, 1008, "policy violation", :admission_rejected)
 
+      {:error, :entry_expired} ->
+        stop(state, 1008, "entry timeout", :entry_timeout)
+
       {:error, reason}
       when reason in [:stale_participant_generation, :invalid_admission_intent] ->
         stop(state, 1008, "invalid token", :admission_rejected)
@@ -900,7 +903,9 @@ defmodule ChalkSync.Transport.SocketV1 do
            Coordinator.begin_recovery(
              identity,
              self(),
-             Map.put(protocol_options, :entry_confirmation, state.entry_confirmation)
+             protocol_options
+             |> Map.put(:entry_confirmation, state.entry_confirmation)
+             |> Map.put(:entry_generation, state.requested_entry_generation != :legacy)
            ) do
       start_registered_recovery(
         state,

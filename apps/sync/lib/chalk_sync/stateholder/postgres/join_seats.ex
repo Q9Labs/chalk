@@ -21,9 +21,33 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       Authority.lock_participant(connection, identity.episode, identity.participant_id)
 
     unless policy.status == "active" && participant &&
-             participant.generation == identity.participant_generation &&
-             participant.status in ["joining", "active", "leaving"] do
+             participant.generation == identity.participant_generation do
       Postgrex.rollback(connection, {:error, :invalid_admission_intent})
+    end
+
+    if participant.status in ["joining", "active", "leaving"] do
+      allocate_entry(connection, identity, requested)
+    else
+      # Recovery distinguishes expired admission from cancellation and departure.
+      identity
+    end
+  end
+
+  defp allocate_entry(connection, identity, requested) do
+    if requested == :new do
+      case Postgrex.query!(
+             connection,
+             """
+             select 1 from sync_external_operations
+             where tenant_id=$1 and space_id=$2 and episode_id=$3 and target_participant_id=$4
+               and target_participant_generation=$5 and operation_name='participant_leave'
+               and status='pending' and attempt_count > 0 limit 1
+             """,
+             Scope.participant(identity) ++ [identity.participant_generation]
+           ).rows do
+        [] -> :ok
+        _ -> Postgrex.rollback(connection, {:retryable, :admission_pending})
+      end
     end
 
     params = Scope.participant(identity) ++ [identity.participant_generation]
@@ -48,7 +72,8 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
                 Postgrex.query!(
                   connection,
                   """
-                  update participant_join_seats set issued_entry_generation=issued_entry_generation+1
+                  update participant_join_seats set issued_entry_generation=issued_entry_generation+1,
+                    issued_entry_expires_at=clock_timestamp()+interval '120 seconds'
                   where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
                   returning issued_entry_generation
                   """,
@@ -80,13 +105,16 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     case Postgrex.query!(
            connection,
            """
-           select state, issued_entry_generation from participant_join_seats
+           select state, issued_entry_generation,
+             confirmed_entry_generation >= $6 or issued_entry_expires_at > clock_timestamp()
+           from participant_join_seats
            where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
            for update
            """,
-           Enum.take(params, 5)
+           params
          ).rows do
-      [["joined", issued]] when identity.entry_generation <= issued -> :ok
+      [["joined", issued, true]] when identity.entry_generation <= issued -> :ok
+      [["joined", _issued, false]] -> Postgrex.rollback(connection, {:error, :entry_expired})
       _ -> Postgrex.rollback(connection, {:error, :invalid_admission_intent})
     end
 
@@ -126,6 +154,35 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     )
 
     :ok
+  end
+
+  # Claiming a Leave blocks later admissions. A prior admission defers its
+  # provider work until confirmation or the bounded entry lease expires.
+  def prepare_leave(connection, episode, operation_id) do
+    Transaction.configure(connection)
+    Authority.lock_control(connection, episode)
+    Authority.lock_episode(connection, episode)
+
+    case Postgrex.query!(
+           connection,
+           """
+           select operation.status,
+             seat.issued_entry_generation > coalesce((operation.payload->>'entryGeneration')::bigint,0)
+               and seat.issued_entry_expires_at > clock_timestamp()
+           from sync_external_operations operation
+           left join participant_join_seats seat
+             on seat.tenant_id=operation.tenant_id and seat.space_id=operation.space_id
+             and seat.episode_id=operation.episode_id and seat.participant_id=operation.target_participant_id
+             and seat.generation=operation.target_participant_generation
+           where operation.tenant_id=$1 and operation.space_id=$2 and operation.episode_id=$3
+             and operation.external_operation_id=$4
+           """,
+           Scope.episode(episode) ++ [UUID.dump!(operation_id)]
+         ).rows do
+      [["pending", true]] -> :pending
+      [["pending", _]] -> :ready
+      _ -> :superseded
+    end
   end
 
   def validate_leave(connection, identity, %{name: :participant_leave}) do
