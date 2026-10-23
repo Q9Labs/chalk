@@ -6,7 +6,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Postgres.Authority
-  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.CommandDecision
   alias ChalkSync.Stateholder.Postgres.CommandPersistence
   alias ChalkSync.Stateholder.Postgres.Control
@@ -14,6 +13,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
   alias ChalkSync.Stateholder.Postgres.FaultHooks
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
   alias ChalkSync.Stateholder.Postgres.Scope

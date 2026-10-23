@@ -7,7 +7,7 @@ import { createDashboardProofFixture } from "./browser-fixture.mjs";
 // committed, the next mount reattaches that seat; if it did commit, the seat
 // refuses the key and the next mount must join with a fresh one.
 const fixture = await createDashboardProofFixture({ recordingName: "owner-leave-unconfirmed.webm", devicesMissing: true });
-const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, cleanup } = fixture;
+const { apiOrigin, origin, syncOrigin, repository, context, tenantId, userId, bindings, cleanup } = fixture;
 const page = await context.newPage();
 fixture.recordPage(page);
 try {
@@ -151,10 +151,19 @@ try {
   const mounting = await context.newPage();
   await observeEntry(mounting);
   await mounting.goto(`${origin}/dashboard`);
-  const stored = await page.evaluate(() => Object.fromEntries(Object.entries(sessionStorage)));
-  await mounting.evaluate((values) => {
-    for (const [key, value] of Object.entries(values)) sessionStorage.setItem(key, value);
-  }, stored);
+  const intentStorageName = `chalk.owner-join:${userId}:${spaceId}`;
+  const stored = await page.evaluate((name) => [sessionStorage.getItem(name), sessionStorage.getItem(`${name}:episode`)], intentStorageName);
+  assert(
+    stored.every((value) => value !== null),
+    "the unresolved join intent and Episode must be stored",
+  );
+  await mounting.evaluate(
+    ({ intentStorageName, stored }) => {
+      sessionStorage.setItem(intentStorageName, stored[0]);
+      sessionStorage.setItem(`${intentStorageName}:episode`, stored[1]);
+    },
+    { intentStorageName, stored },
+  );
   mode = "slow-leave";
   const leave = page.getByRole("button", { name: "Leave call", exact: true });
   const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
