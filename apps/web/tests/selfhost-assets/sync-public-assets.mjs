@@ -1,13 +1,49 @@
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 
 const webRoot = resolve(import.meta.dirname, "../..");
 const repoRoot = resolve(webRoot, "../..");
+const require = createRequire(import.meta.url);
+const { Miniflare } = createRequire(require.resolve("wrangler/package.json"))("miniflare");
+
+test("a clean release serves the previous release's lazy-loaded immutable assets", async () => {
+  const assets = await createFixture();
+  let runtime;
+  try {
+    const source = await readFile(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), "utf8");
+    const pinned = Object.fromEntries([...source.matchAll(/(\w+_ASSET_(?:VERSION|DIGEST)) = "([^"]+)"/g)].map(([, name, value]) => [name, value]));
+    const oldFiles = [`chalk-whiteboard/${pinned.EXCALIDRAW_ASSET_VERSION}-${pinned.EXCALIDRAW_ASSET_DIGEST}/fonts/Assistant/Assistant-Regular.woff2`, `chalk-mathjax/${pinned.MATHJAX_ASSET_VERSION}-${pinned.MATHJAX_ASSET_DIGEST}/tex-svg.js`];
+    const oldBytes = await Promise.all(oldFiles.map((path) => readFile(join(webRoot, "public", path))));
+
+    // Only Git inputs survive the fresh checkout used by both release builders.
+    const tracked = spawnSync("git", ["ls-files", "-z", "--", "apps/web/immutable-assets"], { cwd: repoRoot, encoding: "utf8" });
+    assert.equal(tracked.status, 0, tracked.stderr);
+    for (const path of tracked.stdout.split("\0").filter(Boolean)) {
+      const destination = join(assets.fixture, path);
+      await mkdir(dirname(destination), { recursive: true });
+      await cp(join(repoRoot, path), destination);
+    }
+    // The newly installed fixture bytes give both libraries new digest URLs.
+    const current = await assets.pinDigests();
+    assert.notEqual(current.EXCALIDRAW_ASSET_DIGEST, pinned.EXCALIDRAW_ASSET_DIGEST);
+    assert.notEqual(current.MATHJAX_ASSET_DIGEST, pinned.MATHJAX_ASSET_DIGEST);
+    runtime = new Miniflare({ modules: true, script: "export default { fetch(request, env) { return env.ASSETS.fetch(request) } }", compatibilityDate: "2026-07-01", assets: { directory: assets.publicDir, binding: "ASSETS" } });
+    for (const [index, path] of oldFiles.entries()) {
+      const response = await runtime.dispatchFetch(`http://chalk.test/${path}`);
+      assert.equal(response.status, 200, `previous release's ${path}`);
+      assert.deepEqual(Buffer.from(await response.arrayBuffer()), oldBytes[index]);
+    }
+  } finally {
+    await runtime?.dispose();
+    await assets.remove();
+  }
+});
 
 test("parallel Vite starts publish public assets once, without racing or rewriting served files", async () => {
   const assets = await createFixture();
@@ -102,6 +138,7 @@ async function createFixture() {
     );
 
   return {
+    fixture,
     excalidraw,
     publicDir: join(fixture, "apps/web/public"),
     async sync(count) {
