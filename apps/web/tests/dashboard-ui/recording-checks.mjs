@@ -49,7 +49,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
           return route.fulfill({ response, json: { ...data, recordings: [newer, older] } });
         }
         const action = route.request().postDataJSON();
-        if (action.action === "transcripts" && action.recordingId === newerId) return route.fulfill({ json: { transcripts: [newerTranscript()], nextCursor: null } });
+        if (action.action === "transcripts" && action.recordingId === newerId) return route.fulfill({ json: { transcripts: [newerTranscript()] } });
         if (action.action === "transcript-document" && action.transcriptId === transcriptId) return route.fulfill({ json: { cues: [{ startMs: 0, endMs: 1000, text: "Newer finished transcript", speaker: null }] } });
         return route.continue();
       });

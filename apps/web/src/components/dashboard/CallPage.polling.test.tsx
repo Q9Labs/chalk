@@ -179,7 +179,7 @@ it("keeps fresh recording fields and the previous transcript list while retrying
     .mockResolvedValue(status);
   vi.mocked(act)
     .mockRejectedValueOnce(new DashboardRequestError(503, "service_unavailable"))
-    .mockResolvedValueOnce({ transcripts: [{ ...transcript, status: "complete" }], nextCursor: null });
+    .mockResolvedValueOnce({ transcripts: [{ ...transcript, status: "complete" }] });
   await reactAct(async () => {
     render(<CallPage spaceId="space" />);
   });
@@ -189,7 +189,7 @@ it("keeps fresh recording fields and the previous transcript list while retrying
     });
   expect(screen.getByText("Transcript processing")).toBeTruthy();
   expect(vi.mocked(readPage).mock.calls.filter(([page]) => page === "call-metadata")).toHaveLength(1);
-  expect(vi.mocked(act).mock.calls).toEqual([["past-session", { action: "transcripts", spaceId: "space", episodeId: "episode", recordingId: "recording" }]]);
+  expect(vi.mocked(act).mock.calls).toEqual([["past-session", { action: "transcripts", spaceId: "space", episodeId: "episode", recordingId: "recording", view: "call" }]]);
   for (let second = 25; second <= 40; second += 5)
     await reactAct(async () => {
       await vi.advanceTimersByTimeAsync(5000);
@@ -236,4 +236,52 @@ it("reads an idle Call overview at most once per period across repeated tab resu
   });
   await resume();
   expect(pages()).toEqual(["call", "call-status", "call-status"]);
+});
+
+it.each([403, 404, 410].flatMap((statusCode) => [false, true].map((previous) => ({ statusCode, previous }))))("keeps the Call page after list $statusCode (previous list: $previous) and retires the retry", async ({ statusCode, previous }) => {
+  const recording = {
+    id: "recording",
+    status: "completed",
+    sourceStatus: "available",
+    exportStatus: "ready",
+    exportRetryable: false,
+    failureMessage: null,
+    transcriptionStatus: "ready",
+    sourceExpiresAt: null,
+    transcriptionExpiresAt: null,
+    createdAt: "2026-10-21T00:00:00Z",
+  } satisfies CallPageDTO["episodes"][number]["recordings"][number];
+  const episode = {
+    id: "episode",
+    status: "ended",
+    startedAt: "2026-10-21T00:00:00Z",
+    endedAt: "2026-10-21T00:05:00Z",
+    participantCount: 1,
+    recordingsNextCursor: null,
+    recordings: [previous ? { ...recording, status: "pending", transcripts: [{ id: "previous", status: "preparing", languages: ["en"], createdAt: recording.createdAt }] } : recording],
+  } satisfies CallPageDTO["episodes"][number];
+  const status = { latestEpisodeId: episode.id, episode: null, knocks: [] };
+  vi.mocked(readPage)
+    .mockResolvedValueOnce({ ...initial, call: { ...initial.call, admission: "anyone" }, episodes: [episode] })
+    .mockImplementation(async (page) => (page === "call-metadata" ? { kind: "recording", recording } : status));
+  vi.mocked(act).mockRejectedValue(new DashboardRequestError(statusCode, "recording_not_found"));
+  await reactAct(async () => {
+    render(<CallPage spaceId="space" />);
+  });
+  for (let second = 5; second <= 20; second += 5)
+    await reactAct(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(readPage).mock.calls.filter(([page]) => page === "call-metadata")).toHaveLength(previous ? 1 : 0);
+  expect(screen.queryByText("Couldn’t load this call")).toBeNull();
+  expect(screen.getByText("Transcript unavailable")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: initial.call.name })).toBeTruthy();
+  for (let second = 25; second <= 60; second += 5)
+    await reactAct(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(readPage).mock.calls.filter(([page]) => page === "call-metadata")).toHaveLength(previous ? 1 : 0);
+  expect(screen.getByText("Transcript unavailable")).toBeTruthy();
 });

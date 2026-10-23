@@ -201,7 +201,6 @@ const recordingsFor = (episode, withTranscripts) =>
           ...(withTranscripts
             ? {
                 transcripts: state.recordingScenario ? transcriptsFor(episode.endedAt) : state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }],
-                transcriptsNextCursor: null,
               }
             : {}),
         },
@@ -313,7 +312,7 @@ async function dashboard(request, response, page, url, entry) {
         lastLeftAt: i === 3 ? plus(episode.startedAt, length - 7) : null,
       }));
       // Like the server, a past session lists each recording's transcripts.
-      const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt), transcriptsNextCursor: null }));
+      const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt) }));
       return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
     if (page === "developer")
@@ -357,7 +356,7 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, { recording: recordingsFor(data.sessions[0], false)[0] });
     case "transcripts":
       if (state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
-      return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()), nextCursor: null });
+      return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()) });
     case "create-transcript":
       if (state.transcript !== "none") return fail(response, 409, "transcript_already_exists");
       state.transcript = "processing";

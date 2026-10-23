@@ -10,7 +10,7 @@ export const knockDecisionAction = z.enum(["approve", "deny"]).nullable();
 export const pageQuery = z.strictObject({ cursor: z.string().max(1024).optional() });
 export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(1024).optional() });
 export const callStatusQuery = z.strictObject({ spaceId: id });
-export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
+export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id, view: z.enum(["call", "past-session"]).optional() }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
 export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
 /** The most rows Home lists. One status check covers them all with one engine read, and 300 ids fit in a GET URL. */
 export const HOME_STATUS_ROWS = 300;
@@ -45,7 +45,7 @@ export const pastAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("create-transcript"), spaceId: id, episodeId: id, recordingId: id, languages: z.array(z.string().trim().min(1).max(32)).min(1).max(16), idempotencyKey }),
   z.strictObject({ action: z.literal("recording-url"), spaceId: id, episodeId: id, recordingId: id, download: z.boolean() }),
   z.strictObject({ action: z.literal("export-recording"), spaceId: id, episodeId: id, recordingId: id, idempotencyKey }),
-  z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, cursor: z.string().max(1024).optional() }),
+  z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, view: z.enum(["call", "past-session"]).optional() }),
   z.strictObject({ action: z.literal("transcript-document"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("transcript-url"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("delete-transcript"), spaceId: id, episodeId: id, transcriptId: id }),
@@ -125,7 +125,6 @@ export type RecordingDTO = {
   transcriptionExpiresAt: string | null;
   createdAt: string;
   transcripts?: TranscriptDTO[];
-  transcriptsNextCursor?: string | null;
 };
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };

@@ -22,10 +22,10 @@ async function readItem(ids: Ids, due: Due): Promise<(item: Attempt) => Attempt>
       return (item) => ({ ...item, lines: { transcriptId: due.transcriptId, cues, read: succeeded(Date.now()) } });
     }
     if (due.kind === "transcripts") {
-      const { transcripts, nextCursor } = await act("past-session", { action: "transcripts", ...ids, recordingId: due.id });
-      return (item) => ({ ...item, recording: { ...item.recording, transcripts, transcriptsNextCursor: nextCursor }, listRead: succeeded(Date.now()) });
+      const { transcripts } = await act("past-session", { action: "transcripts", ...ids, recordingId: due.id });
+      return (item) => ({ ...item, recording: { ...item.recording, transcripts }, listRead: succeeded(Date.now()) });
     }
-    const { data, offset } = await readPageTimed("call-metadata", { kind: "recording", spaceId: ids.spaceId, id: due.id });
+    const { data, offset } = await readPageTimed("call-metadata", { kind: "recording", spaceId: ids.spaceId, id: due.id, view: "past-session" });
     if (data.kind !== "recording") return (item) => item;
     // The server lists the recording's transcripts in the same read when it can, which also answers the list. When it
     // can't, the list may have missed a transcript made since, so it is read on its own next.

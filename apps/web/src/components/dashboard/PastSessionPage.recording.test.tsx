@@ -148,7 +148,7 @@ async function route(input: string, init?: RequestInit): Promise<Response> {
     const response =
       metadataStatus !== 200 && (failedMetadata === null || failedMetadata === key)
         ? Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus })
-        : Response.json({ kind: "recording", recording: { ...recording(), id: key, ...(transcriptHTTPStatus === 200 ? { transcripts: transcriptsOf(key), transcriptsNextCursor: null } : {}) } });
+        : Response.json({ kind: "recording", recording: { ...recording(), id: key, ...(transcriptHTTPStatus === 200 ? { transcripts: transcriptsOf(key) } : {}) } });
     inFlight.set(key, (inFlight.get(key) ?? 0) + 1);
     maxInFlight = Math.max(maxInFlight, inFlight.get(key) ?? 0);
     if (metadataDelayMs) await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
@@ -156,7 +156,7 @@ async function route(input: string, init?: RequestInit): Promise<Response> {
     return response;
   }
   if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
-  if (body?.action === "transcripts") return Response.json({ transcripts: transcriptsOf(body.recordingId), nextCursor: null });
+  if (body?.action === "transcripts") return Response.json({ transcripts: transcriptsOf(body.recordingId) });
   if (body?.action === "transcript-document" && body.transcriptId === failedDocument) return Response.json({ error: { code: "transcript_not_found" } }, { status: documentHTTPStatus });
   if (body?.action === "transcript-document") return Response.json({ cues: [{ startMs: 0, endMs: 1000, text: body.transcriptId === "older-transcript" ? "Older speech" : "Saved speech", speaker: null }] });
   if (body?.action === "export-recording" && exportHTTPStatus !== 202) return Response.json({ error: { code: "recording.not_ready" } }, { status: exportHTTPStatus });
@@ -180,7 +180,7 @@ async function route(input: string, init?: RequestInit): Promise<Response> {
       episode: { id, status: "ended", startedAt: date, endedAt: date },
       attendance: { kind: "available", participants: [] },
       // The server leaves an attempt unlisted when its transcript list fails, rather than failing the session (engine.ts).
-      recordings: [recording(), ...extraRecordings].map((item) => (transcriptHTTPStatus === 200 ? { ...item, transcripts: transcriptsOf(item.id), transcriptsNextCursor: null } : item)),
+      recordings: [recording(), ...extraRecordings].map((item) => (transcriptHTTPStatus === 200 ? { ...item, transcripts: transcriptsOf(item.id) } : item)),
       nextCursor: null,
     });
   throw new Error(`Unexpected request: ${path}`);

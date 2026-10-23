@@ -43,7 +43,6 @@ function recording(cell: Cell, index: number) {
       }),
     ),
     transcripts: [],
-    transcriptsNextCursor: null,
   };
 }
 

@@ -36,7 +36,6 @@ function tracked(cell: Cell, index: number, buried: boolean) {
     transcriptionExpiresAt: null,
     createdAt: new Date(START - index * 60_000).toISOString(),
     transcripts: buried ? ["failed", "deleted", "failed", "deleted", "failed", "complete"].map((status, generation) => ({ id: `${id(index)}-transcript-${generation}`, status, languages: ["en"], createdAt: new Date(START - generation * 60_000).toISOString() })) : [],
-    transcriptsNextCursor: null,
   };
   const item = attempt(recording, 0, START);
   if (cell.read === "readable") return item;

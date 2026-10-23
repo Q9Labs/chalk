@@ -310,8 +310,9 @@ These are names, not avatar URLs. Empty history returns `null` and an empty list
 
 Call returns five Episodes per page. Each row contains its attendance count and
 up to five recordings. Each recording includes up to five transcript summaries.
-`recordingsNextCursor` and `transcriptsNextCursor` identify incomplete lists. The
-Past session page and transcript action expose their existing paginated reads.
+`recordingsNextCursor` identifies an incomplete recording list. Past sessions
+read one page of up to 100 transcript summaries per recording (the API maximum);
+the overview keeps five. Transcript cursors are neither returned nor followed.
 `live` uses the batch live-Episode read, independently of the history cursor.
 The API does not return a total Episode count, so the DTO does not invent one.
 

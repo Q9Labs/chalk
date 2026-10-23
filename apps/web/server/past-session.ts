@@ -18,7 +18,7 @@ export async function pastSessionPage(engine: Engine, spaceId: string, episodeId
     episode: episodeDTO(episode),
     attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
     // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
-    recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording))),
+    recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, "past-session"))),
     nextCursor: recordings.pagination.next_cursor,
   };
 }
@@ -43,7 +43,7 @@ export async function pastMutation(engine: Engine, action: PastSessionAction) {
         return { transcript: transcriptDTO(result.transcript) };
       }
       case "transcripts": {
-        return recordingTranscripts(engine, params.recording_id, action.cursor);
+        return recordingTranscripts(engine, params.recording_id, action.view);
       }
     }
   }

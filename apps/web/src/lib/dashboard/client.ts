@@ -60,7 +60,7 @@ type Results = {
   "create-transcript": { transcript: TranscriptDTO };
   "recording-url": ArtifactURLDTO;
   "export-recording": { recording: RecordingDTO };
-  transcripts: { transcripts: TranscriptDTO[]; nextCursor: string | null };
+  transcripts: { transcripts: TranscriptDTO[] };
   "transcript-document": { cues: CueDTO[] };
   "transcript-url": ArtifactURLDTO;
   "delete-transcript": Ok;

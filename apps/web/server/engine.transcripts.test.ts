@@ -2,6 +2,9 @@ import { Effect, Schema } from "effect";
 import { createChalkEffectClient, RecordingSchema, TenantIdSchema } from "@q9labsai/chalk-client/effect";
 import { expect, it } from "vitest";
 import { listedRecording } from "./engine";
+import { recordingDTO } from "./dto";
+import { callMetadata } from "./call";
+import { pastMutation } from "./past-session";
 
 const id = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 const date = "2026-10-22T12:00:00Z";
@@ -23,55 +26,46 @@ const recording = Schema.decodeUnknownSync(RecordingSchema)({
 });
 const transcript = (index: number, status: string) => ({ id: id(index), tenant_id: id(2), space_id: id(3), episode_id: id(4), recording_id: id(1), generation: 1, status, languages: ["en"], created_at: date, updated_at: date });
 
-it("follows the cursor past five failed or deleted rows to a completed transcript", async () => {
-  const cursors: (string | null)[] = [];
+it.each(["call", "past-session"] as const)("reads exactly one %s transcript page and discards its continuation", async (view) => {
+  const requests: URL[] = [];
+  const pageSize = view === "call" ? 5 : 100;
   const api = await Effect.runPromise(
     createChalkEffectClient({
       baseUrl: "https://api.chalk.test",
       fetch: async (input) => {
-        const cursor = new URL(String(input)).searchParams.get("cursor");
-        cursors.push(cursor);
-        const first = cursor === null;
-        return Response.json({ pagination: { page_size: 5, has_more: true, next_cursor: first ? "older" : "oldest" }, transcripts: first ? Array.from({ length: 5 }, (_, index) => transcript(index + 10, index % 2 ? "deleted" : "failed")) : [transcript(20, "complete")] });
+        const url = new URL(String(input));
+        requests.push(url);
+        const rows = Array.from({ length: pageSize }, (_, index) => transcript(index + 10, index === 99 ? "complete" : index % 2 ? "deleted" : "failed"));
+        return Response.json({ pagination: { page_size: pageSize, has_more: true, next_cursor: "more" }, transcripts: rows });
       },
     }),
   );
-  const result = await listedRecording({ api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" }, recording);
-  expect(cursors).toEqual([null, "older"]);
-  expect(result.transcripts?.map((row) => row.status)).toEqual(["failed", "deleted", "failed", "deleted", "failed", "complete"]);
-  expect(result.transcriptsNextCursor).toBe("oldest");
+  const result = await listedRecording({ api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" }, recording, view);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.searchParams.get("page_size")).toBe(String(pageSize));
+  expect(requests[0]?.searchParams.has("cursor")).toBe(false);
+  expect(result.transcripts).toHaveLength(pageSize);
+  expect(result.transcripts?.some((row) => row.status === "complete")).toBe(view === "past-session");
+  expect(Object.keys(result)).toEqual([...Object.keys(recordingDTO(recording)), "transcripts"]);
 });
 
-it("caps a transcript search at five pages and retains its continuation cursor", async () => {
-  let pages = 0;
+it.each(["call", "past-session"] as const)("keeps %s metadata and list retries at the same single-page size", async (view) => {
+  const requests: URL[] = [];
   const api = await Effect.runPromise(
     createChalkEffectClient({
       baseUrl: "https://api.chalk.test",
-      fetch: async () => {
-        pages++;
-        return Response.json({ pagination: { page_size: 5, has_more: true, next_cursor: `page-${pages}` }, transcripts: [transcript(10 + pages, "deleted")] });
+      fetch: async (input) => {
+        const url = new URL(String(input));
+        requests.push(url);
+        return url.pathname.endsWith(`/recordings/${recording.id}`) ? Response.json(recording) : Response.json({ pagination: { page_size: view === "call" ? 5 : 100, has_more: true, next_cursor: "more" }, transcripts: [] });
       },
     }),
   );
-  const result = await listedRecording({ api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" }, recording);
-  expect(pages).toBe(5);
-  expect(result.transcripts).toHaveLength(5);
-  expect(result.transcriptsNextCursor).toBe("page-5");
-});
-
-it("stops at the end of a list without a completed transcript", async () => {
-  let pages = 0;
-  const api = await Effect.runPromise(
-    createChalkEffectClient({
-      baseUrl: "https://api.chalk.test",
-      fetch: async () => {
-        pages++;
-        return Response.json({ pagination: { page_size: 5, has_more: false, next_cursor: null }, transcripts: [transcript(10, "failed")] });
-      },
-    }),
-  );
-  const result = await listedRecording({ api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" }, recording);
-  expect(pages).toBe(1);
-  expect(result.transcripts?.map((row) => row.status)).toEqual(["failed"]);
-  expect(result.transcriptsNextCursor).toBeNull();
+  const engine = { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" };
+  await callMetadata(engine, { kind: "recording", spaceId: recording.space_id, id: recording.id, view });
+  const result = await pastMutation(engine, { action: "transcripts", spaceId: recording.space_id, episodeId: recording.episode_id, recordingId: recording.id, view });
+  const lists = requests.filter((url) => url.pathname.endsWith("/transcripts"));
+  expect(lists.map((url) => url.searchParams.get("page_size"))).toEqual([String(view === "call" ? 5 : 100), String(view === "call" ? 5 : 100)]);
+  expect(lists.every((url) => !url.searchParams.has("cursor"))).toBe(true);
+  expect(result).toEqual({ transcripts: [] });
 });
