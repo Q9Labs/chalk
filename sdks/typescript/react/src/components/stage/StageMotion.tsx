@@ -1,5 +1,6 @@
 import React, { Component, type ReactNode, type RefObject } from "react";
 import { captureFlip } from "../../internal/call-motion";
+import { WHITEBOARD_ITEM_ID } from "./stage-items";
 
 interface StageMotionProps {
   readonly rootRef: RefObject<HTMLDivElement | null>;
@@ -27,7 +28,9 @@ export class StageMotion extends Component<StageMotionProps> {
   override getSnapshotBeforeUpdate(previous: StageMotionProps): StageSnapshot | null {
     if (!this.props.animate || !this.animationsSupported() || previous.motionKey === this.props.motionKey) return null;
     const elements = this.elements();
-    return { play: captureFlip(elements), previous: new Set(elements) };
+    // The live canvas measures its viewport during layout; transforms would
+    // leave its renderer using an intermediate size and pointer origin.
+    return { play: captureFlip(elements.filter((element) => element.dataset.stageItem !== WHITEBOARD_ITEM_ID)), previous: new Set(elements) };
   }
 
   override componentDidUpdate(previous: StageMotionProps, _state: unknown, snapshot: StageSnapshot | null): void {
@@ -60,10 +63,12 @@ export class StageMotion extends Component<StageMotionProps> {
       } else if (entering.has(element)) {
         const transform = getComputedStyle(element).transform;
         const enter = element.animate(
-          [
-            { opacity: 0, transform: `${transform} scale(.97)` },
-            { opacity: 1, transform },
-          ],
+          element.dataset.stageItem === WHITEBOARD_ITEM_ID
+            ? [{ opacity: 0 }, { opacity: 1 }]
+            : [
+                { opacity: 0, transform: `${transform} scale(.97)` },
+                { opacity: 1, transform },
+              ],
           { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
         );
         enter.startTime = frameTime;
