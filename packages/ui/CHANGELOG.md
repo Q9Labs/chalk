@@ -3,6 +3,7 @@
 ## 5.1.0
 
 - Round the call's corners and lift board messages clear of the controls. This is a stylesheet change with no API changes.
+- Stack call notices below the reaction tray (`z-index` 45 instead of 90), and leave room for `@q9labsai/chalk-react` to lift them clear while the tray is open.
 
 See the [project changelog](../../CHANGELOG.md) for the coordinated v5.1 release.
 

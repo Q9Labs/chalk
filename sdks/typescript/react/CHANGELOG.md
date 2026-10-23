@@ -11,6 +11,7 @@
 - The call board now shows Chalk's own controls instead of the stock Excalidraw ones, with Follow and Bring everyone. `Stage` adds optional `followingId`, `onFollowChange` and `clickAction` (`"pin"` or `"follow"`); `SpaceStage` adds `colorScheme` and `onCloseBoard`; `SpaceView` shares and follows board views through the client's `sendView`.
 - Keep Follow, Clear and Undo on the board scene where they started, so a scene change cannot restore or follow into another scene. Redo brings back undone text, and small drawings open at 100% zoom at most.
 - Label screen shares of unknown surfaces plainly instead of guessing what is being shared.
+- Lift call notices clear of an open reaction tray, so the tray and the notices stay readable together.
 - Keep chat messages still while the clock ticks instead of re-rendering and jumping the scroll position.
 - Show recovery notices without blocking the call, keep chat readable, and disable reaction sending and media enable controls until Sync is live. Local mute, private camera preview, device menus, and hand controls stay available.
 - Omit the reference when the host has no known error code instead of inventing an internal-error reference.

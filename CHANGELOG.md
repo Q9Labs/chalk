@@ -7,9 +7,12 @@
 - Board: the call's board shows Chalk's own controls with Follow and Bring everyone. New public APIs: `ChalkWhiteboardView` and `sendView()` in the client, `followingId`, `onFollowChange` and `clickAction` on the React `Stage`, and a headless `WhiteboardCanvas` in `@q9labsai/chalk-whiteboard`. Scene-scoped Follow, Clear and Undo, Redo for undone text, and 100% maximum initial zoom fix earlier board behavior.
 - Client: export `isChalkAccessGrantError` from the server entry point, and add `decision_state` and `decision_action` to admission responses.
 - React: keep chat messages still while the clock ticks.
+- React: add optional `CallLimbo.className` for the message card, and lift call notices clear of an open reaction tray.
 - UI: round call corners and lift board messages in the stylesheet.
+- UI: stack call notices below the reaction tray instead of over it.
 - Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
-- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, then retry. React Native keeps a 30-second opening deadline, or `syncStartupTimeoutMs` when set, before it retries. Capture a fresh microphone after its track ended.
+- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, or in React Native to 30 seconds or `syncStartupTimeoutMs`. The whiteboard, and Sync once the call is live, retry a timed-out attempt. During first join the deadline ends with the startup wait, so a Sync socket that never opens fails the join instead of retrying. Capture a fresh microphone after its track ended.
+- Client: report a chat send that Sync refuses for sending too fast as recoverable `command.rate_limited`, and one it refuses while overloaded as recoverable `collaboration.unavailable`, instead of `chat.payload_invalid`.
 - React: label screen shares of unknown surfaces plainly.
 - React Native: size the call from the enclosing safe-area frame instead of the window, so calls in a smaller container lay out for that container.
 - React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
