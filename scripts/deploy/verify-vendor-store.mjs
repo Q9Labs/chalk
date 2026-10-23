@@ -16,11 +16,15 @@ export async function verifyVendorStore(target, origin = target === "nightly" ? 
   for (const key of keys) {
     const response = await fetch(new URL(`/${key}`, origin), { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000) });
     const body = Buffer.from(await response.arrayBuffer());
-    if (response.status !== 200 || response.headers.get("Content-Type") !== "text/javascript; charset=utf-8" || response.headers.get("Cache-Control") !== "public, max-age=31536000, immutable" || !body.equals(bytes))
-      throw new Error(`Vendor Worker probe failed: ${key} (status, MIME, cache or bytes)`);
+    const message = `Vendor Worker probe failed: ${key}`;
+    assert.equal(response.status, 200, message);
+    assert.equal(response.headers.get("Content-Type"), "text/javascript; charset=utf-8", message);
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=31536000, immutable", message);
+    assert.ok(body.equals(bytes), message);
     const missing = await fetch(new URL(`/${key}/missing-${randomUUID()}`, origin), { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000) });
-    await missing.body?.cancel();
-    if (missing.status !== 404 || missing.headers.get("Cache-Control") !== "no-store") throw new Error(`Vendor Worker missing-key probe failed: ${key}`);
+    await missing.arrayBuffer();
+    assert.equal(missing.status, 404, `Vendor Worker missing-key probe failed: ${key}`);
+    assert.equal(missing.headers.get("Cache-Control"), "no-store", `Vendor Worker missing-key probe failed: ${key}`);
   }
 }
 
@@ -29,3 +33,4 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   if (values.target !== "production" && values.target !== "nightly") throw new Error("--target production|nightly is required");
   await verifyVendorStore(values.target);
 }
+import assert from "node:assert/strict";
