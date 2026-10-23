@@ -238,7 +238,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              Postgrex.query!(
                connection,
                FinalizerSQL.complete_external_participant(),
-               params
+               params ++ [false, nil]
              )
 
     assert [[^first, last_leave, "left"]] =

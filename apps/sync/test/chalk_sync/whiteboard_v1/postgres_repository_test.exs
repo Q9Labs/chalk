@@ -289,7 +289,9 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
       uuid(participant.episode.space_id),
       uuid(participant.episode.episode_id),
       uuid(participant.participant_id),
-      participant.participant_generation
+      participant.participant_generation,
+      false,
+      nil
     ]
 
     ended = Enum.take(removed, 3)
