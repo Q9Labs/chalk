@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, live, run } from "./engine";
-import { callDTO, episodeDTO, recordingDTO, transcriptDTO } from "./dto";
+import { attendance, listedRecording, live, run } from "./engine";
+import { callDTO, episodeDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import { DashboardError } from "./http";
 import { knockDecisionAction, knockDecisionState, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
@@ -19,8 +19,7 @@ export async function callMetadata(engine: Engine, input: CallMetadataQuery): Pr
   if (input.kind === "recording") {
     const recording = await run(engine.api.recordings.getRecording({ params: { tenant_id: engine.tenantId, recording_id: Schema.decodeUnknownSync(RecordingIdSchema)(input.id) } }));
     if (recording.space_id !== input.spaceId) throw new DashboardError(404, "recording_not_found");
-    const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
-    return { kind: "recording", recording: { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor } };
+    return { kind: "recording", recording: await listedRecording(engine, recording, input.view) };
   }
   const transcript = await run(engine.api.transcripts.getTranscript({ params: { tenant_id: engine.tenantId, transcript_id: Schema.decodeUnknownSync(TranscriptIdSchema)(input.id) } }));
   if (transcript.space_id !== input.spaceId) throw new DashboardError(404, "transcript_not_found");
@@ -51,12 +50,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
         return {
           ...episodeDTO(episode),
           participantCount: people.participants.length,
-          recordings: await Promise.all(
-            recordings.recordings.map(async (recording) => {
-              const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
-              return { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor };
-            }),
-          ),
+          recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording))),
           recordingsNextCursor: recordings.pagination.next_cursor,
         };
       }),

@@ -672,6 +672,7 @@ export const RecordingSourceSchema = Schema.Struct({
 export type RecordingSource = typeof RecordingSourceSchema.Type;
 
 export const RecordingTranscriptionPreparationSchema = Schema.Struct({
+  expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
   status: Schema.Literals(["none", "pending", "ready", "failed", "expired"]),
 });
 export type RecordingTranscriptionPreparation = typeof RecordingTranscriptionPreparationSchema.Type;

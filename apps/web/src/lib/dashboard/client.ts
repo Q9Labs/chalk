@@ -60,7 +60,7 @@ type Results = {
   "create-transcript": { transcript: TranscriptDTO };
   "recording-url": ArtifactURLDTO;
   "export-recording": { recording: RecordingDTO };
-  transcripts: { transcripts: TranscriptDTO[]; nextCursor: string | null };
+  transcripts: { transcripts: TranscriptDTO[] };
   "transcript-document": { cues: CueDTO[] };
   "transcript-url": ArtifactURLDTO;
   "delete-transcript": Ok;
@@ -118,11 +118,19 @@ export async function signOut(): Promise<void> {
   csrfToken = undefined;
 }
 
-export function readPage<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<Pages[P]["data"]> {
+export async function readPage<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<Pages[P]["data"]> {
+  return (await readPageTimed(page, query)).data;
+}
+
+/** A page read with the server's clock offset: its `Date` header minus this page's clock, or null without one. */
+export async function readPageTimed<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<{ data: Pages[P]["data"]; offset: number | null }> {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (typeof value === "string") search.set(key, value);
   const suffix = search.size ? `?${search}` : "";
-  return send(() => fetch(`/dashboard-api/${page}${suffix}`, { headers: { Accept: "application/json" }, cache: "no-store" }));
+  const response = await fetch(`/dashboard-api/${page}${suffix}`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  const served = Date.parse(response.headers.get("Date") ?? "");
+  const offset = Number.isFinite(served) ? served - Date.now() : null;
+  return { data: await send(async () => response), offset };
 }
 
 export async function act<P extends DashboardPage, A extends Pages[P]["action"]>(page: P, action: A): Promise<Results[A["action"]]> {
@@ -172,6 +180,16 @@ function errorCode(body: unknown): string | undefined {
 
 function isSession(body: unknown): body is SessionDTO {
   return Boolean(body && typeof body === "object" && "csrfToken" in body && typeof body.csrfToken === "string" && "profile" in body && body.profile && typeof body.profile === "object");
+}
+
+/**
+ * How a failed read ends, sorted once for every page: a lost session signs in again and stops all reads, any other
+ * client error is final for what was read, and server, network and rate-limit failures are retried with backoff.
+ */
+export function failureKind(error: unknown): "sign-in" | "terminal" | "transient" {
+  if (needsSignIn(error)) return "sign-in";
+  if (error instanceof DashboardRequestError && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) return "terminal";
+  return "transient";
 }
 
 /** Whether the person has to sign in again before anything else works. */

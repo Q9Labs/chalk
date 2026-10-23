@@ -162,6 +162,25 @@ const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: null, lastActiveAt
 const episodeDTO = ({ people: _people, kept: _kept, ...episode }) => episode;
 const inviteURL = (call) => `https://chalkmeet.com/space/${call.slug}#invite=fx${call.id.slice(-6)}`;
 const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
+function recordingScenario() {
+  if (!state.recordingScenario) return {};
+  // A deadline set with expireIn closes the source window by this server's clock, as the API does.
+  const mode = state.expireAt && Date.now() >= state.expireAt ? "expired" : state.recordingScenario;
+  const failed = mode === "failed";
+  const expired = mode === "expired";
+  const pending = mode === "pending";
+  return {
+    status: mode === "export_ready" ? "completed" : "pending",
+    sourceStatus: failed ? "failed" : expired ? "expired" : pending ? "pending" : "available",
+    exportStatus: failed || expired || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
+    exportRetryable: mode === "export_failed",
+    failureMessage: failed ? "The recording capture did not complete." : expired ? "The recording source is no longer available." : ["export_failed", "export_exhausted"].includes(mode) ? "The recording export could not be completed." : null,
+    sourceExpiresAt: state.expireAt ? new Date(state.expireAt).toISOString() : null,
+    transcriptionExpiresAt: null,
+    transcriptionStatus: failed || mode === "transcript_failed" ? "failed" : expired ? "expired" : pending ? "pending" : "ready",
+  };
+}
+
 const recordingsFor = (episode, withTranscripts) =>
   episode.kept === "none"
     ? []
@@ -169,10 +188,21 @@ const recordingsFor = (episode, withTranscripts) =>
         {
           id: uuid(0x800),
           status: episode.kept === "processing" ? "processing" : "completed",
-          exportStatus: "not_requested",
-          transcriptionPending: state.transcriptionPending ?? false,
+          sourceStatus: episode.kept === "processing" ? "pending" : "available",
+          exportStatus: episode.kept === "processing" ? "unavailable" : "ready",
+          exportRetryable: false,
+          failureMessage: null,
+          transcriptionStatus: state.transcriptionPending ? "pending" : "ready",
+          sourceExpiresAt: null,
+          transcriptionExpiresAt: null,
           createdAt: episode.startedAt,
-          ...(withTranscripts ? { transcripts: state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
+          ...recordingScenario(),
+          // A recording scenario lists the same transcripts on every read, as the server's one transcript list does.
+          ...(withTranscripts
+            ? {
+                transcripts: state.recordingScenario ? transcriptsFor(episode.endedAt) : state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }],
+              }
+            : {}),
         },
       ];
 
@@ -240,6 +270,7 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, newest && !ids.includes(newest) ? { live, calls, first: homeDTO(data) } : { live, calls });
     }
     if (page === "call-metadata") {
+      if (query.kind === "recording" && state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
       const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));
       if (query.kind === "recording") return send(response, 200, { kind: "recording", recording: recordings.find((item) => item.id === query.id && item.status === "processing") ?? recordings.find((item) => item.id === query.id) });
       return send(response, 200, { kind: "transcript", transcript: recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id && item.status === "processing") ?? recordings.flatMap((item) => item.transcripts ?? []).find((item) => item.id === query.id) });
@@ -280,8 +311,9 @@ async function dashboard(request, response, page, url, entry) {
         firstJoinedAt: plus(episode.startedAt, offsets[i] ?? i * 2),
         lastLeftAt: i === 3 ? plus(episode.startedAt, length - 7) : null,
       }));
-      const recordings = recordingsFor(episode, false);
-      return send(response, 200, { episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
+      // Like the server, a past session lists each recording's transcripts.
+      const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt) }));
+      return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
     if (page === "developer")
       return send(response, 200, { allowedWebsites: data.origins, keys: data.keys.filter((key) => !key.revokedAt), webhooks: data.webhooks.map((webhook) => ({ ...webhook, lastDelivery: data.deliveries[webhook.id]?.[0] ?? null })), nextKeyCursor: null, nextWebhookCursor: null });
@@ -320,9 +352,11 @@ async function dashboard(request, response, page, url, entry) {
     case "recording-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/video.mp4`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
     case "export-recording":
-      return send(response, 200, { recording: { id: action.recordingId, status: "completed", exportStatus: "processing", transcriptionPending: false, createdAt: new Date().toISOString() } });
+      state.recordingScenario = "export_pending";
+      return send(response, 200, { recording: recordingsFor(data.sessions[0], false)[0] });
     case "transcripts":
-      return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()), nextCursor: null });
+      if (state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
+      return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()) });
     case "create-transcript":
       if (state.transcript !== "none") return fail(response, 409, "transcript_already_exists");
       state.transcript = "processing";
@@ -455,7 +489,13 @@ const server = createServer(async (request, response) => {
           } else if (key === "metadataComplete") {
             for (const session of accounts.hasan.sessions) if (session.kept === "processing") session.kept = "done";
             state.finishedTranscript = value;
-          } else if (key === "transcript") state.transcript = value;
+          } else if (key === "recordingScenario") {
+            state.recordingScenario = value;
+            state.transcript = ["available", "export_pending", "export_ready", "export_failed", "export_exhausted"].includes(value) ? "complete" : value === "transcript_failed" ? "terminal_failure" : "none";
+            accounts.hasan.live = false;
+            accounts.hasan.calls[0].admission = "anyone";
+          } else if (key === "expireIn") state.expireAt = Date.now() + Number(value) * 1000;
+          else if (key === "transcript") state.transcript = value;
           else if (key === "signInError") state.signInError = value === "1";
           else if (key === "newCall") accounts.hasan.calls.unshift({ id: uuid(0x1000 + accounts.hasan.calls.length), slug: "made-elsewhere", name: value, archived: false, admission: "knock", createdAt: new Date().toISOString() });
         }

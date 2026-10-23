@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AccessGrant } from "@q9labsai/chalk-client/effect";
+import type { AccessGrant, Recording } from "@q9labsai/chalk-client/effect";
 
 const id = z.uuid();
 const name = z.string().trim().min(1).max(120);
@@ -10,7 +10,7 @@ export const knockDecisionAction = z.enum(["approve", "deny"]).nullable();
 export const pageQuery = z.strictObject({ cursor: z.string().max(1024).optional() });
 export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(1024).optional() });
 export const callStatusQuery = z.strictObject({ spaceId: id });
-export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
+export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id, view: z.enum(["call", "past-session"]).optional() }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
 export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
 /** The most rows Home lists. One status check covers them all with one engine read, and 300 ids fit in a GET URL. */
 export const HOME_STATUS_ROWS = 300;
@@ -45,7 +45,7 @@ export const pastAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("create-transcript"), spaceId: id, episodeId: id, recordingId: id, languages: z.array(z.string().trim().min(1).max(32)).min(1).max(16), idempotencyKey }),
   z.strictObject({ action: z.literal("recording-url"), spaceId: id, episodeId: id, recordingId: id, download: z.boolean() }),
   z.strictObject({ action: z.literal("export-recording"), spaceId: id, episodeId: id, recordingId: id, idempotencyKey }),
-  z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, cursor: z.string().max(1024).optional() }),
+  z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, view: z.enum(["call", "past-session"]).optional() }),
   z.strictObject({ action: z.literal("transcript-document"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("transcript-url"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("delete-transcript"), spaceId: id, episodeId: id, transcriptId: id }),
@@ -113,7 +113,19 @@ export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
 export type CallDTO = { id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
 export type LiveDTO = { spaceId: string; episode: null | { id: string; count: number; participants: { id: string; name: string }[] } };
 export type EpisodeDTO = { id: string; status: "active" | "ending" | "ended"; startedAt: string; endedAt: string | null };
-export type RecordingDTO = { id: string; status: string; exportStatus: string; transcriptionPending: boolean; createdAt: string; transcripts?: TranscriptDTO[]; transcriptsNextCursor?: string | null };
+export type RecordingDTO = {
+  id: string;
+  status: Recording["status"];
+  sourceStatus: Recording["source"]["status"];
+  sourceExpiresAt: string | null;
+  exportStatus: Recording["export"]["status"];
+  exportRetryable: boolean;
+  failureMessage: string | null;
+  transcriptionStatus: Recording["transcription_preparation"]["status"];
+  transcriptionExpiresAt: string | null;
+  createdAt: string;
+  transcripts?: TranscriptDTO[];
+};
 export type TranscriptDTO = { id: string; status: string; languages: readonly string[]; createdAt: string };
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
@@ -130,7 +142,7 @@ export type CallPageDTO = {
   nextCursor: string | null;
   knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
-export type PastSessionDTO = { episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
+export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
 export type DeveloperDTO = AllowedWebsitesDTO & { keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
 export type SecretDTO = { id: string; secret: string };
@@ -143,4 +155,4 @@ export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<Epis
 /** `first` is the first page, sent when a call Home doesn't list is among the five newest. */
 export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "archived" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
 
-export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO & Required<Pick<RecordingDTO, "transcripts" | "transcriptsNextCursor">> } | { kind: "transcript"; transcript: TranscriptDTO };
+export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };

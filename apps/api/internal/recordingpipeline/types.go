@@ -142,11 +142,15 @@ type ArtifactState struct {
 	// policy.
 	TranscriptionPolicy            artifactpolicy.TranscriptionMode
 	TranscriptionPreparationStatus TranscriptionPreparationStatus
-	ExportJobID                    *utilities.ID
-	ExportStatus                   ExportStatus
-	Retryable                      bool
-	FailureCode                    string
-	FailureMessage                 string
+	// TranscriptionSourceExpiresAt is the transcription source's own expiry,
+	// capped by the recording source window. It is nil when transcription is
+	// disabled or no source exists yet.
+	TranscriptionSourceExpiresAt *time.Time
+	ExportJobID                  *utilities.ID
+	ExportStatus                 ExportStatus
+	Retryable                    bool
+	FailureCode                  string
+	FailureMessage               string
 }
 
 type JobState string

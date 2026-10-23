@@ -1,11 +1,12 @@
 import { Effect, Schema } from "effect";
 import { HttpClientError } from "effect/unstable/http";
-import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
+import { createChalkEffectClient, TenantIdSchema, type Recording } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
 import { dashboardWebsiteOrigin } from "../src/lib/dashboard/contracts";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
-import type { AttendanceDTO, LiveDTO } from "../src/lib/dashboard/contracts";
+import type { AttendanceDTO, LiveDTO, RecordingDTO } from "../src/lib/dashboard/contracts";
+import { recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import { readCookie, seal, unseal, writeCookie } from "./cookies";
 
@@ -86,4 +87,20 @@ export async function live(engine: Engine, spaceIds: readonly string[]): Promise
 export async function attendance(engine: Engine, params: Parameters<Engine["api"]["episodes"]["getEpisodeAttendance"]>[0]["params"]): Promise<AttendanceDTO> {
   const result = await run(engine.api.episodes.getEpisodeAttendance({ params }));
   return { kind: "available", participants: result.participants.map((p) => ({ id: p.participant_id, name: p.display_name, kind: p.identity_kind, externalId: p.external_id, firstJoinedAt: p.first_joined_at, isYou: false, lastLeftAt: p.last_left_at })) };
+}
+
+/** Each view reads one page. The API's real maximum is MaxPageSize = 100 in apps/api/internal/pagination/pagination.go:15. */
+export async function recordingTranscripts(engine: Engine, recordingId: Recording["id"], view: "call" | "past-session" = "past-session") {
+  const result = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recordingId, page_size: view === "call" ? 5 : 100 } }));
+  return { transcripts: result.transcripts.map(transcriptDTO) };
+}
+
+/** A failed list leaves the fresh recording unlisted, so a page retries only that list. */
+export async function listedRecording(engine: Engine, recording: Recording, view: "call" | "past-session" = "call"): Promise<RecordingDTO> {
+  try {
+    const result = await recordingTranscripts(engine, recording.id, view);
+    return { ...recordingDTO(recording), transcripts: result.transcripts };
+  } catch {
+    return recordingDTO(recording);
+  }
 }

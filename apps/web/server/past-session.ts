@@ -1,15 +1,26 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, RecordingIdSchema, SpaceIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, run } from "./engine";
+import { attendance, listedRecording, recordingTranscripts, run } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import type { ArtifactURLDTO, CueDTO, PastSessionAction, PastSessionDTO } from "../src/lib/dashboard/contracts";
 export async function pastSessionPage(engine: Engine, spaceId: string, episodeId: string, cursor?: string, viewerParticipantId: string | null = null): Promise<PastSessionDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
-  const [recordings, people] = await Promise.all([run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })), attendance(engine, params)]);
-  return { episode: episodeDTO(episode), attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) }, recordings: recordings.recordings.map(recordingDTO), nextCursor: recordings.pagination.next_cursor };
+  const [space, recordings, people] = await Promise.all([
+    run(engine.api.spaces.getSpace({ params: { tenant_id: engine.tenantId, space_id: params.space_id } })),
+    run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })),
+    attendance(engine, params),
+  ]);
+  return {
+    callName: space.name,
+    episode: episodeDTO(episode),
+    attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
+    // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
+    recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, "past-session"))),
+    nextCursor: recordings.pagination.next_cursor,
+  };
 }
 function artifactDTO(value: { url: string; expires_at: string; method: string; signed_headers: Readonly<Record<string, readonly string[]>> }): ArtifactURLDTO {
   return { url: value.url, expiresAt: value.expires_at, method: value.method, headers: value.signed_headers };
@@ -32,8 +43,7 @@ export async function pastMutation(engine: Engine, action: PastSessionAction) {
         return { transcript: transcriptDTO(result.transcript) };
       }
       case "transcripts": {
-        const result = await run(engine.api.transcripts.listTranscripts({ params: tenantParams, query: { recording_id: params.recording_id, page_size: 30, cursor: action.cursor } }));
-        return { transcripts: result.transcripts.map(transcriptDTO), nextCursor: result.pagination.next_cursor };
+        return recordingTranscripts(engine, params.recording_id, action.view);
       }
     }
   }

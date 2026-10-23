@@ -13523,6 +13523,16 @@
       "RecordingTranscriptionPreparation": {
         "additionalProperties": false,
         "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "enum": ["none", "pending", "ready", "failed", "expired"],
             "type": "string"

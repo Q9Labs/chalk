@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type ReactNode } from "react";
 
-import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO } from "../../lib/dashboard/contracts";
+import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
+import { workingRecording } from "../../lib/dashboard/recording";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -12,7 +13,6 @@ import { AdmissionKnocks } from "./AdmissionKnocks";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
-const pendingRecording = (recording: RecordingDTO) => recording.transcriptionPending || ["pending", "processing"].includes(recording.status) || ["pending", "processing"].includes(recording.exportStatus);
 
 type Admission = CallPageDTO["call"]["admission"];
 type Session = CallPageDTO["episodes"][number];
@@ -24,7 +24,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const pendingDecisions = useRef(new Set<string>());
   const pages = useRef(1);
-  const metadata = useRef({ after: Date.now() + 10000, next: 0 });
+  const metadata = useRef({ after: Date.now() + 10000, next: 0, unlisted: new Set<string>(), unavailable: new Set<string>() });
   const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
   const { state, reload, update } = useLoad(
     async () => {
@@ -34,6 +34,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         const older = await readPage("call", { spaceId, cursor: data.nextCursor });
         data = { ...data, episodes: [...data.episodes, ...older.episodes], nextCursor: older.nextCursor };
       }
+      metadata.current.unlisted.clear();
+      metadata.current.unavailable.clear();
       return data;
     },
     `call:${spaceId}`,
@@ -43,7 +45,13 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         lifecycleRefresh.current.pending ||
         (!data.call.archived && data.call.admission === "knock") ||
         data.live ||
-        data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => pendingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
+        data.episodes.some(
+          (episode) =>
+            episode.status !== "ended" ||
+            episode.recordings.some(
+              (recording) => workingRecording(recording) || (!metadata.current.unavailable.has(recording.id) && (recording.transcripts === undefined || metadata.current.unlisted.has(recording.id) || recording.transcripts.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))),
+            ),
+        ) ||
         data.knocks.length
           ? data.knocks.length
             ? 3000
@@ -60,7 +68,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           // Charge failed attempts too. Recheck on later ticks so the final state is fetched.
           lifecycleRefresh.current.after = Date.now() + 30000;
           const fresh = await readPage("call", { spaceId });
-          // Refresh only the newest page (at most 40 engine reads), not expanded history.
+          // Refresh only the newest page (at most 41 engine reads including Tenant resolution), not expanded history.
           // Older ended sessions remain snapshots until an explicit page refresh.
           const older = pages.current > 1 ? data.episodes.filter((item) => item.status === "ended" && !fresh.episodes.some((current) => current.id === item.id)) : [];
           lifecycleRefresh.current.pending = false;
@@ -70,11 +78,13 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         // Share one metadata request per ten seconds; recording discovery uses two reads.
         if (Date.now() < metadata.current.after) return next;
         metadata.current.after = Date.now() + 10000;
-        const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
+        const targets: (CallMetadataQuery | { kind: "live" } | { kind: "transcripts"; spaceId: string; episodeId: string; id: string })[] = data.live ? [{ kind: "live" }] : [];
         for (const session of data.episodes)
           for (const recording of session.recordings) {
-            if (pendingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
-            for (const transcript of recording.transcripts ?? []) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
+            if (workingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
+            if (metadata.current.unavailable.has(recording.id)) continue;
+            if (recording.transcripts === undefined || metadata.current.unlisted.has(recording.id)) targets.push({ kind: "transcripts", spaceId, episodeId: session.id, id: recording.id });
+            else for (const transcript of recording.transcripts) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
           }
         if (!targets.length) return next;
         const target = targets[metadata.current.next++ % targets.length];
@@ -84,6 +94,22 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           const current = roster.live[0]?.episode ?? null;
           if (current?.id !== data.live?.id) return next;
           return { ...next, live: current };
+        }
+        if (target.kind === "transcripts") {
+          let result: { transcripts: TranscriptDTO[] };
+          try {
+            result = await act("past-session", { action: "transcripts", spaceId, episodeId: target.episodeId, recordingId: target.id, view: "call" });
+          } catch (error) {
+            if (!(error instanceof DashboardRequestError) || ![403, 404, 410].includes(error.status)) throw error;
+            metadata.current.unlisted.delete(target.id);
+            metadata.current.unavailable.add(target.id);
+            return next;
+          }
+          metadata.current.unlisted.delete(target.id);
+          return {
+            ...next,
+            episodes: next.episodes.map((session) => ({ ...session, recordings: session.recordings.map((recording) => (recording.id === target.id ? { ...recording, transcripts: result.transcripts } : recording)) })),
+          };
         }
         let result: CallMetadataDTO;
         try {
@@ -100,13 +126,21 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
             })),
           };
         }
+        if (result.kind === "recording") {
+          if (result.recording.transcripts === undefined) {
+            if (!metadata.current.unavailable.has(result.recording.id)) metadata.current.unlisted.add(result.recording.id);
+          } else {
+            metadata.current.unlisted.delete(result.recording.id);
+            metadata.current.unavailable.delete(result.recording.id);
+          }
+        }
         next = {
           ...next,
           episodes: next.episodes.map((session) => ({
             ...session,
             recordings: session.recordings.map((recording) =>
               result.kind === "recording" && recording.id === result.recording.id
-                ? { ...recording, ...result.recording }
+                ? { ...recording, ...result.recording, transcripts: result.recording.transcripts ?? recording.transcripts }
                 : result.kind === "transcript"
                   ? { ...recording, transcripts: recording.transcripts?.map((transcript) => (transcript.id === result.transcript.id ? result.transcript : transcript)) }
                   : recording,
@@ -263,7 +297,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         <>
           <div className="list">
             {past.map((episode) => (
-              <SessionRow key={episode.id} spaceId={spaceId} episode={episode} />
+              <SessionRow key={episode.id} spaceId={spaceId} episode={episode} unavailableTranscripts={metadata.current.unavailable} />
             ))}
           </div>
           {nextCursor ? (
@@ -293,12 +327,13 @@ function inCall(names: readonly string[]): string {
   return `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)} are in the call.`;
 }
 
-type Kept = { readonly recording: boolean; readonly transcript: "none" | "ready" | "processing" };
+type Kept = { readonly recording: boolean; readonly transcript: "none" | "ready" | "processing" | "unavailable" };
 
 /** What a session kept: its newest recording, and that recording's best transcript. */
-function kept(recordings: readonly RecordingDTO[]): Kept {
+function kept(recordings: readonly RecordingDTO[], unavailable: ReadonlySet<string>): Kept {
   const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
   if (!recording) return { recording: false, transcript: "none" };
+  if (unavailable.has(recording.id)) return { recording: true, transcript: "unavailable" };
   const transcripts = recording.transcripts ?? [];
   if (transcripts.some((item) => item.status === "completed" || item.status === "complete")) return { recording: true, transcript: "ready" };
   if (transcripts.some((item) => PENDING_TRANSCRIPTS.has(item.status))) return { recording: true, transcript: "processing" };
@@ -308,16 +343,17 @@ function kept(recordings: readonly RecordingDTO[]): Kept {
 function keptSummary({ recording, transcript }: Kept): string {
   if (!recording) return "No recording";
   if (transcript === "ready") return "Recording and transcript";
+  if (transcript === "unavailable") return "Recording · transcript unavailable";
   if (transcript === "processing") return "Recording · transcript soon";
   return "Recording";
 }
 
-function SessionRow({ spaceId, episode }: { readonly spaceId: string; readonly episode: Session }) {
+function SessionRow({ spaceId, episode, unavailableTranscripts }: { readonly spaceId: string; readonly episode: Session; readonly unavailableTranscripts: ReadonlySet<string> }) {
   const phone = usePhone();
   const day = sessionDay(episode.startedAt);
   const range = episode.endedAt ? `${clock(episode.startedAt)} to ${clock(episode.endedAt)}` : `${clock(episode.startedAt)}, ending`;
   const length = episode.endedAt ? duration(episode.startedAt, episode.endedAt) : "";
-  const what = kept(episode.recordings);
+  const what = kept(episode.recordings, unavailableTranscripts);
   const people = `${episode.participantCount} ${episode.participantCount === 1 ? "person" : "people"}`;
   const link = <Link className="ra" to="/dashboard/call/$spaceId/session/$episodeId" params={{ spaceId, episodeId: episode.id }} aria-label={`Session ${day}, ${range}${length ? `, ${length}` : ""}, ${people}, ${what.recording ? "recorded" : "not recorded"}`} />;
   if (phone)
@@ -360,6 +396,8 @@ function SessionRow({ spaceId, episode }: { readonly spaceId: string; readonly e
                 <Icon name="clock" />
                 Transcript processing
               </span>
+            ) : what.transcript === "unavailable" ? (
+              <span>Transcript unavailable</span>
             ) : null}
           </>
         ) : (

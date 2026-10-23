@@ -165,6 +165,7 @@ func TestListRecordingsFiltersBySpaceAndBatchesArtifactStates(t *testing.T) {
 	firstRecordingID := mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be023")
 	secondRecordingID := mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be024")
 	now := time.Date(2031, 2, 3, 4, 5, 6, 0, time.UTC)
+	transcriptionExpiresAt := now.Add(24 * time.Hour)
 	service := &recordingListHTTPStub{list: recordings.RecordingList{Recordings: []recordings.Recording{
 		{ID: firstRecordingID, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Status: recordings.StatusCompleted, StorageProvider: recordings.StorageProviderR2, CreatedAt: now, UpdatedAt: now},
 		{ID: secondRecordingID, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Status: recordings.StatusCompleted, StorageProvider: recordings.StorageProviderR2, CreatedAt: now.Add(-time.Second), UpdatedAt: now},
@@ -174,6 +175,7 @@ func TestListRecordingsFiltersBySpaceAndBatchesArtifactStates(t *testing.T) {
 			SourceStatus: recordingpipeline.SourceStatusAvailable, ExportStatus: recordingpipeline.ExportStatusNone,
 			TranscriptionPolicy:            artifactpolicy.TranscriptionOnDemand,
 			TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationReady,
+			TranscriptionSourceExpiresAt:   &transcriptionExpiresAt,
 		},
 		secondRecordingID: {
 			SourceStatus: recordingpipeline.SourceStatusAvailable, ExportStatus: recordingpipeline.ExportStatusReady,
@@ -211,6 +213,9 @@ func TestListRecordingsFiltersBySpaceAndBatchesArtifactStates(t *testing.T) {
 	}
 	if body.Recordings[0].TranscriptionPreparation.Status != recordingpipeline.TranscriptionPreparationReady || body.Recordings[1].TranscriptionPreparation.Status != recordingpipeline.TranscriptionPreparationNone {
 		t.Fatalf("transcription preparation statuses=%+v", body.Recordings)
+	}
+	if first := body.Recordings[0].TranscriptionPreparation.ExpiresAt; first == nil || *first != utilities.FormatTimestamp(transcriptionExpiresAt) || body.Recordings[1].TranscriptionPreparation.ExpiresAt != nil {
+		t.Fatalf("transcription preparation expiries=%+v", body.Recordings)
 	}
 }
 

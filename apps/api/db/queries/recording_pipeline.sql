@@ -682,6 +682,8 @@ select selected.id as recording_id,
 		when transcription_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
 		else 'none'
 	end::text as transcription_preparation_status,
+	-- The transcription source has its own window, never longer than the recording source window; a disabled policy has none.
+	(case when selected.transcription_policy = 'disabled' then null else transcription_source.expires_at end)::timestamptz as transcription_source_expires_at,
 	export_job.id as export_job_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported

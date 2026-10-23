@@ -3,6 +3,11 @@ import { resolve } from "node:path";
 
 const ARCHIVED = "00000000-0000-4000-8000-000000000100";
 
+async function startVisibleRead(tab, started) {
+  await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  return Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
+}
+
 export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   for (const final of ["complete", "terminal_failure"]) {
@@ -257,7 +262,72 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     check("explicit non-polling reload still exposes its error and retry", failure && (await tab.getByRole("button", { name: "Try again" }).count()) === 1);
     await context.close();
   }
-  for (const action of ["deny", "admission", "rename"]) {
+  {
+    const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=1" });
+    // Record every label the knock row shows, and when the page has consumed the stale status body.
+    await tab.evaluate(() => {
+      const trace = (window.__denyTrace = { labels: [], armed: false, staleRead: false });
+      const sample = () => {
+        const label = [...document.querySelectorAll(".orow button")].map((button) => button.textContent).join(", ") || "<removed>";
+        if (trace.labels.at(-1) !== label) trace.labels.push(label);
+      };
+      new MutationObserver(sample).observe(document.body, { subtree: true, childList: true, characterData: true });
+      sample();
+      const json = Response.prototype.json;
+      Response.prototype.json = async function () {
+        const body = await json.call(this);
+        if (trace.armed && this.url.includes("/dashboard-api/call-status")) setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(() => (trace.staleRead = true))));
+        return body;
+      };
+    });
+    let releaseStale;
+    let releasePolls;
+    let captured;
+    const stale = new Promise((accept) => {
+      releaseStale = accept;
+    });
+    const polls = new Promise((accept) => {
+      releasePolls = accept;
+    });
+    const started = new Promise((accept) => {
+      captured = accept;
+    });
+    let reads = 0;
+    // The first read answers with pre-decision state after the decision; later polls wait so they can't hide what it did.
+    await tab.route("**/dashboard-api/call-status?*", async (route) => {
+      if (++reads > 1) {
+        await polls;
+        return route.continue();
+      }
+      const response = await route.fetch();
+      captured();
+      await stale;
+      await route.fulfill({ response });
+    });
+    const raced = await startVisibleRead(tab, started);
+    await tab.getByRole("button", { name: "Deny", exact: true }).click();
+    await tab.getByRole("button", { name: "Denying…", exact: true }).waitFor();
+    await tab.evaluate(() => (window.__denyTrace.armed = true));
+    releaseStale();
+    const consumed = await tab
+      .waitForFunction(() => window.__denyTrace.staleRead, null, { timeout: 10000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    const resurrected = (labels) => labels.slice(labels.findIndex((label) => label.includes("Denying…"))).some((label) => label.split(", ").includes("Deny"));
+    const held = await tab.evaluate(() => window.__denyTrace.labels);
+    check("stale refresh cannot undo deny", raced && consumed && !resurrected(held) && held.at(-1).includes("Denying…"), held.join(" → "));
+    releasePolls();
+    await tab
+      .locator(".orow")
+      .waitFor({ state: "hidden", timeout: 10000 })
+      .catch(() => {});
+    const settled = await tab.evaluate(() => window.__denyTrace.labels);
+    check("authoritative status removes a denied knock", !resurrected(settled) && settled.at(-1) === "<removed>", settled.join(" → "));
+    await context.close();
+  }
+  for (const action of ["admission", "rename"]) {
     const { tab, context } = await open(CALL, { set: "freshLive=1&knocks=1" });
     let release;
     let captured;
@@ -278,9 +348,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       { times: 1 },
     );
     // Force a read before the write, then deliver its stale response after the write.
-    await tab.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    const raced = await Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
-    if (action === "deny") await tab.getByRole("button", { name: "Deny", exact: true }).click();
+    const raced = await startVisibleRead(tab, started);
     if (action === "admission") await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
     if (action === "rename") {
       await tab.getByRole("button", { name: "More actions for Q9 team" }).click();
@@ -291,8 +359,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await tab.waitForTimeout(500);
     release();
     await tab.waitForTimeout(500);
-    const kept =
-      action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
+    const kept = action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
     check(`stale refresh cannot undo ${action}`, raced && kept);
     await context.close();
   }
@@ -589,6 +656,8 @@ export async function reviewPollChecks({ open, fixture, check, CALL }) {
     try {
       const initial = await reads();
       await tab.getByRole("button", { name: "Deny", exact: true }).click();
+      // Tick only after the decision is acknowledged, so the status read sees it.
+      await tab.getByRole("button", { name: "Denying…", exact: true }).waitFor();
       const settled = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
       await tab.clock.runFor(3000);
       await settled;

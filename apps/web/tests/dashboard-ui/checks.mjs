@@ -1,3 +1,4 @@
+import { installClock } from "./browser-clock.mjs";
 // Drives the dashboard build against the DTO fixture in headless Chromium and prints one line per check.
 // Usage: node dashboard-checks.mjs <playwright index.mjs> <fixture origin>
 const [playwrightPath, origin] = process.argv.slice(2);
@@ -18,10 +19,7 @@ async function open(route, { account = "hasan", set = "", signedOut = false, the
   if (!signedOut) cookies.push({ name: "fx_session", value: account, url: origin });
   await context.addCookies(cookies);
   const tab = await context.newPage();
-  if (clock) {
-    await tab.clock.install();
-    await tab.clock.pauseAt(new Date(Date.now() + 1000));
-  }
+  await installClock(tab, clock);
   tab.on("console", (message) => message.type() === "error" && errors.push(`${route}: ${message.text()}`));
   tab.on("pageerror", (error) => errors.push(`${route}: ${error.message}`));
   await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });
@@ -53,6 +51,7 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  await (await import("./recording-checks.mjs")).recordingChecks({ open, fixture, check, CALL });
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
   {
     const { tab, context } = await open("/dashboard", { set: "fail=call" });
@@ -123,7 +122,10 @@ try {
       await tab.keyboard.press("Tab");
       order.push(await focused(tab));
     }
-    check("keyboard order on Home", order.slice(0, 6).join(" | ") === "Chalk, Home | Home | Developer | Account: Hasan Shoaib | Start a call | Join with a link", order.join(" | "));
+    // The privacy notice adds its link and dismiss button until the policy update takes effect.
+    const notice = (await tab.locator(".privacy-notice").count()) === 1 ? ["See what's changing.", "Dismiss Privacy Policy notice"] : [];
+    const expected = ["Chalk, Home", "Home", "Developer", "Account: Hasan Shoaib", ...notice, "Start a call", "Join with a link"];
+    check("keyboard order on Home", order.slice(0, expected.length).join(" | ") === expected.join(" | "), order.join(" | "));
     await tab.getByRole("link", { name: /^Q9 team/ }).click();
     await tab.waitForURL(`**${CALL}`);
     await tab.waitForLoadState("networkidle");
@@ -302,7 +304,7 @@ try {
     await tab.waitForTimeout(800);
     const [create] = await posted("create-transcript");
     check("transcript action sends one explicit language", offered === 1 && JSON.stringify(create?.body?.languages) === '["en"]' && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
-    check("transcript action leaves the panel processing", (await tab.getByText("The transcript follows the recording.").count()) === 1);
+    check("transcript action leaves the panel processing", (await tab.getByText("The transcript is being prepared.").count()) === 1);
     await context.close();
   }
   {

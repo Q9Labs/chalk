@@ -600,7 +600,8 @@ func recordingArtifactSchemas() map[string]map[string]any {
 			"additionalProperties": false,
 			"required":             []string{"status"},
 			"properties": map[string]any{
-				"status": map[string]any{"type": "string", "enum": []string{"none", "pending", "ready", "failed", "expired"}},
+				"status":     map[string]any{"type": "string", "enum": []string{"none", "pending", "ready", "failed", "expired"}},
+				"expires_at": nullableSchema(timestampSchema()),
 			},
 		},
 	}
