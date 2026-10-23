@@ -41,18 +41,13 @@ function boardPixels() {
   };
 }
 
+function stageSettled() {
+  return Array.from(document.querySelectorAll("[data-stage-item]")).every((tile) => tile.getAnimations().every((animation) => animation.playState !== "running" && !animation.pending));
+}
+
 async function settleStage(page: Page) {
-  await page.waitForFunction(() => {
-    const board = document.querySelector(".chalk-board[data-ready]");
-    return (
-      board &&
-      document.querySelector('[data-stage-item="whiteboard"][data-stage-role="primary"]') &&
-      !document
-        .querySelector('[data-testid="stage"]')
-        ?.getAnimations({ subtree: true })
-        .some((animation) => animation.playState === "running" || animation.pending)
-    );
-  });
+  await page.locator(`${stageBoard}[data-stage-role="primary"] .chalk-board[data-ready]`).waitFor();
+  await page.waitForFunction(stageSettled);
   // Let ResizeObserver delivery and the canvas paint finish without resizing.
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }
@@ -87,21 +82,21 @@ test("the live board keeps its canvas and drawing coordinates after person → b
     }
     const [a, b] = await Promise.all(contexts.map((context) => context.newPage()));
     await a.goto(new URL(process.env.CHALK_E2E_INVITE ?? "/space/", process.env.CHALK_PROOF_WEB_URL ?? "http://localhost:3000").href);
-    await a.getByLabel("Your name", { exact: true }).fill("Board motion A");
+    await a.getByLabel("Your name", { exact: true }).fill("BoardA");
     await a.getByRole("button", { name: "Join call", exact: true }).click();
     if (!process.env.CHALK_E2E_INVITE) await a.getByRole("button", { name: "Close call link", exact: true }).click();
     await b.goto(a.url());
-    await b.getByLabel("Your name", { exact: true }).fill("Board motion B");
+    await b.getByLabel("Your name", { exact: true }).fill("BoardB");
     await b.getByRole("button", { name: "Join call", exact: true }).click();
     for (const page of [a, b]) {
-      await page.getByRole("button", { name: "Video tile for Board motion A", exact: true }).waitFor();
-      await page.getByRole("button", { name: "Video tile for Board motion B", exact: true }).waitFor();
+      await page.getByRole("button", { name: "Video tile for BoardA", exact: true }).waitFor();
+      await page.getByRole("button", { name: "Video tile for BoardB", exact: true }).waitFor();
     }
     await a.getByRole("button", { name: "Board", exact: true }).click();
     await Promise.all([a, b].map(settleStage));
     // Following keeps the peer from fitting the first incoming stroke to a different camera.
-    await b.getByLabel("Follow Board motion A", { exact: true }).click();
-    await b.getByText("Following Board motion A").waitFor();
+    await b.getByLabel("Follow BoardA", { exact: true }).click();
+    await b.getByText("Following BoardA").waitFor();
     for (const page of [a, b]) {
       const pixels = await page.evaluate(boardPixels);
       expect(pixels?.upperLeft).toBe(false);
@@ -121,18 +116,12 @@ test("the live board keeps its canvas and drawing coordinates after person → b
     }
     await b.getByRole("button", { name: "Stop", exact: true }).click();
     for (const [page, name] of [
-      [a, "Board motion A"],
-      [b, "Board motion B"],
+      [a, "BoardA"],
+      [b, "BoardB"],
     ] satisfies [Page, string][]) {
       await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).click();
       await page.locator(`${stageBoard}[data-stage-role="strip"]`).waitFor();
-      await page.waitForFunction(
-        () =>
-          !document
-            .querySelector('[data-testid="stage"]')
-            ?.getAnimations({ subtree: true })
-            .some((animation) => animation.playState === "running" || animation.pending),
-      );
+      await page.waitForFunction(stageSettled);
       await page.locator(stageBoard).click();
       await settleStage(page);
     }
