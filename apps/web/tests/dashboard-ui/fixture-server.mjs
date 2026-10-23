@@ -229,7 +229,7 @@ async function dashboard(request, response, page, url, entry) {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
       const ids = query.spaceIds ? query.spaceIds.split(",") : [];
       const live = ids.map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));
-      // Like the server: every row's activity, and with `home` whether the newest call isn't listed.
+      // Like the server: every row's activity, and with `home` the first page when the newest call isn't listed.
       const calls = ids
         .map((spaceId) => data.calls.find((call) => call.id === spaceId))
         .filter(Boolean)
@@ -237,7 +237,7 @@ async function dashboard(request, response, page, url, entry) {
         .map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople }));
       if (!query.home) return send(response, 200, { live, calls });
       const newest = data.calls.find((call) => !call.archived)?.id;
-      return send(response, 200, newest && !ids.includes(newest) ? { live, calls, added: true } : { live, calls });
+      return send(response, 200, newest && !ids.includes(newest) ? { live, calls, first: homeDTO(data) } : { live, calls });
     }
     if (page === "call-metadata") {
       const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));

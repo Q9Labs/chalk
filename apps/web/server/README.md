@@ -60,7 +60,8 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
 - `GET /dashboard-api/home-status?spaceIds=...&home=1`: Home's check. Live state, whether it
   is archived, last active time and recent people for up to 300 Spaces in one tenant read
   (`listSpaceActivity`), plus one read for the five newest unarchived Spaces; when any of them
-  isn't listed, the answer says `added`. Without `home=1`, the call page's roster
+  isn't listed, the answer carries them as the first page (one more read for their activity).
+  Without `home=1`, the call page's roster
   check: the full live roster from `listSpaceLiveEpisodes`, one read for up to 30 Spaces.
   The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
@@ -81,8 +82,9 @@ service bearer, storage keys, webhook events or raw engine responses.
 
 Visible Call and Home pages check status every five seconds. Each Home check is one
 request for every shown row (up to 300), and Home updates its rows from the answer.
-A call archived elsewhere leaves the list. A call made elsewhere reloads the list down to
-where its last row sat, two tenant reads per page of five.
+A call archived elsewhere leaves the list. Calls made elsewhere go on top from the first page;
+when that page holds no call Home already has, Home reloads its list down to where its last
+row sat, two tenant reads per page of five.
 Stable status never reloads page history. A changed
 Episode or knock set reloads the expanded page once. Hidden pages pause checks
 and refresh once on return; failed background reads retain ready content.

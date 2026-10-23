@@ -95,22 +95,24 @@ describe("Home", () => {
     expect(status.calls[0]).toEqual({ id: ids[0], archived: false, lastActiveAt: ended, recentPeople: [{ id: nora.participant_id, name: "Nora" }] });
     expect(status.calls[299]?.lastActiveAt).toBe(at);
     expect(status.live[299]).toEqual({ spaceId: ids[299], episode: { id: uuid(0xe1), count: 1, participants: [{ id: nora.participant_id, name: "Nora" }] } });
-    expect(status.added).toBeUndefined();
+    expect(status.first).toBeUndefined();
   });
 
-  it("says a call was added when the newest call isn't listed, with no more reads", async () => {
+  it("returns the first page with one more read when the newest call isn't listed", async () => {
     const ids = spaceIds(3);
     const { engine, requests } = await fakeEngine([uuid(0x99), ...ids], {});
     const status = await homeStatus(engine, { spaceIds: ids, home: "1" });
-    expect(status.added).toBe(true);
-    expect(paths(requests).sort()).toEqual(["space-activity", "spaces"]);
+    expect(status.first?.calls.map((call) => call.id)).toEqual([uuid(0x99), ...ids]);
+    expect(status.first?.calls[0]?.lastActiveAt).toBe(ended);
+    expect(paths(requests).sort()).toEqual(["space-activity", "space-activity", "spaces"]);
   });
 
-  it("says a call was added when a call below the newest isn't listed", async () => {
+  it("returns the first page when a call below the newest isn't listed", async () => {
     const ids = spaceIds(3);
     const [mine = "", ...older] = ids;
     const { engine } = await fakeEngine([mine, uuid(0x99), ...older], {});
-    expect((await homeStatus(engine, { spaceIds: ids, home: "1" })).added).toBe(true);
+    const status = await homeStatus(engine, { spaceIds: ids, home: "1" });
+    expect(status.first?.calls.map((call) => call.id)).toEqual([mine, uuid(0x99), ...older]);
   });
 
   it("says which listed calls were archived", async () => {
@@ -119,7 +121,7 @@ describe("Home", () => {
     const { engine } = await fakeEngine([newer, older], {}, [gone]);
     const status = await homeStatus(engine, { spaceIds: ids, home: "1" });
     expect(status.calls.map((call) => call.archived)).toEqual([false, true, false]);
-    expect(status.added).toBeUndefined();
+    expect(status.first).toBeUndefined();
   });
 
   it("loads a page of calls with two engine reads", async () => {

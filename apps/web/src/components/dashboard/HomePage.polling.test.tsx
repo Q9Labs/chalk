@@ -31,10 +31,12 @@ const second: Episode = { id: uuid(0xe2), count: 2, participants: [nora, { id: u
 /**
  * The server as Home sees it, answering from `truth` the way `server/home.ts` does: pages of five, and one status
  * answer with every row's live state, last active time and recent people, whether it was archived (it left `truth`),
- * and `added` when any of the five newest calls isn't in the list. Like the engine, it lists calls newest first, so a
- * call without its own creation time gets a later one when it is first seen higher in `truth.calls`.
+ * and the first page when any of the five newest calls isn't in the list. Like the engine, it lists calls newest first,
+ * so a call without its own creation time gets a later one when it is first seen higher in `truth.calls`. It counts
+ * the engine reads the real server makes: two per page, and per check one activity read when rows are listed, one
+ * newest-five read and one more activity read for a first page.
  */
-type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; fail?: boolean; failFirstPage?: boolean; pageSize?: number };
+type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; fail?: boolean; failFirstPage?: boolean; pageSize?: number; engineReads?: number };
 function serve(truth: Truth) {
   const answer = (spaceId: string) => ({ spaceId, episode: truth.live[spaceId] ?? null });
   const made = new WeakMap<HomeCallDTO, string>();
@@ -47,6 +49,7 @@ function serve(truth: Truth) {
   vi.mocked(readPage).mockImplementation(async (name, query) => {
     for (const call of [...truth.calls].reverse()) if (call.createdAt === unstamped && !made.has(call)) made.set(call, new Date((clock += 1000)).toISOString());
     if (name === "home") {
+      truth.engineReads = (truth.engineReads ?? 0) + 2;
       const cursor = query && "cursor" in query && query.cursor ? Number(query.cursor) : 0;
       if (!cursor && truth.failFirstPage) throw new Error("page read failed");
       return pageAt(cursor);
@@ -57,7 +60,9 @@ function serve(truth: Truth) {
     const ids = query && "spaceIds" in query && query.spaceIds ? query.spaceIds.split(",") : [];
     const calls = ids.map((id) => truth.calls.find((call) => call.id === id) ?? { ...row(id, ""), archived: true });
     const result: HomeStatusDTO = { live: ids.map(answer), calls: calls.map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople })) };
-    return truth.calls.slice(0, 5).some((call) => !ids.includes(call.id)) ? { ...result, added: true } : result;
+    const added = truth.calls.slice(0, 5).some((call) => !ids.includes(call.id));
+    truth.engineReads = (truth.engineReads ?? 0) + (ids.length ? 1 : 0) + 1 + (added ? 1 : 0);
+    return added ? { ...result, first: pageAt(0) } : result;
   });
 }
 const requests = () => vi.mocked(readPage).mock.calls.map(([name, query]) => [name, query] as const);
@@ -160,6 +165,34 @@ it("reloads when more calls were made elsewhere than the first page holds", asyn
   expect(screen.getAllByText(/^(Made in this tab|Elsewhere \d|Planning)$/).map((item) => item.textContent)).toEqual(["Made in this tab", ...others.map((call) => call.name), "Planning"]);
 });
 
+it("brings back the call pushed past 300 when a shown call is archived", async () => {
+  const rows = Array.from({ length: 310 }, (_, index) => row(uuid(0x1000 + index), `Call ${index}`));
+  const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
+  serve(truth);
+  await open();
+  for (let count = 1; count < 6; count++)
+    await reactAct(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+    });
+  truth.calls = [elsewhere, ...rows];
+  await tick();
+  expect(screen.queryByText("Call 299")).toBeNull();
+  // The reload after the archive fails, so only the list Home already holds can fill the gap.
+  const archived = rows[5];
+  if (!archived) throw new Error("no row to archive");
+  vi.mocked(act).mockResolvedValue({ call: { ...archived, archived: true } });
+  truth.calls = truth.calls.filter((call) => call !== archived);
+  truth.failFirstPage = true;
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: `More actions for ${archived.name}` }));
+  });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive call" }));
+  });
+  expect(screen.getByText("Call 299")).toBeTruthy();
+  expect(screen.getAllByText(/^(Call \d+|Made in another tab)$/)).toHaveLength(300);
+}, 20_000);
+
 it("keeps 300 calls when a reload replays more pages than the limit needs", async () => {
   const rows = Array.from({ length: 310 }, (_, index) => row(uuid(0x1000 + index), `Call ${index}`));
   const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
@@ -211,7 +244,7 @@ it("shows a call that started and ended between two checks with its new last-act
   expect(screen.getByLabelText(`Planning, last active ${lastActive(ended)}`)).toBeTruthy();
 });
 
-it("puts a call made elsewhere on top within one check by reloading to the same depth", async () => {
+it("puts a call made elsewhere on top within one check and keeps the expanded history", async () => {
   const history = Array.from({ length: 100 }, (_, index) => row(uuid(0x100 + index), `Paged ${index}`));
   const truth: Truth = { calls: history, live: {} };
   serve(truth);
@@ -224,8 +257,7 @@ it("puts a call made elsewhere on top within one check by reloading to the same 
   truth.calls = [elsewhere, ...history];
   const before = requests().length;
   await tick();
-  // One status check, then the reload reads the 101 calls down to Paged 99 in 21 pages.
-  expect(requests().slice(before)).toEqual([["home-status", { home: "1", spaceIds: history.map((call) => call.id).join(",") }], ...Array.from({ length: 21 }, (_, index) => ["home", index ? { cursor: String(index * 5) } : {}])]);
+  expect(requests().slice(before)).toEqual([["home-status", { home: "1", spaceIds: history.map((call) => call.id).join(",") }]]);
   expect(screen.getAllByText(/^(Paged \d+|Made in another tab)$/)[0]?.textContent).toBe("Made in another tab");
   expect(screen.getAllByText(/^Paged \d+$/)).toHaveLength(100);
 });
@@ -260,33 +292,33 @@ const old12 = engineTimes.map((time, index) => row(uuid(0xf00 - index), `Old ${i
 const later = (label: string, count: number) => Array.from({ length: count }, (_, index) => row(uuid(0x5000 + index), `${label} ${index}`, `2026-10-21T11:00:${String(59 - index).padStart(2, "0")}Z`));
 const fresh1 = later("New", 1);
 const fresh5 = later("New", 5);
+const fresh6 = later("New", 6);
+const old100 = series("Old", 100, 0x2000);
 const fresh12 = later("New", 12);
 const fresh50 = series("New", 50, 0x5000);
 const old320 = series("Old", 320, 0x1000);
-const nth = (list: readonly HomeCallDTO[], index: number) => {
-  const call = list[index];
-  if (!call) throw new Error(`no row ${index}`);
-  return call;
-};
 /**
- * A call made elsewhere makes Home reload its list: the reload reads pages until a row sorts at or past where Home's
- * last row sat, or until 300 calls. A call archived elsewhere leaves the list without a reload. Home starts with Old 0
- * to Old 9 shown in pages of five (Old 9 last), or 300 of 320 calls in pages of 50.
+ * Calls made elsewhere go on top from the first page when it holds a call Home already has. When it holds none, Home
+ * reloads its list: the reload reads pages until a row sorts at or past where Home's last row sat, or until 300 calls.
+ * A call archived elsewhere leaves the list without a page read. Home starts with Old 0 to Old 9 shown in pages of
+ * five (Old 9 last), 100 calls in pages of five, or 300 of 320 calls in pages of 50. In pages of five, the minute after
+ * the change stays within the dashboard's budget of 60 engine reads.
  */
 const depthCases = [
   { name: "the last row is still there", pageSize: 5, history: old12, opened: 2, change: () => [...fresh5, ...old12], shown: [...names(fresh5), ...names(old12.slice(0, 10))], reads: 3 },
   { name: "the last row was archived elsewhere", pageSize: 5, history: old12, opened: 2, change: () => [...fresh5, ...without(old12, 9)], shown: [...names(fresh5), ...names(old12.slice(0, 9)), "Old 10"], reads: 3 },
-  { name: "the last row moved up", pageSize: 5, history: old12, opened: 2, change: () => [{ ...nth(old12, 9), createdAt: "2026-10-21T12:00:00Z" }, ...fresh5, ...without(old12, 9)], shown: ["Old 9", ...names(fresh5), ...names(old12.slice(0, 9)), "Old 10", "Old 11"], reads: 4 },
+  { name: "six calls came in", pageSize: 5, history: old12, opened: 2, change: () => [...fresh6, ...old12], shown: [...names(fresh6), ...names(old12)], reads: 4 },
+  { name: "one call came in with 100 rows open", pageSize: 5, history: old100, opened: 20, change: () => [...fresh1, ...old100], shown: [...names(fresh1), ...names(old100)], reads: 0 },
   { name: "more calls came in than a page holds", pageSize: 5, history: old12, opened: 2, change: () => [...fresh12, ...old12], shown: [...names(fresh12), ...names(old12)], reads: 5 },
   { name: "a shown call was archived elsewhere", pageSize: 5, history: old12, opened: 2, change: () => without(old12, 4), shown: names(without(old12, 4).slice(0, 9)), reads: 0 },
   { name: "a call on an expanded page was archived elsewhere", pageSize: 5, history: old12, opened: 2, change: () => without(old12, 7), shown: names(without(old12, 7).slice(0, 9)), reads: 0 },
   { name: "the last row was archived elsewhere alone", pageSize: 5, history: old12, opened: 2, change: () => without(old12, 9), shown: names(old12.slice(0, 9)), reads: 0 },
-  { name: "the last row was archived as one call came in", pageSize: 5, history: old12, opened: 2, change: () => [...fresh1, ...without(old12, 9)], shown: [...names(fresh1), ...names(old12.slice(0, 9)), "Old 10", "Old 11"], reads: 3 },
+  { name: "the last row was archived as one call came in", pageSize: 5, history: old12, opened: 2, change: () => [...fresh1, ...without(old12, 9)], shown: [...names(fresh1), ...names(old12.slice(0, 9))], reads: 0 },
   { name: "the account has more than 300 calls", pageSize: 50, history: old320, opened: 6, change: () => [...fresh50, ...old320], shown: [...names(fresh50), ...names(old320.slice(0, 250))], reads: 6 },
 ];
 
 it.each(depthCases)(
-  "reloads to the same depth when $name",
+  "keeps the right rows when $name",
   async ({ pageSize, history, opened, change, shown, reads }) => {
     const truth: Truth = { calls: history, live: {}, pageSize };
     serve(truth);
@@ -297,6 +329,7 @@ it.each(depthCases)(
       });
     truth.calls = change();
     const before = requests().length;
+    const engineReads = truth.engineReads ?? 0;
     await tick();
     expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual(shown);
     expect(
@@ -304,9 +337,34 @@ it.each(depthCases)(
         .slice(before)
         .filter(([name]) => name === "home"),
     ).toHaveLength(reads);
+    for (let check = 1; check < 12; check++) await tick();
+    if (pageSize === 5) expect((truth.engineReads ?? 0) - engineReads).toBeLessThanOrEqual(60);
   },
   20_000,
 );
+
+it("reloads when a call archived elsewhere comes back with a new call", async () => {
+  const truth: Truth = { calls: old12, live: {} };
+  serve(truth);
+  await open();
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+  });
+  truth.calls = without(old12, 2);
+  await tick();
+  expect(screen.queryByText("Old 2")).toBeNull();
+  // The restored call sits below a call Home knows on the first page, so only a reload puts it back in place. The
+  // reload reads down to Old 9 in whole pages of five, which brings Old 10 and Old 11 too.
+  truth.calls = [...fresh1, ...old12];
+  const before = requests().length;
+  await tick();
+  expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual([...names(fresh1), ...names(old12)]);
+  expect(
+    requests()
+      .slice(before)
+      .filter(([name]) => name === "home"),
+  ).toHaveLength(3);
+});
 
 it("ends a live call in the same check that finds a call made elsewhere", async () => {
   const truth: Truth = { calls: [planning], live: { [planning.id]: first } };
@@ -433,6 +491,6 @@ it.each(qaRuns)("replays QA's B4 run $run: a call made, started and ended in ano
   });
   await tick(5000);
   expect(screen.queryByText("Live · 1 in the call")).toBeNull();
-  // The page load reads a page and the call made elsewhere reloads it once; every other change came in one status check.
-  expect(requests().filter(([name]) => name === "home")).toHaveLength(2);
+  // Only the page load reads a page; each later answer came in one status check.
+  expect(requests().filter(([name]) => name === "home")).toHaveLength(1);
 });
