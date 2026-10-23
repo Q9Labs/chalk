@@ -181,6 +181,13 @@ export function Stage({
     );
   }, [activePinnedId, box, interactive, layout, maxPerPage, minTileWidth, ordered, primary, shareAspects]);
   const framesById = useMemo(() => new Map(geometry.frames.map((frame) => [frame.id, frame])), [geometry.frames]);
+  const foldedContent = ordered.filter((item): item is Extract<StageItem, { kind: "screen-share" | "whiteboard" }> => item.kind !== "participant" && !framesById.has(item.id));
+  const renderContent = (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => {
+    if (context.primary && renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
+    if (renderContentTile) return renderContentTile(item, context);
+    if (renderPrimaryContent) return <StageContentTileSurface item={item} {...context} mediaVisible media={renderPrimaryContent(item)} />;
+    return <StageContentTile item={item} {...context} />;
+  };
   const animate = animateOverride ?? !prefersReducedMotion;
   const [displayed, setDisplayed] = useState<{ source: readonly StageItem[]; geometry: StageGeometry; tiles: readonly { item: StageItem; frame: StageFrame | undefined; leaving: boolean; departedAt?: number }[] }>({
     source: ordered,
@@ -295,14 +302,8 @@ export function Stage({
                   gradientPreference={gradientPreference}
                 />
               );
-            } else if (frame?.role === "primary" && renderPrimaryContent) {
-              content = <StageContentTileSurface item={item} {...renderContext} mediaVisible media={renderPrimaryContent(item)} />;
-            } else if (renderContentTile) {
-              content = renderContentTile(item, renderContext);
-            } else if (renderPrimaryContent) {
-              content = <StageContentTileSurface item={item} {...renderContext} mediaVisible media={renderPrimaryContent(item)} />;
             } else {
-              content = <StageContentTile item={item} {...renderContext} />;
+              content = renderContent(item, renderContext);
             }
             return (
               <div
@@ -328,9 +329,9 @@ export function Stage({
                 data-stage-item={MORE_TILE_ID}
                 data-stage-role={frame.role}
                 style={frameStyle(frame)}
-                onClick={onOverflowClick ?? (() => setOverflowOpen(true))}
+                onClick={foldedContent.length ? () => setOverflowOpen(true) : (onOverflowClick ?? (() => setOverflowOpen(true)))}
                 disabled={!interactive}
-                aria-label={`Show ${geometry.overflowCount} more participants`}
+                aria-label={`Show ${geometry.overflowCount} more ${foldedContent.length ? "items" : "participants"}`}
                 className="grid place-items-center rounded-[12px] bg-[var(--chalk-raised)] text-[22px] font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-[14px]"
               >
                 +{geometry.overflowCount}
@@ -338,7 +339,13 @@ export function Stage({
             ))}
         </StageMotion>
       </div>
-      <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title="People">
+      <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title={foldedContent.length ? "People and shared content" : "People"}>
+        {overflowOpen &&
+          foldedContent.map((item) => (
+            <div key={item.id} className="relative mb-3 aspect-video w-full">
+              {renderContent(item, { active: true, primary: true, pinned: activePinnedId === item.id, hidden: false, style: undefined, onClick: undefined, onDoubleClick: undefined })}
+            </div>
+          ))}
         {ordered
           .filter((item) => item.kind === "participant")
           .map((item) => (

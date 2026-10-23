@@ -41,6 +41,11 @@ describe("Spotlight primary content", () => {
 });
 
 describe("Justified rows", () => {
+  it.each([1, 2, 3])("keeps maxPerPage=%i as an upper bound even when shared content follows a pinned person", (maxPerPage) => {
+    const geometry = fitGrid({ width: 1408, height: 756 }, ["pinned", "share-a", "share-b", "other"], { ...DEFAULT_GRID_OPTIONS, maxPerPage }, ["share-a", "share-b"]);
+    expect(geometry.frames.length).toBeLessThanOrEqual(maxPerPage);
+    expect(geometry.frames.some((frame) => frame.id === MORE_TILE_ID)).toBe(true);
+  });
   it.each([3, 5, 7, 12])("fills all rows for %i people without holes", (count) => {
     const box = { width: 1408, height: 756 };
     const geometry = fitGrid(

@@ -475,6 +475,40 @@ function noticeCount() {
   });
 }
 
+it.each([false, true])("fits SDK notices to a tall call's actual band, long=%s", async (long) => {
+  await page.setViewportSize({ width: 390, height: 620 });
+  try {
+    await page.goto(`${origin}/call-states.html?state=notice-band${long ? "&long=1" : ""}`);
+    await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
+    await page.locator('.chalk-board-island[data-place="expanded"]').waitFor();
+    await expect.poll(noticeCount).toBe(long ? 1 : 10);
+    await page.waitForFunction(() => [...document.querySelectorAll("[data-part='toast']")].every((toast) => toast.getAnimations().every((animation) => animation.playState !== "running")));
+    if (process.env.STAGE_ARTIFACTS) {
+      await mkdir(process.env.STAGE_ARTIFACTS, { recursive: true });
+      await page.screenshot({ path: resolve(process.env.STAGE_ARTIFACTS, `notice-band-${long ? "long" : "ten"}.png`) });
+    }
+    const outside = await page.locator("[data-part='toast-stack']").evaluate((stack) => {
+      const band = stack.getBoundingClientRect();
+      const style = getComputedStyle(stack);
+      const top = band.top + parseFloat(style.paddingTop);
+      const bottom = band.bottom - parseFloat(style.paddingBottom);
+      return [...stack.children]
+        .filter((toast) => {
+          const box = toast.getBoundingClientRect();
+          return box.top < top - 0.5 || box.bottom > bottom + 0.5 || toast.scrollHeight > toast.clientHeight + 1;
+        })
+        .map((toast) => toast.textContent);
+    });
+    expect(outside).toEqual([]);
+    const button = page.locator("[data-part='notice-button']");
+    await button.click();
+    await expect.poll(() => page.locator("[data-part='notice']").count()).toBeGreaterThan(0);
+    expect(await noticeCount()).toBe(long ? 1 : 10);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
 it.each(noticeCases)("shows notices whole and off every control: $name, $scheme, tools open $tools, reactions open $tray, $notices $kind notices", async ({ width, height, scheme, tools, tray, ...content }) => {
   await page.setViewportSize({ width, height });
   try {

@@ -2,10 +2,14 @@ import { memo, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
+import { noticeAnnouncement } from "./notice-announcement";
+import { useToastCapacity } from "./useToastCapacity";
 export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
   readonly id: string;
   /** Stable semantic identity for rich message content. Change it when the message changes. */
   readonly announcementKey?: string;
+  /** Plain speech text for custom message components. Literal text and markup are read without mounting them. */
+  readonly announcementText?: string;
 }
 export interface ToastStackProps {
   readonly toasts: readonly Toast[];
@@ -14,7 +18,7 @@ export interface ToastStackProps {
   readonly className?: string;
   /**
    * Called with the ids of the notices the stage has no room for, so the host can offer them elsewhere, such as from the header.
-   * With it, a call shorter than `FOLD_BELOW_PX` folds every notice and a taller one folds those past `maxVisible`, and the stack announces each folded notice once.
+   * With it, a call shorter than `FOLD_BELOW_PX` folds every notice. Taller calls fold notices past `maxVisible` or outside the available band, announcing each folded message once.
    */
   readonly onFold?: (folded: readonly string[]) => void;
 }
@@ -28,35 +32,40 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   const stack = useRef<HTMLDivElement>(null);
   const short = useShortCall(stack, onFold !== undefined);
   // Until the call's height is known, a folding stack shows nothing, so no notice mounts and then folds.
-  const shown = onFold !== undefined && short !== false ? [] : toasts.slice(-maxVisible);
+  const candidates = maxVisible > 0 ? toasts.slice(-maxVisible) : [];
+  const capacity = useToastCapacity(stack, candidates, onFold !== undefined && short === false);
+  const shown = onFold !== undefined && short !== false ? [] : candidates.slice(candidates.length - capacity.count);
   const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !shown.includes(toast)) : [];
   const foldedIds = folded.map((toast) => toast.id);
   // Each message is announced once, even when a host reuses a notice id for a new failure.
-  const announced = useRef(new Map<string, Pick<Toast, "message" | "type" | "announcementKey"> & { readonly revision: number }>());
+  const announced = useRef(new Map<string, { readonly text: string; readonly type: Toast["type"]; readonly key: Toast["announcementKey"] }>());
   const wasAnnounced = (toast: Toast) => {
     const previous = announced.current.get(toast.id);
     if (!previous) return false;
-    const sameMessage = previous.announcementKey === undefined && toast.announcementKey === undefined ? previous.message === toast.message : previous.announcementKey === toast.announcementKey;
+    const sameMessage = previous.text === noticeAnnouncement(toast) && previous.key === toast.announcementKey;
     return sameMessage && (previous.type ?? "info") === (toast.type ?? "info");
   };
-  const revision = (toast: Toast) => (announced.current.get(toast.id)?.revision ?? 0) + (wasAnnounced(toast) ? 0 : 1);
   const [unheard, setUnheard] = useState<readonly string[]>([]);
   const reported = useRef<readonly string[]>([]);
   const fold = useRef(onFold);
-  fold.current = onFold;
   useLayoutEffect(() => {
-    if (!fold.current) return;
+    const replacement = fold.current !== onFold;
+    if (replacement) {
+      fold.current?.([]);
+      fold.current = onFold;
+    }
+    if (!capacity.ready) return;
     const present = new Set(toasts.map((toast) => toast.id));
     for (const id of announced.current.keys()) if (!present.has(id)) announced.current.delete(id);
     const fresh = folded.filter((toast) => !wasAnnounced(toast)).map((toast) => toast.id);
-    for (const toast of [...folded, ...shown]) announced.current.set(toast.id, { message: toast.message, type: toast.type, announcementKey: toast.announcementKey, revision: revision(toast) });
+    for (const toast of [...folded, ...shown]) announced.current.set(toast.id, { text: noticeAnnouncement(toast), type: toast.type, key: toast.announcementKey });
     // A notice leaves the announcer once it shows or goes, so folding again doesn't read it twice.
     const kept = unheard.filter((id) => foldedIds.includes(id));
     if (fresh.length) setUnheard(fresh);
     else if (kept.length < unheard.length) setUnheard(kept);
-    if (sameIds(reported.current, foldedIds)) return;
-    reported.current = foldedIds;
-    fold.current(foldedIds);
+    const unchanged = sameIds(reported.current, foldedIds);
+    if (!unchanged) reported.current = foldedIds;
+    if (replacement || !unchanged) fold.current?.(reported.current);
   });
   useLayoutEffect(
     () => () => {
@@ -70,7 +79,7 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     <>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
-          <ChalkToast key={`${toast.id}:${revision(toast)}`} {...toast} announce={!wasAnnounced(toast)} onDismiss={() => onDismiss(toast.id)} />
+          <ChalkToast key={toast.id} {...toast} announce={!wasAnnounced(toast)} onDismiss={() => onDismiss(toast.id)} />
         ))}
       </div>
       {onFold ? (
@@ -80,14 +89,14 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
             {announcing
               .filter((toast) => toast.type !== "error")
               .map((toast) => (
-                <div key={toast.id}>{toast.message}</div>
+                <div key={toast.id}>{noticeAnnouncement(toast)}</div>
               ))}
           </div>
           <div aria-live="assertive">
             {announcing
               .filter((toast) => toast.type === "error")
               .map((toast) => (
-                <div key={toast.id}>{toast.message}</div>
+                <div key={toast.id}>{noticeAnnouncement(toast)}</div>
               ))}
           </div>
         </div>

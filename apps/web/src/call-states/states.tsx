@@ -3,6 +3,7 @@ import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
 import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
+import { NoticeBandFixture } from "./notice-band";
 import { STATES_LANE } from "./states-lane";
 import { FoundationKit } from "./foundation";
 import { readThemePreference, persistThemePreference } from "../lib/theme";
@@ -37,6 +38,7 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
+  { id: "notice-band", title: "SDK notices fit the call's available band", render: () => <NoticeBandFixture /> },
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },
   ...PERFORMANCE_STATES,
   ...SHELL_STATES,

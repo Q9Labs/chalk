@@ -110,10 +110,10 @@ export function fitGrid(box: StageBox, ids: readonly string[], options: GridFitO
   let plan: RowPlan | null = null;
   let overflowCount = 0;
   const weight = (id: string): number => (wideIds.includes(id) ? 2 : 1);
-  // +N opens the people list, so every content tile keeps a place before it, however small the tiles get.
+  // Prefer keeping content on the stage; an explicit tile limit can move it into the content-aware overflow.
   const lastContent = ids.reduce((last, id, index) => (wideIds.includes(id) ? index : last), -1);
   const fewest = Math.min(ids.length, Math.max(wideIds.includes(ids[0] ?? "") ? 2 : 1, lastContent + 2));
-  for (let count = Math.min(ids.length, Math.max(fewest, options.maxPerPage)); count >= 1; count -= 1) {
+  for (let count = Math.min(ids.length, options.maxPerPage); count >= 1; count -= 1) {
     overflowCount = count < ids.length ? ids.length - count + 1 : 0;
     keys = overflowCount ? [...ids.slice(0, count - 1), MORE_TILE_ID] : ids;
     plan = rowPlan(box, keys.map(weight), options);

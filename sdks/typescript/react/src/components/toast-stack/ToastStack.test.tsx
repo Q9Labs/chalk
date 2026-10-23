@@ -3,7 +3,7 @@ import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ClientFailure } from "@q9labsai/chalk-client";
-import { ToastStack, type Toast } from "./ToastStack";
+import { ToastStack, type Toast, type ToastStackProps } from "./ToastStack";
 import { mediaFailureToast } from "./call-events";
 
 afterEach(() => {
@@ -37,10 +37,12 @@ function renderCall(height: number) {
   );
   const root = createRoot(frame);
   const folds: (readonly string[])[] = [];
+  const reportFold = (ids: readonly string[]) => folds.push(ids);
   return {
     frame,
     folds,
-    render: (toasts: readonly Toast[]) => act(async () => root.render(<ToastStack toasts={toasts} onDismiss={() => undefined} onFold={(ids) => folds.push(ids)} />)),
+    render: (toasts: readonly Toast[], options: Partial<Pick<ToastStackProps, "onFold" | "onDismiss" | "maxVisible">> = { onFold: reportFold }) =>
+      act(async () => root.render(<ToastStack toasts={toasts} onDismiss={options.onDismiss ?? (() => undefined)} onFold={options.onFold} maxVisible={options.maxVisible} />)),
     resize: (next: number) =>
       act(async () => {
         size = next;
@@ -63,7 +65,74 @@ it("folds every notice, by its whole id, in a call shorter than 620px", async ()
   await call.unmount();
 });
 
-it("shows the newest three in a call 620px tall, folds the rest, and mounts each message once", async () => {
+it("announces rich folded notices as text without mounting caller code or hidden controls", async () => {
+  const mounted = vi.fn();
+  function Message() {
+    useEffect(mounted, []);
+    return <a href="https://example.com/help">Camera help</a>;
+  }
+  const call = renderCall(320);
+  try {
+    await call.render([{ id: "rich", message: <Message />, announcementText: "Camera help", type: "error" }]);
+    expect(mounted).not.toHaveBeenCalled();
+    expect(call.frame.querySelector("[data-part='notice-announcer'] a")).toBeNull();
+    expect(call.live()).toContain("assertive: Camera help");
+  } finally {
+    await call.unmount();
+  }
+});
+
+it("clears a disabled fold callback and initializes its replacement with unchanged folded IDs", async () => {
+  const call = renderCall(320);
+  const first = vi.fn();
+  const second = vi.fn();
+  const toasts: Toast[] = [{ id: "error", message: "Camera blocked", type: "error" }];
+  try {
+    await call.render(toasts, { onFold: first });
+    expect(first).toHaveBeenLastCalledWith(["error"]);
+    await call.render(toasts, { onFold: second });
+    expect(first).toHaveBeenLastCalledWith([]);
+    expect(second).toHaveBeenLastCalledWith(["error"]);
+    await call.render(toasts, {});
+    expect(second).toHaveBeenLastCalledWith([]);
+    expect(call.shown()).toEqual(["Camera blocked"]);
+    await call.render(toasts, { onFold: second });
+    expect(second).toHaveBeenLastCalledWith(["error"]);
+  } finally {
+    await call.unmount();
+  }
+  expect(second).toHaveBeenLastCalledWith([]);
+});
+
+it("keeps a rich stable-ID toast mounted, focused and on its original expiry across parent renders", async () => {
+  vi.useFakeTimers();
+  const call = renderCall(844);
+  const mounted = vi.fn();
+  const dismissed = vi.fn();
+  function Message() {
+    useEffect(mounted, []);
+    return <button>Open chat</button>;
+  }
+  const render = () => call.render([{ id: "rich", message: <Message />, duration: 1000 }], { onFold: () => undefined, onDismiss: dismissed });
+  try {
+    await render();
+    const button = call.frame.querySelector("button");
+    button?.focus();
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await render();
+    expect(mounted).toHaveBeenCalledTimes(1);
+    expect(call.frame.querySelector("button")).toBe(button);
+    expect(document.activeElement).toBe(button);
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await act(async () => vi.advanceTimersByTimeAsync(160));
+    expect(dismissed).toHaveBeenCalledOnce();
+  } finally {
+    await call.unmount();
+    vi.useRealTimers();
+  }
+});
+
+it("shows the newest three in a call 620px tall and announces folded rich messages without mounting them", async () => {
   const mounts: string[] = [];
   function Message({ text }: { readonly text: string }) {
     useEffect(() => {
@@ -72,10 +141,11 @@ it("shows the newest three in a call 620px tall, folds the rest, and mounts each
     return <>{text}</>;
   }
   const call = renderCall(620);
-  await call.render(["Ana", "Ben", "Cy", "Di"].map((name) => ({ id: name, message: <Message text={`${name} joined`} /> })));
+  await call.render(["Ana", "Ben", "Cy", "Di"].map((name) => ({ id: name, message: <Message text={`${name} joined`} />, announcementText: `${name} joined` })));
   expect(call.shown()).toEqual(["Ben joined", "Cy joined", "Di joined"]);
   expect(call.folds.at(-1)).toEqual(["Ana"]);
-  expect(mounts.sort()).toEqual(["Ana joined", "Ben joined", "Cy joined", "Di joined"]);
+  expect(mounts.sort()).toEqual(["Ben joined", "Cy joined", "Di joined"]);
+  expect(call.live()).toContain("polite: Ana joined");
   await call.unmount();
 });
 

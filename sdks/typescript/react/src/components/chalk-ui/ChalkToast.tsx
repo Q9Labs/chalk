@@ -6,7 +6,7 @@ export interface ChalkToastProps {
   readonly type?: "info" | "success" | "warning" | "error";
   readonly duration?: number;
   readonly action?: { readonly label: string; readonly onClick: () => void };
-  /** Whether the toast announces itself to screen readers as it appears. Pass false when the host already announced the notice. It is read once, when the toast mounts. */
+  /** Enables live announcements. Pass false for an already-announced notice; a replacement message can enable the same mounted toast later. */
   readonly announce?: boolean;
   readonly onDismiss: () => void;
 }
@@ -14,7 +14,10 @@ export function ChalkToast({ message, type = "info", duration = type === "info" 
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const [exiting, setExiting] = useState(false);
-  const [live] = useState(announce);
+  const [live, setLive] = useState(announce);
+  useEffect(() => {
+    if (announce) setLive(true);
+  }, [announce]);
   useEffect(() => {
     if (duration === Infinity) return;
     const timer = setTimeout(() => setExiting(true), duration);
