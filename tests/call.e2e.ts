@@ -10,7 +10,7 @@ test("the real web app and SDK guest receive live video and audio", async ({ app
     await screen.getByRole("button", "Unmute microphone", { exact: true }).click();
     await screen.getByRole("button", "Turn on camera", { exact: true }).click();
     await guest.ready;
-    const tile = screen.getByLabel("Video tile for Proof guest 1");
+    const tile = screen.getByLabel("Video tile for Proof guest 1").first();
     await expect(tile).toBeVisible();
     await expect.poll(() => browser.evaluate(remoteVideoFrames), { timeout: 45_000 }).toBeGreaterThan(5);
     const before = await browser.evaluate(remoteVideoFrames);
