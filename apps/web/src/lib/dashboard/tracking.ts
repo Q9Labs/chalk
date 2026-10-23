@@ -30,9 +30,8 @@ export type Attempt = {
   readonly read: Read;
   /** The transcript list's read. A recording read that lists them counts as one. */
   readonly listRead: Read;
-  /** The lines of the attempt's finished transcript, read only while the page shows it. */
-  readonly cues: { readonly transcriptId: string; readonly cues: readonly CueDTO[] } | null;
-  readonly cuesRead: Read;
+  /** The lines of the finished transcript the page shows, and their read, so a failure stays with that transcript. */
+  readonly lines: { readonly transcriptId: string; readonly cues: readonly CueDTO[] | null; readonly read: Read } | null;
 };
 
 export type Due = ({ readonly kind: "recording" | "transcripts" } | { readonly kind: "cues"; readonly transcriptId: string }) & { readonly id: string; readonly at: number };
@@ -61,7 +60,7 @@ export function failed(read: Read, kind: "transient" | "terminal", error: unknow
 }
 
 export function attempt(recording: RecordingDTO, offset: number, at: number): Attempt {
-  return { recording, offset, writes: 0, read: succeeded(at), listRead: succeeded(at), cues: null, cuesRead: succeeded(at) };
+  return { recording, offset, writes: 0, read: succeeded(at), listRead: succeeded(at), lines: null };
 }
 
 /**
@@ -90,7 +89,7 @@ export type TranscriptView = { readonly kind: "loading" } | { readonly kind: "un
 
 /** The transcript panel for one attempt. A failed read marks only this panel, and a transient one keeps the last good answer. */
 export function transcriptView(item: Attempt): TranscriptView {
-  const { read, listRead, cuesRead, recording } = item;
+  const { read, listRead, recording } = item;
   if (listRead.failure?.kind === "terminal") return { kind: "unreadable", message: listRead.failure.message };
   const listed = recording.transcripts;
   if (listed === undefined) return listRead.failure ? { kind: "unreadable", message: listRead.failure.message } : { kind: "loading" };
@@ -102,8 +101,9 @@ export function transcriptView(item: Attempt): TranscriptView {
   if (!transcript && listRead.stale) return { kind: "loading" };
   const kind = transcriptState(recording, transcript);
   if (kind !== "ready" || !transcript) return { kind: kind === "ready" ? "failed" : kind };
-  if (item.cues?.transcriptId === transcript.id) return { kind: "ready", transcript, cues: item.cues.cues };
-  return cuesRead.failure ? { kind: "unreadable", message: cuesRead.failure.message } : { kind: "loading" };
+  const lines = item.lines?.transcriptId === transcript.id ? item.lines : null;
+  if (lines?.cues) return { kind: "ready", transcript, cues: lines.cues };
+  return lines?.read.failure ? { kind: "unreadable", message: lines.read.failure.message } : { kind: "loading" };
 }
 
 function readable(read: Read, now: number): boolean {
@@ -114,12 +114,13 @@ function readable(read: Read, now: number): boolean {
  * Every read due now. A recording is due while the server reports work on it, once a deadline has passed by the
  * server's clock and the server still reports the window open, and every `REVALIDATE_MS` while a window is open. Its
  * transcript list is due until it is read and while any transcript on it is being made. Either is also due after a
- * transient failure or a refused action.
+ * transient failure, or when its last answer is out of date. The shown finished transcript's lines are due until they
+ * load.
  */
 export function dueReads(attempts: readonly Attempt[], now: number): Due[] {
   const shown = selection(attempts).transcript;
   return attempts.flatMap((item): Due[] => {
-    const { recording, read, listRead, cuesRead } = item;
+    const { recording, read, listRead } = item;
     const id = recording.id;
     const open = openWindow(recording) && (lapsed(recording, now + item.offset) || now - read.at >= REVALIDATE_MS);
     const listing = recording.transcripts === undefined || recording.transcripts.some(pendingTranscript);
@@ -127,7 +128,9 @@ export function dueReads(attempts: readonly Attempt[], now: number): Due[] {
     if (readable(read, now) && (workingRecording(recording) || open || read.stale || read.failure !== null)) due.push({ kind: "recording", id, at: read.at });
     if (readable(listRead, now) && (listing || listRead.stale || listRead.failure !== null)) due.push({ kind: "transcripts", id, at: listRead.at });
     const done = item === shown ? recording.transcripts?.find(completedTranscript) : undefined;
-    if (done && item.cues?.transcriptId !== done.id && readable(cuesRead, now)) due.push({ kind: "cues", id, transcriptId: done.id, at: cuesRead.at });
+    const lines = item.lines?.transcriptId === done?.id ? item.lines : null;
+    // A transcript whose lines were never read is due at once, ahead of items read before.
+    if (done && !lines?.cues && (!lines || readable(lines.read, now))) due.push({ kind: "cues", id, transcriptId: done.id, at: lines?.read.at ?? 0 });
     return due;
   });
 }
@@ -142,8 +145,8 @@ export function nextRead(attempts: readonly Attempt[], now: number): Due | undef
  * window, or a deadline moved from the server's clock to the page's with the attempt's offset.
  */
 export function nextDue(attempts: readonly Attempt[], now: number): number | undefined {
-  const moments = attempts.flatMap(({ recording, read, listRead, cuesRead, offset }) => {
-    const retries = [read, listRead, cuesRead].filter((item) => item.failure?.kind === "transient").map((item) => item.retryAt);
+  const moments = attempts.flatMap(({ recording, read, listRead, lines, offset }) => {
+    const retries = [read, listRead, lines?.read].flatMap((item) => (item?.failure?.kind === "transient" ? [item.retryAt] : []));
     if (read.failure?.kind === "terminal" || !openWindow(recording)) return retries;
     const deadlines = [recording.sourceExpiresAt, recording.transcriptionExpiresAt].flatMap((deadline) => (deadline === null ? [] : [Date.parse(deadline) - offset]));
     return [...retries, read.at + REVALIDATE_MS, ...deadlines];

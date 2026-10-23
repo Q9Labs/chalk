@@ -143,7 +143,7 @@ export type CallPageDTO = {
   nextCursor: string | null;
   knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
-export type PastSessionDTO = { episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
+export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
 export type DeveloperDTO = AllowedWebsitesDTO & { keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
 export type SecretDTO = { id: string; secret: string };

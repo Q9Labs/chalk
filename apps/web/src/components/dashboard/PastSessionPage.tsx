@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 import type { AttendanceDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, failureKind, readPage, readPageTimed } from "../../lib/dashboard/client";
+import { act, errorMessage, failureKind, readPageTimed } from "../../lib/dashboard/client";
 import { TRANSCRIPT, VIDEO, videoState } from "../../lib/dashboard/recording";
 import { attempt, dueReads, failed, nextDue, nextRead, reread, selection, succeeded, transcriptView, type Attempt, type Due, type TranscriptView } from "../../lib/dashboard/tracking";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
@@ -12,14 +12,14 @@ import { Change, useLoad } from "./AppShell";
 import { ErrorPanel, Menu, MenuItem, Sk, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Ids = { readonly spaceId: string; readonly episodeId: string };
-type Page = { readonly session: Omit<PastSessionDTO, "recordings">; readonly callName: string; readonly attempts: readonly Attempt[] };
+type Page = { readonly session: Omit<PastSessionDTO, "recordings" | "callName">; readonly callName: string; readonly attempts: readonly Attempt[] };
 
 /** Reads one due item. A failure lands on that item alone, except a lost session, which stops every read. */
 async function readItem(ids: Ids, due: Due): Promise<(item: Attempt) => Attempt> {
   try {
     if (due.kind === "cues") {
       const { cues } = await act("past-session", { action: "transcript-document", ...ids, transcriptId: due.transcriptId });
-      return (item) => ({ ...item, cues: { transcriptId: due.transcriptId, cues }, cuesRead: succeeded(Date.now()) });
+      return (item) => ({ ...item, lines: { transcriptId: due.transcriptId, cues, read: succeeded(Date.now()) } });
     }
     if (due.kind === "transcripts") {
       const { transcripts, nextCursor } = await act("past-session", { action: "transcripts", ...ids, recordingId: due.id });
@@ -35,21 +35,22 @@ async function readItem(ids: Ids, due: Due): Promise<(item: Attempt) => Attempt>
     const kind = failureKind(error);
     if (kind === "sign-in") throw error;
     const at = Date.now();
-    if (due.kind === "cues") return (item) => ({ ...item, cuesRead: failed(item.cuesRead, kind, error, at) });
+    if (due.kind === "cues") return (item) => ({ ...item, lines: { transcriptId: due.transcriptId, cues: null, read: failed(item.lines?.transcriptId === due.transcriptId ? item.lines.read : succeeded(at), kind, error, at) } });
     if (due.kind === "transcripts") return (item) => ({ ...item, listRead: failed(item.listRead, kind, error, at) });
     return (item) => ({ ...item, read: failed(item.read, kind, error, at) });
   }
 }
 
 async function loadPage(ids: Ids): Promise<Page> {
-  const [{ data, offset }, call] = await Promise.all([readPageTimed("past-session", ids), readPage("call", { spaceId: ids.spaceId })]);
-  const { recordings, ...session } = data;
+  // The session's own read carries the call's name, so no other read can fail the page.
+  const { data, offset } = await readPageTimed("past-session", ids);
+  const { recordings, callName, ...session } = data;
   const at = Date.now();
   const attempts = recordings.map((recording) => attempt(recording, offset ?? 0, at));
   // The shown transcript's lines load with the page rather than a tick later.
   const lines = dueReads(attempts, at).find((due) => due.kind === "cues");
   const apply = lines ? await readItem(ids, lines) : undefined;
-  return { session, callName: call.call.name, attempts: attempts.map((item) => (apply && item.recording.id === lines?.id ? apply(item) : item)) };
+  return { session, callName, attempts: attempts.map((item) => (apply && item.recording.id === lines?.id ? apply(item) : item)) };
 }
 
 const unchanged = new Change<Page>((page) => page);

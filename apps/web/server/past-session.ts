@@ -8,8 +8,13 @@ import type { ArtifactURLDTO, CueDTO, PastSessionAction, PastSessionDTO } from "
 export async function pastSessionPage(engine: Engine, spaceId: string, episodeId: string, cursor?: string, viewerParticipantId: string | null = null): Promise<PastSessionDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
-  const [recordings, people] = await Promise.all([run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })), attendance(engine, params)]);
+  const [space, recordings, people] = await Promise.all([
+    run(engine.api.spaces.getSpace({ params: { tenant_id: engine.tenantId, space_id: params.space_id } })),
+    run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })),
+    attendance(engine, params),
+  ]);
   return {
+    callName: space.name,
     episode: episodeDTO(episode),
     attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
     // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.

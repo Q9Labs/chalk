@@ -109,7 +109,7 @@ let log: { readonly at: number; readonly path: string; readonly action?: string;
 const skew = () => (cell.clock === "behind" ? HOUR : -HOUR);
 const elapsed = () => Date.now() - PAGE_START;
 const serverNow = () => Date.now() + skew();
-const WINDOW_END = () => iso(PAGE_START + skew() + 3 * 24 * HOUR);
+const WINDOW_END = () => iso(PAGE_START + skew() + (cell.state === "ready" ? 90_000 : 3 * 24 * HOUR));
 const finished = () => elapsed() >= 12_000;
 const closedEarly = () => cell.state === "window closed early" && elapsed() >= 60_000;
 const signedOut = () => cell.state === "401" && elapsed() >= 7_000;
@@ -141,7 +141,7 @@ function attempts() {
   const other =
     cell.place === "selected"
       ? { id: OTHER, status: "completed", source: { status: "expired" }, export: { status: "unavailable", retryable: false }, transcription_preparation: { status: "none" }, transcripts: [] }
-      : { id: OTHER, status: "completed", source: { status: "available", expires_at: WINDOW_END() }, export: { status: "ready", retryable: false }, transcription_preparation: { status: "none" }, transcripts: [] };
+      : { id: OTHER, status: "completed", source: { status: "available", expires_at: iso(PAGE_START + skew() + 3 * 24 * HOUR) }, export: { status: "ready", retryable: false }, transcription_preparation: { status: "none" }, transcripts: [] };
   const newestFirst = cell.item === "recording" && cell.place === "unselected" ? [other, item] : [item, other];
   return newestFirst.map((recording, index) => ({ ...recording, createdAt: iso(PAGE_START - (index + 1) * HOUR) }));
 }
@@ -162,6 +162,27 @@ async function chalkAPI(input: RequestInfo | URL): Promise<Response> {
   const path = url.pathname.replace(`/v1/tenants/${TENANT}`, "");
   // A refusal as each endpoint declares one: a missing recording, or a list the tenant may no longer read.
   const failure = cell.state === "transient failure" ? apiError(503, "service.unavailable") : cell.item === "recording" ? apiError(404, "recording.not_found") : apiError(403, "access.forbidden");
+  if (path === `/spaces/${SPACE}`)
+    return Response.json({
+      id: SPACE,
+      tenant_id: TENANT,
+      name: "Weekly sync",
+      slug: "weekly-sync",
+      archived: false,
+      admission_policy: { mode: "anyone" },
+      created_by_user_id: null,
+      default_episode_duration_seconds: 3_600,
+      linger_window_seconds: 60,
+      maximum_episode_duration_seconds: 14_400,
+      media_plane: "livekit",
+      metadata: {},
+      recording_policy: "automatic",
+      recurring_policy: null,
+      roles: [],
+      transcription_policy: "automatic",
+      created_at: iso(PAGE_START - 48 * HOUR),
+      updated_at: iso(PAGE_START - 48 * HOUR),
+    });
   if (path === `/spaces/${SPACE}/episodes/${EPISODE}`)
     return Response.json({
       ...common,
@@ -208,6 +229,7 @@ async function answer(url: URL, body: unknown): Promise<Response> {
   if (signedOut()) return Response.json({ error: { code: "sign_in_required" } }, { status: 401 });
   if (url.pathname === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June Park", email: "june@example.test", avatarUrl: null } });
   try {
+    // Older pages read this label separately; keep their baseline run able to reach the recording regressions.
     if (url.pathname === "/dashboard-api/call") return Response.json({ call: { name: "Weekly sync" } });
     if (url.pathname === "/dashboard-api/call-metadata") return Response.json(await callMetadata(engine, callMetadataQuery.parse(Object.fromEntries(url.searchParams))));
     if (url.pathname === "/dashboard-api/past-session" && body === null) return Response.json(await pastSessionPage(engine, SPACE, EPISODE));
@@ -294,6 +316,17 @@ describe("the past-session page tracks every item on the server's clock", () => 
     if (expected.plays) {
       expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
       expect(videos().at(-1)).toBe(expected.plays === "item" ? ITEM : OTHER);
+    }
+    if (cell.state === "ready") {
+      // This deadline is 90 s after server-now on either clock, not hours before or after page-now.
+      await until(89_000);
+      expect(itemReads()).toEqual([]);
+      await until(90_000);
+      await until(95_000);
+      const first = itemReads()[0];
+      expect(first?.path).toBe("/dashboard-api/call-metadata");
+      expect(first?.at).toBeGreaterThanOrEqual(90_000);
+      expect(first?.at).toBeLessThanOrEqual(95_000);
     }
   });
 });

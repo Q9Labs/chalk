@@ -314,7 +314,7 @@ async function dashboard(request, response, page, url, entry) {
       }));
       // Like the server, a past session lists each recording's transcripts.
       const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt), transcriptsNextCursor: null }));
-      return send(response, 200, { episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
+      return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
     if (page === "developer")
       return send(response, 200, { allowedWebsites: data.origins, keys: data.keys.filter((key) => !key.revokedAt), webhooks: data.webhooks.map((webhook) => ({ ...webhook, lastDelivery: data.deliveries[webhook.id]?.[0] ?? null })), nextKeyCursor: null, nextWebhookCursor: null });

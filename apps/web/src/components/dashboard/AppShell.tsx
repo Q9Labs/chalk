@@ -100,9 +100,11 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
           const interval = ready.current === undefined ? 5000 : (latest.current.polling?.interval(ready.current) ?? 5000);
           const delay = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : Math.min(interval * 2 ** failures, 30000);
           retryAt = Date.now() + delay;
-          const terminal = kind === "terminal";
-          if (terminal) ready.current = undefined;
-          setState((value) => (background && !terminal && value.kind === "ready" ? value : { kind: "error", error }));
+          // A failed background read keeps ready data on screen. Any other failure replaces it, so a later update can't
+          // bring the old data back over the error.
+          if (background && kind === "transient" && ready.current !== undefined) return;
+          ready.current = undefined;
+          setState({ kind: "error", error });
         },
       );
     };
