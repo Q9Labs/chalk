@@ -34,8 +34,13 @@ run_owned() {
 }
 
 # A zombie still belongs to its group, and kill -0 counts it on Linux, so only live members count.
+# A second TERM to the wrapper's process group also reaches ps, and procps ps resets the TERM ignore it
+# inherits. A scan that did not finish says nothing about the group, so the group counts as alive until the
+# deadline.
 group_alive() {
-  ps -A -o pgid= -o stat= | awk -v group="$1" '$1 == group && $2 !~ /^Z/ { live = 1 } END { exit !live }'
+  local table
+  table="$(ps -A -o pgid= -o stat=)" || return 0
+  awk -v group="$1" '$1 == group && $2 !~ /^Z/ { live = 1 } END { exit !live }' <<<"${table}"
 }
 
 stop_owned() {

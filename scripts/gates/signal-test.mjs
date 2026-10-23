@@ -40,8 +40,8 @@ sleep 1 while 1;
 
 // Starts a wrapper in its own process group, sends the group a signal once the wrapped command is ready,
 // and returns how the wrapper exited, how long it took and what it printed to stderr.
-// With `againAfterMs`, the group gets the signal a second time while the wrapper is still stopping.
-export async function signalWhenReady(context, { args, cwd, env, ready, signal, againAfterMs }) {
+// With `againWhen`, the group gets the signal a second time once that file exists, while the wrapper is still stopping.
+export async function signalWhenReady(context, { args, cwd, env, ready, signal, againWhen }) {
   const child = spawn("bash", args, { cwd, detached: true, stdio: ["ignore", "ignore", "pipe"], env });
   let stderr = "";
   child.stderr.on("data", (chunk) => (stderr += chunk));
@@ -65,9 +65,13 @@ export async function signalWhenReady(context, { args, cwd, env, ready, signal, 
   }
   const started = Date.now();
   process.kill(-child.pid, signal);
-  if (againAfterMs !== undefined) {
-    const again = setTimeout(() => early === undefined && process.kill(-child.pid, signal), againAfterMs);
-    exited.then(() => clearTimeout(again));
+  if (againWhen !== undefined) {
+    const again = setInterval(() => {
+      if (!existsSync(againWhen)) return;
+      clearInterval(again);
+      process.kill(-child.pid, signal);
+    }, 20);
+    exited.then(() => clearInterval(again));
   }
   const result = await exited;
   const seconds = (Date.now() - started) / 1000;
