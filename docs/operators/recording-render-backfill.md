@@ -1,8 +1,8 @@
 # Backfill recording renders
 
-New captures queue their render automatically. This command is only for older
-successful captures without a render job. It never retries an existing failed
-job or renews retention. No migration or production backfill runs on deployment.
+Tenants can opt in to automatic rendering; on demand is the default. This command
+inspects older successful captures for opted-in Tenants. It never retries an
+existing failed job or renews retention. Deployment never runs this backfill.
 
 Inject `CHALK_DATABASE_URL` and the normal `CHALK_R2_*` configuration through the
 operator environment. Do not paste credentials into arguments or logs.
