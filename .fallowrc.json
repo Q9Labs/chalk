@@ -35,6 +35,7 @@
     "tools/contract-fixture-proof/test/*.mjs",
     "tools/sdk-web-consumer-e2e/consumer/styles.css",
     "scripts/gates/chalk-gate-plan.mjs",
+    "scripts/gates/osv-snapshot.mjs",
     "scripts/integration-smoke/run.mjs",
     "scripts/recorder/analyze-media.mjs",
     "scripts/recorder/compare-frames.mjs",
@@ -68,6 +69,7 @@
     "../../sdks/typescript/client/dist/webhooks/index.js"
   ],
   "ignoreDependencies": [
+    "js-yaml",
     "@arethetypeswrong/cli",
     "playwright",
     "publint",
