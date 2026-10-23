@@ -23,6 +23,11 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 		return spaces.Space{}, err
 	}
 	defer tx.Rollback(ctx)
+	// CreateSpace locks the Tenant row; take the later journey write intent first,
+	// matching delivery and purge even when a purge fence is already queued.
+	if _, err := tx.Exec(ctx, `lock table observability_journey_events in row exclusive mode`); err != nil {
+		return spaces.Space{}, err
+	}
 	queries := sqlc.New(tx)
 	if input.RequestKey != "" {
 		_, err := queries.ReserveSpaceCreateRequest(ctx, sqlc.ReserveSpaceCreateRequestParams{

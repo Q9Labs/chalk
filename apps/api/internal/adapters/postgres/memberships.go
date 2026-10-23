@@ -184,6 +184,10 @@ func membershipWithUser(id, tenantID, userID pgtype.UUID, role, userName, userEm
 var _ memberships.MembershipRepository = MembershipRepository{}
 
 func lockMembershipTenant(ctx context.Context, tx pgx.Tx, id utilities.ID) error {
+	// Match purge's table-before-row order while retaining last-owner serialization.
+	if _, err := tx.Exec(ctx, `lock table memberships in row exclusive mode`); err != nil {
+		return err
+	}
 	var locked pgtype.UUID
 	return tx.QueryRow(ctx, `select id from tenants where id=$1 for update`, uuid(id)).Scan(&locked)
 }
