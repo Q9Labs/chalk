@@ -192,10 +192,13 @@ export function createGuestAccessGetter({ apiBaseURL, credential, initialAccess,
   let currentAccess = initialAccess;
   const client = publicClient(apiBaseURL, credential.guestCredential);
 
-  return async ({ reason }) => {
+  return async ({ reason, replaceMediaConnection, signal }) => {
     if (reason === "join") return currentAccess;
     try {
-      const refreshed = await client.refreshSpacePublicInviteAccess({ arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential, mediaProof: mediaProof(currentAccess) }, { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential });
+      const refreshed = await client.refreshSpacePublicInviteAccess(
+        { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential, mediaProof: mediaProof(currentAccess), replaceMediaConnection, signal },
+        { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential },
+      );
       currentAccess = refreshed;
       onOperation?.("refresh", "succeeded");
       return refreshed;
