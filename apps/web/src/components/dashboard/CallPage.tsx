@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
-import { pendingRecording } from "../../lib/dashboard/recording";
+import { workingRecording } from "../../lib/dashboard/recording";
 import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -43,7 +43,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         lifecycleRefresh.current.pending ||
         (!data.call.archived && data.call.admission === "knock") ||
         data.live ||
-        data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => pendingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
+        data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => workingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
         data.knocks.length
           ? data.knocks.length
             ? 3000
@@ -73,7 +73,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
         for (const session of data.episodes)
           for (const recording of session.recordings) {
-            if (pendingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
+            if (workingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
             for (const transcript of recording.transcripts ?? []) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
           }
         if (!targets.length) return next;

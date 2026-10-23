@@ -118,3 +118,39 @@ it("uses the shared status tick for new knocks, accepted progress, retry and set
   expect(act).toHaveBeenCalledTimes(2);
   expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call", "call-status", "call-status", "call-status", "call-status"]);
 });
+
+it("doesn't poll an ended call when this page's clock runs past a deadline the server still reports open", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  // The recording's windows closed a minute ago by this page's clock, but the server still serves them, so its clock is behind.
+  const episode = {
+    id: "episode",
+    status: "ended",
+    startedAt: "2026-10-21T00:00:00Z",
+    endedAt: "2026-10-21T00:05:00Z",
+    participantCount: 1,
+    recordingsNextCursor: null,
+    recordings: [
+      {
+        id: "recording",
+        status: "completed",
+        sourceStatus: "available",
+        exportStatus: "ready",
+        exportRetryable: false,
+        failureMessage: null,
+        transcriptionStatus: "ready",
+        sourceExpiresAt: "2026-10-22T11:59:00Z",
+        transcriptionExpiresAt: "2026-10-22T11:59:00Z",
+        createdAt: "2026-10-21T00:00:00Z",
+        transcripts: [{ id: "transcript", status: "completed", languages: ["en"], createdAt: "2026-10-21T00:00:00Z" }],
+      },
+    ],
+  } satisfies CallPageDTO["episodes"][number];
+  vi.mocked(readPage).mockResolvedValueOnce({ ...initial, call: { ...initial.call, admission: "anyone" }, episodes: [episode] });
+  await reactAct(async () => {
+    render(<CallPage spaceId="space" />);
+  });
+  await reactAct(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
+  expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call"]);
+});

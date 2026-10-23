@@ -1,9 +1,14 @@
 import type { RecordingDTO, TranscriptDTO } from "./contracts";
 
-/** A recording is polled exactly while the page shows it waiting, so a terminal state never polls and a wait never stalls. */
-export function pendingRecording(recording: RecordingDTO, now = Date.now()): boolean {
+/** The server reports work in progress on this recording, so a page that shows it waiting polls until the work ends. */
+export function workingRecording(recording: RecordingDTO): boolean {
   const video = videoState(recording);
-  return video === "capturing" || video === "preparing" || recording.transcriptionStatus === "pending" || lapsed(recording, now);
+  return video === "capturing" || video === "preparing" || recording.transcriptionStatus === "pending";
+}
+
+/** The past-session page also polls past a deadline the server still reports open, because its actions depend on that window. */
+export function pendingRecording(recording: RecordingDTO, now = Date.now()): boolean {
+  return workingRecording(recording) || lapsed(recording, now);
 }
 
 /**
