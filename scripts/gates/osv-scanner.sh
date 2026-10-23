@@ -5,7 +5,7 @@ script_directory="$(cd "$(dirname "$0")" && pwd)"
 lockfiles=()
 while IFS= read -r file; do
   case "${file}" in
-    go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
+    go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock | mix.lock | */mix.lock)
       lockfiles+=("$file")
       ;;
   esac

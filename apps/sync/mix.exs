@@ -24,7 +24,7 @@ defmodule ChalkSync.MixProject do
 
   defp deps do
     [
-      {:bandit, "~> 1.12.5", override: true},
+      {:bandit, "~> 1.13.0", override: true},
       {:postgrex, "~> 0.22.4"},
       {:telemetry, "~> 1.3"},
       {:websock_adapter, "~> 0.5"},
