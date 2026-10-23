@@ -154,3 +154,32 @@ it("keeps the call usable when browser camera capture is unavailable", async () 
   expect(errors).toEqual([]);
   await page.keyboard.press("Escape");
 });
+
+it("judge: keeps the active preview tied to the call track after a device selection", async () => {
+  await load("shell-browser-camera-on");
+  await page.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
+  await expect.poll(() => page.getByRole("menuitemradio").count()).toBeGreaterThanOrEqual(2);
+  const preview = page.locator(".chalk-shell-preview video");
+  const callTrack = await preview.evaluateHandle((video: HTMLVideoElement) => video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined);
+  const originalDevice = await callTrack.evaluate((track) => track?.getSettings().deviceId);
+  expect(originalDevice).toBeTruthy();
+  const selectedDevice = await page.evaluate(async () => (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput")[1]?.deviceId);
+  await page.getByRole("menuitemradio").nth(1).click();
+  await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0]?.getSettings().deviceId : undefined)).toBe(selectedDevice);
+  await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0);
+  const previewDevice = await preview.evaluate((video: HTMLVideoElement) => video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0]?.getSettings().deviceId : undefined);
+  console.log("JUDGE_ACTIVE_CAMERA", { originalDevice, callDevice: await callTrack.evaluate((track) => track?.getSettings().deviceId), previewDevice, callState: await callTrack.evaluate((track) => track?.readyState) });
+  expect(previewDevice).toBe(originalDevice);
+  await callTrack.dispose();
+});
+
+it("judge: releases private capture when the call controls unmount", async () => {
+  await load("shell-browser-cameras");
+  await page.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
+  const preview = page.locator(".chalk-shell-preview video");
+  await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0);
+  const track = await preview.evaluateHandle((video: HTMLVideoElement) => video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined);
+  await page.getByRole("button", { name: "Leave call", exact: true }).filter({ visible: true }).evaluate((button: HTMLButtonElement) => button.click());
+  await expect.poll(() => track.evaluate((value) => value?.readyState)).toBe("ended");
+  await track.dispose();
+});
