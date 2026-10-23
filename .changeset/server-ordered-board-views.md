@@ -8,3 +8,5 @@ Order board camera views by authenticated server stamps for real camera moves an
 Publish the 1,536-byte transient envelope limit and additive leadership metadata contract, while retaining legacy view interoperability.
 
 Make every camera move lead except followed-view application, preserve leading moves through recovery, and order one tab by sequence only. Use authenticated per-Episode hybrid clocks across Sync nodes and fail readiness on shared origin-key disagreement.
+
+Keep applied relay sequences separate from direct observations. Allow cached Bring to relay as an ordinary view without granting new Bring intent.

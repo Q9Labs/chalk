@@ -51,7 +51,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOrigin do
     end
   end
 
-  # Authenticate geometry too: a relay may not change a signed camera or Bring.
+  # Authenticate geometry too. A relay may suppress Bring, never add it.
   def sign(view, episode) do
     payload =
       {2, view.origin_participant_id, view.origin_connection_id, view.origin_lead_stamp,
@@ -65,7 +65,9 @@ defmodule ChalkSync.WhiteboardV1.ViewOrigin do
 
   def valid?(%{origin_proof: proof} = view, episode, clock)
       when is_binary(proof) and byte_size(proof) == 64 do
-    with true <- :crypto.hash_equals(proof, sign(view, episode)),
+    with true <-
+           :crypto.hash_equals(proof, sign(view, episode)) or
+             (not view.bring and :crypto.hash_equals(proof, sign(%{view | bring: true}, episode))),
          {:ok, time} <- stamp_time(view, episode),
          {:ok, _high} <- ViewClock.advance(episode, time, false, clock) do
       true

@@ -21,7 +21,9 @@ defmodule ChalkSync.WhiteboardV1.ViewOriginTest do
 
       b =
         start_supervised!(
-          {ViewClock, name: :view_clock_test_b, wall: fn -> 20_000_000 + @offset end}, id: :b)
+          {ViewClock, name: :view_clock_test_b, wall: fn -> 20_000_000 + @offset end},
+          id: :b
+        )
 
       {:ok, first} = ViewOrigin.lead(view("a"), @episode, a)
       first = Map.put(first, :origin_proof, ViewOrigin.sign(first, @episode))
@@ -48,6 +50,17 @@ defmodule ChalkSync.WhiteboardV1.ViewOriginTest do
     assert ViewOrigin.valid?(signed, @episode, a)
     {:ok, later} = ViewOrigin.lead(view("a"), @episode, a)
     assert time(later) > time(second)
+  end
+
+  test "cached Bring can become an ordinary relay but an ordinary view cannot become Bring" do
+    clock = start_supervised!({ViewClock, name: :view_clock_bring, wall: fn -> 100 end})
+    {:ok, bring} = ViewOrigin.lead(%{view("a") | bring: true}, @episode, clock)
+    signed_bring = Map.put(bring, :origin_proof, ViewOrigin.sign(bring, @episode))
+    assert ViewOrigin.valid?(%{signed_bring | bring: false}, @episode, clock)
+    refute ViewOrigin.valid?(%{signed_bring | bring: false, x: 999}, @episode, clock)
+    ordinary = %{bring | bring: false}
+    signed_ordinary = Map.put(ordinary, :origin_proof, ViewOrigin.sign(ordinary, @episode))
+    refute ViewOrigin.valid?(%{signed_ordinary | bring: true}, @episode, clock)
   end
 
   test "clock capacity never evicts an active ordering watermark" do

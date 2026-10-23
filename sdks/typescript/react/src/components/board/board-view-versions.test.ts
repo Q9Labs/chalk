@@ -261,7 +261,7 @@ it("never downgrades a legacy epoch's learned stamp after a delayed frame", () =
   receive(versions, { ...old, originSequence: 2, originLeadStamp: "200:b" });
   versions.observe(old, "delayed-relay");
   const { originConnectionId: _connection, originLeadStamp: _stamp, ...legacy } = { ...old, originSequence: 3 };
-  expect(versions.isRetired(old)).toBe(true);
+  expect(versions.isNew(old)).toBe(false);
   expect(versions.isRetired(legacy)).toBe(false);
   expect(versions.isNew(legacy)).toBe(true);
 });

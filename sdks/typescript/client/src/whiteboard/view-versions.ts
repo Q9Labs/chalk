@@ -23,12 +23,14 @@ export class ChalkWhiteboardViewVersions {
   readonly #participants = new Map<string, Participant>();
   readonly #epochs = new Map<string, Position>();
   readonly #tabs = new Map<string, Position>();
+  readonly #appliedTabs = new Map<string, number>();
 
   #epoch(view: ChalkWhiteboardView): string {
     return JSON.stringify([view.originParticipantId, view.originEpoch]);
   }
 
   #origin(view: ChalkWhiteboardView): Position | undefined {
+    if (!view.originParticipantId) return undefined;
     const origin = view.originConnectionId && view.originLeadStamp ? { connectionId: view.originConnectionId, lead: BigInt(view.originLeadStamp.slice(0, view.originLeadStamp.indexOf(":"))) } : this.#epochs.get(this.#epoch(view));
     return origin && { ...origin, sequence: view.originSequence };
   }
@@ -38,8 +40,8 @@ export class ChalkWhiteboardViewVersions {
     const origin = this.#origin(view);
     const current = this.#participants.get(view.originParticipantId);
     if (!origin) return false;
-    const tab = this.#tabs.get(JSON.stringify([view.originParticipantId, origin.connectionId]));
-    return (tab !== undefined && origin.sequence < tab.sequence) || (current !== undefined && before(origin, current));
+    const applied = this.#appliedTabs.get(JSON.stringify([view.originParticipantId, origin.connectionId]));
+    return (applied !== undefined && origin.sequence < applied) || (current !== undefined && origin.connectionId !== current.connectionId && before(origin, current));
   }
 
   isNew(view: ChalkWhiteboardView): boolean {
@@ -47,6 +49,7 @@ export class ChalkWhiteboardViewVersions {
     if (this.isRetired(view)) return false;
     const origin = this.#origin(view);
     if (origin !== undefined) {
+      if (origin.sequence <= (this.#appliedTabs.get(JSON.stringify([view.originParticipantId, origin.connectionId])) ?? 0)) return false;
       const applied = this.#participants.get(view.originParticipantId)?.applied;
       return !applied || compare(origin, applied) > 0;
     }
@@ -57,6 +60,7 @@ export class ChalkWhiteboardViewVersions {
   remember(view: ChalkWhiteboardView, _publisherId?: string): void {
     if (!view.originParticipantId || !this.isNew(view)) return;
     const origin = this.#origin(view);
+    if (origin) this.#retain(this.#appliedTabs, JSON.stringify([view.originParticipantId, origin.connectionId]), origin.sequence);
     const current = this.#participants.get(view.originParticipantId);
     if (origin !== undefined && current) {
       this.#retain(this.#participants, view.originParticipantId, { ...current, applied: { ...origin, sequence: view.originSequence } });
@@ -104,7 +108,7 @@ export class ChalkWhiteboardViewVersions {
 
   forgetParticipant(participantId: string): void {
     this.#participants.delete(participantId);
-    for (const history of [this.#sequences, this.#epochs, this.#tabs]) {
+    for (const history of [this.#sequences, this.#epochs, this.#tabs, this.#appliedTabs]) {
       for (const key of history.keys()) if (JSON.parse(key)[0] === participantId) history.delete(key);
     }
   }

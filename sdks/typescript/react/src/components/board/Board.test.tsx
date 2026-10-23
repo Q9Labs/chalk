@@ -1763,6 +1763,19 @@ type OrderingDriver = {
 };
 const orderingScenarios: readonly { name: string; check: (driver: OrderingDriver) => Promise<void> }[] = [
   {
+    name: "an observed direct view does not block the selected relay's next unapplied view",
+    check: async (d) => {
+      await d.follow("relay");
+      await d.deliver(d.view("older", 100), orderingRelay);
+      d.expectCamera(100);
+      const next = d.view("older", 200);
+      await d.deliver(d.view("older", 300));
+      d.expectCamera(100);
+      await d.deliver(next, orderingRelay);
+      d.expectCamera(200);
+    },
+  },
+  {
     name: "JUDGE: a late pre-reconnect sequence cannot win by being stamped later",
     check: async (d) => {
       const delayed = d.view("older", 100);
@@ -2149,7 +2162,9 @@ it.each(orderingScenarios)("ordering scenario table: $name (camera deadline 600 
         };
         const driver: OrderingDriver = {
           view,
-          skew: (tab, milliseconds) => { skew[tab] = milliseconds; },
+          skew: (tab, milliseconds) => {
+            skew[tab] = milliseconds;
+          },
           consensus: async (frames) => {
             const mirror = orderingTransport();
             await mirror.sdk.startSceneSubscription();
@@ -2162,7 +2177,9 @@ it.each(orderingScenarios)("ordering scenario table: $name (camera deadline 600 
               }
               await drain();
               const cached: { x: number }[] = [];
-              const off = mirror.sdk.subscribe((event) => { if (event.type === "view") cached.push(event); });
+              const off = mirror.sdk.subscribe((event) => {
+                if (event.type === "view") cached.push(event);
+              });
               off();
               const winner = cached.at(-1);
               expect(winner).toBeDefined();
@@ -2360,6 +2377,7 @@ it.each(cameraMoveCases)("camera API leadership: $name", async ({ follow, run })
         await vi.advanceTimersByTimeAsync(800);
       });
       expect(send).toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: !follow }));
       if (follow) expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
       else expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
     },
@@ -2371,28 +2389,36 @@ it.each(cameraMoveCases)("camera API leadership: $name", async ({ follow, run })
 it("JUDGE: user Zoom in grants leadership", async () => {
   vi.useFakeTimers();
   const send = vi.fn(() => true);
-  await withOpenBoard(async (container, _engine, _peer, _toast, render) => {
-    await render({ following: null });
-    await act(async () => vi.advanceTimersByTimeAsync(250));
-    send.mockClear();
-    await clickControl(container, "Zoom in");
-    await act(async () => vi.advanceTimersByTimeAsync(600));
-    expect(send).toHaveBeenCalled();
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
-  }, true, { sendView: send });
+  await withOpenBoard(
+    async (container, _engine, _peer, _toast, render) => {
+      await render({ following: null });
+      await act(async () => vi.advanceTimersByTimeAsync(250));
+      send.mockClear();
+      await clickControl(container, "Zoom in");
+      await act(async () => vi.advanceTimersByTimeAsync(600));
+      expect(send).toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+    },
+    true,
+    { sendView: send },
+  );
 });
 
 it("review repro: queued initial fit must not cancel a newer Bring", async () => {
   vi.useFakeTimers();
   const onFollow = vi.fn();
-  await withOpenBoard(async (_container, engine, peer) => {
-    await act(async () => engine.pan(25, 30));
-    onFollow.mockClear();
-    await act(async () => {
-      engine.select("note");
-      peer.receive("presenter", { x: 75, y: 25, width: 100, height: 100, bring: true });
-      await vi.advanceTimersByTimeAsync(600);
-    });
-    expect(onFollow).toHaveBeenLastCalledWith("presenter");
-  }, true, { onFollow });
+  await withOpenBoard(
+    async (_container, engine, peer) => {
+      await act(async () => engine.pan(25, 30));
+      onFollow.mockClear();
+      await act(async () => {
+        engine.select("note");
+        peer.receive("presenter", { x: 75, y: 25, width: 100, height: 100, bring: true });
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      expect(onFollow).toHaveBeenLastCalledWith("presenter");
+    },
+    true,
+    { onFollow },
+  );
 });

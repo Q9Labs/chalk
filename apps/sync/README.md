@@ -49,7 +49,9 @@ All nodes in one database-backed Sync deployment must use the same 32-byte,
 base64url `CHALK_SYNC_VIEW_ORIGIN_SECRET`, unchanged across database restores.
 Sync only has public Ed25519 token verification keys; neither those public keys
 nor independently valid database credentials provide a shared symmetric key.
-Origin proofs derive from the dedicated secret, never a database row.
+Origin proofs derive from the dedicated secret, never a database row. A relay may
+suppress a signed Bring action for cached replay. It may not add Bring or change
+the signed geometry.
 
 Nodes announce an HMAC fingerprint of a fixed label through PostgreSQL
 notifications. Startup discovery takes two seconds; heartbeats run every two

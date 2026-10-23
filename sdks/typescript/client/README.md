@@ -281,12 +281,13 @@ not prevent recovery. Subscription stop detaches without waiting for socket clos
 
 ### Board view ordering
 
-A participant's last real camera move or Follow-me start wins across tabs. The
-first Sync node receiving that intent stamps it with server Unix microseconds
-and authenticates the stamp for the origin connection. Within a tab, the SDK's
-sequence continues across socket reconnects. Relays preserve the authenticated
-origin stamp and geometry. Equal timestamps use the connection UUID as a stable
-tie-break. Sync nodes must have synchronized system clocks.
+Sync stamps camera moves and Follow-me starts with a per-Episode hybrid logical
+clock: `max(wall_microseconds, highest_authentic_stamp_seen) + 1`. Every verified
+or relayed authentic stamp advances that node's clock. Within a tab, the sequence
+alone orders views and continues across socket reconnects. Between tabs, stamps
+order views and equal stamps use the connection UUID as a stable tie-break.
+Relays preserve the authenticated origin stamp and geometry. The crossed
+reconnect limitation in [#451](https://github.com/Q9Labs/chalk/issues/451) remains.
 
 Idle views (including two-second keep-alives), discovery and resize retain the
 tab's last stamp. They never take leadership from another tab. A returning tab
@@ -301,7 +302,10 @@ as unpadded base64url, shared by every node in the environment and retained acro
 database restore. It derives domain-separated per-Episode proof keys without a
 database lookup. Configure it before deploying this release. Development and
 explicit localhost proof/parity modes use a local fixture key only. Never rotate
-it during a rolling deploy: existing view proofs would become invalid.
+it during a rolling deploy: existing view proofs would become invalid. Nodes
+publish HMAC fingerprints through PostgreSQL notifications. A live-peer mismatch
+fails readiness and logs both fingerprints, never the secrets. Sync has no
+mandatory shared symmetric key from which to derive this secret.
 
 Authoritative participant removal clears ordering and cached views. Temporary
 socket loss keeps both, so automatic recovery does not revive stale views.
@@ -309,7 +313,11 @@ socket loss keeps both, so automatic recovery does not revive stale views.
 The transport delivers all live view observations, including enriched duplicates
 and retired views, so consumers can invalidate cached views before filtering.
 Use `ChalkWhiteboardViewVersions` to observe ordering before applying or caching a
-view; React Board does this automatically. Subscription replay omits retired views.
+view; React Board does this automatically. Application deduplication remembers
+applied sequences separately from direct observations, so a faster direct stream
+does not block the selected relay. Subscription replay omits retired views and
+suppresses cached Bring actions. Sync accepts that authenticated downgrade, but
+rejects adding Bring or changing signed geometry.
 
 ### Screen capture source hints
 
