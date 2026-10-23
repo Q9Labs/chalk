@@ -90,7 +90,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
         do: lock_intent(connection, episode, lifecycle_intent_id),
         else: intent
 
-    case {intent.status, prepared} do
+    decision = case {intent.status, prepared} do
       {"applied", _prepared} ->
         lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
 
@@ -103,6 +103,9 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
       {"pending", _prepared} ->
         apply_pending_lifecycle(connection, episode, control, intent)
     end
+
+    if decision.result in [:applied, :already_applied], do: JoinSeats.claim_entry(connection, identity)
+    decision
   end
 
   defp lock_lifecycle_control(connection, episode) do

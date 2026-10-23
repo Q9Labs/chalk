@@ -9,6 +9,41 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.UUID
 
+  def claim_entry(_connection, nil), do: :ok
+  def claim_entry(_connection, %{entry_token_id: nil}), do: :ok
+
+  def claim_entry(connection, identity) do
+    Postgrex.query!(
+      connection,
+      """
+      update participant_join_seats set entry_token_id=$6
+      where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4
+        and generation=$5 and state='joined'
+      """,
+      Scope.participant(identity) ++ [identity.participant_generation, identity.entry_token_id]
+    )
+
+    :ok
+  end
+
+  def validate_leave(connection, %{entry_token_id: token} = identity, %{name: :participant_leave})
+      when is_binary(token) do
+    case Postgrex.query!(
+           connection,
+           """
+           select entry_token_id from participant_join_seats
+           where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4
+             and generation=$5
+           """,
+           Scope.participant(identity) ++ [identity.participant_generation]
+         ).rows do
+      [[owner]] when not is_nil(owner) and owner != token -> {:error, :participant_inactive}
+      _ -> :ok
+    end
+  end
+
+  def validate_leave(_connection, _identity, _operation), do: :ok
+
   def prepare(connection, episode, intent, identity) do
     if identity &&
          (intent.participant_id != identity.participant_id ||

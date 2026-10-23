@@ -6,6 +6,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Postgres.Authority
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.CommandDecision
   alias ChalkSync.Stateholder.Postgres.CommandPersistence
   alias ChalkSync.Stateholder.Postgres.Control
@@ -44,6 +45,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
           )
 
         with :ok <- Authority.validate_operation_actor(identity, operation, policy, participant),
+             :ok <- JoinSeats.validate_leave(connection, identity, operation),
              {:ok, state} <- Control.validate_fold(identity.episode, control, policy),
              {:ok, context} <- prepare_operation(connection, identity, operation, policy, state),
              :ok <- ensure_operation_capacity(connection, identity.episode) do

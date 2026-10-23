@@ -724,6 +724,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          participant_id: String.downcase(claims.participant_id),
          participant_generation: generation,
          admission_lifecycle_intent_id: String.downcase(claims.admission_lifecycle_intent_id),
+         entry_token_id: claims.entry_token_id,
          protocol_version: 1,
          role: authorization.role,
          capabilities: authorization.capabilities

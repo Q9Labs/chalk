@@ -29,6 +29,9 @@ a retried admission names a participant that has already left. The public
 uses the existing `HttpClientError` channel, with its code in the response body.
 The dashboard reads that code and retries once with a fresh join key.
 
-Rollout: apply the database migration first, then upgrade Sync, then the API and
+Completed entry also fences an older entry's delayed Leave, so reattaching the
+same seat cannot let the previous mount remove it.
+
+Rollout: apply the database migrations first, then upgrade Sync, then the API and
 this client. This client also works with an older Sync, and published 5.0.x
 clients keep hello confirmation with the new Sync.

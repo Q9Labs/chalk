@@ -4601,3 +4601,6 @@ $$;
 create trigger participant_join_seat_departure after update of status on participants
     for each row execute function complete_participant_join_seat();
 -- +goose StatementEnd
+
+alter table participant_join_seats add column entry_token_id text
+    check (octet_length(entry_token_id) between 1 and 128);

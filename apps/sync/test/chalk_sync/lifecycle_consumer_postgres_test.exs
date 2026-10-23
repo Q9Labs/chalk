@@ -40,6 +40,26 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     end
   end
 
+  @tag :join_seat_retry
+  test "a completed reentry fences an older entry's delayed Leave", %{connections: connections} do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    first = %{fixture.identity | entry_token_id: "first-entry"}
+    current = %{fixture.identity | entry_token_id: "current-entry"}
+
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
+    {:ok, stale_leave} = ChalkSync.Stateholder.Operation.new("stale_entry_leave_001", :participant_leave, %{})
+    assert {:ok, %{result: :rejected, reason: :participant_inactive}} = Postgres.begin_operation(first, stale_leave)
+    assert [["active", "joined", "current-entry"]] = Postgrex.query!(connection,
+      "select p.status,s.state,s.entry_token_id from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1",
+      [UUID.dump!(current.participant_id)]).rows
+
+    {:ok, current_leave} = ChalkSync.Stateholder.Operation.new("current_entry_leave_001", :participant_leave, %{})
+    assert {:ok, %{result: :accepted}} = Postgres.begin_operation(current, current_leave)
+  end
+
   for state <- ["pending", "cancelled", "expired"] do
     @seat_state state
     @tag :join_seat_retry
