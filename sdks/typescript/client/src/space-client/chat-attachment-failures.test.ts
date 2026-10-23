@@ -9,24 +9,30 @@ const file = { fileName: "note.txt", mimeType: "text/plain", bytes: new TextEnco
 const attachment = { attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 } as const;
 
 describe("public chat attachment failures", () => {
-  it("does not make a permanently rejected access refresh retryable", async () => {
+  it.each(["download", "upload"] as const)("preserves rejected credentials after access expires for %s", async (operation) => {
     let now = Date.now();
     const getAccess = vi
       .fn()
       .mockResolvedValueOnce(opaqueAccessGrant("chat-expired-token"))
       .mockResolvedValue(new Response(null, { status: 401 }));
-    const fetch = vi.fn<typeof globalThis.fetch>();
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({ attachmentId: "attachment-1", uploadId: "upload-1", method: "PUT", uploadUrl: "https://storage.example/upload", headers: { "content-type": "text/plain" }, expiresAt: "2030-01-01T00:00:00Z" }));
+    const storageFetch = vi.fn<typeof globalThis.fetch>(async () => {
+      now += 6 * 60_000;
+      return new Response(null, { status: 200 });
+    });
     const platform = createCoreTestPlatform();
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess },
-      { ...platform, dependencies: { ...platform.dependencies, clock: { ...platform.dependencies.clock, now: () => now }, createChatFileTransport: ({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch }) } },
+      { ...platform, fetch: storageFetch, dependencies: { ...platform.dependencies, clock: { ...platform.dependencies.clock, now: () => now }, createChatFileTransport: ({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch }) } },
     );
     try {
       await client.join({ microphone: false, camera: false });
-      now += 6 * 60_000;
-      await expect(client.chat.files.resolveUrl(attachment)).rejects.toMatchObject({ code: "access.invalid", recoverable: false });
+      if (operation === "download") now += 6 * 60_000;
+      const result = operation === "upload" ? client.chat.files.upload(file) : client.chat.files.resolveUrl(attachment);
+      await expect(result).rejects.toMatchObject({ code: "access.invalid", recoverable: false, message: "Access was rejected" });
       expect(getAccess).toHaveBeenCalledTimes(2);
-      expect(fetch).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(operation === "upload" ? 1 : 0);
+      expect(storageFetch).toHaveBeenCalledTimes(operation === "upload" ? 1 : 0);
     } finally {
       client.dispose();
     }
@@ -54,7 +60,7 @@ describe("public chat attachment failures", () => {
     );
     try {
       await client.join({ microphone: false, camera: false });
-      await expect(client.chat.files.resolveUrl(attachment)).rejects.toMatchObject({ code: "access.invalid", recoverable: false, message });
+      await expect(client.chat.files.resolveUrl(attachment)).rejects.toMatchObject({ code: "access.invalid", recoverable: false, message: "Access was rejected" });
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       client.dispose();

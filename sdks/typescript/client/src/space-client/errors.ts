@@ -83,7 +83,7 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
 
 function normalizeUnavailableChatFile(cause: ChalkChatFileError): SpaceClientError {
   if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
-    return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.message });
+    return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.cause instanceof Error ? cause.cause.message : "Access was rejected" });
   }
   return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message });
 }
