@@ -4,7 +4,7 @@ set -euo pipefail
 script_directory="$(cd "$(dirname "$0")" && pwd)"
 # Let OSV discover every supported input, respecting .gitignore. No filename list.
 # --no-resolve avoids the Python transitive resolver crash, not input discovery.
-args=(scan source --recursive --no-resolve --all-packages --experimental-exclude 'r:(^|/)(node_modules|\.git|\.worktrees)(/|$)')
+args=(scan source --recursive --no-resolve --all-packages --experimental-exclude 'r:(^|/)(node_modules|\.git|\.worktrees)$')
 
 osv_scanner() {
   if command -v osv-scanner >/dev/null 2>&1; then
