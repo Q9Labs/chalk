@@ -12,19 +12,28 @@ export async function withProofCall({ app, screen }, run) {
   const directory = process.env.CHALK_E2E_DIRECTORY;
   if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
   const guest = await prepareGuest(directory);
+  const errors = [];
   try {
     await app.open(invite);
     await screen.getByLabel("Your name").fill("Web proof A");
     await screen.getByRole("button", "Join call", { exact: true }).click();
     await run(guest);
-  } finally {
-    try {
-      const leave = screen.getByRole("button", "Leave call", { exact: true });
-      if (await leave.count()) await leave.click();
-    } finally {
-      await guest.dispose();
-    }
+  } catch (error) {
+    errors.push(error);
   }
+  try {
+    const leave = screen.getByRole("button", "Leave call", { exact: true });
+    if (await leave.count()) await leave.click();
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
+    await guest.dispose();
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length) throw new AggregateError(errors, "Web proof call or cleanup failed");
 }
 
 async function prepareGuest(directory) {
