@@ -211,19 +211,20 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
 
     // Following the guest by its tile moves the web view with the guest's view.
     await screen.getByLabel("Follow Proof").click();
-    await expect(screen.getByText("Following Proof")).toBeVisible();
+    const following = screen.getByRole("status").filter({ hasText: "Following Proof" });
+    await expect(following).toBeVisible();
     expect(await guest.board.view({ x: 0, y: 0, width: 4000, height: 2500, bring: false })).toBe(true);
     await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).not.toBe("100%");
     const wide = await browser.evaluate(zoomLabel);
     expect(await guest.board.view({ x: 100, y: 100, width: 400, height: 250, bring: false })).toBe(true);
     await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).not.toBe(wide);
     await screen.getByRole("button", "Stop", { exact: true }).click();
-    await expect(screen.getByText("Following Proof")).not.toBeVisible();
+    await expect(following).not.toBeVisible();
 
     // Bring everyone makes the web follow the guest again, with a toast that says who did it.
     expect(await guest.board.view({ x: 0, y: 0, width: 2000, height: 1250, bring: true })).toBe(true);
     await expect(screen.getByText("Proof brought everyone to this view")).toBeVisible();
-    await expect(screen.getByText("Following Proof")).toBeVisible();
+    await expect(following).toBeVisible();
     await app.screenshot("board-web");
 
     await screen.getByRole("button", "Leave call", { exact: true }).click();

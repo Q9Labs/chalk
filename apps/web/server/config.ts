@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const environmentSchema = z.object({
-  CHALK_ENVIRONMENT: z.enum(["local", "test", "staging", "production"]),
+  CHALK_ENVIRONMENT: z.enum(["local", "test", "staging", "nightly", "production"]),
   CHALK_API_ORIGIN: z.url(),
   DASHBOARD_ORIGIN: z.url(),
   GOOGLE_CLIENT_ID: z.string().min(1),

@@ -12,14 +12,36 @@ export async function withProofCall({ app, screen }, run) {
   const directory = process.env.CHALK_E2E_DIRECTORY;
   if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
   const guest = await prepareGuest(directory);
-  try {
+  const errors = [];
+  let joined = false;
+  const call = async () => {
     await app.open(invite);
     await screen.getByLabel("Your name").fill("Web proof A");
-    await screen.getByRole("button", "Join", { exact: true }).click();
+    await screen.getByRole("button", "Join call", { exact: true }).click();
+    joined = true;
     await run(guest);
-  } finally {
-    await guest.dispose();
+  };
+  for (const step of [call, () => leaveWebCall(screen, joined), () => guest.dispose()]) {
+    await step().catch((error) => errors.push(error));
   }
+  throwErrors(errors, "Web proof call or cleanup failed");
+}
+
+function throwErrors(errors, message) {
+  const failures = [...new Set(errors.flatMap(flattenErrors))];
+  if (failures.length === 1) throw failures[0];
+  if (failures.length) throw new AggregateError(failures, message);
+}
+
+async function leaveWebCall(screen, joined) {
+  const leave = screen.getByRole("button", "Leave call", { exact: true });
+  if (await leave.count()) await leave.click();
+  // The left heading appears during leave; Rejoin stays disabled until release finishes.
+  if (joined) await screen.getByRole("button", "Rejoin", { exact: true, disabled: false }).waitFor({ state: "visible", timeout: 15_000 });
+}
+
+function flattenErrors(error) {
+  return error instanceof AggregateError ? error.errors.flatMap(flattenErrors) : [error];
 }
 
 async function prepareGuest(directory) {
@@ -30,6 +52,18 @@ async function prepareGuest(directory) {
   const ready = launchGuests(run, space, episode, "", run.config.proof_origin, true, 1);
   // The test awaits this promise after opening the app; keep early failure handled.
   ready.catch(() => {});
+  let leaving;
+  const leave = () =>
+    (leaving ??= ready.then(async (guest) => {
+      const errors = [];
+      await guest.pages[0]
+        .evaluate(async () => {
+          if (window.proofBoard) await window.proofClient.whiteboard.transport().setPresentation(false);
+        })
+        .catch((error) => errors.push(error));
+      await guest.pages[0].evaluate(() => window.proofClient.leave()).catch((error) => errors.push(error));
+      throwErrors(errors, "SDK guest leave failed");
+    }));
   return {
     ready,
     async playAudio() {
@@ -79,15 +113,14 @@ async function prepareGuest(directory) {
       elements: async () => (await ready).pages[0].evaluate(boardElements),
       view: async (view) => (await ready).pages[0].evaluate(boardView, view),
     },
-    async leave() {
-      const guest = await ready;
-      await guest.pages[0].evaluate(() => window.proofClient.leave());
-    },
+    leave,
     async dispose() {
-      await ready.catch(() => {});
+      const guest = await ready.catch(() => undefined);
+      const errors = [];
+      if (guest) await leave().catch((error) => errors.push(error));
       const results = await Promise.allSettled([...run.resources].reverse().map((resource) => resource.dispose()));
-      const errors = results.filter((result) => result.status === "rejected").map((result) => result.reason);
-      if (errors.length) throw new AggregateError(errors, "SDK guest cleanup failed");
+      errors.push(...results.filter((result) => result.status === "rejected").map((result) => result.reason));
+      throwErrors(errors, "SDK guest cleanup failed");
     },
   };
 }

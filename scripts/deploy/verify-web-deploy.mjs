@@ -49,6 +49,14 @@ async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, ex
   await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
   if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal);
   await verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal);
+  if (expectedEnvironment === "nightly") await verifyDashboard(baseURL, requestTimeoutMs, deadlineSignal);
+}
+
+async function verifyDashboard(baseURL, requestTimeoutMs, deadlineSignal) {
+  const response = await request(endpointURL(baseURL, "/auth/session"), requestTimeoutMs, deadlineSignal);
+  requireStatus(response, 401, "dashboard session");
+  const session = await readJSON(response, "dashboard session");
+  if (session?.error?.code !== "sign_in_required") throw new Error("dashboard did not report the signed-out state");
 }
 
 async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal) {

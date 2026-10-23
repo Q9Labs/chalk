@@ -19,7 +19,10 @@ describe("dashboard deployment boundary", () => {
   it("permits an explicitly local fixture with distinct HTTP cookies", () => {
     expect(configuration(local).DASHBOARD_IDENTITY_PROVIDER).toBe("fixture");
   });
-  it.each(["staging", "production"])("rejects fixture mode in %s", (environment) => {
+  it("accepts the isolated nightly dashboard with OAuth", () => {
+    expect(configuration({ ...local, CHALK_ENVIRONMENT: "nightly", CHALK_API_ORIGIN: "https://nightly-api.chalkmeet.com", DASHBOARD_ORIGIN: "https://nightly.chalkmeet.com", DASHBOARD_IDENTITY_PROVIDER: "oauth" }).CHALK_ENVIRONMENT).toBe("nightly");
+  });
+  it.each(["nightly", "staging", "production"])("rejects fixture mode in %s", (environment) => {
     expect(() => configuration({ ...local, CHALK_ENVIRONMENT: environment, CHALK_API_ORIGIN: "https://api.example.test", DASHBOARD_ORIGIN: "https://chalk.example.test" })).toThrow("Fixture identity is local/test only");
   });
   it("rejects non-loopback insecure local origins", () => {
