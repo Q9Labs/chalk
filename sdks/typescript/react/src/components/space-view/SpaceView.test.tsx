@@ -203,3 +203,93 @@ it("retries a failed screen Off command as Off, not Start", async () => {
     preview.dispose();
   }
 });
+
+it("retains live drawing permission updates alongside the offline notice", async () => {
+  const base = createSnapshot(["drawWhiteboard"]);
+  const warning = "Your expired offline actions were not sent.";
+  const client = createPreviewClient({ ...base, connection: { ...base.connection, status: "live" }, offline: { ...base.offline, notice: warning } });
+  const container = document.createElement("main");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} onToggleWhiteboard={() => {}} />
+        </ChalkProvider>,
+      ),
+    );
+    expect(container.querySelector('[aria-label="Board"]')).not.toBeNull();
+    expect(container.textContent).toContain(warning);
+    await act(async () => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, engine: { ...current.whiteboard.engine, status: "ready" }, access: { ...current.whiteboard.access, policy: "everyone", canDraw: false } } })));
+    expect(container.querySelector('[aria-label="Board"]')).toBeNull();
+    expect(container.textContent).toContain(warning);
+    await act(async () => client.updateSnapshot((current) => ({ ...current, whiteboard: { ...current.whiteboard, access: { ...current.whiteboard.access, canDraw: true } } })));
+    expect(container.querySelector('[aria-label="Board"]')).not.toBeNull();
+    expect(container.textContent).toContain(warning);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it("keeps an expired warning reachable and dismissed through Notices and rotation", async () => {
+  let callHeight = 320;
+  const callbacks = new Set<(entries: ResizeObserverEntry[]) => void>();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private notify: (entries: ResizeObserverEntry[]) => void) {}
+      observe() {
+        callbacks.add(this.notify);
+      }
+      disconnect() {
+        callbacks.delete(this.notify);
+      }
+    },
+  );
+  const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(() => callHeight);
+  const base = createSnapshot([]);
+  const warning = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+  const client = createPreviewClient({ ...base, connection: { ...base.connection, status: "live" }, offline: { ...base.offline, notice: warning } });
+  const frame = document.createElement("main");
+  document.body.append(frame);
+  const root = createRoot(frame);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} commandError="Camera blocked" />
+        </ChalkProvider>,
+      ),
+    );
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(0);
+    expect(frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label")).toBe("Show 2 notices");
+    await act(async () => frame.querySelector<HTMLButtonElement>("[data-part=notice-button]")!.click());
+    const notice = [...document.querySelectorAll("[data-part=notice]")].find((node) => node.textContent?.includes(warning));
+    expect(notice).toBeDefined();
+    expect(document.querySelectorAll("[data-part=notice]")).toHaveLength(2);
+    await act(async () => notice!.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click());
+    expect(frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label")).toBe("Show 1 notice");
+    expect([...document.querySelectorAll("[data-part=notice]")].some((node) => node.textContent?.includes(warning))).toBe(false);
+    await act(async () => {
+      callHeight = 844;
+      for (const callback of [...callbacks]) callback([]);
+    });
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(1);
+    expect(frame.querySelector("[data-part=toast]")?.textContent).not.toContain(warning);
+    await act(async () => {
+      callHeight = 320;
+      for (const callback of [...callbacks]) callback([]);
+    });
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(0);
+    expect(frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label")).toBe("Show 1 notice");
+  } finally {
+    await act(async () => root.unmount());
+    frame.remove();
+    client.dispose();
+    height.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});

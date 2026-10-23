@@ -116,7 +116,10 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
 function useShortCall(stack: RefObject<HTMLElement | null>, enabled: boolean): boolean | null {
   const [short, setShort] = useState<boolean | null>(null);
   useLayoutEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setShort(null);
+      return;
+    }
     const call = stack.current?.closest<HTMLElement>("[data-part='call-frame']");
     const read = () => setShort(Boolean(call && call.clientHeight > 0 && call.clientHeight < FOLD_BELOW_PX));
     read();

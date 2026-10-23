@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { act, useLayoutEffect } from "react";
+import { act, useEffect, useLayoutEffect } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { Stage, type StageItem } from "./Stage";
+import { fitSpotlight, DEFAULT_SPOTLIGHT_OPTIONS } from "./stage-layout";
 
 it("keeps capped shared content readable in overflow, even with a single stage slot", async () => {
   const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora" } };
@@ -158,5 +159,121 @@ it("hydrates a shared media host without hydration errors or duplicate client mo
   } finally {
     await act(async () => root.unmount());
     container.remove();
+  }
+});
+
+it("includes shares in the configured phone-board floating limit", () => {
+  const geometry = fitSpotlight({ width: 390, height: 844 }, "board", ["share-a", "share-b", "nora", "akash", "self"], { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, floatingPhonePeople: true, wideIds: ["share-a", "share-b"], maxPerPage: 2, speakerId: "nora", localId: "self" });
+  const floats = geometry.frames.filter((frame) => frame.role === "float");
+
+  expect(floats.length).toBeLessThanOrEqual(2);
+});
+
+it("does not mount a second caller content tree when folded content opens", async () => {
+  const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora" } };
+  const items: StageItem[] = [person, { kind: "screen-share", id: "share", participant: person.participant }, { kind: "whiteboard", id: "whiteboard" }];
+  const active = new Map<string, number>();
+  function Content({ id }: { id: string }) {
+    useEffect(() => {
+      active.set(id, (active.get(id) ?? 0) + 1);
+      return () => {
+        active.set(id, (active.get(id) ?? 0) - 1);
+      };
+    }, [id]);
+    return <div data-caller-content={id}>{id} is readable</div>;
+  }
+  const frame = document.createElement("main");
+  document.body.append(frame);
+  const root = createRoot(frame);
+  try {
+    await act(async () => root.render(<Stage items={items} layout="grid" maxPerPage={1} generatedAvatars={false} animate={false} renderPrimaryContent={(item) => <Content id={item.id} />} />));
+    expect(active.get("share")).toBe(1);
+    expect(active.get("whiteboard")).toBe(1);
+    await act(async () => frame.querySelector<HTMLButtonElement>("[data-stage-item='stage:more']")!.click());
+
+    expect(frame.querySelector("[role=dialog]")?.textContent).toContain("share is readable");
+    expect(active.get("share")).toBe(1);
+    expect(active.get("whiteboard")).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    frame.remove();
+  }
+});
+
+it("returns overflow media to the stage without mounting a replacement", async () => {
+  const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora" } };
+  const items: StageItem[] = [person, { kind: "screen-share", id: "share", participant: person.participant }, { kind: "whiteboard", id: "whiteboard" }];
+  let mounts = 0,
+    active = 0,
+    peak = 0;
+  function Media() {
+    useLayoutEffect(() => {
+      mounts++;
+      active++;
+      peak = Math.max(peak, active);
+      return () => {
+        active--;
+      };
+    }, []);
+    return <video data-review-media="share" />;
+  }
+  const container = document.createElement("main");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Stage items={items} layout="grid" maxPerPage={1} generatedAvatars={false} animate={false} renderContentTile={(item) => (item.id === "share" ? <Media /> : <div>whiteboard</div>)} />));
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-stage-item='stage:more']")!.click());
+    const video = container.querySelector("[role=dialog] video[data-review-media=share]");
+    expect(video).not.toBeNull();
+    const beforeClose = mounts;
+    await act(async () => container.querySelector("[role=dialog]")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true })));
+    expect(container.querySelector("[role=dialog]")).toBeNull();
+
+    expect(active).toBe(1);
+    expect(peak).toBe(1);
+    expect(mounts).toBe(beforeClose);
+    expect(container.querySelector("[data-stage-item=share] [data-review-media=share]")).toBe(video);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+it("keeps phone shares beyond the floating cap reachable in overflow", async () => {
+  const updates: (() => void)[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        if (target.getAttribute("data-testid") !== "stage") return;
+        updates.push(() => this.callback([{ target, contentRect: new DOMRectReadOnly(0, 0, 390, 844), borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: [] }], this));
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const participant = { id: "person", displayName: "Nora" };
+  const items: StageItem[] = [
+    { kind: "whiteboard", id: "board" },
+    { kind: "screen-share", id: "share-a", participant },
+    { kind: "screen-share", id: "share-b", participant },
+    { kind: "participant", id: "person", participant },
+  ];
+  const container = document.createElement("main");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Stage items={items} layout="focus" pinnedId="board" maxPerPage={2} generatedAvatars={false} animate={false} renderContentTile={(item) => <div data-review-content={item.id}>{item.id}</div>} />));
+    await act(async () => updates.forEach((update) => update()));
+    expect(container.querySelectorAll("[data-stage-role=float]").length).toBe(2);
+    const more = container.querySelector<HTMLButtonElement>("[data-stage-item='stage:more']");
+    expect(more).not.toBeNull();
+    await act(async () => more!.click());
+    expect(container.querySelector("[role=dialog] [data-review-content='share-b']")).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
   }
 });

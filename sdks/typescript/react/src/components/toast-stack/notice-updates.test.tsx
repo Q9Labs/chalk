@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, type ReactNode } from "react";
+import { act, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { it, expect, vi } from "vitest";
 import { ToastStack } from "./ToastStack";
@@ -27,7 +27,7 @@ it("refits a folded toast when its action is removed", async () => {
     const after = frame.querySelectorAll("[data-part=toast]").length;
     await render(false, "Changed camera permission message");
     const control = frame.querySelectorAll("[data-part=toast]").length;
-    console.log("CHROME_REPRO", JSON.stringify({ before, afterActionRemoved: after, afterMessageChanged: control, folded: fold.mock.calls }));
+
     expect(before).toBe(0);
     expect(control).toBe(1);
     expect(after).toBe(1);
@@ -56,8 +56,7 @@ it("folds the actual offline warning with other SpaceView notices on a short cal
       ),
     );
     const toasts = [...frame.querySelectorAll("[data-part=toast]")].map((t) => t.textContent);
-    const button = frame.querySelector("[data-part=notice-button]")?.getAttribute("aria-label");
-    console.log("OFFLINE_REPRO", JSON.stringify({ toasts, button }));
+
     expect(toasts).toEqual([]);
   } finally {
     await act(async () => root.unmount());
@@ -120,6 +119,106 @@ it("keeps the same mounted toast, focus and finite lifetime when its chrome chan
   } finally {
     await act(async () => root.unmount());
     frame.remove();
+    vi.useRealTimers();
+  }
+});
+
+it("does not remount a folded rich toast for equivalent new JSX icons", async () => {
+  const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+  const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return this.dataset.part === "call-frame" ? 844 : 60;
+  });
+  const child = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(80);
+  const frame = document.createElement("main");
+  frame.dataset.part = "call-frame";
+  document.body.append(frame);
+  const root = createRoot(frame),
+    mounted = vi.fn(),
+    unmounted = vi.fn();
+  function Message() {
+    useEffect(() => {
+      mounted();
+      return () => {
+        unmounted();
+      };
+    }, []);
+    return <input />;
+  }
+  function Icon() {
+    return <svg aria-hidden="true" />;
+  }
+  const fold = () => {};
+  const render = () => act(async () => root.render(<ToastStack toasts={[{ id: "same", message: <Message />, announcementText: "Camera blocked", icon: <Icon /> }]} onDismiss={() => {}} onFold={fold} />));
+  try {
+    await render();
+    const initialMounts = mounted.mock.calls.length;
+    const initialUnmounts = unmounted.mock.calls.length;
+    for (let i = 0; i < 3; i++) await render();
+
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(0);
+    expect(mounted).toHaveBeenCalledTimes(initialMounts);
+    expect(unmounted).toHaveBeenCalledTimes(initialUnmounts);
+  } finally {
+    await act(async () => root.unmount());
+    frame.remove();
+    width.mockRestore();
+    height.mockRestore();
+    child.mockRestore();
+  }
+});
+
+it("refits fresh action and icon elements without looping, remounting rich input, or restarting expiry", async () => {
+  vi.useFakeTimers();
+  const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+  const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return this.dataset.part === "call-frame" ? 844 : 200;
+  });
+  const child = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(48);
+  const frame = document.createElement("main");
+  frame.dataset.part = "call-frame";
+  document.body.append(frame);
+  const root = createRoot(frame);
+  const mount = vi.fn(),
+    dismiss = vi.fn();
+  let renders = 0;
+  function Message() {
+    useEffect(() => {
+      mount();
+    }, []);
+    return <input aria-label="Draft" defaultValue="" />;
+  }
+  function Host({ version }: { version: number }) {
+    const [, setFolded] = useState<readonly string[]>([]);
+    if (++renders > 100) throw new Error("Fit invalidation loops");
+    return <ToastStack toasts={[{ id: "stable", message: <Message />, announcementText: "Camera blocked", duration: 1000, icon: <span>{version}</span>, action: { label: `Retry ${version}`, onClick() {} } }]} onDismiss={dismiss} onFold={(ids) => setFolded([...ids])} />;
+  }
+  const render = (version: number) => act(async () => root.render(<Host version={version} />));
+  try {
+    await render(0);
+    const input = frame.querySelector("input")!;
+    input.value = "keep this draft";
+    input.focus();
+    const mutations: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => mutations.push(...records));
+    observer.observe(input.parentElement!, { subtree: true, childList: true, characterData: true });
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    for (let version = 1; version <= 15; version++) await render(version);
+    expect(mount).toHaveBeenCalledOnce();
+    expect(frame.querySelector("input")).toBe(input);
+    expect(input.value).toBe("keep this draft");
+    expect(document.activeElement).toBe(input);
+    expect([...mutations, ...observer.takeRecords()]).toEqual([]);
+    observer.disconnect();
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    await act(async () => vi.advanceTimersByTimeAsync(160));
+    expect(dismiss).toHaveBeenCalledOnce();
+    expect(renders).toBeLessThan(100);
+  } finally {
+    await act(async () => root.unmount());
+    frame.remove();
+    width.mockRestore();
+    height.mockRestore();
+    child.mockRestore();
     vi.useRealTimers();
   }
 });
