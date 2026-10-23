@@ -50,7 +50,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   def read_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_read_ms, @read_ms)
 
   @doc "Keeps the Episode's access current while the calling socket is alive."
-  @spec watch(EpisodeKey.t()) :: :ok
+  @spec watch(EpisodeKey.t()) :: :ok | {:error, :authority_unavailable}
   def watch(%EpisodeKey{} = episode), do: Poller.watch(episode, self())
 
   @doc false
@@ -77,8 +77,10 @@ defmodule ChalkSync.WhiteboardV1.Authority do
     case lookup(identity.episode) do
       # No poller is reading this Episode yet, so only the connect check counts.
       :missing ->
-        watch(identity.episode)
-        freshness(nil, nil, connected_at)
+        case watch(identity.episode) do
+          :ok -> freshness(nil, nil, connected_at)
+          {:error, :authority_unavailable} -> {:retryable, {:storage_unavailable, "authority"}}
+        end
 
       {:not_found, read_at, _failure}
       when not is_integer(connected_at) or read_at > connected_at ->
@@ -90,9 +92,6 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   rescue
     # The table goes away with this process while it restarts.
     ArgumentError -> {:retryable, {:storage_unavailable, "authority"}}
-  catch
-    # The poller supervisor restarts just after this process, so a watch can find it missing.
-    :exit, {:noproc, _call} -> {:retryable, {:storage_unavailable, "authority"}}
   end
 
   defp lookup(episode) do

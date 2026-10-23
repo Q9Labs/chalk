@@ -525,6 +525,36 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       refute match?({:stop, _reason, _close, _state}, receive_frame(cursor(), live))
     end
 
+    test "a hello while the poller supervisor restarts closes with a retry", %{state: state} do
+      {:ok, initial} = SocketWhiteboardV1.init(%{})
+      Process.cancel_timer(initial.hello_timer)
+      supervisor = Authority.Supervisor
+
+      # Stopping the poller supervisor holds open the window after an Authority restart in
+      # which Authority is back and the poller supervisor is not yet.
+      :ok = Supervisor.terminate_child(supervisor, Authority.Pollers)
+      on_exit(fn -> Supervisor.restart_child(supervisor, Authority.Pollers) end)
+
+      assert {:stop, :normal, {1012, "dependency unavailable"}, closed} =
+               receive_frame(
+                 %{
+                   "type" => "hello",
+                   "protocol" => "whiteboard-v1",
+                   "token" => token(state.identity),
+                   "cursor" => nil
+                 },
+                 initial
+               )
+
+      assert closed.terminal == %{
+               close_code: 1012,
+               reason: :dependency_unavailable,
+               failure: "authority"
+             }
+
+      {:ok, _pollers} = Supervisor.restart_child(supervisor, Authority.Pollers)
+    end
+
     test "closes instead of sending a cursor after the Participant left", %{state: state} do
       access("active", "left")
       read(state)

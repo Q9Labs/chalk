@@ -9,20 +9,31 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   alias ChalkSync.WhiteboardV1.Repository
 
   def watch(episode, socket) do
-    poller =
-      case Registry.lookup(ChalkSync.Episodes.Registry, key(episode)) do
-        [{poller, _value}] ->
-          poller
+    with {:ok, poller} <- poller(episode) do
+      # A poller that is stopping drops this; the socket's next check finds no entry and watches again.
+      GenServer.cast(poller, {:watch, socket})
+    end
+  end
 
-        [] ->
-          case DynamicSupervisor.start_child(Authority.Pollers, {__MODULE__, episode}) do
-            {:ok, poller} -> poller
-            {:error, {:already_started, poller}} -> poller
-          end
-      end
+  defp poller(episode) do
+    case Registry.lookup(ChalkSync.Episodes.Registry, key(episode)) do
+      [{poller, _value}] -> {:ok, poller}
+      [] -> start(episode)
+    end
+  rescue
+    # The Registry's table goes away while the Registry restarts.
+    ArgumentError -> {:error, :authority_unavailable}
+  end
 
-    # A poller that is stopping drops this; the socket's next check finds no entry and watches again.
-    GenServer.cast(poller, {:watch, socket})
+  # The poller supervisor restarts just after Authority, so a start in that gap finds it missing.
+  defp start(episode) do
+    case DynamicSupervisor.start_child(Authority.Pollers, {__MODULE__, episode}) do
+      {:ok, poller} -> {:ok, poller}
+      {:error, {:already_started, poller}} -> {:ok, poller}
+      {:error, _reason} -> {:error, :authority_unavailable}
+    end
+  catch
+    :exit, _reason -> {:error, :authority_unavailable}
   end
 
   def start_link(episode) do

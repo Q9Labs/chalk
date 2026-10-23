@@ -95,11 +95,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         {:stop, reason, close, put_in(state.terminal[:denial], denial)}
 
       {:retryable, {_reason, failure}} ->
-        {:stop, reason, close, state} =
-          stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-
-        {:stop, reason, close, put_in(state.terminal[:failure], failure)}
+        dependency_unavailable(state, failure)
     end
+  end
+
+  # The close trace keeps a bounded failure category; the peer sees only that it may retry.
+  defp dependency_unavailable(state, failure) do
+    {:stop, reason, close, state} =
+      stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+
+    {:stop, reason, close, put_in(state.terminal[:failure], failure)}
   end
 
   defp handle_message(:whiteboard_authority_tick, state) do
@@ -357,13 +362,13 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims),
-         {:ok, welcome} <- Episode.connect(identity) do
-      # Taken once the connect check has passed, so a stored read that started while it waited,
-      # possibly before the Participant's admission committed, cannot close this socket.
-      connected_at = System.monotonic_time(:millisecond)
+         {:ok, welcome} <- Episode.connect(identity),
+         # Taken once the connect check has passed, so a stored read that started while it waited,
+         # possibly before the Participant's admission committed, cannot close this socket.
+         connected_at = System.monotonic_time(:millisecond),
+         :ok <- Authority.watch(identity.episode) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
-      Authority.watch(identity.episode)
       Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
 
       welcome =
@@ -395,6 +400,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
       {:error, :invalid_token} -> stop(state, 1008, "invalid token", :invalid_token)
       {:error, :invalid_identity} -> stop(state, 1008, "invalid token", :invalid_token)
       {:error, :permission_denied} -> stop(state, 1008, "policy violation", :permission_denied)
+      {:error, :authority_unavailable} -> dependency_unavailable(state, "authority")
       _unavailable -> stop(state, 1012, "dependency unavailable", :dependency_unavailable)
     end
   end
