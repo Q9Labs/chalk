@@ -485,11 +485,15 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp dispatch_with_context(episode, operation, media_plane, recording_plane, timeout_ms) do
-    with :ready <- prepare_entry_leave(episode, operation) do
-      dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms)
-    else
-      :pending -> :pending
-      :superseded -> {:terminal_failure, :participant_inactive}
+    case prepare_entry_leave(episode, operation) do
+      :ready ->
+        dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms)
+
+      :pending ->
+        :pending
+
+      :superseded ->
+        {:terminal_failure, :participant_inactive}
     end
   end
 
