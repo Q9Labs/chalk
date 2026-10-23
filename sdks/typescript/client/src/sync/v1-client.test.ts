@@ -398,6 +398,42 @@ describe("V1SyncClient", () => {
       sync.stop();
     }
   });
+  it("confirms a replacement Sync client's generation once before its later Leave", async () => {
+    const first = await liveClient({}, baseState(), ownerId, true, 7);
+    const replacement = await liveClient({}, baseState(), ownerId, true, 8);
+    const platform = createCoreTestPlatform();
+    const access = opaqueAccessGrant("replacement-entry");
+    const createSyncClient = vi.fn().mockReturnValueOnce(first.client).mockReturnValue(replacement.client);
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => ({ ...access, subject: { ...access.subject, participant_id: ownerId } }) }, { ...platform, dependencies: { ...platform.dependencies, createSyncClient } });
+    const firstSnapshot = first.client.getSnapshot();
+    try {
+      await client.join({ microphone: false, camera: false });
+      expect(first.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+      vi.spyOn(first.client, "getSnapshot").mockReturnValue({ ...firstSnapshot, connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+      first.socket.close();
+      await vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(replacement.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1));
+      expect(new URL(replacement.urls[0]!).searchParams.get("entry_generation")).toBe("new");
+      replacement.socket.receive({ type: "entered_ack" });
+      replacement.socket.receive({ type: "pong" });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      expect(first.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+      expect(replacement.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+
+      const leaving = client.leave();
+      await vi.waitFor(() => expect(replacement.socket.frames().some((frame) => frame.type === "operation" && frame.name === "participant_leave")).toBe(true));
+      const operation = replacement.socket.frames().find((frame) => frame.type === "operation" && frame.name === "participant_leave");
+      if (!operation) throw new Error("Replacement did not send Leave");
+      replacement.socket.receive({ type: "ack", command_id: operation.command_id, delivery: "original", outcome: "satisfied", revision: replacement.state.revision, state_digest: replacement.state.stateDigest });
+      await leaving;
+      expect(client.getSnapshot().connection.status).toBe("left");
+    } finally {
+      client.dispose();
+      first.client.stop();
+      replacement.client.stop();
+      vi.restoreAllMocks();
+    }
+  });
   it("requests entry confirmation on the URL and sends entered only after Sync grants it", async () => {
     const { client, socket, urls } = await liveClient();
     try {
