@@ -62,6 +62,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-manifest-${{ steps.evidence.outputs.release_id }}
-          path: recovery-evidence/
+          path: |
+            recovery-evidence/${{ steps.evidence.outputs.release_id }}.json
+            recovery-evidence/${{ steps.evidence.outputs.release_id }}.media.json
+          retention-days: 90
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recovery-proof-${{ steps.evidence.outputs.release_id }}
+          path: |
+            recovery-evidence/original-successful-rollback-proof.json
+            recovery-evidence/fresh-host-verification.json
           retention-days: 90
           if-no-files-found: error
