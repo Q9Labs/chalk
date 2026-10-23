@@ -460,11 +460,18 @@ func (q *Queries) CommitRecordingArtifact(ctx context.Context, arg CommitRecordi
 }
 
 const completeCaptureRecordingJob = `-- name: CompleteCaptureRecordingJob :one
-with completed as (
+with completion_eligibility as materialized (
+    select jobs.id,
+        recording_capture_completion_available(jobs.recording_id) as completion_available,
+        recording_capture_stop_confirmed(jobs.recording_id) as stop_confirmed
+    from recording_jobs jobs
+    where jobs.id = $1 and jobs.kind = 'capture'
+), completed as (
     update recording_jobs
     set state = 'succeeded', lease_token = null, lease_owner = null, lease_expires_at = null,
         error_code = null, error_detail = null, terminal_at = now(), updated_at = now()
-    where recording_jobs.id = $1
+    from completion_eligibility eligibility
+    where recording_jobs.id = eligibility.id
       and kind = 'capture'
       and state = 'leased'
       and recording_jobs.attempt_count = $2
@@ -477,7 +484,7 @@ with completed as (
           where authority.job_id = recording_jobs.id
             and authority.kind = recording_jobs.kind
             and ((convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is not true
-                 or recording_capture_completion_available(recording_jobs.recording_id))
+                 or eligibility.completion_available)
             and authority.attempt_count = $2
             and authority.fencing_generation = $3
             and authority.capture_epoch = $6
@@ -505,12 +512,12 @@ with completed as (
         jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', $6::bigint,
                            'reason', 'stop_unconfirmed', 'source', 'committed_bundles')
     from completed
+    join completion_eligibility eligibility on eligibility.id = completed.id
     join sync_recordings recording on recording.recording_id = completed.recording_id and recording.tenant_id = completed.tenant_id
     left join sync_external_operations start_operation on start_operation.external_operation_id = recording.start_external_operation_id
         and start_operation.tenant_id = completed.tenant_id and start_operation.episode_id = completed.episode_id
         and start_operation.recording_id = completed.recording_id and start_operation.operation_name = 'start_recording'
-    where recording_capture_completion_available(completed.recording_id)
-      and not recording_capture_stop_confirmed(completed.recording_id)
+    where eligibility.completion_available and not eligibility.stop_confirmed
     returning event_id
 ), reservation as (
     select recording_pipelines.recording_id, recording_reservations.id,
