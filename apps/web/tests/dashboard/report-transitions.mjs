@@ -21,7 +21,13 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
     if (dismissal === "Escape") await tab.keyboard.press("Escape");
     else await tab.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
     await tab.getByRole("dialog").waitFor({ state: "hidden" });
-    const focused = await target.evaluate((element) => element.isConnected && element === document.activeElement);
+    const focused =
+      target === "main"
+        ? await tab.evaluate(() => {
+            const element = document.activeElement;
+            return element instanceof HTMLElement && element.matches('main, [role="main"]') && element.isConnected && !element.closest("[inert]") && element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+          })
+        : await target.evaluate((element) => element.isConnected && element === document.activeElement);
     const active = await tab.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent?.trim().slice(0, 160) }));
     await writeFile(resolve(evidence, `${name}.json`), JSON.stringify({ focused, active }, null, 2));
     await tab.screenshot({ path: resolve(evidence, `${name}.png`), animations: "disabled" });
@@ -96,7 +102,7 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
             await openerElement.evaluate((element, attribute) => element.setAttribute(attribute, ""), unavailable);
             await homeElement.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).setAttribute(attribute, ""), unavailable);
             try {
-              await closeReport(tab, dismissal, tab.locator("main[data-chalk-status]"), `fallback-${unavailable}-${role}-${dismissal}`);
+              await closeReport(tab, dismissal, "main", `fallback-${unavailable}-${role}-${dismissal}`);
             } finally {
               await openerElement.evaluate((element, attribute) => element.removeAttribute(attribute), unavailable);
               await homeElement.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).removeAttribute(attribute), unavailable);
