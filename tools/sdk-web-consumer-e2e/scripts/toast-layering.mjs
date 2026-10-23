@@ -28,7 +28,10 @@ async function proveViewport(page, baseURL, { screenshotDirectory, label, notice
   url.searchParams.set("fixture", "toast-layering");
   await page.goto(url.href);
   if (noticeBottom !== undefined) await page.addStyleTag({ content: `.chalk-toasts { bottom: ${noticeBottom}px; }` });
-  const alert = page.getByRole("alert").filter({ hasText: "setCameraEnabled belongs to an inactive connection" });
+  const error = "setCameraEnabled belongs to an inactive connection";
+  // A call shorter than 620px keeps its notices behind the header's notice button and reads them out from a hidden announcer instead of toasts.
+  const notice = (text, live) => (place === "header" ? page.locator(`[data-part='notice-announcer'] [aria-live='${live}']`, { hasText: text }) : page.getByRole(live === "assertive" ? "alert" : "status").filter({ hasText: text }));
+  const alert = notice(error, "assertive");
   await alert.waitFor();
   await page.getByRole("button", { name: "Reactions", exact: true }).click();
   await page.getByRole("button", { name: "React with 👍", exact: true }).click();
@@ -38,7 +41,7 @@ async function proveViewport(page, baseURL, { screenshotDirectory, label, notice
   await hand.click();
   await page.waitForFunction(() => window.__toastLayering.state().raised);
   await page.evaluate(() => window.__toastLayering.peerHand());
-  await page.getByRole("status").filter({ hasText: "Nora raised a hand" }).waitFor();
+  await notice("Nora raised a hand", "polite").waitFor();
   await hand.click();
   await page.waitForFunction(() => !window.__toastLayering.state().raised);
   const reactions = await page.evaluate(() => window.__toastLayering.state().reactions);
@@ -46,11 +49,18 @@ async function proveViewport(page, baseURL, { screenshotDirectory, label, notice
   if (place === "header") {
     await page.locator("[data-part='notice-button']").click();
     const list = page.getByRole("dialog", { name: "Notices" });
-    await list.locator("[data-part='notice']", { hasText: "setCameraEnabled belongs to an inactive connection" }).getByRole("button", { name: "Dismiss", exact: true }).click();
+    const row = list.locator("[data-part='notice']", { hasText: error });
+    await row.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await row.waitFor({ state: "detached" });
     await page.keyboard.press("Escape");
     await list.waitFor({ state: "hidden" });
-  } else await alert.getByRole("button", { name: "Dismiss", exact: true }).click();
-  await alert.waitFor({ state: "detached" });
+    // Escape handed focus back to the notice button, whose tooltip would take the next Escape before the tray.
+    await page.evaluate(() => document.activeElement.blur());
+    await page.locator("[data-part='tooltip']").waitFor({ state: "hidden" });
+  } else {
+    await alert.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await alert.waitFor({ state: "detached" });
+  }
   assert.deepEqual(await page.evaluate(() => window.__toastLayering.state().reactions), reactions, "Dismiss must not send a reaction");
   await page.keyboard.press("Escape");
   await page.locator(".chalk-shell-reactions").waitFor({ state: "detached" });

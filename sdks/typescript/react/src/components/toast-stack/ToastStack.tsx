@@ -26,8 +26,7 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   const stack = useRef<HTMLDivElement>(null);
   const short = useShortCall(stack, onFold !== undefined);
   // Until the call's height is known, a folding stack shows nothing, so no notice mounts and then folds.
-  const limit = onFold === undefined || short === false ? maxVisible : 0;
-  const shown = limit > 0 ? toasts.slice(-limit) : [];
+  const shown = onFold !== undefined && short !== false ? [] : toasts.slice(-maxVisible);
   const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !shown.includes(toast)) : [];
   const foldedIds = folded.map((toast) => toast.id);
   // Each notice is announced once: by its toast if it shows first, or by the announcer if it folds first.
@@ -42,7 +41,10 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     for (const id of announced.current) if (!present.has(id)) announced.current.delete(id);
     const fresh = foldedIds.filter((id) => !announced.current.has(id));
     for (const id of [...foldedIds, ...shown.map((toast) => toast.id)]) announced.current.add(id);
+    // A notice leaves the announcer once it shows or goes, so folding again doesn't read it twice.
+    const kept = unheard.filter((id) => foldedIds.includes(id));
     if (fresh.length) setUnheard(fresh);
+    else if (kept.length < unheard.length) setUnheard(kept);
     if (sameIds(reported.current, foldedIds)) return;
     reported.current = foldedIds;
     fold.current(foldedIds);
@@ -63,19 +65,20 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
         ))}
       </div>
       {onFold ? (
+        // Live regions without the status and alert roles, so a query for a toast's role finds only toasts.
         <div data-part="notice-announcer" className="sr-only">
-          <div role="status">
+          <div aria-live="polite">
             {announcing
               .filter((toast) => toast.type !== "error")
               .map((toast) => (
-                <span key={toast.id}>{toast.message}</span>
+                <div key={toast.id}>{toast.message}</div>
               ))}
           </div>
-          <div role="alert">
+          <div aria-live="assertive">
             {announcing
               .filter((toast) => toast.type === "error")
               .map((toast) => (
-                <span key={toast.id}>{toast.message}</span>
+                <div key={toast.id}>{toast.message}</div>
               ))}
           </div>
         </div>

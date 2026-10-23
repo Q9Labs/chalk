@@ -45,7 +45,7 @@ function renderCall(height: number) {
         for (const notify of resizes) notify();
       }),
     shown: () => [...frame.querySelectorAll("[data-part='toast']")].map((toast) => toast.textContent),
-    live: () => [...frame.querySelectorAll("[role='status'], [role='alert']")].map((region) => `${region.getAttribute("role")}: ${region.textContent}`),
+    live: () => [...frame.querySelectorAll("[aria-live]")].map((region) => `${region.getAttribute("aria-live")}: ${region.textContent}`),
     unmount: () => act(async () => root.unmount()),
   };
 }
@@ -77,16 +77,18 @@ it("shows the newest three in a call 620px tall, folds the rest, and mounts each
   await call.unmount();
 });
 
-it("announces a folded notice once, politely for news and assertively for errors, and not again when it shows", async () => {
+it("announces a folded notice once, politely for news and assertively for errors, and not again when it shows or folds again", async () => {
   const call = renderCall(320);
   await call.render([
     { id: "join", message: "Nora joined" },
     { id: "camera", message: "Camera blocked", type: "error" },
   ]);
-  expect(call.live()).toEqual(["status: Nora joined", "alert: Camera blocked"]);
+  expect(call.live()).toEqual(["polite: Nora joined", "assertive: Camera blocked"]);
   await call.resize(844);
   expect(call.shown()).toEqual(["Nora joined", "Camera blocked"]);
-  expect(call.live()).toEqual(["status: ", "alert: "]);
+  expect(call.live()).toEqual(["polite: ", "assertive: "]);
+  await call.resize(320);
+  expect(call.live()).toEqual(["polite: ", "assertive: "]);
   await call.unmount();
 });
 
@@ -96,7 +98,9 @@ it("doesn't announce a notice again when a newer one pushes it into the header",
   await call.render(people.slice(0, 3));
   await call.render(people);
   expect(call.folds.at(-1)).toEqual(["Ana"]);
-  expect(call.live()).toEqual(["status: Ben joined", "status: Cy joined", "status: Di joined", "status: ", "alert: "]);
+  expect(call.live()).toEqual(["polite: Ben joined", "polite: Cy joined", "polite: Di joined", "polite: ", "assertive: "]);
+  // The announcer leaves the status and alert roles to toasts, so a host's query for a toast by role finds only toasts.
+  expect([...call.frame.querySelectorAll("[role='status'], [role='alert']")].map((toast) => toast.textContent)).toEqual(["Ben joined", "Cy joined", "Di joined"]);
   await call.unmount();
 });
 
