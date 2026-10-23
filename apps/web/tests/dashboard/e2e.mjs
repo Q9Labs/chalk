@@ -625,6 +625,26 @@ try {
     assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId, participantId: foreign.recordingId }, other.csrfToken)).status, 400);
     assert.equal((await post(malik, "/dashboard-api/home", { action: "archive-call", spaceId: foreign.spaceId, tenantId: firstTenant }, other.csrfToken)).status, 400);
 
+    assert.equal((await tenantFor("malik")).recording_render_mode, "on_demand");
+    const automatic = await post(malik, "/dashboard-api/developer", { action: "set-recording-render-mode", mode: "automatic" }, other.csrfToken);
+    assert.equal(automatic.status, 200, await automatic.clone().text());
+    assert.deepEqual(await automatic.json(), { recordingRenderMode: "automatic" });
+    assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ recording_render_mode: "automatic" }) });
+    assert.equal((await tenantFor("malik")).recording_render_mode, "automatic");
+    assert.equal((await tenantFor("ada")).recording_render_mode, "on_demand", "Saving one account must not change another account");
+    const developerSettings = await malik.request("/dashboard-api/developer");
+    assert.equal(developerSettings.status, 200);
+    assert.equal((await developerSettings.json()).recordingRenderMode, "automatic");
+    for (const action of [
+      { action: "set-recording-render-mode", mode: "always" },
+      { action: "set-recording-render-mode", mode: "automatic", tenantId: firstTenant },
+    ]) {
+      assert.equal((await post(malik, "/dashboard-api/developer", action, other.csrfToken)).status, 400);
+    }
+    assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-recording-render-mode", mode: "on_demand" }, other.csrfToken)).status, 200);
+    assert.equal((await tenantFor("malik")).recording_render_mode, "on_demand");
+    console.log("PASS: dashboard recording mode persists through the real API and stays inside the signed-in Tenant");
+
     assert.equal((await post(malik, "/dashboard-api/developer", { action: "set-allowed-websites", origins: ["https://example.test", "http://localhost:3000"] }, other.csrfToken)).status, 200);
     assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ cors_allowed_origins: ["https://chalkmeet.com", "https://example.test", "http://localhost:3000", origin] }) });
     const websites = await post(malik, "/dashboard-api/developer", { action: "allowed-websites" }, other.csrfToken);

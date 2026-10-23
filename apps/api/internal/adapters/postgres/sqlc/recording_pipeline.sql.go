@@ -495,8 +495,10 @@ with completion_eligibility as materialized (
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
 ), pipeline as (
     update recording_pipelines
-    set state = 'capture_complete', capture_completed_at = now(), updated_at = now()
+    set state = case when tenants.recording_render_mode = 'automatic' then 'render_queued' else 'capture_complete' end,
+        capture_completed_at = now(), updated_at = now()
     from completed
+    join tenants on tenants.id = completed.tenant_id
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
 ), salvage_event as (
@@ -540,18 +542,46 @@ with completion_eligibility as materialized (
     where id in (select id from reservation)
       and exists (select 1 from capacity_release)
     returning id
+), render_job as (
+    insert into recording_jobs (
+        id, tenant_id, episode_id, recording_id, kind, idempotency_key,
+        payload_schema_version, state, priority, available_at, attempt_limit
+    )
+    select gen_random_uuid(), completed.tenant_id, completed.episode_id, completed.recording_id,
+        'render', 'render:' || completed.recording_id::text,
+        $10, 'pending', $11, now(), $12
+    from completed
+    join tenants on tenants.id = completed.tenant_id
+    where exists (select 1 from reservation_release)
+      and tenants.recording_render_mode = 'automatic'
+    on conflict (recording_id, kind) do nothing
+    returning id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
+), render_journey as (
+    insert into observability_journey_events (
+        event_id, journey_id, sequence, occurred_at, name, phase, state,
+        origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes
+    )
+    select render_job.id, coalesce($13::uuid, render_job.recording_id),
+        coalesce((select max(sequence) + 1 from observability_journey_events
+                  where journey_id = coalesce($13::uuid, render_job.recording_id)), 0),
+        now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
+        $8::text, $9::text,
+        jsonb_build_object('tenant_id', render_job.tenant_id, 'episode_id', render_job.episode_id,
+            'recording_id', render_job.recording_id, 'capture_job_id', completed.id,
+            'render_job_id', render_job.id, 'trigger', 'automatic')
+    from render_job join completed on completed.recording_id = render_job.recording_id
 ), transcription_job as (
     insert into recording_jobs (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $10, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
-        'transcription:' || completed.recording_id::text, $11, 'pending',
-        $12, now(), $13
+    select $14, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
+        'transcription:' || completed.recording_id::text, $10, 'pending',
+        $11, now(), $12
     from completed
     join episodes on episodes.id = completed.episode_id
     where exists (select 1 from reservation_release)
-      and $14::boolean
+      and $15::boolean
       and episodes.config_snapshot -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('automatic', 'on_demand')
     on conflict (recording_id, kind) do nothing
 ), source_cleanup_objects as (
@@ -605,10 +635,11 @@ type CompleteCaptureRecordingJobParams struct {
 	EnvelopeDigest       []byte      `json:"envelope_digest"`
 	TraceID              pgtype.Text `json:"trace_id"`
 	SpanID               pgtype.Text `json:"span_id"`
-	RenderJobID          pgtype.UUID `json:"render_job_id"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
 	AttemptLimit         int32       `json:"attempt_limit"`
+	JourneyID            pgtype.UUID `json:"journey_id"`
+	RenderJobID          pgtype.UUID `json:"render_job_id"`
 	TranscriptionEnabled bool        `json:"transcription_enabled"`
 }
 
@@ -648,10 +679,11 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.EnvelopeDigest,
 		arg.TraceID,
 		arg.SpanID,
-		arg.RenderJobID,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
 		arg.AttemptLimit,
+		arg.JourneyID,
+		arg.RenderJobID,
 		arg.TranscriptionEnabled,
 	)
 	var i CompleteCaptureRecordingJobRow
@@ -2266,7 +2298,8 @@ with selected as (
 		end::text as transcription_policy,
 		artifacts.recording_id is not null as has_artifact,
 		artifacts.expires_at as artifact_expires_at,
-        coalesce(capture.result_metadata ->> 'capture_stop_reason', '')::text as capture_stop_reason
+        coalesce(capture.result_metadata ->> 'capture_stop_reason', '')::text as capture_stop_reason,
+        capture.error_code as capture_error_code
     from recordings
     left join recording_pipelines pipelines on pipelines.recording_id = recordings.id
     join episodes on episodes.id = recordings.episode_id
@@ -2280,7 +2313,7 @@ with selected as (
     join selected on selected.id = jobs.recording_id
     where jobs.kind = 'render'
 ), transcription_job as (
-    select jobs.recording_id, jobs.state
+    select jobs.recording_id, jobs.state, jobs.error_code
     from recording_jobs jobs
     join selected on selected.id = jobs.recording_id
     where jobs.kind = 'transcription'
@@ -2300,6 +2333,7 @@ select selected.id as recording_id,
 		when selected.transcription_policy = 'disabled' then 'none'
 		when transcription_source.status = 'ready' and transcription_source.expires_at > clock_timestamp() then 'ready'
 		when transcription_source.expires_at <= clock_timestamp() or transcription_source.status in ('cleanup_pending', 'deleting', 'deleted') then 'expired'
+        when transcription_job.error_code in ('recording_source_expired', 'render_deadline_exceeded') then 'expired'
 		when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'failed'
 		when selected.capture_completed_at is null and selected.recording_status = 'completed' then 'expired'
 		when selected.capture_completed_at is null then 'pending'
@@ -2310,6 +2344,7 @@ select selected.id as recording_id,
 	end::text as transcription_preparation_status,
 	-- The transcription source has its own window, never longer than the recording source window; a disabled policy has none.
 	(case when selected.transcription_policy = 'disabled' then null else transcription_source.expires_at end)::timestamptz as transcription_source_expires_at,
+    coalesce(transcription_job.error_code, '')::text as transcription_failure_code,
 	export_job.id as export_job_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported
@@ -2317,24 +2352,34 @@ select selected.id as recording_id,
         when selected.has_artifact and selected.artifact_expires_at is not null and selected.artifact_expires_at <= clock_timestamp() then 'unavailable'
         when selected.has_artifact then 'ready'
         when selected.recording_status = 'completed' and selected.storage_key is not null then 'ready'
-        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'unavailable'
-        when export_job.state in ('pending', 'leased') then 'pending'
+        when selected.capture_completed_at is null then 'unavailable'
+        when selected.source_expires_at <= clock_timestamp() then 'unavailable'
+        when export_job.error_code in ('recording_source_expired', 'render_deadline_exceeded') then 'unavailable'
+        when export_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
         when export_job.state = 'terminal_failure' then 'failed'
         else 'none'
     end as export_status,
     case when export_job.state = 'terminal_failure'
+        and coalesce(export_job.error_code, '') not in ('recording_source_expired', 'render_deadline_exceeded')
         and (select count(*) from recording_job_failure_history history where history.job_id = export_job.id) < 5
         and selected.source_expires_at > clock_timestamp() then true else false end as retryable,
     case
-        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'capture_failed'
-        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'recording_source_expired'
+        when selected.has_artifact and selected.artifact_expires_at <= clock_timestamp() then 'recording_expired'
+        when selected.has_artifact or (selected.recording_status = 'completed' and selected.storage_key is not null) then ''
+        when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then coalesce(selected.capture_error_code, 'capture_failed')
+        when selected.capture_completed_at is null then ''
+        when selected.source_expires_at <= clock_timestamp() then 'recording_source_expired'
         when export_job.state = 'terminal_failure' then coalesce(export_job.error_code, 'render_failed')
         else ''
     end::text as failure_code,
     case
+        when selected.has_artifact and selected.artifact_expires_at <= clock_timestamp() then 'The recording has expired.'
+        when selected.has_artifact or (selected.recording_status = 'completed' and selected.storage_key is not null) then ''
         when selected.capture_completed_at is null and (selected.pipeline_state = 'terminal_failure' or selected.recording_status = 'failed') then 'The recording capture did not complete.'
-        when selected.capture_completed_at is null or selected.source_expires_at <= clock_timestamp() then 'The recording source is no longer available.'
-        when export_job.state = 'terminal_failure' then 'The recording export could not be completed.'
+        when selected.capture_completed_at is null then ''
+        when selected.source_expires_at <= clock_timestamp() or export_job.error_code = 'recording_source_expired' then 'The recording source expired before rendering completed.'
+        when export_job.error_code = 'render_deadline_exceeded' then 'The recording could not be rendered before its deadline.'
+        when export_job.state = 'terminal_failure' then 'The recording could not be rendered.'
         else ''
     end::text as failure_message
 from selected
@@ -2357,6 +2402,7 @@ type ListRecordingDeferredArtifactStatesRow struct {
 	TranscriptionPolicy            string             `json:"transcription_policy"`
 	TranscriptionPreparationStatus string             `json:"transcription_preparation_status"`
 	TranscriptionSourceExpiresAt   pgtype.Timestamptz `json:"transcription_source_expires_at"`
+	TranscriptionFailureCode       string             `json:"transcription_failure_code"`
 	ExportJobID                    pgtype.UUID        `json:"export_job_id"`
 	ExportStatus                   string             `json:"export_status"`
 	Retryable                      bool               `json:"retryable"`
@@ -2381,6 +2427,7 @@ func (q *Queries) ListRecordingDeferredArtifactStates(ctx context.Context, arg L
 			&i.TranscriptionPolicy,
 			&i.TranscriptionPreparationStatus,
 			&i.TranscriptionSourceExpiresAt,
+			&i.TranscriptionFailureCode,
 			&i.ExportJobID,
 			&i.ExportStatus,
 			&i.Retryable,
@@ -2939,10 +2986,12 @@ with candidate as (
     from recording_pipelines pipelines
     join recordings on recordings.id = pipelines.recording_id
     join episodes on episodes.id = recordings.episode_id
-    where pipelines.recording_id = $1
-      and pipelines.tenant_id = $2
-      and recordings.tenant_id = $2
-    for update of pipelines
+    join tenants on tenants.id = pipelines.tenant_id
+    where ($1::boolean or tenants.recording_render_mode = 'automatic')
+      and pipelines.recording_id = $2
+      and pipelines.tenant_id = $3
+      and recordings.tenant_id = $3
+    for update of pipelines for share of tenants
 ), existing as (
     select jobs.id, jobs.tenant_id, jobs.episode_id, jobs.recording_id, jobs.kind, jobs.idempotency_key, jobs.payload_schema_version, jobs.state, jobs.priority, jobs.available_at, jobs.attempt_count, jobs.attempt_limit, jobs.lease_token, jobs.lease_owner, jobs.lease_expires_at, jobs.fencing_generation, jobs.error_code, jobs.error_detail, jobs.terminal_at, jobs.updated_at, jobs.created_at, jobs.result_metadata
     from recording_jobs jobs
@@ -2965,6 +3014,7 @@ with candidate as (
     join retry_tally on retry_tally.job_id = existing.id
     join candidate on candidate.recording_id = existing.recording_id
     where existing.state = 'terminal_failure'
+      and $1::boolean
       and retry_tally.retry_count < 5
       and candidate.capture_completed_at +
           (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
@@ -2984,10 +3034,10 @@ with candidate as (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $3, recordings.tenant_id, recordings.episode_id,
+    select $4, recordings.tenant_id, recordings.episode_id,
         recordings.id, 'render', 'render:' || recordings.id::text,
-        $4, 'pending', $5, now(),
-        $6
+        $5, 'pending', $6, now(),
+        $7
     from candidate
     join recordings on recordings.id = candidate.recording_id
     where candidate.state = 'capture_complete'
@@ -2996,6 +3046,20 @@ with candidate as (
           (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
     on conflict (recording_id, kind) do nothing
     returning id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
+), backfill_journey as (
+    insert into observability_journey_events (
+        event_id, journey_id, sequence, occurred_at, name, phase, state,
+        origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes
+    )
+    select inserted.id, coalesce($8::uuid, inserted.recording_id),
+        coalesce((select max(sequence) + 1 from observability_journey_events
+                  where journey_id = coalesce($8::uuid, inserted.recording_id)), 0),
+        now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
+        $9::text, $10::text,
+        jsonb_build_object('tenant_id', inserted.tenant_id, 'episode_id', inserted.episode_id,
+            'recording_id', inserted.recording_id, 'render_job_id', inserted.id, 'trigger', 'backfill')
+    from inserted
+    where not $1::boolean
 ), queued as (
     update recording_pipelines
     set state = 'render_queued', updated_at = now()
@@ -3005,10 +3069,10 @@ with candidate as (
       and recording_pipelines.state in ('capture_complete', 'terminal_failure')
     returning recording_pipelines.recording_id
 )
-select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, existing.result_metadata, (existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
+select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, existing.result_metadata, ($1::boolean and existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
 from existing
 join retry_tally on retry_tally.job_id = existing.id
-where existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
+where not $1::boolean or existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
 union all
 select retried.id, retried.tenant_id, retried.episode_id, retried.recording_id, retried.kind, retried.idempotency_key, retried.payload_schema_version, retried.state, retried.priority, retried.available_at, retried.attempt_count, retried.attempt_limit, retried.lease_token, retried.lease_owner, retried.lease_expires_at, retried.fencing_generation, retried.error_code, retried.error_detail, retried.terminal_at, retried.updated_at, retried.created_at, retried.result_metadata, false as retry_limit_reached from retried
 union all
@@ -3017,12 +3081,16 @@ limit 1
 `
 
 type RequestDeferredRecordingRenderParams struct {
+	AllowManualRetry     bool        `json:"allow_manual_retry"`
 	RecordingID          pgtype.UUID `json:"recording_id"`
 	TenantID             pgtype.UUID `json:"tenant_id"`
 	RenderJobID          pgtype.UUID `json:"render_job_id"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
 	AttemptLimit         int32       `json:"attempt_limit"`
+	JourneyID            pgtype.UUID `json:"journey_id"`
+	TraceID              pgtype.Text `json:"trace_id"`
+	SpanID               pgtype.Text `json:"span_id"`
 }
 
 type RequestDeferredRecordingRenderRow struct {
@@ -3051,18 +3119,22 @@ type RequestDeferredRecordingRenderRow struct {
 	RetryLimitReached    pgtype.Bool        `json:"retry_limit_reached"`
 }
 
-// A Recording has one canonical MP4 export. The first authorized request
-// creates its render job; active and completed jobs remain idempotent. A
+// Automatic capture completion queues the canonical MP4 export. Requests
+// reuse it, or create it for retained on-demand captures. A
 // terminally failed job may be manually retried five times; each old failure
 // is copied to append-only history before the same fenced job is requeued.
 func (q *Queries) RequestDeferredRecordingRender(ctx context.Context, arg RequestDeferredRecordingRenderParams) (RequestDeferredRecordingRenderRow, error) {
 	row := q.db.QueryRow(ctx, requestDeferredRecordingRender,
+		arg.AllowManualRetry,
 		arg.RecordingID,
 		arg.TenantID,
 		arg.RenderJobID,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
 		arg.AttemptLimit,
+		arg.JourneyID,
+		arg.TraceID,
+		arg.SpanID,
 	)
 	var i RequestDeferredRecordingRenderRow
 	err := row.Scan(

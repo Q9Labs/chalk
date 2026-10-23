@@ -1059,7 +1059,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	var renderJobs int
 	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='render'`, reservation.RecordingID.Bytes()).Scan(&renderJobs); err != nil || renderJobs != 0 {
-		t.Fatalf("capture completion must not create an MP4 export: render jobs=%d err=%v", renderJobs, err)
+		t.Fatalf("on-demand capture completion must not queue an MP4: render jobs=%d err=%v", renderJobs, err)
 	}
 	requestedRenderID := mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be048")
 	requestedRender, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, requestedRenderID)
@@ -1079,7 +1079,8 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	defer retryTx.Rollback(ctx)
 	if _, err := sqlc.New(retryTx).RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
-		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true}, RecordingID: pgtype.UUID{Bytes: reservation.RecordingID.Bytes(), Valid: true},
+		AllowManualRetry: true,
+		TenantID:         pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true}, RecordingID: pgtype.UUID{Bytes: reservation.RecordingID.Bytes(), Valid: true},
 		RenderJobID:          pgtype.UUID{Bytes: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be050").Bytes(), Valid: true},
 		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
 	}); err != nil {

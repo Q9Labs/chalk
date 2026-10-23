@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -65,6 +66,18 @@ type recordingPipelineQuerier interface {
 }
 
 func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	return r.requestRender(ctx, input, renderJobID, true)
+}
+
+// QueueBackfillRender never retries an existing job, including one that failed
+// after the operator's source inventory. Both paths serialize on the pipeline.
+func (r RecordingPipelineRepository) QueueBackfillRender(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	return r.requestRender(ctx, input, renderJobID, false)
+}
+
+func (r RecordingPipelineRepository) requestRender(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID, allowManualRetry bool) (recordingpipeline.Job, error) {
+	journeyID, _ := observability.JourneyIDFromContext(ctx)
+	traceID, spanID, _, _ := lifecycleTraceContext(ctx)
 	var row sqlc.RequestDeferredRecordingRenderRow
 	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		// Acquire the lock before the request statement so concurrent requests
@@ -74,6 +87,8 @@ func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input re
 		}
 		var err error
 		row, err = queries.RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
+			AllowManualRetry: allowManualRetry,
+			JourneyID:        uuid(journeyID), TraceID: optionalText(traceID), SpanID: optionalText(spanID),
 			TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
 			PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
 		})
@@ -130,6 +145,7 @@ func mapDeferredRecordingArtifactState(row sqlc.ListRecordingDeferredArtifactSta
 		TranscriptionPolicy:            artifactpolicy.TranscriptionMode(row.TranscriptionPolicy),
 		TranscriptionPreparationStatus: recordingpipeline.TranscriptionPreparationStatus(row.TranscriptionPreparationStatus),
 		TranscriptionSourceExpiresAt:   nullableTimestamp(row.TranscriptionSourceExpiresAt),
+		TranscriptionFailureCode:       row.TranscriptionFailureCode,
 		FailureCode:                    row.FailureCode, FailureMessage: row.FailureMessage,
 	}
 	if row.ExportJobID.Valid {
@@ -809,8 +825,10 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 }
 
 func completeCaptureParams(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID, transcriptionEnabled bool) sqlc.CompleteCaptureRecordingJobParams {
+	journeyID, _ := observability.JourneyIDFromContext(ctx)
 	params := sqlc.CompleteCaptureRecordingJobParams{
-		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
+		JourneyID: uuid(journeyID),
+		ID:        uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),
 		CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: input.EnvelopeDigest,

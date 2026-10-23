@@ -13533,6 +13533,9 @@
               }
             ]
           },
+          "failure_code": {
+            "type": "string"
+          },
           "status": {
             "enum": ["none", "pending", "ready", "failed", "expired"],
             "type": "string"
@@ -14107,6 +14110,10 @@
           "provider_policy_version": {
             "type": "string"
           },
+          "recording_render_mode": {
+            "enum": ["on_demand", "automatic"],
+            "type": "string"
+          },
           "recording_retention_seconds": {
             "type": "integer"
           },
@@ -14156,6 +14163,7 @@
           "media_plane_provider_config",
           "name",
           "provider_policy_version",
+          "recording_render_mode",
           "recording_retention_seconds",
           "storage_provider_config",
           "transcript_retention_seconds",
@@ -14529,6 +14537,10 @@
           },
           "provider_policy_version": {
             "minLength": 1,
+            "type": "string"
+          },
+          "recording_render_mode": {
+            "enum": ["on_demand", "automatic"],
             "type": "string"
           },
           "recording_retention_seconds": {

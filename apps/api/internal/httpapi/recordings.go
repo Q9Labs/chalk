@@ -95,8 +95,9 @@ type recordingSourceResponse struct {
 }
 
 type recordingTranscriptionPreparationResponse struct {
-	Status    recordingpipeline.TranscriptionPreparationStatus `json:"status"`
-	ExpiresAt *string                                          `json:"expires_at,omitempty"`
+	Status      recordingpipeline.TranscriptionPreparationStatus `json:"status"`
+	ExpiresAt   *string                                          `json:"expires_at,omitempty"`
+	FailureCode string                                           `json:"failure_code,omitempty"`
 }
 
 type requestRecordingExportResponse struct {
@@ -488,7 +489,7 @@ func newRecordingResponse(recording recordings.Recording, state recordingpipelin
 }
 
 func newRecordingTranscriptionPreparationResponse(state recordingpipeline.ArtifactState) recordingTranscriptionPreparationResponse {
-	response := recordingTranscriptionPreparationResponse{Status: state.TranscriptionPreparationStatus}
+	response := recordingTranscriptionPreparationResponse{Status: state.TranscriptionPreparationStatus, FailureCode: state.TranscriptionFailureCode}
 	if state.TranscriptionSourceExpiresAt != nil {
 		expiresAt := utilities.FormatTimestamp(*state.TranscriptionSourceExpiresAt)
 		response.ExpiresAt = &expiresAt

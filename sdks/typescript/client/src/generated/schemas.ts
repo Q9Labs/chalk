@@ -673,6 +673,7 @@ export type RecordingSource = typeof RecordingSourceSchema.Type;
 
 export const RecordingTranscriptionPreparationSchema = Schema.Struct({
   expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  failure_code: Schema.optional(Schema.String),
   status: Schema.Literals(["none", "pending", "ready", "failed", "expired"]),
 });
 export type RecordingTranscriptionPreparation = typeof RecordingTranscriptionPreparationSchema.Type;
@@ -905,6 +906,7 @@ export const TenantSchema = Schema.Struct({
   media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
   name: Schema.String,
   provider_policy_version: Schema.String,
+  recording_render_mode: Schema.Literals(["on_demand", "automatic"]),
   recording_retention_seconds: Schema.Number,
   storage_provider_config: Schema.NullOr(StorageProviderConfigSchema),
   transcript_retention_seconds: Schema.Number,
@@ -1034,6 +1036,7 @@ export const UpdateTenantRequestSchema = Schema.Struct({
   media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
   name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   provider_policy_version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  recording_render_mode: Schema.optional(Schema.Literals(["on_demand", "automatic"])),
   recording_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
   storage_provider_config: Schema.optional(Schema.NullOr(StorageProviderConfigSchema)),
   transcript_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),

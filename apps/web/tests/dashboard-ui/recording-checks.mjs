@@ -7,7 +7,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
   if (evidence) await mkdir(evidence, { recursive: true });
   const reads = async () => (await fixture("log")).filter((entry) => entry.path === "/dashboard-api/call-metadata").length;
   for (const width of [1440, 390]) {
-    for (const scenario of ["failed", "expired", "available", "export_failed", "export_exhausted", "transcript_failed"]) {
+    for (const scenario of ["failed", "expired", "export_expired", "available", "export_failed", "export_exhausted", "transcript_failed"]) {
       const { tab, context } = await open(session, { width, set: `recordingScenario=${scenario}` });
       try {
         const waiting = await tab.locator(".pnote .spin").count();
@@ -15,6 +15,11 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
         const retry = await tab.getByRole("button", { name: "Try again", exact: true }).count();
         if (scenario === "failed") check(`${width}: terminal capture explains the failure without a spinner`, waiting === 0 && (await tab.getByText("The recording capture did not complete.", { exact: true }).count()) === 1);
         if (scenario === "expired") check(`${width}: expired source stops waiting and offers no unusable action`, waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording is no longer available", { exact: true }).count()) === 1);
+        if (scenario === "export_expired")
+          check(
+            `${width}: an expired render names its deadline and still offers transcription`,
+            waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording could not be rendered before its deadline.", { exact: true }).count()) === 1 && (await tab.getByRole("button", { name: "Make a transcript in English", exact: true }).count()) === 1,
+          );
         if (scenario === "available") {
           check(`${width}: captured source offers preparation before MP4 exists`, waiting === 0 && prepare === 1);
           check(`${width}: canonical complete transcript displays independently of MP4`, (await tab.getByLabel("Search transcript").count()) === 1 && (await tab.locator(".tline").count()) > 0);

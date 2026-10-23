@@ -151,6 +151,7 @@ type ArtifactState struct {
 	Retryable                    bool
 	FailureCode                  string
 	FailureMessage               string
+	TranscriptionFailureCode     string
 }
 
 type JobState string

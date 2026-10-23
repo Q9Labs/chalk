@@ -123,9 +123,11 @@ func (s TenantRepository) listTenants(ctx context.Context, page pagination.PageR
 
 func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
 	tenant, err := s.queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
-		ID:      pgtype.UUID{Bytes: id.Bytes(), Valid: true},
-		NameSet: input.Name.Set,
-		Name:    requiredText(input.Name),
+		ID:                     pgtype.UUID{Bytes: id.Bytes(), Valid: true},
+		RecordingRenderModeSet: input.RecordingRenderMode.Set,
+		RecordingRenderMode:    requiredText(input.RecordingRenderMode),
+		NameSet:                input.Name.Set,
+		Name:                   requiredText(input.Name),
 
 		DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
 		DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
@@ -194,6 +196,7 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 		CORSAllowedOrigins:       append([]string(nil), tenant.CorsAllowedOrigins...),
 		LogoKey:                  nullableText(tenant.LogoKey),
 		Website:                  nullableText(tenant.Website),
+		RecordingRenderMode:      tenants.RecordingRenderMode(tenant.RecordingRenderMode),
 		ArtifactPolicy:           policy,
 		UpdatedAt:                timestamp(tenant.UpdatedAt),
 		CreatedAt:                timestamp(tenant.CreatedAt),
@@ -211,6 +214,7 @@ type tenantRecord struct {
 	StorageProviderConfig      []byte
 	CorsAllowedOrigins         []string
 	LogoKey                    pgtype.Text
+	RecordingRenderMode        string
 	Website                    pgtype.Text
 	UpdatedAt                  pgtype.Timestamptz
 	CreatedAt                  pgtype.Timestamptz
@@ -253,6 +257,7 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
 		LogoKey:                    row.LogoKey,
+		RecordingRenderMode:        row.RecordingRenderMode,
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
@@ -277,6 +282,7 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
 		LogoKey:                    row.LogoKey,
+		RecordingRenderMode:        row.RecordingRenderMode,
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
@@ -301,6 +307,7 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
 		LogoKey:                    row.LogoKey,
+		RecordingRenderMode:        row.RecordingRenderMode,
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
@@ -325,6 +332,7 @@ func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
 		LogoKey:                    row.LogoKey,
+		RecordingRenderMode:        row.RecordingRenderMode,
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,

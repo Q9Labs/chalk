@@ -20,6 +20,7 @@
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "apps/api/scripts/smoke-lifecycle.mjs",
+    "apps/api/tests/recording-sdk-compatibility/published-clients.mjs",
     "apps/sync/scripts/reliability_harness.mjs",
     "apps/sync/scripts/reliability_harness.test.mjs",
     "packages/whiteboard/src/embedded/renderer.tsx",

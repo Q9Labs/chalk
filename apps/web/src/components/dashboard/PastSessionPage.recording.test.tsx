@@ -78,7 +78,16 @@ function recording() {
       export: {
         status: state.export,
         retryable: state.retryable,
-        failure_message: state.source === "failed" ? "The recording capture did not complete." : state.source === "expired" ? "The recording source is no longer available." : state.export === "failed" ? "The recording export could not be completed." : null,
+        failure_message:
+          artifact === "unavailable" && state.source === "available"
+            ? "The recording could not be rendered before its deadline."
+            : state.source === "failed"
+              ? "The recording capture did not complete."
+              : state.source === "expired"
+                ? "The recording source is no longer available."
+                : state.export === "failed"
+                  ? "The recording export could not be completed."
+                  : null,
       },
       transcription_preparation: { status: state.transcription, ...(transcriptionExpiresAt ? { expires_at: transcriptionExpiresAt } : {}) },
       transcription_policy: "automatic",
@@ -238,6 +247,19 @@ it.each(["failed", "expired"])("shows a terminal %s source and its reason, not e
   const count = requests.length;
   await tick();
   expect(requests).toHaveLength(count);
+});
+
+it("shows a render deadline as expired with the server reason while capture sources are retained", async () => {
+  source = "available";
+  artifact = "unavailable";
+  transcriptStatus = "";
+  transcriptionSource = "ready";
+  await open();
+  expect(screen.getByText("The recording is no longer available")).toBeTruthy();
+  expect(screen.getByText("The recording could not be rendered before its deadline.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Make a transcript in English" })).toBeTruthy();
 });
 
 it("names the call from the session's own read, so a failing Call overview can't fail the page", async () => {
