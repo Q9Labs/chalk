@@ -8,26 +8,47 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
 
-func TestBackfillCommandPersistsExportedTraceLinks(t *testing.T) {
-	url := os.Getenv(config.DatabaseURL)
-	if url == "" {
+func TestBackfillCommandTelemetry(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		collectorStatus  int
+		readOnlyDatabase bool
+	}{
+		{name: "exported_trace_links", collectorStatus: http.StatusOK},
+		{name: "collector_outage", collectorStatus: http.StatusServiceUnavailable},
+		{name: "database_failure_with_collector_outage", collectorStatus: http.StatusServiceUnavailable, readOnlyDatabase: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testBackfillCommandTelemetry(t, test.collectorStatus, test.readOnlyDatabase)
+		})
+	}
+}
+
+func testBackfillCommandTelemetry(t *testing.T, collectorStatus int, readOnlyDatabase bool) {
+	t.Helper()
+	databaseURL := os.Getenv(config.DatabaseURL)
+	if databaseURL == "" {
 		t.Skip("CHALK_DATABASE_URL is not set")
 	}
 	ctx := context.Background() // The operator command has no incoming trace.
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,12 +122,18 @@ func TestBackfillCommandPersistsExportedTraceLinks(t *testing.T) {
 
 	var mu sync.Mutex
 	var exported []*tracepb.Span
+	var traceRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodHead {
 			w.Header().Set("Content-Length", "1")
 			return
 		}
 		if req.URL.Path == "/v1/traces" {
+			traceRequests.Add(1)
+			if collectorStatus != http.StatusOK {
+				w.WriteHeader(collectorStatus)
+				return
+			}
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
 				t.Error(err)
@@ -138,9 +165,44 @@ func TestBackfillCommandPersistsExportedTraceLinks(t *testing.T) {
 	t.Setenv(config.APIOTLPInsecure, "true")
 	previous := otel.GetTracerProvider()
 	defer otel.SetTracerProvider(previous)
-	var output bytes.Buffer
-	if err := run(ctx, []string{"--batch-size", "100", "--apply"}, &output); err != nil {
-		t.Fatal(err)
+	if readOnlyDatabase {
+		parsed, err := url.Parse(databaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := parsed.Query()
+		query.Set("default_transaction_read_only", "on")
+		parsed.RawQuery = query.Encode()
+		t.Setenv(config.DatabaseURL, parsed.String())
+	}
+	var output, warnings bytes.Buffer
+	runErr := run(ctx, []string{"--batch-size", "100", "--apply"}, &output, &warnings)
+	if readOnlyDatabase {
+		if runErr == nil || runErr.Error() != "queue backfill render; rerunning is idempotent (sqlstate_25006)" {
+			t.Fatalf("database failure was not preserved: %v", runErr)
+		}
+		var jobs, events int
+		if err := pool.QueryRow(ctx, `select (select count(*) from recording_jobs where recording_id=$1 and kind='render'),(select count(*) from observability_journey_events where attributes->>'recording_id'=$2 and name='recording.render.queued')`, recordingID.Bytes(), recordingID.String()).Scan(&jobs, &events); err != nil {
+			t.Fatal(err)
+		}
+		if jobs != 0 || events != 0 {
+			t.Fatalf("failed backfill persisted jobs=%d events=%d", jobs, events)
+		}
+	} else if runErr != nil {
+		t.Fatalf("successful backfill returned error: %v", runErr)
+	}
+	if traceRequests.Load() == 0 {
+		t.Fatal("collector was not called")
+	}
+	if collectorStatus != http.StatusOK {
+		if !strings.Contains(warnings.String(), "recording-backfill: warning: telemetry shutdown:") {
+			t.Fatalf("collector failure did not emit a warning: %q", warnings.String())
+		}
+	} else if warnings.Len() != 0 {
+		t.Fatalf("healthy collector emitted a warning: %s", warnings.String())
+	}
+	if readOnlyDatabase {
+		return
 	}
 	var result report
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil || result.Queued != 1 {
@@ -152,6 +214,15 @@ func TestBackfillCommandPersistsExportedTraceLinks(t *testing.T) {
 	}
 	if journeyID == recordingID.String() {
 		t.Fatal("backfill event must use the command journey, not the legacy recording-ID fallback")
+	}
+	if _, err := trace.TraceIDFromHex(traceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trace.SpanIDFromHex(spanID); err != nil {
+		t.Fatal(err)
+	}
+	if collectorStatus != http.StatusOK {
+		return
 	}
 	mu.Lock()
 	defer mu.Unlock()

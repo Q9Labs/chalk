@@ -47,13 +47,13 @@ type report struct {
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
+	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "recording-backfill:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, args []string, out io.Writer) (runErr error) {
+func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	flags := flag.NewFlagSet("recording-backfill", flag.ContinueOnError)
 	batchSize := flags.Int("batch-size", 0, "required: inspect at most 1-100 captures")
 	apply := flags.Bool("apply", false, "queue verified captures; default is a read-only dry run")
@@ -102,7 +102,9 @@ func run(ctx context.Context, args []string, out io.Writer) (runErr error) {
 	defer func() {
 		shutdownCtx, cancel := observability.TelemetryShutdownContext()
 		defer cancel()
-		runErr = errors.Join(runErr, shutdownTracing(shutdownCtx))
+		if err := shutdownTracing(shutdownCtx); err != nil {
+			fmt.Fprintln(stderr, "recording-backfill: warning: telemetry shutdown:", err)
+		}
 	}()
 	tracer := otel.Tracer("github.com/q9labs/chalk/apps/api/cmd/recording-backfill")
 	ctx, batchSpan := tracer.Start(ctx, "recording.render.backfill", trace.WithAttributes(attribute.String("chalk.journey.id", journeyID.String())))

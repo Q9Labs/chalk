@@ -9,7 +9,9 @@ operator environment. Do not paste credentials into arguments or logs.
 The command uses `CHALK_API_OTLP_ENDPOINT` and `CHALK_API_OTLP_INSECURE` for
 the normal telemetry exporter. Each queued job's journey event links to its
 backfill span. Without an endpoint, local runs retain trace and span IDs in the
-ledger but do not export telemetry.
+ledger but do not export telemetry. Exporter shutdown failures print a warning
+to stderr without changing the backfill result or exit code. Backfill failures
+still exit non-zero.
 
 ## Inspect one batch
 

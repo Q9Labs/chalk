@@ -17,7 +17,7 @@ import (
 
 func TestBackfillRequiresExplicitBoundedBatch(t *testing.T) {
 	for _, args := range [][]string{nil, {"--apply"}, {"--batch-size", "0"}, {"--batch-size", "101"}, {"--batch-size", "10", "--timeout", "21m"}, {"--batch-size", "10", "--after-recording", "invalid"}} {
-		if err := run(context.Background(), args, &bytes.Buffer{}); err == nil {
+		if err := run(context.Background(), args, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 			t.Fatalf("accepted %v", args)
 		}
 	}
