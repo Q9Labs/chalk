@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/facehash",
-  "version": "5.0.1",
+  "version": "5.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -8,7 +8,8 @@
     "directory": "packages/facehash"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "sideEffects": false,

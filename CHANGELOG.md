@@ -1,12 +1,27 @@
 # Changelog
 
-## 5.1.0 (unreleased)
+## 5.1.0
 
 - Client: add `media.captureCameraPreview()` for unpublished camera capture with post-permission device refresh. It shares live or pending camera capture; callers release a preview handle.
 - React: add optional `captureCameraPreview` to `DevicePopover` and `ControlBarSurface`, and optional `ChalkMenu.onOpenChange`. Fix camera-menu previews and the keyboard-shortcut dialog flash.
-- These additive SDK APIs require the next synchronized minor release. Before publishing, use `pnpm run package:release -- --bump 5.1.0` to advance the coordinated package versions, workspace ranges, and lockfile. This PR does not bump versions or publish packages.
+- Board: the call's board shows Chalk's own controls with Follow and Bring everyone. New public APIs: `ChalkWhiteboardView` and `sendView()` in the client, `followingId`, `onFollowChange` and `clickAction` on the React `Stage`, and a headless `WhiteboardCanvas` in `@q9labsai/chalk-whiteboard`. Scene-scoped Follow, Clear and Undo, Redo for undone text, and 100% maximum initial zoom fix earlier board behavior.
+- Client: export `isChalkAccessGrantError` from the server entry point, and add `decision_state` and `decision_action` to admission responses.
+- React: keep chat messages still while the clock ticks.
+- React: add optional `CallLimbo.className` for the message card, and lift call notices clear of an open reaction tray.
+- UI: round call corners and lift board messages in the stylesheet.
+- UI: stack call notices below the reaction tray instead of over it.
+- Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
+- Client: keep access, Sync, SFU and recovery failure codes and whether they're recoverable in join rejections, snapshots and error events. React: show guidance for the startup step that failed, with a public error-code reference.
+- Client: return recoverable `media.timeout` when media confirmations run out, and recoverable `collaboration.unavailable` when a reaction acknowledgement times out after five seconds. React and React Native: keep recovery notices non-blocking, and disable reaction sending and media enable controls until Sync is live.
+- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, or in React Native to 30 seconds or `syncStartupTimeoutMs` (10 to 60 seconds). The whiteboard, and Sync once the call is live, retry a timed-out attempt. During first join the startup wait decides, so a Sync socket that never opens fails the join when that wait ends instead of retrying. Capture a fresh microphone after its track ended.
+- Client: report a chat send that Sync refuses for sending too fast as recoverable `command.rate_limited`, and one it refuses while overloaded as recoverable `collaboration.unavailable`, instead of `chat.payload_invalid`.
+- React: label screen shares of unknown surfaces plainly.
+- React Native: size the call from the enclosing safe-area frame instead of the window, so calls in a smaller container lay out for that container.
+- React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
+- React Native: an app's Android `./gradlew check` no longer runs Chalk's own module API compatibility check.
+- Advance the seven coordinated Chalk SDK packages to 5.1.0. `@q9labsai/recording-presentation` remains at 0.1.1.
 
-## 5.0.1 (unreleased)
+## 5.0.1
 
 - React Native: fix the Android 11 crash when joining a call by keeping API 31 audio listener types out of React Native module signatures.
 - Advance the seven coordinated Chalk SDK packages to 5.0.1. `@q9labsai/recording-presentation` remains at 0.1.1.
