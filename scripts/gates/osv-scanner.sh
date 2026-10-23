@@ -15,7 +15,11 @@ done < <(git ls-files)
 # Run before both the scan and the PR baseline filter: an old runtime copy fails too.
 for file in "${lockfiles[@]}"; do
   case "${file}" in
-    pnpm-lock.yaml | */pnpm-lock.yaml) node "${script_directory}/zod-exception.mjs" "$file" ;;
+    pnpm-lock.yaml) node "${script_directory}/zod-exception.mjs" "$file" ;;
+    */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
+      echo "Zod exception cannot validate ${file}. Only the repository-root pnpm-lock.yaml is supported. Move these dependencies into it, or extend and re-check the guard before adding another JavaScript lockfile." >&2
+      exit 1
+      ;;
   esac
 done
 
@@ -25,7 +29,8 @@ for file in "${lockfiles[@]}"; do
   args+=(--lockfile "$file")
 done
 if [ "${#lockfiles[@]}" -eq 0 ]; then
-  args=(scan source --recursive --no-resolve --allow-no-lockfiles .)
+  echo "Zod exception requires tracked lockfiles; refusing an unguarded recursive scan." >&2
+  exit 1
 fi
 
 osv_scanner() {

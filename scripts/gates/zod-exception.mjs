@@ -13,6 +13,7 @@ const dependencyGroups = ["dependencies", "devDependencies", "optionalDependenci
 const allowedImporters = new Set(["importer:apps/mobile", "importer:sdks/typescript/react-native"]);
 function checkZodException(source) {
   for (const document of loadAll(source)) {
+    if (document?.lockfileVersion !== "9.0") throw new Error(`Zod exception only supports pnpm lockfileVersion 9.0; found ${document?.lockfileVersion ?? "missing"}. Regenerate the root lockfile with the pinned pnpm version, or extend and re-check this guard before changing its supported format.`);
     const { importers = {}, snapshots = {}, packages = {} } = document;
     const parents = new Map();
     const importerKey = (name) => `importer:${name}`;
@@ -72,6 +73,9 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     for (const lockfile of process.argv.slice(2)) checkZodException(readFileSync(lockfile, "utf8"));
   } catch (error) {
     console.error(error.message);
+    console.error(
+      "If Expo or zod changed, re-check that the old zod copy reaches only Expo CLI tooling and is absent from runtime bundles. Then update the allowed versions in scripts/gates/zod-exception.mjs, the regression fixtures, and the ignore's reason in osv-scanner.toml. Remove the exception when a fixed dependency makes it unnecessary.",
+    );
     process.exitCode = 1;
   }
 }

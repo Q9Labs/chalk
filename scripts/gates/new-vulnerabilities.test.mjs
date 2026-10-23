@@ -57,6 +57,37 @@ test("the OSV lane fails closed outside the locked Expo CLI zod exception", asyn
   const source = readFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), "utf8");
   const cases = [
     ["current lockfile", () => {}, true],
+    ...["package-lock.json", "yarn.lock", "runtime/package-lock.json", "runtime/yarn.lock", "runtime/pnpm-lock.yaml"].map((file) => [
+      `unsupported JavaScript lockfile ${file}`,
+      (_lock, _documents, root) => {
+        mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+        const npmLock = { name: "runtime-app", lockfileVersion: 3, packages: { "": { dependencies: { zod: "3.25.76" } }, "node_modules/zod": { version: "3.25.76" } } };
+        const content = file.endsWith(".json") ? JSON.stringify(npmLock) : file.endsWith("yarn.lock") ? 'zod@3.25.76:\n  version "3.25.76"\n' : "lockfileVersion: '9.0'\n";
+        writeFileSync(path.join(root, file), content);
+      },
+    ]),
+    [
+      "pnpm v6 transitive production zod",
+      (_lock, documents) => {
+        documents.splice(0, documents.length, {
+          lockfileVersion: "6.0",
+          importers: { ".": { dependencies: { "@expo/cli": { specifier: "55.0.19", version: "55.0.19" } } } },
+          packages: { "/@expo/cli@55.0.19": { dependencies: { zod: "3.25.76" } }, "/zod@3.25.76": {} },
+        });
+      },
+    ],
+    [
+      "unsupported version in the first YAML document",
+      (_lock, documents) => {
+        documents[0].lockfileVersion = "6.0";
+      },
+    ],
+    [
+      "missing pnpm lockfileVersion",
+      (lock) => {
+        delete lock.lockfileVersion;
+      },
+    ],
     [
       "direct production zod 3",
       (lock) => {
@@ -121,11 +152,11 @@ test("the OSV lane fails closed outside the locked Expo CLI zod exception", asyn
       symlinkSync(new URL("./zod-exception.mjs", import.meta.url), path.join(root, "zod-exception.mjs"));
       copyFileSync(new URL("./osv-scanner.sh", import.meta.url), path.join(root, "osv-scanner.sh"));
       const documents = loadAll(source);
-      modify(documents.at(-1));
+      modify(documents.at(-1), documents, root);
       writeFileSync(path.join(root, "pnpm-lock.yaml"), documents.map((document) => `---\n${dump(document)}`).join(""));
       writeFileSync(path.join(root, "bin/osv-scanner"), '#!/bin/bash\ntouch "$TEST_OSV_CALLED"\n', { mode: 0o755 });
       spawnSync("git", ["init", "-q"], { cwd: root });
-      spawnSync("git", ["add", "pnpm-lock.yaml"], { cwd: root });
+      spawnSync("git", ["add", "."], { cwd: root });
       const marker = path.join(root, "osv-called");
       const result = spawnSync("bash", ["osv-scanner.sh"], {
         cwd: root,
@@ -135,7 +166,14 @@ test("the OSV lane fails closed outside the locked Expo CLI zod exception", asyn
       });
       assert.equal(result.status, passes ? 0 : 1, result.stderr);
       assert.equal(existsSync(marker), passes, "unsafe consumers must fail before OSV can ignore the advisory");
-      if (!passes) assert.match(result.stderr, /Zod exception/);
+      if (!passes) {
+        assert.match(result.stderr, /Zod exception/);
+        if (name === "a changed Expo CLI version") {
+          assert.match(result.stderr, /re-check.*Expo.*tooling/);
+          assert.match(result.stderr, /allowed versions.*scripts\/gates\/zod-exception\.mjs/);
+          assert.match(result.stderr, /ignore.*osv-scanner\.toml/);
+        }
+      }
     });
   }
 });
