@@ -88,10 +88,11 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   };
   const [reportOpen, setReportOpen] = useState(false);
   const reportTrigger = useRef<HTMLButtonElement>(null);
+  const container = useRef<HTMLDivElement>(null);
   const openReport =
     props.onReportProblem && !props.reportUnavailableReason
       ? () => {
-          reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+          reportTrigger.current = container.current?.querySelector<HTMLButtonElement>('button[data-part="call-name"]') ?? (document.activeElement instanceof HTMLButtonElement ? document.activeElement : null);
           if (props.onOpenReportProblem) props.onOpenReportProblem();
           else setReportOpen(true);
         }
@@ -121,7 +122,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   }, [ownedClient]);
   return (
     <>
-      <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
+      <div ref={container} data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
           <SpaceExperience {...props} theme={{ ...props.theme, colorScheme }} onColorSchemeChange={changeColorScheme} resolvedColorScheme={colorScheme} onOpenReport={openReport} />
           {props.onReportProblem && !props.onOpenReportProblem ? (

@@ -125,6 +125,15 @@ export async function checkReports({ browser, page, origin, call, repository }) 
   await page.getByRole("button", { name: "Report a problem", exact: true }).click({ timeout: 10000 });
   await submit(page, { name: "owner", failure: process.env.CHALK_REPORT_LIVE_PROOF !== "1" });
   assert((await received()).at(-1).content.includes("(owner)"));
+  const ownerFocusRestored = await page
+    .waitForFunction(() => document.activeElement?.matches('button[data-part="call-name"]') && document.activeElement.isConnected, undefined, { timeout: 3000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await page.screenshot({ path: resolve(evidence, "owner-report-focus.png"), animations: "disabled" });
+  await writeFile(resolve(evidence, "owner-focus-regression.json"), JSON.stringify({ passed: ownerFocusRestored }, null, 2));
+  assert(ownerFocusRestored, "Closing the SDK-owned report must focus its persistent Call Details trigger");
   if (process.env.CHALK_REPORT_LIVE_PROOF === "1") {
     assert.equal((await received()).length, 1, "Exactly one live test message");
     await writeFile(resolve(evidence, "live-proof.json"), JSON.stringify({ result: "passed", messages: 1, label }));
