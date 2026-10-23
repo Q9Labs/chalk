@@ -497,6 +497,39 @@ def pause(point):
             listener.close()
             db.close()
 
+    def test_killed_job_cleans_only_its_receipted_simulator(self):
+        owned = '11111111-1111-4111-8111-111111111111'
+        foreign = '22222222-2222-4222-8222-222222222222'
+        state = self.root / 'simulators.json'
+        state.write_text(json.dumps({'devices': {'iOS': [
+            {'udid': owned, 'state': 'Booted'}, {'udid': foreign, 'state': 'Booted'}]}}))
+        xcrun = self.root / 'xcrun'
+        xcrun.write_text('#!/usr/bin/env python3\n' + f'''
+import json,pathlib,sys
+path=pathlib.Path({str(state)!r}); data=json.loads(path.read_text()); args=sys.argv[1:]
+if args[:3]==['simctl','list','devices']: print(json.dumps(data))
+elif args[:2]==['simctl','shutdown']:
+    next(device for device in data['devices']['iOS'] if device['udid']==args[2])['state']='Shutdown'
+    path.write_text(json.dumps(data))
+else: sys.exit(2)
+''')
+        xcrun.chmod(0o700)
+        ready = self.root / 'simulator-ready'
+        self.submit('simulator-kill', f'mkdir -p "$CHALK_REMOTE_RESOURCE_DIR"\n'
+                    f'printf "%s\\n" {owned} > "$CHALK_REMOTE_RESOURCE_DIR/simulator-{owned}"\n'
+                    f'touch "{ready}"\nsleep 15')
+        self.release_dispatcher()
+        row = self.wait('simulator-kill', 'running')
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.02)
+        self.assertTrue(ready.exists())
+        os.kill(row['pid'], signal.SIGKILL)
+        self.assertEqual(self.wait('simulator-kill')['result'], 137)
+        self.assertEqual([device['state'] for device in json.loads(state.read_text())['devices']['iOS']],
+                         ['Shutdown', 'Booted'], 'killed-job cleanup leaked its device or stopped a foreign one')
+        self.assertFalse((self.root / f'jobs/simulator-kill/resources/simulator-{owned}').exists())
+
     def test_waiting_client_sees_quarantined_jobs_errors_and_retry_times(self):
         os.environ['CHALK_REMOTE_SLOTS'] = '3'
         for slot in range(3):

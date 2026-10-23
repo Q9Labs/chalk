@@ -247,6 +247,21 @@ def cleanup_resources(job, slot):
     resources = job / 'resources'
     if not resources.is_dir():
         return
+    simulator_receipts = list(resources.glob('simulator-*'))
+    for receipt in simulator_receipts:
+        udid = receipt.name.removeprefix('simulator-')
+        if (not re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', udid)
+                or receipt.is_symlink() or receipt.read_text() != udid + '\n'):
+            raise ValueError('invalid simulator resource receipt')
+    if simulator_receipts:
+        found = subprocess.run(['xcrun', 'simctl', 'list', 'devices', '-j'], check=True,
+                               capture_output=True, text=True, timeout=30)
+        devices = {device['udid']: device['state'] for group in json.loads(found.stdout)['devices'].values() for device in group}
+        for receipt in simulator_receipts:
+            udid = receipt.name.removeprefix('simulator-')
+            if devices.get(udid, 'Shutdown') != 'Shutdown':
+                subprocess.run(['xcrun', 'simctl', 'shutdown', udid], check=True, capture_output=True, timeout=30)
+            receipt.unlink()
     receipts = []
     for service, prefix in [('postgres', 'chalk-postgres-slot'), ('redis', 'chalk-slot')]:
         receipt = resources / service
