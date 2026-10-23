@@ -1,11 +1,9 @@
-import { createRequire } from "node:module";
+import { build } from "esbuild";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 // Bundle current source, never a possibly stale dist left by another gate lane.
-const sdk = new URL("../../../../sdks/typescript/client/", import.meta.url);
-const require = createRequire(new URL("package.json", sdk));
-const { build } = require("esbuild");
+const sdk = new URL("../../", import.meta.url);
 const bundle = await build({ entryPoints: [fileURLToPath(new URL("src/sync/v1-client.ts", sdk))], bundle: true, write: false, format: "esm", platform: "node", logLevel: "silent" });
 const { V1SyncClient } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString("base64")}`);
 let client;
@@ -26,6 +24,11 @@ const waitFor = async (predicate) => {
   }
 };
 const status = () => ({ entered, acknowledged, generation, welcomes, operation, operationReply, recoveryMode, phase: client?.getSnapshot().connection.phase });
+const recordWelcome = (frame) => {
+  welcomes++;
+  generation = frame.entry_generation ?? null;
+  recoveryMode = frame.mode;
+};
 const commands = {
   async start(input) {
     client?.stop();
@@ -53,12 +56,14 @@ const commands = {
           };
           socket.addEventListener("message", ({ data }) => {
             const frame = JSON.parse(data);
-            if (frame.type === "welcome") {
-              welcomes++;
-              generation = frame.entry_generation ?? null;
-              recoveryMode = frame.mode;
+            switch (frame.type) {
+              case "welcome":
+                recordWelcome(frame);
+                break;
+              case "entered_ack":
+                acknowledged++;
+                break;
             }
-            if (frame.type === "entered_ack") acknowledged++;
             if (frame.command_id === operation) operationReply = frame.type;
           });
           return socket;

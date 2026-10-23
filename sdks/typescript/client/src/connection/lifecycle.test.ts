@@ -225,13 +225,21 @@ function exerciseAdmission<A, E>(layer: ReturnType<typeof admissionLayer>, exerc
     }).pipe(Effect.provide(layer), Effect.scoped),
   );
 }
-function blockedSync(platform: ReturnType<typeof createCoreTestPlatform>) {
-  return {
-    ...platform.sync,
-    start: async () => {
-      throw new Error("blocked socket");
+function blockedAdmission(cancelPendingAdmission: NonNullable<ConnectionOptions["dependencies"]>["cancelPendingAdmission"]) {
+  const platform = createCoreTestPlatform();
+  return admissionLayer({
+    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+    dependencies: {
+      ...platform.dependencies,
+      cancelPendingAdmission,
+      createSyncClient: () => ({
+        ...platform.sync,
+        start: async () => {
+          throw new Error("blocked socket");
+        },
+      }),
     },
-  };
+  });
 }
 
 function rejectFirstAccess(platform: ReturnType<typeof createCoreTestPlatform>) {
@@ -355,19 +363,11 @@ describe("failed join admission cleanup", () => {
   });
 
   it("cancels the admitted seat before discarding access when Sync startup fails", async () => {
-    const platform = createCoreTestPlatform();
     const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
     const cancelled: string[] = [];
-    const layer = admissionLayer({
-      access: async () => grant,
-      dependencies: {
-        ...platform.dependencies,
-        cancelPendingAdmission: async (access) => {
-          cancelled.push(access.subject.participantId);
-          return true;
-        },
-        createSyncClient: () => blockedSync(platform),
-      },
+    const layer = blockedAdmission(async (access) => {
+      cancelled.push(access.subject.participantId);
+      return true;
     });
     await exerciseAdmission(layer, (lifecycle) =>
       Effect.gen(function* () {
@@ -380,16 +380,8 @@ describe("failed join admission cleanup", () => {
 });
 
 it("keeps failed HTTP cleanup unconfirmed so local Leave cannot clear a retry identity", async () => {
-  const platform = createCoreTestPlatform();
-  const layer = admissionLayer({
-    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
-    dependencies: {
-      ...platform.dependencies,
-      cancelPendingAdmission: async () => {
-        throw new Error("offline");
-      },
-      createSyncClient: () => blockedSync(platform),
-    },
+  const layer = blockedAdmission(async () => {
+    throw new Error("offline");
   });
   await exerciseAdmission(layer, (lifecycle) =>
     Effect.gen(function* () {

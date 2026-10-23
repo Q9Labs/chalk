@@ -503,7 +503,11 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   end
 
   defp start_bridge do
-    script = Path.expand("../fixtures/entry-interleaving-client.mjs", __DIR__)
+    script =
+      Path.expand(
+        "../../../../sdks/typescript/client/test/fixtures/entry-interleaving-client.mjs",
+        __DIR__
+      )
 
     Port.open({:spawn_executable, System.find_executable("node")}, [
       :binary,

@@ -97,14 +97,18 @@ try {
   await holder.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
   console.log("holder seats at grid visibility:", JSON.stringify(await live()));
   await waitForEntry(holder, 0, [first.participantId, holderId], "holder entry");
-  const leaveUnconfirmed = async (nextMode) => {
-    mode = nextMode;
-    const leavesBefore = interceptedLeaves.length;
-    const cleanupAttempt = page.waitForRequest((request) => request.url().endsWith("/cancel-join"), { timeout: 30000 });
+  const clickLeave = async () => {
     const leave = page.getByRole("button", { name: "Leave call", exact: true });
     const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
     await leave.click();
     if (opensMenu) await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+    return opensMenu;
+  };
+  const leaveUnconfirmed = async (nextMode) => {
+    mode = nextMode;
+    const leavesBefore = interceptedLeaves.length;
+    const cleanupAttempt = page.waitForRequest((request) => request.url().endsWith("/cancel-join"), { timeout: 30000 });
+    const opensMenu = await clickLeave();
     await cleanupAttempt;
     assert.deepEqual(interceptedLeaves.slice(leavesBefore), [nextMode], "the intended Leave operation must be intercepted exactly once");
     await delay(500);
@@ -165,10 +169,7 @@ try {
     { intentStorageName, stored },
   );
   mode = "slow-leave";
-  const leave = page.getByRole("button", { name: "Leave call", exact: true });
-  const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
-  await leave.click();
-  if (opensMenu) await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+  await clickLeave();
   await Promise.race([
     heldLeave,
     delay(30000).then(() => {
