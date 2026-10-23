@@ -9,8 +9,8 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def keystorePropertiesPath = System.getenv("CHALK_ANDROID_KEYSTORE_PROPERTIES") ?: "app/keystore.properties"
 def keystorePropertiesFile = rootProject.file(keystorePropertiesPath)
 def keystoreProperties = new Properties()
-def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '35').toString())
-def appVersionName = (findProperty('chalk.versionName') ?: '3.0.1').toString()
+def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '37').toString())
+def appVersionName = (findProperty('chalk.versionName') ?: '3.0.3').toString()
 
 def configuredBuildDirectory = findProperty('chalk.androidBuildDirectory')
 if (configuredBuildDirectory) {
