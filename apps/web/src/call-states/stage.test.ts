@@ -800,7 +800,17 @@ it("reflows a folded notice into a wider band and back without clipping", async 
     await page.setViewportSize({ width: 390, height: 844 });
     await open("notice-band&fitWidth=1");
     await page.evaluate(() => document.fonts.ready);
-    await page.addStyleTag({ content: ".chalk-toasts { height: 72px; top: auto; padding-bottom: 0; }" });
+    await page.locator("[data-part=toast]").waitFor();
+    const toastHeight = () => page.locator("[data-part=toast]").evaluate((toast) => toast.getBoundingClientRect().height);
+    const narrowHeight = await toastHeight();
+    await page.setViewportSize({ width: 900, height: 844 });
+    await expect.poll(toastHeight).toBeLessThan(narrowHeight);
+    const wideHeight = await toastHeight();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(toastHeight).toBe(narrowHeight);
+    const bandHeight = (narrowHeight + wideHeight) / 2;
+    console.info("NOTICE_WIDTH_FIT", { narrowHeight, wideHeight, bandHeight });
+    await page.addStyleTag({ content: `.chalk-toasts { height: ${bandHeight}px; top: auto; padding-bottom: 0; }` });
     await expect.poll(() => page.locator("[data-part=toast]").count()).toBe(0);
     await page.getByRole("button", { name: "Show 1 notice", exact: true }).waitFor();
     await page.setViewportSize({ width: 900, height: 844 });
