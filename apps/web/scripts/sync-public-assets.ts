@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -71,13 +72,19 @@ function publishVersionedTree(urlRoot: string, digestName: string, pinnedDigest:
   if (digest !== pinnedDigest) {
     throw new Error(`Asset digest mismatch: ${urlRoot} copies different bytes; set ${digestName} to "${digest}" so they get a new immutable URL`);
   }
+  publishTree(urlRoot, (staging) => {
+    for (const [source, relativePath] of entries) cpSync(source, join(staging, relativePath), { recursive: true });
+  });
+}
+
+function publishTree(urlRoot: string, populate: (staging: string) => void) {
   const destination = resolve(publicDir, urlRoot.slice(1));
   if (existsSync(destination)) return;
   mkdirSync(dirname(destination), { recursive: true });
   mkdirSync(stagingDir, { recursive: true });
   const staging = mkdtempSync(join(stagingDir, "tree-"));
   try {
-    for (const [source, relativePath] of entries) cpSync(source, join(staging, relativePath), { recursive: true });
+    populate(staging);
     renameSync(staging, destination);
   } catch (error) {
     if (!existsSync(destination)) throw error;
@@ -95,3 +102,18 @@ publishVersionedTree(MATHJAX_ASSET_ROOT, "MATHJAX_ASSET_DIGEST", MATHJAX_ASSET_D
   [join(mathFontRoot, "svg"), "fonts/mathjax-newcm-font/svg"],
   [join(mathFontRoot, "svg.js"), "fonts/mathjax-newcm-font/svg.js"],
 ]);
+
+// Fresh release checkouts need every published tree, not just the installed dependencies.
+for (const family of ["chalk-whiteboard", "chalk-mathjax"]) {
+  const archives = resolve(scriptDir, "../immutable-assets", family);
+  if (!existsSync(archives)) continue;
+  for (const archive of readdirSync(archives)) {
+    if (!archive.endsWith(".tar.gz")) continue;
+    const version = archive.slice(0, -".tar.gz".length);
+    publishTree(`/${family}/${version}`, (staging) => {
+      execFileSync("tar", ["-xzf", join(archives, archive), "-C", staging]);
+      const digest = treeDigest(sourceFiles([[staging, ""]]));
+      if (!version.endsWith(`-${digest}`)) throw new Error(`Retained asset digest mismatch: ${family}/${archive}; extracted bytes have digest ${digest}`);
+    });
+  }
+}

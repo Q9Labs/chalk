@@ -1,6 +1,9 @@
 // Each asset URL names the upstream version and a digest of the copied bytes, so a patched
 // dependency can't change the bytes behind an immutable URL. sync-public-assets.ts checks
 // both against the installed packages and prints the new digest when the bytes change.
+// Commit each new tree as immutable-assets/<family>/<version>-<digest>.tar.gz using
+// tar -czf <archive> -C public/<family>/<version>-<digest> ., keeping every older archive.
+// Clean release builds restore these snapshots for clients still running old bundles.
 export const EXCALIDRAW_ASSET_VERSION = "0.18.1";
 export const EXCALIDRAW_ASSET_DIGEST = "e62e08179b0a8026";
 export const MATHJAX_ASSET_VERSION = "4.1.3";
