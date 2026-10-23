@@ -122,8 +122,14 @@ test("a slow process-table scan does not stretch the stop grace", async (context
 test("a second TERM while a gate is stopping does not cut its cleanup short", async (context) => {
   const { root, write, env } = scratchRoot(context, "chalk-gate-twice-");
   write("gate.sh", stubbornCommand);
-  const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "--", "./gate.sh"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "2" }, ready: env.TEST_READY, signal: "SIGTERM", againAfterMs: 500 });
+  // Like procps ps on Linux, this ps resets the TERM ignore it inherits. Its first scan marks a file and waits,
+  // so the second TERM reaches it while the wrapper checks whether the command still runs.
+  const scanning = path.join(root, "scanning");
+  write("bin/ps", `#!/usr/bin/perl\n$SIG{TERM} = "DEFAULT";\nif (!-e $ENV{TEST_SCANNING}) {\n  open(my $mark, ">", $ENV{TEST_SCANNING}) or die "mark: $!";\n  close $mark;\n  sleep 5;\n}\nexec "/bin/ps", @ARGV;\n`);
+  const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "--", "./gate.sh"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "2", TEST_SCANNING: scanning }, ready: env.TEST_READY, signal: "SIGTERM", againWhen: scanning });
   assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+  // A scan the second TERM missed would wait its full 5 seconds before the wrapper could stop.
+  assert.ok(stopped.seconds < 4, `the wrapper took ${stopped.seconds} seconds, so the second TERM missed the scan`);
   await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
   const services = readFileSync(env.TEST_SERVICE_LOG, "utf8").trim().split("\n");
   assert.equal(services.filter((line) => line.startsWith("rm -f --volumes ")).length, 1);
