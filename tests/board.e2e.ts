@@ -9,6 +9,11 @@ const boardBox = () => {
   return box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null;
 };
 const zoomLabel = () => document.querySelector(".chalk-board-zoom-value")?.textContent ?? "";
+const fittedZoomLabel = ({ width, height }: { width: number; height: number }) => {
+  const board = document.querySelector<HTMLElement>(".chalk-board");
+  if (!board) throw new Error("The board did not open");
+  return `${Math.round(Math.min(4, Math.max(0.1, Math.min(board.clientWidth / width, board.clientHeight / height))) * 100)}%`;
+};
 
 const stageBoard = '[data-stage-item="whiteboard"]';
 
@@ -216,19 +221,22 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
 
     // Following the guest by its tile moves the web view with the guest's view.
     await screen.getByLabel("Follow Proof").click();
-    const following = screen.getByRole("status").filter({ hasText: "Following Proof" });
+    const following = screen.getByRole("status").filter({ hasText: "Following Proof", has: screen.getByRole("button", "Stop", { exact: true }) });
     await expect(following).toBeVisible();
-    expect(await guest.board.view({ x: 0, y: 0, width: 4000, height: 2500, bring: false })).toBe(true);
-    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).not.toBe("100%");
-    const wide = await browser.evaluate(zoomLabel);
-    expect(await guest.board.view({ x: 100, y: 100, width: 400, height: 250, bring: false })).toBe(true);
-    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).not.toBe(wide);
+    const wide = { x: 0, y: 0, width: 4000, height: 2500, bring: false };
+    const wideZoom = await browser.evaluate(fittedZoomLabel, wide);
+    expect(await guest.board.view(wide)).toBe(true);
+    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe(wideZoom);
+    const narrow = { x: 100, y: 100, width: 400, height: 250, bring: false };
+    const narrowZoom = await browser.evaluate(fittedZoomLabel, narrow);
+    expect(await guest.board.view(narrow)).toBe(true);
+    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe(narrowZoom);
     await screen.getByRole("button", "Stop", { exact: true }).click();
     await expect(following).not.toBeVisible();
 
     // Bring everyone makes the web follow the guest again, with a toast that says who did it.
     expect(await guest.board.view({ x: 0, y: 0, width: 2000, height: 1250, bring: true })).toBe(true);
-    await expect(screen.getByText("Proof brought everyone to this view")).toBeVisible();
+    await expect.poll(() => browser.locator('[data-part="toast"]').filter({ hasText: "Proof brought everyone to this view" }).isVisible()).toBe(true);
     await expect(following).toBeVisible();
     await app.screenshot("board-web");
 
