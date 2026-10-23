@@ -501,9 +501,10 @@ export function Board({ board, primary, visible, colorScheme, people, following,
       setElementCount(count);
       if (!touched.current && count > 0) {
         touched.current = true;
-        if (!followingRef.current) requestAnimationFrame(() => {
-          if (!followingRef.current) camera.fit();
-        });
+        if (!followingRef.current)
+          requestAnimationFrame(() => {
+            if (!followingRef.current) camera.fit();
+          });
       }
       const editing = appState.editingTextElement !== null;
       if (!wasEditing && editing) beforeEditing = sceneSignature(engine);

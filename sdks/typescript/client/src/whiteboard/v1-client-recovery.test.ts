@@ -1037,7 +1037,6 @@ class TestSocket implements SyncSocket {
   }
 }
 
-
 it("JUDGE: recovery-time real movement is retained as leadership after reconnect", async () => {
   const clock = new ManualClock();
   const { client, sockets } = recoveryClient(clock, 100);
