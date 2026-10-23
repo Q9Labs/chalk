@@ -24,22 +24,12 @@ it.each(["network", "status", "json"])("recovers report availability after a tra
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it("does not poll a successful disabled response", async () => {
+it.each(["network failure", "disabled response"])("recovers the report control after ten minutes of %s", async (failure) => {
   vi.useFakeTimers();
-  const fetch = vi.fn().mockResolvedValue(Response.json({ available: false }));
-  vi.stubGlobal("fetch", fetch);
-  const { result } = renderHook(() => useProblemReports("https://api.chalk.test", "tenant-1"));
-  await act(async () => vi.advanceTimersByTimeAsync(60000));
-  expect(result.current).toBe(false);
-  expect(fetch).toHaveBeenCalledTimes(1);
-});
-
-it("recovers the report control after an outage lasting ten minutes", async () => {
-  vi.useFakeTimers();
-  let online = false;
+  let enabled = false;
   const fetch = vi.fn(async () => {
-    if (!online) throw new TypeError("offline");
-    return Response.json({ available: true });
+    if (!enabled && failure === "network failure") throw new TypeError("offline");
+    return Response.json({ available: enabled });
   });
   vi.stubGlobal("fetch", fetch);
   const { result } = renderHook(() => useProblemReports("https://api.chalk.test", "tenant-1"));
@@ -47,7 +37,7 @@ it("recovers the report control after an outage lasting ten minutes", async () =
   expect(result.current).toBe(false);
   expect(fetch.mock.calls.length).toBeGreaterThan(4);
   expect(fetch.mock.calls.length).toBeLessThan(20);
-  online = true;
+  enabled = true;
   await act(async () => vi.advanceTimersByTimeAsync(60_000));
   expect(result.current).toBe(true);
 });

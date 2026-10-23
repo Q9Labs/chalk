@@ -26,6 +26,12 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
     let retryDelay = 1000;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let activeProbe: AbortController | undefined;
+    const retry = () => {
+      timer = setTimeout(() => {
+        void probe();
+      }, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 60_000);
+    };
     const probe = async () => {
       clearTimeout(timer);
       activeProbe?.abort();
@@ -36,15 +42,13 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
         if (!response.ok) throw new Error("Availability probe failed");
         const enabled = availability.parse(await response.json()).available;
         if (!controller.signal.aborted && !attempt.signal.aborted) {
-          retryDelay = 1000;
           setAvailable(enabled);
+          if (enabled) retryDelay = 1000;
+          else retry();
         }
       } catch {
         if (!controller.signal.aborted && !attempt.signal.aborted) {
-          timer = setTimeout(() => {
-            void probe();
-          }, retryDelay);
-          retryDelay = Math.min(retryDelay * 2, 60_000);
+          retry();
         }
       }
     };
