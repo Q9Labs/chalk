@@ -3,6 +3,8 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Episodes.Coordinator
+  alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Operations.Probe
   alias ChalkSync.Operations.Readiness
   alias ChalkSync.Stateholder.Operation
@@ -164,12 +166,12 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     {_, claimed} =
       Enum.find(operations, fn {_, operation} -> operation.external_operation_id == id end)
 
-    {:ok, adapter} = ChalkSync.Live.MediaPlaneTestAdapter.start_link()
-    media = {ChalkSync.Live.MediaPlaneTestAdapter, adapter}
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+    media = {MediaPlaneTestAdapter, adapter}
     finalize = &Postgres.finalize_operation/3
 
     assert :pending =
-             ChalkSync.ExternalOperationConsumer.execute_operation(
+             ExternalOperationConsumer.execute_operation(
                fixture.episode,
                claimed,
                media,
@@ -177,11 +179,11 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
                finalize
              )
 
-    assert [] == ChalkSync.Live.MediaPlaneTestAdapter.calls(adapter)
+    assert [] == MediaPlaneTestAdapter.calls(adapter)
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
 
     assert :terminal_failure =
-             ChalkSync.ExternalOperationConsumer.execute_operation(
+             ExternalOperationConsumer.execute_operation(
                fixture.episode,
                claimed,
                media,
@@ -189,7 +191,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
                finalize
              )
 
-    assert [] == ChalkSync.Live.MediaPlaneTestAdapter.calls(adapter)
+    assert [] == MediaPlaneTestAdapter.calls(adapter)
     assert [["active", "joined"]] = entry_rows(connection, current)
     leave_entry(connection, current, "provider_current_leave_001")
   end
