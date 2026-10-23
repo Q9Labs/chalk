@@ -4900,6 +4900,7 @@ export const CancelEpisodeParticipantJoinErrorSchema = Schema.Union([
   ParticipantInvalidIdErrorSchema,
   RequestInvalidErrorSchema,
   RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpaceInvalidIdErrorSchema,
 ]);

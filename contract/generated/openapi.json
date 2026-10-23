@@ -6565,6 +6565,17 @@
             },
             "x-chalk-error-codes": ["request.rate_limited"]
           },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
           "503": {
             "content": {
               "application/json": {

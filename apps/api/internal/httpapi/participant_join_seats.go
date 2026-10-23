@@ -53,5 +53,5 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantJoinCancellation", cancelParticipantJoinResponse{}).
 		Errors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID,
-			apiErrorUnauthenticated, apiErrorForbidden, apiErrorRateLimited, apiErrorServiceUnavailable)
+			apiErrorUnauthenticated, apiErrorForbidden, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
 }
