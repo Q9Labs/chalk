@@ -42,12 +42,19 @@ def database(root):
         ticket INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
         priority INTEGER NOT NULL, submitted REAL NOT NULL, wait_seconds INTEGER NOT NULL,
         state TEXT NOT NULL, pid INTEGER, started TEXT, result INTEGER, finished REAL)''')
+    db.execute('CREATE TABLE IF NOT EXISTS queue (id INTEGER PRIMARY KEY CHECK (id=1), slots INTEGER NOT NULL, waiting TEXT)')
     db.execute('BEGIN IMMEDIATE')
     columns = {row[1] for row in db.execute('PRAGMA table_info(jobs)')}
     for name, definition in [('exclusive', 'INTEGER NOT NULL DEFAULT 0'), ('slot', 'INTEGER'),
                              ('cleanup_error', 'TEXT'), ('cleanup_after', 'REAL NOT NULL DEFAULT 0')]:
         if name not in columns:
             db.execute(f'ALTER TABLE jobs ADD COLUMN {name} {definition}')
+    if db.execute('SELECT 1 FROM queue').fetchone() is None:
+        # The slot count belongs to the queue: dispatchers never take it from whoever wakes them.
+        slots = int(os.environ.get('CHALK_REMOTE_SLOTS', '3'))
+        if not 1 <= slots <= 100:
+            raise ValueError('CHALK_REMOTE_SLOTS must be between 1 and 100')
+        db.execute('INSERT INTO queue(id,slots) VALUES(1,?)', (slots,))
     db.commit()
     return db
 
@@ -369,6 +376,7 @@ def describe(db, row):
     status = dict(row)
     if row['state'] != 'queued':
         return status
+    status['waiting'] = db.execute('SELECT waiting FROM queue').fetchone()[0]
     blocked = db.execute("SELECT id,slot,cleanup_error,cleanup_after FROM jobs WHERE state='quarantined' ORDER BY slot").fetchall()
     status['blocked_by'] = [{'id': r['id'], 'slot': r['slot'], 'error': bounded_text(r['cleanup_error'] or 'cleanup pending', 256),
                              'retry_at': r['cleanup_after']} for r in blocked[:8]]
@@ -393,18 +401,28 @@ def disk_threshold(request):
     return int(value)
 
 
-def resources_available(root, request):
+def resource_blocker(root, request):
     minimum_disk = disk_threshold(request)
-    if shutil.disk_usage(root).free < minimum_disk * 1024 ** 3:
-        return False
+    free = shutil.disk_usage(root).free
+    if free < minimum_disk * 1024 ** 3:
+        return f'waiting: free disk {free / 1024 ** 3:.1f} GiB < {minimum_disk} GiB floor'
     try:
         stats = subprocess.check_output(['vm_stat'], text=True)
         page_size = int(re.search(r'page size of (\d+) bytes', stats)[1])
-        pages = sum(int(re.search(r'^' + label + r':\s+(\d+)', stats, re.M)[1])
-                    for label in ('Pages free', 'Pages inactive', 'Pages speculative'))
-        return pages * page_size >= 3 * 1024 ** 3
-    except (OSError, subprocess.SubprocessError, TypeError, ValueError):
-        return False
+        available = page_size * sum(int(re.search(r'^' + label + r':\s+(\d+)', stats, re.M)[1])
+                                    for label in ('Pages free', 'Pages inactive', 'Pages speculative'))
+    except (OSError, subprocess.SubprocessError, TypeError, ValueError) as error:
+        return bounded_text(f'waiting: memory check failed: {type(error).__name__}: {error}', 256)
+    if available < 3 * 1024 ** 3:
+        return f'waiting: available memory {available / 1024 ** 3:.1f} GiB < 3 GiB floor'
+    return None
+
+
+def record_waiting(db, reason):
+    # One queue-wide line; status shows it to every waiting client.
+    if db.execute('SELECT waiting FROM queue').fetchone()[0] != reason:
+        with db:
+            db.execute('UPDATE queue SET waiting=?', (reason,))
 
 
 def legacy_occupied():
@@ -501,9 +519,10 @@ def reap_legacy(temp_root=Path('/tmp')):
 
 
 def expire_waiters(root, db):
+    waiting = db.execute('SELECT waiting FROM queue').fetchone()[0]
     rows = db.execute("SELECT * FROM jobs WHERE state='queued' AND wait_seconds>0 AND submitted+wait_seconds<=?", (time.time(),)).fetchall()
     for row in rows:
-        finish(root, db, row, 76, 'queue wait limit expired')
+        finish(root, db, row, 76, 'queue wait limit expired' + (f'; {waiting}' if waiting else ''))
 
 
 def daemon(root, db, isolated):
@@ -515,9 +534,7 @@ def daemon(root, db, isolated):
 
 
 def dispatch(root, db, isolated):
-    slots = int(os.environ.get('CHALK_REMOTE_SLOTS', '3'))
-    if not 1 <= slots <= 100:
-        raise ValueError('CHALK_REMOTE_SLOTS must be between 1 and 100')
+    slots = db.execute('SELECT slots FROM queue').fetchone()[0]
     # Only this process writes admissions.
     with (root / 'dispatcher.lock').open('a') as lock:
         try:
@@ -558,8 +575,10 @@ def dispatch(root, db, isolated):
             busy = db.execute("SELECT * FROM jobs WHERE state IN ('running','quarantined')").fetchall()
             row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
             if row is None and not busy:
+                record_waiting(db, None)
                 return True
             if row is None or len(busy) >= slots or any(r['exclusive'] for r, _, _ in running.values()):
+                record_waiting(db, None)
                 time.sleep(0.2)
                 continue
             job = root / 'jobs' / row['id']
@@ -575,8 +594,10 @@ def dispatch(root, db, isolated):
             occupied = int(not isolated and legacy_occupied())
             if occupied:
                 legacy_handoff_until = None
-            if (len(busy) + occupied >= slots or (exclusive and busy)
-                    or not resources_available(root, request)):
+            waiting_for_slots = len(busy) + occupied >= slots or (exclusive and busy)
+            blocker = None if waiting_for_slots else resource_blocker(root, request)
+            record_waiting(db, blocker)
+            if waiting_for_slots or blocker:
                 time.sleep(0.2)
                 continue
             if exclusive and not isolated and not occupied:

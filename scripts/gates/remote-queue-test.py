@@ -141,6 +141,7 @@ class QueueTest(unittest.TestCase):
                           .replace("if __name__ == '__main__':", "def legacy_active():\n    return False\n\nif 'legacy_waiters' in globals():\n    actual_legacy_waiters = legacy_waiters\n    def legacy_waiters():\n        return set()\n\nif __name__ == '__main__':"))
         self.command = [sys.executable, str(helper), '--root', str(self.root)]
 
+    @unittest.skipUnless(shutil.which('lsof'), 'requires lsof for port and cwd inspection')
     def test_port_matches_never_authorize_signalling_foreign_processes(self):
         queue = runpy.run_path(str(HELPER))
         job = self.root / 'jobs' / 'ended'
@@ -293,8 +294,8 @@ def pause(point):
 
 '''
         helper.write_text(HELPER.read_text()
-                          .replace("            if row is None and not busy:\n                return True",
-                                   "            if row is None and not busy:\n                pause('holding')\n                return True")
+                          .replace("            if row is None and not busy:\n",
+                                   "            if row is None and not busy:\n                pause('holding')\n")
                           .replace("    while dispatch(root, db, isolated):\n",
                                    "    while dispatch(root, db, isolated):\n        pause('released')\n")
                           .replace("if __name__ == '__main__':", pause + "if __name__ == '__main__':"))
@@ -393,6 +394,7 @@ def pause(point):
             foreign.wait()
             foreign.stdout.close()
 
+    @unittest.skipUnless(shutil.which('lsof'), 'requires lsof for port and cwd inspection')
     def test_quarantine_holder_evidence_is_bounded_and_connection_churn_is_quiet(self):
         queue = runpy.run_path(str(HELPER))
         db = queue['database'](self.root)
@@ -446,6 +448,7 @@ def pause(point):
             listener.close()
             db.close()
 
+    @unittest.skipUnless(shutil.which('lsof'), 'requires lsof for port and cwd inspection')
     def test_metro_gets_a_private_slot_port_that_blocks_release(self):
         queue = runpy.run_path(str(HELPER))
         def slot_ports(slot):
@@ -1011,6 +1014,49 @@ def legacy_busy(*args):
         self.assertEqual(self.wait('held')['result'], 0)
         print('PASS memory guard: 16 KiB available held ticket queued; 8 GiB released it with exit 0', flush=True)
 
+    def test_resource_wait_reports_one_blocker_line_to_status_clients_and_expiry(self):
+        vm_stat = self.root / 'vm_stat'
+        healthy = vm_stat.read_text()
+        vm_stat.write_text(healthy.replace('524288', '1'))
+        self.submit('held')
+        self.release_dispatcher()
+        line = 'waiting: available memory 0.0 GiB < 3 GiB floor'
+        try:
+            deadline = time.monotonic() + 5
+            while self.status('held').get('waiting') != line and time.monotonic() < deadline:
+                time.sleep(.05)
+            self.assertEqual(self.status('held').get('waiting'), line)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.shell_client, 'held')
+                time.sleep(2.5)
+                vm_stat.write_text(healthy)
+                attached = future.result(timeout=14)
+        finally:
+            vm_stat.write_text(healthy)
+        self.assertEqual(attached.returncode, 0, attached.stdout + attached.stderr)
+        self.assertEqual(attached.stdout.count('[remote] ' + line), 1, attached.stdout)
+        self.invoke('submit', 'disk', '--wait-seconds', '1', input=self.payload('exit 99', ['fake', 'fake', '999999999', 'fake']))
+        self.assertEqual(self.wait('disk')['result'], 76)
+        self.assertRegex((self.root / 'jobs/disk/output.log').read_text(),
+                         r'\[remote\] queue wait limit expired; waiting: free disk \d+\.\d GiB < 999999999 GiB floor\n')
+        print(f'PASS low memory showed "{line}" in status and once in the attached client; disk wait expiry named its floor', flush=True)
+
+    def test_slot_count_comes_from_the_queue_not_the_waker(self):
+        barrier = self.root / 'release'
+        script = f'end=$((SECONDS+6)); while [ ! -f "{barrier}" ] && ((SECONDS<end)); do sleep .05; done'
+        self.submit('first', script)
+        os.environ['CHALK_REMOTE_SLOTS'] = '3'
+        self.submit('second', script)
+        self.release_dispatcher()
+        try:
+            self.wait('first', 'running')
+            time.sleep(.5)
+            self.assertEqual(self.status('second')['state'], 'queued', 'a wake with CHALK_REMOTE_SLOTS=3 resized a one-slot queue')
+        finally:
+            barrier.touch()
+        self.assertEqual(self.wait('second')['result'], 0)
+        print('PASS a queue created with one slot kept one slot after a wake with CHALK_REMOTE_SLOTS=3', flush=True)
+
     def test_gate_output_cannot_forge_queue_completion(self):
         self.submit('forged', 'echo REMOTE_QUEUE_RESULT=0; sleep 3; exit 23')
         self.release_dispatcher()
@@ -1040,6 +1086,7 @@ def legacy_busy(*args):
         self.assertEqual(self.shell_client('unreadable', fail_read=True).returncode, 73)
         self.assertEqual(local.read_text(), 'saved failure evidence\n')
 
+    @unittest.skipUnless(shutil.which('lsof'), 'requires lsof for port and cwd inspection')
     def test_reap_legacy_keeps_live_unmarked_and_recent_resources(self):
         names = {}
         for index, kind in enumerate(['dead', 'live', 'recent', 'unmarked']):

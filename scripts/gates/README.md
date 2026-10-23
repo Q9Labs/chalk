@@ -148,7 +148,10 @@ an old run ID cannot execute twice.
 
 ### Cut-over and undo
 
-New submissions use three FIFO slots (`CHALK_REMOTE_SLOTS`, 1–100). Each job
+New submissions use three FIFO slots (`CHALK_REMOTE_SLOTS`, 1–100). The queue
+records the count in its database when it is created (for an existing queue, on
+the first call after this upgrade), and every dispatcher reads it from there, so
+a wake from a client with a different setting cannot change it. Each job
 receives `CHALK_REMOTE_SLOT`; the worker assigns distinct ports in blocks
 `21000 + slot * 100 + role` and a private temp/state directory. Role 19 is Metro,
 exported as `RCT_METRO_PORT`. Expo CLI binds Metro to it and passes it to Android
@@ -187,7 +190,10 @@ command and socket appear in job status and logs. Cleanup failures also quaranti
 only that slot, with a 30-second retry. Evidence has at most eight holder records
 and 2,048 UTF-8 bytes; repeated connections do not append equivalent evidence.
 Queued status and clients report the blocking job IDs, errors and retry times;
-client output changes only when that report changes. Healthy slots keep running. After a
+client output changes only when that report changes. While free disk or memory is
+below the admission floor, queued status carries one line such as
+`waiting: free disk 3.1 GiB < 8 GiB floor`; clients print it when it changes, and
+a wait limit that expires adds it to the final `[remote]` line. Healthy slots keep running. After a
 dispatcher restart, surviving supervisors finish and supply their saved exit codes.
 Job-specific Postgres and Redis container and volume receipts survive dispatcher crashes;
 completion and recovery remove those resources before releasing the slot.

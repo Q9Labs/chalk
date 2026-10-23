@@ -5,6 +5,51 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveDevConfig } from "./config.mjs";
 import { createResourceManager } from "./chalk-resources.mjs";
+import { runCommand } from "./commands.mjs";
+
+test("reset approval lists exactly the slot Postgres and Redis resources that reset touches", async () => {
+  const root = await mkdtemp(join(tmpdir(), "chalk-dev-reset-"));
+  try {
+    const config = resolveDevConfig({
+      root,
+      requiredTools: [],
+      env: {
+        CHALK_POSTGRES_CONTAINER: "chalk-postgres-slot-1-token",
+        CHALK_POSTGRES_VOLUME: "chalk-postgres-slot-1-token-volume",
+        CHALK_REDIS_CONTAINER: "chalk-slot-1-token",
+        CHALK_REDIS_VOLUME: "chalk-slot-1-token-volume",
+        CHALK_DEV_STATE_ROOT: join(root, "state"),
+      },
+    });
+    const touched = { containers: new Set(), volumes: new Set(), databases: new Set() };
+    const manager = createResourceManager(config, {
+      docker: async (name) => {
+        touched.containers.add(name);
+        return undefined;
+      },
+      runner: async (command, args, options) => {
+        const env = options.env || {};
+        for (const name of [env.CHALK_POSTGRES_CONTAINER, env.CHALK_REDIS_CONTAINER]) if (name) touched.containers.add(name);
+        for (const name of [env.CHALK_POSTGRES_VOLUME, env.CHALK_REDIS_VOLUME]) if (name) touched.volumes.add(name);
+        if (command === "docker" && args[0] === "exec") {
+          touched.containers.add(args[1]);
+          touched.databases.add(`${args[1]}/${args.at(-1).match(/"([^"]+)"/)[1]}`);
+        }
+        return { stdout: "" };
+      },
+    });
+    const { targets } = await runCommand("reset", config, { yes: true, hooks: { resetResources: () => manager.reset() }, output: () => {} });
+    assert.deepEqual([...touched.containers].sort(), [...new Set([...targets.containers, ...targets.preservedContainers])].sort());
+    assert.deepEqual([...touched.volumes].sort(), [...targets.volumes, ...targets.preservedVolumes].sort());
+    assert.deepEqual(
+      [...touched.databases],
+      targets.databases.map(({ container, name }) => `${container}/${name}`),
+    );
+    assert.ok(!JSON.stringify(targets).includes('"chalk-postgres"'), "a slot reset must not name the shared Postgres");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("slot dev startup, SQL, reset and cleanup use their own Postgres container", async () => {
   const root = await mkdtemp(join(tmpdir(), "chalk-dev-slot-"));

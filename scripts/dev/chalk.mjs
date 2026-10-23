@@ -35,8 +35,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       }),
     preflightOptions: { ...hooks.preflightOptions, which: adapters.which },
     resources: async () => [
-      { kind: "container", name: "chalk-postgres", reusable: true },
-      { kind: "database", name: config.databaseName || "chalk_dev", container: "chalk-postgres", reusable: true },
+      { kind: "container", name: config.postgres.container, reusable: true },
+      { kind: "database", name: config.databaseName || "chalk_dev", container: config.postgres.container, reusable: true },
       { kind: "container", name: config.redis.container, reusable: true },
       { kind: "generated", path: config.runtimeRoot },
     ],

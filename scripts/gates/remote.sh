@@ -37,7 +37,7 @@ Environment:
   CHALK_REMOTE_HOST                  SSH host (default agents-macmini)
   CHALK_REMOTE_BASE_REF              base ref for branch scope (default origin/master)
   CHALK_REMOTE_MIN_FREE_GIB          refuse to start below this much free disk (default 8)
-  CHALK_REMOTE_SLOTS                concurrent slots (default 3); --exclusive runs alone
+  CHALK_REMOTE_SLOTS                concurrent slots, fixed when the M4 queue is created (default 3); --exclusive runs alone
   CHALK_REMOTE_RUN_ID                reuse an existing run ID (also --run-id ID)
   CHALK_REMOTE_GATE_TIMEOUT_SECONDS  limit for each setup step and the gate (default 3600)
   CHALK_REMOTE_TAIL_LINES            lines printed at the end (default 60)
@@ -196,7 +196,7 @@ echo "[local] job ID: ${run_id}; reattach: scripts/gates/remote.sh --attach ${ru
 echo "[local] full log: ${log_file}"
 
 follow() {
-  local offset=0 result chunk status response blockers previous_blockers=""
+  local offset=0 result chunk status response blockers previous_blockers="" waiting previous_waiting=""
   chunk="$(mktemp "${log_dir}/.read.XXXXXX")"
   trap 'rm -f "$chunk"' RETURN
   # A failed transfer is discarded and retried from its last confirmed byte offset.
@@ -222,6 +222,15 @@ follow() {
           echo '[remote] queue blockers cleared'
         fi
         previous_blockers="$blockers"
+      fi
+      waiting="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("waiting") or "")' <<<"$response")"
+      if [[ "$waiting" != "$previous_waiting" ]]; then
+        if [[ -n "$waiting" ]]; then
+          printf '[remote] %s\n' "$waiting"
+        else
+          echo '[remote] resource wait cleared'
+        fi
+        previous_waiting="$waiting"
       fi
       result="$(python3 -c 'import json,sys; row=json.load(sys.stdin); print(row["result"] if row["state"]=="done" else "")' <<<"$response")"
       if [[ -n "$result" ]]; then
