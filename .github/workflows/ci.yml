@@ -3,6 +3,9 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      web_dispatch_id:
+        description: Correlate a local web release with its workflow run
+        type: string
       target_sha:
         description: Full 40-character commit SHA whose latest Gate run on master passed
         required: true
@@ -79,6 +82,8 @@ on:
         type: string
   workflow_call:
     inputs:
+      web_dispatch_id:
+        type: string
       target_sha:
         required: false
         type: string
@@ -157,7 +162,7 @@ on:
       pages_deployment_id:
         value: ${{ jobs.deploy-web.outputs.pages_deployment_id }}
 
-run-name: Release ${{ inputs.target_sha }}
+run-name: Release ${{ inputs.target_sha }} ${{ inputs.web_dispatch_id }}
 
 permissions:
   contents: read
@@ -1025,6 +1030,10 @@ jobs:
           if-no-files-found: error
 
   deploy-web:
+    concurrency:
+      group: web-${{ inputs.managed_environment }}
+      cancel-in-progress: false
+      queue: max
     name: Deploy selected web or restore Pages
     outputs:
       pages_deployment_id: ${{ steps.restore.outputs.pages_deployment_id }}

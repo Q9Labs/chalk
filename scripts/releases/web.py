@@ -86,6 +86,7 @@ def current(project):
 
 
 def rollback(project, deployment_id):
+    require_serialized_writer()
     if current(project) != deployment_id:
         deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
         require(deployment['id'] == deployment_id, 'Pages rollback returned a different deployment')
@@ -93,7 +94,13 @@ def rollback(project, deployment_id):
     outputs({'pages_deployment_id': deployment_id})
 
 
+def require_serialized_writer():
+    require(os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('GITHUB_JOB') == 'deploy-web',
+            'Shared Pages destinations may only be published by the serialized Release deploy-web job; use pnpm run release:web')
+
+
 def deploy(target, sha, run, member, project, without_asset_retention=False):
+    require_serialized_writer()
     require(len(member['sha256']) == 64, 'web artifact requires a SHA256 hash')
     require(project and os.environ.get('CLOUDFLARE_ACCOUNT_ID'), 'missing Pages destination')
     data = GitHub().artifact(run, member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
@@ -105,6 +112,8 @@ def deploy(target, sha, run, member, project, without_asset_retention=False):
                         '--directory', str(Path(directory) / 'dist/client'),
                         '--origin', public_config(target, sha)['VITE_PUBLIC_APP_URL'], '--release', sha,
                         *(['--without-asset-retention'] if without_asset_retention else [])], check=True)
+        subprocess.run([str(ROOT / 'node_modules/.bin/tsx'), str(ROOT / 'apps/web/scripts/retain-public-assets.ts'),
+                        '--directory', str(Path(directory) / 'dist/client'), '--check-live'], check=True)
         subprocess.run([str(ROOT / 'node_modules/.bin/wrangler'), 'pages', 'deploy', 'dist/client',
                         '--project-name', project, '--branch', 'master', '--commit-hash', sha,
                         '--commit-dirty=false'], cwd=directory, check=True)

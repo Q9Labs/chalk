@@ -245,3 +245,58 @@ base and archive pins with the exact payloads tested on nightly, then deploys ni
 ZIP bytes to the production dispatcher and keeps its scheduler enabled. It
 retains production's previous pins and ZIP for rollback. Existing workers drain
 through the normal fleet release lifecycle; no cross-environment deletion is added.
+
+## Web asset retention and first deploy
+
+Production and nightly web uploads run only in the Release workflow's
+`deploy-web` job. Its `web-production` and `web-nightly` concurrency groups
+queue publishes with `cancel-in-progress: false`, including called workflows
+and Pages rollbacks. Local `release:web` dispatches Release on `master` and
+waits for its exact run; it never uploads directly. The requested full SHA must
+have passed the latest Gate on master. GitHub CLI authentication needs workflow
+write access. Build-only archives remain independent of live retention.
+
+The manifest stores the newest four distinct asset generations per vendor,
+including the current generation. Reusing a digest does not consume a slot.
+Before upload, the job re-reads the live manifest and stops if it changed since
+the retention read. This guard detects stale retention; Cloudflare Pages has
+no compare-and-swap, so the serialized workflow remains the single writer.
+
+A missing live manifest cannot distinguish the first deployment from later
+manifest loss. From a clean checkout of the intended merged release, with
+normal GitHub workflow credentials configured, bootstrap production once:
+
+```sh
+cd /Users/macmini/code/chalk
+pnpm run release:web --sha "$(git rev-parse HEAD)" --without-asset-retention
+```
+
+Every later production release:
+
+```sh
+cd /Users/macmini/code/chalk
+pnpm run release:web --sha "$(git rev-parse HEAD)"
+```
+
+Nightly needs its own independent one-time bootstrap:
+
+```sh
+cd /Users/macmini/code/chalk
+pnpm run release:web --target nightly --sha "$(git rev-parse HEAD)" --without-asset-retention
+```
+
+Every later nightly web release:
+
+```sh
+cd /Users/macmini/code/chalk
+pnpm run release:web --target nightly --sha "$(git rev-parse HEAD)"
+```
+
+For a prebuilt Release dispatch, set `without_asset_retention=true` once, then
+leave it false. This forwards `--without-asset-retention` to
+`scripts/releases/web.py deploy`. Cut nightly also exposes that input for its
+own one-time bootstrap; scheduled cuts always leave it false. The flag can
+discard retention on any later deployment and warns that older clients may
+lose lazy-loaded assets. Never persist it in routine automation. If a later
+manifest is missing, investigate the loss before explicitly discarding retained
+assets. Never bypass the workflow by running Wrangler against shared sites.
