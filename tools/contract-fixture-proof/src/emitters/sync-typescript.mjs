@@ -375,7 +375,7 @@ function renderTypeScript(contract) {
     "export const CollaborationWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), capabilities: CollaborationCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
   lines.push(
-    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)) };`,
+    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema) };`,
   );
   lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");

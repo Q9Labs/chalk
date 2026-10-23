@@ -777,7 +777,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   defp complete_external_participant(connection, episode, external) do
     params =
       Scope.episode(episode) ++
-        [Scope.uuid(external.target_participant_id), external.target_participant_generation]
+        [
+          Scope.uuid(external.target_participant_id),
+          external.target_participant_generation,
+          external.name == :participant_leave,
+          external.payload["entryGeneration"]
+        ]
 
     case Postgrex.query!(connection, SQL.complete_external_participant(), params).rows do
       [row] ->
@@ -941,7 +946,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
        when external.name in [:remove_participant, :participant_leave] do
     params =
       Scope.episode(episode) ++
-        [Scope.uuid(external.target_participant_id), external.target_participant_generation]
+        [
+          Scope.uuid(external.target_participant_id),
+          external.target_participant_generation,
+          external.name == :participant_leave,
+          external.payload["entryGeneration"]
+        ]
 
     case Postgrex.query!(connection, SQL.restore_participant_active(), params).rows do
       [[_id]] -> :ok

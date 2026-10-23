@@ -29,8 +29,12 @@ a retried admission names a participant that has already left. The public
 uses the existing `HttpClientError` channel, with its code in the response body.
 The dashboard reads that code and retries once with a fresh join key.
 
-Completed entry also fences an older entry's delayed Leave, so reattaching the
-same seat cannot let the previous mount remove it.
+Sync assigns each entry a participant-local generation and returns it in
+`welcome`. The client resumes that generation through the `entry_generation`
+WebSocket query, even after refreshing its credential. Confirmation advances
+ownership only forward and voids older pending Leaves. Acceptance and completion
+both fence a Leave against the confirmed generation, so reattaching the same
+seat cannot let the previous mount remove it. Previous Sync ignores this query.
 
 Rollout: apply the database migrations first, then upgrade Sync, then the API and
 this client. This client also works with an older Sync, and published 5.0.x

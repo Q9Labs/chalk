@@ -54,6 +54,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        heartbeat_timer: nil,
        entry_timer: nil,
        entry_confirmation: Map.get(opts, :entry_confirmation, false),
+       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
        terminal_ack_timer: nil,
        terminal_head: nil,
        missed_heartbeats: 0,
@@ -724,7 +725,6 @@ defmodule ChalkSync.Transport.SocketV1 do
          participant_id: String.downcase(claims.participant_id),
          participant_generation: generation,
          admission_lifecycle_intent_id: String.downcase(claims.admission_lifecycle_intent_id),
-         entry_token_id: claims.entry_token_id,
          protocol_version: 1,
          role: authorization.role,
          capabilities: authorization.capabilities
@@ -887,7 +887,8 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
+    with {:ok, identity} <- Stateholder.admit_entry(identity, state.requested_entry_generation),
+         :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
          {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(

@@ -10,6 +10,13 @@ export const SyncProtocolMetadata = {
     value: 1,
     transport: "websocket-json-text",
     route: "/v1/sync",
+    entryGeneration: {
+      queryParameter: "entry_generation",
+      newEntry: "new",
+      resume: "previous welcome entry_generation",
+      confirmation: "monotonic compare-and-set",
+      scope: "participant",
+    },
   },
   directions: {
     clientToServer: "client-to-server",
@@ -313,7 +320,7 @@ export const SyncProtocolMetadata = {
     {
       code: 1008,
       connection: "closed",
-      reasons: ["invalid token", "policy violation"],
+      reasons: ["invalid token", "policy violation", "entry timeout"],
     },
     {
       code: 1009,
@@ -1257,7 +1264,16 @@ export const CollaborationWelcomeExtensionSchema = Schema.Struct({
   retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
   read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)),
 }).check(exactKeys(["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]));
-const WelcomeBase = { type: Schema.Literal("welcome"), protocol: Schema.Literal(1), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)) };
+const WelcomeBase = {
+  type: Schema.Literal("welcome"),
+  protocol: Schema.Literal(1),
+  participant_id: UuidSchema,
+  participant_generation: PositiveIntegerSchema,
+  recovery_id: UuidSchema,
+  head: ControlCursorSchema,
+  entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
+  entry_generation: Schema.optionalKey(PositiveIntegerSchema),
+};
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
 export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));
 export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("replay"), ...ServerCorrelationFields });

@@ -9,7 +9,7 @@ defmodule ChalkSync.Stateholder.Identity do
     :participant_id,
     :participant_generation,
     :admission_lifecycle_intent_id,
-    :entry_token_id,
+    :entry_generation,
     :role,
     protocol_version: 1,
     capabilities: []
@@ -20,7 +20,7 @@ defmodule ChalkSync.Stateholder.Identity do
           participant_id: String.t(),
           participant_generation: pos_integer(),
           admission_lifecycle_intent_id: String.t() | nil,
-          entry_token_id: String.t() | nil,
+          entry_generation: pos_integer() | nil,
           role: String.t() | nil,
           protocol_version: 1,
           capabilities: [String.t()]

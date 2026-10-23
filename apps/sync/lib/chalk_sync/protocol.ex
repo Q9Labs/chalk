@@ -85,6 +85,11 @@ defmodule ChalkSync.ProtocolV1 do
         do: Map.put(frame, "entry_confirmation", true),
         else: frame
 
+    frame =
+      if identity.entry_generation,
+        do: Map.put(frame, "entry_generation", identity.entry_generation),
+        else: frame
+
     encode!(frame)
   end
 

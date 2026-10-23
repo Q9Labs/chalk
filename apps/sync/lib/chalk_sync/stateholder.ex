@@ -32,6 +32,9 @@ defmodule ChalkSync.Stateholder do
               {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
   @callback confirm_admission(Identity.t()) ::
               {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
+
+  @callback admit_entry(Identity.t(), :new | pos_integer()) ::
+              {:ok, Identity.t()} | {:error, atom()} | {:retryable, atom()}
   @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
               :ok | {:retryable, atom()}
   @callback pending_lifecycle_intents(pos_integer()) ::
@@ -149,6 +152,10 @@ defmodule ChalkSync.Stateholder do
 
     result
   end
+
+  def admit_entry(%Identity{} = identity, :legacy), do: {:ok, identity}
+  def admit_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
+  def admit_entry(%Identity{} = identity, requested), do: impl().admit_entry(identity, requested)
 
   @spec record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
           :ok | {:retryable, atom()}

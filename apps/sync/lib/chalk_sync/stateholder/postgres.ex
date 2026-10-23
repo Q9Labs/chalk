@@ -24,6 +24,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
   alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Lifecycle
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
@@ -75,6 +76,19 @@ defmodule ChalkSync.Stateholder.Postgres do
   @impl ChalkSync.Stateholder
   def confirm_admission(%Identity{} = identity),
     do: apply_lifecycle(identity.episode, identity.admission_lifecycle_intent_id, identity)
+
+  @impl ChalkSync.Stateholder
+  def admit_entry(%Identity{} = identity, requested) do
+    case Postgrex.transaction(
+           Database.connection(identity.episode),
+           &JoinSeats.admit_entry(&1, identity, requested),
+           timeout: @transaction_timeout_ms
+         ) do
+      {:ok, admitted} -> {:ok, admitted}
+      {:error, {:error, reason}} -> {:error, reason}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  end
 
   defp apply_lifecycle(episode, lifecycle_intent_id, identity)
        when is_binary(lifecycle_intent_id) do

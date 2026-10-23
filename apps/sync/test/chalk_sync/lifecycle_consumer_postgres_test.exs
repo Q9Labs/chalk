@@ -42,7 +42,9 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   end
 
   @tag :entry_ownership
-  test "a newer confirmed entry voids an accepted older Leave through finalization", %{connections: connections} do
+  test "a newer confirmed entry voids an accepted older Leave through finalization", %{
+    connections: connections
+  } do
     connection = hd(connections)
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
@@ -51,17 +53,38 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
     assert {:ok, _} = Postgres.recover(current, nil)
     {:ok, leave} = Operation.new("inflight_entry_leave_001", :participant_leave, %{})
-    assert {:ok, %{result: :pending, external_operation_id: id}} = Postgres.begin_operation(first, leave)
+
+    assert {:ok, %{result: :pending, external_operation_id: id}} =
+             Postgres.begin_operation(first, leave)
+
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
-    assert {:ok, %{result: :failed}} = Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+
+    assert {:ok, %{result: :failed}} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+
     assert [["active", "joined"]] = entry_rows(connection, current)
-    assert [[0]] = Postgrex.query!(connection, "select count(*) from sync_publication_fences where participant_id=$1", [UUID.dump!(current.participant_id)]).rows
-    assert [["rejected"]] = Postgrex.query!(connection, "select outcome from sync_command_receipts where external_operation_id=$1", [UUID.dump!(id)]).rows
+
+    assert [[0]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_publication_fences where participant_id=$1",
+               [UUID.dump!(current.participant_id)]
+             ).rows
+
+    assert [["rejected"]] =
+             Postgrex.query!(
+               connection,
+               "select outcome from sync_command_receipts where external_operation_id=$1",
+               [UUID.dump!(id)]
+             ).rows
+
     leave_entry(connection, current, "newer_entry_leave_001")
   end
 
   @tag :entry_ownership
-  test "an older confirmation retry cannot reclaim Leave or cancel the newer entry's Leave", %{connections: connections} do
+  test "an older confirmation retry cannot reclaim Leave or cancel the newer entry's Leave", %{
+    connections: connections
+  } do
     connection = hd(connections)
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
@@ -71,16 +94,27 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(first)
     {:ok, stale} = Operation.new("retried_older_leave_001", :participant_leave, %{})
-    assert {:ok, %{result: :rejected, reason: :participant_inactive}} = Postgres.begin_operation(first, stale)
+
+    assert {:ok, %{result: :rejected, reason: :participant_inactive}} =
+             Postgres.begin_operation(first, stale)
+
     {:ok, own} = Operation.new("newer_own_leave_001", :participant_leave, %{})
-    assert {:ok, %{result: :pending, external_operation_id: id}} = Postgres.begin_operation(current, own)
+
+    assert {:ok, %{result: :pending, external_operation_id: id}} =
+             Postgres.begin_operation(current, own)
+
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(first)
-    assert {:ok, %{result: :applied}} = Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+
     assert [["left", "left"]] = entry_rows(connection, current)
   end
 
   @tag :entry_ownership
-  test "a refreshed reconnect Leaves the same entry without another entered", %{connections: connections} do
+  test "a refreshed reconnect Leaves the same entry without another entered", %{
+    connections: connections
+  } do
     connection = hd(connections)
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
@@ -91,18 +125,49 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     leave_entry(connection, refreshed, "refreshed_entry_leave_001")
   end
 
+  @tag :entry_generation
+  test "entry admission allocates monotonically and resumption cannot choose a future generation",
+       %{connections: connections} do
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    assert {:ok, first} = Postgres.admit_entry(fixture.identity, :new)
+    assert {:ok, current} = Postgres.admit_entry(fixture.identity, :new)
+    assert current.entry_generation == first.entry_generation + 1
+    assert {:ok, resumed} = Postgres.admit_entry(fixture.identity, first.entry_generation)
+    assert resumed.entry_generation == first.entry_generation
+
+    assert {:error, :invalid_admission_intent} =
+             Postgres.admit_entry(fixture.identity, current.entry_generation + 1)
+
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
+    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(resumed)
+    leave_entry(connection, current, "allocated_entry_leave_001")
+    assert {:error, :invalid_admission_intent} = Postgres.confirm_admission(current)
+  end
+
   defp entry_identity(identity, generation, old_token) do
     identity |> Map.put(:entry_generation, generation) |> Map.put(:entry_token_id, old_token)
   end
 
   defp entry_rows(connection, identity) do
-    Postgrex.query!(connection, "select p.status,s.state from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1", [UUID.dump!(identity.participant_id)]).rows
+    Postgrex.query!(
+      connection,
+      "select p.status,s.state from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1",
+      [UUID.dump!(identity.participant_id)]
+    ).rows
   end
 
   defp leave_entry(connection, identity, key) do
     {:ok, leave} = Operation.new(key, :participant_leave, %{})
-    assert {:ok, %{result: :pending, external_operation_id: id}} = Postgres.begin_operation(identity, leave)
-    assert {:ok, %{result: :applied}} = Postgres.finalize_operation(identity.episode, id, {:confirmed, :provider})
+
+    assert {:ok, %{result: :pending, external_operation_id: id}} =
+             Postgres.begin_operation(identity, leave)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(identity.episode, id, {:confirmed, :provider})
+
     assert [["left", "left"]] = entry_rows(connection, identity)
   end
 
@@ -111,8 +176,8 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     connection = hd(connections)
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
-    first = %{fixture.identity | entry_token_id: "first-entry"}
-    current = %{fixture.identity | entry_token_id: "current-entry"}
+    first = entry_identity(fixture.identity, 1, "first-entry")
+    current = entry_identity(fixture.identity, 2, "current-entry")
 
     assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
@@ -122,10 +187,10 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :rejected, reason: :participant_inactive}} =
              Postgres.begin_operation(first, stale_leave)
 
-    assert [["active", "joined", "current-entry"]] =
+    assert [["active", "joined", 2]] =
              Postgrex.query!(
                connection,
-               "select p.status,s.state,s.entry_token_id from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1",
+               "select p.status,s.state,s.confirmed_entry_generation from participants p join participant_join_seats s on s.participant_id=p.id where p.id=$1",
                [UUID.dump!(current.participant_id)]
              ).rows
 
@@ -578,8 +643,8 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     Postgrex.query!(
       connection,
       """
-      insert into participant_join_seats(tenant_id,space_id,episode_id,participant_id,generation,state,expires_at)
-      values($1,$2,$3,$4,1,'pending',now()+interval '2 minutes')
+      insert into participant_join_seats(tenant_id,space_id,episode_id,participant_id,generation,state,expires_at,issued_entry_generation)
+      values($1,$2,$3,$4,1,'pending',now()+interval '2 minutes',2)
       """,
       Scope.participant(fixture.identity)
     )

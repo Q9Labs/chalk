@@ -89,6 +89,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #presence: V1Projection<V1Presence> | null = null;
   #participantId: string | null = null;
   #participantGeneration: number | null = null;
+  #entryGeneration: number | null = null;
   #recovery: Recovery | null = null;
   #snapshotRecoveryRequested = false;
   #lastDigestRecoveryAt: number | null = null;
@@ -183,6 +184,7 @@ export class V1SyncClient implements V1CollaborationClient {
   stop(): void {
     this.#started = false;
     this.#entryPending = false;
+    this.#entryGeneration = null;
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
@@ -375,7 +377,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryNegotiated = false;
     let socket: V1Socket;
     try {
-      socket = this.#options.webSocket.connect(this.#options.entryConfirmation ? entryConfirmationUrl(this.#options.url) : this.#options.url);
+      socket = this.#options.webSocket.connect(entryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
     } catch {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
@@ -580,6 +582,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
+    this.#entryGeneration = frame.entry_generation ?? null;
     if (!this.#entryNegotiated) this.#entryPending = false;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -1034,9 +1037,10 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
     (!publication.enabled || publication.publicationId !== null)
   );
 }
-function entryConfirmationUrl(value: string): string {
+function entryUrl(value: string, generation: number | null, confirmation: boolean): string {
   const url = new URL(value);
-  url.searchParams.set("entry_confirmation", "1");
+  url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
+  if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();
 }
 function assertV1Url(value: string): void {

@@ -492,6 +492,30 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  it.each([true, false])("keeps its server entry generation when refreshed recovery has acknowledged entry=%s", async (acknowledged) => {
+    const clock = new TestClock();
+    let token = "before-refresh";
+    const { client, socket, state, urls } = await liveClient({ clock, reconnectDelayMs: 1, token: async () => token }, baseState(), ownerId, true, 7);
+    try {
+      expect(new URL(urls[0]!).searchParams.get("entry_generation")).toBe("new");
+      await client.confirmEntered();
+      if (acknowledged) socket.receive({ type: "entered_ack" });
+      await settle();
+      token = "after-refresh";
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      expect(new URL(urls.at(-1)!).searchParams.get("entry_generation")).toBe("7");
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, 7);
+      expect(socket.frames().findLast((frame) => frame.type === "hello")).toMatchObject({ token: "after-refresh" });
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(acknowledged ? 1 : 2);
+    } finally {
+      client.stop();
+    }
+  });
   it("resends unacknowledged entry after transport recovery", async () => {
     const clock = new TestClock();
     const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
@@ -2084,7 +2108,7 @@ describe("v1 exact decoding and durable state", () => {
     for (const snapshot of malformed) await expect(restoreV1Snapshot(snapshot)).rejects.toBeInstanceOf(V1ReplicaError);
   });
 });
-async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true) {
+async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true, entryGeneration?: number) {
   const socket = new TestSocket();
   const urls: string[] = [];
   const factory: SyncWebSocketFactory = {
@@ -2110,6 +2134,7 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
     mode: "snapshot",
     snapshot,
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
+    ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
@@ -2177,7 +2202,7 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2190,6 +2215,7 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     mode,
     ...(mode === "snapshot" ? { snapshot } : {}),
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
+    ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

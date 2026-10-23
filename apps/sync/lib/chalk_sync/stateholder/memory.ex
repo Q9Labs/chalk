@@ -78,6 +78,10 @@ defmodule ChalkSync.Stateholder.Memory do
     do: apply_lifecycle_intent(identity.episode, identity.admission_lifecycle_intent_id)
 
   @impl ChalkSync.Stateholder
+  def admit_entry(identity, requested),
+    do: GenServer.call(__MODULE__, {:admit_entry, identity, requested})
+
+  @impl ChalkSync.Stateholder
   def record_lifecycle_failure(_episode, _lifecycle_intent_id, _reason), do: :ok
 
   @impl ChalkSync.Stateholder
@@ -157,7 +161,27 @@ defmodule ChalkSync.Stateholder.Memory do
   @impl GenServer
   def handle_call(:reset, _from, s) do
     :ets.delete_all_objects(@episodes)
-    {:reply, :ok, s}
+    {:reply, :ok, Map.drop(s, [:entry_generations])}
+  end
+
+  def handle_call({:admit_entry, identity, requested}, _from, state) do
+    key =
+      {EpisodeKey.authority_key(identity.episode), identity.participant_id,
+       identity.participant_generation}
+
+    generations = Map.get(state, :entry_generations, %{})
+    issued = Map.get(generations, key, 0)
+    generation = if requested == :new, do: issued + 1, else: requested
+
+    if is_integer(generation) && generation > 0 &&
+         generation <= issued + if(requested == :new, do: 1, else: 0) do
+      next = Map.put(generations, key, max(issued, generation))
+
+      {:reply, {:ok, %{identity | entry_generation: generation}},
+       Map.put(state, :entry_generations, next)}
+    else
+      {:reply, {:error, :invalid_admission_intent}, state}
+    end
   end
 
   def handle_call({:media_pauses, episode}, _from, server_state) do
