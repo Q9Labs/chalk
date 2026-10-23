@@ -721,6 +721,175 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     }
   });
 
+  it("keeps a saved first change ahead when a later save fails in the same turn as it", async () => {
+    const { pendingStore, saves } = heldPolicyStore("before");
+    const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
+    const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("picked"), client.setDrawPolicy("everyone")];
+    for (const change of changes) void change.catch(() => undefined);
+    try {
+      await settle();
+      saves[2]?.resolve();
+      await settle();
+      expect(sentPolicies(sockets[0])).toEqual([]);
+      saves[0]?.resolve();
+      saves[1]?.reject(new Error("disk full"));
+      await settle();
+      expect(sentPolicies(sockets[0])).toEqual(["hosts"]);
+      commit(sockets[0], sentFrames(sockets[0], "set_draw_policy").at(-1).operation_id, "1");
+      await settle();
+      expect(sentPolicies(sockets[0])).toEqual(["hosts", "everyone"]);
+      commit(sockets[0], sentFrames(sockets[0], "set_draw_policy").at(-1).operation_id, "2");
+      await expect(changes[0]).resolves.toBeUndefined();
+      await expect(changes[1]).rejects.toMatchObject({ code: "unavailable" });
+      await expect(changes[2]).resolves.toBeUndefined();
+      expect(await pendingStore.load()).toEqual([]);
+    } finally {
+      for (const save of saves) save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("ignores a receipt from the last connection for a change that was already decided", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock);
+    try {
+      const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("picked")];
+      await settle();
+      const first = sentFrames(sockets[0], "set_draw_policy")[0].operation_id;
+      commit(sockets[0], first, "1");
+      await changes[0];
+      await reconnect(clock, sockets);
+      expect(sentPolicies(sockets[1])).toEqual(["picked"]);
+      commit(sockets[1], first, "1");
+      await settle();
+      expect(sentPolicies(sockets[1])).toEqual(["picked"]);
+      commit(sockets[1], sentFrames(sockets[1], "set_draw_policy")[0].operation_id, "2");
+      await expect(changes[1]).resolves.toBeUndefined();
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends the next access change exactly once when the sent one fails for good while the next is saving", async () => {
+    const queued = await twoQueuedPolicyChanges();
+    try {
+      queued.sockets[0]?.receive({ type: "operation_error", correlation_id: queued.first(), operation: "set_draw_policy", code: "permission_denied", recoverable: false, message: "Permission denied." });
+      await settle();
+      expect(sentPolicies(queued.sockets[0])).toEqual(["hosts"]);
+      queued.saves[1]?.resolve();
+      await settle();
+      expect(sentPolicies(queued.sockets[0])).toEqual(["hosts", "picked"]);
+      commit(queued.sockets[0], sentFrames(queued.sockets[0], "set_draw_policy").at(-1).operation_id, "2");
+      await expect(queued.changes[0]).rejects.toMatchObject({ code: "permission_denied" });
+      await expect(queued.changes[1]).resolves.toBeUndefined();
+    } finally {
+      for (const save of queued.saves) save.resolve();
+      await queued.client.stopSceneSubscription();
+    }
+  });
+
+  // Every order the three saves can finish in, cut into turns every way, with every save outcome and a receipt, a
+  // final failure or nothing for the sent change after each turn: 6 orders x 8 outcomes x 48 paths through the turn
+  // groupings and decisions, so 2,304 cases per store.
+  it.each(SAVE_ORDERS.flatMap((order) => (["before", "after"] as const).map((write) => ({ order, write }))))("sends saved access changes once each, in the order they were made, when saves finish in order $order with a store that writes $write the wait", async ({ order, write }) => {
+    for (const turns of turnsOf(order)) {
+      for (const saved of outcomesOf(3)) {
+        for (const decisions of decisionsOf(turns.length)) await expectCreationOrder({ write, turns, saved, decisions });
+      }
+    }
+  });
+
+  it("keeps creation order on reconnect when the first change is still saving and a later one is saved", async () => {
+    const clock = new ManualClock();
+    const { pendingStore, saves } = heldPolicyStore("before");
+    const { client, sockets } = await hostClient(clock, { pendingStore });
+    const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("picked")];
+    try {
+      await settle();
+      saves[1]?.resolve();
+      await settle();
+      await reconnect(clock, sockets);
+      expect(sentPolicies(sockets[1])).toEqual([]);
+      sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+      saves[0]?.resolve();
+      await settle();
+      expect(sentPolicies(sockets[1])).toEqual(["hosts"]);
+      await commitFirst(sockets[1], "2");
+      expect(sentPolicies(sockets[1])).toEqual(["hosts", "picked"]);
+      commit(sockets[1], sentFrames(sockets[1], "set_draw_policy")[1].operation_id, "3");
+      await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined]);
+    } finally {
+      for (const save of saves) save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("waits for a replayed access change's receipt before the reconnect snapshot", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock);
+    try {
+      const change = client.setDrawPolicy("hosts");
+      await settle();
+      await reconnect(clock, sockets);
+      expect(sentPolicies(sockets[1])).toEqual(["hosts"]);
+      expect(sentFrames(sockets[1], "request_snapshot")).toEqual([]);
+      await commitFirst(sockets[1], "2");
+      expect(sentFrames(sockets[1], "request_snapshot")).toHaveLength(1);
+      await expect(change).resolves.toBeUndefined();
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends a held access change once after the same client stops and starts again", async () => {
+    const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
+    try {
+      void client.setDrawPolicy("hosts").catch(() => undefined);
+      await settle();
+      await client.stopSceneSubscription();
+      const restart = client.startSceneSubscription();
+      void restart.catch(() => undefined);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+      sockets[1]?.receive(welcome());
+      await settle();
+      const replayed = sentFrames(sockets[1], "set_draw_policy");
+      expect(replayed.map((frame) => frame.policy)).toEqual(["hosts"]);
+      commit(sockets[1], replayed[0].operation_id, "2");
+      await settle();
+      expect(sentFrames(sockets[1], "set_draw_policy")).toHaveLength(1);
+      expect(await pendingStore.load()).toEqual([]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("sends a policy change and a drawing made during a snapshot in the order they were made once it completes", async () => {
+    const { client, sockets } = await hostClient();
+    try {
+      const snapshot = client.requestSnapshot();
+      await settle();
+      const policy = client.setDrawPolicy("hosts");
+      await settle();
+      const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+      await settle();
+      expect(sentFrames(sockets[0], "set_draw_policy", "submit_update")).toEqual([]);
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      const [policyFrame, drawingFrame] = sentFrames(sockets[0], "set_draw_policy", "submit_update");
+      expect([policyFrame?.type, drawingFrame?.type]).toEqual(["set_draw_policy", "submit_update"]);
+      commit(sockets[0], policyFrame.operation_id, "2");
+      commit(sockets[0], drawingFrame.operation_id, "3");
+      await expect(policy).resolves.toBeUndefined();
+      await expect(drawing).resolves.toMatchObject({ revision: "3" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("sends a held access change when a snapshot fails for good", async () => {
     const { client, sockets } = await hostClient();
     const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
@@ -762,8 +931,14 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     }
   });
 
-  it("refuses a policy change whose save finishes after the client fell back to a Sync without draw_policy_v1", async () => {
-    const { pendingStore, saves } = heldPolicyStore("before");
+  it.each([
+    { write: "before", save: "finishes" },
+    { write: "after", save: "finishes" },
+    { write: "before", save: "fails" },
+    { write: "after", save: "fails" },
+  ] as const)("refuses a policy change whose save $save after the client fell back to a Sync without draw_policy_v1, with a store that writes $write the wait", async ({ write, save }) => {
+    const unhandled = unhandledRejections();
+    const { pendingStore, saves } = heldPolicyStore(write);
     const clock = new ManualClock();
     const { client, sockets } = await hostClient(clock, { pendingStore });
     try {
@@ -774,14 +949,34 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await settle();
       expect(helloExtensions(sockets[2])).toEqual(withoutDrawPolicy);
 
-      saves[0]?.resolve();
+      if (save === "finishes") saves[0]?.resolve();
+      else saves[0]?.reject(new Error("disk full"));
       await settle();
       sockets[2]?.receive(snapshotPage(sockets[2]?.requestId()));
       await settle();
       expect(sentFrames(sockets[2], "set_draw_policy")).toEqual([]);
-      await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable" });
-      expect(await pendingStore.load()).toEqual([]);
+      await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "unavailable", message: policyUnavailableMessage });
+      await expectNothingLeft(pendingStore, unhandled);
     } finally {
+      unhandled.stop();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("rejects a change once with the closed connection when its save fails after Sync rejected the connection", async () => {
+    const unhandled = unhandledRejections();
+    const { pendingStore, saves } = heldPolicyStore("after");
+    const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
+    try {
+      const change = client.setDrawPolicy("hosts");
+      await settle();
+      sockets[0]?.close(1008);
+      await settle();
+      saves[0]?.reject(new Error("disk full"));
+      await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "permission_denied", recoverable: false });
+      await expectNothingLeft(pendingStore, unhandled);
+    } finally {
+      unhandled.stop();
       await client.stopSceneSubscription();
     }
   });
@@ -1390,6 +1585,122 @@ async function twoQueuedPolicyChanges() {
 
 function sentPolicies(socket: TestSocket | undefined): string[] {
   return sentFrames(socket, "set_draw_policy").map((frame) => frame.policy);
+}
+
+const SAVE_ORDERS = [
+  [0, 1, 2],
+  [0, 2, 1],
+  [1, 0, 2],
+  [1, 2, 0],
+  [2, 0, 1],
+  [2, 1, 0],
+];
+
+/** Each way to cut the order into turns, where saves in one turn finish together before the client runs again. */
+function turnsOf(order: readonly number[]): number[][][] {
+  return [0, 1, 2, 3].map((cuts) => {
+    const turns: number[][] = [[order[0] ?? 0]];
+    for (let index = 1; index < order.length; index += 1) {
+      if (cuts & (1 << (index - 1))) turns.push([]);
+      turns.at(-1)?.push(order[index] ?? 0);
+    }
+    return turns;
+  });
+}
+
+function outcomesOf(count: number): boolean[][] {
+  return Array.from({ length: 2 ** count }, (_, mask) => Array.from({ length: count }, (_, index) => (mask & (1 << index)) === 0));
+}
+
+type Decision = "wait" | "receipt" | "failure";
+
+function decisionsOf(count: number): Decision[][] {
+  if (count === 0) return [[]];
+  return decisionsOf(count - 1).flatMap((rest) => (["wait", "receipt", "failure"] as const).map((decision) => [decision, ...rest]));
+}
+
+/**
+ * Makes three policy changes, finishes their saves turn by turn, and decides the sent change after each turn as told.
+ * Then it answers every change still sent, and checks that each saved change went out once, in creation order.
+ */
+async function expectCreationOrder({ write, turns, saved, decisions }: { write: "before" | "after"; turns: number[][]; saved: boolean[]; decisions: Decision[] }) {
+  const label = JSON.stringify({ write, turns, saved, decisions });
+  const policies = ["hosts", "picked", "everyone"] as const;
+  const { pendingStore, saves } = heldPolicyStore(write);
+  const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
+  const socket = sockets[0];
+  const changes = policies.map((policy) =>
+    client.setDrawPolicy(policy).then(
+      () => "resolved",
+      (failed: { readonly code?: string }) => failed.code,
+    ),
+  );
+  const answers = new Map<string, Decision>();
+  let revision = 1;
+  const decide = async (decision: Decision) => {
+    const undecided = sentFrames(socket, "set_draw_policy").filter((frame) => !answers.has(frame.policy));
+    expect(undecided.length, label).toBeLessThanOrEqual(1);
+    const [frame] = undecided;
+    if (!frame || decision === "wait") return;
+    answers.set(frame.policy, decision);
+    if (decision === "receipt") commit(socket, frame.operation_id, String((revision += 1)));
+    else socket?.receive({ type: "operation_error", correlation_id: frame.operation_id, operation: "set_draw_policy", code: "permission_denied", recoverable: false, message: "Permission denied." });
+    await settle();
+  };
+  try {
+    await settle();
+    for (const [index, turn] of turns.entries()) {
+      for (const change of turn) {
+        if (saved[change]) saves[change]?.resolve();
+        else saves[change]?.reject(new Error("disk full"));
+      }
+      await settle();
+      await decide(decisions[index] ?? "wait");
+    }
+    for (let drained = 0; drained < policies.length; drained += 1) await decide("receipt");
+
+    expect(sentPolicies(socket), label).toEqual(policies.filter((_, index) => saved[index]));
+    const expected = policies.map((policy, index) => (!saved[index] ? "unavailable" : answers.get(policy) === "failure" ? "permission_denied" : "resolved"));
+    expect(await Promise.all(changes), label).toEqual(expected);
+    expect(await pendingStore.load(), label).toEqual([]);
+  } finally {
+    for (const save of saves) save.resolve();
+    await client.stopSceneSubscription();
+  }
+}
+
+const policyUnavailableMessage = "The call-wide drawing policy is unavailable on this Sync server.";
+
+/** Collects unhandled promise rejections, so a test can show that each caller's failure reached a handler. */
+function unhandledRejections() {
+  const reasons: string[] = [];
+  const listener = (reason: unknown) => reasons.push(String(reason));
+  process.on("unhandledRejection", listener);
+  return {
+    after: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return reasons;
+    },
+    stop: () => process.off("unhandledRejection", listener),
+  };
+}
+
+/** Drops the first connection, then dials and welcomes the second. */
+async function reconnect(clock: ManualClock, sockets: readonly TestSocket[]) {
+  sockets[0]?.close(1006);
+  await redial(clock, sockets, 1);
+  sockets[1]?.receive(welcome());
+  await settle();
+}
+
+async function commitFirst(socket: TestSocket | undefined, revision: string) {
+  commit(socket, sentFrames(socket, "set_draw_policy")[0].operation_id, revision);
+  await settle();
+}
+
+async function expectNothingLeft(pendingStore: InMemoryChalkWhiteboardV1PendingOperationStore, unhandled: ReturnType<typeof unhandledRejections>) {
+  expect(await pendingStore.load()).toEqual([]);
+  expect(await unhandled.after()).toEqual([]);
 }
 
 /** Lets the reconnect timer dial, then opens the socket it made. */
