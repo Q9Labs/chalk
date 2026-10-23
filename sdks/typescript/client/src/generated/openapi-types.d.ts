@@ -1733,6 +1733,7 @@ export interface components {
     };
     SpaceActivityList: {
       spaces: {
+        archived: boolean;
         latest_episode: {
           ended_at: components["schemas"]["DateTimeString"] | null;
           episode_id: components["schemas"]["EpisodeId"];

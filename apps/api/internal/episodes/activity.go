@@ -22,6 +22,7 @@ type LatestEpisode struct {
 // SpaceActivity holds at most five live Participants; LiveParticipantCount counts the whole live roster.
 type SpaceActivity struct {
 	SpaceID              utilities.ID
+	Archived             bool
 	LiveEpisode          *LiveEpisode
 	LiveParticipantCount int
 	LatestEpisode        *LatestEpisode

@@ -19,6 +19,7 @@ type latestEpisodeResponse struct {
 
 type spaceActivityResponse struct {
 	SpaceID            string                       `json:"space_id"`
+	Archived           bool                         `json:"archived"`
 	LiveEpisode        *liveEpisodeResponse         `json:"live_episode"`
 	LatestEpisode      *latestEpisodeResponse       `json:"latest_episode"`
 	RecentParticipants []presentParticipantResponse `json:"recent_participants"`
@@ -71,7 +72,7 @@ func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer Tenan
 		}
 		result := spaceActivityListResponse{Spaces: make([]spaceActivityResponse, 0, len(list))}
 		for _, space := range list {
-			item := spaceActivityResponse{SpaceID: space.SpaceID.String(), RecentParticipants: make([]presentParticipantResponse, 0, len(space.RecentParticipants))}
+			item := spaceActivityResponse{SpaceID: space.SpaceID.String(), Archived: space.Archived, RecentParticipants: make([]presentParticipantResponse, 0, len(space.RecentParticipants))}
 			if latest := space.LatestEpisode; latest != nil {
 				item.LatestEpisode = &latestEpisodeResponse{EpisodeID: latest.EpisodeID.String(), Status: latest.Status, StartedAt: episodeTimestampString(latest.StartedAt)}
 				if latest.EndedAt != nil {

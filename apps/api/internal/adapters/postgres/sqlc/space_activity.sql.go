@@ -12,7 +12,7 @@ import (
 )
 
 const listSpaceActivity = `-- name: ListSpaceActivity :many
-select s.id as space_id, live.id as live_episode_id,
+select s.id as space_id, (s.archived_at is not null)::bool as archived, live.id as live_episode_id,
        coalesce(jsonb_array_length(c.folded_state -> 'participants'), 0)::int as live_participant_count,
        coalesce((select jsonb_agg(roster.value order by roster.position)
                  from jsonb_array_elements(c.folded_state -> 'participants') with ordinality as roster(value, position)
@@ -52,6 +52,7 @@ type ListSpaceActivityParams struct {
 
 type ListSpaceActivityRow struct {
 	SpaceID              pgtype.UUID        `json:"space_id"`
+	Archived             bool               `json:"archived"`
 	LiveEpisodeID        pgtype.UUID        `json:"live_episode_id"`
 	LiveParticipantCount int32              `json:"live_participant_count"`
 	LiveParticipants     []byte             `json:"live_participants"`
@@ -73,6 +74,7 @@ func (q *Queries) ListSpaceActivity(ctx context.Context, arg ListSpaceActivityPa
 		var i ListSpaceActivityRow
 		if err := rows.Scan(
 			&i.SpaceID,
+			&i.Archived,
 			&i.LiveEpisodeID,
 			&i.LiveParticipantCount,
 			&i.LiveParticipants,

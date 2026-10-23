@@ -804,6 +804,7 @@ export type Space = typeof SpaceSchema.Type;
 export const SpaceActivityListSchema = Schema.Struct({
   spaces: Schema.Array(
     Schema.Struct({
+      archived: Schema.Boolean,
       latest_episode: Schema.NullOr(
         Schema.Struct({
           ended_at: Schema.NullOr(DateTimeStringSchema),

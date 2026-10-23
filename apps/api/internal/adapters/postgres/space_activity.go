@@ -35,7 +35,7 @@ func (r EpisodeLifecycleRepository) ListSpaceActivity(ctx context.Context, tenan
 		if err != nil {
 			return nil, err
 		}
-		item := episodes.SpaceActivity{SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), RecentParticipants: recent}
+		item := episodes.SpaceActivity{SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes), Archived: row.Archived, RecentParticipants: recent}
 		if row.LiveEpisodeID.Valid {
 			participants, err := decodeActivityParticipants(row.LiveParticipants)
 			if err != nil {

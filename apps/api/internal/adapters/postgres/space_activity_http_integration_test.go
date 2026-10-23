@@ -101,6 +101,7 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	var response struct {
 		Spaces []struct {
 			SpaceID       string `json:"space_id"`
+			Archived      bool   `json:"archived"`
 			LatestEpisode *struct {
 				EpisodeID string  `json:"episode_id"`
 				Status    string  `json:"status"`
@@ -128,6 +129,9 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 		t.Fatalf("expected three Spaces: %+v", response)
 	}
 	for _, space := range response.Spaces {
+		if space.Archived {
+			t.Fatalf("unarchived Space read as archived: %+v", space)
+		}
 		if space.SpaceID == liveSpaceID.String() {
 			live := space.LiveEpisode
 			if live == nil || live.EpisodeID != liveEpisodeID.String() || live.ParticipantCount != 2 || len(live.Participants) != 2 || live.Participants[0].DisplayName != "Malik Haddad" || live.Participants[1].DisplayName != "Meeting Agent" {
@@ -203,7 +207,7 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	if live := response.Spaces[0].LiveEpisode; live == nil || live.ParticipantCount != 7 || len(live.Participants) != 5 || live.Participants[0].DisplayName != "Guest 0" || live.Participants[4].DisplayName != "Guest 4" {
 		t.Fatalf("large live roster not bounded: %+v", response.Spaces[0].LiveEpisode)
 	}
-	// An ending Episode and an archived Space follow the unchanged live-read semantics.
+	// An ending Episode and an archived Space follow the unchanged live-read semantics, and the row says it is archived.
 	if _, err := pool.Exec(ctx, `update episodes set status='ending' where id=$1`, uuid(liveEpisodeID)); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +217,7 @@ func TestSpaceActivityPublicHTTP(t *testing.T) {
 	if err := json.Unmarshal(request(tenantID, liveSpaceID.String(), key.RawKey, http.StatusOK), &response); err != nil {
 		t.Fatal(err)
 	}
-	if response.Spaces[0].LatestEpisode.Status != "ending" || response.Spaces[0].LiveEpisode == nil {
+	if !response.Spaces[0].Archived || response.Spaces[0].LatestEpisode.Status != "ending" || response.Spaces[0].LiveEpisode == nil {
 		t.Fatalf("ending archived Space: %+v", response)
 	}
 

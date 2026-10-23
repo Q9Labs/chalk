@@ -13772,6 +13772,9 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "archived": {
+                  "type": "boolean"
+                },
                 "latest_episode": {
                   "additionalProperties": false,
                   "properties": {
@@ -13847,7 +13850,7 @@
                   "$ref": "#/components/schemas/SpaceId"
                 }
               },
-              "required": ["latest_episode", "live_episode", "recent_participants", "space_id"],
+              "required": ["archived", "latest_episode", "live_episode", "recent_participants", "space_id"],
               "type": "object"
             },
             "type": "array"
