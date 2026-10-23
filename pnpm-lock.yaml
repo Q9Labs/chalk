@@ -207,6 +207,7 @@ overrides:
   vite: 8.1.6
   ws@>=7.0.0 <7.5.11: ^7.5.11
   ws@>=8.0.0 <8.21.0: ^8.21.0
+  zod@>=4.0.0 <4.6.6: 4.6.7
 
 patchedDependencies:
   metro@0.83.3: 3674191468595e952739a9cbd383d3eda1fb648dcacb89a25b16646bd5d17760
@@ -9219,12 +9220,6 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.6.1:
-    resolution: {integrity: sha512-341aRWQsve0rvronKNTqZpjmzdbUDlFuzHaI/XLg/Ej82qffDJRRfBTCuv7+9q/rMjB6LSLyEBnW4InJeMtt/Q==}
-
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
-
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -11540,12 +11535,12 @@ snapshots:
 
   '@modelcontextprotocol/core@2.3.1':
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@modelcontextprotocol/server@2.3.1':
     dependencies:
       '@modelcontextprotocol/core': 2.3.1
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     optional: true
@@ -11941,7 +11936,7 @@ snapshots:
       picocolors: 1.1.1
       semver: 7.8.5
       smol-toml: 1.9.0
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@radix-ui/primitive@1.0.0':
     dependencies:
@@ -14780,7 +14775,7 @@ snapshots:
       oxc-transform: 0.153.0
       picocolors: 1.1.1
       pixelmatch: 8.0.0
-      zod: 4.6.1
+      zod: 4.6.7
 
   ee-first@1.1.1: {}
 
@@ -19244,10 +19239,6 @@ snapshots:
       youch-core: 0.3.3
 
   zod@3.25.76: {}
-
-  zod@4.6.1: {}
-
-  zod@4.6.5: {}
 
   zod@4.6.7: {}
 
