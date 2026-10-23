@@ -53,28 +53,20 @@ export function HomePage() {
     "home",
     {
       // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
-      // every row: its live state, last active time and recent people, and the first page when a call was made
-      // elsewhere. Home replaces its rows with that answer, so a failed check keeps the old rows and the next one
-      // catches up.
+      // every shown row: its live state, whether it was archived, its last active time and recent people, and whether
+      // a call was made elsewhere. A call archived elsewhere leaves the list, so the depth a reload replays to moves up
+      // with it. A call made elsewhere reloads the list to that depth. A failed check keeps the old rows and the next
+      // one catches up.
       interval: () => 5000,
       read: async (data) => {
         const ids = shown(data).map((call) => call.id);
         const status = await readPage("home-status", { home: "1", ...(ids.length ? { spaceIds: ids.join(",") } : {}) });
-        const next = { ...data, calls: data.calls.map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })), live: data.live.map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item) };
-        if (!status.first) return next;
-        // A call made elsewhere (another tab, device or API client): the first page replaces the top of the list in
-        // its own order, keeping the expanded history below it. That is safe only when the page ends on a call the list
-        // already holds, or holds every call; otherwise more new calls may sit below it, so reload the list instead.
-        if (!ids.length) return status.first;
-        const first = status.first;
-        const known = data.calls.map((call) => call.id);
-        const last = first.calls.at(-1);
-        if (first.nextCursor && !(last && known.includes(last.id))) return null;
-        const firstIds = first.calls.map((call) => call.id);
+        if (status.added) return null;
+        const archived = new Set(status.calls.filter((call) => call.archived).map((call) => call.id));
         return {
-          ...next,
-          calls: [...first.calls.map((call) => next.calls.find((row) => row.id === call.id) ?? call), ...next.calls.filter((call) => !firstIds.includes(call.id))],
-          live: [...first.live.filter((item) => !ids.includes(item.spaceId)), ...next.live],
+          ...data,
+          calls: data.calls.filter((call) => !archived.has(call.id)).map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })),
+          live: data.live.filter((item) => !archived.has(item.spaceId)).map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item),
         };
       },
     },

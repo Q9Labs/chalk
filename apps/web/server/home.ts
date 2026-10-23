@@ -11,7 +11,7 @@ async function activity(engine: Engine, spaceIds: readonly string[]): Promise<Ac
   const result = await run(engine.api.spaces.listSpaceActivity({ params: { tenant_id: engine.tenantId }, query: { space_ids: spaceIds.join(",") } }));
   return result.spaces.map((row) => ({
     live: { spaceId: row.space_id, episode: row.live_episode && { id: row.live_episode.episode_id, count: row.live_episode.participant_count, participants: row.live_episode.participants.map((p) => ({ id: p.participant_id, name: p.display_name })) } },
-    call: { id: row.space_id, lastActiveAt: row.latest_episode ? (row.latest_episode.ended_at ?? row.latest_episode.started_at) : null, recentPeople: row.recent_participants.map((p) => ({ id: p.participant_id, name: p.display_name })) },
+    call: { id: row.space_id, archived: row.archived, lastActiveAt: row.latest_episode ? (row.latest_episode.ended_at ?? row.latest_episode.started_at) : null, recentPeople: row.recent_participants.map((p) => ({ id: p.participant_id, name: p.display_name })) },
   }));
 }
 // Two tenant reads: the page of Spaces, then their activity.
@@ -29,16 +29,16 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
   };
 }
 /**
- * Home's check: every listed Space's live state, last active time and recent people in one tenant read. One more
- * read lists the newest page, and the answer carries the first page (two more reads) when any call on it isn't
- * listed: a call made in this tab can be newest while one made elsewhere just before it is still missing. Without
- * `home`, this is the call page's roster check, which needs the full live roster rather than Home's five faces.
+ * Home's check: every listed Space's live state, whether it is archived, its last active time and recent people in one
+ * tenant read. One more read lists the five newest calls, and the answer says `added` when any of them isn't listed: a
+ * call made in this tab can be newest while one made elsewhere just before it is still missing. Without `home`, this is
+ * the call page's roster check, which needs the full live roster rather than Home's five faces.
  */
 export async function homeStatus(engine: Engine, query: HomeStatusQuery): Promise<HomeStatusDTO> {
   if (!query.home) return { live: await live(engine, query.spaceIds), calls: [] };
   const [rows, newest] = await Promise.all([activity(engine, query.spaceIds), run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, archived: false } })).then((result) => result.spaces.map((space) => space.id))]);
   const status = { live: rows.map((row) => row.live), calls: rows.map((row) => row.call) };
-  return newest.some((id) => !query.spaceIds.includes(id)) ? { ...status, first: await homePage(engine) } : status;
+  return newest.some((id) => !query.spaceIds.includes(id)) ? { ...status, added: true } : status;
 }
 export async function homeMutation(engine: Engine, action: HomeAction) {
   const params = { tenant_id: engine.tenantId };

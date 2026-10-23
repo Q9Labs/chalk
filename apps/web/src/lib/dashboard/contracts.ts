@@ -140,6 +140,7 @@ export type DashboardErrorDTO = { error: { code: string; retryable?: true; retry
 export type OwnerAccessDTO = { access: AccessGrant };
 
 export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
-export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
+/** `added` means a call Home doesn't list is among the five newest, so Home reloads its list. */
+export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "archived" | "lastActiveAt" | "recentPeople">[]; added?: true };
 
 export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO & Required<Pick<RecordingDTO, "transcripts" | "transcriptsNextCursor">> } | { kind: "transcript"; transcript: TranscriptDTO };

@@ -33,10 +33,11 @@ const space = (id: string) => ({
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
 
 /**
- * The engine over HTTP, answering through the real SDK decoder: Spaces newest first, and each one's activity. A Space
- * in `live` has that Episode live; every other Space last ended an Episode at `ended`.
+ * The engine over HTTP, answering through the real SDK decoder: unarchived Spaces newest first, and each one's activity.
+ * A Space in `live` has that Episode live; every other Space last ended an Episode at `ended`. A Space in `archived`
+ * says so in its activity.
  */
-async function fakeEngine(spaces: string[], live: Record<string, string>) {
+async function fakeEngine(spaces: string[], live: Record<string, string>, archived: string[] = []) {
   const requests: URL[] = [];
   const api = await Effect.runPromise(
     createChalkEffectClient({
@@ -52,6 +53,7 @@ async function fakeEngine(spaces: string[], live: Record<string, string>) {
               const episode = live[id];
               return {
                 space_id: id,
+                archived: archived.includes(id),
                 live_episode: episode ? { episode_id: episode, participant_count: 1, participants: [nora] } : null,
                 latest_episode: { episode_id: episode ?? uuid(0xe0), status: episode ? "active" : "ended", started_at: at, ended_at: episode ? null : ended },
                 recent_participants: [nora],
@@ -90,26 +92,34 @@ describe("Home", () => {
         ?.split(","),
     ).toEqual(ids);
     expect(status.calls).toHaveLength(300);
-    expect(status.calls[0]).toEqual({ id: ids[0], lastActiveAt: ended, recentPeople: [{ id: nora.participant_id, name: "Nora" }] });
+    expect(status.calls[0]).toEqual({ id: ids[0], archived: false, lastActiveAt: ended, recentPeople: [{ id: nora.participant_id, name: "Nora" }] });
     expect(status.calls[299]?.lastActiveAt).toBe(at);
     expect(status.live[299]).toEqual({ spaceId: ids[299], episode: { id: uuid(0xe1), count: 1, participants: [{ id: nora.participant_id, name: "Nora" }] } });
-    expect(status.first).toBeUndefined();
+    expect(status.added).toBeUndefined();
   });
 
-  it("returns the first page when the newest call isn't listed", async () => {
+  it("says a call was added when the newest call isn't listed, with no more reads", async () => {
     const ids = spaceIds(3);
-    const { engine } = await fakeEngine([uuid(0x99), ...ids], {});
+    const { engine, requests } = await fakeEngine([uuid(0x99), ...ids], {});
     const status = await homeStatus(engine, { spaceIds: ids, home: "1" });
-    expect(status.first?.calls.map((call) => call.id)).toEqual([uuid(0x99), ...ids]);
-    expect(status.first?.calls[0]?.lastActiveAt).toBe(ended);
+    expect(status.added).toBe(true);
+    expect(paths(requests).sort()).toEqual(["space-activity", "spaces"]);
   });
 
-  it("returns the first page when a call below the newest isn't listed", async () => {
+  it("says a call was added when a call below the newest isn't listed", async () => {
     const ids = spaceIds(3);
     const [mine = "", ...older] = ids;
     const { engine } = await fakeEngine([mine, uuid(0x99), ...older], {});
+    expect((await homeStatus(engine, { spaceIds: ids, home: "1" })).added).toBe(true);
+  });
+
+  it("says which listed calls were archived", async () => {
+    const ids = spaceIds(3);
+    const [newer = "", gone = "", older = ""] = ids;
+    const { engine } = await fakeEngine([newer, older], {}, [gone]);
     const status = await homeStatus(engine, { spaceIds: ids, home: "1" });
-    expect(status.first?.calls.map((call) => call.id)).toEqual([mine, uuid(0x99), ...older]);
+    expect(status.calls.map((call) => call.archived)).toEqual([false, true, false]);
+    expect(status.added).toBeUndefined();
   });
 
   it("loads a page of calls with two engine reads", async () => {

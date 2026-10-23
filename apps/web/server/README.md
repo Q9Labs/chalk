@@ -57,10 +57,10 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   one tenant read for a transcript, or two for a recording and its latest transcripts.
   Recording polling includes pending audio preparation, so new automatic transcripts appear.
   Call pages share one metadata request per ten seconds between the live roster and pending artifacts.
-- `GET /dashboard-api/home-status?spaceIds=...&home=1`: Home's check. Live state, last active
-  time and recent people for up to 300 Spaces in one tenant read (`listSpaceActivity`), plus
-  one read for the five newest unarchived Spaces; when any of them isn't listed, the answer
-  also carries the first page (two more reads). Without `home=1`, the call page's roster
+- `GET /dashboard-api/home-status?spaceIds=...&home=1`: Home's check. Live state, whether it
+  is archived, last active time and recent people for up to 300 Spaces in one tenant read
+  (`listSpaceActivity`), plus one read for the five newest unarchived Spaces; when any of them
+  isn't listed, the answer says `added`. Without `home=1`, the call page's roster
   check: the full live roster from `listSpaceLiveEpisodes`, one read for up to 30 Spaces.
   The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
@@ -80,8 +80,9 @@ The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
 
 Visible Call and Home pages check status every five seconds. Each Home check is one
-request for every loaded row (up to 300), and Home replaces its rows with the answer.
-A new call goes on top; Home reloads its list once only when the first page shares no row.
+request for every shown row (up to 300), and Home updates its rows from the answer.
+A call archived elsewhere leaves the list. A call made elsewhere reloads the list down to
+where its last row sat, two tenant reads per page of five.
 Stable status never reloads page history. A changed
 Episode or knock set reloads the expanded page once. Hidden pages pause checks
 and refresh once on return; failed background reads retain ready content.
