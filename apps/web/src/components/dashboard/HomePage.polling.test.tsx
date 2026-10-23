@@ -313,7 +313,11 @@ it.each(depthCases)(
     const before = requests().length;
     await tick();
     expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual(shown);
-    expect(requests().slice(before).filter(([name]) => name === "home")).toHaveLength(reads);
+    expect(
+      requests()
+        .slice(before)
+        .filter(([name]) => name === "home"),
+    ).toHaveLength(reads);
   },
   20_000,
 );
