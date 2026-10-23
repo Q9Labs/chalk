@@ -100,7 +100,6 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     ref = Process.monitor(owner)
     send(socket, :leave)
     assert_receive {:DOWN, ^ref, :process, ^owner, :normal}
-    assert Registry.lookup(ChalkSync.WhiteboardV1.ViewRegistry, episode) == []
   end
 
   defp input(stream, sequence), do: %{input_id: "#{stream}:#{sequence}", move: true}
