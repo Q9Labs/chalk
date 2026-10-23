@@ -2,23 +2,9 @@
 set -euo pipefail
 
 script_directory="$(cd "$(dirname "$0")" && pwd)"
-lockfiles=()
-while IFS= read -r file; do
-  case "${file}" in
-    go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock | mix.lock | */mix.lock)
-      lockfiles+=("$file")
-      ;;
-  esac
-done < <(git ls-files)
-
-# The transitive resolver currently crashes on the Python requirements file.
-args=(scan source --no-resolve)
-for file in "${lockfiles[@]}"; do
-  args+=(--lockfile "$file")
-done
-if [ "${#lockfiles[@]}" -eq 0 ]; then
-  args=(scan source --recursive --no-resolve --allow-no-lockfiles .)
-fi
+# Let OSV discover every supported input in the tracked snapshot. No filename list.
+# --no-resolve avoids the Python transitive resolver crash, not input discovery.
+args=(scan source --recursive --no-ignore --no-resolve --all-packages --experimental-exclude 'r:(^|/)(node_modules|\.git|\.worktrees)$')
 
 osv_scanner() {
   if command -v osv-scanner >/dev/null 2>&1; then
@@ -32,41 +18,38 @@ osv_scanner() {
   fi
 }
 
-if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
-  osv_scanner "${args[@]}"
-  exit 0
-fi
-
-# A pull request fails only on findings in package versions that the base branch does not have.
 report_directory="$(mktemp -d "${TMPDIR:-/tmp}/chalk-osv.XXXXXX")"
+report_directory="$(cd "${report_directory}" && pwd -P)"
 trap 'find "${report_directory}" -depth -delete' EXIT
-status=0
-osv_scanner "${args[@]}" --format json --output-file "${report_directory}/head.json" || status=$?
-if ((status == 0)); then
-  exit 0
-elif ((status != 1)); then
-  exit "${status}"
-fi
-
-base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
-copy_from_base() {
-  git cat-file -e "${base}:$1" 2>/dev/null || return 1
-  mkdir -p "${report_directory}/base/$(dirname "$1")"
-  git show "${base}:$1" > "${report_directory}/base/$1"
+snapshot() {
+  mkdir "$2"
+  GIT_INDEX_FILE="${2}.index" git read-tree "$1"
+  GIT_INDEX_FILE="${2}.index" git -c core.symlinks=true checkout-index --all --prefix="$2/"
+  node "${script_directory}/osv-snapshot.mjs" "$2"
 }
-# The base scan uses the base's ignore lists, so it reports what the base branch reported.
-while IFS= read -r config; do
-  copy_from_base "${config}"
-done < <(git ls-tree -r --name-only "${base}" | grep -E '(^|/)osv-scanner\.toml$' || true)
-base_args=(scan source --no-resolve)
-for file in "${lockfiles[@]}"; do
-  copy_from_base "${file}" && base_args+=(--lockfile "${report_directory}/base/${file}")
-done
+scan_report() {
+  local directory="$1" report="$2" status=0
+  shift 2
+  osv_scanner "${args[@]}" "$@" --format json --output-file "${report}" "${directory}" || status=$?
+  ((status <= 1)) || return "${status}"
+}
 
-printf '{"results":[]}\n' > "${report_directory}/base.json"
-if [ "${#base_args[@]}" -gt 3 ]; then
-  base_status=0
-  osv_scanner "${base_args[@]}" --format json --output-file "${report_directory}/base.json" >/dev/null || base_status=$?
-  ((base_status <= 1)) || exit "${base_status}"
+mkdir "${report_directory}/head"
+node "${script_directory}/osv-snapshot.mjs" "${report_directory}/head" --working-tree
+# Validate zod without any policy that could hide a new consumer.
+scan_report "${report_directory}/head" "${report_directory}/raw.json" --config /dev/null
+(cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/raw.json")
+# Other advisories retain OSV's normal per-directory policy, including the API's.
+scan_report "${report_directory}/head" "${report_directory}/head.json"
+(cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/head.json")
+
+if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
+  node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json"
+  exit 0
 fi
+
+# Discover the base's tracked tree too, with the same symlink handling.
+base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
+snapshot "${base}" "${report_directory}/base"
+scan_report "${report_directory}/base" "${report_directory}/base.json"
 node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json" "${report_directory}/base.json"

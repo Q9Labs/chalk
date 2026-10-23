@@ -17,7 +17,7 @@
     "@napi-rs/canvas": "1.0.9",
     "@q9labsai/chalk-react": "workspace:^5.1.0",
     "@q9labsai/recording-presentation": "workspace:^0.1.1",
-    "happy-dom": "^20.11.2",
+    "happy-dom": "^21.0.4",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },

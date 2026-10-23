@@ -384,7 +384,7 @@ export function createGatePlan(files, options = {}) {
       "run",
       "gate:boundaries",
     ]),
-    task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
+    task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "-c", "node --test scripts/gates/osv-scanner.test.mjs && bash scripts/gates/osv-scanner.sh"]),
     task(
       "services",
       "Service-backed API and Sync correctness gates",

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { dump, loadAll } from "js-yaml";
 import { govulncheckFindings, newFindings, osvFindings } from "./new-vulnerabilities.mjs";
 
 const osvReport = (version) => ({
@@ -30,23 +31,109 @@ test("govulncheck counts only findings in called functions, as its text mode doe
   assert.deepEqual(newFindings(called, govulncheckFindings(govulncheckStream("v0.3.5", {}))), ["GO-2021-0113 golang.org/x/text@v0.3.5"]);
 });
 
-test("the OSV scan reads the Sync mix.lock", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "chalk-osv-lockfiles-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const directory of ["scripts/gates", "apps/sync", "bin"]) mkdirSync(path.join(root, directory), { recursive: true });
-  copyFileSync(new URL("./osv-scanner.sh", import.meta.url), path.join(root, "scripts/gates/osv-scanner.sh"));
-  writeFileSync(path.join(root, "apps/sync/mix.lock"), "%{}\n");
-  writeFileSync(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
-  writeFileSync(path.join(root, "bin/osv-scanner"), '#!/bin/bash\nprintf \'%s\\n\' "$@" > "$TEST_OSV_ARGS"\n', { mode: 0o755 });
-  spawnSync("git", ["init", "-q"], { cwd: root });
-  spawnSync("git", ["add", "."], { cwd: root });
-  const environment = { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, TEST_OSV_ARGS: path.join(root, "args.txt") };
-  delete environment.GATE_VULN_BASE_REF;
-  const result = spawnSync("bash", ["scripts/gates/osv-scanner.sh"], { cwd: root, encoding: "utf8", env: environment });
-  assert.equal(result.status, 0, result.stderr);
-  const lockfiles = readFileSync(path.join(root, "args.txt"), "utf8")
-    .trim()
-    .split("\n")
-    .filter((_, index, args) => args[index - 1] === "--lockfile");
-  assert.deepEqual(lockfiles.toSorted(), ["apps/sync/mix.lock", "pnpm-lock.yaml"]);
+test("the zod importer guard fails closed outside the locked Expo CLI chain", async (context) => {
+  const source = readFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), "utf8");
+  const cases = [
+    ["current lockfile", () => {}, true],
+    [
+      "pnpm v6 transitive production zod",
+      (_lock, documents) => {
+        documents.splice(0, documents.length, {
+          lockfileVersion: "6.0",
+          importers: { ".": { dependencies: { "@expo/cli": { specifier: "55.0.19", version: "55.0.19" } } } },
+          packages: { "/@expo/cli@55.0.19": { dependencies: { zod: "3.25.76" } }, "/zod@3.25.76": {} },
+        });
+      },
+    ],
+    [
+      "unsupported version in the first YAML document",
+      (_lock, documents) => {
+        documents[0].lockfileVersion = "6.0";
+      },
+    ],
+    [
+      "missing pnpm lockfileVersion",
+      (lock) => {
+        delete lock.lockfileVersion;
+      },
+    ],
+    [
+      "direct production zod 3",
+      (lock) => {
+        lock.importers["apps/web"].dependencies.zod.version = "3.25.76";
+      },
+    ],
+    [
+      "direct zod in an allowed workspace",
+      (lock) => {
+        lock.importers["apps/mobile"].dependencies.zod = { version: "3.25.76" };
+      },
+    ],
+    [
+      "direct production zod 4",
+      (lock) => {
+        lock.importers["apps/web"].dependencies.zod.version = "4.6.5";
+      },
+    ],
+    [
+      "aliased optional zod",
+      (lock) => {
+        lock.importers["apps/web"].optionalDependencies = { validation: { version: "zod@3.25.76" } };
+      },
+    ],
+    [
+      "transitive runtime zod",
+      (lock) => {
+        lock.importers["apps/web"].dependencies.validation = { version: "1.0.0" };
+        lock.snapshots["validation@1.0.0"] = { dependencies: { zod: "3.25.76" } };
+      },
+    ],
+    [
+      "direct Expo CLI consumer",
+      (lock) => {
+        const cli = Object.keys(lock.snapshots).find((key) => key.startsWith("@expo/cli@"));
+        lock.importers["apps/web"].dependencies["@expo/cli"] = { version: cli.slice("@expo/cli@".length) };
+      },
+    ],
+    [
+      "another workspace reaches Expo through a link",
+      (lock) => {
+        lock.importers["apps/web"].dependencies.mobile = { version: "link:../mobile" };
+      },
+    ],
+    [
+      "a changed Expo CLI version",
+      (lock) => {
+        for (const [key, value] of Object.entries(lock.snapshots)) {
+          if (!key.startsWith("@expo/cli@55.0.19")) continue;
+          delete lock.snapshots[key];
+          lock.snapshots[key.replace("@expo/cli@55.0.19", "@expo/cli@55.0.20")] = value;
+        }
+      },
+    ],
+  ];
+  for (const [name, modify, passes = false] of cases) {
+    await context.test(name, (subtest) => {
+      const root = mkdtempSync(path.join(tmpdir(), "chalk-zod-exception-"));
+      subtest.after(() => rmSync(root, { recursive: true, force: true }));
+      // Resolve the guard's existing YAML dependency from the real script, not the fixture.
+      symlinkSync(new URL("./zod-exception.mjs", import.meta.url), path.join(root, "zod-exception.mjs"));
+      const documents = loadAll(source);
+      modify(documents.at(-1), documents, root);
+      writeFileSync(path.join(root, "pnpm-lock.yaml"), documents.map((document) => `---\n${dump(document)}`).join(""));
+      const result = spawnSync("node", ["zod-exception.mjs", "pnpm-lock.yaml"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      assert.equal(result.status, passes ? 0 : 1, result.stderr);
+      if (!passes) {
+        assert.match(result.stderr, /Zod exception/);
+        if (name === "a changed Expo CLI version") {
+          assert.match(result.stderr, /re-check.*Expo.*tooling/);
+          assert.match(result.stderr, /allowed versions.*scripts\/gates\/zod-exception\.mjs/);
+          assert.match(result.stderr, /exception.*osv-scanner\.toml/);
+        }
+      }
+    });
+  }
 });
