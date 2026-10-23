@@ -156,6 +156,8 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, fullBeforeDeletion);
     assert(engineRequests.some((entry) => entry.path.endsWith(`/transcripts/${transcriptId}`) && entry.status === 404));
     console.log("PASS: real pending transcript deletion returns 404; browser removes it, retains Call and continues shared status polling without history reload");
+    // A poll still forwarded by the route above fails once the caller stops the Pages server, so let it finish first.
+    await context.unrouteAll({ behavior: "wait" });
   } finally {
     await browser?.close();
   }
