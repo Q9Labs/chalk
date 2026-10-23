@@ -9,7 +9,7 @@ import { createDashboardProofFixture } from "./browser-fixture.mjs";
 const admissionProof = process.argv.some((argument) => argument.startsWith("--admission"));
 const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, syncLog, pagesLog, cleanup, recordPage } = await createDashboardProofFixture({
   devicesMissing: true,
-  recordingName: admissionProof ? `fix-admit/${process.argv.includes("--admission-before") ? "before" : "after"}-host.webm` : undefined,
+  recordingName: admissionProof ? `fix-admit/${process.argv.includes("--admission-before") ? "before" : "after"}-host.webm` : process.env.CHALK_REPORT_VIDEO === "1" ? "report-discord/owner.webm" : undefined,
 });
 let admissionGuestBrowser;
 try {

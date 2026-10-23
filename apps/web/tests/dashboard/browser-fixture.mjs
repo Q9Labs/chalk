@@ -12,8 +12,8 @@ import { chromium } from "playwright";
 export async function createDashboardProofFixture({ recordingName, devicesMissing = false } = {}) {
   assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through real-engine.sh");
   const apiOrigin = process.env.DASHBOARD_TEST_API_ORIGIN;
-  const webPort = process.env.CHALK_JOIN_WEB_PORT || "18797";
-  const syncPort = process.env.CHALK_JOIN_SYNC_PORT || "18410";
+  const webPort = process.env.CHALK_JOIN_WEB_PORT || process.env.CHALK_DASHBOARD_WEB_PORT || "18797";
+  const syncPort = process.env.CHALK_JOIN_SYNC_PORT || process.env.CHALK_DASHBOARD_SYNC_PORT || "18410";
   const origin = `http://127.0.0.1:${webPort}`;
   const syncOrigin = `ws://127.0.0.1:${syncPort}/v1/sync`;
   const web = resolve(import.meta.dirname, "../..");
@@ -65,6 +65,7 @@ export async function createDashboardProofFixture({ recordingName, devicesMissin
     } catch (error) {
       console.error("Browser recording finalization failed", error);
     }
+    for (const context of browser?.contexts() ?? []) await context.close();
     await browser?.close();
     for (const child of children.toReversed()) {
       if (child.exitCode === null && child.signalCode === null) {
