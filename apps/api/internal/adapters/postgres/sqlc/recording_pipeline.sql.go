@@ -125,6 +125,8 @@ with candidate as (
 		lease_expires_at = case when recording_jobs.kind in ('render', 'transcription')
 			then least($7::timestamptz, candidate.source_expires_at,
 				coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $3::integer * interval '1 second')
+            when candidate.completion_only then least($7::timestamptz,
+                candidate.recovery_expires_at, recording_capture_salvage_deadline(recording_jobs.recording_id))
             else least($7::timestamptz, candidate.recovery_expires_at) end,
         fencing_generation = fencing_generation + 1,
         attempt_limit = case when candidate.completion_only then greatest(recording_jobs.attempt_limit, recording_jobs.attempt_count + 1) else recording_jobs.attempt_limit end,
@@ -474,6 +476,8 @@ with completed as (
           select 1 from recording_job_attempt_authorities authority
           where authority.job_id = recording_jobs.id
             and authority.kind = recording_jobs.kind
+            and ((convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is not true
+                 or recording_capture_completion_available(recording_jobs.recording_id))
             and authority.attempt_count = $2
             and authority.fencing_generation = $3
             and authority.capture_epoch = $6
@@ -1896,7 +1900,13 @@ set lease_expires_at = case when recording_jobs.kind in ('render', 'transcriptio
         else least($1::timestamptz,
             (select recovery.source_expires_at from recording_completion_recoveries recovery
              where recovery.job_id = recording_jobs.id
-               and recovery.fencing_generation + 1 = recording_jobs.fencing_generation)) end, updated_at = now()
+               and recovery.fencing_generation + 1 = recording_jobs.fencing_generation),
+            (select case when (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is true
+                         then recording_capture_salvage_deadline(recording_jobs.recording_id) end
+             from recording_job_attempt_authorities authority
+             where authority.job_id = recording_jobs.id
+               and authority.attempt_count = recording_jobs.attempt_count
+               and authority.fencing_generation = recording_jobs.fencing_generation)) end, updated_at = now()
 where id = $2
   and state = 'leased'
   and recording_jobs.attempt_count = $3
@@ -1908,6 +1918,8 @@ where id = $2
       select 1 from recording_job_attempt_authorities authority
       where authority.job_id = recording_jobs.id
         and authority.kind = recording_jobs.kind
+        and ((convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is not true
+             or recording_capture_completion_available(recording_jobs.recording_id))
         and (recording_jobs.kind not in ('render', 'transcription') or
             (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz > clock_timestamp())
         and authority.attempt_count = $3
