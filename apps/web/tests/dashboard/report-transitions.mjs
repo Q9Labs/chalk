@@ -17,6 +17,17 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
     await writeFile(resolve(evidence, "report-transitions.json"), JSON.stringify(results, null, 2));
   }
 
+  async function closeReport(tab, dismissal, target, name) {
+    if (dismissal === "Escape") await tab.keyboard.press("Escape");
+    else await tab.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await tab.getByRole("dialog").waitFor({ state: "hidden" });
+    const focused = await target.evaluate((element) => element.isConnected && element === document.activeElement);
+    const active = await tab.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent?.trim().slice(0, 160) }));
+    await writeFile(resolve(evidence, `${name}.json`), JSON.stringify({ focused, active }, null, 2));
+    await tab.screenshot({ path: resolve(evidence, `${name}.png`), animations: "disabled" });
+    assert(focused, `${name} must focus the usable target, not ${active.tag}: ${active.text}`);
+  }
+
   for (const dismissal of ["Close", "Escape"]) {
     const ownerContext = await browser.newContext({ storageState: await page.context().storageState(), viewport: { width: 1440, height: 960 } });
     const guestContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -45,6 +56,12 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
       ]) {
         await tab.getByRole("button", { name: "Call details", exact: true }).first().click();
         await tab.getByRole("button", { name: "Report a problem", exact: true }).click();
+        await check(`${role}: ${dismissal} while live returns to Call Details`, async () => {
+          await tab.getByLabel("What went wrong?").fill("Live close focus probe");
+          await closeReport(tab, dismissal, tab.getByRole("button", { name: "Call details", exact: true }).first(), `live-${role}-${dismissal}`);
+        });
+        await tab.getByRole("button", { name: "Call details", exact: true }).first().click();
+        await tab.getByRole("button", { name: "Report a problem", exact: true }).click();
         const input = tab.getByLabel("What went wrong?");
         const text = `Keep this ${role} live report draft through ${dismissal}`;
         await input.fill(text);
@@ -57,13 +74,32 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
           await tab.getByText("The call ended", { exact: true }).waitFor();
           assert(await input.evaluate((element) => element.isConnected), `${role} textarea must remain mounted`);
           assert.equal(await tab.getByLabel("What went wrong?").inputValue(), text);
-          if (dismissal === "Escape") await tab.keyboard.press("Escape");
-          else await tab.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
-          await tab.getByRole("dialog").waitFor({ state: "hidden" });
-          const focused = await tab.getByRole("button", { name: "Home", exact: true }).evaluate((element) => element.isConnected && element === document.activeElement);
-          await tab.screenshot({ path: resolve(evidence, `ended-${role}-${dismissal}.png`), animations: "disabled" });
-          assert(focused, `${role} ${dismissal} must return focus to Home, not BODY or the removed Call Details`);
+          await closeReport(tab, dismissal, tab.getByRole("button", { name: "Home", exact: true }), `ended-${role}-${dismissal}`);
         });
+        await check(`${role}: ${dismissal} from terminal returns to its opener`, async () => {
+          const opener = tab.getByRole("button", { name: "Report a problem", exact: true });
+          await opener.click();
+          await tab.getByLabel("What went wrong?").fill("Terminal opener focus probe");
+          await closeReport(tab, dismissal, opener, `terminal-${role}-${dismissal}`);
+        });
+        for (const unavailable of ["hidden", "inert"]) {
+          await check(`${role}: ${dismissal} skips ${unavailable} opener and terminal fallback`, async () => {
+            const opener = tab.getByRole("button", { name: "Report a problem", exact: true });
+            const home = tab.getByRole("button", { name: "Home", exact: true });
+            await opener.click();
+            await tab.getByLabel("What went wrong?").fill(`Skip ${unavailable} focus targets`);
+            // These are deterministic DOM fixtures; the dialog and ended-call UI are real.
+            // Inert on the actions parent also proves that ancestor inertness is respected.
+            await opener.evaluate((element, attribute) => element.setAttribute(attribute, ""), unavailable);
+            await home.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).setAttribute(attribute, ""), unavailable);
+            try {
+              await closeReport(tab, dismissal, tab.locator("main[data-chalk-status]"), `fallback-${unavailable}-${role}-${dismissal}`);
+            } finally {
+              await opener.evaluate((element, attribute) => element.removeAttribute(attribute), unavailable);
+              await home.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).removeAttribute(attribute), unavailable);
+            }
+          });
+        }
       }
     } finally {
       await guestContext.close();
