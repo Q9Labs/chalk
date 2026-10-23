@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { checkReportTransitions } from "./report-transitions.mjs";
 
 // Called by the real-engine + dashboard join harness. Nothing substitutes the
 // app, API, signed call credentials, database, or Sync; only Discord is local.
@@ -280,53 +281,7 @@ export async function checkReports({ browser, page, origin, call, repository }) 
   } finally {
     await policy.close();
   }
-  // End a separate real Episode while both participants have live drafts open.
-  const draftOwnerContext = await browser.newContext({ storageState: await page.context().storageState(), viewport: { width: 1440, height: 960 } });
-  const draftGuestContext = await browser.newContext({ viewport: { width: 1440, height: 960 } });
-  try {
-    const owner = await draftOwnerContext.newPage();
-    const participant = await draftGuestContext.newPage();
-    await owner.goto(`${origin}/dashboard`);
-    await owner.getByRole("button", { name: "Start a call", exact: true }).click();
-    await owner.getByRole("button", { name: "Join call", exact: true }).click();
-    await owner.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
-    const spaceId = new URL(owner.url()).pathname.split("/").at(-2);
-    const read = await draftOwnerContext.request.get(`${origin}/dashboard-api/call?spaceId=${spaceId}`);
-    assert.equal(read.status(), 200);
-    const separateCall = await read.json();
-    const open = await draftOwnerContext.request.post(`${origin}/dashboard-api/call`, { headers: { Origin: origin, "X-CSRF-Token": csrfToken }, data: { action: "set-admission", spaceId, admission: "anyone" } });
-    assert.equal(open.status(), 200);
-    const invite = new URL(separateCall.inviteUrl);
-    await participant.goto(`${origin}${invite.pathname}${invite.search}${invite.hash}`);
-    await participant.getByLabel("Your name").fill("Draft participant");
-    await participant.getByRole("button", { name: "Join call", exact: true }).click();
-    await participant.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
-    const drafts = [];
-    for (const [role, tab] of [
-      ["owner", owner],
-      ["guest", participant],
-    ]) {
-      await tab.getByRole("button", { name: "Call details", exact: true }).first().click();
-      await tab.getByRole("button", { name: "Report a problem", exact: true }).click();
-      const input = tab.getByLabel("What went wrong?");
-      await input.fill(`Keep this ${role} live report draft`);
-      drafts.push({ role, tab, input: await input.elementHandle() });
-      await tab.screenshot({ path: resolve(evidence, `draft-${role}-before-end.png`), animations: "disabled" });
-    }
-    const end = await draftOwnerContext.request.post(`${origin}/dashboard-api/call`, { headers: { Origin: origin, "X-CSRF-Token": csrfToken }, data: { action: "end-for-everyone", spaceId, episodeId: separateCall.live.id, idempotencyKey: randomUUID() } });
-    assert.equal(end.status(), 200, await end.text());
-    for (const { role, tab, input } of drafts) {
-      await tab.getByText("The call ended", { exact: true }).waitFor();
-      assert(await input.evaluate((element) => element.isConnected), `${role} report textarea must remain mounted`);
-      assert.equal(await tab.getByLabel("What went wrong?").inputValue(), `Keep this ${role} live report draft`);
-      assert(!(await tab.getByLabel("What went wrong?").isDisabled()));
-      await tab.screenshot({ path: resolve(evidence, `draft-${role}-after-end.png`), animations: "disabled" });
-    }
-    await writeFile(resolve(evidence, "draft-transition.json"), JSON.stringify({ result: "passed", paths: ["owner SDK terminal", "guest app-owned terminal"], textareaRetained: true, textRetained: true }));
-  } finally {
-    await draftGuestContext.close();
-    await draftOwnerContext.close();
-  }
+  await checkReportTransitions({ browser, page, origin, call, csrfToken, evidence });
   // Clock installation affects its whole context; keep the reload journey on real time.
   const failedOwnerContext = await browser.newContext({
     storageState: await page.context().storageState(),
