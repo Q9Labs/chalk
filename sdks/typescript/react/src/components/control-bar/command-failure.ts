@@ -84,7 +84,7 @@ export const MEDIA_FAILURE_POLICY = {
         ? "Chalk can’t use your speaker. Check your browser’s audio permissions and system sound settings."
         : `Chalk can’t use your ${device(context)}. Click the camera icon in the address bar and allow ${context.source === "camera" ? "Camera" : context.source === "microphone" ? "Microphone" : "Camera and Microphone"}.`,
   ),
-  "media.device_not_found": specific((context) => `No ${device(context)} found. Plug one in, or check that your Mac can see it in System Settings.`),
+  "media.device_not_found": specific((context) => `No ${device(context)} found. Connect one${context.recoverable ? ", then try again" : ""}.`),
   "media.device_busy": { ...specific((context) => `Your ${device(context)} is being used by another app. Close it there${context.recoverable ? ", then try again" : ""}.`), retry: true },
   "media.device_constraint_invalid": specific((context) => `Your ${device(context)} doesn’t support these settings. Choose another ${device(context)}${context.recoverable ? ", then try again" : ""}.`),
   "media.capture_failed": { copy: { ...operationCopy, start: captureStart, request: captureStart, change: (context) => (context.source === "screen" ? `${settings(context)}${again(context)}` : capture(context)) }, retry: true },

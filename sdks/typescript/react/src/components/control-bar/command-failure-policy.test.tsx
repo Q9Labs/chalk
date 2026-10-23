@@ -86,7 +86,7 @@ function expectedMessage(family: Family, source: MediaCommandSource | undefined,
       : source === "speaker"
         ? "Chalk can’t use your speaker. Check your browser’s audio permissions and system sound settings."
         : `Chalk can’t use your ${device}. Click the camera icon in the address bar and allow ${source === "camera" ? "Camera" : source === "microphone" ? "Microphone" : "Camera and Microphone"}.`;
-  if (family === "missing") return `No ${device} found. Plug one in, or check that your Mac can see it in System Settings.`;
+  if (family === "missing") return `No ${device} found. Connect one${then}.`;
   if (family === "busy") return `Your ${device} is being used by another app. Close it there${then}.`;
   if (family === "constraint") return `Your ${device} doesn’t support these settings. Choose another ${device}${then}.`;
   if (family === "capture" && (operation === "start" || operation === "request")) return source === "screen" ? "Your screen couldn’t be shared." + again : `Your ${device} couldn’t start. Check that it is connected and available${then}.`;
