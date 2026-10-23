@@ -31,15 +31,19 @@ it.each([
     await act(async () => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)?.click());
     await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1)));
     await act(async () => vi.waitFor(() => expect(container.textContent).toContain("Try again")));
-    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
-    if (!retry) throw new Error("Missing media retry");
+    const retry = () => {
+      const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again");
+      if (!button) throw new Error("Missing media retry");
+      return button;
+    };
     await act(async () => fixture.health(true));
-    await act(async () => retry.click());
+    await act(async () => retry().click());
     await expect((capability === "publishVideo" ? fixture.actions.camera : capability === "publishAudio" ? fixture.actions.microphone : fixture.actions.screen).mock.results.at(-1)?.value).rejects.toMatchObject({ code: "connection.invalid_state" });
     expect(capture).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("That change was interrupted.");
     expect(container.textContent).toContain("Try again");
     await act(async () => fixture.health(false));
-    await act(async () => retry.click());
+    await act(async () => retry().click());
     await act(async () => vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2)));
   } finally {
     await act(async () => root.unmount());
