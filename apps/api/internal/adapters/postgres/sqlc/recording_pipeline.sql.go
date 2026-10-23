@@ -2480,6 +2480,8 @@ with expired as (
                 then recording_transcription_source_window_seconds(episodes.config_snapshot)
                 else recording_deferred_retention_seconds(episodes.config_snapshot)
             end) * interval '1 second') <= clock_timestamp())
+        or (jobs.kind = 'capture' and pipelines.capture_ready_at is not null
+            and recording_capture_salvage_deadline(jobs.recording_id) <= clock_timestamp())
         or exists (select 1 from recording_completion_recoveries recovery
                    where recovery.job_id = jobs.id and recovery.source_expires_at <= clock_timestamp())) as source_expired,
         jobs.kind in ('render', 'transcription') and

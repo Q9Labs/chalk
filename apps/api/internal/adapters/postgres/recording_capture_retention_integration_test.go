@@ -85,6 +85,15 @@ func TestCaptureSalvageLeaseAndCompletionRespectRetention(t *testing.T) {
 			if err := tx.QueryRow(ctx, `select job.state,pipeline.capture_completed_at from recording_jobs job join recording_pipelines pipeline on pipeline.recording_id=job.recording_id where job.id=$1`, f.jobID.Bytes()).Scan(&state, &completedAt); err != nil || state != "leased" || completedAt.Valid {
 				t.Fatalf("rejected completion changed capture state: state=%s completed=%v err=%v", state, completedAt, err)
 			}
+			execCleanupFixture(t, tx, `update recording_jobs set lease_expires_at=now()-interval '1 second' where id=$1`, f.jobID.Bytes())
+			recovered, err := queries.RecoverExpiredRecordingJobs(ctx, 7200)
+			wantCode := "capture_stopped_before_completion"
+			if scenario == "expired" {
+				wantCode = "recording_source_expired"
+			}
+			if err != nil || len(recovered) != 1 || recovered[0].State != "terminal_failure" || recovered[0].ErrorCode.String != wantCode {
+				t.Fatalf("recover unavailable salvage source: jobs=%+v err=%v want=%s", recovered, err, wantCode)
+			}
 		})
 	}
 }
