@@ -49,6 +49,28 @@ describe("public Space entry", () => {
     expect(screen.queryByText(/check the invite link/)).toBeNull();
   });
 
+  it("keeps an app-owned live report draft when the call view unmounts after Leave", async () => {
+    mocks.reportsAvailable.mockReturnValue(true);
+    await enterInvite();
+    const open = mocks.holder.chalkProps?.onOpenReportProblem;
+    if (typeof open !== "function") throw new Error("Missing app-owned report action");
+    await act(async () => open());
+    const input = screen.getByLabelText<HTMLTextAreaElement>("What went wrong?");
+    fireEvent.change(input, { target: { value: "Keep my live draft after leaving" } });
+    vi.useFakeTimers();
+    try {
+      await act(async () => vi.advanceTimersByTimeAsync(300_001));
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+    await leaveCall();
+    expect(screen.getByRole("heading", { name: "You left Design Lab" })).toBeDefined();
+    expect(screen.getByLabelText("What went wrong?")).toBe(input);
+    expect(input.value).toBe("Keep my live draft after leaving");
+    expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+  });
+
   it.each(["left", "failed", "episode-ended"])("expires terminal report access without erasing the %s form", async (phase) => {
     mocks.reportsAvailable.mockReturnValue(true);
     const view = await enterInvite();

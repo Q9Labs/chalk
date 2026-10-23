@@ -47,6 +47,7 @@ type ExpectedTokenKeys =
 type ExpectedChalkProps =
   | "shareUrl"
   | "onReportProblem"
+  | "onOpenReportProblem"
   | "reportUnavailableReason"
   | "client"
   | "space"

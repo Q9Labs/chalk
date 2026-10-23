@@ -369,3 +369,61 @@ func TestDiscordPayloadPreservesLiteralText(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscordPreservesLegacySpaceName(t *testing.T) {
+	var payload struct {
+		Content string `json:"content"`
+	}
+	var attached string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attached = ""
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Error(err)
+				return
+			}
+			defer r.MultipartForm.RemoveAll()
+			if err := json.Unmarshal([]byte(r.FormValue("payload_json")), &payload); err != nil {
+				t.Error(err)
+			}
+			file, _, err := r.FormFile("files[0]")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer file.Close()
+			data, err := io.ReadAll(file)
+			if err != nil {
+				t.Error(err)
+			}
+			attached = string(data)
+		} else if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	target, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewAdapter("https://discord.com/api/webhooks/test/fake")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter.client.Transport = fixtureTransport{target, http.DefaultTransport}
+	for _, length := range []int{121, 256, 4096} {
+		name := strings.Repeat("_", length-5) + "TAILZ"
+		err := adapter.Send(context.Background(), problemreports.Delivery{Attribution: problemreports.Attribution{SpaceName: name, Role: "owner"}, Report: problemreports.Report{Description: "Camera froze"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := strings.Repeat(`\_`, length-5) + "TAILZ"
+		if !strings.Contains(payload.Content, want) && attached != want {
+			t.Fatal("legacy Space name lost its identifying suffix")
+		}
+		if len(utf16.Encode([]rune(payload.Content))) > 2000 {
+			t.Fatal("Discord content limit exceeded")
+		}
+	}
+}

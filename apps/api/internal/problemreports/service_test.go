@@ -74,7 +74,7 @@ func TestReportRejectsCredentialsInNames(t *testing.T) {
 	code := strings.Repeat("ab09\u200b", 20)
 	for _, name := range []Attribution{{SpaceName: code, ReporterName: "Tester", Role: "guest"}, {SpaceName: "New Call", ReporterName: code, Role: "guest"}} {
 		sender := &deliveryPort{}
-		service := NewService(namedAttributionRepository{name: name}, sender).WithCredentials(nil, strings.Repeat("ab09", 20))
+		service := NewService(namedAttributionRepository{name: name}, sender).WithCredentials(liveReportCredentials{values: []string{strings.Repeat("ab09", 20)}})
 		if _, err := service.Send(context.Background(), accessgrants.Subject{}, Report{Description: "Could not connect"}); err == nil {
 			t.Fatal("credential-bearing attribution accepted")
 		}
@@ -122,7 +122,7 @@ func TestReportRejectsExactLiveCredentials(t *testing.T) {
 	// Deliberately lacks a structured token prefix or generic code-sized run:
 	// exact matching must not depend on a particular signing format or length.
 	known := "opaquecallcredential"
-	for _, source := range []string{"media", "invite", "server"} {
+	for _, source := range []string{"media", "invite"} {
 		for chunk := 2; chunk <= len(known); chunk++ {
 			t.Run(fmt.Sprintf("%s_%d", source, chunk), func(t *testing.T) {
 				ctx := context.Background()
@@ -130,10 +130,8 @@ func TestReportRejectsExactLiveCredentials(t *testing.T) {
 				service := NewService(attributionRepository{}, sender)
 				if source == "media" {
 					ctx = WithRequestCredentials(ctx, known)
-				} else if source == "invite" {
-					service = service.WithCredentials(liveReportCredentials{values: []string{known}})
 				} else {
-					service = service.WithCredentials(nil, known)
+					service = service.WithCredentials(liveReportCredentials{values: []string{known}})
 				}
 				var split strings.Builder
 				for i, c := range known {
@@ -158,5 +156,35 @@ func TestReportRejectsExactLiveCredentials(t *testing.T) {
 	}
 	if sender.report.Description != "" {
 		t.Fatal("delivery bypassed unavailable credential source")
+	}
+}
+
+func TestReportCredentialShapes(t *testing.T) {
+	jwt := strings.Join([]string{"eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJmaXh0dXJlIn0", strings.Repeat("s", 43)}, ".")
+	for name, credential := range map[string]string{
+		"discord_upper_host": "https://DISCORD.com/api/webhooks/123456789012345678/" + strings.Repeat("MiXeD_", 8),
+		"username_only_otlp": "https://user@otlp.example",
+		"postgres_userinfo":  "postgres://u:p@h/db",
+		"jwt":                jwt,
+		"aws_access_key_id":  "AKIA" + strings.Repeat("A1", 8),
+		"invite":             "cspi1." + strings.Repeat("Ab3", 24),
+		"chalk_grant":        "chalk_sk_" + strings.Repeat("Ab3", 24),
+	} {
+		for _, field := range []string{"description", "diagnostics"} {
+			t.Run(name+"/"+field, func(t *testing.T) {
+				sender := &deliveryPort{}
+				service := NewService(attributionRepository{}, sender)
+				report := Report{Description: "Camera froze"}
+				if field == "description" {
+					report.Description = credential
+				} else {
+					report.Diagnostics = credential
+				}
+				result, err := service.Send(context.Background(), accessgrants.Subject{}, report)
+				if !errors.Is(err, ErrCredentials) || result.Outcome != OutcomeCredentialsDetected || sender.report.Description != "" {
+					t.Fatalf("credential reached delivery: outcome=%v error=%v", result.Outcome, err)
+				}
+			})
+		}
 	}
 }

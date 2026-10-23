@@ -49,7 +49,7 @@ func normalizedCredentialView(text string) string {
 func containsKnownCredential(text string, credentials []string) bool {
 	view := []rune(normalizeCredentialText(text))
 	for _, credential := range credentials {
-		// Literal configured values are secrets even in short local setups. Only
+		// Exact request-carried values are credentials even when short. Only
 		// separator-tolerant matching needs a distinctive normalized length.
 		if credential != "" && strings.Contains(text, credential) {
 			return true
@@ -89,13 +89,11 @@ func containsKnownCredential(text string, credentials []string) bool {
 
 func containsCredential(text string) bool {
 	text = normalizeCredentialText(text)
-	// A password in URL userinfo is a credential even when Chalk did not issue
-	// or configure it. Public URLs without passwords remain ordinary report text.
+	// Any URL userinfo is a credential, including a username-only collector URL.
+	// Public URLs without userinfo remain ordinary report text.
 	for _, candidate := range credentialURL.FindAllString(text, -1) {
 		if parsed, err := url.Parse(candidate); err == nil && parsed.User != nil {
-			if _, password := parsed.User.Password(); password {
-				return true
-			}
+			return true
 		}
 	}
 	// Only known credential formats use a fully compacted view. Joining all
@@ -160,6 +158,6 @@ func containsJWT(text string) bool {
 
 var (
 	jwtCandidate         = regexp.MustCompile(`^eyJ[A-Za-z0-9_-]+`)
-	structuredCredential = regexp.MustCompile(`(?:cspi1[A-Za-z0-9]{32,}|chalksk[A-Za-z0-9]{40,}|AKIA[A-Z0-9]{16}|BEGIN(?:RSA|EC|OPENSSH|ENCRYPTED)?PRIVATEKEY|discord(?:app)?comapi(?:v[0-9]+)?webhooks[A-Za-z0-9]{16,})`)
+	structuredCredential = regexp.MustCompile(`(?:cspi1[A-Za-z0-9]{32,}|chalksk[A-Za-z0-9]{40,}|AKIA[A-Z0-9]{16}|BEGIN(?:RSA|EC|OPENSSH|ENCRYPTED)?PRIVATEKEY|(?i:discord(?:app)?com)api(?:v[0-9]+)?webhooks[A-Za-z0-9]{2,})`)
 	prefixedCredential   = regexp.MustCompile(`(?:(?:sk|pk)_(?:(?:live|test|proj)_)?[A-Za-z0-9_-]{16,}|(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|AIza[A-Za-z0-9_-]{30,})`)
 )

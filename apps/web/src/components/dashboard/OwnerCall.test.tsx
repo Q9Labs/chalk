@@ -10,7 +10,10 @@ import { OwnerCall } from "./OwnerCall";
 const mocks = vi.hoisted(() => ({ createClient: vi.fn(), dashboardAction: vi.fn() }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.createClient }));
 vi.mock("@q9labsai/chalk-react", async () => ({ Chalk: (await import("../../../../../sdks/typescript/react/src/components/chalk/Chalk")).Chalk }));
-vi.mock("../../../../../sdks/typescript/react/src/components/space-view/SpaceView", () => ({ SpaceView: () => null }));
+vi.mock("../../../../../sdks/typescript/react/src/components/space-view/SpaceView", async () => {
+  const { SpaceHeader } = await import("../../../../../sdks/typescript/react/src/components/space-header/SpaceHeader");
+  return { SpaceView: (props: Omit<React.ComponentProps<typeof SpaceHeader>, "spaceName">) => <SpaceHeader {...props} spaceName="Camera test" /> };
+});
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("./AppShell", () => ({
   useSession: () => ({ profile: { name: "Owner" } }),
@@ -66,6 +69,47 @@ it("keeps an open owner report editable with Send disabled when the five-minute 
     await act(async () => cleanup());
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  }
+});
+
+it("re-enables an expired owner draft after a quiet access-only refresh", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-23T12:00:00Z"));
+  window.sessionStorage.clear();
+  const platform = terminalTestPlatform();
+  let refresh: import("@q9labsai/chalk-client").GetAccess | undefined;
+  let recovered = false;
+  mocks.dashboardAction.mockImplementation(async (_page, input) => {
+    if (input.action === "refresh-access" && !recovered) throw new Error("API temporarily unavailable");
+    return { access: opaqueAccessGrant(1) };
+  });
+  mocks.createClient.mockImplementation((options) => {
+    refresh = options.getAccess;
+    return createSpaceClientForPlatform(options, { ...platform, fetch: async () => new Response(null, { status: 204 }) });
+  });
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    await act(async () => vi.waitFor(() => expect(screen.getByRole("button", { name: "Call details", exact: true })).toBeDefined()));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Call details", exact: true })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Report a problem", exact: true })));
+    const input = screen.getByLabelText<HTMLTextAreaElement>("What went wrong?");
+    fireEvent.change(input, { target: { value: "Keep my draft during renewal" } });
+    await act(async () => vi.advanceTimersByTimeAsync(300_001));
+    expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
+    recovered = true;
+    const refreshAccess = refresh;
+    if (!refreshAccess) throw new Error("Owner access callback missing");
+    await act(async () => {
+      await refreshAccess({ reason: "scheduled_refresh", replaceMediaConnection: false, signal: new AbortController().signal });
+    });
+    expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByLabelText("What went wrong?")).toBe(input);
+    expect(input.value).toBe("Keep my draft during renewal");
+    expect(screen.queryByRole("alert")).toBeNull();
+  } finally {
+    await act(async () => cleanup());
+    vi.useRealTimers();
     vi.clearAllMocks();
   }
 });

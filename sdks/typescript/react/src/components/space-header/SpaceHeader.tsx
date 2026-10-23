@@ -43,7 +43,8 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       onSoundsChange={setSounds}
       onDialog={(kind) => {
         setOpen(false);
-        setDialog({ kind, open: true });
+        if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
+        else setDialog({ kind, open: true });
       }}
     />
   );

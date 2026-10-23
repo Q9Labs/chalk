@@ -541,7 +541,6 @@ func run() error {
 	if reportAdapter != nil {
 		reportSender = reportAdapter
 	}
-	reportKnownCredentials := cfg.Secrets()
 	routerOptions := httpapi.Options{
 		RecorderWorkerLogger: logger,
 		Capabilities: httpapi.CapabilityStatus{
@@ -564,7 +563,7 @@ func run() error {
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,
 
-		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender).WithCredentials(reportCredentials, reportKnownCredentials...),
+		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender).WithCredentials(reportCredentials),
 		ParticipantMediaVerify: participantMediaVerifier,
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,

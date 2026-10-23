@@ -12,6 +12,7 @@ export interface SpaceHeaderProps {
   weakConnection?: boolean;
   onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;
   reportUnavailableReason?: string;
+  onOpenReportProblem?: () => void;
   shortcuts?: {
     readonly isMuted?: boolean;
     readonly onToggleMute?: () => void;

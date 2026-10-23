@@ -4,6 +4,6 @@ package authentication
 // An empty ID leaves service authentication disabled.
 type ServiceCredential struct {
 	ID      string
-	Secrets []string `secret:"true"`
+	Secrets []string
 	Scopes  []Scope
 }

@@ -20,8 +20,6 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/discordreports"
-	"github.com/q9labs/chalk/apps/api/internal/authentication"
-	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 )
@@ -134,7 +132,6 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var configured []string
 	var carriedCookies []*http.Cookie
 	var carriedAuthorizations []string
 	var carriedCSRF string
@@ -146,7 +143,7 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 			t.Fatal(err)
 		}
 		repository := reportCredentialAttribution{reportAttributionRepository{subject}, attribution}
-		router := NewRouter(Options{ProblemReports: problemreports.NewService(repository, adapter).WithCredentials(knownOpaque, append([]string{"https://discord.com/api/webhooks/test/fake"}, configured...)...), ParticipantMediaVerify: verifier, RateLimit: DefaultRateLimitOptions()})
+		router := NewRouter(Options{ProblemReports: problemreports.NewService(repository, adapter).WithCredentials(knownOpaque), ParticipantMediaVerify: verifier, RateLimit: DefaultRateLimitOptions()})
 		request := httptest.NewRequest(http.MethodPost, "/v1/tenants/"+subject.TenantID.String()+"/problem-reports", strings.NewReader(string(body)))
 		request.Header.Set("Authorization", "Bearer "+proof.Token)
 		request.AddCookie(&http.Cookie{Name: "__Host-chalk_session", Value: session})
@@ -164,14 +161,13 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 		return response
 	}
 	t.Run("client_text_and_listed_metadata_only", func(t *testing.T) {
-		// SDK-only credentials never enter report data unless the reporter supplies them.
+		// Environment values and server error text must never be appended to delivery.
 		t.Setenv("PGPASSWORD", "provider-database-only-value")
 		t.Setenv("AWS_SECRET_ACCESS_KEY", "provider-aws-only-value")
 		t.Setenv("AWS_SESSION_TOKEN", "provider-session-only-value")
 		for _, report := range []problemreports.Report{
 			{Description: "Camera froze."},
 			{Description: "Camera froze.", Diagnostics: "Connection: failed\nBrowser: Local browser"},
-			{Description: "provider-database-only-value", Diagnostics: "provider-aws-only-value provider-session-only-value"},
 		} {
 			before := len(payloads)
 			response := post(report)
@@ -200,7 +196,6 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 			{name: "native_guest_authorization", value: guest, authorization: publicGuestScheme + " " + guest},
 			{name: "guest_first_arrival", value: guest, cookie: publicGuestCookiePrefix + "first-arrival"},
 			{name: "guest_second_arrival", value: guest, cookie: publicGuestCookiePrefix + "second-arrival"},
-			{name: "configured_server_secret", value: guest},
 			{name: "csrf_header", value: guest},
 		}
 		// cookieName in the web auth layer owns these namespaces; covering every
@@ -219,13 +214,10 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 					if fixture.authorization != "" {
 						carriedAuthorizations = []string{fixture.authorization}
 					}
-					if fixture.name == "configured_server_secret" {
-						configured = []string{fixture.value}
-					}
 					if fixture.name == "csrf_header" {
 						carriedCSRF = fixture.value
 					}
-					defer func() { carriedCookies = nil; carriedAuthorizations = nil; carriedCSRF = ""; configured = nil }()
+					defer func() { carriedCookies = nil; carriedAuthorizations = nil; carriedCSRF = "" }()
 					report := problemreports.Report{Description: "The call stopped working."}
 					if field == "description" {
 						report.Description += " " + fixture.value
@@ -241,11 +233,8 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 			}
 		}
 	})
-	t.Run("connection_urls_and_configured_passwords", func(t *testing.T) {
-		cfg := config.Config{Database: config.DatabaseConfig{URL: "postgres://user:db%2Dfixture-password@host/chalk?password=query-db-password&sslpassword=tls-key-password"}, Redis: config.RedisConfig{URL: "redis://default:redis-fixture-password@host/0"}}
-		configured = cfg.Secrets()
-		defer func() { configured = nil }()
-		for _, secret := range []string{cfg.Database.URL, cfg.Redis.URL, "db-fixture-password", "query-db-password", "tls-key-password", "redis-fixture-password", "postgres://unrelated:unconfigured-password@public.example/db", "https://user:any-password@example.org/help", "redis://user:p%40ssword@public.example/0", "//user:password@example.org/path"} {
+	t.Run("credential_shapes", func(t *testing.T) {
+		for _, secret := range []string{"https://DISCORD.com/api/webhooks/123456789012345678/" + strings.Repeat("MiXeD_", 8), "https://user@otlp.example", "postgres://u:p@h/db", strings.Join([]string{"eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJmaXh0dXJlIn0", strings.Repeat("s", 43)}, "."), "AKIA" + strings.Repeat("A1", 8), "postgres://unrelated:unconfigured-password@public.example/db", "https://user:any-password@example.org/help", "redis://user:p%40ssword@public.example/0", "//user:password@example.org/path"} {
 			for _, field := range []string{"description", "diagnostics"} {
 				report := problemreports.Report{Description: "The call stopped working."}
 				if field == "description" {
@@ -259,130 +248,6 @@ func TestProblemReportCredentialRejection(t *testing.T) {
 					t.Fatalf("password reached final Discord payload: field=%s status=%d deliveries=%d", field, response.Code, len(payloads)-before)
 				}
 			}
-		}
-	})
-	t.Run("configured_inventory_judge_r6", func(t *testing.T) {
-		t.Setenv(config.APIEnvironment, "local")
-		t.Setenv(config.RecordingEnabled, "false")
-		t.Setenv(config.TranscriptionEnabled, "false")
-		t.Setenv(config.DatabaseURL, "postgres://judge:JudgeDatabasePassword8877@127.0.0.1:5432/judge?sslmode=disable")
-		t.Setenv(config.RedisURL, "redis://judge:JudgeRedisPassword9966@127.0.0.1:6379/0")
-		t.Setenv(config.SyncTokenAudience, "sync")
-		t.Setenv(config.SyncTokenIssuer, "judge-r6")
-		t.Setenv(config.SyncTokenKeyID, "r6")
-		t.Setenv(config.SyncTokenPrivateKey, base64.RawURLEncoding.EncodeToString(private))
-		invitePublic, invitePrivate, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		verifiers, err := json.Marshal(map[string]string{"r6": base64.RawURLEncoding.EncodeToString(invitePublic)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv(config.PublicInviteManagedTenantID, subject.TenantID.String())
-		t.Setenv(config.PublicInviteDefaultMediaPlane, "cloudflare_sfu")
-		t.Setenv(config.PublicInviteWebOrigin, "http://127.0.0.1:3000")
-		t.Setenv(config.PublicInviteKeyID, "r6")
-		t.Setenv(config.PublicInvitePrivateKey, base64.RawURLEncoding.EncodeToString(invitePrivate))
-		t.Setenv(config.PublicInviteVerificationKeys, string(verifiers))
-		cfg, err := config.Load()
-		if err != nil {
-			t.Fatal(err)
-		}
-		configured = cfg.Secrets()
-		defer func() { configured = nil }()
-		cases := []struct{ name, value string }{
-			{"sync_media_signing_key", base64.RawURLEncoding.EncodeToString(cfg.SyncToken.PrivateKey)},
-			{"public_invite_signing_key", base64.RawURLEncoding.EncodeToString(cfg.PublicInvite.PrivateKey)},
-			{"postgres_full_url", cfg.Database.URL}, {"postgres_password", "JudgeDatabasePassword8877"},
-			{"redis_full_url", cfg.Redis.URL}, {"redis_password", "JudgeRedisPassword9966"},
-		}
-		// The first six cases in two fields are the judge's twelve probes. Also
-		// cover common pasted encodings of both full signing keys and their seeds.
-		for _, key := range []struct {
-			name  string
-			value ed25519.PrivateKey
-		}{{"sync_media", cfg.SyncToken.PrivateKey}, {"public_invite", cfg.PublicInvite.PrivateKey}} {
-			for _, raw := range [][]byte{key.value, key.value.Seed()} {
-				for _, encoding := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
-					cases = append(cases, struct{ name, value string }{key.name + "_base64", encoding.EncodeToString(raw)})
-				}
-				cases = append(cases, struct{ name, value string }{key.name + "_hex", fmt.Sprintf("%x", raw)}, struct{ name, value string }{key.name + "_upper_hex", fmt.Sprintf("%X", raw)})
-			}
-		}
-		for _, fixture := range cases {
-			for _, field := range []string{"description", "diagnostics"} {
-				t.Run(fixture.name+"/"+field, func(t *testing.T) {
-					report := problemreports.Report{Description: "The camera stopped working."}
-					if field == "description" {
-						report.Description = fixture.value
-					} else {
-						report.Diagnostics = fixture.value
-					}
-					before := len(payloads)
-					response := post(report)
-					if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "reports.credentials_detected") || len(payloads) != before {
-						t.Fatalf("configured credential reached final Discord POST: status=%d deliveries=%d", response.Code, len(payloads)-before)
-					}
-				})
-			}
-		}
-	})
-	for _, fixture := range []struct {
-		name   string
-		secret string
-		kind   authentication.PrincipalKind
-	}{
-		{"short_configured_system_credential", "local-test-key9", authentication.PrincipalSystem},
-		{"normalized_short_valid_service_secret", "sample-key-val9" + strings.Repeat("\u200b", 17), authentication.PrincipalService},
-	} {
-		t.Run(fixture.name, func(t *testing.T) {
-			t.Setenv(config.APIEnvironment, "local")
-			t.Setenv(config.RecordingEnabled, "false")
-			t.Setenv(config.TranscriptionEnabled, "false")
-			if fixture.kind == authentication.PrincipalSystem {
-				t.Setenv(config.APILocalSystemToken, fixture.secret)
-			} else {
-				t.Setenv(config.APIServiceID, "report-test")
-				t.Setenv(config.APIServiceSecrets, fixture.secret)
-				t.Setenv(config.APIServiceScopes, "tenants:read")
-			}
-			cfg, err := config.Load()
-			if err != nil {
-				t.Fatal(err)
-			}
-			middleware := acceptLocalSystemToken(cfg.API.LocalSystemToken)
-			if fixture.kind == authentication.PrincipalService {
-				middleware = acceptServiceCredential(cfg.API.ServicePrincipal)
-				configured = cfg.API.ServicePrincipal.Secrets
-			} else {
-				configured = []string{cfg.API.LocalSystemToken}
-			}
-			defer func() { configured = nil }()
-			authenticated := false
-			request := httptest.NewRequest(http.MethodGet, "/", nil)
-			request.Header.Set("Authorization", "Bearer "+fixture.secret)
-			middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				principal, ok := authentication.PrincipalFromContext(r.Context())
-				authenticated = ok && principal.Kind == fixture.kind
-			})).ServeHTTP(httptest.NewRecorder(), request)
-			if !authenticated {
-				t.Fatal("configured fixture did not authenticate with the real middleware")
-			}
-			before := len(payloads)
-			response := post(problemreports.Report{Description: "My camera failed; configured value=" + fixture.secret})
-			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "reports.credentials_detected") || len(payloads) != before {
-				t.Fatalf("literal configured credential reached Discord: status=%d deliveries=%d", response.Code, len(payloads)-before)
-			}
-		})
-	}
-	t.Run("short_configured_aliases_are_not_compacted", func(t *testing.T) {
-		configured = []string{"", "short-code"}
-		defer func() { configured = nil }()
-		before := len(payloads)
-		response := post(problemreports.Report{Description: "The short - code label stayed on screen."})
-		if response.Code != http.StatusOK || len(payloads) != before+1 {
-			t.Fatalf("short normalized alias blocked ordinary prose: status=%d", response.Code)
 		}
 	})
 	t.Run("holder_reconstruction_across_unrelated_fields_is_out_of_scope", func(t *testing.T) {

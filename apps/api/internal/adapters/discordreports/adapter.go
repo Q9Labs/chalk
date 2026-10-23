@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,7 +17,6 @@ import (
 	"unicode/utf16"
 
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 type Adapter struct {
@@ -41,10 +41,16 @@ func (c *Adapter) Send(ctx context.Context, report problemreports.Delivery) erro
 	const prefix = "Chalk problem report\nCall: "
 	const panelsNotice = "\n\nReport panels: description, then diagnostics when provided."
 	suffix := fmt.Sprintf("\nEpisode ID: %s\nReporter: %s (%s)", report.CallID.String(), safeText(strings.Join(strings.Fields(report.ReporterName), " "), 512), report.Role)
-	// Each accepted name code point needs at most two UTF-16 units, including
-	// Markdown escaping. The creation/rename bound therefore fits without loss.
-	nameBudget := spaces.MaxNameCodePoints * 2
-	heading := prefix + safeText(strings.Join(strings.Fields(report.SpaceName), " "), nameBudget) + suffix
+	// Historical Space names were unbounded. Keep their full sanitized text;
+	// attach names that cannot fit beside the fixed metadata in Discord content.
+	name := strings.Join(strings.Fields(report.SpaceName), " ")
+	name = safeText(name, len([]rune(name))*2)
+	heading := prefix + name + suffix
+	var attachedName string
+	if len(utf16.Encode([]rune(heading+panelsNotice))) > 2000 {
+		attachedName = name
+		heading = prefix + "See call-name.txt" + suffix
+	}
 	description := safeText(report.Description, problemreports.MaxDescriptionCodePoints*2)
 	diagnostics := safeText(report.Diagnostics, problemreports.MaxDiagnosticsCodePoints*2)
 	content := heading + "\n\nDescription:\n" + description
@@ -66,14 +72,22 @@ func (c *Adapter) Send(ctx context.Context, report problemreports.Delivery) erro
 			panels = append(panels, panel{Description: diagnostics})
 		}
 	}
+	type attachment struct {
+		ID       int    `json:"id"`
+		Filename string `json:"filename"`
+	}
 	payload := struct {
-		Content         string  `json:"content"`
-		Embeds          []panel `json:"embeds,omitempty"`
+		Attachments     []attachment `json:"attachments,omitempty"`
+		Content         string       `json:"content"`
+		Embeds          []panel      `json:"embeds,omitempty"`
 		AllowedMentions struct {
 			Parse []string `json:"parse"`
 		} `json:"allowed_mentions"`
 	}{Content: content, Embeds: panels}
 	payload.AllowedMentions.Parse = []string{}
+	if attachedName != "" {
+		payload.Attachments = []attachment{{ID: 0, Filename: "call-name.txt"}}
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return problemreports.ErrDelivery
@@ -86,11 +100,31 @@ func (c *Adapter) Send(ctx context.Context, report problemreports.Delivery) erro
 	query := destination.Query()
 	query.Set("wait", "true")
 	destination.RawQuery = query.Encode()
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, destination.String(), bytes.NewReader(body))
+	requestBody := bytes.NewBuffer(body)
+	contentType := "application/json"
+	if attachedName != "" {
+		requestBody = new(bytes.Buffer)
+		writer := multipart.NewWriter(requestBody)
+		if err := writer.WriteField("payload_json", string(body)); err != nil {
+			return problemreports.ErrDelivery
+		}
+		file, err := writer.CreateFormFile("files[0]", "call-name.txt")
+		if err != nil {
+			return problemreports.ErrDelivery
+		}
+		if _, err := file.Write([]byte(attachedName)); err != nil {
+			return problemreports.ErrDelivery
+		}
+		if err := writer.Close(); err != nil {
+			return problemreports.ErrDelivery
+		}
+		contentType = writer.FormDataContentType()
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, destination.String(), requestBody)
 	if err != nil {
 		return problemreports.ErrDelivery
 	}
-	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Type", contentType)
 	response, err := c.client.Do(request)
 	// Transport errors can contain the secret webhook URL.
 	if err != nil {

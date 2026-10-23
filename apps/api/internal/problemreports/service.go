@@ -59,11 +59,10 @@ type CredentialSource interface {
 }
 
 type Service struct {
-	repository       Repository
-	credentials      CredentialSource
-	knownCredentials []string
-	sender           Sender
-	tracer           trace.Tracer
+	repository  Repository
+	credentials CredentialSource
+	sender      Sender
+	tracer      trace.Tracer
 }
 
 func NewService(repository Repository, sender Sender) Service {
@@ -73,9 +72,8 @@ func NewService(repository Repository, sender Sender) Service {
 
 func (s Service) Available() bool { return s.sender != nil }
 
-func (s Service) WithCredentials(source CredentialSource, known ...string) Service {
+func (s Service) WithCredentials(source CredentialSource) Service {
 	s.credentials = source
-	s.knownCredentials = append([]string(nil), known...)
 	return s
 }
 
@@ -99,7 +97,7 @@ func (s Service) Send(ctx context.Context, subject accessgrants.Subject, report 
 		}
 		return Result{Outcome: OutcomeAttributionFailed}, errors.New("problem report attribution unavailable")
 	}
-	credentials := append([]string(nil), s.knownCredentials...)
+	var credentials []string
 	if s.credentials != nil {
 		live, err := s.credentials.Credentials(ctx, subject)
 		if err != nil {

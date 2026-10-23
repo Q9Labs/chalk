@@ -30,6 +30,7 @@ function readOwnerReload(spaceId: string) {
 function ownerAccess(spaceId: string) {
   let joinKey = intentKey();
   let current: OwnerAccessDTO["access"] | undefined;
+  const listeners = new Set<() => void>();
   let recovery: ReturnType<typeof readOwnerReload> | undefined;
   let restoring: Promise<void> | undefined;
   const clearReload = () => {
@@ -57,6 +58,7 @@ function ownerAccess(spaceId: string) {
         : // Without the current token the server replaces the media connection.
           await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
+    for (const listener of listeners) listener();
     return access;
   };
   const saveReload = (snapshot: ReturnType<SpaceClient["getSnapshot"]>) => {
@@ -76,7 +78,19 @@ function ownerAccess(spaceId: string) {
       // Reload recovery is unavailable with tab storage disabled.
     }
   };
-  return { getAccess, saveReload, clearReload, reportCredential: () => current?.media.token, reportTenant: () => current?.subject.tenant_id, reportCredentialExpiresAt: () => (current ? Date.parse(current.media.expires_at) : undefined) };
+  return {
+    getAccess,
+    saveReload,
+    clearReload,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    reportAccess: () => current,
+    reportCredential: () => current?.media.token,
+  };
 }
 
 /** The call screen for the call's owner, through the React SDK's own call UI. */
@@ -131,16 +145,35 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     );
   return (
     <div style={{ position: "absolute", inset: 0 }}>
-      <OwnerCallSurface client={client} owner={owner} baseURL={apiBaseURL} inviteLink={state.data.inviteUrl} spaceName={state.data.call.name} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
+      <OwnerCallSurface
+        client={client}
+        owner={owner}
+        baseURL={apiBaseURL}
+        inviteLink={state.data.inviteUrl}
+        spaceName={state.data.call.name}
+        displayName={profile.name}
+        theme={{ colorScheme: theme }}
+        onColorSchemeChange={setTheme}
+        onLeft={() => {
+          if (client.getSnapshot().connection.episodeEnded) owner.clearReload();
+          else leave();
+        }}
+        onEpisodeEnded={owner.clearReload}
+        onHome={() => {
+          owner.clearReload();
+          void navigate({ to: "/dashboard" });
+        }}
+      />
     </div>
   );
 }
 
 function OwnerCallSurface({ client, owner, baseURL, ...props }: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string }) {
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
-  const tenantId = owner.reportTenant();
+  const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
+  const tenantId = access?.subject.tenant_id;
   const reportsAvailable = useProblemReports(baseURL, tenantId);
-  const reportExpired = useReportCredentialExpired(owner.reportCredentialExpiresAt());
+  const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
   const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection }), [baseURL, tenantId, owner, connection]);
   return <Chalk {...props} client={client} onReportProblem={reportsAvailable ? onReportProblem : undefined} reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined} />;
 }

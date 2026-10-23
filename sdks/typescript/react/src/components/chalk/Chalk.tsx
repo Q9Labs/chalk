@@ -61,6 +61,8 @@ export type ChalkProps = SpaceIntegration &
     readonly theme?: ChalkTheme;
     readonly shareUrl?: string;
     readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
+    /** Opens an app-owned dialog that can outlive this call view. */
+    readonly onOpenReportProblem?: () => void;
     /** Hides new report actions and disables Send without discarding an open report. */
     readonly reportUnavailableReason?: string;
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
@@ -90,7 +92,8 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     props.onReportProblem && !props.reportUnavailableReason
       ? () => {
           reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
-          setReportOpen(true);
+          if (props.onOpenReportProblem) props.onOpenReportProblem();
+          else setReportOpen(true);
         }
       : undefined;
   const suppliedClient = props.client;
@@ -121,7 +124,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
       <div data-chalk data-chalk-theme={colorScheme} className="chalk-root h-full min-h-0 w-full" style={chalkThemeStyle(props.theme, colorScheme)}>
         <ChalkProvider client={client}>
           <SpaceExperience {...props} theme={{ ...props.theme, colorScheme }} onColorSchemeChange={changeColorScheme} resolvedColorScheme={colorScheme} onOpenReport={openReport} />
-          {props.onReportProblem ? (
+          {props.onReportProblem && !props.onOpenReportProblem ? (
             <>
               <ShellStyles />
               <CallDialog
@@ -241,6 +244,7 @@ function SpaceSurface(
   props: ChalkProps & {
     readonly resolvedColorScheme: ChalkColorScheme;
     readonly spaceName: string;
+    readonly onOpenReport?: () => void;
   },
 ): React.JSX.Element {
   const client = useSpaceClient();
@@ -301,6 +305,7 @@ function SpaceSurface(
       colorScheme={props.resolvedColorScheme}
       shareUrl={props.shareUrl}
       onReportProblem={props.onReportProblem}
+      onOpenReportProblem={props.onOpenReport}
       reportUnavailableReason={props.reportUnavailableReason}
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
