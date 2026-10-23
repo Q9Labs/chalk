@@ -13,11 +13,12 @@
 - Client: accept a server-selected media replacement during access refresh, so rejoining with an expired media token works. Add optional Sync health to connection snapshots and the `connection.sync_hello_timeout` error code.
 - Client: keep access, Sync, SFU and recovery failure codes and whether they're recoverable in join rejections, snapshots and error events. React: show guidance for the startup step that failed, with a public error-code reference.
 - Client: return recoverable `media.timeout` when media confirmations run out, and recoverable `collaboration.unavailable` when a reaction acknowledgement times out after five seconds. React and React Native: keep recovery notices non-blocking, and disable reaction sending and media enable controls until Sync is live.
-- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, or in React Native to 30 seconds or `syncStartupTimeoutMs` (at least 10 seconds). The whiteboard, and Sync once the call is live, retry a timed-out attempt. During first join the startup wait decides, so a Sync socket that never opens fails the join when that wait ends instead of retrying. Capture a fresh microphone after its track ended.
+- Client: recover from a rejected Sync state update through one fresh snapshot, ending in the new `connection.state_digest_recovery_failed` code if that fails. Bound Sync and whiteboard WebSocket opening attempts to 10 seconds by default, or in React Native to 30 seconds or `syncStartupTimeoutMs` (10 to 60 seconds). The whiteboard, and Sync once the call is live, retry a timed-out attempt. During first join the startup wait decides, so a Sync socket that never opens fails the join when that wait ends instead of retrying. Capture a fresh microphone after its track ended.
 - Client: report a chat send that Sync refuses for sending too fast as recoverable `command.rate_limited`, and one it refuses while overloaded as recoverable `collaboration.unavailable`, instead of `chat.payload_invalid`.
 - React: label screen shares of unknown surfaces plainly.
 - React Native: size the call from the enclosing safe-area frame instead of the window, so calls in a smaller container lay out for that container.
 - React Native: render registered native WebRTC host components so remote screen shares and camera video stay visible.
+- React Native: an app's Android `./gradlew check` no longer runs Chalk's own module API compatibility check.
 - Advance the seven coordinated Chalk SDK packages to 5.1.0. `@q9labsai/recording-presentation` remains at 0.1.1.
 
 ## 5.0.1
