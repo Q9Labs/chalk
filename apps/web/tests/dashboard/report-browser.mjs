@@ -59,34 +59,40 @@ export async function checkReports({ browser, page, origin, call, repository }) 
   }
   async function submit(tab, { name, diagnostics = true, failure = false }) {
     const dialog = tab.getByRole("dialog").filter({ has: tab.getByText("What went wrong?", { exact: true }) });
-    await dialog.getByLabel("What went wrong?").fill(`${label}: ${name}. I looked at discord.com/api/webhooks but the camera still froze. @everyone`);
+    const description = `${label}: ${name}. I looked at discord.com/api/webhooks but the camera still froze. @everyone`;
+    await dialog.getByLabel("What went wrong?").fill(description);
     assert.equal(await dialog.getByLabel("Include diagnostics").isChecked(), false, "Diagnostics must be opt-in");
     if (diagnostics) await dialog.getByLabel("Include diagnostics").check();
     await tab.screenshot({ path: resolve(evidence, `${name}-form.png`), animations: "disabled" });
     const previousIds = new Set(deliveryRecords().map((event) => event.event_id));
+    if (failure) assert.equal((await fetch(`${webhook}/fail`, { method: "POST" })).status, 204);
     const delivery = tab.waitForResponse((response) => response.url().endsWith("/problem-reports") && response.request().method() === "POST");
     await dialog.getByRole("button", { name: "Send", exact: true }).click();
     await dialog.getByRole("button", { name: "Sending…", exact: true }).waitFor();
     assert(await dialog.getByLabel("What went wrong?").isDisabled());
-    const response = await delivery;
+    let response = await delivery;
     assert.equal(response.status(), failure ? 502 : 200, "Report delivery status");
+    if (failure) {
+      assert.equal(deliveryRecords().filter((event) => !previousIds.has(event.event_id)).length, 0, "Failed delivery must not create a retained journey event");
+      await dialog.getByRole("alert").waitFor();
+      assert.equal(await dialog.getByLabel("What went wrong?").inputValue(), description, "Failed delivery must preserve text");
+      await tab.screenshot({ path: resolve(evidence, `${name}-delivery-error.png`), animations: "disabled" });
+      assert.equal((await fetch(`${webhook}/recover`, { method: "POST" })).status, 204);
+      const retry = tab.waitForResponse((response) => response.url().endsWith("/problem-reports") && response.request().method() === "POST");
+      await dialog.getByRole("button", { name: "Send", exact: true }).click();
+      response = await retry;
+      assert.equal(response.status(), 200, "The unchanged draft must deliver after transport recovery");
+    }
     const journeyId = response.headers()["x-chalk-journey-id"];
     assert.match(journeyId, /^[0-9a-f-]{36}$/, "Report response keeps its journey ID");
     const ledger = deliveryRecords().filter((event) => !previousIds.has(event.event_id));
-    assert.equal(ledger.length, failure ? 0 : 1, "Only accepted deliveries create a retained journey event");
-    if (!failure) {
-      assert.equal(ledger[0].state, "succeeded");
-      assert.equal(ledger[0].journey_id, ledger[0].event_id, "Delivery owns its report-scoped journey");
-      assert.equal(ledger[0].event_id, ledger[0].attributes.report_id);
-      assert.notEqual(ledger[0].journey_id, journeyId, "A supplied request journey cannot own delivery evidence");
-      assert.deepEqual(Object.keys(ledger[0].attributes).sort(), ["episode_id", "report_id", "space_id", "tenant_id"]);
-      await writeFile(resolve(evidence, `${name}-journey.json`), JSON.stringify(ledger, null, 2));
-    }
-    if (failure) {
-      await dialog.getByRole("alert").waitFor();
-      assert.equal(await dialog.getByLabel("What went wrong?").inputValue(), `${label}: ${name}`, "Failed delivery must preserve text");
-      return;
-    }
+    assert.equal(ledger.length, 1, "Only accepted deliveries create a retained journey event");
+    assert.equal(ledger[0].state, "succeeded");
+    assert.equal(ledger[0].journey_id, ledger[0].event_id, "Delivery owns its report-scoped journey");
+    assert.equal(ledger[0].event_id, ledger[0].attributes.report_id);
+    assert.notEqual(ledger[0].journey_id, journeyId, "A supplied request journey cannot own delivery evidence");
+    assert.deepEqual(Object.keys(ledger[0].attributes).sort(), ["episode_id", "report_id", "space_id", "tenant_id"]);
+    await writeFile(resolve(evidence, `${name}-journey.json`), JSON.stringify(ledger, null, 2));
     await tab.getByRole("heading", { name: "Sent", exact: true }).waitFor();
     await tab.screenshot({ path: resolve(evidence, `${name}-success.png`), animations: "disabled" });
     const reports = await received();
@@ -107,7 +113,7 @@ export async function checkReports({ browser, page, origin, call, repository }) 
   await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).waitFor();
   await page.screenshot({ path: resolve(evidence, "owner-dropdown.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Report a problem", exact: true }).click({ timeout: 10000 });
-  await submit(page, { name: "owner" });
+  await submit(page, { name: "owner", failure: process.env.CHALK_REPORT_LIVE_PROOF !== "1" });
   assert((await received()).at(-1).content.includes("(owner)"));
   if (process.env.CHALK_REPORT_LIVE_PROOF === "1") {
     assert.equal((await received()).length, 1, "Exactly one live test message");
@@ -185,7 +191,7 @@ export async function checkReports({ browser, page, origin, call, repository }) 
     const disclosure = policy.getByRole("listitem").filter({ hasText: "Discord" });
     await disclosure.waitFor();
     const text = await disclosure.innerText();
-    for (const field of ["description", "display name and role", "call name and ID", "only if you opt in", "We do not add your account email address or credentials"]) assert(text.includes(field), field);
+    for (const field of ["what you type", "display name and role", "Space name and Episode ID", "If you choose to include diagnostics", "We do not add your account email address"]) assert(text.includes(field), field);
     assert((await policy.locator("body").innerText()).includes("Discord relies on the EU-US Data Privacy Framework adequacy decision"));
     await disclosure.scrollIntoViewIfNeeded();
     await policy.screenshot({ path: resolve(evidence, "privacy-disclosure.png"), animations: "disabled" });

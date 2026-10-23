@@ -109,7 +109,7 @@ describe("Privacy Policy advance notice", () => {
       "problem reports",
       "what you type",
       "display name and role",
-      "Space name and call ID",
+      "Space name and Episode ID",
       "If you choose to include diagnostics",
       "connection status",
       "last error code",

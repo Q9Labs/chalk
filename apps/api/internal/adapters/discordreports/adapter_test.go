@@ -30,7 +30,7 @@ func TestWebhookDestinations(t *testing.T) {
 			t.Errorf("accepted unsafe destination %q", destination)
 		}
 	}
-	for _, host := range []string{"discord.com", "discordapp.com"} {
+	for _, host := range []string{"discord.com", "discordapp.com", "DISCORD.COM", "DiscordApp.Com"} {
 		if client, err := NewAdapter("https://" + host + "/api/webhooks/123/abc"); client == nil || err != nil {
 			t.Errorf("rejected Discord host %s", host)
 		}

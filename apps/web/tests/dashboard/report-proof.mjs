@@ -12,6 +12,7 @@ const live = process.env.CHALK_REPORT_LIVE_PROOF === "1";
 assert(!live || (liveURL && process.env.CHALK_REPORT_LIVE_ONCE_FILE), "Live proof needs an injected secret and a durable once marker");
 let liveSent = false;
 let failDelivery = false;
+let failedDeliveries = 0;
 const server = createServer(async (request, response) => {
   if (request.url === "/reports" && request.method === "GET") return response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(reports));
   if (request.url === "/fail" && request.method === "POST") {
@@ -28,7 +29,10 @@ const server = createServer(async (request, response) => {
     for await (const chunk of request) chunks.push(chunk);
     const payload = JSON.parse(Buffer.concat(chunks));
     await new Promise((accept) => setTimeout(accept, 150));
-    if (failDelivery) return response.writeHead(500).end();
+    if (failDelivery) {
+      failedDeliveries++;
+      return response.writeHead(500).end();
+    }
     reports.push(payload);
     if (live) {
       assert(!liveSent, "Refusing a second live Discord message");
@@ -94,6 +98,7 @@ const deadline = setTimeout(stop, 15 * 60_000);
 try {
   const [code] = await once(child, "exit");
   assert.equal(code, 0, "Real-stack report browser proof");
+  if (!live) assert.equal(failedDeliveries, 1, "The fake-only proof must exercise a delivery failure");
   if (live) assert(liveSent && reports.length === 1, "Exactly one live message");
 } finally {
   clearInterval(watchdog);

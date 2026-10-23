@@ -30,7 +30,7 @@ func NewAdapter(webhookURL string) (*Adapter, error) {
 	}
 	destination, err := url.Parse(webhookURL)
 	if err != nil || destination.Scheme != "https" || destination.User != nil || destination.Fragment != "" || destination.Opaque != "" ||
-		(destination.Hostname() != "discord.com" && destination.Hostname() != "discordapp.com") ||
+		(!strings.EqualFold(destination.Hostname(), "discord.com") && !strings.EqualFold(destination.Hostname(), "discordapp.com")) ||
 		(destination.Port() != "" && destination.Port() != "443") || !webhookPath.MatchString(destination.EscapedPath()) {
 		return nil, errors.New("expected an HTTPS discord.com or discordapp.com webhook URL")
 	}

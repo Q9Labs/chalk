@@ -2,12 +2,98 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
+	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestProblemReportDeliveryOverlapsTenantPurge(t *testing.T) {
+	for _, short := range []bool{false, true} {
+		t.Run(map[bool]string{false: "frozen", true: "short"}[short], func(t *testing.T) {
+			pool := purgeIntegrationPool(t)
+			fixture := createPurgeFixture(t, pool)
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			tenantID, err := utilities.ParseID(fixture.erased)
+			if err != nil {
+				t.Fatal(err)
+			}
+			connection, err := pool.Acquire(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			started := false
+			done := make(chan struct{})
+			defer func() {
+				cancel()
+				if started {
+					<-done
+				}
+				connection.Release()
+			}()
+			reports := NewProblemReportRepository(connection)
+			reportID := accountTenantIntegrationID(t)
+			recorded := make(chan error, 1)
+			// The real purge invokes this only after acquiring its table fences.
+			overlap := func(fenceCtx context.Context) error {
+				started = true
+				go func() {
+					defer close(done)
+					recorded <- reports.RecordDelivery(ctx, accessgrants.Subject{TenantID: tenantID}, reportID)
+				}()
+				ticker := time.NewTicker(10 * time.Millisecond)
+				defer ticker.Stop()
+				for {
+					var blocked bool
+					if err := pool.QueryRow(fenceCtx, `select cardinality(pg_blocking_pids($1))>0`, connection.Conn().PgConn().PID()).Scan(&blocked); err != nil {
+						return err
+					}
+					if blocked {
+						return nil
+					}
+					select {
+					case err := <-recorded:
+						return fmt.Errorf("delivery escaped purge fence: %v", err)
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-ticker.C:
+					}
+				}
+			}
+			purge := NewTenantPurgeRepository(pool)
+			snapshot := purge.Snapshot
+			if short {
+				snapshot = purge.SnapshotShort
+			}
+			plan, err := snapshot(ctx, fixture.scope, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if short {
+				_, err = purge.ApplyTenantShort(ctx, plan, fixture.erased, func(ctx context.Context, _ tenantpurge.Plan) error { return overlap(ctx) })
+			} else {
+				_, err = purge.ApplyWithFrozenBackup(ctx, plan, fixtureReceipt(t, plan), func(ctx context.Context, frozen tenantpurge.Plan) (tenantpurge.BackupReceipt, error) {
+					return fixtureReceipt(t, frozen), overlap(ctx)
+				})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := <-recorded; err != nil {
+				t.Fatalf("delivery after concurrent purge: %v", err)
+			}
+			var retained int
+			if err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where attributes->>'tenant_id'=$1`, fixture.erased).Scan(&retained); err != nil || retained != 0 {
+				t.Fatalf("delivery resurrected purged Tenant data: count=%d error=%v", retained, err)
+			}
+		})
+	}
+}
 
 type reportAttributionCapture struct{ delivery problemreports.Delivery }
 

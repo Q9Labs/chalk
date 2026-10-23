@@ -234,7 +234,7 @@ function PrivacyPolicy() {
           <strong>Axiom</strong> receives API request logs and Sync diagnostic traces, including request paths, outcomes, timing, and journey and trace identifiers, to help us run and secure the service.
         </li>
         <li>
-          <strong>Discord</strong> receives operational alerts that may include a tenant's display name. Our private Discord channel also receives problem reports you submit through Chalk: what you type, your display name and role, and the Space name and call ID. If you choose to include
+          <strong>Discord</strong> receives operational alerts that may include a tenant's display name. Our private Discord channel also receives problem reports you submit through Chalk: what you type, your display name and role, and the Space name and Episode ID. If you choose to include
           diagnostics, the report also sends connection status, last error code, browser or user agent, and app version. We do not add your account email address, server configuration, logs or server error text. Please do not include passwords or keys in your report. URLs beginning with http://,
           https:// or www. are sent as non-clickable text with query strings and fragments removed. Stack traces and commit IDs you include are kept.
         </li>

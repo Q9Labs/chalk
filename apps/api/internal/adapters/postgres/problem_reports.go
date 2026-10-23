@@ -18,13 +18,17 @@ import (
 
 type ProblemReportRepository struct {
 	queries problemReportQuerier
-	db      sqlc.DBTX
+	db      problemReportDB
+}
+type problemReportDB interface {
+	sqlc.DBTX
+	Begin(context.Context) (pgx.Tx, error)
 }
 type problemReportQuerier interface {
 	GetProblemReportAttribution(context.Context, sqlc.GetProblemReportAttributionParams) (sqlc.GetProblemReportAttributionRow, error)
 }
 
-func NewProblemReportRepository(db sqlc.DBTX) ProblemReportRepository {
+func NewProblemReportRepository(db problemReportDB) ProblemReportRepository {
 	return ProblemReportRepository{queries: sqlc.New(db), db: db}
 }
 func (r ProblemReportRepository) Attribution(ctx context.Context, subject accessgrants.Subject) (problemreports.Attribution, error) {
@@ -54,14 +58,26 @@ func (r ProblemReportRepository) RecordDelivery(ctx context.Context, subject acc
 		traceID = span.TraceID().String()
 		spanID = span.SpanID().String()
 	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return reportJourneyError(err)
+	}
+	defer tx.Rollback(ctx)
+	// Both purge paths fence the journey table before deleting the Tenant.
+	// Take that table lock before the Tenant row lock, keeping the same order.
+	if _, err := tx.Exec(ctx, `lock table observability_journey_events in row exclusive mode`); err != nil {
+		return reportJourneyError(err)
+	}
 	// The report owns its journey; caller-supplied journey IDs cannot block a Tenant purge.
-	// A row lock makes Tenant existence and the write atomic with both purge paths.
-	_, err = r.db.Exec(ctx, `with live_tenant as materialized (
+	_, err = tx.Exec(ctx, `with live_tenant as materialized (
         select id from tenants where id=$5 for key share
     ) insert into observability_journey_events(event_id,journey_id,sequence,occurred_at,name,phase,state,origin_kind,first_observed_layer,upstream_visibility,trace_id,span_id,attributes)
     select $1,$1,0,now(),'problem_report.delivered','terminal','succeeded','server','api','visible',$2,$3,$4 from live_tenant
     on conflict(event_id) do nothing`, uuid(reportID), optionalText(traceID), optionalText(spanID), attributes, uuid(subject.TenantID))
-	return reportJourneyError(err)
+	if err != nil {
+		return reportJourneyError(err)
+	}
+	return reportJourneyError(tx.Commit(ctx))
 }
 
 func reportJourneyError(err error) error {
