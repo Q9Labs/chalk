@@ -46,6 +46,52 @@ it.each([true, false])("resolves a mounted terminal focus target at close time (
   }
 });
 
+it("returns a terminal report to its still-mounted opener", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const scope = createRef<HTMLDivElement>();
+  let open = false;
+  const render = () =>
+    root.render(
+      <div ref={scope}>
+        <StatusSurface
+          phase="episode-ended"
+          onHome={() => {}}
+          onReportProblem={() => {
+            open = true;
+            render();
+          }}
+        />
+        <ReportProblemDialog
+          open={open}
+          focusScope={scope}
+          colorScheme="light"
+          onReportProblem={async () => {}}
+          onClose={() => {
+            open = false;
+            render();
+          }}
+        />
+      </div>,
+    );
+  try {
+    await act(async () => render());
+    const opener = [...container.querySelectorAll("button")].find((button) => button.textContent === "Report a problem");
+    if (!opener) throw new Error("Terminal report opener missing");
+    await act(async () => {
+      opener.focus();
+      opener.click();
+    });
+    expect(container.querySelector("textarea")).not.toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    await vi.waitFor(() => expect(document.activeElement).toBe(opener));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 it("opens the report form from a terminal screen and submits without diagnostics", async () => {
   const container = document.createElement("div");
   document.body.append(container);

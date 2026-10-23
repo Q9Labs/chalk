@@ -90,13 +90,16 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
             await tab.getByLabel("What went wrong?").fill(`Skip ${unavailable} focus targets`);
             // These are deterministic DOM fixtures; the dialog and ended-call UI are real.
             // Inert on the actions parent also proves that ancestor inertness is respected.
-            await opener.evaluate((element, attribute) => element.setAttribute(attribute, ""), unavailable);
-            await home.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).setAttribute(attribute, ""), unavailable);
+            const openerElement = await opener.elementHandle();
+            const homeElement = await home.elementHandle();
+            assert(openerElement && homeElement, "The terminal fixture needs both mounted controls");
+            await openerElement.evaluate((element, attribute) => element.setAttribute(attribute, ""), unavailable);
+            await homeElement.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).setAttribute(attribute, ""), unavailable);
             try {
               await closeReport(tab, dismissal, tab.locator("main[data-chalk-status]"), `fallback-${unavailable}-${role}-${dismissal}`);
             } finally {
-              await opener.evaluate((element, attribute) => element.removeAttribute(attribute), unavailable);
-              await home.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).removeAttribute(attribute), unavailable);
+              await openerElement.evaluate((element, attribute) => element.removeAttribute(attribute), unavailable);
+              await homeElement.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).removeAttribute(attribute), unavailable);
             }
           });
         }
