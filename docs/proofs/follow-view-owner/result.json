@@ -1,0 +1,39 @@
+{
+  "scope": "real Sync, PostgreSQL, SDK, Board and Excalidraw; two Chromium instances",
+  "sourceHashes": {
+    "apps/sync/lib/chalk_sync/whiteboard_v1/view_owner.ex": "fc808a69b2ad3fc1d18d61cb3b76e6a43e1e98bb9efebebfdf2b689b7c25fc77",
+    "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1.ex": "a8f361fe6b9ee63391631ef9d77c5c4f4a664996e3bef03075c17650d2bda3cb",
+    "sdks/typescript/client/src/whiteboard/v1-client.ts": "662dbfc0000057a68da711beca1076b2cecfd6dbfe9f2f11abf4d398573283e9",
+    "sdks/typescript/react/src/components/board/Board.tsx": "333db3cc7df746ffb977262e3ec04c9974d45cb2d10b4bd9244f45ab6cf70f9f"
+  },
+  "hostMove": true,
+  "followerReconnectMidMove": true,
+  "twoTabsAndIdleHeartbeat": true,
+  "ownerRestart": true,
+  "published510": {
+    "newToOld": true,
+    "oldToNew": true,
+    "noUnknownFields": true,
+    "noOwnBringEcho": true
+  },
+  "published500": {
+    "connectAndSnapshot": true,
+    "noUnknownFields": true,
+    "views": "5.0.0 has no view_v1 capability"
+  },
+  "result": "PASS",
+  "recording": "journey.mp4",
+  "sourceManifest": "source-hashes.json",
+  "gates": {
+    "sync": {
+      "passed": 212,
+      "excluded": 2,
+      "strictCredo": "PASS",
+      "compileWarningsAsErrors": "PASS"
+    },
+    "app": {
+      "passed": ["scope", "hygiene", "secrets", "generated", "format", "contracts", "types", "tests", "build", "depcruise"],
+      "notSelected": ["self-test", "fallow", "semgrep", "boundaries", "osv", "services", "image-size", "syncpack", "browser-tests", "call-performance", "call-leaks", "recorder", "publint", "attw"]
+    }
+  }
+}
