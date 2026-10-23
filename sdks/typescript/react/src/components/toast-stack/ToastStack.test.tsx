@@ -2,7 +2,9 @@
 import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import type { ClientFailure } from "@q9labsai/chalk-client";
 import { ToastStack, type Toast } from "./ToastStack";
+import { mediaFailureToast } from "./call-events";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -102,6 +104,49 @@ it("doesn't announce a notice again when a newer one pushes it into the header",
   // The announcer leaves the status and alert roles to toasts, so a host's query for a toast by role finds only toasts.
   expect([...call.frame.querySelectorAll("[role='status'], [role='alert']")].map((toast) => toast.textContent)).toEqual(["Ben joined", "Cy joined", "Di joined"]);
   await call.unmount();
+});
+
+it("announces a replacement after a previously folded notice returns to the stage, but not when it folds again", async () => {
+  const call = renderCall(844);
+  const first: Toast = { id: "command-error", message: "Camera is blocked", type: "error" };
+  const replacement: Toast = { ...first, message: "Screen sharing was denied" };
+  try {
+    await call.render([first]);
+    await call.resize(320);
+    await call.resize(844);
+    expect(call.live()).toEqual(["polite: ", "assertive: "]);
+    await call.render([replacement]);
+    expect(call.live()).toContain("assertive: Screen sharing was denied");
+    await call.resize(320);
+    await call.render([{ ...replacement }]);
+    expect(call.live()).toEqual(["polite: ", "assertive: "]);
+  } finally {
+    await call.unmount();
+  }
+});
+
+it("preserves focus and stays quiet when an unchanged typed media failure is remapped", async () => {
+  const call = renderCall(844);
+  const toast = (code: ClientFailure["code"] = "media.permission_denied"): Toast => {
+    const failure = mediaFailureToast({ code, recoverable: true, message: "denied" }, "camera");
+    if (!failure) throw new Error("Missing media failure toast");
+    return { id: "space-command-error", ...failure };
+  };
+  try {
+    await call.render([toast()]);
+    const dismiss = call.frame.querySelector<HTMLButtonElement>("[data-part='toast-dismiss']");
+    if (!dismiss) throw new Error("Missing Dismiss button");
+    dismiss.focus();
+    await call.render([toast()]);
+    expect(document.activeElement).toBe(dismiss);
+    await call.resize(320);
+    await call.render([toast()]);
+    expect(call.live()).toEqual(["polite: ", "assertive: "]);
+    await call.render([toast("media.device_not_found")]);
+    expect(call.live().some((message) => message.includes("assertive: No camera found."))).toBe(true);
+  } finally {
+    await call.unmount();
+  }
 });
 
 it("shows the newest notice where ResizeObserver doesn't exist, as in jsdom tests and server rendering", async () => {

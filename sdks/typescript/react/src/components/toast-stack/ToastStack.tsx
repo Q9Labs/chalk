@@ -4,6 +4,8 @@ import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
 export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
   readonly id: string;
+  /** Stable semantic identity for rich message content. Change it when the message changes. */
+  readonly announcementKey?: string;
 }
 export interface ToastStackProps {
   readonly toasts: readonly Toast[];
@@ -29,8 +31,15 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   const shown = onFold !== undefined && short !== false ? [] : toasts.slice(-maxVisible);
   const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !shown.includes(toast)) : [];
   const foldedIds = folded.map((toast) => toast.id);
-  // Each notice is announced once: by its toast if it shows first, or by the announcer if it folds first.
-  const announced = useRef(new Set<string>());
+  // Each message is announced once, even when a host reuses a notice id for a new failure.
+  const announced = useRef(new Map<string, Pick<Toast, "message" | "type" | "announcementKey"> & { readonly revision: number }>());
+  const wasAnnounced = (toast: Toast) => {
+    const previous = announced.current.get(toast.id);
+    if (!previous) return false;
+    const sameMessage = previous.announcementKey === undefined && toast.announcementKey === undefined ? previous.message === toast.message : previous.announcementKey === toast.announcementKey;
+    return sameMessage && (previous.type ?? "info") === (toast.type ?? "info");
+  };
+  const revision = (toast: Toast) => (announced.current.get(toast.id)?.revision ?? 0) + (wasAnnounced(toast) ? 0 : 1);
   const [unheard, setUnheard] = useState<readonly string[]>([]);
   const reported = useRef<readonly string[]>([]);
   const fold = useRef(onFold);
@@ -38,9 +47,9 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   useLayoutEffect(() => {
     if (!fold.current) return;
     const present = new Set(toasts.map((toast) => toast.id));
-    for (const id of announced.current) if (!present.has(id)) announced.current.delete(id);
-    const fresh = foldedIds.filter((id) => !announced.current.has(id));
-    for (const id of [...foldedIds, ...shown.map((toast) => toast.id)]) announced.current.add(id);
+    for (const id of announced.current.keys()) if (!present.has(id)) announced.current.delete(id);
+    const fresh = folded.filter((toast) => !wasAnnounced(toast)).map((toast) => toast.id);
+    for (const toast of [...folded, ...shown]) announced.current.set(toast.id, { message: toast.message, type: toast.type, announcementKey: toast.announcementKey, revision: revision(toast) });
     // A notice leaves the announcer once it shows or goes, so folding again doesn't read it twice.
     const kept = unheard.filter((id) => foldedIds.includes(id));
     if (fresh.length) setUnheard(fresh);
@@ -61,7 +70,7 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     <>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
-          <ChalkToast key={toast.id} {...toast} announce={!announced.current.has(toast.id)} onDismiss={() => onDismiss(toast.id)} />
+          <ChalkToast key={`${toast.id}:${revision(toast)}`} {...toast} announce={!wasAnnounced(toast)} onDismiss={() => onDismiss(toast.id)} />
         ))}
       </div>
       {onFold ? (
