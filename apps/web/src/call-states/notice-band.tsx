@@ -31,7 +31,7 @@ export function NoticeBandFixture() {
   const [toasts, setToasts] = useState<readonly Toast[]>(() =>
     Array.from({ length: long || fitWidth ? 1 : 10 }, (_, index) => ({
       id: String(index),
-      message: fitWidth ? "Camera permission needs attention. Check your browser settings before trying again." : long ? "Camera permission needs attention. ".repeat(100) : `Camera ${index + 1} could not start. Check its permissions and try again.`,
+      message: fitWidth ? "Camera permission needs attention. Check your browser settings before trying again. ".repeat(4) : long ? "Camera permission needs attention. ".repeat(100) : `Camera ${index + 1} could not start. Check its permissions and try again.`,
       type: "error",
       duration: Infinity,
     })),
