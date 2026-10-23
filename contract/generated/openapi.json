@@ -3216,7 +3216,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["reports.credentials_detected", "request.invalid", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
           },
           "401": {
             "content": {

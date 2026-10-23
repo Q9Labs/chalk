@@ -369,27 +369,15 @@ still applies. Descriptions are required (1,000 code points maximum); diagnostic
 are optional (2,000 maximum). Hourly ceilings are three reports per participant, twenty per Episode,
 thirty per IP and one hundred per owning Tenant. Participant limits run first. Delivery waits for Discord acknowledgement;
 failures return 502 with no automatic retry. The form keeps the text for a retry.
-The Discord payload contains only the written description, reporter display name
-and owner/guest role, call name and call-instance ID (Episode ID), plus diagnostics
-only when opted in: connection status, last error code, browser/UA, and app version.
-Chalk does not add tenant names, timestamps, account email addresses or credentials.
-Diagnostics are unselected by default. Before delivery, the service checks each report
-field and the description/diagnostics pair for known Chalk credentials and known secret
-formats. The check folds full-width characters, decodes HTML entities and tolerates
-inserted separators and zero-width characters. Every intrinsic known-credential character,
-including punctuation, must match in order. Provider-key prefixes must start at a token boundary.
-Every nonempty configured credential is refused verbatim regardless of length; separator-tolerant matching applies only when its normalized form has at least 16 characters.
-Configuration owns one classified secret inventory, including connection URLs and
-decoded passwords, signing keys and seeds in raw, base64/base64url and hex forms,
-rotated encryption keys, and service credentials. URLs with a userinfo password
-are refused even when the password is not configured in Chalk.
-This catches accidental pastes, including description/diagnostics splits; deliberate
-evasion by the credential's own holder, such as reconstructing it across unrelated
-call-name and description fields, is not covered. Other user-provided text
-is sent as written with Markdown escaped, including any personal information or
-unrecognized secrets the person chooses to include. Only `http://`, `https://` and
-`www.` URLs are transformed: query strings and fragments are removed, and inline
-code prevents clicks. Bare hosts, commit IDs and file/line/column frames remain text.
+Our private Discord channel receives what you type in the description, your display
+name and owner/guest role, the Space name and call-instance ID (Episode ID), plus
+diagnostics only when you opt in: connection status, last error code, browser/UA,
+and app version. Diagnostics are unselected by default. Please do not include
+passwords or keys. Chalk does not add account email addresses, server configuration,
+environment values, logs or server error text. User-provided text is sent with
+Markdown escaped. Only `http://`, `https://` and `www.` URLs are transformed: query
+strings and fragments are removed, and inline code prevents clicks. Bare hosts,
+commit IDs and file/line/column frames remain text.
 Mentions are disabled. Accepted descriptions and opt-in diagnostics are delivered in
 full: longer reports use ordered description/diagnostic panels in the same message,
 within Discord's 2,000-unit content and 6,000-unit combined embed limits.

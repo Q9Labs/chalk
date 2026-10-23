@@ -234,11 +234,9 @@ function PrivacyPolicy() {
           <strong>Axiom</strong> receives API request logs and Sync diagnostic traces, including request paths, outcomes, timing, and journey and trace identifiers, to help us run and secure the service.
         </li>
         <li>
-          <strong>Discord</strong> receives operational alerts that may include a tenant's display name. It also receives problem reports you submit through Chalk. A report includes the description you write, your display name and role, and the call name and ID. Diagnostics are included only if you
-          opt in: connection status, last error code, browser or user agent, and app version. We do not add your account email address or credentials to reports. Before delivery, we check each field and the description/diagnostics pair for known Chalk credentials and known secret formats,
-          normalizing full-width characters, HTML entities and inserted separators, including zero-width characters. We block every nonempty configured credential when pasted exactly, regardless of length; separator-tolerant matching applies only to credentials with at least 16 normalized
-          characters. We refuse matching reports so you can edit your text. This catches accidental pastes; deliberate evasion by a credential's own holder, such as reconstructing it across unrelated call-name and description fields, is not covered. Other text you provide is sent as written,
-          including any personal information or unrecognized secrets you choose to include. URLs beginning with http://, https:// or www. are sent as non-clickable text with query strings and fragments removed. Stack traces and commit IDs are kept.
+          <strong>Discord</strong> receives operational alerts that may include a tenant's display name. Our private Discord channel also receives problem reports you submit through Chalk: what you type, your display name and role, and the Space name and call ID. If you choose to include
+          diagnostics, the report also sends connection status, last error code, browser or user agent, and app version. We do not add your account email address, server configuration, logs or server error text. Please do not include passwords or keys in your report. URLs beginning with http://,
+          https:// or www. are sent as non-clickable text with query strings and fragments removed. Stack traces and commit IDs you include are kept.
         </li>
         <li>
           <strong>Google sign-in</strong> lets you authenticate your dashboard account. If you choose it, your browser contacts accounts.google.com and our server exchanges an authorization code with oauth2.googleapis.com and verifies Google's keys from www.googleapis.com. Google receives the

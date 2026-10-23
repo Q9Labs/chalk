@@ -46,7 +46,6 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const client = useMemo(() => createPublicInviteClient(), []);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
-  const reportExpired = useReportCredentialExpired(terminal?.reportExpiresAt);
   const reportTrigger = useRef<HTMLButtonElement>(null);
   const [reloadMarker] = useState(() => {
     if (!slug) return null;
@@ -72,6 +71,10 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const autoArrivalAttempted = useRef(false);
   const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
+  const subscribeReportAccess = useCallback((listener: () => void) => spaceAccess?.prepared.subscribe(listener) ?? (() => undefined), [spaceAccess]);
+  const reportAccessExpiry = useCallback(() => spaceAccess?.prepared.reportCredentialExpiresAt(), [spaceAccess]);
+  const liveReportExpiresAt = useSyncExternalStore(subscribeReportAccess, reportAccessExpiry, reportAccessExpiry);
+  const reportExpired = useReportCredentialExpired(terminal?.reportExpiresAt ?? liveReportExpiresAt);
   const reportsAvailable = useProblemReports(publicAPIBaseURL(), spaceAccess?.prepared.reloadMarker().tenantId ?? terminal?.tenantId);
   const [pending, setPending] = useState<PendingArrival | null>(null);
   const [error, setError] = useState<EntryFailure | null>(null);
@@ -379,7 +382,7 @@ type JoinedSpaceAccess = {
   readonly inviteLink?: string;
   readonly spaceName?: string;
 };
-type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess" | "reportCredential" | "reportCredentialExpiresAt"> & {
+type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess" | "subscribe" | "reportCredential" | "reportCredentialExpiresAt"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
@@ -495,7 +498,7 @@ function LocalSpace({
   const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const tenantId = reloadMarker().tenantId;
-  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: reportCredential, connection }), [credential.apiBaseURL, tenantId, reportCredential, connection]);
+  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: reportCredential, connection: () => client.getSnapshot().connection }), [credential.apiBaseURL, tenantId, reportCredential, client]);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
@@ -510,7 +513,7 @@ function LocalSpace({
         /* Storage may be disabled. */
       }
       const terminalProof = reportCredential();
-      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: client.getSnapshot().connection }), reportCredentialExpiresAt());
+      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => client.getSnapshot().connection }), reportCredentialExpiresAt());
     },
     [onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt, client],
   );

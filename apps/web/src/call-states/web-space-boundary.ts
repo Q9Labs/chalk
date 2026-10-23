@@ -23,13 +23,15 @@ export function createPublicInviteClient(): PublicInviteClient {
   };
 }
 export function createPreparedPublicSpace(): Omit<PreparedPublicSpace, "arrival" | "connectionAccess"> {
+  const reportExpiresAt = Date.now() + 300_000;
   return {
     credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
     getAccess: async () => {
       throw new Error("The preview client must not request network credentials");
     },
     finish: async () => undefined,
-    reportCredentialExpiresAt: () => Date.now() + 300_000,
+    subscribe: () => () => undefined,
+    reportCredentialExpiresAt: () => reportExpiresAt,
     reportCredential: () => "fixture-proof",
     reloadMarker: () => ({ episodeId: "33333333-3333-4333-8333-333333333333", participantId: "you", participantGeneration: 1, mediaProof: "fixture-proof", arrivalHandle: "fixture-arrival" }),
   };

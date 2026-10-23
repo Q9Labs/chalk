@@ -58,18 +58,18 @@ const transport = await createDiscordProofTransport((request, response) => serve
 try {
   await new Promise((accept, reject) => {
     server.once("error", reject);
-    server.listen(18082, "127.0.0.1", accept);
+    server.listen(Number(process.env.CHALK_REPORT_FAKE_PORT ?? 18082), "127.0.0.1", accept);
   });
 } catch (error) {
   await transport.close();
   throw error;
 }
 const env = {
-  CHALK_API_CORS_ALLOWED_ORIGINS: "http://127.0.0.1:18797",
+  CHALK_API_CORS_ALLOWED_ORIGINS: `http://127.0.0.1:${process.env.CHALK_DASHBOARD_WEB_PORT ?? 18797}`,
   ...process.env,
   ...transport.env,
   CHALK_REPORT_PROOF: "1",
-  CHALK_REPORT_FAKE_ORIGIN: "http://127.0.0.1:18082",
+  CHALK_REPORT_FAKE_ORIGIN: `http://127.0.0.1:${server.address().port}`,
   CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL: live ? liveURL : "https://discord.com/api/webhooks/proof/fake",
   DASHBOARD_ENGINE_DEADLINE_SECONDS: "900",
 };

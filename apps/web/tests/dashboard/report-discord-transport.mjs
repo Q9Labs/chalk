@@ -23,7 +23,7 @@ export async function createDiscordProofTransport(handler) {
   try {
     execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", certificate, "-days", "1", "-subj", "/CN=discord.com", "-addext", "subjectAltName=DNS:discord.com"], { stdio: "ignore" });
     tls = createHTTPSServer({ key: await readFile(key), cert: await readFile(certificate) }, handler);
-    await listen(tls);
+    await listen(tls, Number(process.env.CHALK_REPORT_TLS_PORT ?? 0));
     proxy = createHTTPServer((_request, response) => response.writeHead(403).end());
     proxy.on("connect", (request, socket, head) => {
       if (request.url !== "discord.com:443") return socket.destroy();
@@ -41,7 +41,7 @@ export async function createDiscordProofTransport(handler) {
         });
       }
     });
-    await listen(proxy);
+    await listen(proxy, Number(process.env.CHALK_REPORT_PROXY_PORT ?? 0));
     return { env: { HTTPS_PROXY: `http://127.0.0.1:${proxy.address().port}`, SSL_CERT_FILE: certificate, NO_PROXY: "127.0.0.1,localhost" }, close };
   } catch (error) {
     await close();
@@ -49,9 +49,9 @@ export async function createDiscordProofTransport(handler) {
   }
 }
 
-function listen(server) {
+function listen(server, port) {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
+    server.listen(port, "127.0.0.1", resolve);
   });
 }

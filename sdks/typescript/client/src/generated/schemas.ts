@@ -3768,25 +3768,6 @@ export const RecordingPreparationPolicyDeniedErrorSchema = RecordingPreparationP
   }),
 );
 
-export class ReportsCredentialsDetectedError extends Schema.TaggedErrorClass<ReportsCredentialsDetectedError>()("ReportsCredentialsDetectedError", {
-  error: Schema.Struct({
-    code: Schema.Literal("reports.credentials_detected"),
-    message: Schema.String,
-  }),
-}) {}
-export const ReportsCredentialsDetectedErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("reports.credentials_detected"),
-    message: Schema.String,
-  }),
-});
-export const ReportsCredentialsDetectedErrorSchema = ReportsCredentialsDetectedErrorWireSchema.pipe(
-  Schema.decodeTo(ReportsCredentialsDetectedError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "ReportsCredentialsDetectedError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class ReportsDeliveryFailedError extends Schema.TaggedErrorClass<ReportsDeliveryFailedError>()("ReportsDeliveryFailedError", {
   error: Schema.Struct({
     code: Schema.Literal("reports.delivery_failed"),
@@ -5785,7 +5766,6 @@ export type RotateWebhookEndpointSecretError = typeof RotateWebhookEndpointSecre
 export const SendProblemReportErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
-  ReportsCredentialsDetectedErrorSchema,
   ReportsDeliveryFailedErrorSchema,
   ReportsUnavailableErrorSchema,
   RequestInvalidErrorSchema,

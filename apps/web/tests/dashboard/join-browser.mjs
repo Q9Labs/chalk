@@ -13,8 +13,8 @@ import { provePublicAdmission } from "./public-admission-browser.mjs";
 // are real; only the external media vendor is the existing local fixture.
 assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through real-engine.sh");
 const apiOrigin = process.env.DASHBOARD_TEST_API_ORIGIN;
-const webPort = process.env.CHALK_JOIN_WEB_PORT || "18797";
-const syncPort = process.env.CHALK_JOIN_SYNC_PORT || "18410";
+const webPort = process.env.CHALK_JOIN_WEB_PORT || process.env.CHALK_DASHBOARD_WEB_PORT || "18797";
+const syncPort = process.env.CHALK_JOIN_SYNC_PORT || process.env.CHALK_DASHBOARD_SYNC_PORT || "18410";
 const origin = `http://127.0.0.1:${webPort}`;
 const syncOrigin = `ws://127.0.0.1:${syncPort}/v1/sync`;
 const web = resolve(import.meta.dirname, "../..");

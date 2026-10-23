@@ -5,9 +5,7 @@ import (
 	"strings"
 )
 
-// authorizationCredential is shared by bearer auth, native guest auth and the
-// report privacy boundary. The latter protects every carried authorization value,
-// not just the first credential selected to authenticate this request.
+// authorizationCredential is shared by bearer auth and native guest auth.
 func authorizationCredential(header string) (scheme, credential string, ok bool) {
 	scheme, credential, ok = strings.Cut(strings.TrimSpace(header), " ")
 	credential = strings.TrimSpace(credential)
@@ -34,18 +32,4 @@ func requestCredentialCookies(r *http.Request) []*http.Cookie {
 		}
 	}
 	return credentials
-}
-
-func requestCredentialValues(r *http.Request) []string {
-	var credentials []string
-	for _, header := range r.Header.Values("Authorization") {
-		if _, credential, ok := authorizationCredential(header); ok {
-			credentials = append(credentials, credential)
-		}
-	}
-	for _, cookie := range requestCredentialCookies(r) {
-		credentials = append(credentials, cookie.Value, strings.TrimSpace(cookie.Value))
-	}
-	// Dashboard cookie auth also reads this anti-forgery credential.
-	return append(credentials, r.Header.Values("X-CSRF-Token")...)
 }

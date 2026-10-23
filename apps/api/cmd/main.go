@@ -469,7 +469,6 @@ func run() error {
 		logger.Info("public invite routes disabled because local media credentials are not configured", "event", "public_invite.disabled", "reason", "local_credentials_unavailable")
 	}
 	var publicInviteService httpapi.PublicInviteService
-	var reportCredentials problemreports.CredentialSource
 	var entranceInvites httpapi.EntranceInviteResolver
 	var publicInviteLifecycleScheduler *publicinvites.LifecycleScheduler
 	if publicInviteConfig.Enabled {
@@ -526,7 +525,6 @@ func run() error {
 			return fmt.Errorf("configure public invite runtime: %w", err)
 		}
 		publicInviteService = runtime
-		reportCredentials = publicinviteapp.ReportCredentials{Service: service}
 		lifecycleActions, err := publicinviteapp.NewLifecycleActions(episodeService, spaceService)
 		if err != nil {
 			return fmt.Errorf("configure public invite lifecycle actions: %w", err)
@@ -563,7 +561,7 @@ func run() error {
 		MediaPublications:      mediaPublicationService,
 		ParticipantMediaIssuer: participantMediaIssuer,
 
-		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender).WithCredentials(reportCredentials),
+		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender),
 		ParticipantMediaVerify: participantMediaVerifier,
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,

@@ -90,9 +90,9 @@ it("re-enables an expired owner draft after a quiet access-only refresh", async 
   });
   try {
     await act(async () => render(<OwnerCall spaceId="space-1" />));
-    await act(async () => vi.waitFor(() => expect(screen.getByRole("button", { name: "Call details", exact: true })).toBeDefined()));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Call details", exact: true })));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Report a problem", exact: true })));
+    await act(async () => vi.waitFor(() => expect(screen.getByRole("button", { name: "Call details" })).toBeDefined()));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Call details" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Report a problem" })));
     const input = screen.getByLabelText<HTMLTextAreaElement>("What went wrong?");
     fireEvent.change(input, { target: { value: "Keep my draft during renewal" } });
     await act(async () => vi.advanceTimersByTimeAsync(300_001));
@@ -101,7 +101,7 @@ it("re-enables an expired owner draft after a quiet access-only refresh", async 
     const refreshAccess = refresh;
     if (!refreshAccess) throw new Error("Owner access callback missing");
     await act(async () => {
-      await refreshAccess({ reason: "scheduled_refresh", replaceMediaConnection: false, signal: new AbortController().signal });
+      await refreshAccess({ space: "space-1", reason: "refresh", replaceMediaConnection: false, signal: new AbortController().signal });
     });
     expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
     expect(screen.getByLabelText("What went wrong?")).toBe(input);

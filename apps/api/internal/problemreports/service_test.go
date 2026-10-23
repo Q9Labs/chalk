@@ -3,8 +3,6 @@ package problemreports
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -70,20 +68,6 @@ type namedAttributionRepository struct {
 func (r namedAttributionRepository) Attribution(context.Context, accessgrants.Subject) (Attribution, error) {
 	return r.name, nil
 }
-func TestReportRejectsCredentialsInNames(t *testing.T) {
-	code := strings.Repeat("ab09\u200b", 20)
-	for _, name := range []Attribution{{SpaceName: code, ReporterName: "Tester", Role: "guest"}, {SpaceName: "New Call", ReporterName: code, Role: "guest"}} {
-		sender := &deliveryPort{}
-		service := NewService(namedAttributionRepository{name: name}, sender).WithCredentials(liveReportCredentials{values: []string{strings.Repeat("ab09", 20)}})
-		if _, err := service.Send(context.Background(), accessgrants.Subject{}, Report{Description: "Could not connect"}); err == nil {
-			t.Fatal("credential-bearing attribution accepted")
-		}
-		if sender.report.Description != "" {
-			t.Fatal("credential-bearing name reached delivery port")
-		}
-	}
-}
-
 func TestReportsFromOrdinaryNames(t *testing.T) {
 	for _, name := range []Attribution{
 		{SpaceName: "New Call", ReporterName: "Casey Jones", Role: "guest"},
@@ -99,92 +83,6 @@ func TestReportsFromOrdinaryNames(t *testing.T) {
 		if sender.report.Report != report {
 			t.Error("ordinary description did not reach delivery")
 		}
-		sender.report = Delivery{}
-		if _, err := service.Send(context.Background(), accessgrants.Subject{}, Report{Description: strings.Join([]string{"eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJmaXh0dXJlIn0", "signaturefixturebyteshere"}, ".")}); !errors.Is(err, ErrCredentials) {
-			t.Error("ordinary name hid a later JWT")
-		}
-		if sender.report.Description != "" {
-			t.Error("JWT reached delivery after ordinary name")
-		}
-	}
-}
 
-type liveReportCredentials struct {
-	values []string
-	err    error
-}
-
-func (s liveReportCredentials) Credentials(context.Context, accessgrants.Subject) ([]string, error) {
-	return s.values, s.err
-}
-
-func TestReportRejectsExactLiveCredentials(t *testing.T) {
-	// Deliberately lacks a structured token prefix or generic code-sized run:
-	// exact matching must not depend on a particular signing format or length.
-	known := "opaquecallcredential"
-	for _, source := range []string{"media", "invite"} {
-		for chunk := 2; chunk <= len(known); chunk++ {
-			t.Run(fmt.Sprintf("%s_%d", source, chunk), func(t *testing.T) {
-				ctx := context.Background()
-				sender := &deliveryPort{}
-				service := NewService(attributionRepository{}, sender)
-				if source == "media" {
-					ctx = WithRequestCredentials(ctx, known)
-				} else {
-					service = service.WithCredentials(liveReportCredentials{values: []string{known}})
-				}
-				var split strings.Builder
-				for i, c := range known {
-					if i > 0 && i%chunk == 0 {
-						split.WriteString("&#9;\u200b:;")
-					}
-					split.WriteRune(c + 0xfee0)
-				}
-				if _, err := service.Send(ctx, accessgrants.Subject{}, Report{Description: "Call failed: " + split.String()}); !errors.Is(err, ErrCredentials) {
-					t.Fatal("live credential was not rejected")
-				}
-				if sender.report.Description != "" {
-					t.Fatal("live credential reached delivery port")
-				}
-			})
-		}
-	}
-	sender := &deliveryPort{}
-	service := NewService(attributionRepository{}, sender).WithCredentials(liveReportCredentials{err: errors.New("private source error")})
-	if _, err := service.Send(context.Background(), accessgrants.Subject{}, Report{Description: "Could not connect"}); !errors.Is(err, ErrDelivery) || strings.Contains(err.Error(), "private source error") {
-		t.Fatal("credential source failure was not bounded")
-	}
-	if sender.report.Description != "" {
-		t.Fatal("delivery bypassed unavailable credential source")
-	}
-}
-
-func TestReportCredentialShapes(t *testing.T) {
-	jwt := strings.Join([]string{"eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJmaXh0dXJlIn0", strings.Repeat("s", 43)}, ".")
-	for name, credential := range map[string]string{
-		"discord_upper_host": "https://DISCORD.com/api/webhooks/123456789012345678/" + strings.Repeat("MiXeD_", 8),
-		"username_only_otlp": "https://user@otlp.example",
-		"postgres_userinfo":  "postgres://u:p@h/db",
-		"jwt":                jwt,
-		"aws_access_key_id":  "AKIA" + strings.Repeat("A1", 8),
-		"invite":             "cspi1." + strings.Repeat("Ab3", 24),
-		"chalk_grant":        "chalk_sk_" + strings.Repeat("Ab3", 24),
-	} {
-		for _, field := range []string{"description", "diagnostics"} {
-			t.Run(name+"/"+field, func(t *testing.T) {
-				sender := &deliveryPort{}
-				service := NewService(attributionRepository{}, sender)
-				report := Report{Description: "Camera froze"}
-				if field == "description" {
-					report.Description = credential
-				} else {
-					report.Diagnostics = credential
-				}
-				result, err := service.Send(context.Background(), accessgrants.Subject{}, report)
-				if !errors.Is(err, ErrCredentials) || result.Outcome != OutcomeCredentialsDetected || sender.report.Description != "" {
-					t.Fatalf("credential reached delivery: outcome=%v error=%v", result.Outcome, err)
-				}
-			})
-		}
 	}
 }

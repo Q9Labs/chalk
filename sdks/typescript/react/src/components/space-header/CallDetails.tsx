@@ -4,7 +4,6 @@ import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } 
 import { shareQr } from "./share-qr";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import type { SpaceHeaderProps } from "./space-header-contract";
-import { ReportCredentialsError } from "../../utils/report-error";
 
 export const CALL_SHORTCUTS = [
   ["Mute or unmute", "⌘ D"],
@@ -120,11 +119,9 @@ export function CallDialog({
                     .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics && diagnostics.trim() ? diagnostics : undefined }))
                     .then(
                       () => setStatus("sent"),
-                      (reason: unknown) => {
+                      () => {
                         setStatus("idle");
-                        // Compare the code, not class identity: SDK entry points
-                        // may be bundled separately by the host application.
-                        setError(reason instanceof Error && "code" in reason && reason.code === ReportCredentialsError.code ? new ReportCredentialsError().message : "Your report could not be sent. Try again.");
+                        setError("Your report could not be sent. Try again.");
                       },
                     );
                 }}

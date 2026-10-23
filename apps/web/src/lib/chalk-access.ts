@@ -25,6 +25,7 @@ export type PublicInviteClient = {
   readonly leaveSpacePublicInviteArrival: (arrivalHandle: string, options?: SpaceAccessCleanupOptions) => Promise<void>;
 };
 export type PreparedPublicSpace = {
+  readonly subscribe: (listener: () => void) => () => void;
   readonly reportCredential: () => string;
   readonly reportCredentialExpiresAt: () => number;
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
@@ -55,6 +56,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
   let current = access;
   let left = false;
   let initial = true;
+  const listeners = new Set<() => void>();
   const connectionAccess: NonNullable<SpaceClientPlatform["connectionAccess"]> = async (request) => {
     if (left) throw new Error("This Space access has been released.");
     if (initial && (!request || request.reason === "join")) {
@@ -64,6 +66,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     mediaProof = request?.currentMediaToken ?? mediaProof;
     current = await client.refreshSpacePublicInviteAccess(arrival.arrival_handle ?? "", mediaProof, { replaceMediaConnection: request?.replaceMediaConnection, signal: request?.signal });
     mediaProof = accessMediaProof(current);
+    listeners.forEach((listener) => listener());
     return current;
   };
   const getAccess: GetAccess = async ({ reason, signal }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection: reason === "retry", signal });
@@ -74,6 +77,12 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     left = true;
   };
   return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     reportCredential: () => mediaProof,
     reportCredentialExpiresAt: () => Date.parse(reportMediaAccess.parse(current).media.expires_at),
     reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle: arrival.arrival_handle ?? undefined }),

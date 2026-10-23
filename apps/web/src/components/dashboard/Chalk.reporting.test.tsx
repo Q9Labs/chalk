@@ -15,8 +15,8 @@ it("keeps the live report draft when the actual Chalk view becomes terminal", as
   try {
     render(<Chalk client={client} onReportProblem={vi.fn().mockResolvedValue(undefined)} />);
     await act(async () => vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live")));
-    fireEvent.click(screen.getByRole("button", { name: "Call details", exact: true }));
-    fireEvent.click(await screen.findByRole("button", { name: "Report a problem", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Call details" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Report a problem" }));
     const input = screen.getByLabelText<HTMLTextAreaElement>("What went wrong?");
     fireEvent.change(input, { target: { value: "Keep this live report draft" } });
     await act(async () => platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "episode_ended" } }));

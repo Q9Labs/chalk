@@ -22,7 +22,6 @@ const (
 
 var (
 	ErrUnavailable        = errors.New("problem reports unavailable")
-	ErrCredentials        = errors.New("remove links and codes before sending a report")
 	ErrInvalid            = errors.New("invalid problem report")
 	ErrForbidden          = errors.New("report participant not found")
 	ErrDelivery           = errors.New("problem report delivery failed")
@@ -53,16 +52,10 @@ type Sender interface {
 	Send(context.Context, Delivery) error
 }
 
-// CredentialSource supplies live call credentials for rejection, never delivery.
-type CredentialSource interface {
-	Credentials(context.Context, accessgrants.Subject) ([]string, error)
-}
-
 type Service struct {
-	repository  Repository
-	credentials CredentialSource
-	sender      Sender
-	tracer      trace.Tracer
+	repository Repository
+	sender     Sender
+	tracer     trace.Tracer
 }
 
 func NewService(repository Repository, sender Sender) Service {
@@ -71,11 +64,6 @@ func NewService(repository Repository, sender Sender) Service {
 }
 
 func (s Service) Available() bool { return s.sender != nil }
-
-func (s Service) WithCredentials(source CredentialSource) Service {
-	s.credentials = source
-	return s
-}
 
 func (s Service) Send(ctx context.Context, subject accessgrants.Subject, report Report) (Result, error) {
 	if !s.Available() {
@@ -96,24 +84,6 @@ func (s Service) Send(ctx context.Context, subject accessgrants.Subject, report 
 			return Result{Outcome: OutcomeParticipantBindingMismatch}, ErrForbidden
 		}
 		return Result{Outcome: OutcomeAttributionFailed}, errors.New("problem report attribution unavailable")
-	}
-	var credentials []string
-	if s.credentials != nil {
-		live, err := s.credentials.Credentials(ctx, subject)
-		if err != nil {
-			return Result{Outcome: OutcomeCredentialSourceFailed}, fmt.Errorf("%w: credentials_unavailable", ErrDelivery)
-		}
-		credentials = append(credentials, live...)
-	}
-	if requestCredentials, ok := ctx.Value(credentialContextKey{}).([]string); ok {
-		credentials = append(credentials, requestCredentials...)
-	}
-	// Catch accidental pastes in each field and splits across the two form inputs.
-	// Deliberate reconstruction across unrelated attribution fields is out of scope.
-	for _, text := range []string{attribution.SpaceName, attribution.ReporterName, attribution.Role, subject.EpisodeID.String(), report.Description, report.Diagnostics, report.Description + "\n" + report.Diagnostics} {
-		if containsKnownCredential(text, credentials) || containsCredential(text) {
-			return Result{Outcome: OutcomeCredentialsDetected}, ErrCredentials
-		}
 	}
 	reportID, err := utilities.NewID()
 	if err != nil {

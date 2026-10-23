@@ -51,12 +51,6 @@ func (v outcomeVerifier) Verify(context.Context, string) (accessgrants.Subject, 
 	return v.subject, v.err
 }
 
-type outcomeCredentials struct{ err error }
-
-func (c outcomeCredentials) Credentials(context.Context, accessgrants.Subject) ([]string, error) {
-	return nil, c.err
-}
-
 type outcomeLimiter struct{ reject string }
 
 func (l outcomeLimiter) Allow(_ context.Context, _ string, p ratelimit.Policy, _ time.Time) ratelimit.Decision {
@@ -102,14 +96,14 @@ func (s outcomeBoundaryFailure) Send(context.Context, accessgrants.Subject, prob
 
 func TestProblemReportTerminalOutcomes(t *testing.T) {
 	type testCase struct {
-		outcome                                                                    problemreports.Outcome
-		cause                                                                      string
-		status                                                                     int
-		body, quota, deliveryDetail, redisFailurePolicy                            string
-		missingAuth, noVerifier, noLimiter, disabled, badTenant, otherTenant       bool
-		verifyError, attributionError, credentialError, journeyError, discordError error
-		boundaryFailure                                                            bool
-		redisMalformed                                                             bool
+		outcome                                                              problemreports.Outcome
+		cause                                                                string
+		status                                                               int
+		body, quota, deliveryDetail, redisFailurePolicy                      string
+		missingAuth, noVerifier, noLimiter, disabled, badTenant, otherTenant bool
+		verifyError, attributionError, journeyError, discordError            error
+		boundaryFailure                                                      bool
+		redisMalformed                                                       bool
 	}
 	cases := []testCase{
 		{outcome: problemreports.OutcomeAccepted, cause: "accepted", status: 200},
@@ -118,7 +112,6 @@ func TestProblemReportTerminalOutcomes(t *testing.T) {
 		{outcome: problemreports.OutcomeDescriptionBlank, cause: "description_blank", status: 400, body: `{"description":" \n\t"}`},
 		{outcome: problemreports.OutcomeDescriptionTooLong, cause: "description_too_long", status: 400, body: `{"description":"` + strings.Repeat("x", 1001) + `"}`},
 		{outcome: problemreports.OutcomeDiagnosticsTooLong, cause: "diagnostics_too_long", status: 400, body: `{"description":"Private report text","diagnostics":"` + strings.Repeat("d", 2001) + `"}`},
-		{outcome: problemreports.OutcomeCredentialsDetected, cause: "credentials_detected", status: 400, body: `{"description":"-----BEGIN PRIVATE KEY-----"}`},
 		{outcome: problemreports.OutcomeUnauthenticated, cause: "unauthenticated", status: 401, missingAuth: true},
 		{outcome: problemreports.OutcomeUnauthenticated, cause: "unauthenticated", status: 401, verifyError: accessgrants.ErrExpired},
 		{outcome: problemreports.OutcomeVerifierUnavailable, cause: "verifier_unavailable", status: 503, verifyError: errors.New("private source error")},
@@ -137,7 +130,6 @@ func TestProblemReportTerminalOutcomes(t *testing.T) {
 		{outcome: problemreports.OutcomeLimiterUnavailable, cause: "limiter_unavailable", status: 503, redisFailurePolicy: reportIPLimit.Name, redisMalformed: true},
 		{outcome: problemreports.OutcomeVerifierUnavailable, cause: "verifier_unavailable", status: 503, noVerifier: true},
 		{outcome: problemreports.OutcomeAttributionFailed, cause: "attribution_failed", status: 500, attributionError: errors.New("private source error")},
-		{outcome: problemreports.OutcomeCredentialSourceFailed, cause: "credentials_unavailable", status: 502, credentialError: errors.New("private source error")},
 		{outcome: problemreports.OutcomeDiscordFailed, cause: "discord_failed", status: 502, discordError: errors.New("private source error")},
 		{outcome: problemreports.OutcomeDiscordFailed, cause: "discord_failed", status: 502, discordError: problemreports.DeliveryError{HTTPStatus: 401}, deliveryDetail: "Discord HTTP 401"},
 		{outcome: problemreports.OutcomeDiscordFailed, cause: "discord_failed", status: 502, discordError: problemreports.DeliveryError{HTTPStatus: 429}, deliveryDetail: "Discord HTTP 429"},
@@ -182,7 +174,7 @@ func TestProblemReportTerminalOutcomes(t *testing.T) {
 			if tc.disabled {
 				sender = nil
 			}
-			var service ProblemReportService = problemreports.NewService(repo, sender).WithCredentials(outcomeCredentials{tc.credentialError})
+			var service ProblemReportService = problemreports.NewService(repo, sender)
 			if tc.boundaryFailure {
 				service = outcomeBoundaryFailure{tc.outcome}
 			}

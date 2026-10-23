@@ -169,11 +169,10 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
 }
 
 function OwnerCallSurface({ client, owner, baseURL, ...props }: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string }) {
-  const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
   const tenantId = access?.subject.tenant_id;
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
-  const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection }), [baseURL, tenantId, owner, connection]);
+  const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection }), [baseURL, tenantId, owner, client]);
   return <Chalk {...props} client={client} onReportProblem={reportsAvailable ? onReportProblem : undefined} reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined} />;
 }

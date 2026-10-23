@@ -17,10 +17,18 @@ const spacePageTestMocks = vi.hoisted(() => {
     refreshSpacePublicInviteAccess: vi.fn(),
     leaveSpacePublicInviteArrival: vi.fn(async () => undefined),
   };
+  let reportExpiresAt = Date.now() + 300_000;
+  const accessListeners = new Set<() => void>();
   const prepared = {
-    reportCredentialExpiresAt: () => Date.now() + 300_000,
+    subscribe: (listener: () => void) => {
+      accessListeners.add(listener);
+      return () => {
+        accessListeners.delete(listener);
+      };
+    },
+    reportCredentialExpiresAt: () => reportExpiresAt,
     reportCredential: () => "proof",
-    reloadMarker: () => ({ episodeId: "33333333-3333-4333-8333-333333333333", participantId: "participant-1", participantGeneration: 1, mediaProof: "proof", arrivalHandle: "arrival-11111111" }),
+    reloadMarker: () => ({ episodeId: "33333333-3333-4333-8333-333333333333", participantId: "participant-1", participantGeneration: 1, mediaProof: "proof", arrivalHandle: "arrival-11111111", tenantId: "tenant-1" }),
     arrival: { state: "admitted", space: { name: "Design Lab", slug: "design-lab" } },
     credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
     getAccess: vi.fn(),
@@ -29,6 +37,14 @@ const spacePageTestMocks = vi.hoisted(() => {
   };
   return {
     holder,
+    renewReportAccess: (expiresAt: number) => {
+      reportExpiresAt = expiresAt;
+      accessListeners.forEach((listener) => listener());
+    },
+    resetReportAccess: () => {
+      accessListeners.clear();
+      reportExpiresAt = Date.now() + 300_000;
+    },
     reportsAvailable: vi.fn(() => false),
     client,
     publicClient,
@@ -48,7 +64,7 @@ const spacePageTestMocks = vi.hoisted(() => {
     resumePublicSpace: vi.fn(),
   };
 });
-vi.mock("../lib/problem-reports", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/problem-reports")>()), useProblemReports: () => spacePageTestMocks.reportsAvailable(), problemReporter: () => async () => undefined }));
+vi.mock("../lib/problem-reports", async (importOriginal) => ({ ...(await importOriginal<typeof import("../lib/problem-reports")>()), useProblemReports: () => spacePageTestMocks.reportsAvailable() }));
 vi.mock("@q9labsai/chalk-react", async () => ({
   Chalk: getSpacePageTestMocks().Chalk,
   ReportProblemDialog: (await import("../../../../sdks/typescript/react/src/components/chalk/ReportProblemDialog")).ReportProblemDialog,
@@ -80,6 +96,7 @@ export const spacePageTestArrival = {
   access: { subject: {}, sync: { token: "sync" }, media: { token: "media" } },
 };
 export function resetSpacePageTestMocks(): void {
+  spacePageTestMocks.resetReportAccess();
   spacePageTestMocks.reportsAvailable.mockReturnValue(false);
   spacePageTestMocks.publicClient.prepareSpaceEntrance.mockClear();
   window.sessionStorage.clear();

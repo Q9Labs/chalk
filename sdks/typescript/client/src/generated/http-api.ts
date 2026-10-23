@@ -528,7 +528,6 @@ const defaultGroup = HttpApiGroup.make("default")
       payload: S.SendProblemReportRequestBodySchema,
       success: S.SendProblemReportResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
-        S.ReportsCredentialsDetectedErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),

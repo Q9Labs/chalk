@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import type { ChalkProps } from "@q9labsai/chalk-react";
-import { ReportCredentialsError } from "@q9labsai/chalk-react/utils";
 
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
 export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
-const credentialRejection = z.object({ error: z.object({ code: z.literal("reports.credentials_detected"), message: z.string().max(300) }) });
 const availability = z.object({ available: z.boolean() });
 
 export function useReportCredentialExpired(expiresAt: number | undefined) {
@@ -66,9 +64,10 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
   return available;
 }
 
-export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: ReturnType<SpaceClient["getSnapshot"]>["connection"] }): ReportProblem {
+export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: () => ReturnType<SpaceClient["getSnapshot"]>["connection"] }): ReportProblem {
   return async ({ description, diagnostics }) => {
     const credential = mediaProof();
+    const snapshot = connection();
     if (!credential || !tenantId) throw new Error("Join the call before sending a report.");
     const response = await fetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports`, {
       method: "POST",
@@ -76,12 +75,10 @@ export function problemReporter({ baseURL, tenantId, mediaProof, connection }: {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential}` },
       body: JSON.stringify({
         description,
-        ...(diagnostics === undefined ? {} : { diagnostics: [`Connection: ${connection.status}`, `Last error: ${connection.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join("\n") }),
+        ...(diagnostics === undefined ? {} : { diagnostics: [`Connection: ${snapshot.status}`, `Last error: ${snapshot.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join("\n") }),
       }),
     });
     if (!response.ok) {
-      const rejection = credentialRejection.safeParse(await response.json().catch(() => undefined));
-      if (rejection.success) throw new ReportCredentialsError();
       throw new Error("Your report could not be sent. Try again.");
     }
   };

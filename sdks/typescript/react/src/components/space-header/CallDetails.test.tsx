@@ -3,7 +3,6 @@ import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { CallDialog } from "./CallDetails";
-import { ReportCredentialsError } from "../../utils/report-error";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -31,12 +30,11 @@ it("accepts 1,000 emoji and caps report input by Unicode code points", async () 
   }
 });
 
-it.each(["credentials", "separate-entry", "unknown"])("keeps rejected text editable and shows safe %s guidance", async (kind) => {
+it("keeps rejected text editable and shows safe retry guidance", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const reason = kind === "credentials" ? new ReportCredentialsError() : new Error("private transport detail");
-  if (kind === "separate-entry") Object.assign(reason, { code: ReportCredentialsError.code });
+  const reason = new Error("private transport detail");
   const send = vi.fn().mockRejectedValueOnce(reason);
   send.mockResolvedValueOnce(undefined);
   try {
@@ -55,7 +53,7 @@ it.each(["credentials", "separate-entry", "unknown"])("keeps rejected text edita
     await enter("The call failed with a code");
     await submit();
     const alert = container.querySelector('[role="alert"]')?.textContent;
-    expect(alert).toContain(kind !== "unknown" ? "Remove links and codes" : "Your report could not be sent. Try again.");
+    expect(alert).toContain("Your report could not be sent. Try again.");
     expect(alert).not.toContain("private transport detail");
     expect(textarea.value).toBe("The call failed with a code");
     expect(textarea.disabled).toBe(false);

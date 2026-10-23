@@ -1,8 +1,7 @@
+import { useProblemReports } from "./problem-reports";
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { problemReporter, useProblemReports } from "./problem-reports";
-import { ReportCredentialsError } from "@q9labsai/chalk-react/utils";
 
 afterEach(() => {
   cleanup();
@@ -96,13 +95,4 @@ it("waits for a tenant scope before probing its report availability", async () =
   await act(async () => {});
   expect(fetch).toHaveBeenCalledWith("https://api.chalk.test/v1/tenants/tenant-1/problem-reports/availability", expect.anything());
   expect(result.current).toBe(true);
-});
-
-it("shows the credential-removal error without automatically retrying a report", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: "reports.credentials_detected", message: "Remove links and codes from your report, then try again." } }), { status: 400 })));
-  const report = problemReporter({ baseURL: "https://api.chalk.test", tenantId: "tenant-1", mediaProof: () => "fixture-proof", connection: { status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false } });
-  const result = report({ description: "Please reconnect" });
-  await expect(result).rejects.toThrow("Remove links and codes");
-  await expect(result).rejects.toBeInstanceOf(ReportCredentialsError);
-  expect(fetch).toHaveBeenCalledTimes(1);
 });

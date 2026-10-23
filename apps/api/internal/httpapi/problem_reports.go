@@ -29,7 +29,6 @@ type problemReportSent struct {
 const reportBodyLimitBytes = 12*(problemreports.MaxDescriptionCodePoints+problemreports.MaxDiagnosticsCodePoints) + 1024
 
 var (
-	apiErrorReportCredentials  = APIError{Status: http.StatusBadRequest, Code: "reports.credentials_detected", Message: "Remove links and codes from your report, display name or call name, then try again. You can turn off diagnostics if they contain codes."}
 	apiErrorReportsUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "reports.unavailable", Message: "Problem reports are unavailable"}
 	apiErrorReportDelivery     = APIError{Status: http.StatusBadGateway, Code: "reports.delivery_failed", Message: "Your report could not be sent. Try again"}
 	reportParticipantLimit     = ratelimit.Policy{Name: "problem_reports.participant", Limit: 3, Window: time.Hour}
@@ -83,11 +82,9 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 		AfterRateLimit(limitReportAccount(limits), limitReportEpisode(limits)).
 		RequestBodyWithLimit("ProblemReportRequest", problemreports.Report{}, reportBodyLimitBytes).
 		Responds(http.StatusOK, "ProblemReportSent", problemReportSent{}).
-		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportDelivery, apiErrorReportCredentials, apiErrorInternal).
+		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportDelivery, apiErrorInternal).
 		MapErrors(func(err error) (APIError, bool) {
 			switch {
-			case errors.Is(err, problemreports.ErrCredentials):
-				return apiErrorReportCredentials, true
 			case errors.Is(err, problemreports.ErrInvalid):
 				return apiErrorInvalidRequest, true
 			case errors.Is(err, problemreports.ErrForbidden):
@@ -147,8 +144,7 @@ func requireReportParticipant(verifier ParticipantMediaVerifier) func(http.Handl
 				return
 			}
 			ctx := accessgrants.WithSubject(r.Context(), subject)
-			credentials := requestCredentialValues(r)
-			next.ServeHTTP(w, r.WithContext(problemreports.WithRequestCredentials(ctx, credentials...)))
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

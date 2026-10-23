@@ -13,7 +13,6 @@ const (
 	OutcomeDescriptionBlank
 	OutcomeDescriptionTooLong
 	OutcomeDiagnosticsTooLong
-	OutcomeCredentialsDetected
 	OutcomeUnauthenticated
 	OutcomeTenantScopeMismatch
 	OutcomeParticipantBindingMismatch
@@ -25,7 +24,6 @@ const (
 	OutcomeLimiterUnavailable
 	OutcomeVerifierUnavailable
 	OutcomeAttributionFailed
-	OutcomeCredentialSourceFailed
 	OutcomeDiscordFailed
 	OutcomeIDGenerationFailed
 	OutcomePayloadTooLarge
@@ -45,7 +43,6 @@ var outcomeCauses = [...]string{
 	OutcomeDescriptionBlank:           "description_blank",
 	OutcomeDescriptionTooLong:         "description_too_long",
 	OutcomeDiagnosticsTooLong:         "diagnostics_too_long",
-	OutcomeCredentialsDetected:        "credentials_detected",
 	OutcomeUnauthenticated:            "unauthenticated",
 	OutcomeTenantScopeMismatch:        "tenant_scope_mismatch",
 	OutcomeParticipantBindingMismatch: "participant_binding_mismatch",
@@ -57,7 +54,6 @@ var outcomeCauses = [...]string{
 	OutcomeLimiterUnavailable:         "limiter_unavailable",
 	OutcomeVerifierUnavailable:        "verifier_unavailable",
 	OutcomeAttributionFailed:          "attribution_failed",
-	OutcomeCredentialSourceFailed:     "credentials_unavailable",
 	OutcomeDiscordFailed:              "discord_failed",
 	OutcomeIDGenerationFailed:         "id_generation_failed",
 	OutcomePayloadTooLarge:            "payload_too_large",
