@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChalkProvider, ChalkButton } from "@q9labsai/chalk-react";
 import { SpaceStage } from "../../../../sdks/typescript/react/src/components/stage/SpaceStage";
+import { Stage, type StageItem } from "../../../../sdks/typescript/react/src/components/stage/Stage";
 import { SpacePresentation } from "../../../../sdks/typescript/react/src/components/space-view/SpacePresentation";
 import type { Participant } from "../../../../sdks/typescript/react/src/components/participant-grid/ParticipantGrid";
 import type { ScreenShareState } from "../../../../sdks/typescript/react/src/components/composite/ScreenShareView";
@@ -140,7 +141,36 @@ function BoardStageFixture(props: StageFixtureProps) {
   );
 }
 
+function SharedContentOverflowFixture() {
+  const participant = { id: "person", displayName: "Nora" };
+  const items: readonly StageItem[] = [
+    { kind: "participant", id: "person", participant },
+    { kind: "screen-share", id: "share-a", participant },
+    { kind: "screen-share", id: "share-b", participant: { id: "akash", displayName: "Akash" } },
+  ];
+  return (
+    <div className="flex h-dvh w-full items-center">
+      <div data-chalk="" data-part="call-frame" className="chalk-frame" style={{ height: 320 }}>
+        <Stage
+          items={items}
+          layout="grid"
+          maxPerPage={1}
+          generatedAvatars={false}
+          animate={false}
+          renderContentTile={(item) => (
+            <button type="button" data-testid={`overflow-${item.id}`} className="relative h-full w-full rounded-xl bg-[var(--chalk-raised)]" aria-label={`Open ${item.kind === "screen-share" ? item.participant.displayName : "shared"} screen`}>
+              <video className="absolute inset-0 h-full w-full rounded-xl" />
+              <span className="relative">{item.kind === "screen-share" ? item.participant.displayName : "Shared"}’s screen</span>
+            </button>
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
 export const STAGE_STATES: readonly CallState[] = [
+  { id: "stage-shared-overflow", title: "Shared content in a short embedded call", render: () => <SharedContentOverflowFixture /> },
   ...[3, 5, 6, 7, 12, 24, 30].map((count) => ({ id: `stage-grid-${count}`, title: `${count} people in justified Grid`, render: () => <StageFixture count={count} layout="grid" /> })),
   { id: "stage-spotlight", title: "Spotlight", render: () => <StageFixture /> },
   { id: "stage-solo", title: "Solo centered Spotlight", render: () => <StageFixture count={1} /> },

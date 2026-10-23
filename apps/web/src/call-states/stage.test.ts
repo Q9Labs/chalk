@@ -34,6 +34,65 @@ async function open(state: string) {
   await page.getByTestId("stage").waitFor({ timeout: 20_000 });
 }
 
+for (const viewport of [
+  { width: 640, height: 320 },
+  { width: 390, height: 844 },
+]) {
+  for (const direction of ["ltr", "rtl"] as const) {
+    it(`scrolls and tabs to every overflow share within the call at ${viewport.width}x${viewport.height} ${direction}`, async () => {
+      await page.setViewportSize(viewport);
+      try {
+        await open("stage-shared-overflow");
+        await page.locator("[data-part=call-frame]").evaluate((frame, dir) => frame.setAttribute("dir", dir), direction);
+        const shares = [page.getByTestId("overflow-share-a"), page.getByTestId("overflow-share-b")];
+        const videos = await Promise.all(shares.map((share) => share.locator("video").elementHandle()));
+        await page.locator('[data-stage-item="stage:more"]').click();
+        const sheet = page.getByRole("dialog");
+        await sheet.waitFor();
+        const frame = await page.locator("[data-part=call-frame]").boundingBox();
+        if (!frame) throw new Error("Missing call frame");
+        const insideFrame = async (target: ReturnType<Page["locator"]>) => {
+          const box = await target.boundingBox();
+          expect(box).not.toBeNull();
+          expect(box!.y).toBeGreaterThanOrEqual(frame.y - 1);
+          expect(box!.y + box!.height).toBeLessThanOrEqual(frame.y + frame.height + 1);
+          expect(box!.x).toBeGreaterThanOrEqual(frame.x - 1);
+          expect(box!.x + box!.width).toBeLessThanOrEqual(frame.x + frame.width + 1);
+        };
+        await insideFrame(sheet);
+        for (const share of shares) {
+          await share.evaluate((element) => element.scrollIntoView({ block: "center" }));
+          await insideFrame(share);
+        }
+        expect(await sheet.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+        // The dialog initially focuses the first share; Tab and Shift+Tab must
+        // reveal the entire next share without scrolling the surrounding page.
+        expect(await shares[0]!.evaluate((element) => element === document.activeElement)).toBe(true);
+        await page.keyboard.press("Tab");
+        expect(await shares[1]!.evaluate((element) => element === document.activeElement)).toBe(true);
+        await insideFrame(shares[1]!);
+        await page.keyboard.press("Shift+Tab");
+        expect(await shares[0]!.evaluate((element) => element === document.activeElement)).toBe(true);
+        await insideFrame(shares[0]!);
+        await page.keyboard.press("Escape");
+        await sheet.waitFor({ state: "detached" });
+        await page.locator('[data-stage-item="stage:more"]').click();
+        await sheet.waitFor();
+        for (let index = 0; index < shares.length; index++) {
+          expect(await shares[index]!.locator("video").evaluate((video, original) => video === original, videos[index])).toBe(true);
+        }
+      } finally {
+        if (process.env.STAGE_ARTIFACTS) {
+          await mkdir(process.env.STAGE_ARTIFACTS, { recursive: true });
+          await page.screenshot({ path: resolve(process.env.STAGE_ARTIFACTS, `overflow-${viewport.width}x${viewport.height}-${direction}.png`) });
+        }
+        await page.setViewportSize({ width: 1440, height: 900 });
+      }
+    });
+  }
+}
+
 it("shares the persistent mirror preference between the local stage camera and its preview", async () => {
   await open("foundation-dark");
   const camera = page.getByRole("button", { name: "Select camera", exact: true });

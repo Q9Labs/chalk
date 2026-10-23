@@ -1441,6 +1441,12 @@
   background: var(--chalk-line-strong);
   margin: 4px auto 12px;
 }
+.chalk-sheet[data-variant="stage"] {
+  height: 100%;
+  max-height: max-content;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .chalk-sheet-heading {
   display: flex;
   align-items: center;

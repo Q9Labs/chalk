@@ -401,8 +401,8 @@ export function Stage({
             ))}
         </StageMotion>
       </div>
-      <ChalkSheet open={overflowOpen} onOpenChange={setOverflowOpen} title={foldedContent.length ? "People and shared content" : "People"}>
-        {overflowOpen && foldedContent.map((item) => <div key={item.id} ref={contentPlacement(item.id).attachOverflow} className="relative mb-3 aspect-video w-full" />)}
+      <ChalkSheet variant="stage" open={overflowOpen} onOpenChange={setOverflowOpen} title={foldedContent.length ? "People and shared content" : "People"}>
+        {overflowOpen && foldedContent.map((item) => <div key={item.id} ref={contentPlacement(item.id).attachOverflow} className="relative mb-3 aspect-video max-h-full w-full" />)}
         {ordered
           .filter((item) => item.kind === "participant")
           .map((item) => (
