@@ -61,7 +61,7 @@ export function normalizeMediaError(cause: unknown): SpaceClientError {
 export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error", scope?: "media"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
   if (cause instanceof ChalkChatFileError && cause.code === "unavailable") {
-    return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message });
+    return normalizeUnavailableChatFile(cause);
   }
   if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
     return new SpaceClientError({
@@ -79,6 +79,13 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
   }
   const message = cause instanceof Error ? cause.message : "The client operation failed";
   return new SpaceClientError({ code: fallback, recoverable: false, message });
+}
+
+function normalizeUnavailableChatFile(cause: ChalkChatFileError): SpaceClientError {
+  if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
+    return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.message });
+  }
+  return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message });
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
