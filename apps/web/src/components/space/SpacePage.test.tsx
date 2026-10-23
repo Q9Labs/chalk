@@ -95,9 +95,9 @@ describe("public Space entry", () => {
     const snapshot = mocks.client.getSnapshot();
     const sync = { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: 24 };
     try {
-      mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code: "connection.sync_websocket_failed", recoverable: true, message: "Private transport details", sync } }) });
+      mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code: "connection.sync_hello_timeout", recoverable: true, message: "Private transport details", sync } }) });
       await act(async () => view.rerender(<SpacePage slug="design-lab" />));
-      expect(await screen.findByText("connection.sync_websocket_failed [upgrade; open=0; close=1006; reason=none; 24ms]")).toBeDefined();
+      expect(await screen.findByText("connection.sync_hello_timeout [upgrade; open=0; close=1006; reason=none; 24ms]")).toBeDefined();
       expect(screen.queryByText("Private transport details")).toBeNull();
     } finally {
       mocks.client.getSnapshot.mockReturnValue(snapshot);

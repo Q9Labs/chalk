@@ -65,8 +65,6 @@ export type ErrorCode =
   | "connection.sync_recovery_exhausted"
   | "connection.sync_start_failed"
   | "connection.sync_hello_timeout"
-  | "connection.sync_websocket_failed"
-  | "connection.sync_dial_timeout"
   | "environment.unsupported"
   | "episode.ended"
   | "media.permission_denied"

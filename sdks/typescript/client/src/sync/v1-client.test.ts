@@ -524,7 +524,7 @@ describe("V1SyncClient", () => {
     transportSocket.error();
     expect(transportSocket.closeCalls).toEqual([{ code: 4000, reason: "transport error" }]);
     transportSocket.onclose?.({ code: 1006 });
-    expect(transportClient.getSnapshot().connection.connectFailure).toMatchObject({ code: "sync_websocket_failed", stage: "upgrade", closeCode: 1006, opened: false });
+    expect(transportClient.getSnapshot().connection.connectFailure).toMatchObject({ stage: "upgrade", closeCode: 1006, opened: false });
     const authenticationSocket = new TestSocket();
     const authenticationClient = new V1SyncClient({
       url: "ws://sync.test/v1/sync",

@@ -354,7 +354,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const failure = snapshot.connection.connectFailure;
             if (failure && failure !== observedConnectFailure) {
               observedConnectFailure = failure;
-              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: failure.code, sync: failure });
+              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: "sync_hello_timeout", sync: failure });
             }
             const count = snapshot.connection.dialTimeoutCount ?? 0;
             if (count > observedDialTimeouts) {
@@ -1212,6 +1212,6 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
 
 function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
-  const code = snapshot.connection.connectFailure?.code ?? (sync?.opened === false ? "sync_dial_timeout" : "sync_hello_timeout");
-  return new ConnectionLifecycleFailure({ code, recoverable: true, message: `Sync could not connect${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync } : {}) });
+  const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
+  return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync } : {}) });
 }

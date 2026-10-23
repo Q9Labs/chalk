@@ -29,8 +29,6 @@ const CASES = {
   "connection.state_digest_recovery_failed": row("connection.state_digest_recovery_failed", "generic", false),
   "connection.sync_recovery_exhausted": row("connection.sync_recovery_exhausted", "generic", false),
   "connection.sync_start_failed": row("connection.sync_start_failed", "generic", false),
-  "connection.sync_websocket_failed": row("connection.sync_websocket_failed", "generic", false),
-  "connection.sync_dial_timeout": row("connection.sync_dial_timeout", "generic", false),
   "connection.sync_hello_timeout": row("connection.sync_hello_timeout", "generic", false),
   "environment.unsupported": row("environment.unsupported", "unsupported", false),
   "episode.ended": row("episode.ended", "ended", false),

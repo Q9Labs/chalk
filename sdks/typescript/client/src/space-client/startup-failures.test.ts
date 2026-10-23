@@ -90,7 +90,7 @@ describe("public client startup failure contract", () => {
           },
         ),
       getAccess: async () => accessGrant(),
-      code: "connection.sync_websocket_failed",
+      code: "connection.sync_hello_timeout",
       recoverable: true,
     },
     { stage: "Sync hello deadline", setup: () => {}, getAccess: async () => accessGrant(), code: "connection.sync_hello_timeout", recoverable: true },
@@ -159,7 +159,7 @@ describe("public client startup failure contract", () => {
       await vi.advanceTimersByTimeAsync(10_001);
       expect(attempts).toBeGreaterThan(1);
       expect(send).not.toHaveBeenCalled();
-      const failure = { code: "connection.sync_websocket_failed", recoverable: true, sync: { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: expect.any(Number) } };
+      const failure = { code: "connection.sync_hello_timeout", recoverable: true, sync: { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: expect.any(Number) } };
       expect(await rejection).toMatchObject(failure);
       expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: failure });
       expect(errors).toMatchObject([failure]);
@@ -215,9 +215,47 @@ describe("public client startup failure contract", () => {
     const client = makeClient(async () => accessGrant(), 25, { debug });
     try {
       const rejection = await client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
-      const code = opened ? "connection.sync_hello_timeout" : "connection.sync_dial_timeout";
+      const code = "connection.sync_hello_timeout";
       expect(rejection).toMatchObject({ code, sync: { stage: opened ? "hello" : "upgrade", opened, closeCode: null, closeReason: null, durationMs: expect.any(Number) } });
       expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "connection_failed", sync: expect.objectContaining({ opened }) }));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("attributes a silent retry deadline to the current attempt and retains the earlier close in telemetry", async () => {
+    browser();
+    vi.useFakeTimers();
+    let attempts = 0;
+    vi.stubGlobal(
+      "WebSocket",
+      class extends EventTarget {
+        constructor() {
+          super();
+          if (++attempts === 1)
+            queueMicrotask(() => {
+              this.dispatchEvent(new Event("open"));
+              setTimeout(() => this.dispatchEvent(Object.assign(new Event("close"), { code: 1012, reason: "server draining" })), 1);
+            });
+        }
+        send() {}
+        close() {}
+      },
+    );
+    const debug = vi.fn();
+    const client = makeClient(async () => accessGrant(), 1000, { debug });
+    try {
+      const rejection = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(attempts).toBeGreaterThan(0));
+      await vi.advanceTimersByTimeAsync(1001);
+      expect(attempts).toBe(2);
+      const failure = await rejection;
+      const expected = { code: "connection.sync_hello_timeout", sync: { stage: "upgrade", opened: false, closeCode: null, closeReason: null, durationMs: expect.any(Number) } };
+      expect(failure).toMatchObject(expected);
+      expect(client.getSnapshot().connection.lastError).toMatchObject(expected);
+      expect(client.getSnapshot().connection.lastError?.sync?.durationMs).toBeGreaterThan(1);
+      expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "sync_connect_failed", sync: expect.objectContaining({ stage: "hello", opened: true, closeCode: 1012, closeReason: "server draining", durationMs: 1 }) }));
+      expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "connection_failed", sync: expect.objectContaining({ stage: "upgrade", opened: false, closeCode: null }) }));
     } finally {
       client.dispose();
     }
@@ -242,7 +280,7 @@ describe("public client startup failure contract", () => {
     const client = makeClient(async () => accessGrant());
     try {
       const failure = await client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
-      expect(failure).toMatchObject({ code: "connection.sync_websocket_failed", sync: { stage: "hello", opened: true, closeCode: 1008, closeReason: reason === "hello timeout" ? reason : "redacted", durationMs: expect.any(Number) } });
+      expect(failure).toMatchObject({ code: "connection.sync_hello_timeout", sync: { stage: "hello", opened: true, closeCode: 1008, closeReason: reason === "hello timeout" ? reason : "redacted", durationMs: expect.any(Number) } });
       expect(JSON.stringify(failure)).not.toContain("secret");
       expect(client.getSnapshot().connection.lastError).toMatchObject({ sync: { stage: "hello", closeCode: 1008 } });
     } finally {

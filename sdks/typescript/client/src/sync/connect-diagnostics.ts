@@ -6,7 +6,6 @@ export type SyncConnectDiagnostic = {
   readonly closeReason: string | null;
   readonly durationMs: number;
 };
-export type SyncConnectFailure = SyncConnectDiagnostic & { readonly code: "sync_websocket_failed" | "sync_dial_timeout" };
 
 // Peer text is untrusted and can echo credentials. Retain only protocol-owned reasons.
 const SAFE_REASONS = new Set([

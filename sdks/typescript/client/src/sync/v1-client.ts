@@ -1,4 +1,4 @@
-import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncConnectFailure } from "./connect-diagnostics";
+import { safeSyncCloseReason, type SyncConnectDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
@@ -97,7 +97,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #dialTimeoutCount = 0;
   #connectStartedAt: number | null = null;
   #opened = false;
-  #connectFailure: SyncConnectFailure | undefined;
+  #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
     return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())) };
   }
@@ -358,15 +358,16 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#phase = { phase: "connecting" };
     this.#connectStartedAt = this.#clock().now();
     this.#opened = false;
+    this.#connectFailure = undefined;
     this.#emit();
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(this.#options.url);
     } catch {
-      this.#connectFailure = { ...this.#connectDiagnostic(), code: "sync_websocket_failed" };
+      this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
       // Never propagate constructor exceptions: browsers can include the credentialed URL.
-      throw new V1SyncError("Sync WebSocket could not be created", "sync_websocket_failed");
+      throw new V1SyncError("Sync WebSocket could not be created", "sync_hello_timeout");
     }
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
@@ -375,7 +376,7 @@ export class V1SyncClient implements V1CollaborationClient {
       () => {
         this.#cancelDial = undefined;
         this.#dialTimeoutCount += 1;
-        this.#connectFailure = { ...this.#connectDiagnostic(), code: "sync_dial_timeout" };
+        this.#connectFailure = this.#connectDiagnostic();
         this.#recover("WebSocket dial timeout");
       },
       this.#options.dialTimeoutMs,
@@ -392,7 +393,7 @@ export class V1SyncClient implements V1CollaborationClient {
     };
     socket.onclose = (event) => {
       if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
-        this.#connectFailure = { ...this.#connectDiagnostic(), code: "sync_websocket_failed", closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
+        this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
         this.#emit();
       }
       this.#clock().setTimeout(() => {
@@ -402,7 +403,7 @@ export class V1SyncClient implements V1CollaborationClient {
     };
     socket.onerror = () => {
       if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
-        this.#connectFailure = { ...this.#connectDiagnostic(), code: "sync_websocket_failed" };
+        this.#connectFailure = this.#connectDiagnostic();
         this.#emit();
       }
       socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");

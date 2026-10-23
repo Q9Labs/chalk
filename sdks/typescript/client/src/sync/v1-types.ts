@@ -101,7 +101,7 @@ export type V1EpisodeSnapshot = {
     /** Cumulative count retained across successful retries; contains no URL or credentials. */
     readonly dialTimeoutCount?: number;
     readonly connectAttempt?: import("./connect-diagnostics").SyncConnectDiagnostic;
-    readonly connectFailure?: import("./connect-diagnostics").SyncConnectFailure;
+    readonly connectFailure?: import("./connect-diagnostics").SyncConnectDiagnostic;
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;

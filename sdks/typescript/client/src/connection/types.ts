@@ -99,8 +99,6 @@ export const CONNECTION_ERROR_CODES = [
   "sync_start_failed",
   "state_digest_recovery_failed",
   "sync_hello_timeout",
-  "sync_websocket_failed",
-  "sync_dial_timeout",
   "media_start_failed",
   "join_cleanup_unconfirmed",
   "sync_recovery_exhausted",
