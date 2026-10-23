@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { Stage, type StageItem } from "./Stage";
@@ -12,12 +15,18 @@ it("keeps a pinned person visible when shared content fills Grid capacity", () =
   expect(wrapper).not.toContain('aria-hidden="true"');
 });
 
-it("uses the primary renderer for focused content when a tile renderer is also supplied", () => {
+it("uses the primary renderer for focused content when a tile renderer is also supplied", async () => {
   const participant = { id: "person", displayName: "Nora" };
   const share: StageItem = { kind: "screen-share", id: "screen-share:person", participant };
-  const html = renderToStaticMarkup(<Stage items={[share]} layout="spotlight" pinnedId={share.id} renderContentTile={() => <div>Unfocused content</div>} renderPrimaryContent={() => <div>Focused content</div>} />);
-  expect(html).toContain("Focused content");
-  expect(html).not.toContain("Unfocused content");
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Stage items={[share]} layout="spotlight" pinnedId={share.id} renderContentTile={() => <div>Unfocused content</div>} renderPrimaryContent={() => <div>Focused content</div>} />));
+    expect(container.textContent).toContain("Focused content");
+    expect(container.textContent).not.toContain("Unfocused content");
+  } finally {
+    await act(async () => root.unmount());
+  }
 });
 
 it("marks the +N tile with its frame role, so styles that follow the layout see it", () => {
