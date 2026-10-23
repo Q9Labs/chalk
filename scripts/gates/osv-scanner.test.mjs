@@ -26,6 +26,8 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       [`nested/${file}`, `nested/${file}`, content],
     ]),
     ["nested/pnpm-lock.yaml", "nested/pnpm-lock.yaml", pnpm],
+    ["tracked gitignored lockfile", "runtime/package-lock.json", npm],
+    ["tracked symlinked lockfile", "runtime/package-lock.json", npm],
     ["ignored fixtures and excluded directories", null, null],
   ];
   for (const [name, file, content] of cases) {
@@ -34,10 +36,11 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       subtest.after(() => rmSync(temporary, { recursive: true, force: true }));
       const root = path.join(temporary, ".worktrees", "checkout");
       mkdirSync(root, { recursive: true });
-      for (const script of ["osv-scanner.sh", "zod-exception.mjs", "new-vulnerabilities.mjs"]) symlinkSync(new URL(`./${script}`, import.meta.url), path.join(root, script));
+      for (const script of ["osv-scanner.sh", "osv-snapshot.mjs", "zod-exception.mjs"]) symlinkSync(new URL(`./${script}`, import.meta.url), path.join(root, script));
+      copyFileSync(new URL("./new-vulnerabilities.mjs", import.meta.url), path.join(root, "new-vulnerabilities.mjs"));
       copyFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), path.join(root, "pnpm-lock.yaml"));
       copyFileSync(new URL("../../osv-scanner.toml", import.meta.url), path.join(root, "osv-scanner.toml"));
-      writeFileSync(path.join(root, ".gitignore"), "ignored-fixtures/\n");
+      writeFileSync(path.join(root, ".gitignore"), name === "tracked gitignored lockfile" ? "runtime/\n" : "ignored-fixtures/\n");
       const git = (args) => {
         const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
         assert.equal(result.status, 0, result.stderr);
@@ -45,8 +48,12 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       git(["init", "-q"]);
       if (file) {
         mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-        writeFileSync(path.join(root, file), content);
-        git(["add", file]);
+        if (name === "tracked symlinked lockfile") {
+          writeFileSync(path.join(root, "runtime/dependency-data.json"), content);
+          symlinkSync("dependency-data.json", path.join(root, file));
+          git(["add", "runtime/dependency-data.json"]);
+        } else writeFileSync(path.join(root, file), content);
+        git(["add", "-f", file]);
       }
       if (name === "ignored fixtures and excluded directories") {
         for (const directory of ["ignored-fixtures", "node_modules/fixture", "nested/node_modules/fixture", ".git/fixture", ".worktrees/fixture", "nested/.worktrees/fixture"]) {
