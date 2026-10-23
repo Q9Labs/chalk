@@ -92,7 +92,7 @@ for (const { name, args, cleanup, cleanups, signal, code } of stubbornCases) {
     write("gate.sh", stubbornCommand);
     const stopped = await signalWhenReady(context, { args, cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "1" }, ready: env.TEST_READY, signal });
     assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code, signal: null });
-    assert.ok(stopped.seconds < 6, `the wrapper took ${stopped.seconds} seconds to stop`);
+    assert.ok(stopped.seconds < 2.5, `the wrapper took ${stopped.seconds} seconds to stop`);
     await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
     const services = readFileSync(env.TEST_SERVICE_LOG, "utf8").trim().split("\n");
     assert.equal(services.filter((line) => cleanup.test(line)).length, cleanups);
@@ -103,6 +103,21 @@ for (const { name, args, cleanup, cleanups, signal, code } of stubbornCases) {
     assert.match(stopped.stderr, new RegExp(`^${escape(gate)}: still running 1s after ${name}, so it gets KILL$`, "mu"));
   });
 }
+
+test("a slow process-table scan does not stretch the stop grace", async (context) => {
+  const { root, write, env } = scratchRoot(context, "chalk-gate-slow-scan-");
+  write("gate.sh", stubbornCommand);
+  // Each scan of the process table takes half a second, as on a loaded machine with many processes.
+  write("bin/ps", `#!/bin/bash\nsleep 0.5\nexec /bin/ps "$@"\n`);
+  const stopped = await signalWhenReady(context, { args: ["scripts/gates/with-postgres.sh", "--", "./gate.sh"], cwd: root, env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "2" }, ready: env.TEST_READY, signal: "SIGTERM" });
+  assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
+  // The grace, plus the scan that was running when it ran out, plus KILL and cleanup.
+  assert.ok(stopped.seconds < 2 + 1.5, `the wrapper took ${stopped.seconds} seconds to stop with a 2-second grace`);
+  // SECONDS counts whole seconds, so the command gets at least the grace less one second.
+  assert.ok(stopped.seconds > 2 - 1, `the wrapper sent KILL after ${stopped.seconds} seconds of a 2-second grace`);
+  assert.match(stopped.stderr, /still running 2s after TERM, so it gets KILL$/mu);
+  await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
+});
 
 test("a second TERM while a gate is stopping does not cut its cleanup short", async (context) => {
   const { root, write, env } = scratchRoot(context, "chalk-gate-twice-");

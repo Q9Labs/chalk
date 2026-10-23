@@ -43,15 +43,16 @@ stop_owned() {
     owned_pid="$(last_job)"
   fi
   [[ -n "${owned_pid}" ]] || return 0
-  local tenths=$((owned_grace * 10))
+  # The deadline comes from the clock, so a slow process-table scan cannot stretch the grace. SECONDS
+  # counts whole seconds, so the command gets between the grace less one second and the grace.
+  local deadline=$((SECONDS + owned_grace))
   kill "-${stop_signal}" -- "-${owned_pid}" 2>/dev/null || true
-  while ((tenths > 0)) && group_alive "${owned_pid}"; do
-    sleep 0.1
-    tenths=$((tenths - 1))
+  while sleep 0.1 && group_alive "${owned_pid}"; do
+    if ((SECONDS >= deadline)); then
+      printf '%s: still running %ss after %s, so it gets KILL\n' "${gate_label}" "${owned_grace}" "${stop_signal}" >&2
+      break
+    fi
   done
-  if group_alive "${owned_pid}"; then
-    printf '%s: still running %ss after %s, so it gets KILL\n' "${gate_label}" "${owned_grace}" "${stop_signal}" >&2
-  fi
   kill -KILL -- "-${owned_pid}" 2>/dev/null || true
   wait "${owned_pid}" 2>/dev/null || true
   owned_pid=""

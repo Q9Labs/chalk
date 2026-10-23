@@ -104,7 +104,7 @@ test("strict Sync tests stop a mix that ignores TERM, remove their output and ex
   writeFileSync(path.join(root, "mix"), stubbornCommand, { mode: 0o755 });
   const stopped = await signalWhenReady(context, { args: [path.join(import.meta.dirname, "test-strict")], env: { ...env, CHALK_GATE_STOP_GRACE_SECONDS: "1" }, ready: env.TEST_READY, signal: "SIGTERM" });
   assert.deepEqual({ code: stopped.code, signal: stopped.signal }, { code: 143, signal: null });
-  assert.ok(stopped.seconds < 6, `the wrapper took ${stopped.seconds} seconds to stop`);
+  assert.ok(stopped.seconds < 2.5, `the wrapper took ${stopped.seconds} seconds to stop`);
   await assertStopped(readFileSync(env.TEST_PIDS, "utf8").trim().split(" ").map(Number));
   assert.deepEqual(readdirSync(env.TMPDIR), []);
   assert.match(stopped.stderr, /^test-strict: stopped by TERM after \d+s; it cleans up and exits 143$/mu);
