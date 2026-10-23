@@ -102,9 +102,12 @@ try {
   await webMore.waitFor({ state: "detached" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${origin}/call-states.html?state=foundation-toast`);
-  const toast = page.getByRole("status").filter({ hasText: "Nora joined" });
+  const toast = page.locator("[data-part=toast]").filter({ hasText: "Nora joined" });
   await toast.waitFor();
-  assert.equal(await toast.getAttribute("aria-live"), "polite");
+  assert.equal(await toast.getAttribute("aria-live"), null, "the visual toast does not duplicate speech");
+  const announcement = page.locator("[data-part=notice-announcer] [aria-live=polite]").getByText("Nora joined", { exact: true });
+  await announcement.waitFor();
+  assert.equal(await announcement.evaluate((node) => node.children.length), 0, "the polite announcer contains speech text, not a second caller tree");
   if (out) {
     await mkdir(out, { recursive: true });
     for (const [device, viewport] of Object.entries({ laptop: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } })) {
