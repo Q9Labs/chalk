@@ -67,6 +67,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, fmt.Errorf("list recorder fleet nodes: %w", errors.Join(ErrProviderUnavailable, err)))
 	}
+	now = r.config.Now().UTC()
+	if now.Sub(demand.ObservedAt) > r.config.DemandMaxAge {
+		return r.failClosed(ctx, state, demand.Revision, now, ErrDemandStale)
+	}
 	nodes, quarantined, err := r.classifyInventory(inventory, state, now)
 	if err != nil {
 		result, closedErr := r.failClosed(ctx, state, demand.Revision, now, err)
@@ -89,11 +93,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, fmt.Errorf("observe recorder fleet nodes: %w", err))
 	}
+	now = r.config.Now().UTC()
 	observed, err := r.indexObservations(state, nodes, observations, now)
 	if err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
 	}
-
 	state, result, handled, err = r.advanceReadiness(ctx, state, nodes, observed, targetNodes, now)
 	if err != nil || handled {
 		result.Quarantined = quarantined
@@ -269,6 +273,9 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 			return nil, ErrRoleFence
 		}
 		if observation.ObservedAt.After(now.Add(time.Second)) || now.Sub(observation.ObservedAt) > r.config.ObservationMaxAge {
+			if state.Nodes[node.ProviderID].Phase == PhaseDraining && observation.ActiveLeases > 0 && !observation.ObservedAt.After(now) {
+				indexed[node.ProviderID] = observation
+			}
 			continue
 		}
 		indexed[node.ProviderID] = observation
@@ -396,9 +403,12 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 	case PhaseDraining:
 		deadline := managed.DrainStartedAt.Add(r.config.DrainTimeout)
+		if observation.ActiveLeases > 0 {
+			return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
+		}
 		// Registered workers can claim before the controller records readiness.
 		if managed.Identity != nil && now.Before(deadline) {
-			if !observation.ObservedAt.After(*managed.DrainStartedAt) || observation.ActiveLeases > 0 {
+			if !observation.ObservedAt.After(*managed.DrainStartedAt) {
 				return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
 			}
 		}
@@ -566,6 +576,9 @@ func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, o
 		return 0
 	})
 	candidate := current[0]
+	if observation, ok := observed[candidate.ProviderID]; candidate.Identity != nil && (!ok || observation.ActiveLeases > 0) {
+		return nil
+	}
 	return &candidate
 }
 

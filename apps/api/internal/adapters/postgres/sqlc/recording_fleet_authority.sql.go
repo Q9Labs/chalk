@@ -396,6 +396,27 @@ func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg Li
 	return items, nil
 }
 
+const lockRecordingFleetWorkerClaim = `-- name: LockRecordingFleetWorkerClaim :one
+select coalesce((role = $1 and state = 'active' and ready and admission_open
+    and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
+    and observed_at <= clock_timestamp()), false)::boolean as authorized
+from recording_fleet_nodes
+where worker_id::text = $2::text
+for share
+`
+
+type LockRecordingFleetWorkerClaimParams struct {
+	Role       string `json:"role"`
+	LeaseOwner string `json:"lease_owner"`
+}
+
+func (q *Queries) LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRecordingFleetWorkerClaimParams) (bool, error) {
+	row := q.db.QueryRow(ctx, lockRecordingFleetWorkerClaim, arg.Role, arg.LeaseOwner)
+	var authorized bool
+	err := row.Scan(&authorized)
+	return authorized, err
+}
+
 const publishRecordingFleetPool = `-- name: PublishRecordingFleetPool :one
 insert into recording_pool_health (
     role, admission_open, ready_capacity, reason, observed_at, demand_revision

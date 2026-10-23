@@ -285,6 +285,7 @@ type Querier interface {
 	LockRecordingCapturePlanHandle(ctx context.Context, planHandle string) error
 	LockRecordingCaptureSignalingAuthority(ctx context.Context, arg LockRecordingCaptureSignalingAuthorityParams) (LockRecordingCaptureSignalingAuthorityRow, error)
 	LockRecordingCompletionRecovery(ctx context.Context, arg LockRecordingCompletionRecoveryParams) (pgtype.UUID, error)
+	LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRecordingFleetWorkerClaimParams) (bool, error)
 	LockRecordingJobClaimRequest(ctx context.Context, claimRequestID string) error
 	LockRecordingRenderCommitAuthority(ctx context.Context, arg LockRecordingRenderCommitAuthorityParams) (LockRecordingRenderCommitAuthorityRow, error)
 	LockRecordingTranscriptionPreparationAuthority(ctx context.Context, arg LockRecordingTranscriptionPreparationAuthorityParams) (LockRecordingTranscriptionPreparationAuthorityRow, error)

@@ -46,8 +46,8 @@ func TestRecorderFleetPreservesRateLimitDeadline(t *testing.T) {
 				t.Fatalf("429 lost its retry deadline: %v", err)
 			}
 			if kind == "invalid" {
-				if !limited.RetryDeadline().IsZero() {
-					t.Fatal("invalid headers created a retry deadline")
+				if delay := limited.RetryDeadline().Sub(start); delay < 5*time.Second || delay > 6*time.Second {
+					t.Fatalf("invalid headers did not use bounded fallback: %s", delay)
 				}
 				return
 			}
@@ -65,11 +65,11 @@ func TestRecorderFleetPreservesRateLimitDeadline(t *testing.T) {
 
 func TestRecorderFleetDistinguishesBurstAndHourlyRateLimits(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		remaining  string
-		retryAfter string
-		wantHourly bool
-		wantZero   bool
+		name         string
+		remaining    string
+		retryAfter   string
+		wantHourly   bool
+		wantFallback bool
 	}{
 		{name: "burst seconds", remaining: "1234", retryAfter: "12"},
 		{name: "burst date", remaining: "1234", retryAfter: "date"},
@@ -78,7 +78,7 @@ func TestRecorderFleetDistinguishesBurstAndHourlyRateLimits(t *testing.T) {
 		{name: "burst with zero remaining", remaining: "0", retryAfter: "12"},
 		{name: "hourly without retry", remaining: "0", wantHourly: true},
 		{name: "hourly invalid retry", remaining: "0", retryAfter: "invalid", wantHourly: true},
-		{name: "burst without retry", remaining: "1234", wantZero: true},
+		{name: "burst without retry", remaining: "1234", wantFallback: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			start := time.Now()
@@ -102,9 +102,9 @@ func TestRecorderFleetDistinguishesBurstAndHourlyRateLimits(t *testing.T) {
 			}
 			deadline := limited.RetryDeadline()
 			switch {
-			case tc.wantZero:
-				if !deadline.IsZero() {
-					t.Fatalf("non-exhausted hourly budget imposed deadline %v", deadline)
+			case tc.wantFallback:
+				if delay := deadline.Sub(start); delay < 5*time.Second || delay > 6*time.Second {
+					t.Fatalf("burst fallback offset = %s, want 5s..6s", delay)
 				}
 			case tc.wantHourly:
 				if !deadline.Equal(hourlyReset) {

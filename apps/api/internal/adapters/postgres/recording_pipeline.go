@@ -26,6 +26,7 @@ type recordingPipelineQuerier interface {
 	GetRecordingCaptureCompletionIdentity(context.Context, pgtype.UUID) (pgtype.UUID, error)
 	ClaimRecordingJob(context.Context, sqlc.ClaimRecordingJobParams) (sqlc.ClaimRecordingJobRow, error)
 	LockRecordingJobClaimRequest(context.Context, string) error
+	LockRecordingFleetWorkerClaim(context.Context, sqlc.LockRecordingFleetWorkerClaimParams) (bool, error)
 	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
 	GetRecordingCaptureJobEnvelope(context.Context, pgtype.UUID) (sqlc.GetRecordingCaptureJobEnvelopeRow, error)
 	InsertRecordingJobAttemptAuthority(context.Context, sqlc.InsertRecordingJobAttemptAuthorityParams) (sqlc.RecordingJobAttemptAuthority, error)
@@ -482,6 +483,22 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			return nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
+		}
+		// Admission closure updates this row, so it cannot overtake an in-flight claim.
+		role := string(input.Kind)
+		if input.Kind == recordingpipeline.JobKindTranscription {
+			role = string(recordingpipeline.PoolRoleRender)
+		}
+		authorized, err := queries.LockRecordingFleetWorkerClaim(ctx, sqlc.LockRecordingFleetWorkerClaimParams{
+			Role: role, LeaseOwner: input.Owner,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("lock recording worker admission: %w", err)
+		}
+		// Local and legacy owners have no fleet row; the managed HTTP verifier
+		// separately requires a registered identity before reaching this repository.
+		if err == nil && !authorized {
+			return recordingpipeline.ErrJobNotFound
 		}
 		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
 			TranscriptionEnabled:   r.transcriptionEnabled,
