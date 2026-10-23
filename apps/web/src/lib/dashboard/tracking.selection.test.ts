@@ -21,9 +21,9 @@ function combinations(count: number): Cell[][] {
   return rows;
 }
 
-const MATRIX = [2, 3].flatMap(combinations);
+const MATRIX = [2, 3].flatMap(combinations).flatMap((row) => [false, true].map((buried) => ({ row, buried })));
 
-function tracked(cell: Cell, index: number) {
+function tracked(cell: Cell, index: number, buried: boolean) {
   const recording: RecordingDTO = {
     id: id(index),
     status: cell.state === "ready" ? "completed" : "pending",
@@ -35,7 +35,7 @@ function tracked(cell: Cell, index: number) {
     transcriptionStatus: "pending",
     transcriptionExpiresAt: null,
     createdAt: new Date(START - index * 60_000).toISOString(),
-    transcripts: [],
+    transcripts: buried ? ["failed", "deleted", "failed", "deleted", "failed", "complete"].map((status, generation) => ({ id: `${id(index)}-transcript-${generation}`, status, languages: ["en"], createdAt: new Date(START - generation * 60_000).toISOString() })) : [],
     transcriptsNextCursor: null,
   };
   const item = attempt(recording, 0, START);
@@ -44,10 +44,10 @@ function tracked(cell: Cell, index: number) {
   return { ...item, read: failed(item.read, cell.read, error, START) };
 }
 
-it("selects and schedules all 3,600 two- and three-attempt state/read combinations", () => {
-  deepStrictEqual(MATRIX.length, 3600);
-  for (const row of MATRIX) {
-    const attempts = row.map(tracked);
+it("selects and schedules all 7,200 attempt/read/list combinations, including completed transcripts behind five failed or deleted rows", () => {
+  deepStrictEqual(MATRIX.length, 7200);
+  for (const { row, buried } of MATRIX) {
+    const attempts = row.map((cell, index) => tracked(cell, index, buried));
     const result = selection(attempts);
     const video = result.video;
     const shown = video ? videoState(video.recording) : undefined;
@@ -60,8 +60,8 @@ it("selects and schedules all 3,600 two- and three-attempt state/read combinatio
       prepare: unreadable ? undefined : shown === "preparable" ? video?.recording.id : newerState === "preparable" ? result.newer?.recording.id : undefined,
       download: !unreadable && shown === "play",
       transcript: result.transcript?.recording.id,
-      beforeRetry: dueReads(attempts, START + 4_999).map((due) => [due.kind, due.id]),
-      afterRetry: dueReads(attempts, START + 5_000).map((due) => [due.kind, due.id]),
+      beforeRetry: dueReads(attempts, START + 4_999).map((due) => [due.kind, due.id, due.kind === "cues" ? due.transcriptId : undefined]),
+      afterRetry: dueReads(attempts, START + 5_000).map((due) => [due.kind, due.id, due.kind === "cues" ? due.transcriptId : undefined]),
       nextBeforeRetry: nextRead(attempts, START + 4_999)?.id,
       nextAfterRetry: nextRead(attempts, START + 5_000)?.id,
     };
@@ -79,12 +79,12 @@ it("selects and schedules all 3,600 two- and three-attempt state/read combinatio
       newer: newer ? id(newer.index) : undefined,
       prepare: prepare ? id(prepare.index) : undefined,
       download: chosen?.state === "ready",
-      transcript: id(available[0]?.index ?? 0),
-      beforeRetry: beforeRetry.map((cell) => ["recording", id(cell.index)]),
-      afterRetry: available.map((cell) => ["recording", id(cell.index)]),
-      nextBeforeRetry: beforeRetry[0] ? id(beforeRetry[0].index) : undefined,
-      nextAfterRetry: available[0] ? id(available[0].index) : undefined,
+      transcript: id(buried ? 0 : (available[0]?.index ?? 0)),
+      beforeRetry: row.flatMap((_, index) => [...(beforeRetry.some((cell) => cell.index === index) ? [["recording", id(index), undefined]] : []), ...(buried && index === 0 ? [["cues", id(0), `${id(0)}-transcript-5`]] : [])]),
+      afterRetry: row.flatMap((_, index) => [...(available.some((cell) => cell.index === index) ? [["recording", id(index), undefined]] : []), ...(buried && index === 0 ? [["cues", id(0), `${id(0)}-transcript-5`]] : [])]),
+      nextBeforeRetry: buried ? id(0) : beforeRetry[0] ? id(beforeRetry[0].index) : undefined,
+      nextAfterRetry: buried ? id(0) : available[0] ? id(available[0].index) : undefined,
     };
-    deepStrictEqual(actual, expected, row.map(({ state, read }) => `${state}/${read}`).join(" > "));
+    deepStrictEqual(actual, expected, `${row.map(({ state, read }) => `${state}/${read}`).join(" > ")} / buried=${buried}`);
   }
 });

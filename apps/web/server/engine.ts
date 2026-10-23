@@ -5,7 +5,8 @@ import { z } from "zod";
 import { dashboardWebsiteOrigin } from "../src/lib/dashboard/contracts";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
-import type { AttendanceDTO, LiveDTO, RecordingDTO } from "../src/lib/dashboard/contracts";
+import type { AttendanceDTO, LiveDTO, RecordingDTO, TranscriptDTO } from "../src/lib/dashboard/contracts";
+import { completedTranscript } from "../src/lib/dashboard/recording";
 import { recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import { readCookie, seal, unseal, writeCookie } from "./cookies";
@@ -89,11 +90,24 @@ export async function attendance(engine: Engine, params: Parameters<Engine["api"
   return { kind: "available", participants: result.participants.map((p) => ({ id: p.participant_id, name: p.display_name, kind: p.identity_kind, externalId: p.external_id, firstJoinedAt: p.first_joined_at, isYou: false, lastLeftAt: p.last_left_at })) };
 }
 
-/** A recording with its newest transcripts. A failed list leaves it unlisted instead of failing the read, so a page reads that list on its own. */
+/** Failed and deleted rows must not hide an older completed transcript. Bound each search and retain its continuation. */
+export async function recordingTranscripts(engine: Engine, recordingId: Recording["id"], cursor?: string) {
+  const transcripts: TranscriptDTO[] = [];
+  let nextCursor: string | null = cursor ?? null;
+  for (let page = 0; page < 5; page++) {
+    const result = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recordingId, page_size: 5, cursor: nextCursor ?? undefined } }));
+    transcripts.push(...result.transcripts.map(transcriptDTO));
+    nextCursor = result.pagination.next_cursor;
+    if (transcripts.some(completedTranscript) || !nextCursor) break;
+  }
+  return { transcripts, nextCursor };
+}
+
+/** A failed list leaves the fresh recording unlisted, so a page retries only that list. */
 export async function listedRecording(engine: Engine, recording: Recording): Promise<RecordingDTO> {
   try {
-    const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
-    return { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor };
+    const result = await recordingTranscripts(engine, recording.id);
+    return { ...recordingDTO(recording), transcripts: result.transcripts, transcriptsNextCursor: result.nextCursor };
   } catch {
     return recordingDTO(recording);
   }

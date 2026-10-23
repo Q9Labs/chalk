@@ -24,7 +24,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const pendingDecisions = useRef(new Set<string>());
   const pages = useRef(1);
-  const metadata = useRef({ after: Date.now() + 10000, next: 0 });
+  const metadata = useRef({ after: Date.now() + 10000, next: 0, unlisted: new Set<string>() });
   const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
   const { state, reload, update } = useLoad(
     async () => {
@@ -34,6 +34,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         const older = await readPage("call", { spaceId, cursor: data.nextCursor });
         data = { ...data, episodes: [...data.episodes, ...older.episodes], nextCursor: older.nextCursor };
       }
+      metadata.current.unlisted.clear();
       return data;
     },
     `call:${spaceId}`,
@@ -43,7 +44,9 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         lifecycleRefresh.current.pending ||
         (!data.call.archived && data.call.admission === "knock") ||
         data.live ||
-        data.episodes.some((episode) => episode.status !== "ended" || episode.recordings.some((recording) => workingRecording(recording) || recording.transcripts?.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status)))) ||
+        data.episodes.some(
+          (episode) => episode.status !== "ended" || episode.recordings.some((recording) => workingRecording(recording) || recording.transcripts === undefined || metadata.current.unlisted.has(recording.id) || recording.transcripts.some((transcript) => PENDING_TRANSCRIPTS.has(transcript.status))),
+        ) ||
         data.knocks.length
           ? data.knocks.length
             ? 3000
@@ -60,7 +63,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           // Charge failed attempts too. Recheck on later ticks so the final state is fetched.
           lifecycleRefresh.current.after = Date.now() + 30000;
           const fresh = await readPage("call", { spaceId });
-          // Refresh only the newest page (at most 40 engine reads), not expanded history.
+          // Refresh only the newest page, with bounded transcript searches, not expanded history.
           // Older ended sessions remain snapshots until an explicit page refresh.
           const older = pages.current > 1 ? data.episodes.filter((item) => item.status === "ended" && !fresh.episodes.some((current) => current.id === item.id)) : [];
           lifecycleRefresh.current.pending = false;
@@ -70,11 +73,12 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         // Share one metadata request per ten seconds; recording discovery uses two reads.
         if (Date.now() < metadata.current.after) return next;
         metadata.current.after = Date.now() + 10000;
-        const targets: (CallMetadataQuery | { kind: "live" })[] = data.live ? [{ kind: "live" }] : [];
+        const targets: (CallMetadataQuery | { kind: "live" } | { kind: "transcripts"; spaceId: string; episodeId: string; id: string })[] = data.live ? [{ kind: "live" }] : [];
         for (const session of data.episodes)
           for (const recording of session.recordings) {
             if (workingRecording(recording)) targets.push({ kind: "recording", spaceId, id: recording.id });
-            for (const transcript of recording.transcripts ?? []) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
+            if (recording.transcripts === undefined || metadata.current.unlisted.has(recording.id)) targets.push({ kind: "transcripts", spaceId, episodeId: session.id, id: recording.id });
+            else for (const transcript of recording.transcripts) if (PENDING_TRANSCRIPTS.has(transcript.status)) targets.push({ kind: "transcript", spaceId, id: transcript.id });
           }
         if (!targets.length) return next;
         const target = targets[metadata.current.next++ % targets.length];
@@ -84,6 +88,14 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           const current = roster.live[0]?.episode ?? null;
           if (current?.id !== data.live?.id) return next;
           return { ...next, live: current };
+        }
+        if (target.kind === "transcripts") {
+          const result = await act("past-session", { action: "transcripts", spaceId, episodeId: target.episodeId, recordingId: target.id });
+          metadata.current.unlisted.delete(target.id);
+          return {
+            ...next,
+            episodes: next.episodes.map((session) => ({ ...session, recordings: session.recordings.map((recording) => (recording.id === target.id ? { ...recording, transcripts: result.transcripts, transcriptsNextCursor: result.nextCursor } : recording)) })),
+          };
         }
         let result: CallMetadataDTO;
         try {
@@ -100,15 +112,17 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
             })),
           };
         }
-        // An answer without its transcript list can't say whether a transcript was made, so the recording is read again.
-        if (result.kind === "recording" && result.recording.transcripts === undefined) return next;
+        if (result.kind === "recording") {
+          if (result.recording.transcripts === undefined) metadata.current.unlisted.add(result.recording.id);
+          else metadata.current.unlisted.delete(result.recording.id);
+        }
         next = {
           ...next,
           episodes: next.episodes.map((session) => ({
             ...session,
             recordings: session.recordings.map((recording) =>
               result.kind === "recording" && recording.id === result.recording.id
-                ? { ...recording, ...result.recording }
+                ? { ...recording, ...result.recording, transcripts: result.recording.transcripts ?? recording.transcripts, transcriptsNextCursor: result.recording.transcripts === undefined ? recording.transcriptsNextCursor : result.recording.transcriptsNextCursor }
                 : result.kind === "transcript"
                   ? { ...recording, transcripts: recording.transcripts?.map((transcript) => (transcript.id === result.transcript.id ? result.transcript : transcript)) }
                   : recording,

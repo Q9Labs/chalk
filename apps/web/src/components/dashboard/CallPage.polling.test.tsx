@@ -155,12 +155,12 @@ it("doesn't poll an ended call when this page's clock runs past a deadline the s
   expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call"]);
 });
 
-it("reads a recording again when its answer comes without the transcript list, so an automatic transcript still shows", async () => {
+it("keeps fresh recording fields and the previous transcript list while retrying only a failed list", async () => {
   const recording = {
     id: "recording",
-    status: "completed",
+    status: "pending",
     sourceStatus: "available",
-    exportStatus: "ready",
+    exportStatus: "pending",
     exportRetryable: false,
     failureMessage: null,
     transcriptionStatus: "pending",
@@ -168,18 +168,18 @@ it("reads a recording again when its answer comes without the transcript list, s
     transcriptionExpiresAt: null,
     createdAt: "2026-10-21T00:00:00Z",
   } satisfies CallPageDTO["episodes"][number]["recordings"][number];
-  const episode = { id: "episode", status: "ended", startedAt: "2026-10-21T00:00:00Z", endedAt: "2026-10-21T00:05:00Z", participantCount: 1, recordingsNextCursor: null, recordings: [{ ...recording, transcripts: [] }] } satisfies CallPageDTO["episodes"][number];
+  const transcript = { id: "transcript", status: "preparing", languages: ["en"], createdAt: "2026-10-21T00:05:00Z" };
+  const episode = { id: "episode", status: "ended", startedAt: "2026-10-21T00:00:00Z", endedAt: "2026-10-21T00:05:00Z", participantCount: 1, recordingsNextCursor: null, recordings: [{ ...recording, transcripts: [transcript] }] } satisfies CallPageDTO["episodes"][number];
   const status = { latestEpisodeId: episode.id, episode: null, knocks: [] };
-  // The engine finished preparing and made a transcript, but the first read couldn't list it.
   vi.mocked(readPage)
     .mockResolvedValueOnce({ ...initial, call: { ...initial.call, admission: "anyone" }, episodes: [episode] })
     .mockResolvedValueOnce(status)
     .mockResolvedValueOnce(status)
-    .mockResolvedValueOnce({ kind: "recording", recording: { ...recording, transcriptionStatus: "ready" } })
-    .mockResolvedValueOnce(status)
-    .mockResolvedValueOnce(status)
-    .mockResolvedValueOnce({ kind: "recording", recording: { ...recording, transcriptionStatus: "ready", transcripts: [{ id: "transcript", status: "preparing", languages: ["en"], createdAt: "2026-10-21T00:05:00Z" }], transcriptsNextCursor: null } })
+    .mockResolvedValueOnce({ kind: "recording", recording: { ...recording, status: "completed", exportStatus: "ready", transcriptionStatus: "ready" } })
     .mockResolvedValue(status);
+  vi.mocked(act)
+    .mockRejectedValueOnce(new DashboardRequestError(503, "service_unavailable"))
+    .mockResolvedValueOnce({ transcripts: [{ ...transcript, status: "complete" }], nextCursor: null });
   await reactAct(async () => {
     render(<CallPage spaceId="space" />);
   });
@@ -188,7 +188,16 @@ it("reads a recording again when its answer comes without the transcript list, s
       await vi.advanceTimersByTimeAsync(5000);
     });
   expect(screen.getByText("Transcript processing")).toBeTruthy();
-  expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call", "call-status", "call-status", "call-metadata", "call-status", "call-status", "call-metadata"]);
+  expect(vi.mocked(readPage).mock.calls.filter(([page]) => page === "call-metadata")).toHaveLength(1);
+  expect(vi.mocked(act).mock.calls).toEqual([["past-session", { action: "transcripts", spaceId: "space", episodeId: "episode", recordingId: "recording" }]]);
+  for (let second = 25; second <= 40; second += 5)
+    await reactAct(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+  expect(screen.queryByText("Transcript processing")).toBeNull();
+  expect(screen.getByText("Transcript", { exact: true })).toBeTruthy();
+  expect(vi.mocked(readPage).mock.calls.filter(([page]) => page === "call-metadata")).toHaveLength(1);
+  expect(act).toHaveBeenCalledTimes(2);
 });
 
 it("reads an idle Call overview at most once per period across repeated tab resumes, and never over a read in flight", async () => {

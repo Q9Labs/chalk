@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, RecordingIdSchema, SpaceIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, listedRecording, run } from "./engine";
+import { attendance, listedRecording, recordingTranscripts, run } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import type { ArtifactURLDTO, CueDTO, PastSessionAction, PastSessionDTO } from "../src/lib/dashboard/contracts";
@@ -43,8 +43,7 @@ export async function pastMutation(engine: Engine, action: PastSessionAction) {
         return { transcript: transcriptDTO(result.transcript) };
       }
       case "transcripts": {
-        const result = await run(engine.api.transcripts.listTranscripts({ params: tenantParams, query: { recording_id: params.recording_id, page_size: 30, cursor: action.cursor } }));
-        return { transcripts: result.transcripts.map(transcriptDTO), nextCursor: result.pagination.next_cursor };
+        return recordingTranscripts(engine, params.recording_id, action.cursor);
       }
     }
   }

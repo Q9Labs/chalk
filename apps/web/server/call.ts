@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, listedRecording, live, run } from "./engine";
-import { callDTO, episodeDTO, recordingDTO, transcriptDTO } from "./dto";
+import { callDTO, episodeDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import { DashboardError } from "./http";
 import { knockDecisionAction, knockDecisionState, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
@@ -50,12 +50,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
         return {
           ...episodeDTO(episode),
           participantCount: people.participants.length,
-          recordings: await Promise.all(
-            recordings.recordings.map(async (recording) => {
-              const transcripts = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recording.id, page_size: 5 } }));
-              return { ...recordingDTO(recording), transcripts: transcripts.transcripts.map(transcriptDTO), transcriptsNextCursor: transcripts.pagination.next_cursor };
-            }),
-          ),
+          recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording))),
           recordingsNextCursor: recordings.pagination.next_cursor,
         };
       }),
