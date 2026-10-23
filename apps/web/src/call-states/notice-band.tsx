@@ -25,9 +25,16 @@ export function OfflineNoticeFixture() {
 export function NoticeBandFixture() {
   const [client] = useState(() => createCallStateClient(liveSnapshot()));
   useEffect(() => () => client.dispose(), [client]);
-  const long = new URLSearchParams(location.search).has("long");
+  const params = new URLSearchParams(location.search);
+  const long = params.has("long");
+  const fitWidth = params.has("fitWidth");
   const [toasts, setToasts] = useState<readonly Toast[]>(() =>
-    Array.from({ length: long ? 1 : 10 }, (_, index) => ({ id: String(index), message: long ? "Camera permission needs attention. ".repeat(100) : `Camera ${index + 1} could not start. Check its permissions and try again.`, type: "error", duration: Infinity })),
+    Array.from({ length: long || fitWidth ? 1 : 10 }, (_, index) => ({
+      id: String(index),
+      message: fitWidth ? "Camera permission needs attention. Check your browser settings before trying again." : long ? "Camera permission needs attention. ".repeat(100) : `Camera ${index + 1} could not start. Check its permissions and try again.`,
+      type: "error",
+      duration: Infinity,
+    })),
   );
   const [folded, setFolded] = useState<readonly string[]>([]);
   const dismiss = (id: string) => setToasts((current) => current.filter((toast) => toast.id !== id));

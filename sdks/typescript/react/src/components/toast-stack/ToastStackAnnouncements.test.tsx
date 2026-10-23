@@ -63,3 +63,18 @@ it("announces an explicit new revision even when its speech text is identical", 
     height.mockRestore();
   }
 });
+
+it("keeps speech available for an opaque visible message without announcementText", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  function Message() {
+    return <span>Camera blocked</span>;
+  }
+  try {
+    await act(async () => root.render(<ToastStack toasts={[{ id: "custom", message: <Message />, type: "error" }]} onDismiss={() => {}} />));
+    expect(container.querySelector("[data-part=toast]")?.getAttribute("role")).toBe("alert");
+    expect(container.querySelector("[data-part=toast]")?.getAttribute("aria-live")).toBe("assertive");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

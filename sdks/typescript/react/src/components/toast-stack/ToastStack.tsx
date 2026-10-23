@@ -88,10 +88,10 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     <>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
-          <ChalkToast key={toast.id} {...toast} announce={false} onDismiss={() => onDismiss(toast.id)} />
+          <ChalkToast key={toast.id} {...toast} announce={toast.announcementText === undefined && noticeAnnouncement(toast) === ""} onDismiss={() => onDismiss(toast.id)} />
         ))}
       </div>
-      {/* One text-only announcer owns speech, independent of caller-tree presentation. */}
+      {/* Text speech is independent of presentation. Opaque messages without speech text keep their visible live-region fallback. */}
       <div data-part="notice-announcer" className="sr-only">
         <div aria-live="polite">
           {announcing

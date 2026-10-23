@@ -128,3 +128,55 @@ it.each(["equivalent JSX", "band resize", "another notice", "initial band smalle
     vi.unstubAllGlobals();
   }
 });
+
+it.each([true, false])("reflows a folded layout at a new width without mounting callers just to measure (wrap=%s)", async (wrap) => {
+  let bandWidth = 300;
+  const notifications = new Set<() => void>();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private notify: () => void) {}
+      observe() {
+        notifications.add(this.notify);
+      }
+      disconnect() {
+        notifications.delete(this.notify);
+      }
+    },
+  );
+  const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => bandWidth);
+  const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return this.dataset.part === "call-frame" ? 844 : 60;
+  });
+  const childHeight = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => (wrap && bandWidth > 300 ? 48 : 100));
+  let mounts = 0;
+  function Message() {
+    useLayoutEffect(() => {
+      mounts += 1;
+    }, []);
+    return <span>A wrapped notice from a caller component</span>;
+  }
+  const frame = document.createElement("main");
+  frame.dataset.part = "call-frame";
+  document.body.append(frame);
+  const root = createRoot(frame);
+  try {
+    await act(async () => root.render(<ToastStack toasts={[{ id: "same", message: <Message />, announcementText: "Wrapped notice" }]} onDismiss={() => {}} onFold={() => {}} />));
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(0);
+    const before = mounts;
+    bandWidth = 800;
+    await act(async () => {
+      for (const notify of [...notifications]) notify();
+    });
+    expect(frame.querySelectorAll("[data-part=toast]")).toHaveLength(wrap ? 1 : 0);
+    expect(mounts).toBe(before + (wrap ? 1 : 0));
+    expect(frame.querySelectorAll("[data-part=toast-measurement]")).toHaveLength(0);
+  } finally {
+    await act(async () => root.unmount());
+    frame.remove();
+    width.mockRestore();
+    height.mockRestore();
+    childHeight.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});

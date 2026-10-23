@@ -794,3 +794,27 @@ it("keeps a weak-connection badge off the short tag on a small face", async () =
     await page.setViewportSize({ width: 1440, height: 900 });
   }
 });
+
+it("reflows a folded notice into a wider band and back without clipping", async () => {
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open("notice-band&fitWidth=1");
+    await page.evaluate(() => document.fonts.ready);
+    await page.addStyleTag({ content: ".chalk-toasts { height: 72px; top: auto; padding-bottom: 0; }" });
+    await expect.poll(() => page.locator("[data-part=toast]").count()).toBe(0);
+    await page.getByRole("button", { name: "Show 1 notice", exact: true }).waitFor();
+    await page.setViewportSize({ width: 900, height: 844 });
+    await expect.poll(() => page.locator("[data-part=toast]").count()).toBe(1);
+    const fits = await page.locator("[data-part=toast]").evaluate((toast) => {
+      const band = toast.parentElement?.getBoundingClientRect();
+      const box = toast.getBoundingClientRect();
+      return Boolean(band && box.top >= band.top && box.bottom <= band.bottom && box.left >= band.left && box.right <= band.right);
+    });
+    expect(fits).toBe(true);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.locator("[data-part=toast]").count()).toBe(0);
+    await page.getByRole("button", { name: "Show 1 notice", exact: true }).waitFor();
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});

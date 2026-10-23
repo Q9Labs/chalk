@@ -2,10 +2,14 @@ import { isValidElement, useLayoutEffect, useState, type RefObject } from "react
 import { flushSync } from "react-dom";
 import type { Toast } from "./ToastStack";
 import { noticeIdentity } from "./notice-announcement";
+import { captureToastLayout, measureToastLayout } from "./toast-layout-snapshot";
 
 interface Measurement {
   readonly toast: Toast;
   readonly height: number;
+  readonly width: number;
+  readonly markup: string;
+  readonly snapshot: HTMLDivElement;
 }
 interface Fit {
   readonly width: number;
@@ -51,20 +55,29 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
       const available = Math.max(0, node.clientHeight - padding);
       const gap = parseFloat(style.rowGap) || 0;
       const mounted = selected.filter((toast) => ownedIds.includes(toast.id));
-      const heights = elements.map((element) => Math.max(element.offsetHeight, Math.ceil(element.getBoundingClientRect().height)));
+      const updates = new Map<string, Measurement>();
+      mounted.forEach((toast, index) => {
+        const element = elements[index];
+        if (!element) return;
+        const height = Math.max(element.offsetHeight, Math.ceil(element.getBoundingClientRect().height));
+        const old = fit?.measurements.get(toast.id);
+        const markup = element.innerHTML;
+        if (!old || old.height !== height || old.width !== width || old.markup !== markup || !sameLayout(old.toast, toast)) {
+          updates.set(toast.id, { toast, height, width, markup, snapshot: captureToastLayout(element) });
+        }
+      });
+      for (const toast of candidates) {
+        const old = fit?.measurements.get(toast.id);
+        if (old && old.width !== width && !mounted.includes(toast) && sameLayout(old.toast, toast)) {
+          updates.set(toast.id, { ...old, width, height: measureToastLayout(node, old.snapshot) });
+        }
+      }
       setFit((previous) => {
         const measurements = new Map(previous?.measurements);
         const present = new Set(candidates.map((toast) => toast.id));
         for (const id of measurements.keys()) if (!present.has(id)) measurements.delete(id);
-        let changed = measurements.size !== previous?.measurements.size;
-        mounted.forEach((toast, index) => {
-          const height = heights[index] ?? 0;
-          const old = measurements.get(toast.id);
-          if (!old || old.height !== height || !sameLayout(old.toast, toast)) {
-            measurements.set(toast.id, { toast, height });
-            changed = true;
-          }
-        });
+        const changed = measurements.size !== previous?.measurements.size || updates.size > 0;
+        for (const [id, measurement] of updates) measurements.set(id, measurement);
         return !changed && previous?.width === width && previous.available === available && previous.gap === gap ? previous : { width, available, gap, measurements };
       });
     };
