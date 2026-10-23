@@ -54,6 +54,8 @@ defmodule ChalkSync.Episodes.Reducer do
         }
   @type t :: %__MODULE__{}
 
+  def max_participants, do: @max_participants
+
   def state_schema_version, do: @state_schema_version
 
   @spec new(String.t(), map()) :: t()

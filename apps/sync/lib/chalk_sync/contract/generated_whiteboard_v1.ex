@@ -18,7 +18,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "view" => %{
         "name" => "view_v1",
         "exactFields" => ["name"],
-        "extendedExactFields" => ["name", "origins"]
+        "extendedExactFields" => ["name", "origins"],
+        "ownerExactFields" => ["name", "origins", "owner"]
       },
       "drawPolicy" => %{"name" => "draw_policy_v1", "exactFields" => ["name"]}
     },
@@ -75,6 +76,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "socketQueueMaxAgeMs" => 5000,
       "cursorTtlMs" => 10_000,
       "cursorRatePerSecond" => 60,
+      "viewPeopleMaxItems" => 500,
       "pendingOperationMaxItems" => 128,
       "multipartUpdateMaxParts" => 128,
       "multipartUpdateMaxItems" => 10_000,
@@ -135,6 +137,8 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         "maxCoordinate" => 1_000_000,
         "maxExtent" => 2_000_000,
         "epochField" => "origin_epoch",
+        "inputFields" => ["input_id", "move"],
+        "ownerFields" => ["owner_id", "owner_sequence"],
         "originFields" => ["origin_participant_id", "origin_sequence"],
         "clientExactFields" => ["type", "x", "y", "width", "height", "bring"],
         "serverExactFields" => [
@@ -150,6 +154,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
         ]
       },
       "welcome" => %{
+        "ownerField" => "view_owner_id",
         "exactFields" => [
           "type",
           "protocol",
@@ -239,6 +244,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "presentation_updated",
       "reset_required",
       "operation_error",
+      "view_ack",
       "pong"
     ],
     "receiptOperations" => [
@@ -309,6 +315,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "socketQueueMaxAgeMs" => 5000,
     "cursorTtlMs" => 10_000,
     "cursorRatePerSecond" => 60,
+    "viewPeopleMaxItems" => 500,
     "pendingOperationMaxItems" => 128,
     "multipartUpdateMaxParts" => 128,
     "multipartUpdateMaxItems" => 10_000,
@@ -377,6 +384,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
       "operation_error" -> valid_operation_error?(frame)
+      "view_ack" -> exact?(frame, ["type", "input_id"]) and valid_input_id?(frame["input_id"])
       "pong" -> exact?(frame, ["type"])
       _ -> false
     end
@@ -436,7 +444,9 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       base in [
         [%{"name" => "presentation_v1"}],
         [%{"name" => "presentation_v1"}, %{"name" => "view_v1"}],
-        [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
+        [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}],
+        [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true,
+            "owner" => true}]
       ]
   end
 
@@ -580,7 +590,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp decode_view(frame) do
-    if view_fields?(frame, [
+    if view_client_fields?(frame, [
   "type",
   "x",
   "y",
@@ -603,6 +613,22 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     end
   end
 
+  defp view_client_fields?(%{"input_id" => input, "move" => move} = frame, fields) do
+    valid_input_id?(input) and is_boolean(move) and
+      view_fields?(Map.drop(frame, ["input_id", "move"]), fields)
+  end
+
+  defp view_client_fields?(frame, fields), do: view_fields?(frame, fields)
+
+  defp view_server_fields?(%{"owner_id" => owner, "owner_sequence" => sequence} = frame,
+      fields) do
+    uuid?(owner) and is_integer(sequence) and sequence > 0 and
+        sequence <= 9_007_199_254_740_991 and
+      view_fields?(Map.drop(frame, ["owner_id", "owner_sequence"]), fields)
+  end
+
+  defp view_server_fields?(frame, fields), do: view_fields?(frame, fields)
+
   defp view_fields?(frame, fields) do
     epoch = frame["origin_epoch"]
     origin_frame = Map.delete(frame, "origin_epoch")
@@ -616,6 +642,16 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
          frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991))
   end
 
+  defp valid_input_id?(input) when is_binary(input) and byte_size(input) <= 64 do
+    case String.split(input, ":") do
+      [stream, sequence] -> uuid?(stream) and Regex.match?(~r/^[1-9][0-9]{0,15}$/, sequence) and match?({n, ""} when n > 0 and n <= 9_007_199_254_740_991, Integer.parse(sequence))
+      _ -> false
+    end
+  end
+  defp valid_input_id?(_input), do: false
+
+  defp view_origin(%{"input_id" => id, "move" => move} = frame),
+    do: Map.merge(view_origin(Map.drop(frame, ["input_id", "move"])), %{input_id: id, move: move})
   defp view_origin(%{"origin_epoch" => epoch} = frame),
     do: Map.put(view_origin(Map.delete(frame, "origin_epoch")), :origin_epoch, epoch)
   defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
@@ -628,6 +664,10 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0 and
       abs(frame["x"]) <= 1000000 and abs(frame["y"]) <= 1000000 and
       frame["width"] <= 2000000 and frame["height"] <= 2000000
+  end
+
+  defp valid_welcome?(%{"view_owner_id" => owner} = frame) do
+    uuid?(owner) and valid_welcome?(Map.delete(frame, "view_owner_id"))
   end
 
   defp valid_welcome?(frame) do
@@ -743,7 +783,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp valid_server_view?(frame) do
-    view_fields?(frame, [
+    view_server_fields?(frame, [
   "type",
   "participant_id",
   "display_name",

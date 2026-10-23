@@ -19,6 +19,7 @@ export const WhiteboardV1ProtocolMetadata = {
       name: "view_v1",
       exactFields: ["name"],
       extendedExactFields: ["name", "origins"],
+      ownerExactFields: ["name", "origins", "owner"],
     },
     drawPolicy: {
       name: "draw_policy_v1",
@@ -70,6 +71,7 @@ export const WhiteboardV1ProtocolMetadata = {
     socketQueueMaxAgeMs: 5000,
     cursorTtlMs: 10000,
     cursorRatePerSecond: 60,
+    viewPeopleMaxItems: 500,
     pendingOperationMaxItems: 128,
     multipartUpdateMaxParts: 128,
     multipartUpdateMaxItems: 10000,
@@ -128,11 +130,14 @@ export const WhiteboardV1ProtocolMetadata = {
       maxCoordinate: 1000000,
       maxExtent: 2000000,
       epochField: "origin_epoch",
+      inputFields: ["input_id", "move"],
+      ownerFields: ["owner_id", "owner_sequence"],
       originFields: ["origin_participant_id", "origin_sequence"],
       clientExactFields: ["type", "x", "y", "width", "height", "bring"],
       serverExactFields: ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"],
     },
     welcome: {
+      ownerField: "view_owner_id",
       exactFields: ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"],
       extendedExactFields: ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"],
     },
@@ -166,7 +171,7 @@ export const WhiteboardV1ProtocolMetadata = {
     },
   },
   clientFrames: ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"],
-  serverFrames: ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "pong"],
+  serverFrames: ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "view_ack", "pong"],
   receiptOperations: ["submit_update", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"],
   receiptOutcomes: ["committed", "duplicate"],
   resetReasons: ["scene_changed", "cursor_expired", "gap"],
@@ -221,7 +226,7 @@ export type WhiteboardV1Element = {
 export type WhiteboardV1Cursor = { readonly scene_id: string; readonly revision: string };
 export type WhiteboardV1SharedAppState = { readonly view_background_color: string } | null;
 export type WhiteboardV1PresentationExtension = { readonly name: "presentation_v1" };
-export type WhiteboardV1ViewExtension = { readonly name: "view_v1"; readonly origins?: true };
+export type WhiteboardV1ViewExtension = { readonly name: "view_v1" } | { readonly name: "view_v1"; readonly origins: true } | { readonly name: "view_v1"; readonly origins: true; readonly owner: true };
 export type WhiteboardV1DrawPolicyExtension = { readonly name: "draw_policy_v1" };
 export type WhiteboardV1Extensions =
   | readonly [WhiteboardV1PresentationExtension]
@@ -232,6 +237,8 @@ export type WhiteboardV1Extensions =
 export type WhiteboardV1DrawPolicy = "everyone" | "hosts" | "picked";
 export type WhiteboardV1DrawGrant = { readonly participant_id: string; readonly can_draw: boolean };
 export type WhiteboardV1ViewOrigin = { readonly origin_participant_id: string; readonly origin_sequence: number; readonly origin_epoch?: string } | { readonly origin_participant_id?: never; readonly origin_sequence?: never; readonly origin_epoch?: never };
+export type WhiteboardV1ViewInput = { readonly input_id: string; readonly move: boolean } | { readonly input_id?: never; readonly move?: never };
+export type WhiteboardV1ViewOrder = { readonly owner_id: string; readonly owner_sequence: number } | { readonly owner_id?: never; readonly owner_sequence?: never };
 export type WhiteboardV1ClientFrame =
   | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null }
   | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly extensions: WhiteboardV1Extensions }
@@ -244,7 +251,7 @@ export type WhiteboardV1ClientFrame =
   | { readonly type: "set_draw_policy"; readonly operation_id: string; readonly policy: WhiteboardV1DrawPolicy }
   | { readonly type: "set_presentation"; readonly operation_id: string; readonly presenting: boolean }
   | { readonly type: "cursor"; readonly x: number; readonly y: number }
-  | ({ readonly type: "view"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean } & WhiteboardV1ViewOrigin)
+  | ({ readonly type: "view"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean } & WhiteboardV1ViewOrigin & WhiteboardV1ViewInput)
   | { readonly type: "ping" };
 export type WhiteboardV1ServerFrame =
   | {
@@ -269,13 +276,14 @@ export type WhiteboardV1ServerFrame =
       readonly revision: string;
       readonly can_draw: boolean;
       readonly presenting: boolean;
+      readonly view_owner_id?: string;
     }
   | { readonly type: "snapshot_page"; readonly request_id: string; readonly scene_id: string; readonly revision: string; readonly page: number; readonly page_count: number; readonly elements: readonly WhiteboardV1Element[]; readonly app_state: WhiteboardV1SharedAppState }
   | { readonly type: "update"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "update_part"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "commit"; readonly operation_id: string; readonly outcome: "committed" | "duplicate"; readonly scene_id: string; readonly revision: string }
   | { readonly type: "cursor"; readonly participant_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly occurred_at: string }
-  | ({ readonly type: "view"; readonly participant_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean; readonly occurred_at: string } & WhiteboardV1ViewOrigin)
+  | ({ readonly type: "view"; readonly participant_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean; readonly occurred_at: string } & WhiteboardV1ViewOrigin & WhiteboardV1ViewOrder)
   | { readonly type: "permission_updated"; readonly participant_id: string; readonly can_draw: boolean }
   | { readonly type: "draw_access"; readonly policy: WhiteboardV1DrawPolicy; readonly can_draw: boolean; readonly capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly grants: readonly WhiteboardV1DrawGrant[] }
   | { readonly type: "presentation_updated"; readonly scene_id: string; readonly revision: string; readonly presenting: boolean }
@@ -288,6 +296,7 @@ export type WhiteboardV1ServerFrame =
       readonly recoverable: boolean;
       readonly message: string;
     }
+  | { readonly type: "view_ack"; readonly input_id: string }
   | { readonly type: "pong" };
 
 const textEncoder = new TextEncoder();
@@ -445,12 +454,28 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
     case "cursor":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.cursor.clientExactFields) && isFiniteNumber(value.x) && isFiniteNumber(value.y) && encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes;
     case "view":
-      return isViewFields(value, WhiteboardV1ProtocolMetadata.frames.view.clientExactFields) && isViewRect(value) && typeof value.bring === "boolean" && encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes;
+      return isViewInput(value, WhiteboardV1ProtocolMetadata.frames.view.clientExactFields) && isViewRect(value) && typeof value.bring === "boolean" && encodedWhiteboardV1FrameBytes(value) <= WhiteboardV1ProtocolLimits.cursorFrameBytes;
     case "ping":
       return hasExactKeys(value, ["type"]);
     default:
       return false;
   }
+}
+
+function isViewInputId(input_id: unknown): boolean {
+  return typeof input_id === "string" && /^[0-9a-fA-F-]{36}:[1-9][0-9]{0,15}$/.test(input_id) && isUuid(input_id.split(":")[0]) && Number.isSafeInteger(Number(input_id.split(":")[1]));
+}
+
+function isViewInput(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  if (!("input_id" in value || "move" in value)) return isViewFields(value, fields);
+  const { input_id, move, ...rectangle } = value;
+  return isViewInputId(input_id) && typeof move === "boolean" && isViewFields(rectangle, fields);
+}
+
+function isViewOrder(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  if (!("owner_id" in value || "owner_sequence" in value)) return isViewFields(value, fields);
+  const { owner_id, owner_sequence, ...rectangle } = value;
+  return isUuid(owner_id) && Number.isSafeInteger(owner_sequence) && Number(owner_sequence) > 0 && isViewFields(rectangle, fields);
 }
 
 function isViewFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
@@ -489,7 +514,11 @@ function isExtensions(value: unknown): value is WhiteboardV1Extensions {
   const drawPolicyLast = value.length > 0 && isExtension(value[value.length - 1], drawPolicy);
   const base = drawPolicyLast ? value.slice(0, -1) : value;
   if (base.length === 0) return drawPolicyLast;
-  return (base.length === 1 || base.length === 2) && isExtension(base[0], presentation) && (base.length === 1 || isExtension(base[1], view) || (hasExactKeys(base[1], view.extendedExactFields) && base[1].name === view.name && base[1].origins === true));
+  return (
+    (base.length === 1 || base.length === 2) &&
+    isExtension(base[0], presentation) &&
+    (base.length === 1 || isExtension(base[1], view) || (hasExactKeys(base[1], view.ownerExactFields) && base[1].name === view.name && base[1].origins === true && base[1].owner === true) || (hasExactKeys(base[1], view.extendedExactFields) && base[1].name === view.name && base[1].origins === true))
+  );
 }
 
 function isDrawPolicy(value: unknown): value is WhiteboardV1DrawPolicy {
@@ -501,6 +530,10 @@ function isDrawGrant(value: unknown): value is WhiteboardV1DrawGrant {
 }
 
 function isWelcome(value: Record<string, unknown>): boolean {
+  if ("view_owner_id" in value) {
+    const { view_owner_id, ...welcome } = value;
+    return isUuid(view_owner_id) && isWelcome(welcome);
+  }
   const exact = hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.welcome.exactFields) || (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.welcome.extendedExactFields) && typeof value.presenting === "boolean");
   return (
     exact &&
@@ -577,7 +610,7 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
       );
     case "view":
       return (
-        isViewFields(value, WhiteboardV1ProtocolMetadata.frames.view.serverExactFields) &&
+        isViewOrder(value, WhiteboardV1ProtocolMetadata.frames.view.serverExactFields) &&
         isUuid(value.participant_id) &&
         typeof value.display_name === "string" &&
         utf8Bytes(value.display_name) > 0 &&
@@ -615,6 +648,8 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
         typeof value.message === "string" &&
         utf8Bytes(value.message) <= WhiteboardV1ProtocolLimits.errorMessageMaxBytes
       );
+    case "view_ack":
+      return hasExactKeys(value, ["type", "input_id"]) && isViewInputId(value.input_id);
     case "pong":
       return hasExactKeys(value, ["type"]);
     default:

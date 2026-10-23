@@ -17,4 +17,5 @@ pnpm exec oxfmt --write \
   sdks/typescript/client/src/generated/http-api.ts \
   sdks/typescript/client/src/generated/sync.ts \
   sdks/typescript/client/src/generated/whiteboard-v1.ts \
+  sdks/typescript/react/src/internal/whiteboard-view-limits.ts \
   sdks/typescript/client/src/generated/openapi-types.d.ts

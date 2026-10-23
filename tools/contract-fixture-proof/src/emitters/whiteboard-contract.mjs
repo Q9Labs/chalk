@@ -43,6 +43,10 @@ function validateWhiteboardContract(contract) {
   requireExactStrings(contract.frames?.setDrawPolicy?.exactFields, ["type", "operation_id", "policy"], "frames.setDrawPolicy.exactFields");
   requireExactStrings(contract.frames?.drawAccess?.exactFields, ["type", "policy", "can_draw", "capabilities", "grants"], "frames.drawAccess.exactFields");
   requireExactStrings(contract.frames?.drawAccess?.grantExactFields, ["participant_id", "can_draw"], "frames.drawAccess.grantExactFields");
+  requireExactStrings(contract.extensions.view.ownerExactFields, ["name", "origins", "owner"], "extensions.view.ownerExactFields");
+  requireExactStrings(contract.frames.view.inputFields, ["input_id", "move"], "frames.view.inputFields");
+  requireExactStrings(contract.frames.view.ownerFields, ["owner_id", "owner_sequence"], "frames.view.ownerFields");
+  if (contract.frames.welcome.ownerField !== "view_owner_id") throw new Error("Invalid view owner welcome field");
   if (contract.frames?.view?.epochField !== "origin_epoch" || !Number.isSafeInteger(contract.frames.view.maxCoordinate) || contract.frames.view.maxCoordinate <= 0 || !Number.isSafeInteger(contract.frames.view.maxExtent) || contract.frames.view.maxExtent <= 0)
     throw new Error("Invalid whiteboard contract: views require an epoch field and bounded coordinates");
   requireExactStrings(contract.frames?.view?.originFields, ["origin_participant_id", "origin_sequence"], "frames.view.originFields");
@@ -55,7 +59,7 @@ function validateWhiteboardContract(contract) {
 
   requireExactStrings(contract.capabilities, ["drawWhiteboard", "manageWhiteboard"], "capabilities");
   requireExactStrings(contract.clientFrames, ["hello", "submit_update", "submit_update_part", "request_snapshot", "snapshot_ack", "clear", "set_draw_permission", "set_draw_policy", "set_presentation", "cursor", "view", "ping"], "clientFrames");
-  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "pong"], "serverFrames");
+  requireExactStrings(contract.serverFrames, ["welcome", "snapshot_page", "update", "update_part", "commit", "cursor", "view", "permission_updated", "draw_access", "presentation_updated", "reset_required", "operation_error", "view_ack", "pong"], "serverFrames");
   requireExactStrings(contract.receiptOperations, ["submit_update", "clear", "set_draw_permission", "set_draw_policy", "set_presentation"], "receiptOperations");
   requireExactStrings(contract.receiptOutcomes, ["committed", "duplicate"], "receiptOutcomes");
   requireExactStrings(contract.resetReasons, ["scene_changed", "cursor_expired", "gap"], "resetReasons");

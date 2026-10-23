@@ -73,6 +73,47 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
              GeneratedWhiteboardV1.decode_client_frame(%{versioned | "origin_sequence" => 0})
   end
 
+  test "owner inputs cannot supply canonical output sequences" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "participant-token",
+      "cursor" => nil,
+      "extensions" => [
+        %{"name" => "presentation_v1"},
+        %{"name" => "view_v1", "origins" => true, "owner" => true}
+      ]
+    }
+
+    assert {:ok, {:hello, _}} = GeneratedWhiteboardV1.decode_client_frame(hello)
+
+    view = %{
+      "type" => "view",
+      "x" => 0,
+      "y" => 0,
+      "width" => 100,
+      "height" => 100,
+      "bring" => false
+    }
+
+    input = Map.merge(view, %{"input_id" => "#{@participant_id}:1", "move" => true})
+    assert {:ok, {:view, %{move: true}}} = GeneratedWhiteboardV1.decode_client_frame(input)
+
+    for id <- [
+          "#{@participant_id}:0",
+          "#{@participant_id}:01",
+          "#{@participant_id}:9007199254740992"
+        ] do
+      assert {:error, :invalid_payload} =
+               GeneratedWhiteboardV1.decode_client_frame(%{input | "input_id" => id})
+    end
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(
+               Map.merge(view, %{"owner_id" => @participant_id, "owner_sequence" => 999})
+             )
+  end
+
   test "bounds view coordinates and extents before broadcasting" do
     view = %{
       "type" => "view",

@@ -10,12 +10,15 @@ import { SpaceStage } from "../stage/SpaceStage";
 import * as BoardMenuModule from "./BoardMenu";
 import { BoardToastContext } from "./board-toasts";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
-import type { Capability, ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import { ChalkWhiteboardV1Client, type ChalkWhiteboardV1ClientOptions, type Capability, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 
 type TestEngine = {
   pan: (x: number, y: number) => void;
   camera: () => { x: number; y: number };
+  cameraWrites: () => number;
+  logicalWidth: () => number;
+  zoom: (value: number) => void;
   editText: (editing: boolean, changed?: boolean) => void;
   select: (kind: "note" | "highlighter") => void;
   elements: () => readonly { strokeColor?: string; strokeWidth?: number; backgroundColor?: string; opacity?: number; isDeleted: boolean }[];
@@ -77,6 +80,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
     const notify = () => {
       for (const listener of changes) listener(elements, appState, {});
     };
+    let cameraWrites = 0;
     const api = {
       history: { clear: clearHistory },
       registerAction: (action: Parameters<typeof actions.add>[0]) => {
@@ -87,6 +91,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
       getSceneElementsIncludingDeleted: () => elements,
       getFiles: () => ({}),
       updateScene: (input: { appState?: Partial<State>; elements?: readonly TextElement[]; captureUpdate?: string }) => {
+        if (input.appState && ("scrollX" in input.appState || "scrollY" in input.appState || "zoom" in input.appState)) cameraWrites++;
         if (input.captureUpdate === "IMMEDIATELY") record();
         const before = appState;
         appState = { ...appState, ...input.appState };
@@ -130,6 +135,9 @@ vi.mock("@excalidraw/excalidraw", async () => {
       nudge: record,
       pan: (x, y) => api.updateScene({ appState: { scrollX: x, scrollY: y } }),
       camera: () => ({ x: appState.scrollX, y: appState.scrollY }),
+      cameraWrites: () => cameraWrites,
+      logicalWidth: () => 1 / appState.zoom.value,
+      zoom: (value) => api.updateScene({ appState: { zoom: { value } } }),
       editText: (editing, changed = false) => {
         if (changed) record();
         if (changed) elements = [{ id: "text", type: "text", version: (elements[0]?.version ?? 0) + 1, isDeleted: false }];
@@ -230,14 +238,15 @@ async function finishOpening(container: HTMLElement, count = 1) {
 }
 
 it.each([
-  [2, false, false, false],
-  [2, true, false, false],
-  [2, false, true, false],
-  [2, true, true, false],
-  [3, false, false, false],
-  [3, true, false, false],
-  [2, false, false, true],
-] as const)("%s cyclic followers settle after crossed 50 ms updates: reduced %s, different shapes %s, legacy %s", async (count, reduced, differentShapes, legacy) => {
+  [2, false, false, false, false],
+  [2, true, false, false, false],
+  [2, false, true, false, false],
+  [2, true, true, false, false],
+  [3, false, false, false, false],
+  [3, true, false, false, false],
+  [2, false, false, true, false],
+  [2, false, false, false, true],
+] as const)("%s cyclic followers settle after crossed 50 ms updates: reduced %s, different shapes %s, legacy %s, zoom %s", async (count, reduced, differentShapes, legacy, zoomLeader) => {
   vi.useFakeTimers();
   vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduced && query.includes("prefers-reduced-motion"), addEventListener() {}, removeEventListener() {} }));
   if (differentShapes) {
@@ -252,7 +261,8 @@ it.each([
   const sequences = peers.map(() => 0);
   const sends = peers.map((_, index) =>
     vi.fn((view: ChalkWhiteboardView) => {
-      const frame = legacy ? { x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } : view.originParticipantId ? view : { ...view, originParticipantId: String(index), originSequence: (sequences[index] = (sequences[index] ?? 0) + 1) };
+      if (zoomLeader && view.lead === false) return true;
+      const frame = legacy ? { x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } : view.originParticipantId ? view : { ...view, originParticipantId: String(index), originEpoch: "initial", originSequence: (sequences[index] = (sequences[index] ?? 0) + 1) };
       for (const [other, peer] of peers.entries()) if (other !== index) setTimeout(() => peer.receive(String(index), frame), 50);
       return true;
     }),
@@ -290,10 +300,20 @@ it.each([
     });
     await act(async () => peers.forEach((_, index) => render(index, true)));
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    if (zoomLeader) {
+      await act(async () => render(0, false));
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')?.click();
+        await vi.advanceTimersByTimeAsync(1_200);
+      });
+      expect(engines[0]?.logicalWidth()).toBeCloseTo(0.8, 5);
+      expect(engines[1]?.logicalWidth()).toBeCloseTo(engines[0]?.logicalWidth() ?? 0, 5);
+      expect(sends[0]).toHaveBeenLastCalledWith(expect.objectContaining({ width: 0.8, lead: true }));
+    }
     const settled = engines.map((engine) => engine.camera());
     sends.forEach((send) => send.mockClear());
     await act(async () => vi.advanceTimersByTimeAsync(6_000));
-    sends.forEach((send) => expect(send).not.toHaveBeenCalled());
+    sends.forEach((send) => (zoomLeader ? expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ lead: true })) : expect(send).not.toHaveBeenCalled()));
     expect(engines.map((engine) => engine.camera())).toEqual(settled);
   } finally {
     await act(async () => roots.forEach((root) => root.unmount()));
@@ -309,7 +329,7 @@ it.each([false, true])("relays a leader through C → B → A, reduced motion %s
   const sequences = [0, 0, 0];
   const sends = peers.map((_, index) =>
     vi.fn((view: ChalkWhiteboardView) => {
-      const frame = view.originParticipantId ? view : { ...view, originParticipantId: String(index), originSequence: (sequences[index] = (sequences[index] ?? 0) + 1) };
+      const frame = { ...view, ownerId: "owner", ownerSequence: (sequences[index] = (sequences[index] ?? 0) + 1) };
       for (const [other, peer] of peers.entries()) if (other !== index) setTimeout(() => peer.receive(String(index), frame), 50);
       return true;
     }),
@@ -361,20 +381,174 @@ it.each([false, true])("relays a leader through C → B → A, reduced motion %s
     const settled = follower.camera();
     sends[2]?.mockClear();
     await act(async () => {
-      peers[2]?.receive("1", { ...latest, x: 999, originSequence: latest.originSequence - 1 });
+      peers[2]?.receive("1", { ...latest, x: 999, ownerId: "owner", ownerSequence: (sequences[1] ?? 1) - 1 });
       await vi.advanceTimersByTimeAsync(600);
     });
     expect(follower.camera()).toEqual(settled);
     expect(sends[2]).not.toHaveBeenCalledWith(expect.objectContaining({ x: 999 }));
     await act(async () => {
-      peers[2]?.receive("1", { ...latest, x: 432, originSequence: 1, originEpoch: "reconnected" });
-      await vi.advanceTimersByTimeAsync(600);
+      peers[1]?.receive("0", { ...latest, x: 432, ownerId: "owner", ownerSequence: (sequences[0] ?? 0) + 1 });
+      await vi.advanceTimersByTimeAsync(1_200);
     });
     expect(follower.camera().x).toBeCloseTo(-432, 2);
+    sends[2]?.mockClear();
+    await act(async () => {
+      peers[1]?.receive("0", { ...latest, x: 999, ownerId: "owner", ownerSequence: 1 });
+      await vi.advanceTimersByTimeAsync(1_200);
+    });
+    expect(follower.camera().x).toBeCloseTo(-432, 2);
+    expect(sends[2]).not.toHaveBeenCalledWith(expect.objectContaining({ x: 999 }));
+    await act(async () => {
+      peers[1]?.receive("0", { ...latest, x: 456, ownerId: "owner", ownerSequence: 1000 });
+      await vi.advanceTimersByTimeAsync(1_200);
+    });
+    expect(follower.camera().x).toBeCloseTo(-456, 2);
+    await act(async () => {
+      peers[1]?.receive("0", { ...latest, x: 789, ownerId: "owner", ownerSequence: 1001 });
+      await vi.advanceTimersByTimeAsync(1_200);
+    });
+    expect(follower.camera().x).toBeCloseTo(-789, 2);
   } finally {
     await act(async () => roots.forEach((root) => root.unmount()));
     container.remove();
     clients.forEach((client) => client.dispose());
+  }
+});
+
+it("ignores unchanged owner refreshes without camera writes or relay echoes", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16));
+  vi.stubGlobal("cancelAnimationFrame", (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle));
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (_container, engine, peer) => {
+      const view = { x: 432, y: 0, width: 100, height: 100, bring: false, ownerId: "owner", ownerSequence: 1 };
+      await act(async () => {
+        peer.receive("remote", view);
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      const before = engine.camera(),
+        writes = engine.cameraWrites();
+      send.mockClear();
+      for (let tick = 0; tick < 6; tick++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2_000);
+          peer.receive("remote", view);
+          await vi.advanceTimersByTimeAsync(200);
+        });
+      }
+      expect(engine.camera()).toEqual(before);
+      expect(engine.cameraWrites()).toBe(writes);
+      expect(send).not.toHaveBeenCalled();
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it("cancels an older glide when the newest owner view returns to the current camera", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16));
+  vi.stubGlobal("cancelAnimationFrame", (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle));
+  await withOpenBoard(async (_container, engine, peer) => {
+    const view = { x: 432, y: 0, width: 100, height: 100, bring: false, ownerId: "owner", ownerSequence: 1 };
+    await act(async () => {
+      peer.receive("remote", view);
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    const baseline = engine.camera(),
+      writes = engine.cameraWrites();
+    await act(async () => {
+      peer.receive("remote", { ...view, x: 999, ownerSequence: 2 });
+      peer.receive("remote", { ...view, ownerSequence: 3 });
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(engine.camera()).toEqual(baseline);
+    expect(engine.cameraWrites()).toBe(writes);
+  });
+});
+
+it("preserves a legacy relay's original person and tab epoch after Bring", async () => {
+  vi.useFakeTimers();
+  const peer = createPeer();
+  const client = participantClient("follower");
+  const sendView = vi.fn(() => true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <Board board={peer.board} primary visible colorScheme="dark" people={[]} following="relay" onFollow={() => undefined} sendView={sendView} />
+        </ChalkProvider>,
+      ),
+    );
+    await finishOpening(container);
+    await act(async () => {
+      peer.receive("relay", { x: 123, y: 0, width: 100, height: 100, bring: true, originParticipantId: "origin", originSequence: 7, originEpoch: "tab-a" });
+      await vi.advanceTimersByTimeAsync(1_200);
+    });
+    expect(sendView).toHaveBeenLastCalledWith(expect.objectContaining({ x: 123, bring: false, originParticipantId: "origin", originSequence: 7, originEpoch: "tab-a" }));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
+  }
+});
+
+it.each([
+  ["relay", "origin"],
+  ["origin", "relay"],
+])("keeps direct reconnect history after %s then %s delivery", async (first, second) => {
+  vi.useFakeTimers();
+  vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+  const peer = createPeer();
+  const client = participantClient("follower");
+  const sendView = vi.fn(() => true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (following: string) =>
+    root.render(
+      <ChalkProvider client={client}>
+        <Board board={peer.board} primary visible colorScheme="dark" people={[]} following={following} onFollow={() => undefined} sendView={sendView} />
+      </ChalkProvider>,
+    );
+  try {
+    await act(async () => render("relay"));
+    await finishOpening(container);
+    const [follower] = loadedEngines();
+    if (!follower) throw new Error("Follower must be initialized");
+    const view = { x: 100, y: 0, width: 100, height: 100, bring: false, originParticipantId: "origin", originSequence: 100, ownerId: "owner", ownerSequence: 100 };
+    for (const publisher of [first, second])
+      await act(async () => {
+        peer.receive(publisher, view);
+        await vi.advanceTimersByTimeAsync(400);
+      });
+    await act(async () => render("origin"));
+    const reconnected = { ...view, x: 432, originSequence: 101, ownerSequence: 101 };
+    await act(async () => {
+      peer.receive("origin", reconnected);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(sendView).toHaveBeenLastCalledWith(expect.objectContaining({ x: 432, lead: true, originParticipantId: "origin", originSequence: 101 }));
+    const current = follower.camera();
+    await act(async () => {
+      peer.receive("origin", { ...view, x: 999, ownerSequence: 100 });
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(follower.camera()).toEqual(current);
+    await act(async () => {
+      peer.receive("origin", { ...reconnected, x: 456, ownerSequence: 102 });
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(follower.camera()).not.toEqual(current);
+    expect(sendView).toHaveBeenLastCalledWith(expect.objectContaining({ x: 456, lead: false, originParticipantId: "origin", originSequence: 102 }));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.dispose();
   }
 });
 
@@ -705,18 +879,19 @@ it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s 
 });
 
 async function withOpenBoard(
-  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible">> | null) => Promise<void>) => Promise<void>,
+  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null) => Promise<void>) => Promise<void>,
   primary = true,
-  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"] } = {},
+  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
 ) {
   const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
+  options.onClient?.(client);
   const peer = createPeer();
   const board = { ...peer.board, collab: { ...peer.board.collab, canDraw: options.canDraw ?? true } };
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   const toast = vi.fn();
-  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible">>) {
+  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">>) {
     const [following, setFollowing] = useState<string | null>("remote");
     return (
       <Board
@@ -735,7 +910,7 @@ async function withOpenBoard(
       />
     );
   }
-  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible">> | null = {}) => {
+  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null = {}) => {
     await act(async () =>
       root.render(
         props === null ? null : (
@@ -967,6 +1142,21 @@ it.each(["draw", "nudge", "delete", "restyle"])("reads engine history after %s, 
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')?.disabled).toBe(true);
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Redo"]')?.disabled).toBe(false);
   });
+});
+
+it.each(["local", "legacy"])("accepts %s Bring even when its person is self", async (kind) => {
+  vi.useFakeTimers();
+  const onFollow = vi.fn();
+  await withOpenBoard(
+    async (_container, _engine, peer, toast) => {
+      const person = kind === "local" ? "participant-local" : "presenter";
+      await act(async () => peer.receive(person, { x: 25, y: 25, width: 100, height: 100, bring: true, originParticipantId: "participant-local", originSequence: 1 }));
+      expect(onFollow).toHaveBeenCalledWith(person);
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Someone brought everyone to this view" }));
+    },
+    true,
+    { onFollow, onClient: (client) => client.updateSnapshot((snapshot) => ({ ...snapshot, self: { ...snapshot.self, participantId: "participant-local" } })) },
+  );
 });
 
 it("processes Bring even after the same origin version was applied through a relay", async () => {
@@ -1219,4 +1409,153 @@ it("does not resurrect an ended screen-switcher choice when the same person shar
     container.remove();
     client.dispose();
   }
+});
+
+it("automatic first-content fit follows the default camera leadership rule", async () => {
+  vi.useFakeTimers();
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (_container, engine, _peer, _toast, render) => {
+      await render({ following: null });
+      send.mockClear();
+      await act(async () => {
+        engine.select("note");
+        await vi.advanceTimersByTimeAsync(800);
+      });
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it("discovery and idle refreshes preserve a coalesced real leadership intent", async () => {
+  vi.useFakeTimers();
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (_container, engine, peer, _toast, render) => {
+      await render({ following: null });
+      await act(async () => vi.advanceTimersByTimeAsync(200));
+      send.mockClear();
+      await act(async () => {
+        engine.pan(10, 20);
+        peer.receive("new-peer", { x: 50, y: 0, width: 100, height: 100, bring: false });
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+      send.mockClear();
+      await act(async () => vi.advanceTimersByTimeAsync(2200));
+      expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+const cameraMoveCases: readonly { name: string; follow?: true; run: (container: HTMLElement, engine: TestEngine, peer: { receive: (id: string, view: ChalkWhiteboardView) => void }) => void }[] = [
+  { name: "engine pan", run: (_container, engine) => engine.pan(25, 30) },
+  { name: "engine wheel/pinch zoom", run: (_container, engine) => engine.zoom(1.5) },
+  { name: "engine zoom beyond its clamp", run: (_container, engine) => engine.zoom(99) },
+  ...["Zoom in", "Zoom out", "Zoom 125%, reset to 100%", "Fit to content"].map((label) => ({
+    name: label,
+    run: (container: HTMLElement) =>
+      (() => {
+        const button = container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
+        if (!button) throw new Error(`Missing ${label}`);
+        button.click();
+      })(),
+  })),
+  ...["+", "=", "-"].map((key) => ({
+    name: `keyboard ${key}`,
+    run: (container: HTMLElement) =>
+      (() => {
+        const board = container.querySelector(".chalk-board");
+        if (!board) throw new Error("Missing board");
+        board.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      })(),
+  })),
+  { name: "first-content fit", run: (_container, engine) => engine.select("note") },
+  { name: "follow apply", follow: true, run: (_container, _engine, peer) => peer.receive("remote", { x: 200, y: 0, width: 100, height: 100, bring: false, originParticipantId: "remote", originEpoch: "camera-table", originSequence: 2 }) },
+];
+it.each(cameraMoveCases)("camera API leadership: $name", async ({ follow, run }) => {
+  vi.useFakeTimers();
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (container, engine, peer, _toast, render) => {
+      await render({ following: null });
+      await act(async () => {
+        engine.zoom(1.25);
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      if (follow) {
+        await act(async () => {
+          peer.receive("remote", { x: 100, y: 0, width: 100, height: 100, bring: false, originParticipantId: "remote", originEpoch: "camera-table", originSequence: 1 });
+        });
+        await render({ following: "remote" });
+        await act(async () => vi.advanceTimersByTimeAsync(400));
+      }
+      send.mockClear();
+      await act(async () => {
+        run(container, engine, peer);
+        await vi.advanceTimersByTimeAsync(800);
+      });
+      expect(send).toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: !follow }));
+      if (follow) expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+      else expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it("JUDGE: user Zoom in grants leadership", async () => {
+  vi.useFakeTimers();
+  const send = vi.fn(() => true);
+  await withOpenBoard(
+    async (container, _engine, _peer, _toast, render) => {
+      await render({ following: null });
+      await act(async () => vi.advanceTimersByTimeAsync(250));
+      send.mockClear();
+      await clickControl(container, "Zoom in");
+      await act(async () => vi.advanceTimersByTimeAsync(600));
+      expect(send).toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+    },
+    true,
+    { sendView: send },
+  );
+});
+
+it("review repro: queued initial fit must not cancel a newer Bring", async () => {
+  vi.useFakeTimers();
+  const onFollow = vi.fn();
+  await withOpenBoard(
+    async (_container, engine, peer) => {
+      await act(async () => engine.pan(25, 30));
+      onFollow.mockClear();
+      await act(async () => {
+        engine.select("note");
+        peer.receive("presenter", { x: 75, y: 25, width: 100, height: 100, bring: true });
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      expect(onFollow).toHaveBeenLastCalledWith("presenter");
+    },
+    true,
+    { onFollow },
+  );
+});
+
+it.each([2, 500])("follows an idle leader with %i active views", async (count) => {
+  vi.useFakeTimers();
+  await withOpenBoard(async (_container, engine, peer, _toast, render) => {
+    await render({ following: null });
+    await act(async () => vi.advanceTimersByTimeAsync(2200));
+    await act(async () => {
+      for (let index = 0; index < count; index++) peer.receive(`active-${index}`, { x: 432 + index, y: 25, width: 1, height: 1, bring: false, ownerId: "owner", ownerSequence: 1 });
+    });
+    await render({ following: "active-0" });
+    await act(async () => vi.advanceTimersByTimeAsync(2200));
+    expect(engine.camera().x).toBeCloseTo(-432, 2);
+  }, true);
 });

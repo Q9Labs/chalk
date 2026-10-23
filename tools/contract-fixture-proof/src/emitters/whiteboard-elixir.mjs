@@ -67,6 +67,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       "presentation_updated" -> valid_presentation_updated?(frame)
       "reset_required" -> valid_reset_required?(frame)
       "operation_error" -> valid_operation_error?(frame)
+      "view_ack" -> exact?(frame, ["type", "input_id"]) and valid_input_id?(frame["input_id"])
       "pong" -> exact?(frame, ["type"])
       _ -> false
     end
@@ -115,7 +116,8 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       base in [
         [%{"name" => ${render(contract.extensions.presentation.name)}}],
         [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}}],
-        [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}]
+        [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true}],
+        [%{"name" => ${render(contract.extensions.presentation.name)}}, %{"name" => ${render(contract.extensions.view.name)}, "origins" => true, "owner" => true}]
       ]
   end
 
@@ -207,7 +209,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp decode_view(frame) do
-    if view_fields?(frame, ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
+    if view_client_fields?(frame, ${render(contract.frames.view.clientExactFields)}) and view_rect?(frame) and
          is_boolean(frame["bring"]) and encoded_bytes(frame) <= @limits["cursorFrameBytes"] do
       {:ok,
        {:view,
@@ -223,6 +225,20 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
     end
   end
 
+  defp view_client_fields?(%{"input_id" => input, "move" => move} = frame, fields) do
+    valid_input_id?(input) and is_boolean(move) and
+      view_fields?(Map.drop(frame, ["input_id", "move"]), fields)
+  end
+
+  defp view_client_fields?(frame, fields), do: view_fields?(frame, fields)
+
+  defp view_server_fields?(%{"owner_id" => owner, "owner_sequence" => sequence} = frame, fields) do
+    uuid?(owner) and is_integer(sequence) and sequence > 0 and sequence <= 9_007_199_254_740_991 and
+      view_fields?(Map.drop(frame, ["owner_id", "owner_sequence"]), fields)
+  end
+
+  defp view_server_fields?(frame, fields), do: view_fields?(frame, fields)
+
   defp view_fields?(frame, fields) do
     epoch = frame["origin_epoch"]
     origin_frame = Map.delete(frame, "origin_epoch")
@@ -233,6 +249,16 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
          frame["origin_sequence"] > 0 and frame["origin_sequence"] <= 9_007_199_254_740_991))
   end
 
+  defp valid_input_id?(input) when is_binary(input) and byte_size(input) <= 64 do
+    case String.split(input, ":") do
+      [stream, sequence] -> uuid?(stream) and Regex.match?(~r/^[1-9][0-9]{0,15}$/, sequence) and match?({n, ""} when n > 0 and n <= 9_007_199_254_740_991, Integer.parse(sequence))
+      _ -> false
+    end
+  end
+  defp valid_input_id?(_input), do: false
+
+  defp view_origin(%{"input_id" => id, "move" => move} = frame),
+    do: Map.merge(view_origin(Map.drop(frame, ["input_id", "move"])), %{input_id: id, move: move})
   defp view_origin(%{"origin_epoch" => epoch} = frame),
     do: Map.put(view_origin(Map.delete(frame, "origin_epoch")), :origin_epoch, epoch)
   defp view_origin(%{"origin_participant_id" => participant, "origin_sequence" => sequence}),
@@ -244,6 +270,10 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       finite_number?(frame["height"]) and frame["width"] > 0 and frame["height"] > 0 and
       abs(frame["x"]) <= ${contract.frames.view.maxCoordinate} and abs(frame["y"]) <= ${contract.frames.view.maxCoordinate} and
       frame["width"] <= ${contract.frames.view.maxExtent} and frame["height"] <= ${contract.frames.view.maxExtent}
+  end
+
+  defp valid_welcome?(%{"view_owner_id" => owner} = frame) do
+    uuid?(owner) and valid_welcome?(Map.delete(frame, "view_owner_id"))
   end
 
   defp valid_welcome?(frame) do
@@ -293,7 +323,7 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp valid_server_view?(frame) do
-    view_fields?(frame, ${render(contract.frames.view.serverExactFields)}) and
+    view_server_fields?(frame, ${render(contract.frames.view.serverExactFields)}) and
       uuid?(frame["participant_id"]) and bounded_string?(frame["display_name"], 1, @limits["displayNameMaxBytes"]) and
       view_rect?(frame) and is_boolean(frame["bring"]) and is_binary(frame["occurred_at"]) and
       encoded_bytes(frame) <= @limits["cursorFrameBytes"]

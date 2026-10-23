@@ -97,6 +97,41 @@ a durable join or leave.
 
 ## Protocol v1
 
+### Follow views
+
+An Episode must be served by one Sync node. Production runs one Sync container.
+If Sync ever runs several nodes, route each Episode to one node, so there is
+still one owner. View messages deliberately do not use PostgreSQL fan-out.
+
+One on-demand, node-local process owns each Episode's disposable view state.
+It serializes moves across a person's tabs and stamps a sequence per person.
+It stops when its last socket leaves. Its registry and dynamic supervisor use
+rest-for-one supervision, so losing the registry cannot leave unnamed owners.
+
+Clients negotiate `view_v1` with `origins: true, owner: true`. The welcome names
+the owner's start UUID, followed by an atomic snapshot of its canonical views.
+On every reconnect clients discard cached views and sequences. An owner crash
+closes its sockets with 1012, forcing the same snapshot handshake. Clients
+ignore views from another owner and keep the highest sequence for each person.
+
+Real moves carry `move: true` and an `input_id` of `tab-UUID:sequence`. Retries
+reuse that ID. A per-tab high watermark prevents duplicate application without
+retaining every move. Heartbeats and reconnect/visibility refreshes use
+`move: false` and cannot reclaim another tab's geometry. Relays name a source
+person; the owner copies its canonical geometry instead of trusting the relay.
+
+SDK 5.0/5.1 messages remain accepted. For unmarked legacy input the owner detects
+motion by changes to that tab's rectangle; unchanged keepalives do not lead.
+Legacy origin-capable clients receive canonical sequences as their existing
+origin fields. Other legacy clients receive plain view frames. Owner fields
+never go to clients that did not negotiate them.
+
+Each owner admits at most 500 active people and retains at most 1,024 input
+streams, a separate bound on retry receipts. Admission stops at those bounds
+rather than evicting deduplication watermarks. Snapshots exclude durable
+departures; a socket disconnect alone does not retire a person’s view. Socket
+scene recovery retains only the newest view per person before resuming delivery.
+
 The language-neutral source is `contract/schema/sync-v1.json`; generated
 Elixir and TypeScript bindings are checked by the root codegen gate. V1 has
 strict frame bounds, tenant/Episode-scoped identity, stable command IDs,

@@ -15,6 +15,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.WhiteboardV1.Multipart
   alias ChalkSync.WhiteboardV1.OutboundQueue
   alias ChalkSync.WhiteboardV1.Protocol
+  alias ChalkSync.WhiteboardV1.ViewOwner
   @hello_timeout_ms 5000
   @multipart_timeout_ms GeneratedWhiteboardV1.limits()["multipartUpdateTimeoutMs"]
   @max_pending_snapshots GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
@@ -55,11 +56,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        access: nil,
        access_timer: nil,
        access_stale: false,
+       view_owner_negotiated: false,
+       view_owner: nil,
+       view_owner_ref: nil,
        scene_id: nil,
        revision: 0,
        snapshot: nil,
        pending_snapshot_requests: [],
        pending_bring: nil,
+       pending_views: %{},
        awaiting_snapshot: false,
        missed_head: nil,
        multipart: nil,
@@ -122,6 +127,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     {:stop, reason, close, put_in(state.terminal[:failure], failure)}
   end
 
+  defp handle_message({:DOWN, ref, :process, _pid, _reason}, %{view_owner_ref: ref} = state) do
+    stop(state, 1012, "view owner restarted", :view_owner_restarted)
+  end
+
   defp handle_message(:whiteboard_authority_tick, state) do
     Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
     {:ok, state}
@@ -151,7 +160,17 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
          %{identity: %Identity{participant_id: participant_id}} = state
        )
-       when type in ["cursor", "view"] do
+       when type == "cursor" do
+    {:ok, state}
+  end
+
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "view", "participant_id" => participant_id}},
+         %{
+           identity: %Identity{participant_id: participant_id},
+           view_owner_negotiated: false
+         } = state
+       ) do
     {:ok, state}
   end
 
@@ -196,12 +215,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_message(
          {:whiteboard_v1_frame, %{"type" => "view"} = frame},
-         %{phase: :live, view_origins_negotiated: false} = state
+         %{phase: :live} = state
        ) do
-    deliver_frame(
-      state,
-      Map.drop(frame, ["origin_participant_id", "origin_sequence", "origin_epoch"])
-    )
+    deliver_frame(state, compatible_view(frame, state))
   end
 
   defp handle_message({:whiteboard_v1_frame, frame}, %{phase: :live} = state) do
@@ -209,10 +225,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_message(
-         {:whiteboard_v1_frame, %{"type" => "view", "bring" => true} = frame},
+         {:whiteboard_v1_frame, %{"type" => "view"} = frame},
          %{phase: :recovering} = state
        ) do
-    {:ok, %{state | pending_bring: frame}}
+    bring = if frame["bring"], do: frame, else: state.pending_bring
+
+    {:ok,
+     %{
+       state
+       | pending_bring: bring,
+         pending_views:
+           Map.put(state.pending_views, frame["participant_id"], %{frame | "bring" => false})
+     }}
   end
 
   defp handle_message(
@@ -363,11 +387,30 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     ]
   end
 
-  defp resume_pending_bring(%{pending_bring: nil} = state), do: state
+  defp resume_pending_bring(state) do
+    frames = if state.pending_bring, do: [compatible_view(state.pending_bring, state)], else: []
 
-  defp resume_pending_bring(%{pending_bring: frame} = state) do
-    send(self(), {:whiteboard_v1_frame, frame})
-    %{state | pending_bring: nil}
+    with {:ok, outbound} <- enqueue_frames(state.outbound, frames) do
+      if frames != [], do: send(self(), :whiteboard_drain)
+
+      Enum.each(state.pending_views, fn {_person, frame} ->
+        send(self(), {:whiteboard_v1_frame, frame})
+      end)
+
+      {:ok, %{state | outbound: outbound, pending_bring: nil, pending_views: %{}}}
+    end
+  end
+
+  defp resume_after_snapshot(state, missed_head) do
+    case resume_pending_bring(state) do
+      {:ok, resumed} ->
+        resumed = resume_stale_access(resumed)
+        resume_snapshot_requests(resumed)
+        catch_up_after_snapshot(resumed, missed_head)
+
+      {:error, _reason} ->
+        stop(state, 1012, "whiteboard delivery recovery required", :delivery_unavailable)
+    end
   end
 
   defp catch_up_after_snapshot(state, nil) do
@@ -614,7 +657,6 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           %{state | phase: :recovering, snapshot: snapshot, awaiting_snapshot: false}
           |> observe_operation("request_snapshot", "accepted")
 
-        nil
         {:push, {:text, Protocol.encode!(first)}, next}
 
       failure ->
@@ -651,9 +693,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               missed_head: nil
           }
 
-          next = next |> resume_pending_bring() |> resume_stale_access()
-          resume_snapshot_requests(next)
-          catch_up_after_snapshot(next, state.missed_head)
+          resume_after_snapshot(next, state.missed_head)
       end
     else
       stop(state, 1008, "invalid snapshot acknowledgement", :invalid_acknowledgement)
@@ -693,41 +733,26 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        ) do
     {admission, next} = admit_presence(state, if(view.bring, do: :bring, else: :view))
 
-    with :ok <- admit_view(view, identity, admission) do
-      frame = %{
-        "type" => "view",
-        "participant_id" => identity.participant_id,
-        "display_name" => display_name,
-        "x" => view.x,
-        "y" => view.y,
-        "width" => view.width,
-        "height" => view.height,
-        "bring" => view.bring,
-        "occurred_at" =>
-          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-      }
+    case admit_view(view, identity, admission) do
+      :ok ->
+        frame = %{
+          "type" => "view",
+          "participant_id" => identity.participant_id,
+          "display_name" => display_name,
+          "x" => view.x,
+          "y" => view.y,
+          "width" => view.width,
+          "height" => view.height,
+          "bring" => view.bring,
+          "occurred_at" =>
+            DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+        }
 
-      frame =
-        case view do
-          %{origin_participant_id: origin, origin_sequence: sequence} ->
-            Map.merge(frame, %{
-              "origin_participant_id" => origin,
-              "origin_sequence" => sequence
-            })
+        publish_view(frame, view, next)
 
-          _ ->
-            frame
-        end
-
-      frame =
-        if Map.has_key?(view, :origin_epoch),
-          do: Map.put(frame, "origin_epoch", view.origin_epoch),
-          else: frame
-
-      Fanout.publish_transient(identity.episode, frame)
+      _denied ->
+        {:ok, next}
     end
-
-    {:ok, next}
   end
 
   defp handle_frame({:ping, _ping}, state) do
@@ -737,6 +762,35 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   defp handle_frame(_frame, state) do
     stop(state, 1008, "operation not available in this phase", :protocol_error)
   end
+
+  defp publish_view(frame, view, state) do
+    case ViewOwner.move(state.view_owner, frame, view) do
+      :ok -> acknowledge_view(view, state)
+      {:error, :overloaded} -> stop(state, 1013, "view capacity exhausted", :overloaded)
+    end
+  catch
+    :exit, _reason -> stop(state, 1012, "view owner restarted", :view_owner_restarted)
+  end
+
+  defp acknowledge_view(%{input_id: id}, %{view_owner_negotiated: true} = state),
+    do: {:push, {:text, Protocol.encode!(%{"type" => "view_ack", "input_id" => id})}, state}
+
+  defp acknowledge_view(_view, state), do: {:ok, state}
+
+  defp compatible_view(frame, %{view_owner_negotiated: true}), do: frame
+
+  defp compatible_view(frame, %{view_origins_negotiated: true}) do
+    frame
+    |> Map.drop(["owner_id", "owner_sequence"])
+    |> Map.merge(%{
+      "origin_participant_id" => frame["participant_id"],
+      "origin_sequence" => frame["owner_sequence"],
+      "origin_epoch" => frame["owner_id"]
+    })
+  end
+
+  defp compatible_view(frame, _state),
+    do: Map.drop(frame, ["owner_id", "owner_sequence"])
 
   defp admit_view(_view, _identity, {:error, reason}), do: {:error, reason}
 
@@ -1070,11 +1124,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
     draw_policy_negotiated = Enum.any?(extensions, &(&1["name"] == "draw_policy_v1"))
 
+    view_owner_negotiated =
+      Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["owner"] == true))
+
     with {:ok, welcome} <- Episode.connect(identity),
          # Taken once the connect check has passed, so a stored read that started while it waited,
          # possibly before the Participant's admission committed, cannot close this socket.
          connected_at = System.monotonic_time(:millisecond),
-         :ok <- Authority.watch(identity.episode) do
+         :ok <- Authority.watch(identity.episode),
+         {:ok, owner, owner_id, _views} <-
+           ViewOwner.join(identity.episode, identity.participant_id) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
       Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
@@ -1085,6 +1144,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
         else
           Map.delete(welcome, "presenting")
         end
+
+      welcome =
+        if view_owner_negotiated, do: Map.put(welcome, "view_owner_id", owner_id), else: welcome
+
+      owner_ref = Process.monitor(owner)
 
       next =
         %{
@@ -1099,6 +1163,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             view_origins_negotiated: view_origins_negotiated,
             draw_policy_negotiated: draw_policy_negotiated,
             can_draw: welcome["can_draw"],
+            view_owner_negotiated: view_owner_negotiated,
+            view_owner: owner,
+            view_owner_ref: owner_ref,
             scene_id: welcome["scene_id"],
             revision: String.to_integer(welcome["revision"])
         }

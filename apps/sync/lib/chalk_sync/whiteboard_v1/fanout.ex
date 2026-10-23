@@ -142,7 +142,7 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
           }} <- JSON.decode(payload),
          false <- source_node == state.source_id,
          {:ok, episode_key} <- episode_key(episode) do
-      broadcast_local(episode_key, frame)
+      if frame["type"] == "cursor", do: broadcast_local(episode_key, frame)
     else
       true -> :ok
       _ -> Logger.warning("discarded malformed whiteboard-v1 transient notification")
