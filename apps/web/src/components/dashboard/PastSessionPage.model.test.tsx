@@ -114,7 +114,6 @@ const finished = () => elapsed() >= 12_000;
 const closedEarly = () => cell.state === "window closed early" && elapsed() >= 60_000;
 const signedOut = () => cell.state === "401" && elapsed() >= 7_000;
 const failing = () => (cell.state === "transient failure" && elapsed() < 20_000) || (cell.state === "other 4xx" && elapsed() >= 7_000);
-const pendingLike = () => ["pending", "transient failure", "401", "other 4xx"].includes(cell.state);
 
 function itemRecording() {
   const source = { status: "available", expires_at: WINDOW_END() };

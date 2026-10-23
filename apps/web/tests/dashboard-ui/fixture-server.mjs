@@ -196,7 +196,13 @@ const recordingsFor = (episode, withTranscripts) =>
           transcriptionExpiresAt: null,
           createdAt: episode.startedAt,
           ...recordingScenario(),
-          ...(withTranscripts ? { transcripts: state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }], transcriptsNextCursor: null } : {}),
+          // A recording scenario lists the same transcripts on every read, as the server's one transcript list does.
+          ...(withTranscripts
+            ? {
+                transcripts: state.recordingScenario ? transcriptsFor(episode.endedAt) : state.hideTranscripts ? [] : [{ id: uuid(0x900), status: episode.kept === "processing" ? "processing" : (state.finishedTranscript ?? "completed"), languages: ["en"], createdAt: episode.endedAt }],
+                transcriptsNextCursor: null,
+              }
+            : {}),
         },
       ];
 
@@ -305,7 +311,8 @@ async function dashboard(request, response, page, url, entry) {
         firstJoinedAt: plus(episode.startedAt, offsets[i] ?? i * 2),
         lastLeftAt: i === 3 ? plus(episode.startedAt, length - 7) : null,
       }));
-      const recordings = recordingsFor(episode, false);
+      // Like the server, a past session lists each recording's transcripts.
+      const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt), transcriptsNextCursor: null }));
       return send(response, 200, { episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
     if (page === "developer")
