@@ -299,7 +299,12 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert {:ok, queued} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, latest}, queued)
     assert {:ok, live} = receive_frame(snapshot_ack(queued), queued)
     assert live.phase == :live
-    assert_receive {:whiteboard_v1_frame, ^latest}
+    assert_receive :whiteboard_drain
+
+    assert {:push, {:text, encoded}, _next} =
+             SocketWhiteboardV1.handle_info(:whiteboard_drain, live)
+
+    assert JSON.decode!(encoded) == latest
 
     assert_receive {:whiteboard_v1_frame,
                     %{
