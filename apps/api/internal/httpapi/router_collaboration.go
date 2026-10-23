@@ -12,6 +12,9 @@ func mountSpaceEpisodeRoutes(r chi.Router, options Options) {
 }
 
 func mountLiveParticipantRoutes(r chi.Router, options Options) {
+	for _, endpoint := range problemReportEndpoints(options.ProblemReports, options.ParticipantMediaVerify, options.RateLimit) {
+		endpoint.Mount(r, options.RateLimit)
+	}
 	r.Group(func(r chi.Router) {
 		mountParticipantMediaRoutes(r, options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications, options.ParticipantMediaVerify, options.ParticipantMediaActive, options.RateLimit)
 	})

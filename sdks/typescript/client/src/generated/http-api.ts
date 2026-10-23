@@ -185,6 +185,13 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getProblemReportAvailability", "/v1/tenants/:tenant_id/problem-reports/availability", {
+      params: S.GetProblemReportAvailabilityPathParamsSchema,
+      success: S.GetProblemReportAvailabilityResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400))],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("getWebhookDelivery", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id/deliveries/:delivery_id", {
       params: S.GetWebhookDeliveryPathParamsSchema,
       success: S.GetWebhookDeliveryResponseSchema.pipe(HttpApiSchema.status(200)),
@@ -511,6 +518,26 @@ const defaultGroup = HttpApiGroup.make("default")
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sendProblemReport", "/v1/tenants/:tenant_id/problem-reports", {
+      params: S.SendProblemReportPathParamsSchema,
+      payload: S.SendProblemReportRequestBodySchema,
+      success: S.SendProblemReportResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.ReportsCredentialsDetectedErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ReportsDeliveryFailedErrorSchema.pipe(HttpApiSchema.status(502)),
+        S.ReportsUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),

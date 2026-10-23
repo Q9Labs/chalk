@@ -200,7 +200,7 @@ overrides:
   sharp: 0.35.5
   shell-quote: 1.11.0
   tar: ^7.5.21
-  toml: ^4.2.0
+  toml: ^5.0.1
   turbo: ^2.9.14
   undici: ^7.29.1
   uuid: ^14.0.0
@@ -8590,8 +8590,8 @@ packages:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
 
-  toml@4.2.0:
-    resolution: {integrity: sha512-TvAJjbHZlYmI323+srtqHQFyJsoWy6mI09ppkuj9+iRsqsVKG9fvTcOP7FHF2UCb0QSYtjEavffrKzdd0XgClg==}
+  toml@5.0.1:
+    resolution: {integrity: sha512-EqYNA/YvUNndrA2B3O2ojzLQoTQrBxeZ9UIjQwk8t10oe6n7dwclBwd9IdZQTOKwe6vWX+AXtl6IntXRbepdxQ==}
     engines: {node: '>=20'}
 
   toqr@0.1.1:
@@ -14793,7 +14793,7 @@ snapshots:
       kubernetes-types: 1.30.0
       msgpackr: 2.0.4
       multipasta: 0.2.8
-      toml: 4.2.0
+      toml: 5.0.1
       uuid: 14.0.0
       yaml: 2.9.0
 
@@ -18487,7 +18487,7 @@ snapshots:
 
   toidentifier@1.0.1: {}
 
-  toml@4.2.0: {}
+  toml@5.0.1: {}
 
   toqr@0.1.1: {}
 

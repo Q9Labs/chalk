@@ -49,6 +49,41 @@ describe("public Space entry", () => {
     expect(screen.queryByText(/check the invite link/)).toBeNull();
   });
 
+  it.each(["left", "failed", "episode-ended"])("expires terminal report access without erasing the %s form", async (phase) => {
+    mocks.reportsAvailable.mockReturnValue(true);
+    const view = await enterInvite();
+    const snapshot = mocks.client.getSnapshot();
+    vi.useFakeTimers();
+    try {
+      if (phase === "left") await leaveCall();
+      else {
+        mocks.client.getSnapshot.mockReturnValue({ ...snapshot, connection: Object.assign({}, snapshot.connection, { status: "failed", lastError: { code: phase === "episode-ended" ? "episode.ended" : "connection.media_start_failed", message: "Connection failed" } }) });
+        await act(async () => view.rerender(<SpacePage slug="design-lab" />));
+      }
+      const report = screen.getByRole("button", { name: "Report a problem" });
+      await act(async () => fireEvent.click(report));
+      const input = screen.getByLabelText("What went wrong?");
+      fireEvent.change(input, { target: { value: "My camera froze after joining." } });
+      await act(async () => vi.advanceTimersByTimeAsync(299_999));
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(false);
+      await act(async () => vi.advanceTimersByTimeAsync(1));
+      expect(screen.queryByRole("button", { name: "Report a problem" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Send" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByText(/Your call access has expired/)).toBeDefined();
+      expect(input).toHaveProperty("value", "My camera froze after joining.");
+      expect(input.hasAttribute("disabled")).toBe(false);
+      fireEvent.change(input, { target: { value: "I can still edit and copy this." } });
+      expect(input).toHaveProperty("value", "I can still edit and copy this.");
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
+      await act(async () => vi.advanceTimersByTimeAsync(200));
+      expect(screen.queryByRole("button", { name: "Report a problem" })).toBeNull();
+    } finally {
+      cleanup();
+      mocks.client.getSnapshot.mockReturnValue(snapshot);
+      vi.useRealTimers();
+    }
+  });
+
   it("requests a fresh admission when rejoining after Leave", async () => {
     await enterInvite();
     await leaveCall();

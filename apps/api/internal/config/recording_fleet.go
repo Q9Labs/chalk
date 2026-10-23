@@ -14,9 +14,9 @@ const (
 )
 
 type RecorderFleetIssuerConfig struct {
-	URL            string
+	URL            string `secret:"true"` // Include any issuer endpoint userinfo.
 	ClientCertFile string
-	ClientKeyFile  string
+	ClientKeyFile  string `secret:"false"` // Filesystem path, not key material.
 	ServerCAFile   string
 	ServerName     string
 }

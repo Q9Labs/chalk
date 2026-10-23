@@ -11,7 +11,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // These tests need their own database: the exact identity partition must not
@@ -369,5 +373,108 @@ func TestTenantPurgeFrozenBackupFencesWritersAndRequiresFreshReceipt(t *testing.
 				t.Fatalf("Tenant count %d, wanted %d", count, want)
 			}
 		})
+	}
+}
+
+func TestTenantPurgeDeletesProblemReportDeliveries(t *testing.T) {
+	for _, short := range []bool{false, true} {
+		t.Run(map[bool]string{false: "transaction", true: "short"}[short], func(t *testing.T) {
+			pool := purgeIntegrationPool(t)
+			fixture := createPurgeFixture(t, pool)
+			ctx := context.Background()
+			reports := NewProblemReportRepository(pool)
+			record := func(tenant string) {
+				t.Helper()
+				tenantID, err := utilities.ParseID(tenant)
+				if err != nil {
+					t.Fatal(err)
+				}
+				subject := accessgrants.Subject{TenantID: tenantID, SpaceID: accountTenantIntegrationID(t), EpisodeID: accountTenantIntegrationID(t)}
+				if err := reports.RecordDelivery(ctx, subject, accountTenantIntegrationID(t)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			record(fixture.erased)
+			record(fixture.kept)
+			repo := NewTenantPurgeRepository(pool)
+			snapshot := repo.Snapshot
+			if short {
+				snapshot = repo.SnapshotShort
+			}
+			plan, err := snapshot(ctx, fixture.scope, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if short {
+				// An old API can still write the existing JSON shape after inventory.
+				record(fixture.erased)
+				_, err = repo.ApplyTenantShort(ctx, plan, fixture.erased, func(context.Context, tenantpurge.Plan) error { return nil })
+			} else {
+				_, err = repo.Apply(ctx, plan, fixtureReceipt(t, plan))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Discord can finish after the purge; its delayed evidence must not resurrect data.
+			record(fixture.erased)
+			for tenant, want := range map[string]int{fixture.erased: 0, fixture.kept: 1} {
+				var count int
+				err := pool.QueryRow(ctx, `select count(*) from observability_journey_events where name='problem_report.delivered' and attributes->>'tenant_id'=$1`, tenant).Scan(&count)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if count != want {
+					t.Fatalf("delivery events after purge: got %d, want %d", count, want)
+				}
+			}
+		})
+	}
+}
+
+func TestProblemReportDeliveryIsolatesCallerJourney(t *testing.T) {
+	pool := purgeIntegrationPool(t)
+	fixture := createPurgeFixture(t, pool)
+	ctx := context.Background()
+	supplied := accountTenantIntegrationID(t)
+	if _, err := pool.Exec(ctx, `create table purge_fixture_journeys(id uuid primary key,tenant_id uuid not null references tenants(id),journey_id uuid not null)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `insert into purge_fixture_journeys values($1,$2,$3)`, accountTenantIntegrationID(t).String(), fixture.kept, supplied.String()); err != nil {
+		t.Fatal(err)
+	}
+	tenantID, err := utilities.ParseID(fixture.erased)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportID := accountTenantIntegrationID(t)
+	traceID := trace.TraceID{1}
+	spanID := trace.SpanID{2}
+	ctx = observability.ContextWithJourneyID(ctx, supplied)
+	ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID}))
+	subject := accessgrants.Subject{TenantID: tenantID, SpaceID: accountTenantIntegrationID(t), EpisodeID: accountTenantIntegrationID(t)}
+	if err := NewProblemReportRepository(pool).RecordDelivery(ctx, subject, reportID); err != nil {
+		t.Fatal(err)
+	}
+	var journey, storedTrace, storedSpan string
+	if err := pool.QueryRow(ctx, `select journey_id::text,trace_id,span_id from observability_journey_events where event_id=$1`, reportID.String()).Scan(&journey, &storedTrace, &storedSpan); err != nil {
+		t.Fatal(err)
+	}
+	if journey != reportID.String() {
+		t.Fatal("delivery journey accepts a caller-controlled cross-Tenant ID")
+	}
+	if storedTrace != traceID.String() || storedSpan != spanID.String() {
+		t.Fatal("delivery trace correlation lost")
+	}
+	repo := NewTenantPurgeRepository(pool)
+	plan, err := repo.Snapshot(ctx, fixture.scope, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Apply(ctx, plan, fixtureReceipt(t, plan)); err != nil {
+		t.Fatal(err)
+	}
+	var retained int
+	if err := pool.QueryRow(ctx, `select count(*) from purge_fixture_journeys where tenant_id=$1`, fixture.kept).Scan(&retained); err != nil || retained != 1 {
+		t.Fatal("report purge changed the kept Tenant journey", err)
 	}
 }

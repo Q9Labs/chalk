@@ -352,3 +352,65 @@ CHALK_API_OPERATION_LOGS=1 CHALK_API_PROFILER=1 CHALK_API_REQUEST_LOGS=all go ru
 local profiling, it also defaults request logs to `all` unless
 `CHALK_API_REQUEST_LOGS` is explicitly set. `CHALK_API_PROFILER=1` mounts Go
 profiling handlers under `/debug/pprof`; do not expose it publicly.
+
+## Call problem reports
+
+Set `CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL` on the **API service only**.
+Only HTTPS Discord webhook URLs on `discord.com` or `discordapp.com` are accepted.
+An unset value disables reports: availability returns false, the web hides report
+entries, and submissions return `503 reports.unavailable`. A nonempty invalid URL
+is startup-fatal: the API rejects its configuration and does not start. Never expose this URL in a
+`VITE_` setting or the dashboard service. Discord is the record; no new table.
+
+`POST /v1/tenants/{tenant_id}/problem-reports` accepts a signed participant media bearer credential
+and `{description, diagnostics?}`. The full Tenant/Space/Episode/generation binding
+must exist, but a live media connection is not required. Normal credential expiry
+still applies. Descriptions are required (1,000 code points maximum); diagnostics
+are optional (2,000 maximum). Hourly ceilings are three reports per participant, twenty per Episode,
+thirty per IP and one hundred per owning Tenant. Participant limits run first. Delivery waits for Discord acknowledgement;
+failures return 502 with no automatic retry. The form keeps the text for a retry.
+The Discord payload contains only the written description, reporter display name
+and owner/guest role, call name and call-instance ID (Episode ID), plus diagnostics
+only when opted in: connection status, last error code, browser/UA, and app version.
+Chalk does not add tenant names, timestamps, account email addresses or credentials.
+Diagnostics are unselected by default. Before delivery, the service checks each report
+field and the description/diagnostics pair for known Chalk credentials and known secret
+formats. The check folds full-width characters, decodes HTML entities and tolerates
+inserted separators and zero-width characters. Every intrinsic known-credential character,
+including punctuation, must match in order. Provider-key prefixes must start at a token boundary.
+Every nonempty configured credential is refused verbatim regardless of length; separator-tolerant matching applies only when its normalized form has at least 16 characters.
+Configuration owns one classified secret inventory, including connection URLs and
+decoded passwords, signing keys and seeds in raw, base64/base64url and hex forms,
+rotated encryption keys, and service credentials. URLs with a userinfo password
+are refused even when the password is not configured in Chalk.
+This catches accidental pastes, including description/diagnostics splits; deliberate
+evasion by the credential's own holder, such as reconstructing it across unrelated
+call-name and description fields, is not covered. Other user-provided text
+is sent as written with Markdown escaped, including any personal information or
+unrecognized secrets the person chooses to include. Only `http://`, `https://` and
+`www.` URLs are transformed: query strings and fragments are removed, and inline
+code prevents clicks. Bare hosts, commit IDs and file/line/column frames remain text.
+Mentions are disabled. Accepted descriptions and opt-in diagnostics are delivered in
+full: longer reports use ordered description/diagnostic panels in the same message,
+within Discord's 2,000-unit content and 6,000-unit combined embed limits.
+
+### Real-stack report proof
+
+Run on the M4 through the repo runner:
+
+```sh
+CHALK_REMOTE_NEEDS_BROWSER=1 scripts/gates/remote.sh -- node apps/web/tests/dashboard/report-proof.mjs
+```
+
+The browser drives real OwnerCall and SpacePage menus, delivery failure/retry,
+opt-in diagnostics, leave, and failed connect. API, signed credentials, Postgres,
+Sync and the built web app are real. Only Discord and the media vendor use local
+fixtures. The Discord fixture uses an ephemeral trusted TLS certificate and a
+process-local proxy; production destination validation stays enabled. Evidence goes to `artifacts/report-discord` in that checkout.
+
+Live proof additionally requires an injected `CHALK_REPORT_LIVE_WEBHOOK_URL`,
+`CHALK_REPORT_LIVE_PROOF=1`, and `CHALK_REPORT_LIVE_ONCE_FILE` pointing to a durable
+exclusive-create marker outside the throwaway checkout. It sends only the labelled
+owner report and reads that Discord message back. Never retry a live run after
+its once marker exists: delivery might already have succeeded. These variables
+are test-driver inputs, not production service settings.

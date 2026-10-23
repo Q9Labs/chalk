@@ -229,7 +229,7 @@ type recordingRateLimiter struct {
 func (l *recordingRateLimiter) Allow(_ context.Context, key string, policy ratelimit.Policy, _ time.Time) ratelimit.Decision {
 	l.keys = append(l.keys, key)
 	l.policies = append(l.policies, policy)
-	return ratelimit.Decision{Allowed: true}
+	return ratelimit.Decision{State: ratelimit.Allowed}
 }
 
 func TestRateLimitKeys(t *testing.T) {

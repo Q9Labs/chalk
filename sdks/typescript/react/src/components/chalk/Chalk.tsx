@@ -208,7 +208,17 @@ function SpaceExperience(
     return <StatusSurface phase="failed" callName={callName} errorCode={connection.lastError?.code} sync={connection.lastError?.sync} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
   if (connection.status === "leaving" || connection.status === "left")
-    return <StatusSurface phase={episodeEnded ? "episode-ended" : "left"} callName={callName} theme={statusTheme} onReportProblem={props.onOpenReport} onRejoin={props.onRejoin ?? retryAutomaticJoin} rejoinDisabled={connection.status === "leaving" || retryPending} onHome={props.onHome} />;
+    return (
+      <StatusSurface
+        phase={episodeEnded ? "episode-ended" : "left"}
+        callName={callName}
+        theme={statusTheme}
+        onReportProblem={connection.status === "leaving" ? undefined : props.onOpenReport}
+        onRejoin={props.onRejoin ?? retryAutomaticJoin}
+        rejoinDisabled={connection.status === "leaving" || retryPending}
+        onHome={props.onHome}
+      />
+    );
   return (
     <div className="relative h-full min-h-0">
       <SpaceSurface {...props} spaceName={spaceName} />

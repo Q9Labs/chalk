@@ -2,7 +2,9 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -69,8 +71,11 @@ func NewRateLimiterWithClient(client rateLimitScriptClient) RateLimiter {
 }
 
 func (l RateLimiter) Allow(ctx context.Context, key string, policy ratelimit.Policy, now time.Time) ratelimit.Decision {
-	if l.client == nil || policy.Limit <= 0 || policy.Window <= 0 {
-		return ratelimit.Decision{Allowed: true}
+	if policy.Limit <= 0 || policy.Window <= 0 {
+		return ratelimit.Decision{State: ratelimit.Allowed}
+	}
+	if l.client == nil {
+		return ratelimit.Decision{State: ratelimit.Unavailable}
 	}
 	ctx, span := rateLimitTracer.Start(ctx, "cache.redis.rate_limit.allow", trace.WithSpanKind(trace.SpanKindClient))
 	defer span.End()
@@ -82,18 +87,18 @@ func (l RateLimiter) Allow(ctx context.Context, key string, policy ratelimit.Pol
 		now.UnixMilli(),
 	).Result()
 	if err != nil {
-		span.RecordError(err)
+		span.RecordError(errors.New("redis rate limit request failed"))
 		span.SetStatus(codes.Error, "redis rate limit request failed")
-		return ratelimit.Decision{Allowed: false, RetryAfter: time.Second}
+		return ratelimit.Decision{State: ratelimit.Unavailable}
 	}
 
 	decision, err := parseRateLimitDecision(result)
 	if err != nil {
-		span.RecordError(err)
+		span.RecordError(errors.New("invalid redis rate limit response"))
 		span.SetStatus(codes.Error, "invalid redis rate limit response")
-		return ratelimit.Decision{Allowed: false, RetryAfter: time.Second}
+		return ratelimit.Decision{State: ratelimit.Unavailable}
 	}
-	span.SetAttributes(attribute.Bool("rate_limit.allowed", decision.Allowed), attribute.Int("rate_limit.remaining", decision.Remaining))
+	span.SetAttributes(attribute.Bool("rate_limit.allowed", decision.State == ratelimit.Allowed), attribute.Int("rate_limit.remaining", decision.Remaining))
 
 	return decision
 }
@@ -121,8 +126,15 @@ func parseRateLimitDecision(result any) (ratelimit.Decision, error) {
 		return ratelimit.Decision{}, err
 	}
 
+	if (allowed != 0 && allowed != 1) || remaining < 0 || retryMS < 0 || retryMS > math.MaxInt64/int64(time.Millisecond) {
+		return ratelimit.Decision{}, errors.New("invalid redis rate limit values")
+	}
+	state := ratelimit.Exhausted
+	if allowed == 1 {
+		state = ratelimit.Allowed
+	}
 	return ratelimit.Decision{
-		Allowed:    allowed == 1,
+		State:      state,
 		Remaining:  int(remaining),
 		RetryAfter: time.Duration(retryMS) * time.Millisecond,
 	}, nil

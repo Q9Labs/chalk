@@ -774,7 +774,7 @@ func isNativePublicRequest(r *http.Request) bool {
 
 func guestCredentialFromRequest(r *http.Request, arrivalHandle string) string {
 	if isNativePublicRequest(r) {
-		scheme, credential, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+		scheme, credential, ok := authorizationCredential(r.Header.Get("Authorization"))
 		if !ok || !strings.EqualFold(scheme, publicGuestScheme) {
 			return ""
 		}
@@ -783,11 +783,12 @@ func guestCredentialFromRequest(r *http.Request, arrivalHandle string) string {
 	if arrivalHandle == "" {
 		return ""
 	}
-	cookie, err := r.Cookie(publicGuestCookiePrefix + arrivalHandle)
-	if err != nil {
-		return ""
+	for _, cookie := range requestCredentialCookies(r) {
+		if cookie.Name == publicGuestCookiePrefix+arrivalHandle {
+			return strings.TrimSpace(cookie.Value)
+		}
 	}
-	return strings.TrimSpace(cookie.Value)
+	return ""
 }
 
 func rejectNativePublicCookies(next http.Handler) http.Handler {

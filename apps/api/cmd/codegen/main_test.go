@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 )
 
 // statusConstants returns the string values of the Status* constants declared
@@ -119,4 +121,23 @@ func TestContractHasNoOptionalWrapperObjects(t *testing.T) {
 		}
 	}
 	walk("#", document)
+}
+
+func TestProblemReportContractLimits(t *testing.T) {
+	routes := httpapi.PreviewRouteContracts()
+	gen := newGenerator(routes)
+	for _, route := range routes {
+		gen.addRoute(route)
+	}
+	operation := gen.doc.Paths["/v1/tenants/{tenant_id}/problem-reports"]["post"].(map[string]any)
+	if operation["x-chalk-max-body-bytes"] != int64(37024) {
+		t.Errorf("body limit=%v", operation["x-chalk-max-body-bytes"])
+	}
+	properties := gen.doc.Components.Schemas["ProblemReportRequest"]["properties"].(map[string]any)
+	for field, limit := range map[string]int{"description": 1000, "diagnostics": 2000} {
+		schema := properties[field].(map[string]any)
+		if schema["maxLength"] != limit || schema[lengthUnitExtension] != codePointLengthUnit {
+			t.Errorf("%s limits=%v", field, schema)
+		}
+	}
 }

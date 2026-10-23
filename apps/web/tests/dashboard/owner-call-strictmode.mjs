@@ -18,7 +18,7 @@ Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, co
 const temporary = await mkdtemp(resolve(tmpdir(), "chalk-owner-strictmode-"));
 const source = (await readFile(process.argv[2] ?? resolve(web, "src/components/dashboard/OwnerCall.tsx"), "utf8")).replace(/^import .*;\n/gm, "").replaceAll("import.meta.env.", "({}).");
 const prefix = `
-import React, {useMemo, useEffect, useState, useRef} from ${JSON.stringify(require.resolve("react"))};
+import React, {useMemo, useEffect, useState, useRef, useSyncExternalStore} from ${JSON.stringify(require.resolve("react"))};
 import {createSpaceClientForPlatform as createReal} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/space-client.ts"))};
 import {readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeReloadRejoin} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/reload-rejoin.ts"))};
 import {z} from ${JSON.stringify(require.resolve("zod"))};
@@ -40,6 +40,9 @@ function createSpaceClientForPlatform(...args) {
   client.dispose=()=>{entry.disposed++;dispose();};
   clients.push(entry); return client;
 }
+const publicAPIBaseURL=()=>"http://engine.local";
+const useProblemReports=()=>false;
+const problemReporter=()=>()=>Promise.resolve();
 const intentKey=()=>crypto.randomUUID();
 const act=(_route,input)=>{admissions.push(input);return new Promise(()=>{});};
 const readPage=async()=>{if(pageFailures>0){pageFailures--;throw Error('Transient call read failure');}return {live:liveEpisodeId?{id:liveEpisodeId}:null};};

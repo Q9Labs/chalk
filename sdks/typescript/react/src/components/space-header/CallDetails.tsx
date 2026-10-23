@@ -4,6 +4,7 @@ import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } 
 import { shareQr } from "./share-qr";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import type { SpaceHeaderProps } from "./space-header-contract";
+import { ReportCredentialsError } from "../../utils/report-error";
 
 export const CALL_SHORTCUTS = [
   ["Mute or unmute", "⌘ D"],
@@ -24,6 +25,7 @@ export function CallDialog({
   onReportProblem,
   diagnostics,
   returnFocus,
+  unavailableReason,
 }: {
   readonly kind: "shortcuts" | "report";
   readonly open: boolean;
@@ -31,16 +33,18 @@ export function CallDialog({
   readonly onReportProblem?: SpaceHeaderProps["onReportProblem"];
   readonly diagnostics: string;
   readonly returnFocus: RefObject<HTMLButtonElement | null>;
+  readonly unavailableReason?: string;
 }) {
   const container = useRef<HTMLElement>(null);
   const reportInput = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
-  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
+  const [includeDiagnostics, setIncludeDiagnostics] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
   useEffect(() => {
     if (open && kind === "report") {
       setText("");
+      setIncludeDiagnostics(false);
       setError("");
       setStatus("idle");
     }
@@ -54,7 +58,11 @@ export function CallDialog({
     >
       <Dialog.Root
         open={open}
-        onOpenChange={(open) => {
+        onOpenChange={(open, event) => {
+          if (!open && status === "sending") {
+            event.cancel();
+            return;
+          }
           if (!open) onClose();
         }}
       >
@@ -65,6 +73,7 @@ export function CallDialog({
               <div className="chalk-shell-modal-heading">
                 <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
                 <Dialog.Close
+                  disabled={status === "sending"}
                   render={
                     <ChalkIconButton aria-label="Close" size="sm">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
@@ -104,31 +113,36 @@ export function CallDialog({
                 className="chalk-shell-report"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (!text.trim() || !onReportProblem || status === "sending") return;
+                  if (!text.trim() || !onReportProblem || status === "sending" || unavailableReason) return;
                   setStatus("sending");
                   setError("");
                   void Promise.resolve()
-                    .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics ? diagnostics : undefined }))
+                    .then(() => onReportProblem({ description: text.trim(), diagnostics: includeDiagnostics && diagnostics.trim() ? diagnostics : undefined }))
                     .then(
                       () => setStatus("sent"),
-                      () => {
+                      (reason: unknown) => {
                         setStatus("idle");
-                        setError("Your report could not be sent. Try again.");
+                        // Compare the code, not class identity: SDK entry points
+                        // may be bundled separately by the host application.
+                        setError(reason instanceof Error && "code" in reason && reason.code === ReportCredentialsError.code ? new ReportCredentialsError().message : "Your report could not be sent. Try again.");
                       },
                     );
                 }}
               >
                 <label htmlFor="chalk-problem">What went wrong?</label>
-                <textarea ref={reportInput} id="chalk-problem" rows={4} required disabled={status === "sending"} value={text} onChange={(event) => setText(event.target.value)} placeholder="Tell us what happened…" />
-                <label className="chalk-shell-report-check">
-                  <input type="checkbox" disabled={status === "sending"} checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
-                </label>
+                <textarea ref={reportInput} id="chalk-problem" rows={4} required disabled={status === "sending"} value={text} onChange={(event) => setText(Array.from(event.target.value).slice(0, 1000).join(""))} placeholder="Tell us what happened…" />
+                {diagnostics.trim() ? (
+                  <label className="chalk-shell-report-check">
+                    <input type="checkbox" disabled={status === "sending"} checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
+                  </label>
+                ) : null}
                 {error ? <p role="alert">{error}</p> : null}
+                {unavailableReason ? <p role="alert">{unavailableReason}</p> : null}
                 <div className="chalk-shell-report-actions">
                   <ChalkButton onClick={onClose} disabled={status === "sending"}>
                     Cancel
                   </ChalkButton>
-                  <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending"}>
+                  <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending" || Boolean(unavailableReason)}>
                     {status === "sending" ? "Sending…" : "Send"}
                   </ChalkButton>
                 </div>

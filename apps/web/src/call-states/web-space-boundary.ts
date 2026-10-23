@@ -1,7 +1,7 @@
 import type { PreparedPublicSpace, PublicInviteClient } from "../lib/chalk-access";
 import { createCallStateClient, liveSnapshot } from "./fixtures";
 export { createLocalSpaceRelease } from "../lib/local-space-client";
-export { resumePublicSpace } from "../lib/chalk-access";
+export { publicAPIBaseURL, resumePublicSpace } from "../lib/chalk-access";
 
 // Only the isolated journey server replaces access and transport boundaries.
 // SpacePage, LocalSpace, the theme provider and SDK controls remain the product code.
@@ -29,6 +29,8 @@ export function createPreparedPublicSpace(): Omit<PreparedPublicSpace, "arrival"
       throw new Error("The preview client must not request network credentials");
     },
     finish: async () => undefined,
+    reportCredentialExpiresAt: () => Date.now() + 300_000,
+    reportCredential: () => "fixture-proof",
     reloadMarker: () => ({ episodeId: "33333333-3333-4333-8333-333333333333", participantId: "you", participantGeneration: 1, mediaProof: "fixture-proof", arrivalHandle: "fixture-arrival" }),
   };
 }

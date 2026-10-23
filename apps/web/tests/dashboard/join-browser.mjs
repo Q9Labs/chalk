@@ -62,6 +62,7 @@ async function cleanup() {
   clearTimeout(deadline);
   await context?.close();
   await admissionGuestBrowser?.close();
+  for (const context of browser?.contexts() ?? []) await context.close();
   await browser?.close();
   for (const child of children.toReversed()) {
     if (child.exitCode === null && child.signalCode === null) {
@@ -165,7 +166,11 @@ Process.sleep(:infinity)
   }
   browser = await chromium.launch({ headless: true });
   context = await browser.newContext({
-    recordVideo: process.argv.some((argument) => argument.startsWith("--admission")) ? { dir: resolve(repository, `artifacts/fix-admit/${process.argv.includes("--admission-before") ? "before" : "after"}-host-video`), size: { width: 1440, height: 960 } } : undefined,
+    recordVideo: process.argv.some((argument) => argument.startsWith("--admission"))
+      ? { dir: resolve(repository, `artifacts/fix-admit/${process.argv.includes("--admission-before") ? "before" : "after"}-host-video`), size: { width: 1440, height: 960 } }
+      : process.env.CHALK_REPORT_VIDEO === "1"
+        ? { dir: resolve(repository, "artifacts/report-discord/videos"), size: { width: 1440, height: 960 } }
+        : undefined,
     permissions: ["clipboard-read", "clipboard-write"],
     viewport: { width: 1440, height: 960 },
   });
@@ -228,6 +233,10 @@ Process.sleep(:infinity)
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(copied, call.inviteUrl, "In-call copy must preserve the exact engine canonical invite URL");
     assert(!copied.includes("/dashboard/call/"));
+    if (process.env.CHALK_REPORT_PROOF === "1") {
+      const { checkReports } = await import("./report-browser.mjs");
+      await checkReports({ browser, page, origin, call, repository });
+    }
     if (process.argv.some((argument) => argument.startsWith("--admission"))) {
       admissionGuestBrowser = await chromium.launch({ headless: true });
       await provePublicAdmission({ browser: admissionGuestBrowser, page, origin, apiOrigin, tenantId, spaceId, inviteUrl: call.inviteUrl, repository });

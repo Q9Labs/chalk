@@ -13,6 +13,46 @@ vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialo
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("Chalk terminal callbacks with a real SpaceClient", () => {
+  it("offers terminal reporting only after leave settles, so cleanup cannot discard an opened form", async () => {
+    const platform = terminalTestPlatform();
+    const departure = Promise.withResolvers<void>();
+    platform.leave.mockImplementation(async () => {
+      await departure.promise;
+      return { type: "ack", command_id: "leave", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" };
+    });
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, { ...platform, fetch: async () => new Response(null, { status: 204 }) });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    let leaving: Promise<void> | undefined;
+    try {
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onReportProblem={async () => undefined} />));
+      await act(async () => {
+        await client.join({ microphone: false, camera: false });
+        platform.emitSync({ ...platform.sync.getSnapshot(), control });
+      });
+      await act(async () => {
+        leaving = client.leave();
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("leaving"));
+      });
+      expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Report a problem")).toBe(false);
+      await act(async () => {
+        departure.resolve();
+        await leaving;
+      });
+      expect(client.getSnapshot().connection.status).toBe("left");
+      expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Report a problem")).toBe(true);
+    } finally {
+      departure.resolve();
+      await act(async () => {
+        await leaving;
+        root.unmount();
+      });
+      client.dispose();
+      container.remove();
+    }
+  });
+
   it("renders an already-ended join failure and preserves episode.ended for the integrator", async () => {
     const platform = terminalTestPlatform();
     const client = createSpaceClientForPlatform(

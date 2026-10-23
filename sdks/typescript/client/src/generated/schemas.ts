@@ -2,6 +2,15 @@
 // Do not edit by hand.
 import { Schema, SchemaGetter } from "effect";
 
+export const ChalkCodePointLimits = {
+  "CreateSpaceRequest.name": 120,
+  "CreateTenantRequest.external_id": 512,
+  "ProblemReportRequest.description": 1000,
+  "ProblemReportRequest.diagnostics": 2000,
+  "Tenant.external_id": 512,
+  "UpdateSpaceRequest.name": 120,
+} as const;
+
 const isCodePointLengthBetween = (minimum: number, maximum: number) =>
   Schema.makeFilter(
     (input: string) => {
@@ -324,7 +333,7 @@ export const CreateSpaceRequestSchema = Schema.Struct({
   maximum_episode_duration_seconds: Schema.Number,
   media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
-  name: Schema.String.check(Schema.isMinLength(1)),
+  name: Schema.String.check(isCodePointLengthBetween(1, 120)),
   recording_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   recurring_policy: Schema.optional(Schema.Unknown),
   slug: Schema.String.check(Schema.isMinLength(1)),
@@ -602,6 +611,22 @@ export const PrepareRecordingRequestSchema = Schema.Struct({
   starts_at: DateTimeStringSchema,
 });
 export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
+
+export const ProblemReportAvailabilitySchema = Schema.Struct({
+  available: Schema.Boolean,
+});
+export type ProblemReportAvailability = typeof ProblemReportAvailabilitySchema.Type;
+
+export const ProblemReportRequestSchema = Schema.Struct({
+  description: Schema.String.check(isCodePointLengthBetween(1, 1000), Schema.isPattern(new RegExp("[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"))),
+  diagnostics: Schema.optional(Schema.String.check(isCodePointLengthBetween(0, 2000))),
+});
+export type ProblemReportRequest = typeof ProblemReportRequestSchema.Type;
+
+export const ProblemReportSentSchema = Schema.Struct({
+  sent: Schema.Boolean,
+});
+export type ProblemReportSent = typeof ProblemReportSentSchema.Type;
 
 export const PublicAdmissionRequestSchema = Schema.Struct({
   decision_action: Schema.optional(Schema.String),
@@ -1017,7 +1042,7 @@ export const UpdateSpaceRequestSchema = Schema.Struct({
   maximum_episode_duration_seconds: Schema.optional(Schema.Number),
   media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   metadata: Schema.optional(Schema.Unknown),
-  name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  name: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 120))),
   recording_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
   recurring_policy: Schema.optional(Schema.Unknown),
   slug: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
@@ -1688,6 +1713,14 @@ export const GetEpisodeAttendance429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
+
+export const GetProblemReportAvailabilityPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type GetProblemReportAvailabilityPathParams = typeof GetProblemReportAvailabilityPathParamsSchema.Type;
+
+export const GetProblemReportAvailabilityResponseSchema = ProblemReportAvailabilitySchema;
+export type GetProblemReportAvailabilityResponse = typeof GetProblemReportAvailabilityResponseSchema.Type;
 
 export const GetRecordingPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
@@ -2411,6 +2444,24 @@ export const RotateWebhookEndpointSecret429ResponseHeadersSchema = Schema.Struct
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RotateWebhookEndpointSecret429ResponseHeaders = typeof RotateWebhookEndpointSecret429ResponseHeadersSchema.Type;
+
+export const SendProblemReportPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type SendProblemReportPathParams = typeof SendProblemReportPathParamsSchema.Type;
+
+export const SendProblemReportRequestBodySchema = ProblemReportRequestSchema;
+export type SendProblemReportRequestBody = typeof SendProblemReportRequestBodySchema.Type;
+
+export const SendProblemReportResponseSchema = ProblemReportSentSchema;
+export type SendProblemReportResponse = typeof SendProblemReportResponseSchema.Type;
+
+export const SendProblemReport429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type SendProblemReport429ResponseHeaders = typeof SendProblemReport429ResponseHeadersSchema.Type;
 
 export const SetEpisodeDeadlinePathParamsSchema = Schema.Struct({
   episode_id: EpisodeIdSchema,
@@ -3713,6 +3764,63 @@ export const RecordingPreparationPolicyDeniedErrorWireSchema = Schema.Struct({
 export const RecordingPreparationPolicyDeniedErrorSchema = RecordingPreparationPolicyDeniedErrorWireSchema.pipe(
   Schema.decodeTo(RecordingPreparationPolicyDeniedError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "RecordingPreparationPolicyDeniedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ReportsCredentialsDetectedError extends Schema.TaggedErrorClass<ReportsCredentialsDetectedError>()("ReportsCredentialsDetectedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("reports.credentials_detected"),
+    message: Schema.String,
+  }),
+}) {}
+export const ReportsCredentialsDetectedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("reports.credentials_detected"),
+    message: Schema.String,
+  }),
+});
+export const ReportsCredentialsDetectedErrorSchema = ReportsCredentialsDetectedErrorWireSchema.pipe(
+  Schema.decodeTo(ReportsCredentialsDetectedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ReportsCredentialsDetectedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ReportsDeliveryFailedError extends Schema.TaggedErrorClass<ReportsDeliveryFailedError>()("ReportsDeliveryFailedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("reports.delivery_failed"),
+    message: Schema.String,
+  }),
+}) {}
+export const ReportsDeliveryFailedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("reports.delivery_failed"),
+    message: Schema.String,
+  }),
+});
+export const ReportsDeliveryFailedErrorSchema = ReportsDeliveryFailedErrorWireSchema.pipe(
+  Schema.decodeTo(ReportsDeliveryFailedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ReportsDeliveryFailedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ReportsUnavailableError extends Schema.TaggedErrorClass<ReportsUnavailableError>()("ReportsUnavailableError", {
+  error: Schema.Struct({
+    code: Schema.Literal("reports.unavailable"),
+    message: Schema.String,
+  }),
+}) {}
+export const ReportsUnavailableErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("reports.unavailable"),
+    message: Schema.String,
+  }),
+});
+export const ReportsUnavailableErrorSchema = ReportsUnavailableErrorWireSchema.pipe(
+  Schema.decodeTo(ReportsUnavailableError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ReportsUnavailableError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -5110,6 +5218,9 @@ export const GetEpisodeErrorSchema = Schema.Union([
 ]);
 export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
 
+export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
+export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
+
 export const GetRecordingErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;
 
@@ -5671,6 +5782,21 @@ export const RotateWebhookEndpointSecretErrorSchema = Schema.Union([
 ]);
 export type RotateWebhookEndpointSecretError = typeof RotateWebhookEndpointSecretErrorSchema.Type;
 
+export const SendProblemReportErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  ReportsCredentialsDetectedErrorSchema,
+  ReportsDeliveryFailedErrorSchema,
+  ReportsUnavailableErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type SendProblemReportError = typeof SendProblemReportErrorSchema.Type;
+
 export const SetEpisodeDeadlineErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5872,6 +5998,7 @@ export const ChalkOperationPolicies = {
   rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  sendProblemReport: { maxBodyBytes: 37024, rateLimit: { limit: 3, policy: "problem_reports.participant", windowSeconds: 3600 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

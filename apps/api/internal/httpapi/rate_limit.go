@@ -79,7 +79,11 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := checkRateLimit(options, policy, w, r); err != nil {
-				writeAPIError(w, apiErrorRateLimited)
+				apiErr, ok := errorAsAPIError(err)
+				if !ok {
+					apiErr = apiErrorInternal
+				}
+				writeAPIError(w, apiErr)
 				return
 			}
 			ctx := context.WithValue(r.Context(), writeBudgetContextKey{}, func() error {
@@ -126,7 +130,7 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 		}
 		if policy.Limit > 0 {
 			decision := options.Limiter.Allow(r.Context(), key, ceiling, now())
-			if !decision.Allowed {
+			if decision.State != ratelimit.Allowed {
 				writeRateLimitHeaders(w, ceiling, decision)
 				return rateLimitFailure(w, decision)
 			}
@@ -135,13 +139,16 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 	}
 	decision := options.Limiter.Allow(r.Context(), key, policy, now())
 	writeRateLimitHeaders(w, policy, decision)
-	if !decision.Allowed {
+	if decision.State != ratelimit.Allowed {
 		return rateLimitFailure(w, decision)
 	}
 	return nil
 }
 
 func writeRateLimitHeaders(w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) {
+	if decision.State != ratelimit.Allowed && decision.State != ratelimit.Exhausted {
+		return
+	}
 	w.Header().Set(ratelimit.HeaderLimit, strconv.Itoa(policy.Limit))
 	w.Header().Set(ratelimit.HeaderRemaining, strconv.Itoa(decision.Remaining))
 }
@@ -237,7 +244,13 @@ func remoteIP(remoteAddr string) string {
 	return remoteAddr
 }
 
-func rateLimitFailure(w http.ResponseWriter, decision ratelimit.Decision) error {
+func rateLimitFailure(w http.ResponseWriter, decision ratelimit.Decision) APIError {
+	if decision.State != ratelimit.Exhausted {
+		w.Header().Del(ratelimit.HeaderLimit)
+		w.Header().Del(ratelimit.HeaderRemaining)
+		w.Header().Del(ratelimit.HeaderRetryAfter)
+		return apiErrorServiceUnavailable
+	}
 	retryAfter := int(math.Ceil(decision.RetryAfter.Seconds()))
 	if retryAfter < 1 {
 		retryAfter = 1

@@ -93,6 +93,47 @@ describe("Privacy Policy advance notice", () => {
     expect(row?.textContent).toContain("Client-readable");
     expect(row?.textContent).toContain("1 year");
   });
+  it("discloses problem-report retention separately from short-lived operational logs", () => {
+    render(<LegalPage kind="privacy" />);
+    const retention = screen.getByText(/Account records remain stored until deleted/).textContent;
+    expect(retention).toContain("Problem reports remain in our Discord channel until we delete them");
+    expect(retention).toContain("Chalk does not automatically expire problem reports");
+  });
+  it("uses one Discord recipient disclosure for alerts and the exact opt-in report payload", () => {
+    render(<LegalPage kind="privacy" />);
+    const recipients = screen.getAllByText("Discord");
+    expect(recipients).toHaveLength(1);
+    const disclosure = recipients[0]?.closest("li")?.textContent;
+    for (const field of [
+      "operational alerts",
+      "problem reports",
+      "description",
+      "display name and role",
+      "call name and ID",
+      "only if you opt in",
+      "connection status",
+      "last error code",
+      "browser or user agent",
+      "app version",
+      "do not add your account email address",
+      "each field and the description/diagnostics pair",
+      "deliberate evasion by a credential's own holder",
+      "regardless of length",
+      "at least 16 normalized characters",
+      "is not covered",
+      "known secret formats",
+      "Other text you provide is sent as written",
+      "http://",
+      "https://",
+      "www.",
+      "non-clickable text",
+      "query strings and fragments removed",
+      "Stack traces and commit IDs",
+    ]) {
+      expect(disclosure).toContain(field);
+    }
+    expect(screen.getByText("Effective 6 November 2026")).toBeTruthy();
+  });
   it("discloses webhook content and endpoint retention criteria", () => {
     render(<LegalPage kind="privacy" />);
     expect(screen.getByText(/Webhook event bodies, deliveries, and attempt logs/).textContent).toContain("cleanup after 30 days");

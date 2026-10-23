@@ -133,7 +133,7 @@ type APIConfig struct {
 	DisableAuthenticatedRateLimits bool
 	Address                        string
 	CORSAllowedOrigins             []string
-	LocalSystemToken               string
+	LocalSystemToken               string `secret:"true"`
 	ServicePrincipal               authentication.ServiceCredential
 
 	TrustedProxyCIDRs []string
@@ -146,20 +146,20 @@ type CapabilityConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL      string
+	URL      string `secret:"true"`
 	MaxConns int32
 	MinConns int32
 }
 
 type RedisConfig struct {
-	URL string
+	URL string `secret:"true"`
 }
 
 type CloudflareRealtimeConfig struct {
 	AccountID         string
 	RealtimeAppID     string
-	RealtimeAppSecret string
-	RealtimeBaseURL   string
+	RealtimeAppSecret string `secret:"true"`
+	RealtimeBaseURL   string `secret:"true"` // Include any local endpoint userinfo.
 
 	RequestTimeout time.Duration
 }
@@ -167,29 +167,29 @@ type CloudflareRealtimeConfig struct {
 type ProviderBridgeConfig struct {
 	Address           string
 	ServerCertFile    string
-	ServerKeyFile     string
+	ServerKeyFile     string `secret:"false"` // Filesystem path, not key material.
 	ClientCAFile      string
 	SPIFFETrustDomain string
 	Enabled           bool
 }
 
 type R2Config struct {
-	AccessKeyID     string
+	AccessKeyID     string `secret:"true"`
 	AccountID       string
 	Bucket          string
-	Endpoint        string
-	SecretAccessKey string
+	Endpoint        string `secret:"true"` // Include any storage endpoint userinfo.
+	SecretAccessKey string `secret:"true"`
 	RequestTimeout  time.Duration
 }
 
 type RecordingKMSConfig struct {
-	KeyID          string
+	KeyID          string `secret:"false"` // KMS resource identifier, not key material.
 	Region         string
 	RequestTimeout time.Duration
 }
 
 type TranscriptionConfig struct {
-	WorkloadAuthSecret string
+	WorkloadAuthSecret string `secret:"true"`
 	ControlAudience    string
 	DispatcherFunction string
 }
@@ -197,9 +197,9 @@ type TranscriptionConfig struct {
 type SyncTokenConfig struct {
 	Audience         string
 	Issuer           string
-	KeyID            string
-	PrivateKey       ed25519.PrivateKey
-	VerificationKeys map[string]ed25519.PublicKey
+	KeyID            string                       `secret:"false"` // Public signing-key identifier.
+	PrivateKey       ed25519.PrivateKey           `secret:"true"`
+	VerificationKeys map[string]ed25519.PublicKey `secret:"false"` // Public verification material.
 }
 
 type PublicInviteConfig struct {
@@ -207,9 +207,9 @@ type PublicInviteConfig struct {
 	ManagedTenantID       string
 	DefaultMediaPlane     string
 	WebOrigin             string
-	KeyID                 string
-	PrivateKey            ed25519.PrivateKey
-	VerificationKeys      map[string]ed25519.PublicKey
+	KeyID                 string                       `secret:"false"` // Public signing-key identifier.
+	PrivateKey            ed25519.PrivateKey           `secret:"true"`
+	VerificationKeys      map[string]ed25519.PublicKey `secret:"false"` // Public verification material.
 	AutoLifecycleLifetime time.Duration
 	SchedulerInterval     time.Duration
 	SchedulerBatch        int32
@@ -219,7 +219,7 @@ type ObservabilityConfig struct {
 	Environment          string
 	LogFormat            string
 	LogLevel             string
-	OTLPEndpoint         string
+	OTLPEndpoint         string `secret:"true"` // May carry collector authentication.
 	OTLPInsecure         bool
 	OperationLogs        bool
 	Profiler             bool
@@ -231,9 +231,9 @@ type ObservabilityConfig struct {
 }
 
 type WebhookConfig struct {
-	EncryptionKey     []byte
-	EncryptionKeys    map[byte][]byte
-	CurrentKeyVersion byte
+	EncryptionKey     []byte          `secret:"true"`
+	EncryptionKeys    map[byte][]byte `secret:"true"`
+	CurrentKeyVersion byte            `secret:"false"` // Public rotation version.
 }
 
 type DeadlineSchedulerConfig struct {
@@ -242,8 +242,9 @@ type DeadlineSchedulerConfig struct {
 }
 
 type Config struct {
-	TenantLimits tenantlimits.Config
-	API          APIConfig
+	ProblemReportsDiscordWebhookURL string `secret:"true"`
+	TenantLimits                    tenantlimits.Config
+	API                             APIConfig
 
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
@@ -500,9 +501,10 @@ func Load() (Config, error) {
 
 			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
 		},
-		Capabilities:       capabilities,
-		CloudflareRealtime: cloudflareRealtime,
-		DefaultMediaPlane:  defaultMediaPlane,
+		ProblemReportsDiscordWebhookURL: strings.TrimSpace(os.Getenv("CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL")),
+		Capabilities:                    capabilities,
+		CloudflareRealtime:              cloudflareRealtime,
+		DefaultMediaPlane:               defaultMediaPlane,
 		Database: DatabaseConfig{
 			URL:      databaseURL,
 			MaxConns: maxConns,

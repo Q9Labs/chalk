@@ -71,16 +71,6 @@ func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIP
 	}
 }
 
-func bearerToken(header string) (string, bool) {
-	scheme, token, ok := strings.Cut(strings.TrimSpace(header), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return "", false
-	}
-
-	token = strings.TrimSpace(token)
-	return token, token != ""
-}
-
 func writeUnauthenticated(w http.ResponseWriter) {
 	writeAPIError(w, apiErrorUnauthenticated)
 }
