@@ -8,6 +8,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketClose
+  alias ChalkSync.Transport.SocketContext
   alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
@@ -21,15 +22,21 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   def init(options) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
 
+    connection_attributes =
+      options |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
+
     observability =
       options
       |> Map.new()
       |> Map.get(:observability)
       |> Observability.merge(nil)
-      |> Observability.root("sync.websocket.handshake", %{
-        transport: "websocket",
-        protocol: "whiteboard-v1"
-      })
+      |> Observability.root(
+        "sync.websocket.handshake",
+        Map.merge(connection_attributes, %{
+          transport: "websocket",
+          protocol: "whiteboard-v1"
+        })
+      )
 
     {:ok,
      %{
@@ -53,6 +60,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        presence_windows: %{},
        outbound: OutboundQueue.new(),
        terminal: nil,
+       connection_attributes: connection_attributes,
        observability: observability
      }}
   end
@@ -354,54 +362,16 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
          {:hello, %{token: token, extensions: extensions}},
          %{phase: :awaiting_hello} = state
        ) do
-    presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
-    view_negotiated = Enum.any?(extensions, &(&1["name"] == "view_v1"))
-
-    view_origins_negotiated =
-      Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
-
     with {:ok, claims} <- TokenVerifier.verify(token),
-         {:ok, identity} <- identity(claims),
-         {:ok, welcome} <- Episode.connect(identity),
-         # Taken once the connect check has passed, so a stored read that started while it waited,
-         # possibly before the Participant's admission committed, cannot close this socket.
-         connected_at = System.monotonic_time(:millisecond),
-         :ok <- Authority.watch(identity.episode) do
-      Process.cancel_timer(state.hello_timer)
-      Fanout.subscribe(identity.episode)
-      Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
-
-      welcome =
-        if presentation_negotiated do
-          welcome
-        else
-          Map.delete(welcome, "presenting")
-        end
-
-      next =
-        %{
-          state
-          | phase: :live,
-            hello_timer: nil,
-            identity: identity,
-            connected_at: connected_at,
-            display_name: claims.display_name,
-            presentation_negotiated: presentation_negotiated,
-            view_negotiated: view_negotiated,
-            view_origins_negotiated: view_origins_negotiated,
-            scene_id: welcome["scene_id"],
-            revision: String.to_integer(welcome["revision"])
-        }
-        |> observe_operation("connect", "accepted")
-
-      nil
-      {:push, {:text, Protocol.encode!(welcome)}, next}
+         {:ok, identity} <- identity(claims) do
+      authenticated_hello(
+        SocketContext.authenticated(state, identity),
+        identity,
+        claims,
+        extensions
+      )
     else
-      {:error, :invalid_token} -> stop(state, 1008, "invalid token", :invalid_token)
-      {:error, :invalid_identity} -> stop(state, 1008, "invalid token", :invalid_token)
-      {:error, :permission_denied} -> stop(state, 1008, "policy violation", :permission_denied)
-      {:error, :authority_unavailable} -> dependency_unavailable(state, "authority")
-      _unavailable -> stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+      {:error, _reason} -> stop(state, 1008, "invalid token", :invalid_token)
     end
   end
 
@@ -979,7 +949,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
-      SocketClose.attributes(terminate_reason, state.terminal)
+      state.connection_attributes
+      |> Map.merge(SocketClose.attributes(terminate_reason, state.terminal))
       |> Map.merge(%{protocol: "whiteboard-v1", phase: state.phase})
       |> put_scene_id(state.scene_id)
     )
@@ -991,5 +962,53 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp put_scene_id(attributes, _scene_id) do
     attributes
+  end
+
+  defp authenticated_hello(state, identity, claims, extensions) do
+    presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
+    view_negotiated = Enum.any?(extensions, &(&1["name"] == "view_v1"))
+
+    view_origins_negotiated =
+      Enum.any?(extensions, &(&1["name"] == "view_v1" and &1["origins"] == true))
+
+    with {:ok, welcome} <- Episode.connect(identity),
+         # Taken once the connect check has passed, so a stored read that started while it waited,
+         # possibly before the Participant's admission committed, cannot close this socket.
+         connected_at = System.monotonic_time(:millisecond),
+         :ok <- Authority.watch(identity.episode) do
+      Process.cancel_timer(state.hello_timer)
+      Fanout.subscribe(identity.episode)
+      Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
+
+      welcome =
+        if presentation_negotiated do
+          welcome
+        else
+          Map.delete(welcome, "presenting")
+        end
+
+      next =
+        %{
+          state
+          | phase: :live,
+            hello_timer: nil,
+            identity: identity,
+            connected_at: connected_at,
+            display_name: claims.display_name,
+            presentation_negotiated: presentation_negotiated,
+            view_negotiated: view_negotiated,
+            view_origins_negotiated: view_origins_negotiated,
+            scene_id: welcome["scene_id"],
+            revision: String.to_integer(welcome["revision"])
+        }
+        |> observe_operation("connect", "accepted")
+
+      nil
+      {:push, {:text, Protocol.encode!(welcome)}, next}
+    else
+      {:error, :permission_denied} -> stop(state, 1008, "policy violation", :permission_denied)
+      {:error, :authority_unavailable} -> dependency_unavailable(state, "authority")
+      _unavailable -> stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+    end
   end
 end

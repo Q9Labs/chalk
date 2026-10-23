@@ -82,6 +82,7 @@ export type ClientFailure = {
   readonly code: ErrorCode;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 };
 export type EpisodeSummary = {
   readonly id: string;

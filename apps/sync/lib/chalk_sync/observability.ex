@@ -414,7 +414,21 @@ defmodule ChalkSync.Observability do
       end
 
     Logger.info(
-      "chalk_sync_observability",
+      if(
+        metadata.event in [
+          "sync.websocket.handshake",
+          "sync.websocket.authenticated",
+          "sync.websocket.closed"
+        ],
+        do:
+          JSON.encode!(
+            Map.merge(metadata.attributes, %{
+              event: metadata.event,
+              journey_id: metadata.journey_id
+            })
+          ),
+        else: "chalk_sync_observability"
+      ),
       [
         observability_event: metadata.event,
         journey_id: metadata.journey_id,

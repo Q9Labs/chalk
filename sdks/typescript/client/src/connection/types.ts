@@ -121,6 +121,7 @@ export type ConnectionFailure = {
   readonly action: ConnectionActionName | null;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 };
 
 export type ChalkPendingChatMessage = ChalkPendingChatMessageState<ConnectionFailure>;
@@ -132,12 +133,15 @@ export class ConnectionError extends Error {
   readonly action: ConnectionActionName | null;
   readonly recoverable: boolean;
 
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+
   constructor(failure: ConnectionFailure, options?: ErrorOptions) {
     super(failure.message, options);
     this.name = "ConnectionError";
     this.code = failure.code;
     this.action = failure.action;
     this.recoverable = failure.recoverable;
+    this.sync = failure.sync;
   }
 }
 

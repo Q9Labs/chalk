@@ -43,6 +43,7 @@ const INVALID_PAYLOAD_CODE_BY_ACTION: ReadonlyMap<ConnectionError["action"], Err
 
 const MEDIA_TIMEOUT_FAILURE = { code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." } as const;
 const SYNC_FAILURES: ReadonlyMap<string, { readonly failure: ClientFailure; readonly scope?: "media" }> = new Map([
+  ["sync_hello_timeout", { failure: { code: "connection.sync_hello_timeout", recoverable: true, message: "Sync could not reach the call service. Try again." } }],
   ["not_live", { failure: { code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." } }],
   ["signaling_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
   ["negotiation_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
@@ -64,6 +65,7 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
       code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
       recoverable: cause.recoverable,
       message: cause.message,
+      ...(cause.sync ? { sync: cause.sync } : {}),
     });
   }
   if (cause instanceof V1SyncError) {
@@ -78,7 +80,7 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
-  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message });
+  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.sync ? { sync: error.sync } : {}) });
 }
 
 export function isAccessInvalid(cause: unknown): boolean {

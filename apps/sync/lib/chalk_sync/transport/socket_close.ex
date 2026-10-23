@@ -12,7 +12,7 @@ defmodule ChalkSync.Transport.SocketClose do
         _reason -> :abnormal
       end
 
-    Map.put(attributes, :close_kind, kind)
+    attributes |> Map.put(:close_kind, kind) |> Map.put_new(:close_code, nil)
   end
 
   defp transport_reason(:normal), do: :normal

@@ -1,3 +1,4 @@
+import { safeSyncCloseReason, type SyncConnectDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
@@ -94,6 +95,12 @@ export class V1SyncClient implements V1CollaborationClient {
   #reconnectTimer: unknown;
   #cancelDial: (() => void) | undefined;
   #dialTimeoutCount = 0;
+  #connectStartedAt: number | null = null;
+  #opened = false;
+  #connectFailure: SyncConnectDiagnostic | undefined;
+  #connectDiagnostic(): SyncConnectDiagnostic {
+    return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())) };
+  }
   #reconnectAttempt = 0;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -195,7 +202,13 @@ export class V1SyncClient implements V1CollaborationClient {
     const pendingCommands = this.#commandScheduler.pendingCommands;
     const optimisticControl = this.#control && this.#participantId ? optimisticV1Control(this.#control, this.#participantId, pendingCommands) : this.#control;
     return {
-      connection: { ...this.#phase, ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}), ...(this.#dialTimeoutCount ? { dialTimeoutCount: this.#dialTimeoutCount } : {}) },
+      connection: {
+        ...this.#phase,
+        ...(this.#connectStartedAt !== null && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectAttempt: this.#connectDiagnostic() } : {}),
+        ...(this.#connectFailure && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectFailure: this.#connectFailure } : {}),
+        ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}),
+        ...(this.#dialTimeoutCount ? { dialTimeoutCount: this.#dialTimeoutCount } : {}),
+      },
       participantId: this.#participantId,
       participantGeneration: this.#participantGeneration,
       control: this.#control,
@@ -343,8 +356,19 @@ export class V1SyncClient implements V1CollaborationClient {
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
+    this.#connectStartedAt = this.#clock().now();
+    this.#opened = false;
+    this.#connectFailure = undefined;
     this.#emit();
-    const socket = this.#options.webSocket.connect(this.#options.url);
+    let socket: V1Socket;
+    try {
+      socket = this.#options.webSocket.connect(this.#options.url);
+    } catch {
+      this.#connectFailure = this.#connectDiagnostic();
+      this.#emit();
+      // Never propagate constructor exceptions: browsers can include the credentialed URL.
+      throw new V1SyncError("Sync WebSocket could not be created", "sync_hello_timeout");
+    }
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
     this.#cancelDial = scheduleSyncDialDeadline(
@@ -352,6 +376,7 @@ export class V1SyncClient implements V1CollaborationClient {
       () => {
         this.#cancelDial = undefined;
         this.#dialTimeoutCount += 1;
+        this.#connectFailure = this.#connectDiagnostic();
         this.#recover("WebSocket dial timeout");
       },
       this.#options.dialTimeoutMs,
@@ -359,18 +384,30 @@ export class V1SyncClient implements V1CollaborationClient {
     socket.onopen = () => {
       if (socket !== this.#socket) return;
       this.#clearDial();
+      this.#opened = true;
+      this.#connectFailure = undefined;
       void this.#authenticate(socket);
     };
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
+        this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
+        this.#emit();
+      }
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
         this.#inbound = this.#inbound.then(() => this.#disconnected(socket));
       }, 0);
     };
-    socket.onerror = () => socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
+    socket.onerror = () => {
+      if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
+        this.#connectFailure = this.#connectDiagnostic();
+        this.#emit();
+      }
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
+    };
   }
   async #authenticate(socket: V1Socket): Promise<void> {
     try {
@@ -665,6 +702,8 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!this.#recovery?.controlComplete || !this.#media || !this.#presence) return;
     this.#recovery = null;
     this.#phase = { phase: "live" };
+    this.#connectStartedAt = null;
+    this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
     this.#commandScheduler.enterLive();

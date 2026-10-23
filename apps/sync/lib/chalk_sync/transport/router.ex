@@ -6,6 +6,7 @@ defmodule ChalkSync.Transport.Router do
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Metrics
   alias ChalkSync.Operations.Readiness
+  alias ChalkSync.Transport.SocketContext
 
   get("/healthz") do
     conn
@@ -39,7 +40,10 @@ defmodule ChalkSync.Transport.Router do
           conn
           |> WebSockAdapter.upgrade(
             ChalkSync.Transport.SocketV1,
-            %{observability: observability},
+            %{
+              observability: observability,
+              connection_attributes: SocketContext.request(conn)
+            },
             timeout: 60_000
           )
           |> halt()
@@ -59,7 +63,10 @@ defmodule ChalkSync.Transport.Router do
       conn
       |> WebSockAdapter.upgrade(
         ChalkSync.Transport.SocketWhiteboardV1,
-        %{observability: observability},
+        %{
+          observability: observability,
+          connection_attributes: SocketContext.request(conn)
+        },
         timeout: 60_000
       )
       |> halt()

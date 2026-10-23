@@ -1,3 +1,4 @@
+import { formatSyncConnectDiagnostic } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import type { ConnectionMediaSnapshot } from "../media";
@@ -48,6 +49,7 @@ export class ConnectionLifecycleFailure extends Data.TaggedError("ConnectionLife
   readonly recoverable: boolean;
   readonly message: string;
   readonly cause?: unknown;
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 }> {}
 export type ConnectionLifecycleCapability = {
   readonly snapshotRef: SubscriptionRef.SubscriptionRef<ConnectionLifecycleSnapshot>;
@@ -208,11 +210,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const mediaAttempt: MediaRecoveryAttempt = { expiresAt: null };
       const foreign = <A>(operation: () => Promise<A>, code: LifecycleFailureCode = "internal_error", message = "A browser transport operation failed"): Effect.Effect<A, ConnectionLifecycleFailure> =>
         Effect.tryPromise({ try: operation, catch: (cause) => lifecycleFailure(code, true, message, cause) });
-      const withinForegroundBudget = <A, E>(effect: Effect.Effect<A, E>, milliseconds: number, failure: ConnectionLifecycleFailure): Effect.Effect<A, E | ConnectionLifecycleFailure> =>
+      const withinForegroundBudget = <A, E>(effect: Effect.Effect<A, E>, milliseconds: number, failure: ConnectionLifecycleFailure | (() => ConnectionLifecycleFailure)): Effect.Effect<A, E | ConnectionLifecycleFailure> =>
         Effect.raceFirst(
           effect,
           Effect.callback<never, ConnectionLifecycleFailure>((resume) => {
-            const cancel = scheduleForegroundDeadline(platform.clock, milliseconds, () => resume(Effect.fail(failure)));
+            const cancel = scheduleForegroundDeadline(platform.clock, milliseconds, () => resume(Effect.fail(typeof failure === "function" ? failure() : failure)));
             return Effect.sync(cancel);
           }),
         );
@@ -345,13 +347,23 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncNoticeUnresponsive = false;
           let latestSnapshot: V1EpisodeSnapshot | null = null;
           let observedDialTimeouts = 0;
+          let observedConnectFailure: V1EpisodeSnapshot["connection"]["connectFailure"];
           let snapshotQueued = false;
-          const unsubscribe = sync.subscribe((snapshot) => {
+          const recordSyncDiagnostics = (snapshot: V1EpisodeSnapshot) => {
+            if (sync !== model.sync) return;
+            const failure = snapshot.connection.connectFailure;
+            if (failure && failure !== observedConnectFailure) {
+              observedConnectFailure = failure;
+              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: "sync_hello_timeout", sync: failure });
+            }
             const count = snapshot.connection.dialTimeoutCount ?? 0;
-            if (sync === model.sync && count > observedDialTimeouts) {
+            if (count > observedDialTimeouts) {
               observedDialTimeouts = count;
               diagnostics.record({ event: "sync_dial_timeout", state: model.state, epoch: model.epoch, attempt: count });
             }
+          };
+          const unsubscribe = sync.subscribe((snapshot) => {
+            recordSyncDiagnostics(snapshot);
             if (sync === model.sync && snapshot.connection.phase === "live") {
               const notice = snapshot.connection.noticeUnresponsive === true;
               if (notice !== model.syncNoticeUnresponsive) {
@@ -416,7 +428,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const unsubscribe = sync.subscribe(observe);
           observe(sync.getSnapshot());
           return Effect.sync(unsubscribe);
-        }).pipe((effect) => withinForegroundBudget(effect, timeoutMs, lifecycleFailure("sync_hello_timeout", true, "Sync did not become live before the startup deadline")));
+        }).pipe((effect) => withinForegroundBudget(effect, timeoutMs, () => syncStartupFailure(sync.getSnapshot())));
       const trace = <A, E>(step: Exclude<ConnectionJoinTraceStep, "join">, effect: Effect.Effect<A, E>): Effect.Effect<A, E> => {
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
         return effect.pipe(
@@ -479,7 +491,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   "start_media",
                   model.startInitialMedia ? model.startInitialMedia(media, stream!).pipe(Effect.mapError((cause) => lifecycleFailure("media_start_failed", true, "The media layer could not start", cause))) : foreign(() => media.start(stream!), "media_start_failed", "The media layer could not start"),
                 ),
-                trace("start_sync", foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))))),
+                trace(
+                  "start_sync",
+                  foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(
+                    Effect.mapError((failure) => (sync.getSnapshot().connection.connectFailure ? syncStartupFailure(sync.getSnapshot()) : failure)),
+                    Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))),
+                  ),
+                ),
               ],
               { concurrency: "unbounded", discard: true },
             );
@@ -857,7 +875,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const syncNeedsRecovery = (snapshot: V1EpisodeSnapshot): boolean => active(model) && (snapshot.connection.phase === "connecting" || snapshot.connection.phase === "recovering" || snapshot.connection.phase === "terminal");
       const recordFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.sync(() => {
-          diagnostics.record({ event: "connection_failed", state: model.state, epoch: model.epoch, code: failure.code });
+          diagnostics.record({ event: "connection_failed", state: model.state, epoch: model.epoch, code: failure.code, ...(failure.sync ? { sync: failure.sync } : {}) });
         });
       const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* failForSnapshotEffect() {
@@ -1064,7 +1082,7 @@ function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, mess
   return new ConnectionLifecycleFailure({ code, recoverable, message, ...(cause === undefined ? {} : { cause }) });
 }
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
-  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message });
+  return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}) });
 }
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
   return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? "Access was rejected" : "Could not reach the Space. Check your network and try again.", value.cause);
@@ -1190,4 +1208,10 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
   if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
+}
+
+function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
+  const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
+  const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
+  return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
 }

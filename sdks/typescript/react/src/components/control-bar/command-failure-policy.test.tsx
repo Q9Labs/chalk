@@ -117,7 +117,7 @@ it("walks every client-code / operation / source / recoverability / retained-com
             });
             rows++;
           }
-  expect(rows).toBe(3600);
+  expect(rows).toBe(Object.keys(CASES).length * operations.length * sources.length * 2 * 2);
 });
 
 it("walks every actionable policy row through SpaceView and replays the exact failed start/stop command", async () => {
@@ -215,7 +215,7 @@ it.each([
         expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Try again")).toBe(false);
         rows++;
       }
-    expect(rows).toBe(60);
+    expect(rows).toBe(Object.keys(CASES).length * 2);
   } finally {
     await act(async () => root.unmount());
     container.remove();

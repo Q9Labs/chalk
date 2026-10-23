@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import type { ErrorCode } from "@q9labsai/chalk-client";
+import { formatSyncConnectDiagnostic, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 
 export type StatusSurfacePhase = "entering" | "left" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
@@ -10,6 +10,7 @@ export interface StatusSurfaceProps {
   readonly callName?: string;
   readonly reason?: string;
   readonly errorCode?: ErrorCode;
+  readonly sync?: ClientFailure["sync"];
   readonly theme?: ChalkTheme;
   readonly onRejoin?: () => void;
   readonly onHome?: () => void;
@@ -33,7 +34,7 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
 };
 
 /** All terminal call states share the same quiet page and host-owned navigation. */
-export function StatusSurface({ phase, callName = "the call", reason, errorCode, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
+export function StatusSurface({ phase, callName = "the call", reason, errorCode, sync, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
@@ -62,6 +63,7 @@ export function StatusSurface({ phase, callName = "the call", reason, errorCode,
           Reference:{" "}
           <code dir="ltr" className="break-all">
             {errorCode}
+            {sync ? ` ${formatSyncConnectDiagnostic(sync)}` : ""}
           </code>
         </p>
       ) : null}

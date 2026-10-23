@@ -43,7 +43,7 @@ export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: 
     diagnostics: {
       onEvent: (event) => {
         platform.onConnectionDiagnostic?.(event);
-        options.logger?.debug?.("SpaceClient connection event", { event: event.event, state: event.state, epoch: event.epoch, ...(event.code ? { code: event.code } : {}) });
+        options.logger?.debug?.("SpaceClient connection event", { event: event.event, state: event.state, epoch: event.epoch, ...(event.code ? { code: event.code } : {}), ...(event.sync ? { sync: event.sync } : {}) });
       },
     },
   });

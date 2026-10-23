@@ -1,6 +1,18 @@
 import type { ConnectionErrorCode, ConnectionState } from "./types";
 
-export type ConnectionDiagnosticEventName = "sync_dial_timeout" | "connection_failed" | "state_changed" | "access_refreshed" | "access_refresh_failed" | "recovery_attempt" | "recovery_succeeded" | "recovery_exhausted" | "cleanup_completed" | "cleanup_unconfirmed" | "space_join_span";
+export type ConnectionDiagnosticEventName =
+  | "sync_dial_timeout"
+  | "sync_connect_failed"
+  | "connection_failed"
+  | "state_changed"
+  | "access_refreshed"
+  | "access_refresh_failed"
+  | "recovery_attempt"
+  | "recovery_succeeded"
+  | "recovery_exhausted"
+  | "cleanup_completed"
+  | "cleanup_unconfirmed"
+  | "space_join_span";
 
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live";
 
@@ -38,6 +50,7 @@ export type ConnectionDiagnostic = {
   readonly parentSpanId?: string;
   readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 };
 
 export class ConnectionDiagnostics {
@@ -54,7 +67,7 @@ export class ConnectionDiagnostics {
   }
 
   record(input: Omit<ConnectionDiagnostic, "timestamp">): void {
-    const event = Object.freeze({ timestamp: this.#now(), ...input });
+    const event = Object.freeze({ timestamp: this.#now(), ...input, ...(input.sync ? { sync: Object.freeze({ ...input.sync }) } : {}) });
     this.#events.push(event);
     if (this.#events.length > this.#limit) this.#events.splice(0, this.#events.length - this.#limit);
     try {

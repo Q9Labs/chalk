@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.check-types.json",
+  "include": ["src/space-client/error-code-compatibility.test.ts"],
+  "exclude": ["node_modules", "dist"]
+}
