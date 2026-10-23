@@ -727,6 +727,26 @@ with completed as (
     from completed
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
+), salvage_event as (
+    insert into observability_journey_events (
+        event_id, journey_id, sequence, occurred_at, name, phase, state,
+        origin_kind, first_observed_layer, upstream_visibility, parent_event_id, attributes
+    )
+    select gen_random_uuid(), coalesce(start_operation.journey_id, completed.recording_id),
+        coalesce((select max(sequence) + 1 from observability_journey_events
+                  where journey_id = coalesce(start_operation.journey_id, completed.recording_id)), 0),
+        now(), 'recording.capture.salvaged', 'capture_completion', 'succeeded', 'server', 'api', 'visible',
+        start_operation.parent_journey_event_id,
+        jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', sqlc.arg(capture_epoch)::bigint,
+                           'reason', 'stop_unconfirmed', 'source', 'committed_bundles')
+    from completed
+    join sync_recordings recording on recording.recording_id = completed.recording_id and recording.tenant_id = completed.tenant_id
+    left join sync_external_operations start_operation on start_operation.external_operation_id = recording.start_external_operation_id
+        and start_operation.tenant_id = completed.tenant_id and start_operation.episode_id = completed.episode_id
+        and start_operation.recording_id = completed.recording_id and start_operation.operation_name = 'start_recording'
+    where recording_capture_completion_available(completed.recording_id)
+      and not recording_capture_stop_confirmed(completed.recording_id)
+    returning event_id
 ), reservation as (
     select recording_pipelines.recording_id, recording_reservations.id,
         recording_reservations.participant_count, recording_reservations.input_bitrate_bps

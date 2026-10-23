@@ -595,27 +595,52 @@ func captureGonePullResult(requestErr error, response captureTracksResponse, inp
 		return captureplane.PullCaptureTracksResult{}, false, nil
 	}
 	byIdentity := make(map[captureTrackKey]captureTrackResult, len(response.Tracks))
+	incomplete := make([]captureTrackResult, 0)
 	for _, result := range response.Tracks {
 		key := captureTrackKey{owner: result.ConnectionReference, track: result.TrackName}
-		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "not_found_track_error") && (key.owner == "" || key.track == "") {
-			// Error entries may omit optional TrackObject identity fields. Infer
-			// only a unique requested identity; never guess by response order.
-			matches := 0
-			for _, requested := range input.Tracks {
-				if (result.ConnectionReference == "" || result.ConnectionReference == requested.OwnerReference.String()) &&
-					(result.TrackName == "" || result.TrackName == requested.TrackReference.String()) {
-					key = captureTrackKey{owner: requested.OwnerReference.String(), track: requested.TrackReference.String()}
-					matches++
-				}
-			}
-			if matches != 1 {
-				return captureplane.PullCaptureTracksResult{}, false, nil
-			}
+		if result.Location != "" && result.Location != "remote" {
+			return captureplane.PullCaptureTracksResult{}, false, nil
 		}
-		if _, exists := byIdentity[key]; exists || (result.Location != "" && result.Location != "remote") {
+		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "not_found_track_error") && (key.owner == "" || key.track == "") {
+			incomplete = append(incomplete, result)
+			continue
+		}
+		if _, exists := byIdentity[key]; exists {
 			return captureplane.PullCaptureTracksResult{}, false, nil
 		}
 		byIdentity[key] = result
+	}
+	// Match explicit identities first. Optional error identities can then use
+	// only unmatched requests, independent of the provider's response order.
+	for len(incomplete) > 0 {
+		unresolved := make([]captureTrackResult, 0, len(incomplete))
+		for _, result := range incomplete {
+			var key captureTrackKey
+			matches := 0
+			for _, requested := range input.Tracks {
+				candidate := captureTrackKey{owner: requested.OwnerReference.String(), track: requested.TrackReference.String()}
+				if _, matched := byIdentity[candidate]; matched {
+					continue
+				}
+				if (result.ConnectionReference == "" || result.ConnectionReference == requested.OwnerReference.String()) &&
+					(result.TrackName == "" || result.TrackName == requested.TrackReference.String()) {
+					key = candidate
+					matches++
+				}
+			}
+			if matches == 0 {
+				return captureplane.PullCaptureTracksResult{}, false, nil
+			}
+			if matches > 1 {
+				unresolved = append(unresolved, result)
+				continue
+			}
+			byIdentity[key] = result
+		}
+		if len(unresolved) == len(incomplete) {
+			return captureplane.PullCaptureTracksResult{}, false, nil
+		}
+		incomplete = unresolved
 	}
 	pulled := make([]captureplane.PulledCaptureTrack, 0, len(input.Tracks))
 	gone := make([]captureplane.CaptureTrack, 0)

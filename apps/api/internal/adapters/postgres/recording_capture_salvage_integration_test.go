@@ -16,10 +16,12 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 		wantPending   bool
 		stopPending   bool
 		reportFailure bool
+		confirmedStop bool
 	}{
 		{name: "expired lease preserves committed source", wantPending: true},
 		{name: "Episode stop still pending", wantPending: true, stopPending: true},
 		{name: "last media attempt failure preserves source", wantPending: true, reportFailure: true},
+		{name: "confirmed stop is not salvage", wantPending: true, confirmedStop: true},
 		{name: "missing key", remove: "key"},
 		{name: "missing committed bundle", remove: "bundle"},
 		{name: "expired source", remove: "expired"},
@@ -34,7 +36,17 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 				select tenant_id,space_id,episode_id,gen_random_uuid(),'salvage-start-'||id::text,$2,'start_recording',id,'{}','applied',now() from recordings where id=$1`, f.recordingID.Bytes(), f.digest)
 			execCleanupFixture(t, tx, `insert into sync_recordings(tenant_id,space_id,episode_id,recording_id,status,generation,start_external_operation_id,completed_at)
 				select tenant_id,space_id,episode_id,recording_id,'stopped',1,external_operation_id,now() from sync_external_operations where recording_id=$1`, f.recordingID.Bytes())
+			execCleanupFixture(t, tx, `update sync_external_operations set journey_id=$2,parent_journey_event_id=$1 where recording_id=$1`, f.recordingID.Bytes(), f.jobID.Bytes())
+			execCleanupFixture(t, tx, `insert into observability_journey_events(event_id,journey_id,sequence,occurred_at,name,phase,state,origin_kind,first_observed_layer,upstream_visibility)
+				values($1,$2,0,now(),'recording.start_requested','api_request','accepted','server','api','visible')`, f.recordingID.Bytes(), f.jobID.Bytes())
 			execCleanupFixture(t, tx, `update recording_pipelines set capture_completed_at=null,capture_ready_at=now()-interval '1 minute',stop_requested_at=now(),stop_operation_id=gen_random_uuid() where recording_id=$1`, f.recordingID.Bytes())
+			if scenario.confirmedStop {
+				execCleanupFixture(t, tx, `insert into sync_external_operations(tenant_id,space_id,episode_id,external_operation_id,request_key,request_fingerprint,operation_name,recording_id,payload,status,completed_at)
+					select tenant_id,space_id,episode_id,$3,'salvage-stop-'||id::text,$2,'stop_recording',id,'{}','applied',now() from recordings where id=$1`, f.recordingID.Bytes(), f.digest, f.jobID.Bytes())
+				execCleanupFixture(t, tx, `update sync_recordings set stop_external_operation_id=$2 where recording_id=$1`, f.recordingID.Bytes(), f.jobID.Bytes())
+				execCleanupFixture(t, tx, `insert into sync_external_operations(tenant_id,space_id,episode_id,external_operation_id,request_key,request_fingerprint,operation_name,recording_id,payload,status,completed_at)
+					select tenant_id,space_id,episode_id,gen_random_uuid(),'salvage-stopped-'||id::text,$2,'recording_capture_stopped',id,jsonb_build_object('stopOperationId',$3::uuid::text,'captureEpoch',1),'applied',now() from recordings where id=$1`, f.recordingID.Bytes(), f.digest, f.jobID.Bytes())
+			}
 			if scenario.stopPending {
 				execCleanupFixture(t, tx, `update sync_recordings set status='stopping',completed_at=null where recording_id=$1`, f.recordingID.Bytes())
 			}
@@ -91,6 +103,26 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 			})
 			if err != nil || completed.State != "succeeded" {
 				t.Fatalf("complete committed source: completed=%+v err=%v", completed, err)
+			}
+			var salvageEvents int
+			wantSalvageEvents := 1
+			if scenario.confirmedStop {
+				wantSalvageEvents = 0
+			}
+			if err := tx.QueryRow(ctx, `select count(*) from observability_journey_events where journey_id=$1 and parent_event_id=$2
+				and name='recording.capture.salvaged' and phase='capture_completion' and state='succeeded'
+				and attributes=jsonb_build_object('recording_id',$2::uuid,'capture_epoch',1,'reason','stop_unconfirmed','source','committed_bundles')`, f.jobID.Bytes(), f.recordingID.Bytes()).Scan(&salvageEvents); err != nil || salvageEvents != wantSalvageEvents {
+				t.Fatalf("salvaged completion must leave bounded journey evidence: count=%d err=%v", salvageEvents, err)
+			}
+			if _, err := queries.CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
+				ID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
+				LeaseOwner: claimed.LeaseOwner, LeaseToken: claimed.LeaseToken, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: f.digest,
+			}); err == nil {
+				t.Fatal("completed lease accepted a second completion")
+			}
+			var afterReplay int
+			if err := tx.QueryRow(ctx, `select count(*) from observability_journey_events where journey_id=$1 and name='recording.capture.salvaged'`, f.jobID.Bytes()).Scan(&afterReplay); err != nil || afterReplay != salvageEvents {
+				t.Fatalf("completion replay duplicated salvage evidence: count=%d err=%v", afterReplay, err)
 			}
 			var bundles, renders int
 			if err := tx.QueryRow(ctx, `select (select count(*) from recording_bundles where recording_id=$1), (select count(*) from recording_jobs where recording_id=$1 and kind='render')`, f.recordingID.Bytes()).Scan(&bundles, &renders); err != nil || bundles != 1 || renders != 0 {

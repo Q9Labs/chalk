@@ -1,0 +1,5 @@
+{
+  "tracks": [{ "errorCode": "not_found_track_error" }, { "sessionId": "publisher", "trackName": "camera", "mid": "0", "location": "remote" }],
+  "requiresImmediateRenegotiation": true,
+  "sessionDescription": { "type": "offer", "sdp": "v=0\r\n" }
+}
