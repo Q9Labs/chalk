@@ -1,0 +1,524 @@
+defmodule ChalkSync.WhiteboardV1.AuthorityTest do
+  use ExUnit.Case, async: false
+
+  alias ChalkSync.Episodes.Coordinator
+  alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Poller
+
+  @participant_id "20000000-0000-4000-8000-000000000002"
+
+  defmodule Repository do
+    # Reads run in the Episode's poller, so the test's answer and its read log live in app env.
+    # The answer is taken before the read is reported, so a change after the report is a commit
+    # during an in-flight read.
+    def episode_access(episode) do
+      access = Application.get_env(:chalk_sync, :authority_test_access)
+
+      if test = Application.get_env(:chalk_sync, :authority_test),
+        do: send(test, {:read, episode})
+
+      Process.sleep(Application.get_env(:chalk_sync, :authority_test_read_delay_ms, 0))
+      access
+    end
+  end
+
+  setup do
+    previous = Application.get_env(:chalk_sync, :whiteboard_v1_repository)
+    Application.put_env(:chalk_sync, :whiteboard_v1_repository, Repository)
+    Application.put_env(:chalk_sync, :authority_test, self())
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 50)
+    access("active", "active")
+
+    on_exit(fn ->
+      for key <- [
+            :authority_test,
+            :authority_test_access,
+            :authority_test_read_delay_ms,
+            :whiteboard_authority_poll_ms,
+            :whiteboard_authority_read_ms,
+            :whiteboard_authority_stale_ms
+          ],
+          do: Application.delete_env(:chalk_sync, key)
+
+      if previous,
+        do: Application.put_env(:chalk_sync, :whiteboard_v1_repository, previous),
+        else: Application.delete_env(:chalk_sync, :whiteboard_v1_repository)
+    end)
+  end
+
+  test "many sockets checking all the time share one read per Episode per poll" do
+    identity = identity()
+
+    sockets =
+      for _socket <- 1..50 do
+        Task.async(fn ->
+          connected_at = System.monotonic_time(:millisecond)
+
+          for _check <- 1..40 do
+            assert Authority.check(identity, connected_at) == :ok
+            Process.sleep(10)
+          end
+        end)
+      end
+
+    Task.await_many(sockets)
+
+    # 50 sockets made 2,000 checks over about 400 ms, which is about 8 poll intervals.
+    assert drain_reads(identity.episode) in 1..12
+  end
+
+  test "an idle socket sees a removal without sending anything" do
+    identity = identity()
+    Authority.watch(identity.episode)
+    assert_receive {:read, _episode}
+
+    access("active", "left")
+
+    wait_until(fn ->
+      Authority.check(identity) == {:error, {:permission_denied, :participant_inactive}}
+    end)
+  end
+
+  test "a person who joins after the last read keeps the board until a newer read" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 300)
+    identity = identity()
+
+    Application.put_env(
+      :chalk_sync,
+      :authority_test_access,
+      {:ok, %{status: "active", participants: %{}}}
+    )
+
+    Authority.watch(identity.episode)
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    # Connect checked the database just now and found the new Participant active.
+    connected_at = System.monotonic_time(:millisecond)
+    assert Authority.check(identity, connected_at) == :ok
+
+    # A read that started after the connect is current, so it decides.
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+
+    wait_until(fn ->
+      Authority.check(identity, connected_at) ==
+        {:error, {:permission_denied, :participant_inactive}}
+    end)
+  end
+
+  test "a removal or an end that can still be undone keeps the socket open" do
+    for {episode_status, participant_status} <- [
+          {"active", "leaving"},
+          {"ending", "active"},
+          {"active", "joining"}
+        ] do
+      identity = identity()
+      access(episode_status, participant_status)
+      Authority.watch(identity.episode)
+      wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+      assert Authority.check(identity) == :ok
+    end
+
+    identity = identity()
+    access("ended", "active")
+    Authority.watch(identity.episode)
+
+    wait_until(fn ->
+      Authority.check(identity) == {:error, {:permission_denied, :episode_ended}}
+    end)
+  end
+
+  test "failed reads keep the last access until it is stale, then ask for a retry" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 300)
+    identity = identity()
+    Authority.watch(identity.episode)
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    Application.put_env(
+      :chalk_sync,
+      :authority_test_access,
+      {:retryable, {:storage_unavailable, "timeout"}}
+    )
+
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}
+    assert Authority.check(identity) == :ok
+
+    wait_until(fn ->
+      Authority.check(identity) == {:retryable, {:storage_unavailable, "timeout"}}
+    end)
+  end
+
+  test "a socket that just connected keeps the board while the stored read is stale" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 300)
+    identity = identity()
+    now = System.monotonic_time(:millisecond)
+    Authority.store(identity.episode, nil, now - 10_000, "timeout")
+
+    # The connect check just read the database and found the Participant.
+    connected_at = System.monotonic_time(:millisecond)
+    assert Authority.check(identity, connected_at) == :ok
+    assert Authority.check(identity) == {:retryable, {:storage_unavailable, "timeout"}}
+
+    Process.sleep(350)
+
+    assert Authority.check(identity, connected_at) ==
+             {:retryable, {:storage_unavailable, "timeout"}}
+  end
+
+  test "an Episode that no longer exists denies access" do
+    identity = identity()
+    Application.put_env(:chalk_sync, :authority_test_access, {:error, :not_found})
+    Authority.watch(identity.episode)
+
+    wait_until(fn ->
+      Authority.check(identity) == {:error, {:permission_denied, :episode_not_found}}
+    end)
+  end
+
+  test "an Episode stops being read and leaves memory when its last socket closes" do
+    identity = identity()
+    test = self()
+
+    sockets =
+      for _socket <- 1..3 do
+        spawn(fn ->
+          send(test, {:watching, Authority.watch(identity.episode)})
+          receive do: (:close -> :ok)
+        end)
+      end
+
+    for _socket <- sockets, do: assert_receive({:watching, :ok})
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    [{poller, _value}] = pollers(identity.episode)
+
+    monitor = Process.monitor(poller)
+    Enum.each(sockets, &send(&1, :close))
+
+    assert_receive {:DOWN, ^monitor, :process, ^poller, :normal}
+    wait_until(fn -> not :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+    drain_reads(identity.episode)
+    # Pollers of earlier tests can still report reads of their own Episodes here.
+    episode = identity.episode
+    refute_receive {:read, ^episode}, 200
+  end
+
+  test "a killed poller's stored read leaves memory, and another poller's read stays" do
+    identity = identity()
+    other = identity()
+    test = self()
+
+    [socket, other_socket] =
+      for episode <- [identity.episode, other.episode] do
+        spawn(fn ->
+          Authority.watch(episode)
+          send(test, :watching)
+          receive do: (:close -> :ok)
+        end)
+      end
+
+    assert_receive :watching
+    assert_receive :watching
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(other.episode)) end)
+    [{poller, _value}] = pollers(identity.episode)
+    monitor = Process.monitor(poller)
+
+    # A kill skips the poller's own cleanup.
+    Process.exit(poller, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^poller, :killed}
+    send(socket, :close)
+
+    wait_until(fn -> not :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+    # The Registry drops the killed poller's name on its own schedule.
+    wait_until(fn -> pollers(identity.episode) == [] end)
+    assert :ets.member(Authority, EpisodeKey.authority_key(other.episode))
+    send(other_socket, :close)
+  end
+
+  test "a poller that replaces a killed one keeps its own stored read" do
+    identity = identity()
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+    [{killed, _value}] = pollers(identity.episode)
+    monitor = Process.monitor(killed)
+    Process.exit(killed, :kill)
+    assert_receive {:DOWN, ^monitor, :process, ^killed, :killed}
+
+    # Like a socket, check until a new poller runs: a watch can still reach the killed poller's
+    # name before the Registry drops it, and a check with no stored read watches again.
+    wait_until(fn ->
+      Authority.check(identity)
+      match?([{poller, _value}] when poller != killed, pollers(identity.episode))
+    end)
+
+    [{poller, _value}] = pollers(identity.episode)
+    wait_until(fn -> stored_by(identity.episode) == poller end)
+
+    # Authority has handled the killed poller's exit, and the new read is still there.
+    :sys.get_state(Authority)
+    assert stored_by(identity.episode) == poller
+  end
+
+  test "after a removal or an end is final, the board stops within one poll interval" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 200)
+
+    for {episode_status, participant_status, denial} <- [
+          {"active", "left", :participant_inactive},
+          {"ended", "active", :episode_ended}
+        ] do
+      access("active", "active")
+      identity = identity()
+      Authority.watch(identity.episode)
+      wait_until(fn -> Authority.check(identity) == :ok end)
+
+      # The removal commits just after a read, the latest it can be seen.
+      drain_reads(identity.episode)
+      assert_receive {:read, _episode}, 1_000
+      access(episode_status, participant_status)
+      final_at = System.monotonic_time(:millisecond)
+
+      assert until_not_ok(identity) == {:error, {:permission_denied, denial}}
+      assert System.monotonic_time(:millisecond) - final_at <= Authority.poll_ms() + 100
+    end
+  end
+
+  test "when reads fail after a removal, the board stops by the freshness deadline" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 100)
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 600)
+    identity = identity()
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+
+    # The removal commits, but no read after it succeeds.
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+    good_read_at = System.monotonic_time(:millisecond)
+
+    Application.put_env(
+      :chalk_sync,
+      :authority_test_access,
+      {:retryable, {:storage_unavailable, "timeout"}}
+    )
+
+    assert until_not_ok(identity) == {:retryable, {:storage_unavailable, "timeout"}}
+    assert System.monotonic_time(:millisecond) - good_read_at <= 600 + 100
+  end
+
+  test "a removal that commits during an in-flight read stops the board within P + D" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 300)
+    Application.put_env(:chalk_sync, :whiteboard_authority_read_ms, 300)
+    Application.put_env(:chalk_sync, :authority_test_read_delay_ms, 250)
+    identity = identity()
+    connected_at = System.monotonic_time(:millisecond)
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity, connected_at) == :ok end)
+
+    # This read already has the old answer and returns it 250 ms later.
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+    access("active", "left")
+    final_at = System.monotonic_time(:millisecond)
+
+    assert until_not_ok(identity, connected_at) ==
+             {:error, {:permission_denied, :participant_inactive}}
+
+    assert System.monotonic_time(:millisecond) - final_at <= 300 + 300 + 100
+  end
+
+  test "a poller killed while reads fail does not extend the freshness deadline" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 100)
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 600)
+    identity = identity()
+    connected_at = System.monotonic_time(:millisecond)
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity, connected_at) == :ok end)
+
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+    good_read_at = System.monotonic_time(:millisecond)
+    fail_reads()
+
+    for _failed <- 1..3,
+        do: assert_receive({:read, _episode}, 1_000)
+
+    # The next check finds no stored read and starts a new poller, whose reads fail too.
+    [{poller, _value}] = pollers(identity.episode)
+    Process.exit(poller, :kill)
+
+    assert {:retryable, {:storage_unavailable, _failure}} = until_not_ok(identity, connected_at)
+    assert System.monotonic_time(:millisecond) - good_read_at <= 600 + 100
+  end
+
+  test "after Authority restarts, a killed poller's read still leaves memory at once" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 600)
+    identity = identity()
+    # Connected long ago, so only a stored read keeps this socket's access fresh.
+    connected_at = System.monotonic_time(:millisecond) - 1_000
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity, connected_at) == :ok end)
+    [{old_poller, _value}] = pollers(identity.episode)
+    old_monitor = Process.monitor(old_poller)
+
+    authority = Process.whereis(Authority)
+    Process.exit(authority, :kill)
+
+    # The pollers restart with Authority, since its table and its monitors are gone.
+    assert_receive {:DOWN, ^old_monitor, :process, ^old_poller, _reason}, 1_000
+    wait_until(fn -> Process.whereis(Authority) not in [nil, authority] end)
+    wait_until(fn -> Authority.check(identity, connected_at) == :ok end)
+    [{poller, _value}] = pollers(identity.episode)
+
+    fail_reads()
+    Process.exit(poller, :kill)
+    killed_at = System.monotonic_time(:millisecond)
+
+    # Until the next poller stores its first failed read, the check finds no read at all.
+    assert {:retryable, {:storage_unavailable, _failure}} = until_not_ok(identity, connected_at)
+    assert System.monotonic_time(:millisecond) - killed_at <= 100
+  end
+
+  test "a check while the poller supervisor restarts asks for a retry" do
+    identity = identity()
+    supervisor = Authority.Supervisor
+
+    # After an Authority restart, the poller supervisor is the last child to come back.
+    :ok = Supervisor.terminate_child(supervisor, Authority.Pollers)
+    on_exit(fn -> Supervisor.restart_child(supervisor, Authority.Pollers) end)
+
+    assert Authority.check(identity, System.monotonic_time(:millisecond)) ==
+             {:retryable, {:storage_unavailable, "authority"}}
+
+    {:ok, _pollers} = Supervisor.restart_child(supervisor, Authority.Pollers)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+  end
+
+  test "a read that does not answer gives up at the read deadline" do
+    Application.put_env(:chalk_sync, :whiteboard_authority_read_ms, 200)
+    Application.put_env(:chalk_sync, :authority_test_read_delay_ms, 5_000)
+    started_at = System.monotonic_time(:millisecond)
+
+    assert Poller.read_access(identity().episode) ==
+             {:retryable, {:storage_unavailable, "deadline"}}
+
+    assert System.monotonic_time(:millisecond) - started_at <= 200 + 100
+  end
+
+  test "an Episode named in a different letter case shares one poller and one stored read" do
+    identity = identity()
+
+    upper = %{
+      identity
+      | episode: %{
+          identity.episode
+          | tenant_id: String.upcase(identity.episode.tenant_id),
+            episode_id: String.upcase(identity.episode.episode_id)
+        }
+    }
+
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+    Authority.watch(upper.episode)
+
+    assert Authority.check(upper) == :ok
+    assert [{poller, _value}] = pollers(identity.episode)
+    assert pollers(upper.episode) == [{poller, nil}]
+    drain_reads(identity.episode)
+    drain_reads(upper.episode)
+    Process.sleep(Authority.poll_ms() * 3)
+    assert (drain_reads(identity.episode) + drain_reads(upper.episode)) in 2..4
+  end
+
+  test "pollers are not Episode Coordinators, so a drain and the Coordinator count skip them" do
+    identity = identity()
+    Authority.watch(identity.episode)
+    wait_until(fn -> Authority.check(identity) == :ok end)
+    [{poller, _value}] = pollers(identity.episode)
+    monitor = Process.monitor(poller)
+
+    refute Enum.any?(
+             DynamicSupervisor.which_children(ChalkSync.Episodes.Supervisor),
+             fn {_id, child, _type, _modules} -> child == poller end
+           )
+
+    Coordinator.drain_all()
+
+    refute_receive {:DOWN, ^monitor, :process, ^poller, _reason}, 200
+    drain_reads(identity.episode)
+    assert_receive {:read, _episode}, 1_000
+  end
+
+  defp pollers(episode),
+    do:
+      Registry.lookup(
+        ChalkSync.Episodes.Registry,
+        {:whiteboard_authority, EpisodeKey.authority_key(episode)}
+      )
+
+  defp stored_by(episode) do
+    case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
+      [{_episode, poller, _access, _read_at, _failure}] -> poller
+      [] -> nil
+    end
+  end
+
+  # Checks the way a busy socket does, every 5 ms, until access is no longer allowed.
+  defp until_not_ok(identity, connected_at \\ nil, attempts \\ 1_000) do
+    case Authority.check(identity, connected_at) do
+      :ok when attempts > 0 ->
+        Process.sleep(5) && until_not_ok(identity, connected_at, attempts - 1)
+
+      result ->
+        result
+    end
+  end
+
+  defp fail_reads,
+    do:
+      Application.put_env(
+        :chalk_sync,
+        :authority_test_access,
+        {:retryable, {:storage_unavailable, "timeout"}}
+      )
+
+  defp access(episode_status, participant_status) do
+    Application.put_env(
+      :chalk_sync,
+      :authority_test_access,
+      {:ok,
+       %{status: episode_status, participants: %{{@participant_id, 1} => participant_status}}}
+    )
+  end
+
+  defp drain_reads(episode, count \\ 0) do
+    receive do
+      {:read, ^episode} -> drain_reads(episode, count + 1)
+    after
+      0 -> count
+    end
+  end
+
+  defp wait_until(condition, attempts \\ 100) do
+    cond do
+      condition.() -> :ok
+      attempts == 0 -> flunk("condition not met")
+      true -> Process.sleep(10) && wait_until(condition, attempts - 1)
+    end
+  end
+
+  defp identity do
+    %Identity{
+      participant_id: @participant_id,
+      participant_generation: 1,
+      episode: %EpisodeKey{
+        tenant_id: UUID.generate(),
+        space_id: UUID.generate(),
+        episode_id: UUID.generate()
+      }
+    }
+  end
+end
