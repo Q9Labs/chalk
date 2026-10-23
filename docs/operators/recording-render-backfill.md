@@ -27,7 +27,8 @@ missing. Counts include already queued, expired and missing-source captures.
 bash scripts/recording-backfill.sh --batch-size 25 --apply
 ```
 
-Apply uses the same idempotent export operation as the API. The transaction
+Apply uses the same canonical render operation as the API, with manual retries
+disabled. The transaction
 rechecks eligibility and reuses any job created concurrently. Repeating a batch
 cannot duplicate a render. The existing fleet cap, job deadlines and source
 expiry apply; this command does not change capture admission or fleet settings.

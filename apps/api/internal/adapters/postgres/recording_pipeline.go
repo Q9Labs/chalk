@@ -65,6 +65,16 @@ type recordingPipelineQuerier interface {
 }
 
 func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	return r.requestRender(ctx, input, renderJobID, true)
+}
+
+// QueueBackfillRender never retries an existing job, including one that failed
+// after the operator's source inventory. Both paths serialize on the pipeline.
+func (r RecordingPipelineRepository) QueueBackfillRender(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
+	return r.requestRender(ctx, input, renderJobID, false)
+}
+
+func (r RecordingPipelineRepository) requestRender(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID, allowManualRetry bool) (recordingpipeline.Job, error) {
 	var row sqlc.RequestDeferredRecordingRenderRow
 	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		// Acquire the lock before the request statement so concurrent requests
@@ -74,7 +84,8 @@ func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input re
 		}
 		var err error
 		row, err = queries.RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
-			TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
+			AllowManualRetry: allowManualRetry,
+			TenantID:         uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
 			PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
 		})
 		return err

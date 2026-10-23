@@ -2965,6 +2965,7 @@ with candidate as (
     join retry_tally on retry_tally.job_id = existing.id
     join candidate on candidate.recording_id = existing.recording_id
     where existing.state = 'terminal_failure'
+      and $3::boolean
       and retry_tally.retry_count < 5
       and candidate.capture_completed_at +
           (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
@@ -2984,10 +2985,10 @@ with candidate as (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $3, recordings.tenant_id, recordings.episode_id,
+    select $4, recordings.tenant_id, recordings.episode_id,
         recordings.id, 'render', 'render:' || recordings.id::text,
-        $4, 'pending', $5, now(),
-        $6
+        $5, 'pending', $6, now(),
+        $7
     from candidate
     join recordings on recordings.id = candidate.recording_id
     where candidate.state = 'capture_complete'
@@ -3005,10 +3006,10 @@ with candidate as (
       and recording_pipelines.state in ('capture_complete', 'terminal_failure')
     returning recording_pipelines.recording_id
 )
-select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, existing.result_metadata, (existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
+select existing.id, existing.tenant_id, existing.episode_id, existing.recording_id, existing.kind, existing.idempotency_key, existing.payload_schema_version, existing.state, existing.priority, existing.available_at, existing.attempt_count, existing.attempt_limit, existing.lease_token, existing.lease_owner, existing.lease_expires_at, existing.fencing_generation, existing.error_code, existing.error_detail, existing.terminal_at, existing.updated_at, existing.created_at, existing.result_metadata, ($3::boolean and existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
 from existing
 join retry_tally on retry_tally.job_id = existing.id
-where existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
+where not $3::boolean or existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
 union all
 select retried.id, retried.tenant_id, retried.episode_id, retried.recording_id, retried.kind, retried.idempotency_key, retried.payload_schema_version, retried.state, retried.priority, retried.available_at, retried.attempt_count, retried.attempt_limit, retried.lease_token, retried.lease_owner, retried.lease_expires_at, retried.fencing_generation, retried.error_code, retried.error_detail, retried.terminal_at, retried.updated_at, retried.created_at, retried.result_metadata, false as retry_limit_reached from retried
 union all
@@ -3019,6 +3020,7 @@ limit 1
 type RequestDeferredRecordingRenderParams struct {
 	RecordingID          pgtype.UUID `json:"recording_id"`
 	TenantID             pgtype.UUID `json:"tenant_id"`
+	AllowManualRetry     bool        `json:"allow_manual_retry"`
 	RenderJobID          pgtype.UUID `json:"render_job_id"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
@@ -3059,6 +3061,7 @@ func (q *Queries) RequestDeferredRecordingRender(ctx context.Context, arg Reques
 	row := q.db.QueryRow(ctx, requestDeferredRecordingRender,
 		arg.RecordingID,
 		arg.TenantID,
+		arg.AllowManualRetry,
 		arg.RenderJobID,
 		arg.PayloadSchemaVersion,
 		arg.Priority,

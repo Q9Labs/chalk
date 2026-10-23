@@ -546,6 +546,7 @@ with candidate as (
     join retry_tally on retry_tally.job_id = existing.id
     join candidate on candidate.recording_id = existing.recording_id
     where existing.state = 'terminal_failure'
+      and sqlc.arg(allow_manual_retry)::boolean
       and retry_tally.retry_count < 5
       and candidate.capture_completed_at +
           (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
@@ -586,10 +587,10 @@ with candidate as (
       and recording_pipelines.state in ('capture_complete', 'terminal_failure')
     returning recording_pipelines.recording_id
 )
-select existing.*, (existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
+select existing.*, (sqlc.arg(allow_manual_retry)::boolean and existing.state = 'terminal_failure' and retry_tally.retry_count >= 5) as retry_limit_reached
 from existing
 join retry_tally on retry_tally.job_id = existing.id
-where existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
+where not sqlc.arg(allow_manual_retry)::boolean or existing.state <> 'terminal_failure' or retry_tally.retry_count >= 5
 union all
 select retried.*, false as retry_limit_reached from retried
 union all

@@ -123,9 +123,36 @@ func TestCaptureCompletionAutomaticallyQueuesRender(t *testing.T) {
 			t.Fatal("backfill inventory must recognize automatic jobs and their source window")
 		}
 
+		// Legacy captures have no render. Backfill queues once and converges on it.
+		if _, err := pool.Exec(ctx, `delete from recording_jobs where id=$1::uuid`, automaticID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `update recording_pipelines set state='capture_complete' where recording_id=$1`, reservation.RecordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		backfillID := newID()
+		backfilled, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, backfillID)
+		if err != nil || backfilled.ID != backfillID {
+			t.Fatalf("backfill must queue retained legacy capture: %+v %v", backfilled, err)
+		}
+		replayed, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID())
+		if err != nil || replayed.ID != backfillID {
+			t.Fatalf("backfill replay must reuse job: %+v %v", replayed, err)
+		}
+		automaticID = backfillID.String()
+
 		if _, err := pool.Exec(ctx, `update recording_jobs set state='terminal_failure', terminal_at=now(), error_code='render_deadline_exceeded' where id=$1::uuid`, automaticID); err != nil {
 			t.Fatal(err)
 		}
+		existingFailure, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID())
+		if err != nil || existingFailure.ID != backfillID || existingFailure.State != recordingpipeline.JobStateTerminalFailure {
+			t.Fatalf("backfill must not retry a job that failed after inventory: %+v %v", existingFailure, err)
+		}
+		var manualRetries int
+		if err := pool.QueryRow(ctx, `select count(*) from recording_job_failure_history where job_id=$1`, backfillID.Bytes()).Scan(&manualRetries); err != nil || manualRetries != 0 {
+			t.Fatalf("backfill must not consume manual retries: count=%d %v", manualRetries, err)
+		}
+
 		state, err := repository.GetArtifactState(ctx, tenantID, reservation.RecordingID)
 		if err != nil || state.ExportStatus != recordingpipeline.ExportStatusExpired || state.FailureCode != "render_deadline_exceeded" || state.FailureMessage == "" || state.Retryable {
 			t.Fatalf("deadline must be expired with its reason, not retryable: %+v, %v", state, err)

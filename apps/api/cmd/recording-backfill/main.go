@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -95,7 +96,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		AfterRecordingID: cursor, BatchSize: int32(*batchSize),
 	})
 	if err != nil {
-		return errors.New("inventory backfill captures")
+		return databaseFailure("inventory backfill captures", err)
 	}
 	result := report{DryRun: !*apply}
 	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
@@ -135,7 +136,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return errors.New("allocate backfill job identity")
 		}
-		job, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{
+		job, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{
 			TenantID: utilities.IDFromBytes(candidate.TenantID.Bytes), RecordingID: recordingID,
 		}, jobID)
 		if errors.Is(err, recordingpipeline.ErrExportUnavailable) {
@@ -144,7 +145,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			continue
 		}
 		if err != nil {
-			return errors.Join(json.NewEncoder(out).Encode(result), errors.New("queue backfill render; rerunning is idempotent"))
+			return errors.Join(json.NewEncoder(out).Encode(result), databaseFailure("queue backfill render; rerunning is idempotent", err))
 		}
 		if job.ID == jobID {
 			result.Queued++
@@ -169,4 +170,29 @@ func inspectSources(ctx context.Context, store r2.Store, keys []string) (bool, e
 		}
 	}
 	return true, nil
+}
+
+// Driver messages can include credentials or customer SQL. Keep only a bounded category.
+func databaseFailure(stage string, err error) error {
+	category := "database_error"
+	var state interface{ SQLState() string }
+	var network net.Error
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		category = "timeout"
+	case errors.Is(err, context.Canceled):
+		category = "canceled"
+	case errors.As(err, &state):
+		code := state.SQLState()
+		valid := len(code) == 5
+		for _, c := range code {
+			valid = valid && ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'))
+		}
+		if valid {
+			category = "sqlstate_" + code
+		}
+	case errors.As(err, &network):
+		category = "connection_failed"
+	}
+	return fmt.Errorf("%s (%s)", stage, category)
 }

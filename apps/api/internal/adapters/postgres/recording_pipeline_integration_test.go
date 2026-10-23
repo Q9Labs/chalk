@@ -1079,7 +1079,8 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	}
 	defer retryTx.Rollback(ctx)
 	if _, err := sqlc.New(retryTx).RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
-		TenantID: pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true}, RecordingID: pgtype.UUID{Bytes: reservation.RecordingID.Bytes(), Valid: true},
+		AllowManualRetry: true,
+		TenantID:         pgtype.UUID{Bytes: tenantID.Bytes(), Valid: true}, RecordingID: pgtype.UUID{Bytes: reservation.RecordingID.Bytes(), Valid: true},
 		RenderJobID:          pgtype.UUID{Bytes: mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be050").Bytes(), Valid: true},
 		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
 	}); err != nil {

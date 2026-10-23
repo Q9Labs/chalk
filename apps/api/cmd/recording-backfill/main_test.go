@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"github.com/jackc/pgx/v5/pgconn"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,5 +62,22 @@ func TestBackfillChecksEverySourceObjectWithoutWriting(t *testing.T) {
 				t.Fatalf("available=%v err=%v paths=%v", available, err, paths)
 			}
 		})
+	}
+}
+
+func TestBackfillDatabaseErrorsKeepOnlyRedactedCause(t *testing.T) {
+	for _, test := range []struct {
+		cause error
+		want  string
+	}{
+		{&pgconn.PgError{Code: "42501", Message: "private-password-and-sql"}, "inventory (sqlstate_42501)"},
+		{context.DeadlineExceeded, "inventory (timeout)"},
+		{context.Canceled, "inventory (canceled)"},
+		{errors.New("private-password-and-sql"), "inventory (database_error)"},
+	} {
+		got := databaseFailure("inventory", test.cause).Error()
+		if got != test.want || strings.Contains(got, "private") {
+			t.Fatalf("redacted cause=%q want=%q", got, test.want)
+		}
 	}
 }
