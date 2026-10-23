@@ -60,9 +60,11 @@ func run(ctx context.Context, config commandConfig, logger *slog.Logger) error {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	providers := make(roleInventories, 2)
+	providerBudget := digitalocean.NewRequestBudget()
 	for _, role := range []workeridentity.Role{workeridentity.RoleCapture, workeridentity.RoleRender} {
 		provider, err := digitalocean.NewRecorderFleet(digitalocean.RecorderFleetConfig{
-			Token: token, BaseURL: config.DigitalOceanBaseURL, HTTPClient: providerHTTP,
+			RequestBudget: providerBudget,
+			Token:         token, BaseURL: config.DigitalOceanBaseURL, HTTPClient: providerHTTP,
 			Environment: config.Environment, Role: role, OwnerTag: config.OwnerTag,
 			GPU: role == workeridentity.RoleRender && config.RenderGPU,
 		})

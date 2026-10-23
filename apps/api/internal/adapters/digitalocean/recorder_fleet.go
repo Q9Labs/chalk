@@ -33,6 +33,7 @@ const (
 var recorderInstaller []byte
 
 type RecorderFleetConfig struct {
+	RequestBudget  *RequestBudget
 	PresignArchive func(context.Context, recorderfleet.ArchiveSpec) (string, error)
 	Token          string
 	BaseURL        string
@@ -47,6 +48,7 @@ type RecorderFleetConfig struct {
 }
 
 type RecorderFleet struct {
+	budget         *RequestBudget
 	rateLimitMu    sync.Mutex
 	rateLimit      RateLimitSnapshot
 	presignArchive func(context.Context, recorderfleet.ArchiveSpec) (string, error)
@@ -75,7 +77,11 @@ func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: 15 * time.Second}
 	}
+	if config.RequestBudget == nil {
+		config.RequestBudget = NewRequestBudget()
+	}
 	return &RecorderFleet{
+		budget:         config.RequestBudget,
 		presignArchive: config.PresignArchive, baseURL: baseURL, client: config.HTTPClient, environment: config.Environment,
 		gpu: config.GPU, ownerTag: config.OwnerTag, projectID: config.ProjectID,
 		role: config.Role, token: config.Token, vpcUUID: config.VPCUUID, sshKeyIDs: append([]int64(nil), config.SSHKeyIDs...),
@@ -394,6 +400,19 @@ func (a *RecorderFleet) ensureProject(ctx context.Context, node recorderfleet.No
 }
 
 func (a *RecorderFleet) doJSON(ctx context.Context, method, path string, query url.Values, input, output any, expectedStatus int) error {
+	select {
+	case a.budget.gate <- struct{}{}:
+		defer func() { <-a.budget.gate }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if err := a.budget.wait(ctx); err != nil {
+		return err
+	}
+	return a.sendJSON(ctx, method, path, query, input, output, expectedStatus)
+}
+
+func (a *RecorderFleet) sendJSON(ctx context.Context, method, path string, query url.Values, input, output any, expectedStatus int) error {
 	endpoint := a.baseURL.ResolveReference(&url.URL{Path: path, RawQuery: query.Encode()})
 	var body io.Reader
 	if input != nil {
@@ -424,7 +443,15 @@ func (a *RecorderFleet) doJSON(ctx context.Context, method, path string, query u
 	a.observeResponse(response.Header, now)
 	if response.StatusCode == http.StatusTooManyRequests {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
-		return fmt.Errorf("%w: DigitalOcean status 429", &recorderfleet.ProviderRateLimitError{RetryAt: retryDeadline(response.Header, now)})
+		deadline := retryDeadline(response.Header, now)
+		if deadline.IsZero() {
+			deadline = now.Add(5 * time.Second)
+		}
+		a.budget.retryAt = maxTime(a.budget.retryAt, deadline)
+		return fmt.Errorf("%w: DigitalOcean status 429", &recorderfleet.ProviderRateLimitError{RetryAt: deadline})
+	}
+	if remaining := rateLimitNumber(response.Header.Get("RateLimit-Remaining")); remaining != nil && *remaining == 0 {
+		a.budget.retryAt = maxTime(a.budget.retryAt, rateLimitReset(response.Header.Get("RateLimit-Reset")))
 	}
 	if response.StatusCode == http.StatusNotFound {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))

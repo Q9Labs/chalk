@@ -301,6 +301,7 @@ func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *
 	if err != nil {
 		t.Fatalf("new adapter: %v", err)
 	}
+	adapter.budget.interval = time.Millisecond
 	return adapter
 }
 

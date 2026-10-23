@@ -451,7 +451,7 @@ func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
 	}
 }
 
-func TestReconcilerDrainTimeoutStillRevokesIdentity(t *testing.T) {
+func TestReconcilerDrainTimeoutOnlyRevokesWithoutLiveLease(t *testing.T) {
 	for _, activeLeases := range []int{0, 1} {
 		t.Run(fmt.Sprintf("active leases=%d", activeLeases), func(t *testing.T) {
 			fixture := newFleetFixture(t)
@@ -472,6 +472,12 @@ func TestReconcilerDrainTimeoutStillRevokesIdentity(t *testing.T) {
 				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now, ActiveLeases: activeLeases}}
 			}
 			reconciler := fixture.reconciler(t)
+			if activeLeases > 0 {
+				if result := fixture.step(t, reconciler); result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+					t.Fatalf("timeout removed a live lease: %+v", result)
+				}
+				return
+			}
 			if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
 				t.Fatalf("timeout revoke = %+v", result)
 			}

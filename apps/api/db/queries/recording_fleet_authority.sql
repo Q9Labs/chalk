@@ -221,6 +221,14 @@ select exists (
       and observed_at <= clock_timestamp()
 ) as authorized;
 
+-- name: LockRecordingFleetWorkerClaim :one
+select coalesce((role = sqlc.arg(role) and state = 'active' and ready and admission_open
+    and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
+    and observed_at <= clock_timestamp()), false)::boolean as authorized
+from recording_fleet_nodes
+where worker_id::text = sqlc.arg(lease_owner)::text
+for share;
+
 -- name: PublishRecordingFleetPool :one
 insert into recording_pool_health (
     role, admission_open, ready_capacity, reason, observed_at, demand_revision

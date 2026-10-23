@@ -90,12 +90,12 @@ func TestEveryReconcileLogsProviderRemainingAndRequestCount(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("budget logs = %s", logs.String())
 	}
-	for i, remaining := range []float64{0, 17} {
+	for i, requests := range []float64{1, 0} {
 		var event map[string]any
 		if err := json.Unmarshal([]byte(lines[i]), &event); err != nil {
 			t.Fatal(err)
 		}
-		if event["role"] != "render" || event["environment"] != "nightly" || event["rate_limit_remaining"] != remaining || event["provider_requests"] != float64(1) {
+		if event["role"] != "render" || event["environment"] != "nightly" || event["rate_limit_remaining"] != float64(0) || event["provider_requests"] != requests {
 			t.Fatalf("missing provider budget attribution: %s", lines[i])
 		}
 	}
@@ -138,7 +138,7 @@ func TestRunLoopHonorsDigitalOcean429Burst(t *testing.T) {
 				if err := runLoop(ctx, 5*time.Second, runner, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 					t.Fatal(err)
 				}
-				bounds := [][2]time.Duration{{13 * time.Second, 15 * time.Second}, {10 * time.Second, 13 * time.Second}, {32 * time.Second, 39 * time.Second}, {5 * time.Second, 5 * time.Second}, {5 * time.Second, 7 * time.Second}}
+				bounds := [][2]time.Duration{{15 * time.Second, 15 * time.Second}, {5 * time.Second, 5 * time.Second}, {35 * time.Second, 35 * time.Second}, {5 * time.Second, 5 * time.Second}, {5 * time.Second, 5 * time.Second}}
 				for i, bound := range bounds {
 					if got := calls[i+1].Sub(calls[i]); got < bound[0] || got > bound[1] {
 						t.Fatalf("request %d retry delay %s outside %s..%s", i+1, got, bound[0], bound[1])
@@ -149,17 +149,17 @@ func TestRunLoopHonorsDigitalOcean429Burst(t *testing.T) {
 	}
 }
 
-func TestRateLimitBackoffCapsAndNeverShortensProviderDeadline(t *testing.T) {
+func TestProviderCooldownKeepsReconcileCadenceResponsive(t *testing.T) {
 	var cadence reconcileCadence
 	for attempt := range 20 {
 		delay := cadence.nextDelay(5*time.Second, recorderfleet.ActionNodeEnsured, &recorderfleet.ProviderRateLimitError{})
-		if delay < 5*time.Second || delay > 375*time.Second {
+		if delay != 5*time.Second {
 			t.Fatalf("attempt%d retry delay=%s", attempt, delay)
 		}
 	}
 	deadline := time.Now().Add(2 * time.Hour)
-	if delay := cadence.nextDelay(5*time.Second, recorderfleet.ActionNodeEnsured, &recorderfleet.ProviderRateLimitError{RetryAt: deadline}); delay < time.Until(deadline) {
-		t.Fatal("backoff cap shortened the provider deadline")
+	if delay := cadence.nextDelay(5*time.Second, recorderfleet.ActionNodeEnsured, &recorderfleet.ProviderRateLimitError{RetryAt: deadline}); delay != 5*time.Second {
+		t.Fatal("provider reset blocked demand and health refresh")
 	}
 }
 
