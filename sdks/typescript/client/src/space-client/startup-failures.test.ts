@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createV1SyncClient, InMemoryV1PendingTargetStore } from "../sync";
 import type { SpaceClientOptions } from "./types";
-import { createSpaceClient } from "./index";
+import { createSpaceClient, SpaceClientError } from "./index";
 import { createSpaceClientForPlatform } from "./space-client";
 import { computeV1StateDigest } from "../sync/v1-reducer";
 import type { V1ControlState } from "../sync/v1-types";
@@ -301,6 +301,38 @@ describe("public client startup failure contract", () => {
       expect(await rejection).toMatchObject(expected);
       expect(client.getSnapshot().connection.lastError).toMatchObject(expected);
       expect(retained?.sync).toMatchObject(expected.sync);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(["join rejection", "lastError", "diagnostic event"])("isolates retained Sync evidence from mutations through the public %s", async (target) => {
+    browser();
+    let diagnostic: ConnectionDiagnostic | undefined;
+    const client = makeClient(
+      async () => accessGrant(),
+      25,
+      undefined,
+      (event) => {
+        if (event.event === "connection_failed") diagnostic = event;
+      },
+    );
+    try {
+      const failure = await client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      if (!(failure instanceof SpaceClientError) || !failure.sync) throw new Error("Expected a Sync startup failure");
+      const sync = target === "join rejection" ? failure.sync : target === "lastError" ? client.getSnapshot().connection.lastError?.sync : diagnostic?.sync;
+      if (!sync) throw new Error("Expected Sync details in the public failure");
+      const expected = { ...sync };
+      expect(expected).toMatchObject({ stage: "hello", opened: true, closeCode: null, closeReason: null });
+      Reflect.set(sync, "stage", "upgrade");
+      Reflect.set(sync, "opened", false);
+      Reflect.set(sync, "closeCode", 4999);
+      Reflect.set(sync, "closeReason", "consumer injected");
+      Reflect.set(sync, "durationMs", 0);
+      expect(client.getSnapshot().connection.lastError?.sync).toEqual(expected);
+      expect(failure.sync).toEqual(expected);
+      expect(diagnostic?.sync).toEqual(expected);
+      expect(Object.isFrozen(sync)).toBe(true);
     } finally {
       client.dispose();
     }

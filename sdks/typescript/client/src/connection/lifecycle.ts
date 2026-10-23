@@ -1213,5 +1213,5 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
 function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
   const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
-  return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync } : {}) });
+  return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
 }
