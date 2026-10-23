@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      without_asset_retention:
+        description: One-time nightly web manifest bootstrap; leave false for routine cuts
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -56,6 +61,7 @@ jobs:
       release_managed: true
       deploy_managed: true
       deploy_web: true
+      without_asset_retention: ${{ inputs.without_asset_retention == true }}
       orchestrated: true
       stable_manifest_run_id: ${{ needs.plan.outputs.baseline_run_id }}
       stable_manifest_artifact_id: ${{ needs.plan.outputs.baseline_artifact_id }}

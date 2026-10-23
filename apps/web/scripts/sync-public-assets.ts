@@ -85,7 +85,7 @@ writePublicFile(
   JSON.stringify({
     format: 1,
     current: roots,
-    releases: [],
+    generations: roots.map((root) => [root]),
     trees: roots.map((root) => ({ root, files: sourceFiles([[resolve(publicDir, root.slice(1)), ""]]).map(([, path]) => path) })),
   }) + "\n",
 );

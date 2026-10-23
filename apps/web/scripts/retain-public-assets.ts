@@ -7,11 +7,17 @@ import { z } from "zod";
 
 export const ASSET_MANIFEST = "chalk-asset-manifest.json";
 const families = ["chalk-whiteboard", "chalk-mathjax"];
-const rootsSchema = z.tuple([z.string().regex(/^\/chalk-whiteboard\/[a-zA-Z0-9.+-]+-[0-9a-f]{16}$/), z.string().regex(/^\/chalk-mathjax\/[a-zA-Z0-9.+-]+-[0-9a-f]{16}$/)]);
+const whiteboardRoot = z.string().regex(/^\/chalk-whiteboard\/[a-zA-Z0-9.+-]+-[0-9a-f]{16}$/);
+const mathjaxRoot = z.string().regex(/^\/chalk-mathjax\/[a-zA-Z0-9.+-]+-[0-9a-f]{16}$/);
+const rootsSchema = z.tuple([whiteboardRoot, mathjaxRoot]);
 const manifestSchema = z.object({
   format: z.literal(1),
   current: rootsSchema,
-  releases: z.array(z.object({ id: z.string().regex(/^[0-9a-f]{40}$/), roots: rootsSchema })).max(4),
+  release: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .optional(),
+  generations: z.tuple([z.array(whiteboardRoot).min(1).max(4), z.array(mathjaxRoot).min(1).max(4)]),
   trees: z
     .array(
       z.object({
@@ -38,7 +44,7 @@ function parseManifest(input: unknown) {
   if (new Set(roots).size !== roots.length || manifest.trees.some((tree) => new Set(tree.files).size !== tree.files.length)) {
     throw new Error("Duplicate asset manifest tree or file");
   }
-  for (const root of [...manifest.current, ...manifest.releases.flatMap((release) => release.roots)]) {
+  for (const root of [...manifest.current, ...manifest.generations.flat()]) {
     if (!roots.includes(root)) throw new Error(`Asset manifest has no file list for ${root}`);
   }
   if (manifest.trees.reduce((total, tree) => total + tree.files.length, 0) > 20_000) throw new Error("Asset manifest exceeds Pages' 20,000-file limit");
@@ -75,33 +81,38 @@ async function fetchAsset(origin: string, path: string) {
   return response;
 }
 
-export async function retainPublicAssets({ directory, origin, release, withoutRetention = false }: { directory: string; origin: string; release: string; withoutRetention?: boolean }) {
+async function retainPublicAssets({ directory, origin, release, withoutRetention = false }: { directory: string; origin: string; release: string; withoutRetention?: boolean }) {
   const id = z
     .string()
     .regex(/^[0-9a-f]{40}$/)
     .parse(release);
   const liveOrigin = new URL(origin).origin;
   const current = parseManifest(JSON.parse(readFileSync(join(directory, ASSET_MANIFEST), "utf8")));
-  let previous: z.infer<typeof manifestSchema> = { ...current, releases: [], trees: [] };
+  const snapshot = await readLiveManifest(liveOrigin);
+  let previous = current;
   if (withoutRetention) {
     console.warn("Asset retention explicitly disabled: older clients may lose lazy-loaded assets.");
   } else {
     try {
-      previous = parseManifest(await (await fetchAsset(liveOrigin, `/${ASSET_MANIFEST}`)).json());
-      if (previous.releases.length === 0) throw new Error("Live asset manifest has no deployed releases");
+      if (snapshot.status !== 200) throw new Error(`Live asset manifest returned HTTP ${snapshot.status}`);
+      previous = parseManifest(JSON.parse(snapshot.body));
+      if (!previous.release) throw new Error("Live asset manifest has no deployed release");
     } catch (error) {
       throw new Error(`Cannot retain assets from ${liveOrigin}: ${error instanceof Error ? error.message : String(error)}. Deploy stopped; use --without-asset-retention explicitly to bootstrap or discard retention.`, { cause: error });
     }
   }
 
-  const releases = [{ id, roots: current.current }, ...previous.releases.filter((entry) => entry.id !== id).slice(0, 3)];
-  const roots = [...new Set(releases.flatMap((entry) => entry.roots))];
+  const generations = [
+    [current.current[0], ...(withoutRetention ? [] : previous.generations[0])],
+    [current.current[1], ...(withoutRetention ? [] : previous.generations[1])],
+  ].map((roots) => [...new Set(roots)].slice(0, 4));
+  const roots = generations.flat();
   const trees = roots.map((root) => {
     const tree = [...current.trees, ...previous.trees].find((entry) => entry.root === root);
     if (!tree) throw new Error(`Missing retained asset tree ${root}`);
     return tree;
   });
-  const manifest = parseManifest({ format: 1, current: current.current, releases, trees });
+  const manifest = parseManifest({ format: 1, release: id, current: current.current, generations, trees });
   const staging = mkdtempSync(join(dirname(resolve(directory)), ".chalk-retention-"));
   try {
     for (const tree of trees) {
@@ -141,14 +152,33 @@ export async function retainPublicAssets({ directory, origin, release, withoutRe
     const files = sourceFiles([[directory, ""]]);
     if (files.length > 20_000) throw new Error(`Deploy exceeds Pages' 20,000-file limit: ${files.length} files`);
     if (files.some(([path]) => statSync(path).size > 25 * 1024 * 1024)) throw new Error("Deploy has an asset above Pages' 25 MiB limit");
+    writeFileSync(`${resolve(directory)}.retention-source.json`, JSON.stringify({ origin: liveOrigin, ...snapshot }));
     return manifest;
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }
 }
 
+async function readLiveManifest(origin: string) {
+  const response = await fetch(new URL(`/${ASSET_MANIFEST}`, origin), { redirect: "error", cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  return { status: response.status, body: await response.text() };
+}
+
+async function checkLiveManifest(directory: string) {
+  const snapshot = z.object({ origin: z.string().url(), status: z.number().int(), body: z.string() }).parse(JSON.parse(readFileSync(`${resolve(directory)}.retention-source.json`, "utf8")));
+  const live = await readLiveManifest(snapshot.origin);
+  if (live.status !== snapshot.status || live.body !== snapshot.body) {
+    throw new Error(`Live asset manifest changed at ${snapshot.origin} since retention was read. Deploy stopped before upload; rerun through the serialized Release workflow.`);
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
-  const { values } = parseArgs({ options: { directory: { type: "string" }, origin: { type: "string" }, release: { type: "string" }, "without-asset-retention": { type: "boolean", default: false } } });
-  if (!values.directory || !values.origin || !values.release) throw new Error("Required: --directory <static assets> --origin <live origin> --release <SHA> [--without-asset-retention]");
-  await retainPublicAssets({ directory: values.directory, origin: values.origin, release: values.release, withoutRetention: values["without-asset-retention"] });
+  const { values } = parseArgs({ options: { directory: { type: "string" }, origin: { type: "string" }, release: { type: "string" }, "check-live": { type: "boolean", default: false }, "without-asset-retention": { type: "boolean", default: false } } });
+  if (!values.directory) throw new Error("Required: --directory <static assets>");
+  if (values["check-live"]) {
+    await checkLiveManifest(values.directory);
+  } else {
+    if (!values.origin || !values.release) throw new Error("Required: --origin <live origin> --release <SHA> [--without-asset-retention]");
+    await retainPublicAssets({ directory: values.directory, origin: values.origin, release: values.release, withoutRetention: values["without-asset-retention"] });
+  }
 }

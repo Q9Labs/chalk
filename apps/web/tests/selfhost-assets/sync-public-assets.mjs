@@ -1,14 +1,13 @@
 import { strict as assert } from "node:assert";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
-import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 
+import { runAssetScript, setupAssetScripts } from "./fixture.mjs";
+
 const webRoot = resolve(import.meta.dirname, "../..");
-const repoRoot = resolve(webRoot, "../..");
 const require = createRequire(import.meta.url);
 const { Miniflare } = createRequire(require.resolve("wrangler/package.json"))("miniflare");
 
@@ -26,7 +25,7 @@ async function manifest(directory) {
   return JSON.parse(await readFile(join(directory, manifestName), "utf8"));
 }
 
-test("live-origin retention covers three prior releases and expires the fourth", async (t) => {
+test("live-origin retention keeps four distinct generations and expires the oldest", async (t) => {
   const assets = await createFixture(1);
   let runtime;
   const published = [];
@@ -39,7 +38,9 @@ test("live-origin retention covers three prior releases and expires the fourth",
       // A warm build's abandoned directory must not leak into a deployment either.
       await mkdir(join(assets.publicDir, "chalk-whiteboard/obsolete"));
       await writeFile(join(assets.publicDir, "chalk-whiteboard/obsolete/old.woff2"), "obsolete");
-      const result = await assets.retain(runtime ? (await runtime.ready).origin : "http://unused.test", releaseSHA(number), !runtime);
+      const bootstrap = !runtime;
+      if (bootstrap) runtime = await serve(assets.publicDir);
+      const result = await assets.retain((await runtime.ready).origin, releaseSHA(number), bootstrap);
       assert.equal(result.status, 0, result.stderr);
       const directory = join(assets.fixture, `deployed-${number}`);
       await cp(assets.publicDir, directory, { recursive: true });
@@ -67,7 +68,7 @@ test("live-origin retention covers three prior releases and expires the fourth",
       await assertServes(1);
       await assertServes(2);
     });
-    await t.test("the fourth newer release drops A, while B remains", async () => {
+    await t.test("the fifth distinct generation drops A, while B remains", async () => {
       await deploy(4);
       await assertServes(1);
       await deploy(5);
@@ -75,13 +76,13 @@ test("live-origin retention covers three prior releases and expires the fourth",
       for (const number of [2, 3, 4, 5]) await assertServes(number);
       const data = await manifest(assets.publicDir);
       assert.deepEqual(
-        data.releases.map((entry) => entry.id),
-        [5, 4, 3, 2].map(releaseSHA),
+        data.generations.map((entries) => entries.length),
+        [4, 4],
       );
       assert.equal(data.trees.length, 8);
       const retry = await assets.retain((await runtime.ready).origin, releaseSHA(5));
       assert.equal(retry.status, 0, retry.stderr);
-      assert.deepEqual(await manifest(assets.publicDir), data, "retry consumed a release slot");
+      assert.deepEqual(await manifest(assets.publicDir), data, "retry consumed a generation slot");
     });
   } finally {
     await runtime?.dispose();
@@ -94,12 +95,14 @@ test("a fetched tree with the wrong digest stops the deploy before publishing re
   let runtime;
   try {
     await assets.pinDigests();
-    const initial = await assets.retain("http://unused.test", releaseSHA(1), true);
+    runtime = await serve(assets.publicDir);
+    const initial = await assets.retain((await runtime.ready).origin, releaseSHA(1), true);
     assert.equal(initial.status, 0, initial.stderr);
     const old = await manifest(assets.publicDir);
     const live = join(assets.fixture, "live-corrupted");
     await cp(assets.publicDir, live, { recursive: true });
     await writeFile(join(live, old.current[0], "fonts/0.woff2"), "corrupted origin bytes");
+    await runtime.dispose();
     runtime = await serve(live);
     await rm(assets.publicDir, { recursive: true });
     await writeFile(join(assets.excalidraw, "dist/prod/fonts/0.woff2"), "release B");
@@ -128,7 +131,10 @@ test("an unreadable live origin fails closed; the explicit bypass deploys only c
     const bypass = await assets.retain(origin, releaseSHA(1), true);
     assert.equal(bypass.status, 0, bypass.stderr);
     const data = await manifest(assets.publicDir);
-    assert.equal(data.releases.length, 1);
+    assert.deepEqual(
+      data.generations.map((entries) => entries.length),
+      [1, 1],
+    );
     assert.equal(data.trees.length, 2);
   } finally {
     await runtime.dispose();
@@ -194,18 +200,7 @@ test("a same-version dependency patch gets a new asset URL in warm and clean bui
 
 async function createFixture(scale = 100) {
   const fixture = await mkdtemp(join(tmpdir(), "chalk-public-assets-"));
-  const script = join(fixture, "apps/web/scripts/sync-public-assets.ts");
-  const versions = join(fixture, "apps/web/src/lib/whiteboard-asset-versions.ts");
-  await mkdir(dirname(script), { recursive: true });
-  await mkdir(dirname(versions), { recursive: true });
-  await cp(join(webRoot, "scripts/sync-public-assets.ts"), script);
-  await cp(join(webRoot, "scripts/retain-public-assets.ts"), join(dirname(script), "retain-public-assets.ts"));
-  await symlink(join(webRoot, "node_modules"), join(fixture, "apps/web/node_modules"), "dir");
-  await cp(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), versions);
-  await writeFile(join(fixture, "package.json"), JSON.stringify({ type: "module" }));
-  const packageRoot = join(fixture, "packages/whiteboard");
-  await mkdir(packageRoot, { recursive: true });
-  await writeFile(join(packageRoot, "package.json"), "{}");
+  const { script, versions, packageRoot } = await setupAssetScripts(fixture);
   const excalidraw = join(packageRoot, "node_modules/@excalidraw/excalidraw");
   const mathJax = join(packageRoot, "node_modules/mathjax");
   const mathFont = join(packageRoot, "node_modules/@mathjax/mathjax-newcm-font");
@@ -220,15 +215,7 @@ async function createFixture(scale = 100) {
   await writeFiles(join(mathFont, "svg"), scale * 2);
   await writeFile(join(mathFont, "svg.js"), "");
 
-  const sync = (count) =>
-    Promise.all(
-      Array.from({ length: count }, () => {
-        const child = spawn(process.execPath, ["--import", "tsx", script], { cwd: repoRoot, stdio: ["ignore", "ignore", "pipe"] });
-        let stderr = "";
-        child.stderr.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
-        return once(child, "close").then(([status]) => ({ status, stderr }));
-      }),
-    );
+  const sync = (count) => Promise.all(Array.from({ length: count }, () => runAssetScript(script)));
 
   return {
     fixture,
@@ -240,15 +227,8 @@ async function createFixture(scale = 100) {
       if (count > 1) for (const { status, stderr } of results) assert.equal(status, 0, stderr);
       return results;
     },
-    async retain(origin, release, withoutRetention = false) {
-      const child = spawn(process.execPath, ["--import", "tsx", join(dirname(script), "retain-public-assets.ts"), "--directory", this.publicDir, "--origin", origin, "--release", release, ...(withoutRetention ? ["--without-asset-retention"] : [])], {
-        cwd: repoRoot,
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-      let stderr = "";
-      child.stderr.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
-      const [status] = await once(child, "close");
-      return { status, stderr };
+    retain(origin, release, withoutRetention = false) {
+      return runAssetScript(join(dirname(script), "retain-public-assets.ts"), ["--directory", this.publicDir, "--origin", origin, "--release", release, ...(withoutRetention ? ["--without-asset-retention"] : [])]);
     },
     /** Pins the digests the sync reports for the fixture's bytes, the way a developer would. */
     async pinDigests() {
