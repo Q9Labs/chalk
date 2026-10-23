@@ -478,9 +478,13 @@ function RecordingSettings({ mode, onSaved }: { readonly mode: RecordingRenderSe
       <div className="secth">
         <h2>Recordings</h2>
       </div>
-      <div className="field">
-        <label htmlFor="recording-render-mode">Make recording videos</label>
+      <div className="field" style={{ maxWidth: 520 }}>
+        <label className="lbl" htmlFor="recording-render-mode">
+          Make recording videos
+        </label>
         <select
+          className="inp"
+          style={{ maxWidth: 320 }}
           id="recording-render-mode"
           value={draft}
           disabled={busy}
@@ -492,10 +496,16 @@ function RecordingSettings({ mode, onSaved }: { readonly mode: RecordingRenderSe
           <option value="on_demand">On demand</option>
           <option value="automatic">Automatically</option>
         </select>
-        <p id="recording-render-help">On demand makes an MP4 when you request a video. Automatic makes it after each recorded call ends. This setting applies to all calls in your account.</p>
+        <p className="help" id="recording-render-help">
+          On demand makes an MP4 when you request a video. Automatic makes it after each recorded call ends. This applies to all calls in your account.
+        </p>
       </div>
-      {error ? <p role="alert">{error}</p> : null}
-      <button type="submit" className="btn sec" disabled={busy || draft === mode}>
+      {error ? (
+        <p className="err" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button type="submit" className="btn pri" style={{ marginTop: 16 }} disabled={busy || draft === mode}>
         {busy ? "Saving…" : "Save recording settings"}
       </button>
     </form>
