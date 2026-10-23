@@ -22,29 +22,38 @@ function serveAppLinks(req, res) {
   return true;
 }
 
-test("nightly verification refuses a dashboard with missing configuration", async () => {
-  const sha = "a".repeat(40);
-  let configured = false;
-  const server = createServer((req, res) => {
-    if (req.url === "/auth/session" && !configured) {
-      res.writeHead(400, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: { code: "invalid_request" } }));
-      return;
-    }
-    if (serveAppLinks(req, res)) return;
-    const responses = { "/sw.js": { commitHash: sha }, "/healthz": { status: "ok" }, "/release.json": { environment: "nightly", commit: sha } };
-    res.end(JSON.stringify(responses[new URL(req.url, "http://localhost").pathname]));
-  });
+async function withNightlyServer(handler, sha, run) {
+  const server = createServer(handler);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
     const origin = `http://127.0.0.1:${server.address().port}`;
-    const options = { baseURL: origin, apiBaseURL: origin, expectedSHA: sha, expectedEnvironment: "nightly", deadlineMs: 2_000, retryDelayMs: 3_000 };
-    await assert.rejects(verifyWebDeploy(options), /dashboard session returned 400/);
-    configured = true;
-    await verifyWebDeploy(options);
+    await run({ baseURL: origin, apiBaseURL: origin, expectedSHA: sha, expectedEnvironment: "nightly", deadlineMs: 2_000, retryDelayMs: 3_000 });
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+}
+
+test("nightly verification refuses a dashboard with missing configuration", async () => {
+  const sha = "a".repeat(40);
+  let configured = false;
+  await withNightlyServer(
+    (req, res) => {
+      if (req.url === "/auth/session" && !configured) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { code: "invalid_request" } }));
+        return;
+      }
+      if (serveAppLinks(req, res)) return;
+      const responses = { "/sw.js": { commitHash: sha }, "/healthz": { status: "ok" }, "/release.json": { environment: "nightly", commit: sha } };
+      res.end(JSON.stringify(responses[new URL(req.url, "http://localhost").pathname]));
+    },
+    sha,
+    async (options) => {
+      await assert.rejects(verifyWebDeploy(options), /dashboard session returned 400/);
+      configured = true;
+      await verifyWebDeploy(options);
+    },
+  );
 });
 
 test("verifies the web revision and retained API health without the account proxy", async () => {
@@ -80,14 +89,11 @@ test("a correct marker cannot hide stale service-worker, unhealthy API or missin
   ];
   for (const { commit, health, target, message } of cases) {
     const responses = { "/sw.js": { commitHash: commit }, "/healthz": { status: health }, "/release.json": { environment: target, commit: sha } };
-    const server = createServer((req, res) => res.end(JSON.stringify(responses[new URL(req.url, "http://localhost").pathname])));
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    try {
-      const origin = `http://127.0.0.1:${server.address().port}`;
-      await assert.rejects(verifyWebDeploy({ baseURL: origin, apiBaseURL: origin, expectedSHA: sha, expectedEnvironment: "nightly", deadlineMs: 2_000, retryDelayMs: 3_000 }), message);
-    } finally {
-      await new Promise((resolve) => server.close(resolve));
-    }
+    await withNightlyServer(
+      (req, res) => res.end(JSON.stringify(responses[new URL(req.url, "http://localhost").pathname])),
+      sha,
+      (options) => assert.rejects(verifyWebDeploy(options), message),
+    );
   }
 });
 
