@@ -93,7 +93,9 @@ export function HomePage() {
         const known = new Set(rows.map((row) => row.id));
         const overlap = first.calls.findIndex((call) => known.has(call.id));
         if (overlap < 0 || first.calls.slice(overlap).some((call) => !known.has(call.id))) return replay(rows, first);
-        return { ...home, rows: capped([...rowsOf(first).slice(0, overlap), ...rows]) };
+        const discovered = rowsOf(first);
+        const byId = new Map(discovered.map((row) => [row.id, row]));
+        return { ...home, rows: capped([...discovered.slice(0, overlap), ...rows.map((row) => byId.get(row.id) ?? row)]) };
       },
     },
   );

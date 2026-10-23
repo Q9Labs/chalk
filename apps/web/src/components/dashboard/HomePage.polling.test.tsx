@@ -7,6 +7,7 @@ import { act, readPage } from "../../lib/dashboard/client";
 import type { HomeCallDTO, HomeDTO, HomeStatusDTO, LiveDTO } from "../../lib/dashboard/contracts";
 import { lastActive } from "../../lib/dashboard/format";
 import { HomePage } from "./HomePage";
+import { ToastProvider } from "./kit";
 
 const router = vi.hoisted(() => ({ state: { location: { pathname: "/dashboard" } }, navigate: vi.fn() }));
 vi.mock("@tanstack/react-router", async () => {
@@ -36,7 +37,7 @@ const second: Episode = { id: uuid(0xe2), count: 2, participants: [nora, { id: u
  * the engine reads the real server makes: two per page, and per check one activity read when rows are listed, one
  * newest-five read and one more activity read for a first page.
  */
-type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; fail?: boolean; failFirstPage?: boolean; pageSize?: number; engineReads?: number };
+type Truth = { calls: HomeCallDTO[]; live: Record<string, Episode>; statusCalls?: HomeCallDTO[]; statusLive?: Record<string, Episode>; fail?: boolean; failFirstPage?: boolean; pageSize?: number; engineReads?: number };
 function serve(truth: Truth) {
   const answer = (spaceId: string) => ({ spaceId, episode: truth.live[spaceId] ?? null });
   const made = new WeakMap<HomeCallDTO, string>();
@@ -58,8 +59,8 @@ function serve(truth: Truth) {
     if (name !== "home-status") throw new Error(`unexpected ${name}`);
     if (truth.fail) throw new Error("status check failed");
     const ids = query && "spaceIds" in query && query.spaceIds ? query.spaceIds.split(",") : [];
-    const calls = ids.map((id) => truth.calls.find((call) => call.id === id) ?? { ...row(id, ""), archived: true });
-    const result: HomeStatusDTO = { live: ids.map(answer), calls: calls.map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople })) };
+    const calls = ids.map((id) => (truth.statusCalls ?? truth.calls).find((call) => call.id === id) ?? { ...row(id, ""), archived: true });
+    const result: HomeStatusDTO = { live: ids.map((spaceId) => ({ spaceId, episode: (truth.statusLive ?? truth.live)[spaceId] ?? null })), calls: calls.map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople })) };
     const added = truth.calls.slice(0, 5).some((call) => !ids.includes(call.id));
     truth.engineReads = (truth.engineReads ?? 0) + (ids.length ? 1 : 0) + 1 + (added ? 1 : 0);
     return added ? { ...result, first: pageAt(0) } : result;
@@ -94,7 +95,11 @@ async function tick(ms = 5000) {
 }
 async function open() {
   await reactAct(async () => {
-    render(<HomePage />);
+    render(
+      <ToastProvider>
+        <HomePage />
+      </ToastProvider>,
+    );
   });
 }
 
@@ -497,6 +502,59 @@ it("ends a live call in the same check that finds a call made elsewhere", async 
   await tick();
   expect(screen.getByText("Made in another tab")).toBeTruthy();
   expect(screen.queryByText("Live · 1 in the call")).toBeNull();
+});
+
+it("applies discovery to a restored overlapping row at the cap and settles to two engine reads per tick", async () => {
+  const rows = Array.from({ length: 310 }, (_, index) => row(uuid(0x7000 + index), `Cap ${index}`));
+  const target = rows[0];
+  if (!target) throw new Error("no cap target");
+  const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
+  serve(truth);
+  await open();
+  for (let count = 1; count < 6; count++)
+    await reactAct(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+    });
+  truth.calls = rows.slice(1);
+  await tick();
+  // The activity read precedes the restore; discovery sees the restored row and a new call in the same tick.
+  truth.statusCalls = truth.calls;
+  truth.statusLive = {};
+  truth.calls = [elsewhere, ...rows];
+  truth.live[target.id] = first;
+  await tick();
+  expect(screen.getByLabelText("Cap 0, live now with 1 people")).toBeTruthy();
+  expect(screen.getAllByText(/^(Cap \d+|Made in another tab)$/)).toHaveLength(300);
+  delete truth.statusCalls;
+  delete truth.statusLive;
+  const before = truth.engineReads ?? 0;
+  for (let check = 0; check < 12; check++) await tick();
+  expect((truth.engineReads ?? 0) - before).toBe(24);
+}, 20_000);
+
+it("restores a retained live row through Undo when its immediate refresh fails", async () => {
+  const truth = await openOld12();
+  truth.live[archivedOld.id] = first;
+  await tick();
+  truth.calls = without(old12, 7);
+  truth.failFirstPage = true;
+  vi.mocked(act)
+    .mockResolvedValueOnce({ call: { ...archivedOld, archived: true } })
+    .mockResolvedValueOnce({ call: archivedOld });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Old 7" }));
+  });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Archive call" }));
+  });
+  expect(screen.queryByText("Old 7")).toBeNull();
+  truth.calls = old12;
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  });
+  truth.failFirstPage = false;
+  await tick(10_000);
+  expect(screen.getByLabelText("Old 7, live now with 1 people")).toBeTruthy();
 });
 
 it("shows a first call while the list is empty", async () => {

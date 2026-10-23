@@ -3,7 +3,7 @@ import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
 import { DashboardError } from "./http";
 
-type CookiePurpose = "session" | "login_google" | "login_apple" | "binding" | `seat_${string}`;
+type CookiePurpose = "session" | "tenant" | "login_google" | "login_apple" | "binding" | `seat_${string}`;
 const encoder = new TextEncoder();
 function base64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -73,5 +73,6 @@ export async function setSession(response: Response, env: DashboardEnvironment, 
 }
 export function clearSession(response: Response, env: DashboardEnvironment): void {
   writeCookie(response, env, "session", "", 0);
+  writeCookie(response, env, "tenant", "", 0);
   writeCookie(response, env, "binding", "", 0);
 }

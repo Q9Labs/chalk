@@ -21,10 +21,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
   const lookupPath = "/v1/tenants/by-external-id?";
   const scoped = (entry) => entry.path.startsWith(`/v1/tenants/${tenantId}/`);
   assert(pageLoad.every((entry) => entry.method === "GET" && entry.status === 200));
-  assert.equal(pageLoad.filter((entry) => entry.path.startsWith(lookupPath)).length, 1);
+  assert.equal(pageLoad.filter((entry) => entry.path.startsWith(lookupPath)).length, 0);
   // Five fixed scoped reads, two per Episode, one per recording (up to 5 x 5).
   assert.equal(pageLoad.filter(scoped).length, 5 + 2 * initial.episodes.length + initial.episodes.reduce((sum, episode) => sum + episode.recordings.length, 0));
-  console.log(`PASS: call-page-fanout ${JSON.stringify({ total: pageLoad.length, scoped: pageLoad.filter(scoped).length, unscopedLookups: 1, writes: 0, maximumScoped: 40, maximumTotal: 41 })}`);
+  console.log(`PASS: call-page-fanout ${JSON.stringify({ total: pageLoad.length, scoped: pageLoad.filter(scoped).length, unscopedLookups: 0, writes: 0, maximumScoped: 40, maximumTotal: 40 })}`);
   const traffic = (start, stop) => {
     const requests = engineRequests.filter((entry) => entry.at >= start && entry.at < stop);
     assert(
@@ -82,6 +82,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const perMinute = observed.length / minutes;
     const windows = [0, 1].map((index) => observed.filter((read) => read.at >= start + index * 60000 && read.at < start + (index + 1) * 60000).length);
     assert(perMinute <= 60 && windows.every((count) => count <= 60), `Tenant reads exceed budget: ${perMinute}; windows ${windows}`);
+    const allPerMinute = normalTraffic.total / minutes;
+    const allWindows = [0, 1].map((index) => engineRequests.filter((read) => read.at >= start + index * 60000 && read.at < start + (index + 1) * 60000).length);
+    assert(allPerMinute <= 60 && allWindows.every((count) => count <= 60), `All engine reads exceed budget: ${allPerMinute}; windows ${allWindows}`);
+    assert.equal(normalTraffic.unscopedLookups, 0, "Polling reuses the session's tenant authority");
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, initialCallReads);
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/home").length, initialHomeReads);
     assert(dashboardReads.filter((path) => path === "/dashboard-api/call-status").length >= 23);
@@ -111,10 +115,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const pendingTraffic = traffic(pendingStart, Date.now());
     const ticks = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length - pendingTicks;
     assert(ticks >= 19 && ticks <= 21, `Expected three-second status cadence, got ${ticks}`);
-    assert(pendingTraffic.scoped <= 52 && pendingTraffic.unscopedLookups <= 26);
+    assert(pendingTraffic.total <= 60 && pendingTraffic.scoped <= 52 && pendingTraffic.unscopedLookups === 0);
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, initialCallReads);
     console.log(
-      `PASS: refresh-cost-all-buckets ${JSON.stringify({ normalTwoPagesTwoMinutes: normalTraffic, pendingOnePageOneMinute: { ...pendingTraffic, ticks }, limitsPerMinute: { tenantRead: 300, tenantWrite: 60, serviceScopedRead: 6000, serviceUnscopedRead: 300 }, conservativeSinglePagePerMinute: { normal: { scoped: 36, unscoped: 18, total: 54, writes: 0 }, pending: { scoped: 52, unscoped: 26, total: 78, writes: 0 } } })}`,
+      `PASS: refresh-cost-all-buckets ${JSON.stringify({ normalTwoPagesTwoMinutes: normalTraffic, allReadsPerMinute: Number(allPerMinute.toFixed(2)), allFullMinuteWindows: allWindows, pendingOnePageOneMinute: { ...pendingTraffic, ticks }, limitsPerMinute: { tenantRead: 300, tenantWrite: 60, serviceScopedRead: 6000, serviceUnscopedRead: 300 }, conservativeSinglePagePerMinute: { normal: { scoped: 36, unscoped: 0, total: 36, writes: 0 }, pending: { scoped: 52, unscoped: 0, total: 52, writes: 0 } } })}`,
     );
     // Let the end transition checks continue to observe both pages.
     await homePage.goto(`${origin}/dashboard`);
