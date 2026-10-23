@@ -29,6 +29,8 @@ test("OSV discovery enforces the tooling exception for every discovered format",
     ["tracked gitignored lockfile", "runtime/package-lock.json", npm],
     ["tracked export-ignored lockfile", "runtime/package-lock.json", npm],
     ["tracked symlinked lockfile", "runtime/package-lock.json", npm],
+    ["uncommitted tracked lockfile edit", "runtime/package-lock.json", npm],
+    ["uncommitted root lockfile edit", "pnpm-lock.yaml", pnpm],
     ["ignored fixtures and excluded directories", null, null],
   ];
   for (const [name, file, content] of cases) {
@@ -57,7 +59,8 @@ test("OSV discovery enforces the tooling exception for every discovered format",
           writeFileSync(path.join(root, "runtime/dependency-data.json"), content);
           symlinkSync("dependency-data.json", path.join(root, file));
           git(["add", "runtime/dependency-data.json"]);
-        } else writeFileSync(path.join(root, file), content);
+        } else if (name === "uncommitted tracked lockfile edit") writeFileSync(path.join(root, file), content.replaceAll("3.25.76", "4.6.7"));
+        else if (name !== "uncommitted root lockfile edit") writeFileSync(path.join(root, file), content);
         git(["add", "-f", file]);
       }
       if (name === "ignored fixtures and excluded directories") {
@@ -68,9 +71,11 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       }
       git(["add", "pnpm-lock.yaml", "osv-scanner.toml", ".gitignore"]);
       git(["-c", "user.name=OSV regression", "-c", "user.email=osv-regression@example.invalid", "commit", "-qm", "Fixture baseline"]);
+      if (name.startsWith("uncommitted")) writeFileSync(path.join(root, file), content);
       const result = spawnSync("bash", ["osv-scanner.sh"], { cwd: root, encoding: "utf8", env: { ...process.env, GATE_VULN_BASE_REF: "HEAD" }, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
       assert.equal(result.status, file ? 1 : 0, `${result.error ?? ""}\n${result.stdout}\n${result.stderr}`);
-      if (file) assert.match(result.stderr, /Zod exception rejects OSV finding GHSA-mrhx-c7xc-m3w5/);
+      if (name === "uncommitted root lockfile edit") assert.match(result.stderr, /Zod exception rejects importer:\./);
+      else if (file) assert.match(result.stderr, /Zod exception rejects OSV finding GHSA-mrhx-c7xc-m3w5/);
       else {
         assert.match(result.stdout, /Zod tooling exception accepted/);
         assert.doesNotMatch(result.stdout, /OSV input: .*?(?:ignored-fixtures|untracked-fixtures|node_modules|\.git\/|\.worktrees)/);

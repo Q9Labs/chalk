@@ -33,7 +33,8 @@ scan_report() {
 }
 
 # Force the root policy for every discovered input; it has no zod advisory ignore.
-snapshot HEAD "${report_directory}/head"
+mkdir "${report_directory}/head"
+node "${script_directory}/osv-snapshot.mjs" "${report_directory}/head" --working-tree
 scan_report "${report_directory}/head" "${report_directory}/head.json" "${report_directory}/head/osv-scanner.toml"
 # Validate every zod finding before discounting the tooling exception or a PR baseline.
 (cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/head.json")
