@@ -4,6 +4,7 @@ import type { JSHandle } from "playwright";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
+import type {} from "./camera-enable-fixture";
 
 let origin: string;
 let stop: (() => Promise<void>) | undefined;
@@ -38,17 +39,10 @@ async function load(state: string) {
 it("borrows the enabling camera when its menu opens before capture finishes", async () => {
   const racePage = await browser.newPage({ permissions: ["camera"], viewport: { width: 1440, height: 900 } });
   racePage.on("pageerror", (error) => errors.push(error.message));
-  let race:
-    | JSHandle<{
-        calls: () => number;
-        tracks: MediaStreamTrack[];
-        allowCapture: () => void;
-        allowPublish: () => void;
-        dispose: () => void;
-      }>
-    | undefined;
+  let race: JSHandle<Awaited<ReturnType<HTMLElementTagNameMap["chalk-camera-enable-fixture"]["mountPendingCamera"]>>> | undefined;
   try {
     await racePage.goto(`${origin}/call-states.html?state=shell-browser-permission&browserMedia`);
+    await racePage.addScriptTag({ type: "module", url: `${origin}/src/call-states/camera-enable-fixture.tsx` });
     race = await racePage.evaluateHandle(async () => document.createElement("chalk-camera-enable-fixture").mountPendingCamera());
     await racePage.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).click();
     await expect.poll(() => race?.evaluate((value) => value.calls())).toBe(1);
