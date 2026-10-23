@@ -38,6 +38,8 @@ test("OSV discovery enforces the tooling exception for every discovered format",
     await context.test(name, (subtest) => {
       const temporary = mkdtempSync(path.join(tmpdir(), "chalk-osv-discovery-"));
       subtest.after(() => rmSync(temporary, { recursive: true, force: true }));
+      mkdirSync(path.join(temporary, "scratch"));
+      symlinkSync("scratch", path.join(temporary, "scratch-alias"));
       const root = path.join(temporary, ".worktrees", "checkout");
       mkdirSync(root, { recursive: true });
       for (const script of ["osv-scanner.sh", "osv-snapshot.mjs", "zod-exception.mjs"]) symlinkSync(new URL(`./${script}`, import.meta.url), path.join(root, script));
@@ -77,7 +79,7 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       git(["add", "pnpm-lock.yaml", "osv-scanner.toml", ".gitignore"]);
       git(["-c", "user.name=OSV regression", "-c", "user.email=osv-regression@example.invalid", "commit", "-qm", "Fixture baseline"]);
       if (name.startsWith("uncommitted")) writeFileSync(path.join(root, file), content);
-      const result = spawnSync("bash", ["osv-scanner.sh"], { cwd: root, encoding: "utf8", env: { ...process.env, GATE_VULN_BASE_REF: "HEAD" }, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
+      const result = spawnSync("bash", ["osv-scanner.sh"], { cwd: root, encoding: "utf8", env: { ...process.env, TMPDIR: path.join(temporary, "scratch-alias"), GATE_VULN_BASE_REF: "HEAD" }, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
       assert.equal(result.status, file ? 1 : 0, `${result.error ?? ""}\n${result.stdout}\n${result.stderr}`);
       if (name === "uncommitted root lockfile edit") assert.match(result.stderr, /Zod exception rejects importer:\./);
       else if (file) assert.match(result.stderr, /Zod exception rejects OSV finding GHSA-mrhx-c7xc-m3w5/);
