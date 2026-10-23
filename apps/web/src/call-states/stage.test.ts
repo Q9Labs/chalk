@@ -810,7 +810,6 @@ it("reflows a folded notice into a wider band and back without clipping", async 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(toastHeight).toBe(narrowHeight);
     const bandHeight = (narrowHeight + wideHeight) / 2;
-    console.info("NOTICE_WIDTH_FIT", { narrowHeight, wideHeight, bandHeight });
     await page.addStyleTag({ content: `.chalk-toasts { height: ${bandHeight}px; top: auto; padding-bottom: 0; }` });
     await expect.poll(() => page.locator("[data-part=toast]").count()).toBe(0);
     await page.getByRole("button", { name: "Show 1 notice", exact: true }).waitFor();
