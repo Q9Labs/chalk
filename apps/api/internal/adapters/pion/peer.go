@@ -545,7 +545,14 @@ func (p *Peer) Track(mid captureplane.ProviderReference) (*MediaTrack, bool) {
 // WaitForTrack waits until OnTrack binds mid, the peer becomes terminal, or
 // ctx expires. The returned wrapper is safe for later RTP reads.
 func (p *Peer) WaitForTrack(ctx context.Context, mid captureplane.ProviderReference) (*MediaTrack, error) {
+	if p == nil {
+		return nil, ErrPeerClosed
+	}
 	for {
+		// Subscribe before checking state so a concurrent binding cannot be missed.
+		p.stateMu.RLock()
+		notify := p.notify
+		p.stateMu.RUnlock()
 		if track, ok := p.Track(mid); ok {
 			return track, nil
 		}
@@ -555,9 +562,6 @@ func (p *Peer) WaitForTrack(ctx context.Context, mid captureplane.ProviderRefere
 		if err := p.checkContext(ctx); err != nil {
 			return nil, err
 		}
-		p.stateMu.RLock()
-		notify := p.notify
-		p.stateMu.RUnlock()
 		select {
 		case <-notify:
 		case <-ctx.Done():
