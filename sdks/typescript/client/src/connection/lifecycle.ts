@@ -505,10 +505,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               { concurrency: "unbounded", discard: true },
             );
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            yield* trace(
-              "confirm_entered",
-              foreign(() => sync.confirmEntered(), "sync_start_failed", "Entry could not be confirmed"),
-            );
+            const confirmEntered = sync.confirmEntered?.bind(sync);
+            if (confirmEntered) yield* trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed"));
           }).pipe(
             Effect.matchEffect({
               onFailure: (cause) =>

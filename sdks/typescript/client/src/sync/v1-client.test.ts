@@ -409,8 +409,18 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  it("never asks for entry confirmation unless its caller opts in", async () => {
+    const { client, socket, urls } = await liveClient({}, baseState(), ownerId, false);
+    try {
+      expect(new URL(urls[0]!).searchParams.has("entry_confirmation")).toBe(false);
+      await client.confirmEntered();
+      expect(socket.frames().map((frame) => frame.type)).not.toContain("entered");
+    } finally {
+      client.stop();
+    }
+  });
   it("enters a previous Sync through the legacy hello and never sends entered", async () => {
-    const { client, socket } = await liveClient({}, baseState(), ownerId, false);
+    const { client, socket } = await liveClient({ entryConfirmation: true }, baseState(), ownerId, false);
     try {
       // Previous Sync accepts only these hello keys and has no entered frame.
       const hello = socket.frames().find((frame) => frame.type === "hello")!;
@@ -2084,7 +2094,7 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
     },
   };
   const mediaPlane = new TestMediaPlane();
-  const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: factory, mediaPlane, ...overrides });
+  const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: factory, mediaPlane, entryConfirmation, ...overrides });
   const snapshot = await wireSnapshot(initialState);
   const state = snapshotToState(snapshot);
   await client.start();

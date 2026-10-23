@@ -499,3 +499,20 @@ it("refreshes rejected access during entry confirmation instead of retrying the 
     }),
   );
 });
+
+it("joins through a 5.x custom Sync adapter that has no confirmEntered", async () => {
+  const platform = createCoreTestPlatform();
+  const { confirmEntered: _confirmEntered, ...legacySync } = platform.sync;
+  const cancelPendingAdmission = vi.fn(async () => true);
+  const layer = admissionLayer({
+    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+    dependencies: { ...platform.dependencies, cancelPendingAdmission, createSyncClient: () => legacySync },
+  });
+  await exerciseAdmission(layer, (lifecycle) =>
+    Effect.gen(function* () {
+      yield* lifecycle.join();
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", failure: null });
+      expect(cancelPendingAdmission).not.toHaveBeenCalled();
+    }),
+  );
+});

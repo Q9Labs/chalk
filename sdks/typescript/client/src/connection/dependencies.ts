@@ -32,7 +32,8 @@ export type ConnectionMediaDevices = {
 };
 export type ConnectionSyncClient = V1CollaborationClient & {
   readonly start: () => Promise<void>;
-  readonly confirmEntered: () => Promise<void>;
+  /** Confirms entry after Sync is live and media has started. Without it, Sync confirms the entry at hello. */
+  readonly confirmEntered?: () => Promise<void>;
   readonly restartTransport?: () => void;
   readonly stop: () => void;
   readonly getSnapshot: () => V1EpisodeSnapshot;

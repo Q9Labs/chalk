@@ -242,6 +242,8 @@ export type V1SyncClientOptions = {
   readonly retryDelayMs?: number;
   readonly collaboration?: V1CollaborationExtensionRequest | false;
   readonly maxPendingCollaborationRequests?: number;
+  /** Asks Sync to hold the entry until `confirmEntered()`; set it only when the caller will call that method. */
+  readonly entryConfirmation?: boolean;
 };
 export type V1Socket = SyncSocket;
 

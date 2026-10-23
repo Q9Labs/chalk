@@ -375,7 +375,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryNegotiated = false;
     let socket: V1Socket;
     try {
-      socket = this.#options.webSocket.connect(entryConfirmationUrl(this.#options.url));
+      socket = this.#options.webSocket.connect(this.#options.entryConfirmation ? entryConfirmationUrl(this.#options.url) : this.#options.url);
     } catch {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();

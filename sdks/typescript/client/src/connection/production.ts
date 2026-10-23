@@ -140,6 +140,7 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
     mediaPlane: input.media,
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
+    entryConfirmation: true,
   });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {
