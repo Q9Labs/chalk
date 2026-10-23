@@ -13,11 +13,13 @@ fixture.recordPage(page);
 try {
   let mode = "pass";
   let silenced = false;
+  const interceptedLeaves = [];
   await page.routeWebSocket(`${syncOrigin}*`, (socket) => {
     const server = socket.connectToServer();
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.type === "operation" && frame.name === "participant_leave") {
+        interceptedLeaves.push(mode);
         if (mode === "drop-leave") return;
         // The Leave reaches Sync, then the connection goes quiet before any reply.
         if (mode === "drop-leave-ack") silenced = true;
@@ -56,11 +58,20 @@ try {
   assert.equal(first?.status, 200);
   const leaveUnconfirmed = async (nextMode) => {
     mode = nextMode;
+    const leavesBefore = interceptedLeaves.length;
     const cleanupAttempt = page.waitForRequest((request) => request.url().endsWith("/cancel-join"), { timeout: 30000 });
-    await page.getByRole("button", { name: "Leave call", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+    const leave = page.getByRole("button", { name: "Leave call", exact: true });
+    const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
+    await leave.click();
+    if (opensMenu) await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
     await cleanupAttempt;
+    assert.deepEqual(interceptedLeaves.slice(leavesBefore), [nextMode], "the intended Leave operation must be intercepted exactly once");
     await delay(500);
+    if (nextMode === "drop-leave-ack") {
+      for (let attempt = 0; attempt < 100 && (await live()).includes(first.participantId); attempt++) await delay(100);
+    }
+    assert.equal((await live()).includes(first.participantId), nextMode === "drop-leave", "the seat must reflect whether Leave committed before rejoining");
+    console.log(`PASS ${nextMode}: intercepted one Leave through the ${opensMenu ? "menu" : "direct button"}; committed=${nextMode === "drop-leave-ack"}`);
     mode = "pass";
     silenced = false;
     await page.goto(`${origin}/dashboard`);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Effect } from "effect";
-import { createChalkEffectClient } from "@q9labsai/chalk-client/effect";
+import { Effect, Schema } from "effect";
+import { AdmitEpisodeParticipantPathParamsSchema, createChalkEffectClient } from "@q9labsai/chalk-client/effect";
 import { run, withSessionEngine } from "./engine";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
@@ -89,6 +89,18 @@ it("rejects a modified tenant cache and renews an expired one", async () => {
 });
 
 describe("engine failure diagnostics through the real SDK decoder", () => {
+  it.each([
+    { code: "participant.not_active", expected: { status: 409, code: "participant_not_active" } },
+    { code: privateDetail, expected: { status: 502, code: "engine_unavailable" } },
+  ])("handles the admission transport code $code", async ({ code, expected }) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const api = await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://engine.example.test", fetch: async () => Response.json({ error: { code, message: privateDetail } }, { status: 409 }) }));
+    const params = Schema.decodeUnknownSync(AdmitEpisodeParticipantPathParamsSchema)({ tenant_id: "11111111-1111-4111-8111-111111111111", space_id: "22222222-2222-4222-8222-222222222222", episode_id: "33333333-3333-4333-8333-333333333333" });
+    await expect(run(api.episodes.admitEpisodeParticipant({ params, headers: { "Idempotency-Key": "admission-compatibility-probe" }, payload: { name: "Owner", role: "host" } }))).rejects.toMatchObject(expected);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ event: "dashboard.engine_failed", engine_status: 409, sdk_error_tag: "HttpClientError" });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);
+  });
+
   it.each([
     { status: 503, body: JSON.stringify({ error: { code: "service.unavailable", message: privateDetail } }), expected: { engine_code: "service.unavailable" } },
     { status: 400, body: JSON.stringify({ error: { code: "request.invalid", message: privateDetail } }), expected: { engine_code: "request.invalid" } },

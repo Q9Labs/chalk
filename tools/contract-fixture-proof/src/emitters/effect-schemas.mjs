@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { publicErrorCodes } from "./effect-error-compatibility.mjs";
 
 const root = new URL(".", import.meta.url);
 const repoRoot = new URL("../../../../", root);
@@ -530,7 +531,7 @@ function collectOperationErrors(document) {
 
       const errorsByCode = new Map();
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
-        for (const code of response["x-chalk-error-codes"] ?? []) {
+        for (const code of publicErrorCodes(operation.operationId, response)) {
           if (!errorsByCode.has(code)) {
             errorsByCode.set(code, new Set());
           }

@@ -23,9 +23,11 @@ pending seat expired before entry, the connection fails as a retryable
 `sync_start_failed` instead of rejected access, and the client does not reconnect
 the expired seat with the same grant.
 
-`admitEpisodeParticipant` now declares the 409 `participant.not_active` error,
-which the API returns when a retried admission names a participant that has
-already left, so the typed client decodes it as `ParticipantNotActiveError`.
+The admission contract declares the 409 `participant.not_active` response when
+a retried admission names a participant that has already left. The public
+`AdmitEpisodeParticipantError` union stays compatible with 5.1.0; this response
+uses the existing `HttpClientError` channel, with its code in the response body.
+The dashboard reads that code and retries once with a fresh join key.
 
 Rollout: apply the database migration first, then upgrade Sync, then the API and
 this client. This client also works with an older Sync, and published 5.0.x

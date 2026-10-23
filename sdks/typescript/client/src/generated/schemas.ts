@@ -4844,7 +4844,6 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeNotFoundErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
-  ParticipantNotActiveErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
