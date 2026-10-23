@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { parseAccessGrant } from "../../../../sdks/typescript/client/src/access/grant";
+import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
 import { createGuestAccessGetter } from "./spaces";
 
 vi.mock("expo-secure-store", () => ({}));
@@ -14,7 +14,7 @@ const credential = {
 
 it.each(["refresh", "retry"] as const)("forwards replacement and cancellation during %s through the real public client", async (reason) => {
   const original = accessGrant("old-connection");
-  const initialAccess = parseAccessGrant(original);
+  const initialAccess = await createChalkPublicClient({ baseUrl: "https://api.chalk.test", fetch: async () => Response.json(original, { status: 201 }) }).refreshSpacePublicInviteAccess({ arrivalHandle: credential.arrivalHandle, mediaProof: original.media.token });
   const replacement = accessGrant("new-connection");
   const controller = new AbortController();
   let requestBody: unknown;
