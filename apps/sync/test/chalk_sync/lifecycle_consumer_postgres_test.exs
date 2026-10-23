@@ -214,7 +214,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
              Postgres.finalize_operation(
                fixture.episode,
                id,
-               {:terminal_failure, :provider_unavailable}
+               {:failed, :provider_unavailable}
              )
 
     assert {:ok, abandoned} = Postgres.admit_entry(fixture.identity, :new)
