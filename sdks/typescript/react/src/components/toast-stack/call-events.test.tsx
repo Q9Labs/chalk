@@ -52,5 +52,17 @@ it("explains a missing camera with the canonical device recovery copy", () => {
   const toast = mediaFailureToast({ code: "media.device_not_found", recoverable: true, message: "Missing input" }, "camera");
   const text = renderToStaticMarkup(<>{toast?.message}</>);
   expect(text).toContain("No camera found.");
-  expect(text).toContain("Plug one in, or check that your Mac can see it in System Settings.");
+  expect(text).toContain("Connect one, then try again.");
+  // People join from Windows, Android and iPhone too, so the copy names no platform.
+  expect(text).not.toMatch(/Mac|System Settings/);
+});
+it("announces someone else's raised hand, but never your own, so no toast covers the tray's hand button", () => {
+  const base = live();
+  const me: Participant = { ...host, participantId: "self", displayName: "Ada", role: "guest", capabilities: [] };
+  const before = { ...base, participants: { ...base.participants, roster: [host, me] } };
+  const raise = (participantId: string) => callEventToasts(before, { ...before, participants: { ...before.participants, roster: before.participants.roster.map((person) => (person.participantId === participantId ? { ...person, handRaised: true } : person)) } });
+  expect(raise("self")).toHaveLength(0);
+  const events = raise("host");
+  expect(events).toHaveLength(1);
+  expect(renderToStaticMarkup(<>{events[0]?.message}</>)).toContain("Nora</b> raised a hand");
 });

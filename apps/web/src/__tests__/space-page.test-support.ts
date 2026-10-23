@@ -19,7 +19,7 @@ const spacePageTestMocks = vi.hoisted(() => {
   };
   const prepared = {
     reloadMarker: () => ({ episodeId: "33333333-3333-4333-8333-333333333333", participantId: "participant-1", participantGeneration: 1, mediaProof: "proof", arrivalHandle: "arrival-11111111" }),
-    arrival: undefined,
+    arrival: { state: "admitted", space: { name: "Design Lab", slug: "design-lab" } },
     credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
     getAccess: vi.fn(),
     connectionAccess: vi.fn(),

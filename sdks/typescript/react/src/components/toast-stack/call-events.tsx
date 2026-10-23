@@ -33,7 +33,7 @@ export function mediaFailureToast(failure: ClientFailure | null, source?: "micro
       type: "error",
       message: (
         <>
-          <b style={{ fontWeight: 600 }}>No {device} found.</b> Plug one in, or check that your Mac can see it in System Settings.
+          <b style={{ fontWeight: 600 }}>No {device} found.</b> Connect one, then try again.
         </>
       ),
     };
@@ -63,7 +63,8 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
           </>
         ),
       });
-    if (old && !old.handRaised && person.handRaised)
+    // Your own hand needs no toast: it would sit over the tray's hand button and block lowering it.
+    if (old && !old.handRaised && person.handRaised && person.participantId !== next.self.participantId)
       events.push({
         icon: <CallEventIcon kind="hand" />,
         message: (

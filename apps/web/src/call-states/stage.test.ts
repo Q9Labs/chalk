@@ -365,3 +365,14 @@ it("brings a typed text back for both people after Undo and Redo", async () => {
     await context.close();
   }
 });
+
+it("lowers your hand while another person's raised-hand toast is showing", async () => {
+  await open("hand-peer-toast");
+  await page.getByRole("button", { name: "Reactions", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "raised a hand" }).waitFor();
+  const hand = page.getByRole("button", { name: "Raise hand", exact: true });
+  expect(await hand.getAttribute("aria-pressed")).toBe("true");
+  // A real click: Playwright waits while another element, such as a toast, would take the pointer.
+  await hand.click({ timeout: 2_000 });
+  await expect.poll(() => hand.getAttribute("aria-pressed")).toBe("false");
+});
