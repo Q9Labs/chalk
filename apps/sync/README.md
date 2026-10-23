@@ -34,6 +34,30 @@ This path is distinct from `CHALK_SYNC_LOCAL_PROOF`: it does not use memory
 state or the development token verifier. `/readyz` checks the Postgres and
 provider-bridge dependencies before the root command reports ready.
 
+## Board view leadership
+
+Sync stamps actual camera moves and Follow-me starts, not idle view refreshes.
+Each node keeps a hybrid logical clock per Episode: `max(wall_microseconds,
+highest_authentic_stamp_seen) + 1`. Direct certificates and verified relay or
+cross-node frames advance that clock. Within a tab, the sequence alone orders
+views; different tabs use the stamp and a connection-UUID tie-break. The clock
+holds at most 4,096 Episode watermarks and rejects new Episodes at capacity
+rather than evicting an active watermark. Rejections retain the bounded
+`view_clock_capacity` reason.
+
+All nodes in one database-backed Sync deployment must use the same 32-byte,
+base64url `CHALK_SYNC_VIEW_ORIGIN_SECRET`, unchanged across database restores.
+Sync only has public Ed25519 token verification keys; neither those public keys
+nor independently valid database credentials provide a shared symmetric key.
+Origin proofs derive from the dedicated secret, never a database row.
+
+Nodes announce an HMAC fingerprint of a fixed label through PostgreSQL
+notifications. Startup discovery takes two seconds; heartbeats run every two
+seconds and expire after six seconds without an announcement. `/readyz` fails
+on a live-peer mismatch, announcement failure, unavailable fanout or the bounded
+256-peer capacity. Mismatch logs name only the two fingerprints, once per peer
+fingerprint change, and emit a telemetry counter. No key material is logged.
+
 ## Current media observations
 
 The provider bridge observer requests `media-observations?latest=true`, returning

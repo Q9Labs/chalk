@@ -138,18 +138,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_message(
-        {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
-        %{identity: %Identity{participant_id: participant_id}} = state
-      )
-      when type == "cursor" do
+         {:whiteboard_v1_frame, %{"type" => type, "participant_id" => participant_id}},
+         %{identity: %Identity{participant_id: participant_id}} = state
+       )
+       when type == "cursor" do
     {:ok, state}
   end
 
   defp handle_message(
-        {:whiteboard_v1_frame, %{"type" => "view", "participant_id" => participant_id} = frame},
-        %{identity: %Identity{participant_id: participant_id}} = state
-      )
-      when not is_map_key(frame, "origin_connection_id") do
+         {:whiteboard_v1_frame, %{"type" => "view", "participant_id" => participant_id} = frame},
+         %{identity: %Identity{participant_id: participant_id}} = state
+       )
+       when not is_map_key(frame, "origin_connection_id") do
     {:ok, state}
   end
 
@@ -209,10 +209,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     )
   end
 
-  def handle_info(
-        {:whiteboard_v1_frame, %{"type" => "view"} = frame},
-        %{phase: :live, view_connection_id: nil} = state
-      ) do
+  defp handle_message(
+         {:whiteboard_v1_frame, %{"type" => "view"} = frame},
+         %{phase: :live, view_connection_id: nil} = state
+       ) do
     deliver_frame(
       state,
       Map.drop(frame, ["origin_connection_id", "origin_lead_stamp", "origin_proof"])

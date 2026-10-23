@@ -48,3 +48,15 @@ Use these fields to distinguish undiscovered backlog from repeated delivery fail
 they do not establish the underlying cause of a `dependency_unavailable` result.
 The response contains no intent, Episode, participant, or Tenant identifiers.
 Readiness thresholds, retry scheduling, and the one-second query timeout are unchanged.
+
+### Sync board-origin agreement
+
+`view_origin_secret_mismatch` in readiness means two live Sync peers announced
+different HMAC fingerprints. The error log names `local_fingerprint` and
+`peer_fingerprint`, never either secret; compare the deployment's secret mounts.
+`[:chalk_sync, :whiteboard, :origin_secret_mismatch]` counts one event per peer
+fingerprint change, not per view. Announcements run every two seconds with a
+six-second peer lease. Startup discovery, announcement loss and peer capacity
+have distinct readiness reasons. A full per-Episode view clock records
+`view_clock_capacity` through the same bounded `sync.whiteboard.view_origin_rejected`
+trace/log path as invalid proofs and stale direct sequences.

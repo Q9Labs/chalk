@@ -100,6 +100,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         phase: :live,
         observability: Observability.context(%{"journey_id" => @scene_id}),
         identity: host,
+        connected_at: System.monotonic_time(:millisecond),
         display_name: "Ada",
         scene_id: @scene_id,
         revision: 4,
@@ -312,7 +313,10 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       Process.put(:reject_view_db, true)
 
       newcomer =
-        ordered_view_socket(%{identity() | participant_id: @scene_id}, @participant_id)
+        ordered_view_socket(
+          %{identity() | participant_id: "60000000-0000-4000-8000-000000000006"},
+          @participant_id
+        )
 
       {publisher, relay} =
         if @direction == :surviving_to_new,
@@ -350,6 +354,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     Map.merge(initial, %{
       phase: :live,
       identity: host,
+      connected_at: System.monotonic_time(:millisecond),
       display_name: "Ada",
       scene_id: @scene_id,
       revision: 4,
