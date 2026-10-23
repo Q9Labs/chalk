@@ -251,6 +251,9 @@ importers:
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.18
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
       dependency-cruiser:
         specifier: 18.2.0
         version: 18.2.0
@@ -5199,6 +5202,9 @@ packages:
   astring@1.9.0:
     resolution: {integrity: sha512-LElXdjswlqjWrPpJFg1Fx4wpkOCxj1TDHlSV4PlaRxHGWko024xICaa97ZkMfs6DRKlCguiAI+rbXv5GWwXIkg==}
     hasBin: true
+
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
   babel-dead-code-elimination@1.0.12:
     resolution: {integrity: sha512-GERT7L2TiYcYDtYk1IpD+ASAYXjKbLTDPhBtYj7X1NuRMDTMtAx9kyBenub1Ev41lo91OHCKdmP+egTDmfQ7Ig==}
@@ -13699,6 +13705,8 @@ snapshots:
       js-tokens: 10.0.0
 
   astring@1.9.0: {}
+
+  aws4fetch@1.0.20: {}
 
   babel-dead-code-elimination@1.0.12(supports-color@10.2.2):
     dependencies:

@@ -38,9 +38,7 @@ assertAssetVersion(join(mathFontRoot, "package.json"), MATHJAX_ASSET_VERSION);
 
 // Every Vite server imports this script, and parallel browser tests start several at once.
 // A versioned tree never changes, so it is staged privately and published by one rename:
-// no server sees another rewrite the files it is serving. Staging stays outside public/,
-// so a start killed mid-copy can't leave a stray tree for the next build to deploy.
-const stagingDir = resolve(scriptDir, "../node_modules/.cache/chalk-public-assets");
+// no server sees another rewrite the files it is serving.
 
 // A tree is reused only under the digest of the bytes installed now, so warm and clean builds agree.
 function publishVersionedTree(urlRoot: string, digestName: string, pinnedDigest: string, entries: [source: string, relativePath: string][]) {
@@ -57,8 +55,8 @@ function publishTree(urlRoot: string, populate: (staging: string) => void) {
   const destination = resolve(publicDir, urlRoot.slice(1));
   if (existsSync(destination)) return;
   mkdirSync(dirname(destination), { recursive: true });
-  mkdirSync(stagingDir, { recursive: true });
-  const staging = mkdtempSync(join(stagingDir, "tree-"));
+  // A sibling guarantees rename stays on the destination filesystem, even with linked dependencies.
+  const staging = mkdtempSync(`${destination}.staging-`);
   try {
     populate(staging);
     renameSync(staging, destination);

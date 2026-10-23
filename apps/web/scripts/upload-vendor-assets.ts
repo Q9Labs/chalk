@@ -1,4 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { AwsClient } from "aws4fetch";
 import { extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -19,7 +21,7 @@ const contentTypes = new Map([
   [".txt", "text/plain; charset=utf-8"],
 ]);
 
-export async function uploadVendorAssets({ directory, bucket, accountId, token, apiOrigin = "https://api.cloudflare.com/client/v4" }: { directory: string; bucket: string; accountId?: string; token?: string; apiOrigin?: string }) {
+export async function uploadVendorAssets({ directory, bucket, accountId, accessKeyId, token, apiOrigin = `https://${accountId}.r2.cloudflarestorage.com` }: { directory: string; bucket: string; accountId?: string; accessKeyId?: string; token?: string; apiOrigin?: string }) {
   // Snapshot and verify every tree before making any requests. Upload exactly those bytes.
   const files = ["chalk-whiteboard", "chalk-mathjax"].flatMap((family) => {
     const parent = join(directory, family);
@@ -35,26 +37,31 @@ export async function uploadVendorAssets({ directory, bucket, accountId, token, 
     });
   });
 
-  if (files.length && (!accountId || !token)) throw new Error("Vendor uploads require CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_R2_API_TOKEN (or CLOUDFLARE_API_TOKEN)");
+  if (files.length && (!accountId || !accessKeyId || !token)) throw new Error("Vendor uploads require CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_ACCESS_KEY_ID and bucket-scoped CLOUDFLARE_R2_API_TOKEN");
+  const client = new AwsClient({
+    accessKeyId: accessKeyId ?? "",
+    secretAccessKey: createHash("sha256")
+      .update(token ?? "")
+      .digest("hex"),
+    service: "s3",
+    region: "auto",
+    retries: 0,
+  });
   let uploaded = 0;
   let skipped = 0;
   for (const { key, bytes } of files) {
-    const url = `${apiOrigin}/accounts/${accountId}/r2/buckets/${encodeURIComponent(bucket)}/objects/${key.split("/").map(encodeURIComponent).join("/")}`;
-    const authorization = `Bearer ${token}`;
-    const existing = await fetch(url, { headers: { Authorization: authorization }, signal: AbortSignal.timeout(30_000) });
-    await existing.body?.cancel();
-    if (existing.ok) {
-      skipped++;
-      continue;
-    }
-    if (existing.status !== 404) throw new Error(`R2 lookup ${key} returned HTTP ${existing.status}`);
-    const response = await fetch(url, {
+    const url = `${apiOrigin}/${encodeURIComponent(bucket)}/${key.split("/").map(encodeURIComponent).join("/")}`;
+    const response = await client.fetch(url, {
       method: "PUT",
-      headers: { Authorization: authorization, "Content-Type": contentTypes.get(extname(key)) ?? (key.endsWith("/LICENSE") ? "text/plain; charset=utf-8" : "application/octet-stream"), "Cache-Control": "public, max-age=31536000, immutable" },
+      headers: { "If-None-Match": "*", "Content-Type": contentTypes.get(extname(key)) ?? (key.endsWith("/LICENSE") ? "text/plain; charset=utf-8" : "application/octet-stream"), "Cache-Control": "public, max-age=31536000, immutable" },
       body: bytes,
       signal: AbortSignal.timeout(30_000),
     });
     await response.body?.cancel();
+    if (response.status === 412) {
+      skipped++;
+      continue;
+    }
     if (!response.ok) throw new Error(`R2 upload ${key} returned HTTP ${response.status}`);
     uploaded++;
   }
@@ -64,6 +71,6 @@ export async function uploadVendorAssets({ directory, bucket, accountId, token, 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   const { values } = parseArgs({ options: { directory: { type: "string", default: "dist/client" }, bucket: { type: "string" } } });
   if (!values.bucket) throw new Error("--bucket is required");
-  const result = await uploadVendorAssets({ directory: values.directory, bucket: values.bucket, accountId: process.env.CLOUDFLARE_ACCOUNT_ID, token: process.env.CLOUDFLARE_R2_API_TOKEN || process.env.CLOUDFLARE_API_TOKEN });
+  const result = await uploadVendorAssets({ directory: values.directory, bucket: values.bucket, accountId: process.env.CLOUDFLARE_ACCOUNT_ID, accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID, token: process.env.CLOUDFLARE_R2_API_TOKEN });
   console.log(`Vendor assets: uploaded ${result.uploaded}, skipped ${result.skipped}; no objects deleted`);
 }

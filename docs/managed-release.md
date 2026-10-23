@@ -249,16 +249,31 @@ through the normal fleet release lifecycle; no cross-environment deletion is add
 ## Immutable web vendor assets
 
 Provision `chalk-vendor-assets` and `chalk-vendor-assets-nightly` in Chalk's
-Cloudflare account without object expiration. Before releasing digest URLs,
-activate `apps/web/wrangler.vendor-assets.toml` once for production and once
-with `--env nightly`. This independent Worker owns only the two vendor URL
-prefixes; native Pages rollbacks cannot remove it or its R2 binding. Updating
-it is a separate infrastructure operation, outside routine Pages releases.
+Cloudflare account without object expiration. Set `CLOUDFLARE_R2_API_TOKEN`
+as a separate secret in each GitHub environment, with Object Read & Write
+permission on that environment's bucket only. Set its token ID as the
+environment variable `CLOUDFLARE_R2_ACCESS_KEY_ID`. The uploader derives the
+S3 signing secret from the token; the Pages token is never an R2 fallback.
+Signed conditional PUTs use `If-None-Match: *`; 412 means the key already
+exists. Uploads never replace or delete an object.
 
-Release's `deploy-web` job needs `CLOUDFLARE_R2_API_TOKEN` with R2 object access
-in addition to its Pages token. Local releases accept that variable too, or
-use `CLOUDFLARE_API_TOKEN` when it has both permissions. Both upload paths
-verify each tree's pinned digest and publish missing keys before Pages.
-Existing keys are skipped, and objects are never deleted. Archives without
-digest trees still deploy normally. Keep the Worker active when rolling back
-Pages, including to a snapshot that predates this feature.
+Before Pages publication, `prepare-vendor-store.ts` uploads verified vendor
+trees and two small content-addressed probe objects. It deploys the independent
+Worker idempotently, then checks both vendor routes for exact probe bytes,
+JavaScript MIME, immutable caching, and an uncached missing-key 404. A failed
+upload, deployment or probe stops Pages publication. Legacy archives use the
+same probe objects and need no vendor manifest.
+
+Wrangler uses `CLOUDFLARE_API_TOKEN` for Worker and route deployment; it never
+uses the bucket-scoped object token for that operation. This deployment
+credential must permit Workers Scripts and Workers Routes in Chalk's account
+and zone, as well as Pages. A missing permission stops the release.
+The current CI credential has only Cloudflare Pages permission, so CI sets
+`CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY=true`. This fallback checks both existing
+routes and their binding and fails closed if the Worker is absent. CI cannot
+deploy the Worker using its bucket-scoped R2 tokens or its Pages-only token.
+Local releases deploy the Worker by default. A deployment credential with
+Workers Scripts and Workers Routes permission allows CI to use the same path
+by removing the verify-only setting.
+Native Pages rollback also checks both existing routes before restoring the
+saved Pages deployment. Keep this independent Worker and binding through rollback.

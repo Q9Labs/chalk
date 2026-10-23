@@ -47,6 +47,8 @@
     "scripts/transcription-dispatcher/emit-manifest.mjs",
     "scripts/transcription-dispatcher/source-state.mjs",
     "scripts/deploy/verify-web-deploy.mjs",
+    "scripts/deploy/verify-vendor-store.mjs",
+    "apps/web/scripts/prepare-vendor-store.ts",
     "apps/web/tests/dashboard-ui/*.mjs",
     "apps/web/tests/selfhost-assets/*.mjs",
     "apps/web/public/fonts/*.css",

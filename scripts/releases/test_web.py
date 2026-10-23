@@ -58,10 +58,11 @@ class PagesRollback(unittest.TestCase):
                     host = rejected_hosts.get(case, '127.0.0.1')
                     with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://{host}:{server.server_port}', NO_PROXY='*', no_proxy='*',
                                     CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='example-token',
-                                    GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(stdout):
+                                    GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(stdout), patch.object(web.subprocess, 'run') as probe:
                         if case in ('restore', 'already-live'):
                             web.rollback('example-project', 'saved')
                             self.assertEqual(output.read_text(), 'pages_deployment_id=saved\n')
+                            self.assertTrue(probe.call_args.args[0][1].endswith('/verify-vendor-store.mjs'))
                         else:
                             with self.assertRaises((ValueError, KeyError, web.urllib.error.HTTPError)) as failure:
                                 web.rollback('example-project', 'saved')
@@ -122,10 +123,11 @@ class PagesRollback(unittest.TestCase):
             with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://127.0.0.1:{target.server_port}',
                             HTTP_PROXY=proxy_url, http_proxy=proxy_url, NO_PROXY='', no_proxy='',
                             CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='dummy-token',
-                            GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(io.StringIO()):
+                            GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(io.StringIO()), patch.object(web.subprocess, 'run') as probe:
                 web.rollback('example-project', 'saved')
             self.assertEqual(received, [('target', 'Bearer dummy-token')] * 2)
             self.assertEqual(output.read_text(), 'pages_deployment_id=saved\n')
+            self.assertTrue(probe.call_args.args[0][1].endswith('/verify-vendor-store.mjs'))
 
 
     def test_override_does_not_follow_redirect(self):
@@ -169,7 +171,7 @@ class PagesRollback(unittest.TestCase):
                 stdout = io.StringIO()
                 with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://127.0.0.1:{redirect.server_port}',
                                 CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='dummy-token',
-                                GITHUB_OUTPUT=str(output), NO_PROXY='*', no_proxy='*'), contextlib.redirect_stdout(stdout):
+                                GITHUB_OUTPUT=str(output), NO_PROXY='*', no_proxy='*'), contextlib.redirect_stdout(stdout), patch.object(web.subprocess, 'run'):
                     with self.assertRaises(ValueError) as failure:
                         web.rollback('example-project', 'saved')
                     if isinstance(failure.exception.__cause__, web.urllib.error.HTTPError):
@@ -194,19 +196,24 @@ def legacy_artifact(target):
 
 @patch.dict(os.environ, CLOUDFLARE_ACCOUNT_ID='fixture-account', GITHUB_REPOSITORY='fixture/repository')
 class WebVendorStore(unittest.TestCase):
+    def test_worker_probe_failure_stops_native_pages_rollback(self):
+        with patch.object(web.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'verify-vendor-store')), patch.object(web, 'pages', return_value={'id': 'saved'}) as pages, patch.object(web, 'current', return_value='saved'), patch.object(web, 'outputs'):
+            with self.assertRaises(subprocess.CalledProcessError):
+                web.rollback('chalk', 'saved')
+            pages.assert_not_called()
+
     def test_legacy_archives_deploy_without_an_asset_manifest(self):
-        real_run = subprocess.run
-        for target, bucket in [('production', 'chalk-vendor-assets'), ('nightly', 'chalk-vendor-assets-nightly')]:
+        for target in ['production', 'nightly']:
             with self.subTest(target=target):
                 def execute(args, **kwargs):
-                    if args[1].endswith('/upload-vendor-assets.ts'):
-                        return real_run(args, **kwargs)
+                    if args[1].endswith('/prepare-vendor-store.ts'):
+                        self.assertEqual(os.listdir(args[args.index('--directory') + 1]), ['release.json'])
                     return subprocess.CompletedProcess(args, 0)
 
                 with patch.object(web.GitHub, 'artifact', return_value=legacy_artifact(target)), patch.object(web.subprocess, 'run', side_effect=execute) as run:
                     web.deploy(target, SHA, '1', {'sha256': 'b' * 64, 'artifact_id': '2'}, 'fixture-project')
                 publish, upload, verify = [call.args[0] for call in run.call_args_list]
-                self.assertEqual(publish[-2:], ['--bucket', bucket])
+                self.assertEqual(publish[-2:], ['--target', target])
                 self.assertEqual(upload[1:4], ['pages', 'deploy', 'dist/client'])
                 self.assertIn(web.public_config(target, SHA)['VITE_PUBLIC_APP_URL'], verify)
 
@@ -215,7 +222,7 @@ class WebVendorStore(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 web.deploy('production', SHA, '1', {'sha256': 'b' * 64, 'artifact_id': '2'}, 'fixture-project')
             self.assertEqual(run.call_count, 1)
-            self.assertTrue(run.call_args.args[0][1].endswith('/upload-vendor-assets.ts'))
+            self.assertTrue(run.call_args.args[0][1].endswith('/prepare-vendor-store.ts'))
 
 
 if __name__ == '__main__':
