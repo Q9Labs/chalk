@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
@@ -640,6 +641,8 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErr, true
 	}
 	switch {
+	case errors.Is(err, spaces.ErrInvalidSpaceName):
+		return apiErrorInvalidRequest, true
 	case errors.Is(err, publicinvites.ErrInvalidToken), errors.Is(err, publicinvites.ErrUnknownKey), errors.Is(err, publicinvites.ErrInvalidHandle), errors.Is(err, publicinvites.ErrInvalidGeneration), errors.Is(err, publicinvites.ErrInvalidKeyID), errors.Is(err, publicinvites.ErrInvalidPayload), errors.Is(err, publicinvites.ErrTokenTooLarge), errors.Is(err, publicinvites.ErrInviteNotFound), errors.Is(err, publicinvites.ErrInviteUnavailable), errors.Is(err, publicinvites.ErrAutoLifecycleNotFound):
 		return apiErrorPublicInviteUnavailable, true
 	case errors.Is(err, publicinvites.ErrAdmissionRequestNotFound):

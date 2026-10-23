@@ -176,7 +176,7 @@ func limitReportQuota(options RateLimitOptions, policy ratelimit.Policy, key fun
 			decision := options.Limiter.Allow(r.Context(), key(r), policy, now())
 			if decision.State != ratelimit.Allowed {
 				writeRateLimitHeaders(w, policy, decision)
-				writeAPIError(w, rateLimitFailure(w, decision))
+				writeAPIError(w, rateLimitFailure(r.Context(), w, policy, decision))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -203,7 +203,7 @@ func limitReportEpisode(options RateLimitOptions) func(http.Handler) http.Handle
 			decision := options.Limiter.Allow(r.Context(), "episode:"+subject.TenantID.String()+":"+subject.EpisodeID.String(), reportEpisodeLimit, now())
 			if decision.State != ratelimit.Allowed {
 				writeRateLimitHeaders(w, reportEpisodeLimit, decision)
-				writeAPIError(w, rateLimitFailure(w, decision))
+				writeAPIError(w, rateLimitFailure(r.Context(), w, reportEpisodeLimit, decision))
 				return
 			}
 			next.ServeHTTP(w, r)

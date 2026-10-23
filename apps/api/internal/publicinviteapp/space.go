@@ -74,8 +74,12 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 		return publicinvites.PublicSpace{}, fmt.Errorf("resolve managed Tenant for public Space: %w", err)
 	}
 
+	name := []rune(strings.TrimSpace(input.DisplayName))
+	if len(name) > spaces.MaxNameCodePoints {
+		name = name[:spaces.MaxNameCodePoints]
+	}
 	created, err := a.spaces.CreateSpace(ctx, spaces.CreateSpaceInput{
-		Name:                          strings.TrimSpace(input.DisplayName),
+		Name:                          string(name),
 		TenantID:                      a.config.ManagedTenantID,
 		Slug:                          publicSpaceSlug(input.RequestKey),
 		MediaPlane:                    a.config.DefaultMediaPlane,
