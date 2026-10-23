@@ -22,7 +22,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       owner: "q9labs",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "3.0.1",
+      version: "3.0.3",
       // The call turns to landscape; Home stays usable in either.
       orientation: "default",
       icon: "./assets/icon.png",
@@ -41,7 +41,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         jsEngine: "jsc",
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "33",
+        buildNumber: "36",
         associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
         entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
         infoPlist: {
@@ -54,7 +54,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 35,
+        versionCode: 37,
         adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
         intentFilters: [
           {
