@@ -128,20 +128,20 @@ accounts even if their emails match. There is no account linking or migration.
 Set all values per Pages environment; never expose credentials through `VITE_*`.
 `config.ts` validates these bindings:
 
-| Value                         | Meaning                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------ |
-| `CHALK_ENVIRONMENT`           | `local`, `test`, `staging`, or `production`; identity namespace          |
-| `CHALK_API_ORIGIN`            | Engine URL; HTTPS required outside local/test                            |
-| `DASHBOARD_ORIGIN`            | Exact dashboard origin, no trailing slash; HTTPS outside local/test      |
-| `DASHBOARD_IDENTITY_PROVIDER` | `oauth` (default) or `fixture` (local/test only)                         |
-| `GOOGLE_CLIENT_ID`            | Google's web OAuth client ID                                             |
-| `GOOGLE_CLIENT_SECRET`        | Secret web-client credential                                             |
-| `APPLE_SERVICES_ID`           | Apple's web Services ID, not an app bundle ID                            |
-| `APPLE_TEAM_ID`               | Apple developer team ID                                                  |
-| `APPLE_KEY_ID`                | ID of the Sign in with Apple signing key                                 |
-| `APPLE_PRIVATE_KEY`           | Secret PKCS#8 PEM Apple key (preserve actual newlines)                   |
-| `SESSION_SECRET`              | Secret, at least 32 random characters; rotation invalidates all cookies  |
-| `DASHBOARD_SERVICE_TOKEN`     | Secret constrained engine service bearer, never System or a user API key |
+| Value                         | Meaning                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `CHALK_ENVIRONMENT`           | `local`, `test`, `staging`, `nightly`, or `production`; identity namespace |
+| `CHALK_API_ORIGIN`            | Engine URL; HTTPS required outside local/test                              |
+| `DASHBOARD_ORIGIN`            | Exact dashboard origin, no trailing slash; HTTPS outside local/test        |
+| `DASHBOARD_IDENTITY_PROVIDER` | `oauth` (default) or `fixture` (local/test only)                           |
+| `GOOGLE_CLIENT_ID`            | Google's web OAuth client ID                                               |
+| `GOOGLE_CLIENT_SECRET`        | Secret web-client credential                                               |
+| `APPLE_SERVICES_ID`           | Apple's web Services ID, not an app bundle ID                              |
+| `APPLE_TEAM_ID`               | Apple developer team ID                                                    |
+| `APPLE_KEY_ID`                | ID of the Sign in with Apple signing key                                   |
+| `APPLE_PRIVATE_KEY`           | Secret PKCS#8 PEM Apple key (preserve actual newlines)                     |
+| `SESSION_SECRET`              | Secret, at least 32 random characters; rotation invalidates all cookies    |
+| `DASHBOARD_SERVICE_TOKEN`     | Secret constrained engine service bearer, never System or a user API key   |
 
 The fixture still needs placeholder provider values but never uses credentials.
 Production Functions reject fixture mode even with a local environment setting.
