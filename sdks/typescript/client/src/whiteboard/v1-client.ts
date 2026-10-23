@@ -642,7 +642,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       this.#removeAccessChange(operationId);
       this.#clearOperationRetryTimer(operationId);
       entry.deferred && rejectDeferred(entry.deferred, error(policyUnavailable()));
-      void this.#store.remove(operationId).catch(() => undefined);
+      this.#discardStoredOperation(operationId);
     }
     return dropped.length > 0;
   }
@@ -766,7 +766,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     // The client fell back to a Sync without draw_policy_v1 during the save, which already refused the change.
     if (!this.#accessChanges.includes(change)) {
-      void this.#store.remove(pending.operationId).catch(() => undefined);
+      this.#discardStoredOperation(pending.operationId);
       return;
     }
     change.state = "ready";
@@ -783,11 +783,17 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       return undefined;
     } catch (cause) {
       // A store can fail after it wrote, and a stored operation the client forgot would replay on the next start.
-      void this.#store.remove(pending.operationId).catch(() => undefined);
+      this.#discardStoredOperation(pending.operationId);
       return error(failure(operationName(pending.frame), "unavailable", true, "Unable to persist the whiteboard operation."), cause);
     } finally {
       if (storeWrite) this.#pendingStoreWrites.delete(storeWrite);
     }
+  }
+
+  #discardStoredOperation(operationId: string): void {
+    const cleanup = this.#store.remove(operationId).catch(() => undefined);
+    this.#pendingStoreWrites.add(cleanup);
+    void cleanup.finally(() => this.#pendingStoreWrites.delete(cleanup));
   }
 
   #commit(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "commit" }>): void {

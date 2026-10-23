@@ -1743,3 +1743,208 @@ function sentFrames(socket: TestSocket | undefined, ...types: string[]) {
 function helloExtensions(socket: TestSocket | undefined): readonly unknown[] {
   return sentFrames(socket)[0]?.extensions ?? [];
 }
+it("judge: a saved first change stays ahead when a later save rejects in the same turn", async () => {
+  const { pendingStore, saves } = heldPolicyStore("before");
+  const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
+  const changes = [client.setDrawPolicy("hosts"), client.setDrawPolicy("picked"), client.setDrawPolicy("everyone")];
+  for (const change of changes) void change.catch(() => undefined);
+  try {
+    await settle();
+    saves[2]?.resolve();
+    await settle();
+    expect(sentPolicies(sockets[0])).toEqual([]);
+    saves[0]?.resolve();
+    saves[1]?.reject(new Error("disk full"));
+    await settle();
+    const initialOrder = sentPolicies(sockets[0]);
+    commit(sockets[0], sentFrames(sockets[0], "set_draw_policy").at(-1).operation_id, "1");
+    await settle();
+    const completeOrder = sentPolicies(sockets[0]);
+    commit(sockets[0], sentFrames(sockets[0], "set_draw_policy").at(-1).operation_id, "2");
+    await expect(changes[0]).resolves.toBeUndefined();
+    await expect(changes[1]).rejects.toMatchObject({ code: "unavailable" });
+    await expect(changes[2]).resolves.toBeUndefined();
+    expect({ initialOrder, completeOrder }).toEqual({ initialOrder: ["hosts"], completeOrder: ["hosts", "everyone"] });
+  } finally {
+    for (const save of saves) save.resolve();
+    await client.stopSceneSubscription();
+  }
+});
+
+it("judge: a stale receipt after welcome cannot release the next access slot", async () => {
+  const clock = new ManualClock();
+  const { client, sockets } = await hostClient(clock);
+  try {
+    const a = client.setDrawPolicy("hosts");
+    const b = client.setDrawPolicy("picked");
+    await settle();
+    const first = sentFrames(sockets[0], "set_draw_policy")[0].operation_id;
+    commit(sockets[0], first, "1");
+    await a;
+    await settle();
+    sockets[0]?.close(1006);
+    await redial(clock, sockets, 1);
+    sockets[1]?.receive(welcome());
+    await settle();
+    expect(sentPolicies(sockets[1])).toEqual(["picked"]);
+    commit(sockets[1], first, "1");
+    await settle();
+    expect(sentPolicies(sockets[1])).toEqual(["picked"]);
+    commit(sockets[1], sentFrames(sockets[1], "set_draw_policy")[0].operation_id, "2");
+    await b;
+  } finally {
+    await client.stopSceneSubscription();
+  }
+});
+
+it("judge: final failure while the next save is pending releases exactly one slot", async () => {
+  const q = await twoQueuedPolicyChanges();
+  try {
+    q.sockets[0]?.receive({ type: "operation_error", correlation_id: q.first(), operation: "set_draw_policy", code: "permission_denied", recoverable: false, message: "Permission denied." });
+    await settle();
+    expect(sentPolicies(q.sockets[0])).toEqual(["hosts"]);
+    q.saves[1]?.resolve();
+    await settle();
+    expect(sentPolicies(q.sockets[0])).toEqual(["hosts", "picked"]);
+    commit(q.sockets[0], sentFrames(q.sockets[0], "set_draw_policy").at(-1).operation_id, "2");
+    await expect(q.changes[0]).rejects.toMatchObject({ code: "permission_denied" });
+    await expect(q.changes[1]).resolves.toBeUndefined();
+  } finally {
+    for (const save of q.saves) save.resolve();
+    await q.client.stopSceneSubscription();
+  }
+});
+
+it("judge: a failed later save does not resend an access change already awaiting its receipt", async () => {
+  let saves = 0;
+  const secondSave = Promise.withResolvers<void>();
+  const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+    override async put(operation: Parameters<InMemoryChalkWhiteboardV1PendingOperationStore["put"]>[0]): Promise<void> {
+      if (operation.frame.type === "set_draw_policy" && ++saves === 2) await secondSave.promise;
+      await super.put(operation);
+    }
+  })();
+  const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { pendingStore });
+  const sent = () => (sockets[0]?.sent ?? []).map((wire) => JSON.parse(wire)).filter((frame) => frame.type === "set_draw_policy");
+  try {
+    sockets[0]?.receive({ type: "draw_access", policy: "everyone", can_draw: true, capabilities: ["drawWhiteboard", "manageWhiteboard"], grants: [] });
+    await settle();
+    const first = client.setDrawPolicy("hosts");
+    void first.catch(() => undefined);
+    await settle();
+    expect(sent()).toHaveLength(1);
+    const second = client.setDrawPolicy("picked");
+    void second.catch(() => undefined);
+    await settle();
+    secondSave.reject(new Error("disk full"));
+    await expect(second).rejects.toMatchObject({ code: "unavailable" });
+    await settle();
+    expect(sent()).toHaveLength(1);
+  } finally {
+    secondSave.resolve();
+    await client.stopSceneSubscription();
+  }
+});
+
+it("judge: a failed save cannot replay after restart while its deletion is still pending", async () => {
+  const deletion = Promise.withResolvers<void>();
+  let failedId: string | undefined;
+  let writes = 0;
+  const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+    override async put(operation: ChalkWhiteboardV1PendingOperation): Promise<void> {
+      await super.put(operation);
+      if (++writes === 1) {
+        failedId = operation.operationId;
+        throw new Error("disk failed after writing");
+      }
+    }
+    override async remove(operationId: string): Promise<void> {
+      if (operationId === failedId) await deletion.promise;
+      await super.remove(operationId);
+    }
+  })();
+  const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
+  let restart: Promise<void> | undefined;
+  try {
+    await expect(client.setDrawPolicy("hosts")).rejects.toMatchObject({ code: "unavailable" });
+    const later = client.setDrawPolicy("everyone");
+    await settle();
+    expect(sentPolicies(sockets[0])).toEqual(["everyone"]);
+    commit(sockets[0], sentFrames(sockets[0], "set_draw_policy")[0].operation_id, "2");
+    await later;
+    let stopped = false;
+    const stopping = client.stopSceneSubscription().then(() => {
+      stopped = true;
+    });
+    void stopping.catch(() => undefined);
+    restart = client.startSceneSubscription();
+    void restart.catch(() => undefined);
+    await settle();
+    expect(stopped).toBe(false);
+    expect(sockets).toHaveLength(1);
+    deletion.resolve();
+    await stopping;
+    await settle();
+    sockets[1]?.open();
+    await settle();
+    sockets[1]?.receive(welcome());
+    await settle();
+    expect(sentPolicies(sockets[1])).toEqual([]);
+    sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+    await restart;
+    expect(await pendingStore.load()).toEqual([]);
+  } finally {
+    deletion.resolve();
+    await settle();
+    await client.stopSceneSubscription();
+    await restart?.catch(() => undefined);
+  }
+});
+
+it("judge: an old-Sync refusal cannot replay after restart while its deletion is still pending", async () => {
+  const deletion = Promise.withResolvers<void>();
+  const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+    override async remove(operationId: string): Promise<void> {
+      await deletion.promise;
+      await super.remove(operationId);
+    }
+  })();
+  const clock = new ManualClock();
+  const { client, sockets } = await hostClient(clock, { pendingStore });
+  let restart: Promise<void> | undefined;
+  try {
+    const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
+    sockets[1]?.close(1009, "invalid whiteboard frame");
+    await redial(clock, sockets, 2);
+    sockets[2]?.receive(welcome());
+    await settle();
+    await expect(change).rejects.toMatchObject({ code: "unavailable" });
+    expect(sentPolicies(sockets[2])).toEqual([]);
+    let stopped = false;
+    const stopping = client.stopSceneSubscription().then(() => {
+      stopped = true;
+    });
+    void stopping.catch(() => undefined);
+    restart = client.startSceneSubscription();
+    void restart.catch(() => undefined);
+    await settle();
+    expect(stopped).toBe(false);
+    expect(sockets).toHaveLength(3);
+    deletion.resolve();
+    await stopping;
+    await settle();
+    sockets[3]?.open();
+    await settle();
+    sockets[3]?.receive(welcome());
+    await settle();
+    expect(sentPolicies(sockets[3])).toEqual([]);
+    sockets[3]?.receive(snapshotPage(sockets[3]?.requestId()));
+    await restart;
+    expect(await pendingStore.load()).toEqual([]);
+  } finally {
+    deletion.resolve();
+    await settle();
+    await client.stopSceneSubscription();
+    await restart?.catch(() => undefined);
+  }
+});
