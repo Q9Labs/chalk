@@ -438,6 +438,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           Effect.tapError(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed" }))),
         );
       };
+      const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
+        const confirmEntered = sync.confirmEntered?.bind(sync);
+        return confirmEntered ? trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed")) : Effect.void;
+      };
       const performJoin = (reason: "join" | "access_retry" = "join", retried = false): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           if (model.state === "live") return;
@@ -505,8 +509,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               { concurrency: "unbounded", discard: true },
             );
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const confirmEntered = sync.confirmEntered?.bind(sync);
-            if (confirmEntered) yield* trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed"));
+            yield* confirmSyncEntry(sync);
           }).pipe(
             Effect.matchEffect({
               onFailure: (cause) =>
@@ -850,6 +853,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               else if (attempt.client === sync) attempt.started = true;
             }),
           ).pipe(
+            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000))),
+            Effect.andThen(Effect.suspend(() => (sync === model.sync && model.epoch === epoch && active(model) ? confirmSyncEntry(sync) : Effect.fail(lifecycleFailure("invalid_state", false, "Sync recovery was superseded"))))),
             Effect.tapError(() =>
               enqueue(
                 Effect.gen(function* () {
@@ -862,7 +867,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               ),
             ),
           );
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
         });
       const handleSyncSnapshot = (sync: ConnectionSyncClient, snapshot: V1EpisodeSnapshot): Effect.Effect<void> =>
         Effect.gen(function* handleSyncSnapshotEffect() {

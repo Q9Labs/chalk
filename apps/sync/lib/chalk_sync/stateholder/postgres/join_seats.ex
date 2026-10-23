@@ -3,7 +3,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   Pending -> joined only on explicit entry after Sync and SFU startup.
   Failed startup remains cancellable until then.
   The Episode authority lock serializes each transition with lifecycle events.
-  Absence of a seat row retains the previous admission protocol during rollout.
+  A live entry lazily acquires ownership storage for participants predating seats.
   """
 
   alias ChalkSync.Stateholder.Postgres.Authority
@@ -13,6 +13,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
   # Episode authority is always acquired before Episode, participant, and seat.
   def admit_entry(connection, identity, requested) do
+    requested = if requested == :legacy, do: :new, else: requested
     Transaction.configure(connection)
     Authority.lock_control(connection, identity.episode)
     policy = Authority.lock_episode(connection, identity.episode)
@@ -26,11 +27,26 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
     if policy.status == "active" && participant &&
          participant.status in ["joining", "active", "leaving"] do
+      ensure_seat(connection, identity, participant.status)
       allocate_entry(connection, identity, requested)
     else
       # Recovery distinguishes expired admission from cancellation and departure.
       identity
     end
+  end
+
+  defp ensure_seat(connection, identity, status) do
+    Postgrex.query!(
+      connection,
+      """
+      insert into participant_join_seats
+        (tenant_id,space_id,episode_id,participant_id,generation,state,expires_at)
+      values ($1,$2,$3,$4,$5,$6,clock_timestamp()+interval '120 seconds')
+      on conflict (participant_id) do nothing
+      """,
+      Scope.participant(identity) ++
+        [identity.participant_generation, if(status == "joining", do: "pending", else: "joined")]
+    )
   end
 
   defp allocate_entry(connection, identity, requested) do
@@ -47,7 +63,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
            params
          ).rows do
       [] ->
-        identity
+        Postgrex.rollback(connection, {:error, :invalid_admission_intent})
 
       [[issued]] ->
         generation =

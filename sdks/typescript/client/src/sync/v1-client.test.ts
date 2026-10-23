@@ -417,6 +417,13 @@ describe("V1SyncClient", () => {
       replacement.socket.receive({ type: "entered_ack" });
       replacement.socket.receive({ type: "pong" });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      replacement.client.restartTransport();
+      await vi.waitFor(() => expect(replacement.urls).toHaveLength(2));
+      expect(new URL(replacement.urls[1]!).searchParams.get("entry_generation")).toBe("8");
+      replacement.socket.open();
+      await settle();
+      await recoverSocket(replacement.client, replacement.socket, replacement.state, await wireSnapshot(baseState()), "up_to_date", true, 8);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
       expect(first.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
       expect(replacement.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
 
@@ -424,6 +431,7 @@ describe("V1SyncClient", () => {
       await vi.waitFor(() => expect(replacement.socket.frames().some((frame) => frame.type === "operation" && frame.name === "participant_leave")).toBe(true));
       const operation = replacement.socket.frames().find((frame) => frame.type === "operation" && frame.name === "participant_leave");
       if (!operation) throw new Error("Replacement did not send Leave");
+      expect(first.socket.frames().some((frame) => frame.type === "operation" && frame.name === "participant_leave")).toBe(false);
       replacement.socket.receive({ type: "ack", command_id: operation.command_id, delivery: "original", outcome: "satisfied", revision: replacement.state.revision, state_digest: replacement.state.stateDigest });
       await leaving;
       expect(client.getSnapshot().connection.status).toBe("left");

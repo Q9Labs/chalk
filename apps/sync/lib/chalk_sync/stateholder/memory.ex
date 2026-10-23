@@ -174,10 +174,11 @@ defmodule ChalkSync.Stateholder.Memory do
 
     generations = Map.get(state, :entry_generations, %{})
     issued = Map.get(generations, key, 0)
-    generation = if requested == :new, do: issued + 1, else: requested
+    allocate? = requested in [:new, :legacy]
+    generation = if allocate?, do: issued + 1, else: requested
 
     if is_integer(generation) && generation > 0 &&
-         generation <= issued + if(requested == :new, do: 1, else: 0) do
+         generation <= issued + if(allocate?, do: 1, else: 0) do
       next = Map.put(generations, key, max(issued, generation))
 
       {:reply, {:ok, %{identity | entry_generation: generation}},

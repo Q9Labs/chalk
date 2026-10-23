@@ -74,6 +74,23 @@ defmodule ChalkSync.LegacyEntryPostgresTest do
     assert_generation(connection, identity, 1)
   end
 
+  @tag :published_legacy_entry
+  test "a mismatched stored seat cannot admit an identity without ownership", %{
+    connection: connection
+  } do
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    prepare_storage(connection, fixture, :seated)
+
+    Postgrex.query!(
+      connection,
+      "update participant_join_seats set generation=2 where participant_id=$1",
+      [UUID.dump!(fixture.identity.participant_id)]
+    )
+
+    assert {:error, :invalid_admission_intent} = Postgres.admit_entry(fixture.identity, :new)
+  end
+
   defp prepare_storage(_connection, _fixture, :pending), do: :ok
 
   defp prepare_storage(_connection, fixture, :active) do

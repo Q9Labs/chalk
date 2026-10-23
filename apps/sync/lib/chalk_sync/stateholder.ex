@@ -33,7 +33,7 @@ defmodule ChalkSync.Stateholder do
   @callback confirm_admission(Identity.t()) ::
               {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
 
-  @callback admit_entry(Identity.t(), :new | pos_integer()) ::
+  @callback admit_entry(Identity.t(), :new | :legacy | pos_integer()) ::
               {:ok, Identity.t()} | {:error, atom()} | {:retryable, atom()}
   @callback prepare_entry_leave(EpisodeKey.t(), String.t()) :: :ready | :pending | :superseded
   @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
@@ -154,7 +154,6 @@ defmodule ChalkSync.Stateholder do
     result
   end
 
-  def admit_entry(%Identity{} = identity, :legacy), do: impl().admit_entry(identity, :new)
   def admit_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
   def admit_entry(%Identity{} = identity, requested), do: impl().admit_entry(identity, requested)
 

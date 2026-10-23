@@ -36,7 +36,10 @@ ownership only forward and voids older pending Leaves. Acceptance and completion
 both fence a Leave against the confirmed generation, so reattaching the same
 seat cannot let the previous mount remove it. Previous Sync ignores this query.
 Legacy sockets receive a server generation internally without changing their
-welcome frame, and still confirm at hello. A claimed Leave blocks later entry
+welcome frame, and still confirm at hello. Participants created before seat
+storage acquire it on their first live hello. When recovery replaces the Sync
+client, it confirms the replacement entry before reporting recovery complete.
+A claimed Leave blocks later entry
 admission until its provider work settles. An entry admitted before that claim
 defers the older provider work until confirmation or its two-minute startup
 lease expires, preventing old cleanup from closing the new entry's media.
