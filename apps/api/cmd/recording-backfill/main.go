@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,8 +22,13 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type report struct {
@@ -47,7 +53,7 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, args []string, out io.Writer) error {
+func run(ctx context.Context, args []string, out io.Writer) (runErr error) {
 	flags := flag.NewFlagSet("recording-backfill", flag.ContinueOnError)
 	batchSize := flags.Int("batch-size", 0, "required: inspect at most 1-100 captures")
 	apply := flags.Bool("apply", false, "queue verified captures; default is a read-only dry run")
@@ -73,6 +79,34 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if url == "" {
 		return errors.New("CHALK_DATABASE_URL required")
 	}
+	journeyID, err := utilities.NewID()
+	if err != nil {
+		return errors.New("allocate backfill journey identity")
+	}
+	ctx = observability.ContextWithJourneyID(ctx, journeyID)
+	endpoint := strings.TrimSpace(os.Getenv(config.APIOTLPEndpoint))
+	telemetry, err := observability.Start(ctx, observability.Config{
+		Environment: os.Getenv(config.APIEnvironment), Service: "chalk-recording-backfill", Version: os.Getenv(config.APIVersion),
+		OTLPEndpoint: endpoint, OTLPInsecure: strings.EqualFold(os.Getenv(config.APIOTLPInsecure), "true"),
+	})
+	if err != nil {
+		return fmt.Errorf("start backfill telemetry: %w", err)
+	}
+	shutdownTracing := telemetry.Shutdown
+	if endpoint == "" {
+		// Keep durable trace links even for local runs without an exporter.
+		provider := sdktrace.NewTracerProvider()
+		otel.SetTracerProvider(provider)
+		shutdownTracing = provider.Shutdown
+	}
+	defer func() {
+		shutdownCtx, cancel := observability.TelemetryShutdownContext()
+		defer cancel()
+		runErr = errors.Join(runErr, shutdownTracing(shutdownCtx))
+	}()
+	tracer := otel.Tracer("github.com/q9labs/chalk/apps/api/cmd/recording-backfill")
+	ctx, batchSpan := tracer.Start(ctx, "recording.render.backfill", trace.WithAttributes(attribute.String("chalk.journey.id", journeyID.String())))
+	defer batchSpan.End()
 	poolConfig, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return errors.New("invalid database configuration")
@@ -137,9 +171,16 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return errors.New("allocate backfill job identity")
 		}
-		job, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{
+		queueCtx, queueSpan := tracer.Start(ctx, "recording.render.backfill.queue", trace.WithAttributes(
+			attribute.String("recording.id", recordingID.String()), attribute.String("recording.job.id", jobID.String()),
+		))
+		job, err := repository.QueueBackfillRender(queueCtx, recordingpipeline.ExportInput{
 			TenantID: utilities.IDFromBytes(candidate.TenantID.Bytes), RecordingID: recordingID,
 		}, jobID)
+		if err != nil {
+			queueSpan.RecordError(databaseFailure("queue backfill render", err))
+		}
+		queueSpan.End()
 		if errors.Is(err, recordingpipeline.ErrExportUnavailable) {
 			result.Recoverable--
 			result.NoLongerEligible++

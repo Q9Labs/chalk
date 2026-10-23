@@ -1,11 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { developerRecordingChecks } from "./developer-recording-checks.mjs";
+import { browserFixture } from "./browser-fixture.mjs";
 
-const [playwrightPath, origin] = process.argv.slice(2);
-const { chromium } = await import(playwrightPath);
-const browser = await chromium.launch({ ...(process.env.DASHBOARD_BROWSER_PATH ? { executablePath: process.env.DASHBOARD_BROWSER_PATH } : {}), headless: true });
-const fixture = (query) => fetch(`${origin}/__fixture/${query}`).then((response) => response.json());
+const { browser, origin, fixture } = await browserFixture();
 const evidence = process.env.DASHBOARD_DEVELOPER_EVIDENCE;
 const results = [];
 try {

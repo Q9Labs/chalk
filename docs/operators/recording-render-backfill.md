@@ -6,6 +6,10 @@ existing failed job or renews retention. Deployment never runs this backfill.
 
 Inject `CHALK_DATABASE_URL` and the normal `CHALK_R2_*` configuration through the
 operator environment. Do not paste credentials into arguments or logs.
+The command uses `CHALK_API_OTLP_ENDPOINT` and `CHALK_API_OTLP_INSECURE` for
+the normal telemetry exporter. Each queued job's journey event links to its
+backfill span. Without an endpoint, local runs retain trace and span IDs in the
+ledger but do not export telemetry.
 
 ## Inspect one batch
 

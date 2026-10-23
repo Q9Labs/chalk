@@ -1,11 +1,9 @@
 import { installClock } from "./browser-clock.mjs";
 import { recordingChecks } from "./recording-checks.mjs";
+import { browserFixture } from "./browser-fixture.mjs";
 import { resolve } from "node:path";
 
-const [playwrightPath, origin] = process.argv.slice(2);
-const { chromium } = await import(playwrightPath);
-const browser = await chromium.launch({ ...(process.env.DASHBOARD_BROWSER_PATH ? { executablePath: process.env.DASHBOARD_BROWSER_PATH } : {}), headless: true });
-const fixture = (query) => fetch(`${origin}/__fixture/${query}`).then((response) => response.json());
+const { browser, origin, fixture } = await browserFixture();
 const results = [];
 const errors = [];
 let sequence = 0;
