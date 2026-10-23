@@ -1,5 +1,5 @@
 import { Children, Fragment, isValidElement, type ReactNode } from "react";
-import type { Toast } from "./ToastStack";
+import type { ChalkToastProps } from "../chalk-ui/ChalkToast";
 
 /** Read literal text without mounting caller components or their interactive descendants. */
 function literalText(node: ReactNode): string {
@@ -10,6 +10,6 @@ function literalText(node: ReactNode): string {
   return typeof node === "object" && Symbol.iterator in node ? Children.toArray(node).map(literalText).join("") : "";
 }
 
-export function noticeAnnouncement(toast: Toast): string {
+export function noticeAnnouncement(toast: Pick<ChalkToastProps, "message" | "announcementText">): string {
   return toast.announcementText ?? literalText(toast.message);
 }

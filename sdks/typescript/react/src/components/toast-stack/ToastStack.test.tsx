@@ -91,7 +91,7 @@ it("clears a disabled fold callback and initializes its replacement with unchang
     await call.render(toasts, { onFold: first });
     expect(first).toHaveBeenLastCalledWith(["error"]);
     await call.render(toasts, { onFold: second });
-    expect(first).toHaveBeenLastCalledWith([]);
+    expect(first).toHaveBeenCalledOnce();
     expect(second).toHaveBeenLastCalledWith(["error"]);
     await call.render(toasts, {});
     expect(second).toHaveBeenLastCalledWith([]);

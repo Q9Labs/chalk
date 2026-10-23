@@ -10,7 +10,11 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
   const current = fit?.source === source;
   useLayoutEffect(() => {
     const node = stack.current;
-    if (!enabled || !node) return;
+    if (!enabled) {
+      setFit(null);
+      return;
+    }
+    if (!node) return;
     const elements = [...node.children].filter((child): child is HTMLElement => child instanceof HTMLElement);
     const dimensions = () => {
       const style = getComputedStyle(node);

@@ -6,10 +6,6 @@ import { noticeAnnouncement } from "./notice-announcement";
 import { useToastCapacity } from "./useToastCapacity";
 export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
   readonly id: string;
-  /** Stable semantic identity for rich message content. Change it when the message changes. */
-  readonly announcementKey?: string;
-  /** Plain speech text for custom message components. Literal text and markup are read without mounting them. */
-  readonly announcementText?: string;
 }
 export interface ToastStackProps {
   readonly toasts: readonly Toast[];
@@ -48,10 +44,11 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
   const [unheard, setUnheard] = useState<readonly string[]>([]);
   const reported = useRef<readonly string[]>([]);
   const fold = useRef(onFold);
+  const reporting = useRef(false);
   useLayoutEffect(() => {
     const replacement = fold.current !== onFold;
     if (replacement) {
-      fold.current?.([]);
+      if (!onFold) fold.current?.([]);
       fold.current = onFold;
     }
     if (!capacity.ready) return;
@@ -65,7 +62,15 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
     else if (kept.length < unheard.length) setUnheard(kept);
     const unchanged = sameIds(reported.current, foldedIds);
     if (!unchanged) reported.current = foldedIds;
-    if (replacement || !unchanged) fold.current?.(reported.current);
+    // A callback can update its host and be recreated by that update. Do not echo
+    // the same snapshot back during that notification's synchronous commit.
+    if (!unchanged || (replacement && !reporting.current)) {
+      reporting.current = true;
+      queueMicrotask(() => {
+        reporting.current = false;
+      });
+      fold.current?.(reported.current);
+    }
   });
   useLayoutEffect(
     () => () => {
