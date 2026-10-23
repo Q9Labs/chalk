@@ -555,6 +555,62 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       {:ok, _pollers} = Supervisor.restart_child(supervisor, Authority.Pollers)
     end
 
+    test "a hello while Authority is down closes with a retry, even when its poller still runs",
+         %{
+           state: state
+         } do
+      {:ok, initial} = SocketWhiteboardV1.init(%{})
+      Process.cancel_timer(initial.hello_timer)
+      supervisor = Authority.Supervisor
+      read(state)
+
+      [{poller, _value}] =
+        Registry.lookup(
+          ChalkSync.Episodes.Registry,
+          {:whiteboard_authority, EpisodeKey.authority_key(state.identity.episode)}
+        )
+
+      # A suspended supervisor holds open the restart window: Authority is gone, and the
+      # Episode's poller is still registered until the supervisor restarts both. The poller is
+      # suspended too, so a read that finds no table cannot end it first.
+      :ok = :sys.suspend(poller)
+      :ok = :sys.suspend(supervisor)
+
+      on_exit(fn ->
+        :sys.resume(supervisor)
+        # Queued behind the restart, so it returns once Authority and its pollers are back.
+        Supervisor.which_children(supervisor)
+      end)
+
+      authority = Process.whereis(Authority)
+      monitor = Process.monitor(authority)
+      Process.exit(authority, :kill)
+      assert_receive {:DOWN, ^monitor, :process, ^authority, :killed}
+      assert Process.alive?(poller)
+
+      assert {:stop, :normal, {1012, "dependency unavailable"}, closed} =
+               receive_frame(
+                 %{
+                   "type" => "hello",
+                   "protocol" => "whiteboard-v1",
+                   "token" => token(state.identity),
+                   "cursor" => nil
+                 },
+                 initial
+               )
+
+      assert closed.terminal == %{
+               close_code: 1012,
+               reason: :dependency_unavailable,
+               failure: "authority"
+             }
+
+      :ok = :sys.resume(poller)
+      :ok = :sys.resume(supervisor)
+      Supervisor.which_children(supervisor)
+      assert Process.whereis(Authority) not in [nil, authority]
+    end
+
     test "closes instead of sending a cursor after the Participant left", %{state: state} do
       access("active", "left")
       read(state)

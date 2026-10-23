@@ -27,6 +27,8 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @table __MODULE__
   @poll_ms 1_000
   @read_ms 1_000
+  # A hello or a check waits at most this long for this process to find or start the poller.
+  @watch_ms 1_000
   # Without a successful read for this long, sockets close so their clients reconnect.
   @stale_ms 3_000
 
@@ -49,17 +51,34 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @spec read_ms() :: pos_integer()
   def read_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_read_ms, @read_ms)
 
-  @doc "Keeps the Episode's access current while the calling socket is alive."
+  @doc """
+  Keeps the Episode's access current while the calling socket is alive. Every watch goes through
+  this process, so no socket goes live while it is down, even when the Episode's poller still runs.
+  """
   @spec watch(EpisodeKey.t()) :: :ok | {:error, :authority_unavailable}
-  def watch(%EpisodeKey{} = episode), do: Poller.watch(episode, self())
-
-  @doc false
-  def own(poller), do: GenServer.cast(__MODULE__, {:own, poller})
+  def watch(%EpisodeKey{} = episode) do
+    GenServer.call(__MODULE__, {:watch, episode, self()}, @watch_ms)
+  catch
+    :exit, _reason -> {:error, :authority_unavailable}
+  end
 
   @impl true
-  def handle_cast({:own, poller}, state) do
-    Process.monitor(poller)
-    {:noreply, state}
+  def handle_call({:watch, episode, socket}, _from, state) do
+    reply =
+      case Poller.find_or_start(episode) do
+        {:started, poller} ->
+          # Only this process starts pollers, so each one is monitored once, from its start.
+          Process.monitor(poller)
+          Poller.watch(poller, socket)
+
+        {:found, poller} ->
+          Poller.watch(poller, socket)
+
+        {:error, :authority_unavailable} = error ->
+          error
+      end
+
+    {:reply, reply, state}
   end
 
   @impl true

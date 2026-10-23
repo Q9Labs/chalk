@@ -8,16 +8,10 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Repository
 
-  def watch(episode, socket) do
-    with {:ok, poller} <- poller(episode) do
-      # A poller that is stopping drops this; the socket's next check finds no entry and watches again.
-      GenServer.cast(poller, {:watch, socket})
-    end
-  end
-
-  defp poller(episode) do
+  # Authority calls these, so it is the only way to a poller.
+  def find_or_start(episode) do
     case Registry.lookup(ChalkSync.Episodes.Registry, key(episode)) do
-      [{poller, _value}] -> {:ok, poller}
+      [{poller, _value}] -> {:found, poller}
       [] -> start(episode)
     end
   rescue
@@ -25,11 +19,14 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
     ArgumentError -> {:error, :authority_unavailable}
   end
 
+  # A poller that is stopping drops this; the socket's next check finds no entry and watches again.
+  def watch(poller, socket), do: GenServer.cast(poller, {:watch, socket})
+
   # The poller supervisor restarts just after Authority, so a start in that gap finds it missing.
   defp start(episode) do
     case DynamicSupervisor.start_child(Authority.Pollers, {__MODULE__, episode}) do
-      {:ok, poller} -> {:ok, poller}
-      {:error, {:already_started, poller}} -> {:ok, poller}
+      {:ok, poller} -> {:started, poller}
+      {:error, {:already_started, poller}} -> {:found, poller}
       {:error, _reason} -> {:error, :authority_unavailable}
     end
   catch
@@ -44,8 +41,6 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
 
   @impl true
   def init(episode) do
-    Authority.own(self())
-
     # No read has succeeded yet, so read_at stays nil and a failed read cannot make access fresh.
     {:ok, %{episode: episode, sockets: MapSet.new(), access: nil, read_at: nil},
      {:continue, :read}}
