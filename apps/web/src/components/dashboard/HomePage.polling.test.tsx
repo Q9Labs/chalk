@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act as reactAct, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act as testingLibraryAct, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -75,18 +75,37 @@ const checkedIds = () => {
   return query && "spaceIds" in query ? (query.spaceIds?.split(",") ?? []) : [];
 };
 
+let testAbort = new AbortController();
+let pendingReactWork = Promise.resolve();
+
 beforeEach(() => {
+  testAbort = new AbortController();
+  pendingReactWork = Promise.resolve();
   vi.useFakeTimers();
-  vi.clearAllMocks();
   vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 });
-afterEach(() => {
-  cleanup();
+afterEach(async () => {
+  // Vitest stops waiting on a timeout, but the test's async body is still running.
+  testAbort.abort();
+  await Promise.allSettled([pendingReactWork]);
+  await testingLibraryAct(async () => cleanup());
+  vi.clearAllTimers();
   vi.useRealTimers();
+  vi.resetAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+function reactAct(work: () => Promise<void>) {
+  const { signal } = testAbort;
+  pendingReactWork = (async () => {
+    signal.throwIfAborted();
+    await testingLibraryAct(work);
+    signal.throwIfAborted();
+  })();
+  return pendingReactWork;
+}
 
 async function tick(ms = 5000) {
   await reactAct(async () => {
@@ -105,8 +124,13 @@ async function open() {
 
 async function showMoreCalls() {
   await reactAct(async () => {
-    // Avoid scanning every row's accessible name just to find this setup button.
-    fireEvent.click(screen.getByText("Show more calls", { selector: "button" }));
+    // Check semantics in the pagination container, not every call row.
+    const button = screen.getByText("Show more calls", { selector: "button" });
+    const pagination = button.parentElement;
+    if (!pagination) throw new Error("Pagination button is detached");
+    expect(within(pagination).getByRole("button", { name: "Show more calls" })).toBe(button);
+    expect(button.matches(":disabled")).toBe(false);
+    fireEvent.click(button);
   });
 }
 
