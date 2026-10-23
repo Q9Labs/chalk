@@ -27,16 +27,19 @@ snapshot() {
   node "${script_directory}/osv-snapshot.mjs" "$2"
 }
 scan_report() {
-  local status=0
-  osv_scanner "${args[@]}" --config "$3" --format json --output-file "$2" "$1" || status=$?
+  local directory="$1" report="$2" status=0
+  shift 2
+  osv_scanner "${args[@]}" "$@" --format json --output-file "${report}" "${directory}" || status=$?
   ((status <= 1)) || return "${status}"
 }
 
-# Force the root policy for every discovered input; it has no zod advisory ignore.
 mkdir "${report_directory}/head"
 node "${script_directory}/osv-snapshot.mjs" "${report_directory}/head" --working-tree
-scan_report "${report_directory}/head" "${report_directory}/head.json" "${report_directory}/head/osv-scanner.toml"
-# Validate every zod finding before discounting the tooling exception or a PR baseline.
+# Validate zod without any policy that could hide a new consumer.
+scan_report "${report_directory}/head" "${report_directory}/raw.json" --config /dev/null
+(cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/raw.json")
+# Other advisories retain OSV's normal per-directory policy, including the API's.
+scan_report "${report_directory}/head" "${report_directory}/head.json"
 (cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/head.json")
 
 if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
@@ -47,7 +50,5 @@ fi
 # Discover the base's tracked tree too, with the same symlink handling.
 base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
 snapshot "${base}" "${report_directory}/base"
-base_config="${report_directory}/base/osv-scanner.toml"
-[[ -f "${base_config}" ]] || base_config=/dev/null
-scan_report "${report_directory}/base" "${report_directory}/base.json" "${base_config}"
+scan_report "${report_directory}/base" "${report_directory}/base.json"
 node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json" "${report_directory}/base.json"
