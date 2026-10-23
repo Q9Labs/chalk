@@ -412,7 +412,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
         this.#inbound = this.#inbound.then(() => {
-          if (socket === this.#socket && event.code === 1008 && event.reason !== "hello timeout") {
+          if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
             this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
             this.#emit();
           }

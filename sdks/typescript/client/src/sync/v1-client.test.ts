@@ -436,10 +436,10 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
-  it("treats policy rejection as rejected access instead of reconnecting with the stale credential", async () => {
+  it.each(["", "invalid token", "policy violation"])("treats policy rejection %j as rejected access instead of reconnecting with the stale credential", async (reason) => {
     const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
     try {
-      socket.close(1008);
+      socket.close(1008, reason);
       await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "access_rejected" }));
     } finally {
       client.stop();

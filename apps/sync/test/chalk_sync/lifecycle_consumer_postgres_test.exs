@@ -5,6 +5,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Operations.Probe
   alias ChalkSync.Operations.Readiness
+  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.SyncPostgres
@@ -51,8 +52,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
 
-    {:ok, stale_leave} =
-      ChalkSync.Stateholder.Operation.new("stale_entry_leave_001", :participant_leave, %{})
+    {:ok, stale_leave} = Operation.new("stale_entry_leave_001", :participant_leave, %{})
 
     assert {:ok, %{result: :rejected, reason: :participant_inactive}} =
              Postgres.begin_operation(first, stale_leave)
@@ -64,8 +64,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
                [UUID.dump!(current.participant_id)]
              ).rows
 
-    {:ok, current_leave} =
-      ChalkSync.Stateholder.Operation.new("current_entry_leave_001", :participant_leave, %{})
+    {:ok, current_leave} = Operation.new("current_entry_leave_001", :participant_leave, %{})
 
     assert {:ok, %{result: :pending}} = Postgres.begin_operation(current, current_leave)
   end
