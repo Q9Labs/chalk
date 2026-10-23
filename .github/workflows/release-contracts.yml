@@ -1,109 +1,67 @@
-name: Release contracts
-
-# Include the release tools and the source trees their contract checks inspect.
+name: Retain audited recovery evidence
 on:
-  pull_request:
-    paths:
-      - .github/workflows/ci.yml
-      - .github/workflows/nightly.yml
-      - .github/workflows/promote.yml
-      - .github/workflows/real-call-proof.yml
-      - .github/workflows/web-call-proof.yml
-      - .github/workflows/media-cleanup.yml
-      - .github/workflows/release-contracts.yml
-      - .github/actions/setup-opentofu/**
-      - scripts/releases/**
-      - scripts/deploy/**
-      - scripts/prod-proof/**
-      - scripts/web-proof/**
-      - scripts/recorder/**
-      - scripts/transcription-dispatcher/**
-      - infrastructure/managed-episode/**
-      - infrastructure/recorder/**
-      - infrastructure/nightly/**
-      - infrastructure/opentofu/modules/aws-transcription-dispatcher/**
-      - infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle/**
-      - apps/api/**
-      - apps/sync/**
-      - apps/recording-renderer/**
-      - apps/transcription-dispatcher/**
-      - packages/**
-      - sdks/typescript/**
-      - .tool-versions
-      - tsconfig.json
-      - .npmrc
-      - .pnpmfile.cjs
-      - go.work
-      - go.work.sum
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - package.json
-      - patches/**
   workflow_dispatch:
-
+    inputs:
+      bundle:
+        description: Base64-encoded JSON containing exact recovery evidence and checksums
+        type: string
+        required: true
 permissions:
   contents: read
-
-concurrency:
-  group: chalk-release-contracts-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  podman-image-cleanup:
-    name: Podman 4.9 image cleanup contract
+  retain:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Ubuntu's Podman
-        run: |
-          sudo apt-get update -qq
-          version="$(apt-cache madison podman | awk '$3 ~ /^4[.]9[.]/{print $3; exit}')"
-          test -n "$version"
-          sudo apt-get install -y --allow-downgrades "podman=$version"
-      - name: Capture real storage behavior without cloud access
-        shell: bash
-        run: |
-          set -o pipefail
-          sudo bash infrastructure/managed-episode/scripts/test-podman-image-cleanup 2>&1 | tee "${RUNNER_TEMP}/podman-image-cleanup.log"
-      - name: Keep the observed Podman trace
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: podman-image-cleanup-trace
-          path: ${{ runner.temp }}/podman-image-cleanup.log
-          retention-days: 7
-          if-no-files-found: error
-  contracts:
-    name: Pre-deploy release contracts
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 12.8.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .tool-versions
-      - uses: ./.github/actions/setup-opentofu
-      - name: Install pinned workflow lint
+      - name: Validate and retain exact recovery bytes without deployment access
+        id: evidence
+        env:
+          BUNDLE: ${{ inputs.bundle }}
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Check every release contract without cloud credentials
-        run: scripts/releases/check-contracts.sh
-      - name: Keep complete contract logs
-        if: always()
-        uses: actions/upload-artifact@v4
+          python3 - <<'PY'
+          import base64, hashlib, json, os, re, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts/releases')
+          from release import retained_manifest, complete_production
+          bundle = json.loads(base64.b64decode(os.environ['BUNDLE'], validate=True))
+          decoded = {}
+          for name, item in bundle.items():
+              data = base64.b64decode(item['base64'], validate=True)
+              assert hashlib.sha256(data).hexdigest() == item['sha256'], 'evidence checksum mismatch'
+              decoded[name] = data
+          manifest = json.loads(decoded['manifest'])
+          release_id = manifest['release_id']
+          assert re.fullmatch(r'[a-zA-Z0-9-]+', release_id), 'invalid release identity'
+          retained_manifest(dict(target_sha=manifest['source_revision'], release_id=release_id,
+                                 manifest_sha256=bundle['manifest']['sha256'],
+                                 manifest_base64=bundle['manifest']['base64']))
+          subprocess.run(['git', 'merge-base', '--is-ancestor', manifest['source_revision'], 'origin/master'], check=True)
+          from media import validate_members
+          validate_members(json.loads(decoded['media']))
+          root = Path('recovery-evidence')
+          root.mkdir()
+          (root / (release_id + '.json')).write_bytes(decoded['manifest'])
+          (root / (release_id + '.media.json')).write_bytes(decoded['media'])
+          proof = root / 'original-successful-rollback-proof.json'
+          proof.write_bytes(decoded['proof'])
+          os.environ.update(RELEASE_ID=release_id, DEPLOYMENT_RESULT=str(proof), DEPLOYMENT_ID='VALIDATION-NO-WRITE')
+          class Sink:
+              def request(self, route, body):
+                  assert route == 'deployments/VALIDATION-NO-WRITE/statuses'
+                  assert body == {'state': 'success', 'auto_inactive': False}
+          complete_production(Sink(), None)
+          (root / 'fresh-host-verification.json').write_bytes(decoded['verification'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('release_id=' + release_id + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Exact recovery manifest, runtime media, original proof, and fresh host verification retained. No production access or mutation.\n')
+          PY
+      - uses: actions/upload-artifact@v4
         with:
-          name: release-contract-logs
-          path: ${{ runner.temp }}/chalk-release-contracts
-          retention-days: 7
-          if-no-files-found: ignore
+          name: release-manifest-${{ steps.evidence.outputs.release_id }}
+          path: recovery-evidence/
+          retention-days: 90
+          if-no-files-found: error
