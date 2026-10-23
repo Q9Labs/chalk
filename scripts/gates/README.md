@@ -123,14 +123,102 @@ shipment target from branch, release mode, or directory.
 The runner snapshots the local commit plus staged, unstaged, and untracked work;
 ignored files are not shipped. The merge-base tree becomes `origin/master`.
 
-Runs queue behind live processes using `/tmp/chalk-remote-*` checkouts. A macOS
-`shlock` PID lock serializes simultaneous arrivals and is reclaimed after owner
-death. Waiting prints once and checks every 30 seconds. Set
-`CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` to change the 5400-second wait; expiry exits 76.
-The runner reaps only abandoned checkouts with a generated run name and matching
-ownership marker; logs and unmarked scratch directories survive. It checks disk space,
-shares dependency caches, limits each setup step and the gate runtime, saves logs
-locally, and deletes its checkout on exit.
+The M4 registers a durable SQLite ticket, then a detached dispatcher waits and runs
+the job there. Ticket order is FIFO; the lead can use `--priority` to move ahead of
+other waiting tickets, without interrupting a running job. `--run-id ID` (or
+`CHALK_REMOTE_RUN_ID`) reuses the original ticket and result, including after an
+ambiguous submission response. Registration finishes only after the whole snapshot
+arrives. A default run ID is printed before registration.
+
+Network drops automatically retry log reads from the last confirmed byte. After
+Air sleep, a T3 restart, or Ctrl-C, run `scripts/gates/remote.sh --attach ID`.
+Ctrl-C detaches; it does not cancel the ticket. There is no default queue expiry.
+An explicit `CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` retains its old meaning (exit 76).
+The M4 waits for at least 3 GiB of free + inactive + speculative memory and
+the configured free disk floor before admission. Setup and gate runtime remain
+bounded as before.
+
+State lives under `~/.local/share/chalk-remote/v1` on the M4. A dispatcher owns
+admissions and reaps dead worker descendants and their queue-owned
+`/tmp/chalk-queue-work-*` checkouts when each ticket finishes. It exits
+when idle, after one more queue check outside its lock, so a ticket registered
+while it exits still runs. A later submission or attach restarts it; a wake that
+finds a dispatcher running exits at once instead of waiting. Live log reads also
+restart a dead dispatcher and record exit 137 for interrupted work. Logs and
+submission files expire after seven days. Abandoned partial uploads expire after
+an hour; an active upload holds a lease and cannot be reaped. The dispatcher
+applies both limits when it starts and every five minutes while it runs, so a
+long wait for disk or memory still frees them. Small result tombstones remain so
+an old run ID cannot execute twice.
+
+### Cut-over and undo
+
+New submissions use three FIFO slots (`CHALK_REMOTE_SLOTS`, 1–100). The queue
+records the count in its database when it is created (for an existing queue, on
+the first call after this upgrade), and every dispatcher reads it from there, so
+a wake from a client with a different setting cannot change it. Each job
+receives `CHALK_REMOTE_SLOT`; the worker assigns distinct ports in blocks
+`21000 + slot * 100 + role` and a private temp/state directory. Role 19 is Metro,
+exported as `RCT_METRO_PORT`. Expo CLI binds Metro to it and passes it to Android
+builds, and the mobile dev profile probes it. iOS Debug builds use the prebuilt
+React Native core, which keeps port 8081 compiled in, so in a slot
+`pnpm --filter @q9labsai/chalk-mobile ios --device <udid>` runs
+`apps/mobile/scripts/run-ios.mjs` instead of `expo run:ios`: it starts Metro on
+`RCT_METRO_PORT`, builds the Debug app with `xcodebuild`, and launches it with
+`-RCT_jsLocation 127.0.0.1:$RCT_METRO_PORT`. It drives `simctl` directly, so it
+needs no Simulator.app, which Xcode 27 no longer ships.
+PostgreSQL gate and topology wrappers already allocate ephemeral ports and unique
+databases.
+`--exclusive`, root/full gates, call-performance and performance-budget commands
+wait for running slots to drain, then hold admission alone. A queued exclusive
+ticket blocks later tickets; priority only changes waiting ticket order.
+
+The client installs helpers by content hash and verifies the transfer before an
+atomic rename. Each ticket carries its own worker script; deployment does not
+rewrite running code. Legacy waiters keep their old shlock and drain one at a
+time. A live legacy lock owner counts as one occupied slot. Ordinary jobs never
+acquire that lock, even when all new slots are running. Only exclusive jobs take
+it for the lifetime of the worker. Native shlock reclaims a dead worker’s lock;
+the dispatcher never unlinks it. The exclusive supervisor owns the lock until
+its workload exits, even if the dispatcher dies.
+Detected legacy waiters get a 35-second handoff window before another exclusive
+job, covering their 30-second polling interval. Admission reserves the
+lock before checking for legacy checkouts without a lock. That check has a
+30-second limit; a checkout that remains active fails only the new ticket.
+Bare legacy waiters remain queued and cannot extend this guard. New checkout names and port blocks avoid the old harness's process
+veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
+Cleanup reads real environment entries (Darwin sysctl or Linux procfs), never
+argv, and checks native process birth identities before and after ownership reads.
+Session ownership requires the original supervisor to remain alive. Supervisors
+persist birth-protected member receipts, and cleanup never refreshes a receipt to
+a replacement's birth. Queue dispatchers strip inherited workload identities.
+Port matches never authorize signals. Reserved local slot ports
+must be free before release; a foreign holder quarantines the slot and its PID,
+command and socket appear in job status and logs. Cleanup failures also quarantine
+only that slot, with a 30-second retry. Evidence has at most eight holder records
+and 2,048 UTF-8 bytes; repeated connections do not append equivalent evidence.
+Queued status and clients report the blocking job IDs, errors and retry times;
+client output changes only when that report changes. When the next ticket has a
+free slot but free disk or memory is below its admission floor, queued status
+carries one line such as `waiting: free disk 3.1 GiB < 8 GiB floor`, with the
+reading taken when that wait began. Clients print it once per wait, and a wait
+limit that expires adds it to the final `[remote]` line. Healthy slots keep running. After a
+dispatcher restart, surviving supervisors finish and supply their saved exit codes.
+Job-specific Postgres and Redis container and volume receipts survive dispatcher crashes;
+completion and recovery remove those resources before releasing the slot.
+FIFO applies among new tickets. After merge, lanes may voluntarily resubmit
+legacy waiters through the new client to use the slots sooner.
+
+To undo, restore the old client for future submissions. Let new tickets finish or
+reattach with this revision; keep their state and helpers until they drain. No
+shared runner or launchd service is replaced.
+
+Tiny proofs (isolated queues; no shared heavy admission):
+
+```sh
+node --test scripts/gates/remote-queue.test.mjs
+python3 scripts/gates/remote-queue-ssh-test.py agents-macmini
+```
 
 `root` installs Chromium. Set `CHALK_REMOTE_NEEDS_BROWSER=1` for custom `--`
 commands that need it. `CHALK_REMOTE_REPO` overrides the local repository root.

@@ -1,7 +1,9 @@
 import Config
 
-if port = System.get_env("CHALK_SYNC_PORT") do
-  config :chalk_sync, port: String.to_integer(port)
+if config_env() != :test do
+  if port = System.get_env("CHALK_SYNC_PORT") do
+    config :chalk_sync, port: String.to_integer(port)
+  end
 end
 
 if config_env() == :prod do

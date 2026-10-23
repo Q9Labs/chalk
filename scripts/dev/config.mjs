@@ -115,7 +115,7 @@ function userStateRoot({ env, platform, home }) {
 export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
   if (profile !== "core" && profile !== "mobile") throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
   const checkoutRoot = resolve(root);
-  const stateRoot = userStateRoot({ env, platform, home });
+  const stateRoot = env.CHALK_DEV_STATE_ROOT || userStateRoot({ env, platform, home });
   const runtimeRoot = join(checkoutRoot, ".private", "chalk-dev");
   const logRoot = join(checkoutRoot, ".logs", "dev");
   const redisPort = env.CHALK_REDIS_PORT ? numberFromEnv(env, "CHALK_REDIS_PORT", 6380) : numberFromEnv(env, "CHALK_DEV_REDIS_PORT", 6380);
@@ -151,11 +151,17 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     },
     secretResolver,
     databaseName: "chalk_dev",
+    postgres: {
+      container: env.CHALK_POSTGRES_CONTAINER || "chalk-postgres",
+      volume: env.CHALK_POSTGRES_VOLUME || "chalk-postgres",
+    },
     redis: {
       port: redisPort,
       container: env.CHALK_REDIS_CONTAINER || "chalk-dev-redis",
       volume: env.CHALK_REDIS_VOLUME || "chalk-dev-redis",
     },
+    // Outside `ports`: preflight must not fail the core profile, or the optional Metro, on a busy 8081.
+    metro: { port: numberFromEnv(env, "RCT_METRO_PORT", 8081) },
     ports,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,

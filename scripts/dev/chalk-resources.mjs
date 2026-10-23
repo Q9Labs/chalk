@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 export function createResourceManager(config, { runner = runChecked, docker = dockerInspect, identityGenerator = generateSigningIdentity } = {}) {
   const state = { postgres: {}, redis: {}, identity: undefined };
   const databaseName = config.databaseName || "chalk_dev";
+  const postgres = config.postgres || { container: "chalk-postgres", volume: "chalk-postgres" };
   const resourceLogPath = join(config.logRoot, "resources.log");
   const scripts = {
     postgres: join(config.root, "apps/api/scripts/dev-postgres.sh"),
@@ -23,7 +24,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
     async preflight(options = {}) {
       const allowBusyPorts = new Set(config.allowBusyPorts);
       const portOwners = [
-        ["postgres", "chalk-postgres"],
+        ["postgres", postgres.container],
         ["redis", config.redis?.container || "chalk-dev-redis"],
       ];
       const containers = new Map();
@@ -42,17 +43,17 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       return preflight(config, { ...options, allowBusyPorts });
     },
     async start({ lease } = {}) {
-      state.postgres.before = await docker("chalk-postgres");
+      state.postgres.before = await docker(postgres.container);
       state.redis.before = await docker(config.redis.container);
       const databaseEnv = {
-        CHALK_POSTGRES_CONTAINER: "chalk-postgres",
-        CHALK_POSTGRES_VOLUME: "chalk-postgres",
+        CHALK_POSTGRES_CONTAINER: postgres.container,
+        CHALK_POSTGRES_VOLUME: postgres.volume,
         CHALK_POSTGRES_PORT: String(config.ports.postgres),
       };
       try {
         await runResource("bash", [scripts.postgres, "start"], { cwd: config.root, env: databaseEnv }, "postgres");
       } finally {
-        state.postgres.after = await docker("chalk-postgres");
+        state.postgres.after = await docker(postgres.container);
         state.postgres.started = !state.postgres.before?.running && Boolean(state.postgres.after?.running);
       }
       await ensureDatabase();
@@ -80,7 +81,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
     },
     async stop() {
       if (state.redis.started) await runResource("bash", [scripts.redis, "stop"], { cwd: config.root, env: { CHALK_REDIS_CONTAINER: config.redis.container, CHALK_REDIS_PORT: String(config.redis.port) } }, "redis").catch(() => {});
-      if (state.postgres.started) await runResource("bash", [scripts.postgres, "stop"], { cwd: config.root, env: { CHALK_POSTGRES_CONTAINER: "chalk-postgres", CHALK_POSTGRES_PORT: String(config.ports.postgres) } }, "postgres").catch(() => {});
+      if (state.postgres.started) await runResource("bash", [scripts.postgres, "stop"], { cwd: config.root, env: { CHALK_POSTGRES_CONTAINER: postgres.container, CHALK_POSTGRES_PORT: String(config.ports.postgres) } }, "postgres").catch(() => {});
     },
     async reset() {
       await runResource(
@@ -98,16 +99,16 @@ export function createResourceManager(config, { runner = runChecked, docker = do
   };
 
   async function ensureDatabase() {
-    const result = await runResource("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-tAc", `SELECT 1 FROM pg_database WHERE datname = '${databaseName}'`], { cwd: config.root }, "postgres");
+    const result = await runResource("docker", ["exec", postgres.container, "psql", "-U", "postgres", "-d", "postgres", "-tAc", `SELECT 1 FROM pg_database WHERE datname = '${databaseName}'`], { cwd: config.root }, "postgres");
     if (result?.stdout?.trim()) return;
-    await runResource("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${databaseName}"`], { cwd: config.root }, "postgres");
+    await runResource("docker", ["exec", postgres.container, "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${databaseName}"`], { cwd: config.root }, "postgres");
   }
 
   async function resetDatabase() {
-    const before = await docker("chalk-postgres");
+    const before = await docker(postgres.container);
     const env = {
-      CHALK_POSTGRES_CONTAINER: "chalk-postgres",
-      CHALK_POSTGRES_VOLUME: "chalk-postgres",
+      CHALK_POSTGRES_CONTAINER: postgres.container,
+      CHALK_POSTGRES_VOLUME: postgres.volume,
       CHALK_POSTGRES_PORT: String(config.ports.postgres),
     };
     let startedForReset = false;
@@ -116,8 +117,8 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       startedForReset = true;
     }
     try {
-      await runResource("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`], { cwd: config.root }, "postgres");
-      await runResource("docker", ["exec", "chalk-postgres", "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${databaseName}"`], { cwd: config.root }, "postgres");
+      await runResource("docker", ["exec", postgres.container, "psql", "-U", "postgres", "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`], { cwd: config.root }, "postgres");
+      await runResource("docker", ["exec", postgres.container, "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${databaseName}"`], { cwd: config.root }, "postgres");
     } finally {
       if (startedForReset) await runResource("bash", [scripts.postgres, "stop"], { cwd: config.root, env }, "postgres").catch(() => {});
     }
@@ -216,7 +217,7 @@ async function dockerInspect(name) {
     const { stdout } = await execFileAsync("docker", ["container", "inspect", name], { encoding: "utf8" });
     const [container] = JSON.parse(stdout);
     let dataChecksums;
-    if (name === "chalk-postgres" && container?.State?.Running === true) {
+    if (String(container?.Config?.Image || "").startsWith("postgres:") && container?.State?.Running === true) {
       try {
         const result = await execFileAsync("docker", ["exec", name, "psql", "-U", "postgres", "-d", "postgres", "-tAc", "show data_checksums"], { encoding: "utf8" });
         dataChecksums = result.stdout.trim();

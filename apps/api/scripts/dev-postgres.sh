@@ -98,6 +98,12 @@ verify_data_checksums() {
 case "${cmd}" in
   start)
     require_docker
+    if [[ -n "${CHALK_REMOTE_RESOURCE_DIR:-}" ]]; then
+      mkdir -p "$CHALK_REMOTE_RESOURCE_DIR"
+      receipt="$(mktemp "$CHALK_REMOTE_RESOURCE_DIR/.postgres.XXXXXX")"
+      printf '%s\n%s\n' "$container" "$volume" > "$receipt"
+      mv "$receipt" "$CHALK_REMOTE_RESOURCE_DIR/postgres"
+    fi
 
     if container_exists; then
       docker start "${container}" >/dev/null

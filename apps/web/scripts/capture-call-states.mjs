@@ -14,7 +14,7 @@ const VIEWPORTS = {
   laptop: { width: 1440, height: 900 },
   wide: { width: 1920, height: 1080 },
 };
-const { values } = parseArgs({ options: { out: { type: "string" }, only: { type: "string" }, viewports: { type: "string" }, port: { type: "string", default: "3071" } } });
+const { values } = parseArgs({ options: { out: { type: "string" }, only: { type: "string" }, viewports: { type: "string" }, port: { type: "string", default: process.env.CHALK_CALL_STATES_PORT || "3071" } } });
 const ORIGIN = `http://127.0.0.1:${values.port}`;
 const SETTLE_MS = 1500;
 const AFTER_ACTION_MS = 700;

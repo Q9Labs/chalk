@@ -138,11 +138,11 @@ async function resetCommand(config, { yes = false, confirm = confirmReset, hooks
 
 function resetTargets(config) {
   return {
-    containers: ["chalk-postgres", config.redis.container],
-    preservedContainers: ["chalk-postgres"],
-    databases: [{ container: "chalk-postgres", name: config.databaseName || "chalk_dev", action: "drop-and-recreate" }],
+    containers: [config.postgres.container, config.redis.container],
+    preservedContainers: [config.postgres.container],
+    databases: [{ container: config.postgres.container, name: config.databaseName || "chalk_dev", action: "drop-and-recreate" }],
     volumes: [config.redis.volume],
-    preservedVolumes: ["chalk-postgres"],
+    preservedVolumes: [config.postgres.volume],
     privateRuntimeDirectory: config.runtimeRoot,
   };
 }

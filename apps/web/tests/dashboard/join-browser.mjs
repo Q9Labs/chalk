@@ -13,8 +13,10 @@ import { provePublicAdmission } from "./public-admission-browser.mjs";
 // are real; only the external media vendor is the existing local fixture.
 assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through real-engine.sh");
 const apiOrigin = process.env.DASHBOARD_TEST_API_ORIGIN;
-const origin = "http://127.0.0.1:18797";
-const syncOrigin = "ws://127.0.0.1:18410/v1/sync";
+const webPort = process.env.CHALK_JOIN_WEB_PORT || "18797";
+const syncPort = process.env.CHALK_JOIN_SYNC_PORT || "18410";
+const origin = `http://127.0.0.1:${webPort}`;
+const syncOrigin = `ws://127.0.0.1:${syncPort}/v1/sync`;
 const web = resolve(import.meta.dirname, "../..");
 const repository = resolve(web, "../..");
 const sandbox = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-join-"));
@@ -112,7 +114,7 @@ try {
 Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
 Application.put_env(:chalk_sync, :database_url, System.fetch_env!("CHALK_DATABASE_URL"))
 Application.put_env(:chalk_sync, :instance_id, "dashboard-join-proof")
-Application.put_env(:chalk_sync, :port, 18410)
+Application.put_env(:chalk_sync, :port, ${Number(syncPort)})
 Application.put_env(:chalk_sync, :provider_bridge,
   base_url: System.fetch_env!("CHALK_SYNC_PROVIDER_BRIDGE_URL"),
   certfile: System.fetch_env!("CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE"),
@@ -128,7 +130,7 @@ Process.sleep(:infinity)
   );
   const syncLog = [];
   const sync = start("mix", ["run", "--no-start", config], resolve(repository, "apps/sync"), { MIX_ENV: "dev" }, syncLog);
-  await ready("http://127.0.0.1:18410/healthz", sync, syncLog);
+  await ready(`http://127.0.0.1:${syncPort}/healthz`, sync, syncLog);
   const bindings = {
     CHALK_ENVIRONMENT: "test",
     CHALK_API_ORIGIN: apiOrigin,
@@ -144,7 +146,7 @@ Process.sleep(:infinity)
     DASHBOARD_IDENTITY_PROVIDER: "oauth",
   };
   const pagesLog = [];
-  const pages = start("pnpm", ["exec", "wrangler", "pages", "dev", "dist/client", "--port", "18797", "--inspector-port", "0", ...Object.entries(bindings).flatMap(([k, v]) => ["--binding", `${k}=${v}`])], web, { CI: "true", WRANGLER_SEND_METRICS: "false" }, pagesLog);
+  const pages = start("pnpm", ["exec", "wrangler", "pages", "dev", "dist/client", "--port", webPort, "--inspector-port", "0", ...Object.entries(bindings).flatMap(([k, v]) => ["--binding", `${k}=${v}`])], web, { CI: "true", WRANGLER_SEND_METRICS: "false" }, pagesLog);
   await ready(`${origin}/auth/session`, pages, pagesLog);
   const userId = `lane-test-${crypto.randomUUID()}`;
   const tenant = await fetch(`${apiOrigin}/v1/tenants`, {

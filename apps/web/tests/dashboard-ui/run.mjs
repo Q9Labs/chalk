@@ -7,6 +7,10 @@ import { createRequire } from "node:module";
 const root = resolve(import.meta.dirname, "../../../..");
 const require = createRequire(resolve(root, "apps/web/package.json"));
 const temporary = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-ui-"));
+const webPort = process.env.CHALK_DEV_WEB_PORT || "3070";
+const fixturePort = process.env.FIXTURE_PORT || "3071";
+const webOrigin = `http://127.0.0.1:${webPort}`;
+const fixtureOrigin = `http://127.0.0.1:${fixturePort}`;
 const children = new Set();
 const owner = process.ppid;
 const controller = new AbortController();
@@ -53,7 +57,7 @@ async function ready(url, child) {
 
 try {
   // Refuse occupied ports instead of accidentally testing another worktree.
-  for (const port of [3070, 3071]) {
+  for (const port of [Number(webPort), Number(fixturePort)]) {
     const { createServer } = await import("node:net");
     const probe = createServer();
     await new Promise((accept, reject) => {
@@ -65,11 +69,11 @@ try {
   await completed(start("pnpm", ["exec", "turbo", "run", "build", "--filter=@q9labsai/chalk-whiteboard..."]));
   const video = resolve(temporary, "session.mp4");
   await completed(start("ffmpeg", ["-loglevel", "error", "-f", "lavfi", "-i", "color=c=gray:s=160x90:r=1", "-t", "120", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]));
-  const vite = start("pnpm", ["--filter", "web", "exec", "vite", "--host", "127.0.0.1", "--port", "3070", "--strictPort"]);
-  await ready("http://127.0.0.1:3070/dashboard/sign-in", vite);
-  const fixture = start(process.execPath, ["apps/web/tests/dashboard-ui/fixture-server.mjs"], { env: { ...process.env, FIXTURE_VIDEO: video } });
-  await ready("http://127.0.0.1:3071/__fixture/log", fixture);
-  await completed(start(process.execPath, ["apps/web/tests/dashboard-ui/checks.mjs", require.resolve("playwright").replace(/index\.js$/, "index.mjs"), "http://127.0.0.1:3071"]));
+  const vite = start("pnpm", ["--filter", "web", "exec", "vite", "--host", "127.0.0.1", "--port", webPort, "--strictPort"]);
+  await ready(`${webOrigin}/dashboard/sign-in`, vite);
+  const fixture = start(process.execPath, ["apps/web/tests/dashboard-ui/fixture-server.mjs"], { env: { ...process.env, FIXTURE_VIDEO: video, FIXTURE_PORT: fixturePort, VITE_ORIGIN: webOrigin } });
+  await ready(`${fixtureOrigin}/__fixture/log`, fixture);
+  await completed(start(process.execPath, ["apps/web/tests/dashboard-ui/checks.mjs", require.resolve("playwright").replace(/index\.js$/, "index.mjs"), fixtureOrigin]));
 } finally {
   clearTimeout(deadline);
   clearInterval(watcher);
