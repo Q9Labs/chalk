@@ -54,12 +54,16 @@ async function prepareGuest(directory) {
   ready.catch(() => {});
   let leaving;
   const leave = () =>
-    (leaving ??= ready.then((guest) =>
-      guest.pages[0].evaluate(async () => {
-        if (window.proofBoard) await window.proofClient.whiteboard.transport().setPresentation(false);
-        await window.proofClient.leave();
-      }),
-    ));
+    (leaving ??= ready.then(async (guest) => {
+      const errors = [];
+      await guest.pages[0]
+        .evaluate(async () => {
+          if (window.proofBoard) await window.proofClient.whiteboard.transport().setPresentation(false);
+        })
+        .catch((error) => errors.push(error));
+      await guest.pages[0].evaluate(() => window.proofClient.leave()).catch((error) => errors.push(error));
+      throwErrors(errors, "SDK guest leave failed");
+    }));
   return {
     ready,
     async playAudio() {

@@ -20,6 +20,16 @@ hooks.deregister();
 
 test("a proof retains its assertion and every cleanup failure", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "chalk-proof-cleanup-"));
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    get proofBoard() {
+      return fixture.openedBoard;
+    },
+    proofClient: {
+      whiteboard: { transport: () => ({ setPresentation: () => fixture.board() }) },
+      leave: () => fixture.leave(),
+    },
+  };
   const environment = {
     CHALK_E2E_INVITE: "/space/test",
     CHALK_E2E_DIRECTORY: directory,
@@ -32,6 +42,8 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
   const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   Object.assign(process.env, environment);
   t.after(async () => {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -50,8 +62,10 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
     { failures: ["web-leave", "browser-close"] },
     { failures: ["assertion", "web-complete", "browser-close"] },
     { failures: ["sdk-leave", "browser-close"], callbackLeave: true, name: "callback awaits a rejected SDK leave" },
+    { failures: ["board-stop"], board: true, name: "board teardown fails but participant leave still runs" },
+    { failures: ["board-stop", "sdk-leave", "browser-close"], board: true, callbackLeave: true, name: "board, participant leave and browser failures each appear once" },
   ];
-  for (const { failures, callbackLeave, name } of scenarios) {
+  for (const { failures, callbackLeave, board, name } of scenarios) {
     await t.test(name ?? failures.join(" + "), async () => {
       const errors = new Map(failures.map((name) => [name, new Error(name)]));
       const calls = [];
@@ -61,6 +75,8 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
       };
       fixture.leave = step("sdk-leave");
       fixture.dispose = step("browser-close");
+      fixture.board = step("board-stop");
+      fixture.openedBoard = board;
       const screen = {
         getByLabel: () => ({ fill: async () => {} }),
         getByRole: (_role, name, options) => ({
@@ -79,12 +95,14 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
       const actual = await result.then(() => [], flatten);
       assert.deepEqual(actual, [...errors.values()]);
       actual.forEach((error) => assert.equal(error, errors.get(error.message)));
-      const expected = callbackLeave ? ["sdk-leave", "web-leave", "browser-close"] : ["assertion", "web-leave", "sdk-leave", "browser-close"];
-      if (!failures.includes("web-leave")) expected.splice(2, 0, "web-complete");
+      const sdk = ["board-stop", "sdk-leave"].filter((name) => name !== "board-stop" || board);
+      const expected = callbackLeave ? [...sdk, "web-leave", "browser-close"] : ["assertion", "web-leave", ...sdk, "browser-close"];
+      if (!failures.includes("web-leave")) expected.splice(expected.indexOf("web-leave") + 1, 0, "web-complete");
       assert.deepEqual(calls, expected);
     });
   }
 
+  fixture.openedBoard = false;
   for (const [callbackLeave, timeout] of [
     [false, false],
     [false, true],
