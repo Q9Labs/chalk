@@ -3,9 +3,6 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      web_dispatch_id:
-        description: Correlate a local web release with its workflow run
-        type: string
       target_sha:
         description: Full 40-character commit SHA whose latest Gate run on master passed
         required: true
@@ -52,10 +49,6 @@ on:
         required: true
         default: false
         type: boolean
-      without_asset_retention:
-        description: Explicitly discard old web assets (bootstrap or emergency only)
-        default: false
-        type: boolean
       web_artifact:
         description: JSON artifact_id and sha256 of the prebuilt target web archive
         type: string
@@ -82,8 +75,6 @@ on:
         type: string
   workflow_call:
     inputs:
-      web_dispatch_id:
-        type: string
       target_sha:
         required: false
         type: string
@@ -118,9 +109,6 @@ on:
         type: string
       deploy_web:
         required: false
-        default: false
-        type: boolean
-      without_asset_retention:
         default: false
         type: boolean
       web_artifact:
@@ -162,7 +150,7 @@ on:
       pages_deployment_id:
         value: ${{ jobs.deploy-web.outputs.pages_deployment_id }}
 
-run-name: Release ${{ inputs.target_sha }} ${{ inputs.web_dispatch_id }}
+run-name: Release ${{ inputs.target_sha }}
 
 permissions:
   contents: read
@@ -1030,10 +1018,6 @@ jobs:
           if-no-files-found: error
 
   deploy-web:
-    concurrency:
-      group: web-${{ inputs.managed_environment }}
-      cancel-in-progress: false
-      queue: max
     name: Deploy selected web or restore Pages
     outputs:
       pages_deployment_id: ${{ steps.restore.outputs.pages_deployment_id }}
@@ -1048,6 +1032,7 @@ jobs:
       # Preserve today's production destination; new configuration is nightly-only.
       CLOUDFLARE_ACCOUNT_ID: ${{ inputs.managed_environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
       - uses: actions/checkout@v4
@@ -1078,13 +1063,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           WEB_TARGET: ${{ inputs.managed_environment }}
-          WITHOUT_ASSET_RETENTION: ${{ inputs.without_asset_retention }}
           ARTIFACT_RUN_ID: ${{ inputs.manifest_run_id || github.run_id }}
           WEB_ARTIFACT: ${{ inputs.web_artifact || toJSON(fromJSON(needs.prepare-web.outputs.web || '{}')[inputs.managed_environment]) }}
-        run: |
-          args=()
-          if [[ "$WITHOUT_ASSET_RETENTION" == "true" ]]; then args+=(--without-asset-retention); fi
-          python3 scripts/releases/web.py deploy --target "$WEB_TARGET" --sha "$TARGET_SHA" "${args[@]}"
+        run: python3 scripts/releases/web.py deploy --target "$WEB_TARGET" --sha "$TARGET_SHA"
       - name: Restore the saved Pages production deployment
         id: restore
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id != '')
