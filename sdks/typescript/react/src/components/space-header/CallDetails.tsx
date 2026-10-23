@@ -38,6 +38,7 @@ export function CallDialog({
 }) {
   const container = useRef<HTMLElement>(null);
   const reportInput = useRef<HTMLTextAreaElement>(null);
+  const reportOpener = useRef<HTMLElement>(null);
   const [text, setText] = useState("");
   const [includeDiagnostics, setIncludeDiagnostics] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -69,7 +70,19 @@ export function CallDialog({
       >
         <Dialog.Portal container={container}>
           <Dialog.Backdrop className="chalk-shell-modal-backdrop" />
-          <Dialog.Popup initialFocus={kind === "report" ? reportInput : undefined} finalFocus={kind === "report" ? () => reportFocusTarget(focusScope.current) : returnFocus} className="chalk-shell-modal">
+          <Dialog.Popup
+            initialFocus={
+              kind === "report"
+                ? () => {
+                    const opener = reportInput.current?.ownerDocument.activeElement;
+                    reportOpener.current = opener instanceof HTMLElement && focusScope.current?.contains(opener) ? opener : null;
+                    return reportInput.current;
+                  }
+                : undefined
+            }
+            finalFocus={kind === "report" ? () => reportFocusTarget(focusScope.current, reportOpener.current) : returnFocus}
+            className="chalk-shell-modal"
+          >
             {kind === "report" && status === "sent" ? null : (
               <div className="chalk-shell-modal-heading">
                 <Dialog.Title>{kind === "shortcuts" ? "Keyboard shortcuts" : "Report a problem"}</Dialog.Title>
@@ -154,16 +167,21 @@ export function CallDialog({
   );
 }
 
-function reportFocusTarget(scope: HTMLElement | null): HTMLElement | false {
+function reportFocusTarget(scope: HTMLElement | null, opener: HTMLElement | null): HTMLElement | false {
+  if (usableReportFocusTarget(opener)) return opener;
   if (!scope?.isConnected) return false;
-  for (const selector of ['button[data-part="call-name"]', '[data-part="status-actions"] button:not(:disabled)', 'main, [role="main"]']) {
-    const target = scope.matches(selector) ? scope : scope.querySelector<HTMLElement>(selector);
-    if (target?.isConnected) {
+  for (const selector of ['button[data-part="call-name"]', '[data-part="status-actions"] button', 'main, [role="main"]']) {
+    for (const target of [scope, ...scope.querySelectorAll<HTMLElement>(selector)]) {
+      if (!target.matches(selector) || !usableReportFocusTarget(target)) continue;
       if (target.matches('main, [role="main"]')) target.tabIndex = -1;
       return target;
     }
   }
   return false;
+}
+
+function usableReportFocusTarget(target: HTMLElement | null): target is HTMLElement {
+  return target !== null && target.isConnected && !target.matches(':disabled, [aria-disabled="true"]') && !target.closest("[inert]") && target.checkVisibility({ opacityProperty: true, visibilityProperty: true });
 }
 
 export function CallDetails({
