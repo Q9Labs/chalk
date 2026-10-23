@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import { ChalkChatFileError } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
 import { V1SyncError } from "../sync/v1-error";
@@ -60,6 +61,8 @@ export function normalizeMediaError(cause: unknown): SpaceClientError {
 
 export function normalizeClientError(cause: unknown, fallback: ErrorCode = "client.internal_error", scope?: "media"): SpaceClientError {
   if (cause instanceof SpaceClientError) return cause;
+  const chatFileError = normalizeChatFileError(cause);
+  if (chatFileError) return chatFileError;
   if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
     return new SpaceClientError({
       code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
@@ -77,6 +80,14 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
   }
   const message = cause instanceof Error ? cause.message : "The client operation failed";
   return new SpaceClientError({ code: fallback, recoverable: false, message });
+}
+
+function normalizeChatFileError(cause: unknown): SpaceClientError | null {
+  if (!(cause instanceof ChalkChatFileError) || cause.code !== "unavailable") return null;
+  if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
+    return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.cause instanceof Error ? cause.cause.message : "Access was rejected" });
+  }
+  return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message });
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
