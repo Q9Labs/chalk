@@ -233,6 +233,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     publish_then_disconnect(episode, active, stream, test)
     for _ <- 1..600, do: publish_then_disconnect(episode, UUID.generate(), UUID.generate(), test)
 
+    Process.sleep(2)
+
     ChalkSync.WhiteboardV1.Authority.store(
       episode,
       %{status: "active", participants: %{{active, 1} => "active"}},
@@ -259,6 +261,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     :ok = ViewOwner.move(owner, frame(c.person, 10), input(c.stream, 1))
 
     for {status, count} <- [{"leaving", 1}, {"left", 0}] do
+      Process.sleep(2)
+
       ChalkSync.WhiteboardV1.Authority.store(
         episode,
         %{status: "active", participants: %{{c.person, 1} => status}},
@@ -269,6 +273,37 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
       {:ok, ^owner, _, snapshot} = ViewOwner.join(episode, UUID.generate())
       assert length(snapshot) == count
     end
+  end
+
+  test "snapshots keep joins newer than the membership read and compare UUIDs without casing" do
+    episode = %ChalkSync.Stateholder.EpisodeKey{
+      tenant_id: UUID.generate(),
+      space_id: UUID.generate(),
+      episode_id: UUID.generate()
+    }
+
+    person = String.upcase(UUID.generate())
+
+    ChalkSync.WhiteboardV1.Authority.store(
+      episode,
+      %{status: "active", participants: %{}},
+      System.monotonic_time(:millisecond) - 10,
+      nil
+    )
+
+    {:ok, owner, _, []} = ViewOwner.join(episode, person)
+    :ok = ViewOwner.move(owner, frame(person, 10), input(UUID.generate(), 1))
+    {:ok, ^owner, _, [%{"participant_id" => ^person}]} = ViewOwner.join(episode, UUID.generate())
+    Process.sleep(2)
+
+    ChalkSync.WhiteboardV1.Authority.store(
+      episode,
+      %{status: "active", participants: %{{String.downcase(person), 1} => "active"}},
+      System.monotonic_time(:millisecond),
+      nil
+    )
+
+    {:ok, ^owner, _, [%{"participant_id" => ^person}]} = ViewOwner.join(episode, UUID.generate())
   end
 
   defp publish_then_disconnect(episode, person, stream, test) do

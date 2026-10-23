@@ -56,6 +56,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
        episode: episode,
        sockets: %{},
        people: MapSet.new(),
+       admitted_at: %{},
        views: %{},
        publishers: %{},
        streams: %{},
@@ -72,11 +73,18 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
             MapSet.size(state.people) < Reducer.max_participants()) do
       ref = Process.monitor(socket)
       sockets = Map.put(state.sockets, ref, {socket, person})
-      snapshot = snapshot(state, person)
+
+      next = %{
+        state
+        | sockets: sockets,
+          people: MapSet.put(state.people, person),
+          admitted_at: Map.put(state.admitted_at, person, System.monotonic_time(:millisecond))
+      }
+
+      snapshot = snapshot(next)
       Enum.each(snapshot, &send(socket, {:whiteboard_v1_frame, &1}))
 
-      {:reply, {:ok, self(), state.id, snapshot},
-       %{state | sockets: sockets, people: MapSet.put(state.people, person)}}
+      {:reply, {:ok, self(), state.id, snapshot}, next}
     else
       {:reply, {:error, :overloaded}, state}
     end
@@ -100,14 +108,19 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
     end
   end
 
-  defp snapshot(state, joining_person) do
-    active = Authority.active_people(state.episode)
+  defp snapshot(state) do
+    roster = Authority.active_people(state.episode)
 
     state.views
-    |> Enum.filter(fn {person, _view} ->
-      is_nil(active) or person == joining_person or MapSet.member?(active, person)
-    end)
+    |> Enum.filter(fn {person, _view} -> active_view?(state, person, roster) end)
     |> Enum.map(fn {_person, view} -> %{view | "bring" => false} end)
+  end
+
+  defp active_view?(_state, _person, nil), do: true
+
+  defp active_view?(state, person, {active, read_at}) do
+    MapSet.member?(active, String.downcase(person)) or
+      Map.fetch!(state.admitted_at, person) >= read_at
   end
 
   @impl true
@@ -116,7 +129,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
 
     # Retire disconnected identities from admission, but retain bounded retry receipts.
     people = MapSet.new(sockets, fn {_ref, {_socket, person}} -> person end)
-    next = %{state | sockets: sockets, people: people}
+    admitted_at = Map.take(state.admitted_at, Map.keys(state.views) ++ MapSet.to_list(people))
+    next = %{state | sockets: sockets, people: people, admitted_at: admitted_at}
 
     if map_size(sockets) == 0,
       do: {:stop, :normal, next},

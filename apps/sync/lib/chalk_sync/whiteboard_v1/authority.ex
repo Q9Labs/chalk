@@ -114,22 +114,16 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   end
 
   @doc "Fresh durable members for view snapshots; unknown reads never imply a leave."
-  @spec active_people(EpisodeKey.t()) :: MapSet.t(String.t()) | nil
+  @spec active_people(EpisodeKey.t()) :: {MapSet.t(String.t()), integer()} | nil
   def active_people(%EpisodeKey{} = episode) do
     case lookup(episode) do
       {access, read_at, failure} when is_map(access) ->
         if freshness(read_at, failure, nil) == :fresh do
-          if access.status == "ended" do
-            MapSet.new()
-          else
-            access.participants
-            |> Enum.reject(fn {_person, status} -> status == "left" end)
-            |> MapSet.new(fn {{person, _generation}, _status} -> person end)
-          end
+          {active_people_from(access), read_at}
         end
 
       {:not_found, read_at, failure} ->
-        if freshness(read_at, failure, nil) == :fresh, do: MapSet.new()
+        if freshness(read_at, failure, nil) == :fresh, do: {MapSet.new(), read_at}
 
       _unknown ->
         nil
@@ -139,6 +133,14 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   end
 
   def active_people(_local_episode), do: nil
+
+  defp active_people_from(%{status: "ended"}), do: MapSet.new()
+
+  defp active_people_from(access) do
+    access.participants
+    |> Enum.reject(fn {_person, status} -> status == "left" end)
+    |> MapSet.new(fn {{person, _generation}, _status} -> String.downcase(person) end)
+  end
 
   defp lookup(episode) do
     case :ets.lookup(@table, EpisodeKey.authority_key(episode)) do
