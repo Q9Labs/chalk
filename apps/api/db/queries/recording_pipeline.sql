@@ -580,6 +580,20 @@ with candidate as (
           (recording_deferred_retention_seconds(candidate.config_snapshot) * interval '1 second') > clock_timestamp()
     on conflict (recording_id, kind) do nothing
     returning *
+), backfill_journey as (
+    insert into observability_journey_events (
+        event_id, journey_id, sequence, occurred_at, name, phase, state,
+        origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes
+    )
+    select inserted.id, coalesce(sqlc.narg(journey_id)::uuid, inserted.recording_id),
+        coalesce((select max(sequence) + 1 from observability_journey_events
+                  where journey_id = coalesce(sqlc.narg(journey_id)::uuid, inserted.recording_id)), 0),
+        now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
+        sqlc.narg(trace_id)::text, sqlc.narg(span_id)::text,
+        jsonb_build_object('tenant_id', inserted.tenant_id, 'episode_id', inserted.episode_id,
+            'recording_id', inserted.recording_id, 'render_job_id', inserted.id, 'trigger', 'backfill')
+    from inserted
+    where not sqlc.arg(allow_manual_retry)::boolean
 ), queued as (
     update recording_pipelines
     set state = 'render_queued', updated_at = now()
@@ -663,12 +677,12 @@ select selected.id as recording_id,
     case
         -- New deferred artifacts carry the capture-anchored expiry; imported
         -- legacy completed MP4s have a null expiry and remain readable.
-        when selected.has_artifact and selected.artifact_expires_at is not null and selected.artifact_expires_at <= clock_timestamp() then 'expired'
+        when selected.has_artifact and selected.artifact_expires_at is not null and selected.artifact_expires_at <= clock_timestamp() then 'unavailable'
         when selected.has_artifact then 'ready'
         when selected.recording_status = 'completed' and selected.storage_key is not null then 'ready'
         when selected.capture_completed_at is null then 'unavailable'
-        when selected.source_expires_at <= clock_timestamp() then 'expired'
-        when export_job.error_code in ('recording_source_expired', 'render_deadline_exceeded') then 'expired'
+        when selected.source_expires_at <= clock_timestamp() then 'unavailable'
+        when export_job.error_code in ('recording_source_expired', 'render_deadline_exceeded') then 'unavailable'
         when export_job.state in ('pending', 'leased', 'retryable_failure') then 'pending'
         when export_job.state = 'terminal_failure' then 'failed'
         else 'none'

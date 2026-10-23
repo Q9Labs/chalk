@@ -1860,7 +1860,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		t.Fatalf("seed expired legacy-zero capture: %v", err)
 	}
 	expiredState, err := repository.GetArtifactState(ctx, tenantID, handoffReservation.RecordingID)
-	if err != nil || expiredState.SourceStatus != recordingpipeline.SourceStatusExpired || expiredState.ExportStatus != recordingpipeline.ExportStatusExpired {
+	if err != nil || expiredState.SourceStatus != recordingpipeline.SourceStatusExpired || expiredState.ExportStatus != recordingpipeline.ExportStatusUnavailable {
 		t.Fatalf("legacy zero source after 30d = %+v err=%v", expiredState, err)
 	}
 	if _, err := repository.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: handoffReservation.RecordingID}, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be045")); !errors.Is(err, recordingpipeline.ErrExportUnavailable) {

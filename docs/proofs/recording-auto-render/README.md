@@ -46,3 +46,30 @@ rollback of both job and journey, replay without duplication, and a durable
 persistence, invalid input, service ownership and write scopes. The dashboard
 real-engine suite exercises the dashboard handler through the generated client
 to the real API and database, including account isolation.
+
+## Published recording-client compatibility
+
+`TestRecordingExpiryPreservesPublishedClientStatuses` serves the real recording
+GET and list endpoints against PostgreSQL for both tenant modes. Its list mixes
+retained video with source expiry, artifact expiry and render-deadline expiry.
+Expiry uses the existing `unavailable` export status with additive reason fields.
+
+To exercise the published clients rather than the working-tree SDK, install each
+version outside the workspace, then run the optional live-client proof:
+
+```sh
+sdkProofRoot=$(mktemp -d)
+for version in 5.0.0 5.1.0; do
+  mkdir -p "$sdkProofRoot/$version"
+  printf '{"private":true,"type":"module"}\n' > "$sdkProofRoot/$version/package.json"
+  pnpm --dir "$sdkProofRoot/$version" add --ignore-scripts --save-exact "@q9labsai/chalk-client@$version"
+done
+export CHALK_RECORDING_PUBLISHED_CLIENTS="$sdkProofRoot"
+export CHALK_RECORDING_SDK_COMPAT_PROOF="$PWD/apps/api/tests/recording-sdk-compatibility/published-clients.mjs"
+scripts/gates/with-postgres.sh -- bash -c 'cd apps/api && go test ./internal/adapters/postgres -run "^TestRecordingExpiryPreservesPublishedClientStatuses$" -count=1 -v'
+```
+
+Both published versions make real authenticated HTTP requests to the test server.
+They decode each recording and the mixed list. Negative controls change only the
+export status back to `expired` in a real response and require both single-item
+and whole-list decoding to fail. This does not replace the live-call rehearsal.

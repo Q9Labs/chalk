@@ -79,7 +79,7 @@ function recording() {
         status: state.export,
         retryable: state.retryable,
         failure_message:
-          state.export === "expired"
+          artifact === "unavailable" && state.source === "available"
             ? "The recording could not be rendered before its deadline."
             : state.source === "failed"
               ? "The recording capture did not complete."
@@ -251,7 +251,7 @@ it.each(["failed", "expired"])("shows a terminal %s source and its reason, not e
 
 it("shows a render deadline as expired with the server reason while capture sources are retained", async () => {
   source = "available";
-  artifact = "expired";
+  artifact = "unavailable";
   transcriptStatus = "";
   transcriptionSource = "ready";
   await open();

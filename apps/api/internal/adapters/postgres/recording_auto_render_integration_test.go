@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -235,6 +236,26 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 			t.Fatal(err)
 		}
 		backfillID := newID()
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		rolledBackID := newID()
+		rollbackRepo := postgres.NewRecordingPipelineRepositoryWithTransactor(backfillRollbackTransaction{tx})
+		if _, err := rollbackRepo.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, rolledBackID); err != nil {
+			t.Fatal(err)
+		}
+		var rollbackRows int
+		if err := tx.QueryRow(ctx, `select (select count(*) from recording_jobs where id=$1) + (select count(*) from observability_journey_events where event_id=$1)`, rolledBackID.Bytes()).Scan(&rollbackRows); err != nil || rollbackRows != 2 {
+			t.Fatalf("backfill transaction must contain both job and journey: count=%d err=%v", rollbackRows, err)
+		}
+		if err := tx.Rollback(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `select (select count(*) from recording_jobs where id=$1) + (select count(*) from observability_journey_events where event_id=$1)`, rolledBackID.Bytes()).Scan(&rollbackRows); err != nil || rollbackRows != 0 {
+			t.Fatalf("backfill rollback must discard both job and journey: count=%d err=%v", rollbackRows, err)
+		}
 		backfilled, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, backfillID)
 		if err != nil || backfilled.ID != backfillID {
 			t.Fatalf("backfill must queue retained legacy capture: %+v %v", backfilled, err)
@@ -242,6 +263,10 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 		replayed, err := repository.QueueBackfillRender(ctx, recordingpipeline.ExportInput{TenantID: tenantID, RecordingID: reservation.RecordingID}, newID())
 		if err != nil || replayed.ID != backfillID {
 			t.Fatalf("backfill replay must reuse job: %+v %v", replayed, err)
+		}
+		var correlatedEvents int
+		if err := pool.QueryRow(ctx, `select count(*), count(*) filter (where event_id=$1 and journey_id=$2 and phase='render' and state='queued' and attributes->>'tenant_id'=$3 and attributes->>'episode_id'=$4 and attributes->>'render_job_id'=$6 and trace_id='0123456789abcdef0123456789abcdef' and span_id='0123456789abcdef') from observability_journey_events where name='recording.render.queued' and attributes->>'trigger'='backfill' and attributes->>'recording_id'=$5`, backfillID.Bytes(), episodeID.Bytes(), tenantID.String(), episodeID.String(), reservation.RecordingID.String(), backfillID.String()).Scan(&events, &correlatedEvents); err != nil || events != 1 || correlatedEvents != 1 {
+			t.Fatalf("backfill and replay must commit exactly one correlated journey event: count=%d correlated=%d err=%v", events, correlatedEvents, err)
 		}
 		automaticID = backfillID.String()
 
@@ -258,14 +283,14 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 		}
 
 		state, err := repository.GetArtifactState(ctx, tenantID, reservation.RecordingID)
-		if err != nil || state.ExportStatus != recordingpipeline.ExportStatusExpired || state.FailureCode != "render_deadline_exceeded" || state.FailureMessage == "" || state.Retryable {
+		if err != nil || state.ExportStatus != recordingpipeline.ExportStatusUnavailable || state.FailureCode != "render_deadline_exceeded" || state.FailureMessage == "" || state.Retryable {
 			t.Fatalf("deadline must be expired with its reason, not retryable: %+v, %v", state, err)
 		}
 		if _, err := pool.Exec(ctx, `update recording_pipelines set capture_completed_at=now()-interval '31 days' where recording_id=$1`, reservation.RecordingID.Bytes()); err != nil {
 			t.Fatal(err)
 		}
 		state, err = repository.GetArtifactState(ctx, tenantID, reservation.RecordingID)
-		if err != nil || state.ExportStatus != recordingpipeline.ExportStatusExpired || state.FailureCode != "recording_source_expired" || state.FailureMessage == "" {
+		if err != nil || state.ExportStatus != recordingpipeline.ExportStatusUnavailable || state.FailureCode != "recording_source_expired" || state.FailureMessage == "" {
 			t.Fatalf("source must be expired with its reason: %+v, %v", state, err)
 		}
 	}
@@ -273,4 +298,10 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 	if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where kind='render' and tenant_id=$1`, tenantID.Bytes()).Scan(&queued); err != nil || queued != 1 {
 		t.Fatalf("completion replay and export must not duplicate render: count=%d err=%v", queued, err)
 	}
+}
+
+type backfillRollbackTransaction struct{ pgx.Tx }
+
+func (tx backfillRollbackTransaction) BeginTx(ctx context.Context, _ pgx.TxOptions) (pgx.Tx, error) {
+	return tx.Begin(ctx)
 }

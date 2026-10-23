@@ -588,7 +588,7 @@ func recordingArtifactSchemas() map[string]map[string]any {
 			"required":             []string{"status", "retryable"},
 			"properties": map[string]any{
 				"job_id":            map[string]any{"type": "string", "format": "uuid"},
-				"status":            map[string]any{"type": "string", "enum": []string{"none", "pending", "ready", "failed", "unavailable", "expired"}},
+				"status":            map[string]any{"type": "string", "enum": []string{"none", "pending", "ready", "failed", "unavailable"}},
 				"retryable":         map[string]any{"type": "boolean"},
 				"source_expires_at": nullableSchema(timestampSchema()),
 				"failure_code":      nullableSchema(stringSchema()),

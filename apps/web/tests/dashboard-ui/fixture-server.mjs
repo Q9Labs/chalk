@@ -172,7 +172,7 @@ function recordingScenario() {
   return {
     status: mode === "export_ready" ? "completed" : "pending",
     sourceStatus: failed ? "failed" : expired ? "expired" : pending ? "pending" : "available",
-    exportStatus: mode === "export_expired" || expired ? "expired" : failed || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
+    exportStatus: mode === "export_expired" || expired ? "unavailable" : failed || pending ? "unavailable" : mode === "export_pending" ? "pending" : mode === "export_ready" ? "ready" : ["export_failed", "export_exhausted"].includes(mode) ? "failed" : "none",
     exportRetryable: mode === "export_failed",
     failureMessage:
       mode === "export_expired"

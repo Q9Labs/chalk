@@ -657,7 +657,7 @@ export const RecordingExportSchema = Schema.Struct({
   job_id: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))),
   retryable: Schema.Boolean,
   source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable", "expired"]),
+  status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
 });
 export type RecordingExport = typeof RecordingExportSchema.Type;
 

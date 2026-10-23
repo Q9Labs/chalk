@@ -76,6 +76,8 @@ func (r RecordingPipelineRepository) QueueBackfillRender(ctx context.Context, in
 }
 
 func (r RecordingPipelineRepository) requestRender(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID, allowManualRetry bool) (recordingpipeline.Job, error) {
+	journeyID, _ := observability.JourneyIDFromContext(ctx)
+	traceID, spanID, _, _ := lifecycleTraceContext(ctx)
 	var row sqlc.RequestDeferredRecordingRenderRow
 	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
 		// Acquire the lock before the request statement so concurrent requests
@@ -86,7 +88,8 @@ func (r RecordingPipelineRepository) requestRender(ctx context.Context, input re
 		var err error
 		row, err = queries.RequestDeferredRecordingRender(ctx, sqlc.RequestDeferredRecordingRenderParams{
 			AllowManualRetry: allowManualRetry,
-			TenantID:         uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
+			JourneyID:        uuid(journeyID), TraceID: optionalText(traceID), SpanID: optionalText(spanID),
+			TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), RenderJobID: uuid(renderJobID),
 			PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion, Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit,
 		})
 		return err
@@ -825,7 +828,7 @@ func completeCaptureParams(ctx context.Context, input recordingpipeline.LeaseInp
 	journeyID, _ := observability.JourneyIDFromContext(ctx)
 	params := sqlc.CompleteCaptureRecordingJobParams{
 		JourneyID: uuid(journeyID),
-		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
+		ID:        uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),
 		CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: input.EnvelopeDigest,

@@ -164,7 +164,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		if err != nil {
 			return requestRecordingExportResponse{}, err
 		}
-		if state.ExportStatus != recordingpipeline.ExportStatusReady && state.ExportStatus != recordingpipeline.ExportStatusUnavailable && state.ExportStatus != recordingpipeline.ExportStatusExpired {
+		if state.ExportStatus != recordingpipeline.ExportStatusReady && state.ExportStatus != recordingpipeline.ExportStatusUnavailable {
 			if _, err := exports.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: request.TenantID, RecordingID: request.RecordingID}); err != nil {
 				return requestRecordingExportResponse{}, err
 			}

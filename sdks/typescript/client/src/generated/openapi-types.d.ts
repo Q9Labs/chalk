@@ -1620,7 +1620,7 @@ export interface components {
       retryable: boolean;
       source_expires_at?: components["schemas"]["DateTimeString"] | null;
       /** @enum {string} */
-      status: "none" | "pending" | "ready" | "failed" | "unavailable" | "expired";
+      status: "none" | "pending" | "ready" | "failed" | "unavailable";
     };
     RecordingExportRequestAcceptedResponse: {
       export: components["schemas"]["RecordingExport"];
