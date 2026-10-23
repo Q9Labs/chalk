@@ -55,6 +55,13 @@ that production already runs it. The check
 ignores SQL comments, quoted identifiers, and ordinary string values; it also
 checks dollar-quoted bodies. It does not prove dynamic SQL or data changes safe.
 
+One narrow exception: a `NO TRANSACTION` migration that builds an index
+concurrently may drop that same index first, so a run that stopped part-way
+starts again from nothing. The marker then names the pull request that adds the
+migration, the index must be new in that migration, and the comment above the
+drop must say that it removes whatever an earlier run of this migration left
+behind, finished or not.
+
 ## Queries
 
 Write named sqlc queries in `apps/api/db/queries`, then generate and verify:

@@ -4256,6 +4256,9 @@ for each statement execute function reject_recording_completion_recovery_mutatio
 alter table participants
     add column first_joined_at timestamptz,
     add column last_left_reason text check (last_left_reason in ('left', 'episode_ended'));
+create index participants_episode_recent_join_idx
+    on participants(tenant_id, space_id, episode_id, (coalesce(first_joined_at, joined_at)) desc, id)
+    where coalesce(first_joined_at, joined_at) is not null;
 
 ALTER TABLE tenants
     ADD COLUMN created_by_service_id text,

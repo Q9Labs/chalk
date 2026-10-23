@@ -1181,6 +1181,23 @@ const spacesGroup = HttpApiGroup.make("spaces")
     }),
   )
   .add(
+    HttpApiEndpoint.get("listSpaceActivity", "/v1/tenants/:tenant_id/space-activity", {
+      params: S.ListSpaceActivityPathParamsSchema,
+      query: S.ListSpaceActivityQueryParamsSchema,
+      success: S.ListSpaceActivityResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.EpisodeInvalidSpaceIdsErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listSpacePublicAdmissionRequests", "/v1/tenants/:tenant_id/spaces/:space_id/public-admission-requests", {
       params: S.ListSpacePublicAdmissionRequestsPathParamsSchema,
       query: S.ListSpacePublicAdmissionRequestsQueryParamsSchema,
