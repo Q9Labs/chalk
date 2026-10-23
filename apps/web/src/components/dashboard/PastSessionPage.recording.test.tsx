@@ -22,6 +22,7 @@ let artifact = "none";
 let retryable = false;
 let transcriptStatus = "complete";
 let metadataStatus = 200;
+let failedMetadata: string | null = null;
 let transcriptHTTPStatus = 200;
 let extraRecordings: ReturnType<typeof recording>[] = [];
 let brokenURL: string | null = null;
@@ -92,6 +93,7 @@ function recording() {
 
 beforeEach(() => {
   metadataStatus = 200;
+  failedMetadata = null;
   transcriptHTTPStatus = 200;
   extraRecordings = [];
   listedTranscripts = undefined;
@@ -144,7 +146,7 @@ async function route(input: string, init?: RequestInit): Promise<Response> {
     const key = url.searchParams.get("id") ?? "";
     // Snapshot before the delay: an action during this read must not make its old answer magically fresh.
     const response =
-      metadataStatus !== 200
+      metadataStatus !== 200 && (failedMetadata === null || failedMetadata === key)
         ? Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus })
         : Response.json({ kind: "recording", recording: { ...recording(), id: key, ...(transcriptHTTPStatus === 200 ? { transcripts: transcriptsOf(key), transcriptsNextCursor: null } : {}) } });
     inFlight.set(key, (inFlight.get(key) ?? 0) + 1);
@@ -523,6 +525,71 @@ it.each([404, 410])("shows the server's error on the video and the transcript wh
   const reads = metadataReads();
   await advance(60_000);
   expect(metadataReads()).toBe(reads);
+});
+
+it.each([404, 410].flatMap((status) => ["none", "ready"].flatMap((newestExport) => ["none", "ready"].map((olderExport) => ({ status, newestExport, olderExport })))))(
+  "uses the older $olderExport recording after the newest $newestExport recording returns $status",
+  async ({ status, newestExport, olderExport }) => {
+    const older = "00000000-0000-4000-8000-000000000002";
+    transcriptStatus = "";
+    artifact = newestExport;
+    extraRecordings = [{ ...recording(), id: older, status: olderExport === "ready" ? "completed" : "pending", exportStatus: olderExport, transcripts: [] }];
+    await open();
+    failedMetadata = id;
+    metadataStatus = status;
+    await advance(300_000);
+    await tick();
+    expect(screen.queryByText("Couldn’t load this recording")).toBeNull();
+    if (olderExport === "ready") {
+      expect(screen.getByRole("region", { name: "Recording" })).toBeTruthy();
+      expect(requests.filter((request) => request.action === "recording-url").at(-1)?.recordingId).toBe(older);
+      expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
+    } else {
+      await clickButton("Prepare recording");
+      expect(requests.filter((request) => request.action === "export-recording").at(-1)?.recordingId).toBe(older);
+    }
+    await clickButton("Make a transcript in English");
+    expect(requests.filter((request) => request.action === "create-transcript").at(-1)?.recordingId).toBe(older);
+    expect(requests.filter((request) => request.path === "/dashboard-api/call-metadata" && request.id === id)).toHaveLength(1);
+  },
+);
+
+it.each([404, 410])("does not offer an MP4 download after its recording metadata returns %s", async (status) => {
+  artifact = "ready";
+  await open();
+  metadataStatus = status;
+  await advance(300_000);
+  await tick();
+  expect(screen.getByText("Couldn’t load this recording")).toBeTruthy();
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  await clickButton("Download");
+  expect(screen.queryByRole("menuitem", { name: "Recording (MP4)" })).toBeNull();
+  expect(screen.getByRole("menuitem", { name: "Transcript (text)" })).toBeTruthy();
+});
+
+it.each([404, 410])("falls back to an older transcript after the newest transcript list returns %s", async (status) => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", sourceStatus: "expired", exportStatus: "ready", transcriptionStatus: "expired", transcripts: [{ id: "older-transcript", status: "complete", languages: ["en"], createdAt: date }] }];
+  source = "pending";
+  artifact = "unavailable";
+  await open();
+  expect(screen.getByText("Saved speech")).toBeTruthy();
+  transcriptHTTPStatus = status;
+  await advance(15_000);
+  expect(screen.getByText("Older speech")).toBeTruthy();
+  expect(screen.queryByText("Couldn’t load the transcript")).toBeNull();
+});
+
+it.each([404, 410])("uses an older transcript source after the newest pending transcript list returns %s", async (status) => {
+  const older = "00000000-0000-4000-8000-000000000002";
+  transcriptStatus = "transcribing";
+  extraRecordings = [{ ...recording(), id: older, status: "completed", exportStatus: "ready", transcripts: [] }];
+  await open();
+  transcriptHTTPStatus = status;
+  await tick();
+  expect(screen.queryByText("Couldn’t load the transcript")).toBeNull();
+  await clickButton("Make a transcript in English");
+  expect(requests.filter((request) => request.action === "create-transcript").at(-1)?.recordingId).toBe(older);
 });
 
 it("shares metadata polling across pending attempts with one request per tick", async () => {

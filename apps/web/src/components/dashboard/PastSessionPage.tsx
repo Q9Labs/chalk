@@ -156,12 +156,15 @@ function Session({
   const end = episode.endedAt ?? episode.startedAt;
   const people = attendance.participants.length;
 
+  const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
+  const playable = recording !== undefined && !unreadable && videoState(recording) === "play";
+
   const head = (
     <>
       {back}
       <div className="pgh">
         <h1>Session on {longDay(episode.startedAt)}</h1>
-        {recording && (videoState(recording) === "play" || transcript.kind === "ready") ? <DownloadMenu ids={ids} recording={recording} video={videoState(recording) === "play"} transcript={transcript.kind === "ready" ? transcript.transcript : null} /> : null}
+        {recording && (playable || transcript.kind === "ready") ? <DownloadMenu ids={ids} recording={recording} video={playable} transcript={transcript.kind === "ready" ? transcript.transcript : null} /> : null}
         <span className="meta">
           {clock(episode.startedAt)} to {clock(end)} · {duration(episode.startedAt, end)} · {people} {people === 1 ? "person" : "people"}
         </span>
@@ -206,7 +209,6 @@ function Session({
   const newerState = newer ? videoState(newer) : null;
   const newerAction = newerState === null ? null : VIDEO[newerState].action;
   const actionLabel = (action: "prepare" | "retry") => (exporting ? "Preparing…" : action === "retry" ? "Try again" : "Prepare recording");
-  const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
   const media = unreadable ? (
     <div className="pnote" role="alert">
       <div>

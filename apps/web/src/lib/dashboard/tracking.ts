@@ -73,23 +73,39 @@ export function reread(item: Attempt, kind: Due["kind"]): Attempt {
   return item;
 }
 
+/** Candidates are ordered by usefulness, then newest first. Keep a failed fallback only to show its error. */
+function selectAttempt(candidates: readonly Attempt[], reads: (item: Attempt) => readonly Read[], fallback?: Attempt): Attempt | undefined {
+  return candidates.find((item) => reads(item).every((read) => read.failure?.kind !== "terminal")) ?? fallback;
+}
+
 /** What the page shows: the newest playable video, and separately the newest useful transcript source. */
 export function selection(attempts: readonly Attempt[]) {
   const usable = (item: Attempt) => ["preparable", "retryable", "preparing"].includes(videoState(item.recording));
+  const recordingReads = (item: Attempt) => [item.read];
   // A playable export first, then an attempt that can still be prepared, so a failed newest attempt never hides a usable older one.
-  const video = attempts.find((item) => videoState(item.recording) === "play") ?? attempts.find(usable) ?? attempts[0];
+  const videos = [...attempts.filter((item) => videoState(item.recording) === "play"), ...attempts.filter(usable)];
+  const video = selectAttempt(videos, recordingReads, videos[0] ?? attempts[0]);
   // Attempts are newest first, so a later attempt than the one shown sits before it.
-  const newer = video ? attempts.slice(0, attempts.indexOf(video)).find(usable) : undefined;
+  const newer = video ? selectAttempt(attempts.slice(0, attempts.indexOf(video)).filter(usable), recordingReads) : undefined;
   // Until a transcript finishes, the newest one being made is shown, so the page doesn't offer to make a second.
+  const transcripts = [
+    ...attempts.filter((item) => item.recording.transcripts?.some(completedTranscript)),
+    ...attempts.filter((item) => item.recording.transcripts?.some(pendingTranscript)),
+    ...attempts.filter((item) => ["creatable", "preparing"].includes(transcriptState(item.recording, item.recording.transcripts?.[0] ?? null))),
+  ];
   const transcript =
-    attempts.find((item) => {
-      const completed = item.recording.transcripts?.find(completedTranscript);
-      return completed && (item.lines?.transcriptId !== completed.id || item.lines.read.failure?.kind !== "terminal");
-    }) ??
-    attempts.find((item) => item.recording.transcripts?.some(completedTranscript)) ??
-    attempts.find((item) => item.recording.transcripts?.some(pendingTranscript)) ??
-    attempts.find((item) => ["creatable", "preparing"].includes(transcriptState(item.recording, item.recording.transcripts?.[0] ?? null))) ??
-    video;
+    selectAttempt(
+      transcripts,
+      (item) => {
+        const reads = [item.listRead];
+        const completed = item.recording.transcripts?.find(completedTranscript);
+        if (completed && item.lines?.transcriptId === completed.id) reads.push(item.lines.read);
+        // Existing transcripts survive a recording metadata failure; creating one still needs that metadata.
+        if (!completed && !item.recording.transcripts?.some(pendingTranscript)) reads.push(item.read);
+        return reads;
+      },
+      transcripts[0],
+    ) ?? video;
   return { video, newer, transcript };
 }
 
