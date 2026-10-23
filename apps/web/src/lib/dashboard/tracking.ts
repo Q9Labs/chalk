@@ -73,38 +73,44 @@ export function reread(item: Attempt, kind: Due["kind"]): Attempt {
   return item;
 }
 
-/** Candidates are ordered by usefulness, then newest first. Keep a failed fallback only to show its error. */
-function selectAttempt(candidates: readonly Attempt[], reads: (item: Attempt) => readonly Read[], fallback?: Attempt): Attempt | undefined {
-  return candidates.find((item) => reads(item).every((read) => read.failure?.kind !== "terminal")) ?? fallback;
+/** Attempts arrive newest first. Rank readable candidates; keep the newest failure only to show its error. */
+function selectAttempt(attempts: readonly Attempt[], candidate: (item: Attempt, index: number) => { readonly priority: number; readonly reads: readonly Read[] } | undefined, showFailure = false): Attempt | undefined {
+  let best: { readonly item: Attempt; readonly priority: number } | undefined;
+  let first: Attempt | undefined;
+  for (const [index, item] of attempts.entries()) {
+    const eligible = candidate(item, index);
+    if (!eligible) continue;
+    first ??= item;
+    if (eligible.reads.some((read) => read.failure?.kind === "terminal")) continue;
+    if (!best || eligible.priority < best.priority) best = { item, priority: eligible.priority };
+  }
+  return best?.item ?? (showFailure ? first : undefined);
 }
 
 /** What the page shows: the newest playable video, and separately the newest useful transcript source. */
 export function selection(attempts: readonly Attempt[]) {
   const usable = (item: Attempt) => ["preparable", "retryable", "preparing"].includes(videoState(item.recording));
-  const recordingReads = (item: Attempt) => [item.read];
   // A playable export first, then an attempt that can still be prepared, so a failed newest attempt never hides a usable older one.
-  const videos = [...attempts.filter((item) => videoState(item.recording) === "play"), ...attempts.filter(usable)];
-  const video = selectAttempt(videos, recordingReads, videos[0] ?? attempts[0]);
+  const video = selectAttempt(attempts, (item) => ({ priority: videoState(item.recording) === "play" ? 0 : usable(item) ? 1 : 2, reads: [item.read] }), true);
   // Attempts are newest first, so a later attempt than the one shown sits before it.
-  const newer = video ? selectAttempt(attempts.slice(0, attempts.indexOf(video)).filter(usable), recordingReads) : undefined;
+  const videoIndex = video ? attempts.indexOf(video) : -1;
+  const newer = selectAttempt(attempts, (item, index) => (index < videoIndex && usable(item) ? { priority: 0, reads: [item.read] } : undefined));
   // Until a transcript finishes, the newest one being made is shown, so the page doesn't offer to make a second.
-  const transcripts = [
-    ...attempts.filter((item) => item.recording.transcripts?.some(completedTranscript)),
-    ...attempts.filter((item) => item.recording.transcripts?.some(pendingTranscript)),
-    ...attempts.filter((item) => ["creatable", "preparing"].includes(transcriptState(item.recording, item.recording.transcripts?.[0] ?? null))),
-  ];
   const transcript =
     selectAttempt(
-      transcripts,
+      attempts,
       (item) => {
-        const reads = [item.listRead];
         const completed = item.recording.transcripts?.find(completedTranscript);
+        const pending = item.recording.transcripts?.some(pendingTranscript);
+        const preparable = ["creatable", "preparing"].includes(transcriptState(item.recording, item.recording.transcripts?.[0] ?? null));
+        if (!completed && !pending && !preparable) return undefined;
+        const reads = [item.listRead];
         if (completed && item.lines?.transcriptId === completed.id) reads.push(item.lines.read);
         // Existing transcripts survive a recording metadata failure; creating one still needs that metadata.
-        if (!completed && !item.recording.transcripts?.some(pendingTranscript)) reads.push(item.read);
-        return reads;
+        if (!completed && !pending) reads.push(item.read);
+        return { priority: completed ? 0 : pending ? 1 : 2, reads };
       },
-      transcripts[0],
+      true,
     ) ?? video;
   return { video, newer, transcript };
 }

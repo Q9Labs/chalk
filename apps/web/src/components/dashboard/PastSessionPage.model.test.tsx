@@ -66,7 +66,7 @@ const TABLE: Record<Item, Record<Place, Record<State, Expectation>>> = {
       ready: { polled: false, retried: false, shown: [], hidden: [], plays: "item" },
       "transient failure": { polled: true, retried: true, shown: [], hidden: [LOST], plays: "item", midway: { at: 10_000, shown: ["Preparing the recording", "Who came"] } },
       "401": SIGNED_OUT,
-      "other 4xx": { polled: true, retried: false, shown: [LOST], hidden: ["Preparing the recording"] },
+      "other 4xx": { polled: true, retried: false, shown: [CLOSED_VIDEO], hidden: [LOST, "Preparing the recording"] },
       "window closed early": { polled: true, retried: false, shown: [CLOSED_VIDEO], hidden: ["Prepare recording"], midway: { at: 120_000, shown: ["Prepare recording"] }, codex: "r4355336033" },
     },
     unselected: {
