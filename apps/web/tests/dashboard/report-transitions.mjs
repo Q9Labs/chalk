@@ -21,13 +21,25 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
     if (dismissal === "Escape") await tab.keyboard.press("Escape");
     else await tab.getByRole("dialog", { name: "Report a problem", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
     await tab.getByRole("dialog", { name: "Report a problem", exact: true }).waitFor({ state: "hidden" });
-    const focused =
-      target === "main"
-        ? await tab.evaluate(() => {
-            const element = document.activeElement;
-            return element instanceof HTMLElement && element.matches('main, [role="main"]') && element.isConnected && !element.closest("[inert]") && element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-          })
-        : await target.evaluate((element) => element.isConnected && element === document.activeElement);
+    const focusTarget = target === "main" ? target : await target.elementHandle();
+    const focused = await tab
+      .waitForFunction(
+        (element) => {
+          if (element !== "main") return element?.isConnected && element === document.activeElement;
+          const active = document.activeElement;
+          return active instanceof HTMLElement && active.matches('main, [role="main"]') && active.isConnected && !active.closest("[inert]") && active.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+        },
+        focusTarget,
+        { timeout: 3000 },
+      )
+      .then(
+        () => true,
+        (error) => {
+          if (error.name === "TimeoutError") return false;
+          throw error;
+        },
+      );
+    if (focusTarget !== "main") await focusTarget?.dispose();
     const active = await tab.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent?.trim().slice(0, 160) }));
     await writeFile(resolve(evidence, `${name}.json`), JSON.stringify({ focused, active }, null, 2));
     await tab.screenshot({ path: resolve(evidence, `${name}.png`), animations: "disabled" });
