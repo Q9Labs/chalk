@@ -582,7 +582,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
-    this.#entryGeneration = frame.entry_generation ?? null;
+    this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     if (!this.#entryNegotiated) this.#entryPending = false;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;

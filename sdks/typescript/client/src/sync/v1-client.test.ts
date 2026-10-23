@@ -516,6 +516,28 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  it("keeps acknowledged ownership across a reconnect through an older Sync", async () => {
+    const clock = new TestClock();
+    const { client, socket, state, urls } = await liveClient({ clock, reconnectDelayMs: 1 }, baseState(), ownerId, true, 7);
+    try {
+      await client.confirmEntered();
+      socket.receive({ type: "entered_ack" });
+      await settle();
+      for (const entryConfirmation of [false, true]) {
+        socket.close(1012);
+        clock.advance(0);
+        await settle();
+        clock.advance(1);
+        expect(new URL(urls.at(-1)!).searchParams.get("entry_generation")).toBe("7");
+        socket.open();
+        await settle();
+        await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", entryConfirmation, entryConfirmation ? 7 : undefined);
+      }
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
   it("resends unacknowledged entry after transport recovery", async () => {
     const clock = new TestClock();
     const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
