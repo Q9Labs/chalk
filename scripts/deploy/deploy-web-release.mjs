@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const repositoryRoot = resolve(scriptDirectory, "../..");
 export const webDirectory = join(repositoryRoot, "apps/web");
-const vendorUploaderPath = join(webDirectory, "scripts/prepare-vendor-store.ts");
+const vendorPreparerPath = join(webDirectory, "scripts/prepare-vendor-store.ts");
 export const verifierPath = join(repositoryRoot, "scripts/deploy/verify-web-deploy.mjs");
 
 export const RELEASE_TOOL_VERSIONS = Object.freeze({
@@ -106,14 +106,10 @@ export function resolveTurboCacheDirectory({ environment = process.env, mainChec
   return cacheDirectory;
 }
 
-export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEFAULT_PRODUCTION_URL, rootDirectory = repositoryRoot, webPath = webDirectory, verifier = verifierPath, turboCacheDirectory = join(resolve(rootDirectory), ".turbo", "cache") }) {
+export function buildReleasePlan({ sha, skipStaging = false, productionURL = DEFAULT_PRODUCTION_URL, rootDirectory = repositoryRoot, webPath = webDirectory, verifier = verifierPath, turboCacheDirectory = join(resolve(rootDirectory), ".turbo", "cache"), verifyVendorWorkerOnly = false }) {
   const normalizedSHA = normalizeSHA(sha);
   const cacheDirectory = resolve(turboCacheDirectory);
-  const commands = [
-    commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory),
-    commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", cacheDirectory], rootDirectory),
-    commandSpec("pnpm", ["exec", "tsx", vendorUploaderPath, "--directory", join(webPath, "dist/client"), "--bucket", "chalk-vendor-assets"], repositoryRoot),
-  ];
+  const commands = [commandSpec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], rootDirectory), commandSpec("pnpm", ["exec", "turbo", "run", "build", "--filter=web...", "--cache-dir", cacheDirectory], rootDirectory), vendorPreparationCommand(webPath, verifyVendorWorkerOnly)];
 
   if (!skipStaging) {
     commands.push(
@@ -138,7 +134,8 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
   await assertCleanTree(commandRunner, rootDirectory, executionEnvironment);
 
   const resolvedTurboCacheDirectory = turboCacheDirectory ?? resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
-  const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL, rootDirectory, webPath, turboCacheDirectory: resolvedTurboCacheDirectory });
+  const verifyVendorWorkerOnly = executionEnvironment.CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY === "true";
+  const releasePlan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL, rootDirectory, webPath, turboCacheDirectory: resolvedTurboCacheDirectory, verifyVendorWorkerOnly });
   if (options.dryRun) {
     printDryRun(expectedSHA, releasePlan);
     return { sha: expectedSHA, dryRun: true, plan: releasePlan };
@@ -151,7 +148,7 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
   await checkPinnedWrangler(commandRunner, webPath, executionEnvironment);
 
   await buildWebArtifact({ build, commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, turboCacheDirectory: resolvedTurboCacheDirectory });
-  await commandRunner(commandSpec("pnpm", ["exec", "tsx", vendorUploaderPath, "--directory", join(webPath, "dist/client"), ...(executionEnvironment.CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY === "true" ? ["--verify-only"] : []), "--target", "production"], repositoryRoot, { env: executionEnvironment }));
+  await commandRunner({ ...vendorPreparationCommand(webPath, verifyVendorWorkerOnly), env: executionEnvironment });
   const stagingURL = await deployStagingArtifact({ commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, skipStaging: options.skipStaging, webPath });
 
   await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", PRODUCTION_PROJECT, "--branch", "master", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { env: executionEnvironment }));
@@ -219,7 +216,15 @@ export async function runLocalWebRelease({ arguments_ = process.argv.slice(2), e
   const turboCacheDirectory = resolveTurboCacheDirectory({ environment: executionEnvironment, mainCheckoutRoot: rootDirectory });
 
   if (options.dryRun) {
-    const plan = buildReleasePlan({ sha: expectedSHA, skipStaging: options.skipStaging, productionURL: resolveProductionURL(executionEnvironment), rootDirectory, webPath: join(rootDirectory, "apps/web"), turboCacheDirectory });
+    const plan = buildReleasePlan({
+      sha: expectedSHA,
+      skipStaging: options.skipStaging,
+      productionURL: resolveProductionURL(executionEnvironment),
+      rootDirectory,
+      webPath: join(rootDirectory, "apps/web"),
+      turboCacheDirectory,
+      verifyVendorWorkerOnly: executionEnvironment.CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY === "true",
+    });
     console.log(`Local web release dry-run for ${expectedSHA}; no detached worktree, install, upload, or verification commands were executed.`);
     printDryRun(expectedSHA, plan);
     return { sha: expectedSHA, dryRun: true, plan };
@@ -365,6 +370,10 @@ function assertExactHEAD(currentSHA, expectedSHA) {
 
 function commandSpec(command, args, cwd, options = {}) {
   return { command, args, cwd, ...options };
+}
+
+function vendorPreparationCommand(webPath, verifyOnly) {
+  return commandSpec("pnpm", ["exec", "tsx", vendorPreparerPath, "--directory", join(webPath, "dist/client"), "--target", "production", ...(verifyOnly ? ["--verify-only"] : [])], repositoryRoot);
 }
 
 function commandOutput(result) {

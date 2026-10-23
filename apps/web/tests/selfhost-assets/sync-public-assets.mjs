@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -8,10 +9,18 @@ import { runAssetScript, setupAssetScripts } from "./fixture.mjs";
 
 test("parallel Vite starts publish public assets once, without racing or rewriting served files", async () => {
   const assets = await createFixture();
+  let watcher;
   try {
     await assets.pinDigests();
     await rm(assets.publicDir, { recursive: true, force: true });
+    for (const family of ["chalk-whiteboard", "chalk-mathjax"]) await mkdir(join(assets.publicDir, family), { recursive: true });
+    const incomplete = new Set();
+    watcher = watch(assets.publicDir, { recursive: true }, (_event, path) => {
+      const [family, tree] = String(path).split(/[\\/]/);
+      if (["chalk-whiteboard", "chalk-mathjax"].includes(family) && tree && !/^\d+\.\d+\.\d+-[0-9a-f]{16}$/.test(tree)) incomplete.add(tree);
+    });
     await assets.sync(8);
+    assert.deepEqual([...incomplete], [], "Vite must never observe incomplete vendor trees in public/");
 
     const [whiteboard] = await readdir(join(assets.publicDir, "chalk-whiteboard"));
     const [mathJax] = await readdir(join(assets.publicDir, "chalk-mathjax"));
@@ -26,6 +35,7 @@ test("parallel Vite starts publish public assets once, without racing or rewriti
     assert.equal((await readdir(join(assets.publicDir, `chalk-whiteboard/${whiteboard}/fonts`), { recursive: true })).length, 200);
     assert.equal((await readdir(join(assets.publicDir, `chalk-mathjax/${mathJax}/fonts/mathjax-newcm-font/svg`))).length, 200);
   } finally {
+    watcher?.close();
     await assets.remove();
   }
 });

@@ -55,8 +55,10 @@ function publishTree(urlRoot: string, populate: (staging: string) => void) {
   const destination = resolve(publicDir, urlRoot.slice(1));
   if (existsSync(destination)) return;
   mkdirSync(dirname(destination), { recursive: true });
-  // A sibling guarantees rename stays on the destination filesystem, even with linked dependencies.
-  const staging = mkdtempSync(`${destination}.staging-`);
+  // Keep staging on the app's filesystem and outside Vite's public copy, even with linked dependencies.
+  const stagingDirectory = resolve(publicDir, "../.cache/chalk-public-assets");
+  mkdirSync(stagingDirectory, { recursive: true });
+  const staging = mkdtempSync(join(stagingDirectory, "tree-"));
   try {
     populate(staging);
     renameSync(staging, destination);

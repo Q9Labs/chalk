@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { runWebRelease } from "./deploy-web-release.mjs";
+import { buildReleasePlan, runWebRelease } from "./deploy-web-release.mjs";
 
 const sha = "a".repeat(40);
 const responses = new Map([
@@ -12,6 +13,17 @@ const responses = new Map([
   ["pnpm --version", "12.8.1"],
   ["pnpm exec wrangler --version", "4.107.0"],
 ]);
+
+test("the dry-run preparation command reaches the real preparer's credential check", async (t) => {
+  const historical = await mkdtemp(join(tmpdir(), "chalk-dry-run-web-"));
+  t.after(() => rm(historical, { recursive: true, force: true }));
+  await mkdir(join(historical, "dist/client"), { recursive: true });
+  const spec = buildReleasePlan({ sha, webPath: historical }).find(({ args }) => args.some((arg) => arg.endsWith("prepare-vendor-store.ts")));
+  assert.ok(spec);
+  const result = spawnSync(spec.command, spec.args, { cwd: spec.cwd, encoding: "utf8", timeout: 10_000, env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: "", CLOUDFLARE_R2_ACCESS_KEY_ID: "", CLOUDFLARE_R2_API_TOKEN: "" } });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Vendor uploads require/);
+});
 
 for (const behavior of ["historical uploader", "production Sync", "Worker probe failure"])
   test(`local releases preserve ${behavior}`, async (t) => {
