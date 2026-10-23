@@ -37,6 +37,7 @@ type providerFailureDetails struct {
 	message            string
 	messageFingerprint string
 	responseBytes      int
+	responseSnapshot   string
 	requestTrackCount  int
 	localTrackCount    int
 	remoteTrackCount   int

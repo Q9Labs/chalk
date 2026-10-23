@@ -419,6 +419,18 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 		}
 		if validator, ok := output.(responseValidator); ok {
 			if err := validator.providerError(operation); err != nil {
+				if response, ok := output.(*captureTracksResponse); ok {
+					for _, track := range response.Tracks {
+						if strings.EqualFold(strings.TrimSpace(track.ErrorCode), "not_found_track_error") {
+							var failure providerFailure
+							if errors.As(err, &failure) {
+								failure.details.responseSnapshot = captureResponseSnapshot(payload)
+								err = failure
+							}
+							break
+						}
+					}
+				}
 				return providerResponse.StatusCode, err
 			}
 		}
@@ -818,6 +830,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
 			attribute.String("chalk.provider.message_fingerprint", failure.details.messageFingerprint),
 			attribute.Int("chalk.provider.response_bytes", failure.details.responseBytes),
+			attribute.String("chalk.provider.response_snapshot", failure.details.responseSnapshot),
 			attribute.Int("chalk.provider.request_track_count", failure.details.requestTrackCount),
 			attribute.Int("chalk.provider.response_track_count", failure.details.responseTrackCount),
 			attribute.Int("chalk.provider.failed_track_count", failure.details.failedTrackCount),
@@ -843,6 +856,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		"provider_message", failure.details.message,
 		"provider_message_fingerprint", failure.details.messageFingerprint,
 		"provider_response_bytes", failure.details.responseBytes,
+		"provider_response_snapshot", failure.details.responseSnapshot,
 		"request_track_count", failure.details.requestTrackCount,
 		"request_local_track_count", failure.details.localTrackCount,
 		"request_remote_track_count", failure.details.remoteTrackCount,

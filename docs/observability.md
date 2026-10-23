@@ -28,6 +28,27 @@ When a Participant joined without a knock, check the journey root named
 that asked for direct admission leaves `"admission": "direct"` in its
 attributes. Policy admissions carry no `admission` attribute.
 
+### Interrupted recording stops and missing provider tracks
+
+A capture completed from retained bundles without a confirmed stopped callback
+adds `recording.capture.salvaged` to the durable journey ledger in the same
+transaction as completion. It links to the recording's start journey and parent
+event when available, with the trace and span IDs of the current database
+completion span. Legacy rows without journey metadata use the recording ID
+as the journey ID. Its attributes contain only the recording ID, capture epoch,
+`reason=stop_unconfirmed`, and `source=committed_bundles`. Confirmed stops do not
+emit this event, and replaying a completed lease cannot emit it twice.
+
+For capture add-tracks responses containing `not_found_track_error`, API logs
+retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
+provider-failure span event carries `chalk.provider.response_snapshot`. This is
+a projection of the documented response, capped at 4096 bytes and 16 tracks.
+It preserves omitted identity fields and track order, hashes identity values,
+redacts SDP and unknown error codes, filters descriptions, and drops unknown
+fields. `omittedTracks` reports omitted entries. Use it to build a sanitized
+fixture after a new occurrence; a documentation-based fixture alone does not
+prove the shape of an earlier production failure.
+
 ## Alerts
 
 Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue

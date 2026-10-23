@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type recordingPipelineQuerier interface {
@@ -763,7 +764,7 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 			if err := insertPreparedRecordingPresentation(ctx, queries, prepared); err != nil {
 				return err
 			}
-			row, err := queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(input, renderJobID, r.transcriptionEnabled))
+			row, err := queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(ctx, input, renderJobID, r.transcriptionEnabled))
 			if errors.Is(err, pgx.ErrNoRows) {
 				return recordingpipeline.ErrJobNotFound
 			}
@@ -789,20 +790,7 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 		attribute.String("chalk.capture.worker_id", input.LeaseOwner),
 		attribute.String("chalk.capture.completion.stage", "db_commit"))
 	defer commitSpan.End()
-	row, err := r.queries.CompleteCaptureRecordingJob(ctx, sqlc.CompleteCaptureRecordingJobParams{
-		ID:                   uuid(input.JobID),
-		AttemptCount:         int32(input.AttemptCount),
-		FencingGeneration:    input.FencingGeneration,
-		LeaseToken:           requiredTextValue(input.LeaseToken),
-		LeaseOwner:           requiredTextValue(input.LeaseOwner),
-		CaptureEpoch:         input.CaptureEpoch,
-		EnvelopeDigest:       input.EnvelopeDigest,
-		RenderJobID:          uuid(renderJobID),
-		PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
-		Priority:             0,
-		AttemptLimit:         recordingpipeline.DefaultRenderAttemptLimit,
-		TranscriptionEnabled: r.transcriptionEnabled,
-	})
+	row, err := r.queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(ctx, input, renderJobID, r.transcriptionEnabled))
 	if errors.Is(err, pgx.ErrNoRows) {
 		commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
 		commitSpan.SetStatus(codes.Error, "database commit failed")
@@ -820,8 +808,8 @@ func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input 
 	return job, nil
 }
 
-func completeCaptureParams(input recordingpipeline.LeaseInput, renderJobID utilities.ID, transcriptionEnabled bool) sqlc.CompleteCaptureRecordingJobParams {
-	return sqlc.CompleteCaptureRecordingJobParams{
+func completeCaptureParams(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID, transcriptionEnabled bool) sqlc.CompleteCaptureRecordingJobParams {
+	params := sqlc.CompleteCaptureRecordingJobParams{
 		ID: uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
 		FencingGeneration: input.FencingGeneration,
 		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),
@@ -829,6 +817,11 @@ func completeCaptureParams(input recordingpipeline.LeaseInput, renderJobID utili
 		RenderJobID: uuid(renderJobID), PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
 		Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit, TranscriptionEnabled: transcriptionEnabled,
 	}
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		params.TraceID = optionalText(span.TraceID().String())
+		params.SpanID = optionalText(span.SpanID().String())
+	}
+	return params
 }
 
 func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
