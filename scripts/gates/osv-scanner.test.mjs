@@ -31,6 +31,7 @@ test("OSV discovery enforces the tooling exception for every discovered format",
     ["tracked symlinked lockfile", "runtime/package-lock.json", npm],
     ["uncommitted tracked lockfile edit", "runtime/package-lock.json", npm],
     ["uncommitted root lockfile edit", "pnpm-lock.yaml", pnpm],
+    ["nested policy cannot hide runtime copy", "runtime/package-lock.json", npm],
     ["ignored fixtures and excluded directories", null, null],
   ];
   for (const [name, file, content] of cases) {
@@ -62,6 +63,10 @@ test("OSV discovery enforces the tooling exception for every discovered format",
         } else if (name === "uncommitted tracked lockfile edit") writeFileSync(path.join(root, file), content.replaceAll("3.25.76", "4.6.7"));
         else if (name !== "uncommitted root lockfile edit") writeFileSync(path.join(root, file), content);
         git(["add", "-f", file]);
+        if (name === "nested policy cannot hide runtime copy") {
+          writeFileSync(path.join(root, "runtime/osv-scanner.toml"), '[[IgnoredVulns]]\nid = "GHSA-mrhx-c7xc-m3w5"\nignoreUntil = 2026-11-22\nreason = "Must not hide this regression."\n');
+          git(["add", "runtime/osv-scanner.toml"]);
+        }
       }
       if (name === "ignored fixtures and excluded directories") {
         for (const directory of ["ignored-fixtures", "untracked-fixtures", "node_modules/fixture", "nested/node_modules/fixture", ".git/fixture", ".worktrees/fixture", "nested/.worktrees/fixture"]) {
