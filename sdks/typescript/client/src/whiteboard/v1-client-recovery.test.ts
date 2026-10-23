@@ -936,18 +936,21 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
     { write: "after", save: "finishes" },
     { write: "before", save: "fails" },
     { write: "after", save: "fails" },
-  ] as const)("refuses a policy change whose save $save after the client fell back to a Sync without draw_policy_v1, with a store that writes $write the wait", async ({ write, save }) => {
+  ] as const)("refuses a policy change without waiting for its save when the client falls back to a Sync without draw_policy_v1, and cleans up once the save $save, with a store that writes $write the wait", async ({ write, save }) => {
     const unhandled = unhandledRejections();
     const { pendingStore, saves } = heldPolicyStore(write);
     const clock = new ManualClock();
     const { client, sockets } = await hostClient(clock, { pendingStore });
     try {
       const { change } = await policyChangeOnDroppedConnection(client, sockets, clock);
+      const caller = settlement(change);
       sockets[1]?.close(1009);
       await redial(clock, sockets, 2);
       sockets[2]?.receive(welcome());
       await settle();
       expect(helloExtensions(sockets[2])).toEqual(withoutDrawPolicy);
+      expect(await unhandled.after()).toEqual([]);
+      expect(caller.settled).toBe(true);
 
       if (save === "finishes") saves[0]?.resolve();
       else saves[0]?.reject(new Error("disk full"));
@@ -959,24 +962,31 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
       await expectNothingLeft(pendingStore, unhandled);
     } finally {
       unhandled.stop();
+      // Stop waits for pending saves, so a failed check must not leave one held.
+      for (const save of saves) save.resolve();
       await client.stopSceneSubscription();
     }
   });
 
-  it("rejects a change once with the closed connection when its save fails after Sync rejected the connection", async () => {
+  it("rejects a change with the closed connection without waiting for its save, and only once when that save then fails", async () => {
     const unhandled = unhandledRejections();
     const { pendingStore, saves } = heldPolicyStore("after");
     const { client, sockets } = await hostClient(new ManualClock(), { pendingStore });
     try {
       const change = client.setDrawPolicy("hosts");
+      const caller = settlement(change);
       await settle();
       sockets[0]?.close(1008);
       await settle();
+      expect(await unhandled.after()).toEqual([]);
+      expect(caller.settled).toBe(true);
       saves[0]?.reject(new Error("disk full"));
       await expect(change).rejects.toMatchObject({ operation: "set_draw_policy", code: "permission_denied", recoverable: false });
       await expectNothingLeft(pendingStore, unhandled);
     } finally {
       unhandled.stop();
+      // Stop waits for pending saves, so a failed check must not leave one held.
+      for (const save of saves) save.resolve();
       await client.stopSceneSubscription();
     }
   });
@@ -1683,6 +1693,16 @@ function unhandledRejections() {
     },
     stop: () => process.off("unhandledRejection", listener),
   };
+}
+
+/** Handles a caller's promise at once and records when it settles, so a test can check it while a save is still held. */
+function settlement(promise: Promise<unknown>) {
+  const state = { settled: false };
+  void promise.then(
+    () => (state.settled = true),
+    () => (state.settled = true),
+  );
+  return state;
 }
 
 /** Drops the first connection, then dials and welcomes the second. */

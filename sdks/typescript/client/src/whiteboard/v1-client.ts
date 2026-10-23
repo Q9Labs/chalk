@@ -745,27 +745,32 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   /**
    * The change joins the list before its save starts, so a later change can't overtake it while it saves. The caller
-   * gets one promise: a refusal or a rejected connection during the save settles it first, and a failed save after that.
+   * gets its one promise at once: a refusal or a rejected connection during the save settles it without waiting for
+   * the store, and a failed save settles it otherwise.
    */
-  async #queueAccessChange(entry: OperationEntry, deferred: Deferred<ChalkWhiteboardV1Commit>, promise: Promise<ChalkWhiteboardV1Commit>): Promise<ChalkWhiteboardV1Commit> {
+  #queueAccessChange(entry: OperationEntry, deferred: Deferred<ChalkWhiteboardV1Commit>, promise: Promise<ChalkWhiteboardV1Commit>): Promise<ChalkWhiteboardV1Commit> {
     const change: AccessChange = { entry, state: "saving" };
-    const { operationId } = entry.pending;
     this.#accessChanges.push(change);
-    const saveFailure = await this.#persist(entry.pending);
+    void this.#saveAccessChange(change, deferred);
+    return promise;
+  }
+
+  async #saveAccessChange(change: AccessChange, deferred: Deferred<ChalkWhiteboardV1Commit>): Promise<void> {
+    const { pending } = change.entry;
+    const saveFailure = await this.#persist(pending);
     if (saveFailure) {
-      this.#removeAccessChange(operationId);
+      this.#removeAccessChange(pending.operationId);
       this.#sendNextAccessChange();
       rejectDeferred(deferred, saveFailure);
-      return promise;
+      return;
     }
     // The client fell back to a Sync without draw_policy_v1 during the save, which already refused the change.
     if (!this.#accessChanges.includes(change)) {
-      void this.#store.remove(operationId).catch(() => undefined);
-      return promise;
+      void this.#store.remove(pending.operationId).catch(() => undefined);
+      return;
     }
     change.state = "ready";
     this.#sendNextAccessChange();
-    return promise;
   }
 
   /** Returns the failure instead of throwing it, so an access change can hand it to the promise its caller holds. */
