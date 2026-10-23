@@ -19,8 +19,8 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
 
   async function closeReport(tab, dismissal, target, name) {
     if (dismissal === "Escape") await tab.keyboard.press("Escape");
-    else await tab.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
-    await tab.getByRole("dialog").waitFor({ state: "hidden" });
+    else await tab.getByRole("dialog", { name: "Report a problem", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+    await tab.getByRole("dialog", { name: "Report a problem", exact: true }).waitFor({ state: "hidden" });
     const focused =
       target === "main"
         ? await tab.evaluate(() => {
@@ -92,13 +92,13 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
           await check(`${role}: ${dismissal} skips ${unavailable} opener and terminal fallback`, async () => {
             const opener = tab.getByRole("button", { name: "Report a problem", exact: true });
             const home = tab.getByRole("button", { name: "Home", exact: true });
+            const openerElement = await opener.elementHandle();
+            const homeElement = await home.elementHandle();
+            assert(openerElement && homeElement, "The terminal fixture needs both mounted controls");
             await opener.click();
             await tab.getByLabel("What went wrong?").fill(`Skip ${unavailable} focus targets`);
             // These are deterministic DOM fixtures; the dialog and ended-call UI are real.
             // Inert on the actions parent also proves that ancestor inertness is respected.
-            const openerElement = await opener.elementHandle();
-            const homeElement = await home.elementHandle();
-            assert(openerElement && homeElement, "The terminal fixture needs both mounted controls");
             await openerElement.evaluate((element, attribute) => element.setAttribute(attribute, ""), unavailable);
             await homeElement.evaluate((element, attribute) => (attribute === "inert" ? element.parentElement : element).setAttribute(attribute, ""), unavailable);
             try {
