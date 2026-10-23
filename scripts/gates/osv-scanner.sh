@@ -2,36 +2,9 @@
 set -euo pipefail
 
 script_directory="$(cd "$(dirname "$0")" && pwd)"
-lockfiles=()
-while IFS= read -r file; do
-  case "${file}" in
-    go.mod | */go.mod | pnpm-lock.yaml | */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock | mix.lock | */mix.lock)
-      lockfiles+=("$file")
-      ;;
-  esac
-done < <(git ls-files)
-
-# Enforce the importer scope that OSV's advisory-wide zod ignore cannot express.
-# Run before both the scan and the PR baseline filter: an old runtime copy fails too.
-for file in "${lockfiles[@]}"; do
-  case "${file}" in
-    pnpm-lock.yaml) node "${script_directory}/zod-exception.mjs" "$file" ;;
-    */pnpm-lock.yaml | package-lock.json | */package-lock.json | yarn.lock | */yarn.lock)
-      echo "Zod exception cannot validate ${file}. Only the repository-root pnpm-lock.yaml is supported. Move these dependencies into it, or extend and re-check the guard before adding another JavaScript lockfile." >&2
-      exit 1
-      ;;
-  esac
-done
-
-# The transitive resolver currently crashes on the Python requirements file.
-args=(scan source --no-resolve)
-for file in "${lockfiles[@]}"; do
-  args+=(--lockfile "$file")
-done
-if [ "${#lockfiles[@]}" -eq 0 ]; then
-  echo "Zod exception requires tracked lockfiles; refusing an unguarded recursive scan." >&2
-  exit 1
-fi
+# Let OSV discover every supported input, respecting .gitignore. No filename list.
+# --no-resolve avoids the Python transitive resolver crash, not input discovery.
+args=(scan source --recursive --no-resolve --all-packages --experimental-exclude 'r:(^|/)(node_modules|\.git|\.worktrees)(/|$)')
 
 osv_scanner() {
   if command -v osv-scanner >/dev/null 2>&1; then
@@ -45,41 +18,29 @@ osv_scanner() {
   fi
 }
 
-if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
-  osv_scanner "${args[@]}"
-  exit 0
-fi
-
-# A pull request fails only on findings in package versions that the base branch does not have.
 report_directory="$(mktemp -d "${TMPDIR:-/tmp}/chalk-osv.XXXXXX")"
 trap 'find "${report_directory}" -depth -delete' EXIT
-status=0
-osv_scanner "${args[@]}" --format json --output-file "${report_directory}/head.json" || status=$?
-if ((status == 0)); then
-  exit 0
-elif ((status != 1)); then
-  exit "${status}"
-fi
-
-base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
-copy_from_base() {
-  git cat-file -e "${base}:$1" 2>/dev/null || return 1
-  mkdir -p "${report_directory}/base/$(dirname "$1")"
-  git show "${base}:$1" > "${report_directory}/base/$1"
+scan_report() {
+  local status=0
+  osv_scanner "${args[@]}" --config "$3" --format json --output-file "$2" "$1" || status=$?
+  ((status <= 1)) || return "${status}"
 }
-# The base scan uses the base's ignore lists, so it reports what the base branch reported.
-while IFS= read -r config; do
-  copy_from_base "${config}"
-done < <(git ls-tree -r --name-only "${base}" | grep -E '(^|/)osv-scanner\.toml$' || true)
-base_args=(scan source --no-resolve)
-for file in "${lockfiles[@]}"; do
-  copy_from_base "${file}" && base_args+=(--lockfile "${report_directory}/base/${file}")
-done
 
-printf '{"results":[]}\n' > "${report_directory}/base.json"
-if [ "${#base_args[@]}" -gt 3 ]; then
-  base_status=0
-  osv_scanner "${base_args[@]}" --format json --output-file "${report_directory}/base.json" >/dev/null || base_status=$?
-  ((base_status <= 1)) || exit "${base_status}"
+# Force the root policy for every discovered input; it has no zod advisory ignore.
+scan_report . "${report_directory}/head.json" "${PWD}/osv-scanner.toml"
+# Validate every zod finding before discounting the tooling exception or a PR baseline.
+node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/head.json"
+
+if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
+  node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json"
+  exit 0
 fi
+
+# Discover the base's complete tree too, including its .gitignore and ignore policy.
+base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
+mkdir "${report_directory}/base"
+git archive "${base}" | tar -x -C "${report_directory}/base"
+base_config="${report_directory}/base/osv-scanner.toml"
+[[ -f "${base_config}" ]] || base_config=/dev/null
+scan_report "${report_directory}/base" "${report_directory}/base.json" "${base_config}"
 node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json" "${report_directory}/base.json"

@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAll } from "js-yaml";
@@ -6,7 +6,7 @@ import { loadAll } from "js-yaml";
 const label = (key) => key.split("(")[0];
 const dependencyGroups = ["dependencies", "devDependencies", "optionalDependencies"];
 
-// OSV ignores advisory IDs, not importer paths. Permit only this tooling tail:
+// Apply the exception to OSV's findings only after verifying this tooling tail:
 // apps/mobile -> ... -> expo@55.0.9 -> @expo/cli@55.0.19 -> zod@3.25.76.
 // sdks/typescript/react-native also reaches that tail through its Expo native peers.
 // Expo's native modules also depend on expo, so ancestors before expo can cycle.
@@ -70,11 +70,31 @@ function checkZodException(source) {
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    for (const lockfile of process.argv.slice(2)) checkZodException(readFileSync(lockfile, "utf8"));
+    const [lockfile, reportFile] = process.argv.slice(2);
+    checkZodException(readFileSync(lockfile, "utf8"));
+    if (reportFile) {
+      const report = JSON.parse(readFileSync(reportFile, "utf8"));
+      const advisory = "GHSA-mrhx-c7xc-m3w5";
+      for (const result of report.results ?? []) {
+        console.log(`OSV input: ${path.relative(process.cwd(), result.source.path)}`);
+        for (const entry of result.packages ?? []) {
+          entry.vulnerabilities = (entry.vulnerabilities ?? []).filter((vulnerability) => {
+            if (vulnerability.id !== advisory && !vulnerability.aliases?.includes(advisory)) return true;
+            const { name, ecosystem, version } = entry.package;
+            if (result.source.type !== "lockfile" || path.resolve(result.source.path) !== path.resolve(lockfile) || name !== "zod" || ecosystem !== "npm" || version !== "3.25.76")
+              throw new Error(`Zod exception rejects OSV finding ${vulnerability.id}: ${result.source.path} ${ecosystem} ${name}@${version}`);
+            if (Date.now() >= Date.parse("2026-11-22T00:00:00Z")) throw new Error("Zod tooling exception expired on 2026-11-22.");
+            console.log(`Zod tooling exception accepted: ${result.source.path} ${name}@${version} (expires 2026-11-22)`);
+            return false;
+          });
+        }
+      }
+      writeFileSync(reportFile, JSON.stringify(report));
+    }
   } catch (error) {
     console.error(error.message);
     console.error(
-      "If Expo or zod changed, re-check that the old zod copy reaches only Expo CLI tooling and is absent from runtime bundles. Then update the allowed versions in scripts/gates/zod-exception.mjs, the regression fixtures, and the ignore's reason in osv-scanner.toml. Remove the exception when a fixed dependency makes it unnecessary.",
+      "If Expo or zod changed, re-check that the old zod copy reaches only Expo CLI tooling and is absent from runtime bundles. Then update the allowed versions in scripts/gates/zod-exception.mjs, the regression fixtures, and the exception's reason in osv-scanner.toml. Remove the exception when a fixed dependency makes it unnecessary.",
     );
     process.exitCode = 1;
   }

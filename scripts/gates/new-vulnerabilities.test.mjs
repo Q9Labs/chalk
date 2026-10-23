@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -31,41 +31,10 @@ test("govulncheck counts only findings in called functions, as its text mode doe
   assert.deepEqual(newFindings(called, govulncheckFindings(govulncheckStream("v0.3.5", {}))), ["GO-2021-0113 golang.org/x/text@v0.3.5"]);
 });
 
-test("the OSV scan reads the Sync mix.lock", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "chalk-osv-lockfiles-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const directory of ["scripts/gates", "apps/sync", "bin"]) mkdirSync(path.join(root, directory), { recursive: true });
-  copyFileSync(new URL("./osv-scanner.sh", import.meta.url), path.join(root, "scripts/gates/osv-scanner.sh"));
-  symlinkSync(new URL("./zod-exception.mjs", import.meta.url), path.join(root, "scripts/gates/zod-exception.mjs"));
-  writeFileSync(path.join(root, "apps/sync/mix.lock"), "%{}\n");
-  writeFileSync(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
-  writeFileSync(path.join(root, "bin/osv-scanner"), '#!/bin/bash\nprintf \'%s\\n\' "$@" > "$TEST_OSV_ARGS"\n', { mode: 0o755 });
-  spawnSync("git", ["init", "-q"], { cwd: root });
-  spawnSync("git", ["add", "."], { cwd: root });
-  const environment = { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, TEST_OSV_ARGS: path.join(root, "args.txt") };
-  delete environment.GATE_VULN_BASE_REF;
-  const result = spawnSync("bash", ["scripts/gates/osv-scanner.sh"], { cwd: root, encoding: "utf8", env: environment });
-  assert.equal(result.status, 0, result.stderr);
-  const lockfiles = readFileSync(path.join(root, "args.txt"), "utf8")
-    .trim()
-    .split("\n")
-    .filter((_, index, args) => args[index - 1] === "--lockfile");
-  assert.deepEqual(lockfiles.toSorted(), ["apps/sync/mix.lock", "pnpm-lock.yaml"]);
-});
-
-test("the OSV lane fails closed outside the locked Expo CLI zod exception", async (context) => {
+test("the zod importer guard fails closed outside the locked Expo CLI chain", async (context) => {
   const source = readFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), "utf8");
   const cases = [
     ["current lockfile", () => {}, true],
-    ...["package-lock.json", "yarn.lock", "runtime/package-lock.json", "runtime/yarn.lock", "runtime/pnpm-lock.yaml"].map((file) => [
-      `unsupported JavaScript lockfile ${file}`,
-      (_lock, _documents, root) => {
-        mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-        const npmLock = { name: "runtime-app", lockfileVersion: 3, packages: { "": { dependencies: { zod: "3.25.76" } }, "node_modules/zod": { version: "3.25.76" } } };
-        const content = file.endsWith(".json") ? JSON.stringify(npmLock) : file.endsWith("yarn.lock") ? 'zod@3.25.76:\n  version "3.25.76"\n' : "lockfileVersion: '9.0'\n";
-        writeFileSync(path.join(root, file), content);
-      },
-    ]),
     [
       "pnpm v6 transitive production zod",
       (_lock, documents) => {
@@ -147,31 +116,22 @@ test("the OSV lane fails closed outside the locked Expo CLI zod exception", asyn
     await context.test(name, (subtest) => {
       const root = mkdtempSync(path.join(tmpdir(), "chalk-zod-exception-"));
       subtest.after(() => rmSync(root, { recursive: true, force: true }));
-      mkdirSync(path.join(root, "bin"));
       // Resolve the guard's existing YAML dependency from the real script, not the fixture.
       symlinkSync(new URL("./zod-exception.mjs", import.meta.url), path.join(root, "zod-exception.mjs"));
-      copyFileSync(new URL("./osv-scanner.sh", import.meta.url), path.join(root, "osv-scanner.sh"));
       const documents = loadAll(source);
       modify(documents.at(-1), documents, root);
       writeFileSync(path.join(root, "pnpm-lock.yaml"), documents.map((document) => `---\n${dump(document)}`).join(""));
-      writeFileSync(path.join(root, "bin/osv-scanner"), '#!/bin/bash\ntouch "$TEST_OSV_CALLED"\n', { mode: 0o755 });
-      spawnSync("git", ["init", "-q"], { cwd: root });
-      spawnSync("git", ["add", "."], { cwd: root });
-      const marker = path.join(root, "osv-called");
-      const result = spawnSync("bash", ["osv-scanner.sh"], {
+      const result = spawnSync("node", ["zod-exception.mjs", "pnpm-lock.yaml"], {
         cwd: root,
         encoding: "utf8",
-        // The guard must run before the PR baseline can discount an existing finding.
-        env: { ...process.env, PATH: `${root}/bin:${process.env.PATH}`, TEST_OSV_CALLED: marker, GATE_VULN_BASE_REF: "origin/master" },
       });
       assert.equal(result.status, passes ? 0 : 1, result.stderr);
-      assert.equal(existsSync(marker), passes, "unsafe consumers must fail before OSV can ignore the advisory");
       if (!passes) {
         assert.match(result.stderr, /Zod exception/);
         if (name === "a changed Expo CLI version") {
           assert.match(result.stderr, /re-check.*Expo.*tooling/);
           assert.match(result.stderr, /allowed versions.*scripts\/gates\/zod-exception\.mjs/);
-          assert.match(result.stderr, /ignore.*osv-scanner\.toml/);
+          assert.match(result.stderr, /exception.*osv-scanner\.toml/);
         }
       }
     });
