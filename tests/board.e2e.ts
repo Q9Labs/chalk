@@ -99,6 +99,9 @@ test("the live board keeps its canvas and drawing coordinates after person → b
     }
     await a.getByRole("button", { name: "Board", exact: true }).click();
     await Promise.all([a, b].map(settleStage));
+    // Following keeps the peer from fitting the first incoming stroke to a different camera.
+    await b.getByLabel("Follow Board motion A", { exact: true }).click();
+    await b.getByText("Following Board motion A").waitFor();
     for (const page of [a, b]) {
       const pixels = await page.evaluate(boardPixels);
       expect(pixels?.upperLeft).toBe(false);
@@ -116,6 +119,7 @@ test("the live board keeps its canvas and drawing coordinates after person → b
         })
         .toBe(true);
     }
+    await b.getByRole("button", { name: "Stop", exact: true }).click();
     for (const [page, name] of [
       [a, "Board motion A"],
       [b, "Board motion B"],
