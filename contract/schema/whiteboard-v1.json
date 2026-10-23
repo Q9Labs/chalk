@@ -14,7 +14,8 @@
     "view": {
       "name": "view_v1",
       "exactFields": ["name"],
-      "extendedExactFields": ["name", "origins"]
+      "extendedExactFields": ["name", "origins"],
+      "ownerExactFields": ["name", "origins", "owner"]
     },
     "drawPolicy": {
       "name": "draw_policy_v1",
@@ -124,11 +125,14 @@
       "maxCoordinate": 1000000,
       "maxExtent": 2000000,
       "epochField": "origin_epoch",
+      "inputFields": ["input_id", "move"],
+      "ownerFields": ["owner_id", "owner_sequence"],
       "originFields": ["origin_participant_id", "origin_sequence"],
       "clientExactFields": ["type", "x", "y", "width", "height", "bring"],
       "serverExactFields": ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"]
     },
     "welcome": {
+      "ownerField": "view_owner_id",
       "exactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"],
       "extendedExactFields": ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"]
     },

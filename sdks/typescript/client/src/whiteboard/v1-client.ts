@@ -1,3 +1,4 @@
+import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
@@ -117,8 +118,10 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #presenting = false;
   #hello: HelloLevel = "draw-policy";
   #viewSequence = 0;
+  #viewOwnerId: string | null = null;
+  readonly #viewVersions = new ChalkWhiteboardViewVersions();
   readonly #viewEpoch = crypto.randomUUID();
-  #pendingBring: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView } | null = null;
+  #pendingLeadingView: { readonly sceneId: string | null; readonly view: ChalkWhiteboardView } | null = null;
   #summaryStatus: ChalkWhiteboardSummary["status"] = "unsubscribed";
   #summaryError: ChalkWhiteboardV1Failure | null = null;
   #latestSnapshot: Extract<ChalkWhiteboardV1Event, { readonly type: "snapshot" }> | null = null;
@@ -198,7 +201,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #stopNow(): void {
     this.#started = false;
     this.#viewsSupported = false;
-    this.#pendingBring = null;
+    this.#pendingLeadingView = null;
     this.#latestViews.clear();
     this.#removeVisibilityListener();
     this.#startupGeneration += 1;
@@ -288,21 +291,30 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     return this.#phase === "live" && this.#summaryStatus === "ready" && this.#snapshots.size === 0;
   }
 
+  forgetParticipant(participantId: string): void {
+    this.#latestViews.delete(participantId);
+    this.#viewVersions.forgetParticipant(participantId);
+  }
+
   sendView(view: ChalkWhiteboardView): boolean {
     if (!this.#started || !this.#viewExtensionEnabled) return false;
     const frame = this.#viewFrame(view);
     encodeWhiteboardV1ClientFrame(frame);
     if (!this.#presenceReady) {
-      if (view.bring) this.#pendingBring = { sceneId: this.#sceneId, view: { ...view } };
+      if (view.bring || view.lead) this.#pendingLeadingView = { sceneId: this.#sceneId, view: { ...view } };
       return true;
     }
-    if (view.bring) this.#pendingBring = null;
+    if (view.bring || view.lead) this.#pendingLeadingView = null;
     this.#send(frame);
     return true;
   }
 
   #viewFrame(view: ChalkWhiteboardView): Extract<WhiteboardV1ClientFrame, { readonly type: "view" }> {
     const rectangle = { type: "view", x: view.x, y: view.y, width: view.width, height: view.height, bring: view.bring } as const;
+    if (this.#viewOwnerId) {
+      const input = { input_id: `${this.#viewEpoch}:${++this.#viewSequence}`, move: view.lead === true || view.bring };
+      return view.originParticipantId && !input.move ? { ...rectangle, ...input, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence } : { ...rectangle, ...input };
+    }
     if (view.bring || !viewOriginsNegotiated(this.#hello)) return rectangle;
     if (view.originParticipantId !== undefined) return { ...rectangle, origin_participant_id: view.originParticipantId, origin_sequence: view.originSequence, ...(view.originEpoch !== undefined ? { origin_epoch: view.originEpoch } : {}) };
     if (!this.#participantId) return rectangle;
@@ -311,8 +323,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #flushPendingBring(): void {
     if (!this.#presenceReady) return;
-    const pending = this.#pendingBring;
-    this.#pendingBring = null;
+    const pending = this.#pendingLeadingView;
+    this.#pendingLeadingView = null;
     if (pending && (pending.sceneId === null || pending.sceneId === this.#sceneId)) this.sendView(pending.view);
   }
 
@@ -508,7 +520,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       case "view": {
         this.#requireLive();
-        const event = {
+        if (this.#viewOwnerId && frame.owner_id !== this.#viewOwnerId) return;
+        const rectangle = {
           type: "view" as const,
           participantId: frame.participant_id,
           displayName: frame.display_name,
@@ -519,6 +532,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
           bring: frame.bring,
           occurredAt: frame.occurred_at,
         };
+        const event = frame.owner_id ? { ...rectangle, ownerId: frame.owner_id, ownerSequence: frame.owner_sequence } : rectangle;
+        if (!this.#viewVersions.isNew(event, event.participantId)) return;
+        this.#viewVersions.remember(event, event.participantId);
         this.#emit(frame.origin_participant_id ? { ...event, originParticipantId: frame.origin_participant_id, originSequence: frame.origin_sequence, ...(frame.origin_epoch ? { originEpoch: frame.origin_epoch } : {}) } : event);
         return;
       }
@@ -606,7 +622,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #welcome(frame: Extract<WhiteboardV1ServerFrame, { readonly type: "welcome" }>): void {
     if (this.#phase !== "authenticating") throw new Error("unexpected whiteboard welcome");
     this.#phase = "live";
-    this.#viewsSupported = viewsNegotiated(this.#hello);
+    this.#viewsSupported = this.#viewExtensionEnabled;
+    this.#viewOwnerId = "view_owner_id" in frame ? (frame.view_owner_id ?? null) : null;
+    this.#latestViews.clear();
+    this.#viewVersions.clear();
+    this.#emit({ type: "views_reset" });
     this.#reconnectAttempt = 0;
     this.#rejectedHelloRetries = 0;
     this.#participantId = frame.participant_id;
@@ -969,10 +989,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
 
   #fallbackHello(): void {
     this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + 1, HELLO_LEVELS.length - 1)] ?? "legacy";
-    if (!viewsNegotiated(this.#hello)) this.#pendingBring = null;
+    if (!viewsNegotiated(this.#hello)) this.#pendingLeadingView = null;
   }
 
   #resetDisconnectedState(): void {
+    this.#viewOwnerId = null;
+    this.#latestViews.clear();
+    this.#viewVersions.clear();
+    this.#emit({ type: "views_reset" });
     this.#socket = null;
     this.#clearDial();
     this.#clearHeartbeat();
@@ -1063,7 +1087,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #publishSummary(status: ChalkWhiteboardSummary["status"], summaryError: ChalkWhiteboardV1Failure | null): void {
     this.#summaryStatus = status;
     this.#summaryError = summaryError;
-    if (status === "failed") this.#pendingBring = null;
+    if (status === "failed") this.#pendingLeadingView = null;
     if (status === "ready") this.#flushPendingBring();
     const summary = this.#summary();
     try {
@@ -1343,7 +1367,7 @@ function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_i
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };
-  return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }] };
+  return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] };
 }
 
 function policyUnavailable(): ChalkWhiteboardV1Failure {

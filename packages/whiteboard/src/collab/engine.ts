@@ -64,7 +64,10 @@ export type WhiteboardCollaborationEvent =
       readonly height: number;
       readonly bring: boolean;
       readonly occurredAt: string;
-    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }))
+      readonly originEpoch?: string;
+    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }) &
+      ({ readonly ownerId: string; readonly ownerSequence: number } | { readonly ownerId?: never; readonly ownerSequence?: never }))
+  | { readonly type: "views_reset" }
   | {
       readonly type: "reset_required";
       readonly sceneId: string;
@@ -271,6 +274,7 @@ export class ExcalidrawCollabEngine {
         });
         return;
       case "view":
+      case "views_reset":
         return;
       case "reset_required":
         this.sceneRevision = null;

@@ -48,6 +48,7 @@ export type ChalkWhiteboardV1Event =
       readonly displayName: string;
       readonly occurredAt: string;
     } & ChalkWhiteboardView)
+  | { readonly type: "views_reset" }
   | {
       readonly type: "reset_required";
       readonly sceneId: string;
@@ -61,7 +62,9 @@ export type ChalkWhiteboardView = {
   readonly width: number;
   readonly height: number;
   readonly bring: boolean;
-} & ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never });
+  readonly lead?: boolean;
+} & ({ readonly ownerId: string; readonly ownerSequence: number } | { readonly ownerId?: never; readonly ownerSequence?: never }) &
+  ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never; readonly originEpoch?: never });
 
 export type ChalkWhiteboardV1Commit = {
   readonly operationId: string;
@@ -120,6 +123,7 @@ export type ChalkWhiteboardV1Transport = {
   /** Whether the active subscription negotiated view_v1; remains stable during recovery. */
   readonly supportsViews?: boolean;
   /** Accepts views while subscribed; keeps the latest bring through recovery. False means views are unavailable. */
+  readonly forgetParticipant?: (participantId: string) => void;
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<ChalkWhiteboardV1Commit>;

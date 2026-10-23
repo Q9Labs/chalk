@@ -143,6 +143,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     publish();
   }
   #publish(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, media?: ReturnType<ConnectionPorts["media"]["getSnapshot"]>): void {
+    // A missing replica during digest recovery is not a durable participant leave.
+    if (snapshot && !controlFor(snapshot)) return;
     const audioParticipants = new Set(media?.remoteTracks.filter((track) => track.source === "screen_audio" && track.track.readyState === "live").map((track) => track.participantId));
     if (snapshot?.participantId && media?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live")) audioParticipants.add(snapshot.participantId);
     const projected = participantsFor(snapshot, collaborationCapabilities);

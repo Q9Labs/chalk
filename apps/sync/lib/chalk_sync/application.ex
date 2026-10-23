@@ -18,6 +18,7 @@ defmodule ChalkSync.Application do
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
         whiteboard_authority_child(),
+        whiteboard_views_child(),
         collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
@@ -43,6 +44,19 @@ defmodule ChalkSync.Application do
   # Board access pollers stay out of the Episode supervisor, which drains and counts Coordinators,
   # and stop before the Authority table they write to. When Authority restarts, its table and its
   # monitors are gone, so every poller restarts with it.
+  defp whiteboard_views_child do
+    children = [
+      {Registry, [keys: :unique, name: ChalkSync.WhiteboardV1.ViewRegistry]},
+      {DynamicSupervisor, [strategy: :one_for_one, name: ChalkSync.WhiteboardV1.ViewSupervisor]}
+    ]
+
+    %{
+      id: ChalkSync.WhiteboardV1.Views,
+      type: :supervisor,
+      start: {Supervisor, :start_link, [children, [strategy: :rest_for_one]]}
+    }
+  end
+
   defp whiteboard_authority_child do
     children = [
       {ChalkSync.WhiteboardV1.Authority, []},

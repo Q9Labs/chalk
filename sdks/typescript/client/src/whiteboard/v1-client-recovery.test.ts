@@ -65,7 +65,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
       await settle();
       sockets[0]?.open();
       await settle();
-      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true }, { name: "draw_policy_v1" }]);
+      expect(hello(0)).toEqual([{ name: "presentation_v1" }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }]);
       sockets[0]?.close(1009);
       clock.advance(1_000);
       await settle();
@@ -1946,5 +1946,68 @@ it("judge: an old-Sync refusal cannot replay after restart while its deletion is
     await settle();
     await client.stopSceneSubscription();
     await restart?.catch(() => undefined);
+  }
+});
+
+it("adopts the owner's snapshot on reconnect and ignores the previous owner's messages", async () => {
+  const clock = new TestClock();
+  const { client, sockets } = recoveryClient(clock);
+  const startup = client.startSceneSubscription();
+  const owner = "40000000-0000-4000-8000-000000000004";
+  const nextOwner = "50000000-0000-4000-8000-000000000005";
+  const views: Extract<ChalkWhiteboardV1Event, { type: "view" }>[] = [];
+  client.subscribe((event) => {
+    if (event.type === "view") views.push(event);
+  });
+  const view = (ownerId: string, sequence: number, x: number) => ({ type: "view", participant_id: sceneId, display_name: "Person", x, y: 0, width: 100, height: 100, bring: false, occurred_at: "2026-10-23T00:00:00Z", owner_id: ownerId, owner_sequence: sequence });
+  try {
+    await settle();
+    sockets[0]?.open();
+    await settle();
+    sockets[0]?.receive({ ...welcome(), view_owner_id: owner });
+    await settle();
+    sockets[0]?.receive(view(owner, 100, 100));
+    sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+    await startup;
+    sockets[0]?.receive(view(owner, 99, 99));
+    expect(views.map((v) => v.x)).toEqual([100]);
+    sockets[0]?.close(1012);
+    const replay: ChalkWhiteboardV1Event[] = [];
+    const off = client.subscribe((event) => replay.push(event));
+    off();
+    expect(replay.filter((e) => e.type === "view")).toEqual([]);
+    clock.advance(1000);
+    await settle();
+    sockets[1]?.open();
+    await settle();
+    sockets[1]?.receive({ ...welcome(), view_owner_id: nextOwner });
+    await settle();
+    sockets[1]?.receive(view(nextOwner, 1, 20));
+    sockets[1]?.receive(view(owner, 101, 999));
+    sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+    await settle();
+    expect(views.map((v) => v.x)).toEqual([100, 20]);
+  } finally {
+    await client.stopSceneSubscription();
+  }
+});
+
+it("keeps a real recovery-time move when a heartbeat follows it", async () => {
+  const { client, sockets } = recoveryClient();
+  const startup = client.startSceneSubscription();
+  try {
+    await settle();
+    sockets[0]?.open();
+    await settle();
+    sockets[0]?.receive({ ...welcome(), view_owner_id: "40000000-0000-4000-8000-000000000004" });
+    await settle();
+    client.sendView({ x: 12, y: 0, width: 100, height: 100, bring: false, lead: true });
+    client.sendView({ x: 999, y: 0, width: 100, height: 100, bring: false });
+    sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+    await startup;
+    const sent = sockets[0]?.sent.map((wire) => JSON.parse(wire)).filter((f) => f.type === "view");
+    expect(sent).toEqual([expect.objectContaining({ x: 12, move: true, input_id: expect.stringMatching(/:[1-9][0-9]*$/) })]);
+  } finally {
+    await client.stopSceneSubscription();
   }
 });

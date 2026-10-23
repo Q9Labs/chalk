@@ -1,0 +1,186 @@
+defmodule ChalkSync.WhiteboardV1.ViewOwner do
+  @moduledoc "Node-local owner of an Episode's disposable Follow views."
+  use GenServer, restart: :temporary
+
+  alias ChalkSync.UUID
+
+  @registry ChalkSync.WhiteboardV1.ViewRegistry
+  @supervisor ChalkSync.WhiteboardV1.ViewSupervisor
+  @max_people 256
+  @max_streams 1024
+
+  def start_link(episode) do
+    GenServer.start_link(__MODULE__, episode, name: {:via, Registry, {@registry, episode}})
+  end
+
+  def join(episode, participant_id) do
+    with {:ok, owner} <- owner(episode) do
+      GenServer.call(owner, {:join, self(), participant_id})
+    end
+  end
+
+  def move(owner, frame, input), do: GenServer.call(owner, {:view, self(), frame, input})
+
+  defp owner(episode) do
+    case Registry.lookup(@registry, episode) do
+      [{pid, _}] ->
+        {:ok, pid}
+
+      [] ->
+        case DynamicSupervisor.start_child(@supervisor, {__MODULE__, episode}) do
+          {:error, {:already_started, pid}} -> {:ok, pid}
+          result -> result
+        end
+    end
+  end
+
+  @impl true
+  def init(_episode) do
+    {:ok,
+     %{
+       id: UUID.generate(),
+       sockets: %{},
+       people: MapSet.new(),
+       views: %{},
+       streams: %{},
+       legacy_views: %{}
+     }}
+  end
+
+  @impl true
+  def handle_call({:join, socket, person}, _from, state) do
+    if map_size(state.sockets) < @max_streams and
+         (MapSet.member?(state.people, person) or MapSet.size(state.people) < @max_people) do
+      ref = Process.monitor(socket)
+      sockets = Map.put(state.sockets, ref, {socket, person})
+      snapshot = Enum.map(state.views, fn {_person, view} -> %{view | "bring" => false} end)
+      Enum.each(snapshot, &send(socket, {:whiteboard_v1_frame, &1}))
+
+      {:reply, {:ok, self(), state.id, snapshot},
+       %{state | sockets: sockets, people: MapSet.put(state.people, person)}}
+    else
+      {:reply, {:error, :overloaded}, state}
+    end
+  end
+
+  def handle_call({:view, socket, frame, input}, _from, state) do
+    person = frame["participant_id"]
+
+    if Enum.any?(state.sockets, fn {_ref, member} -> member == {socket, person} end) do
+      {reply, next} = accept(state, frame, Map.put(input, :socket_id, socket))
+      {:reply, reply, next}
+    else
+      {:reply, {:error, :permission_denied}, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    sockets = Map.delete(state.sockets, ref)
+
+    if map_size(sockets) == 0,
+      do: {:stop, :normal, %{state | sockets: sockets}},
+      else: {:noreply, %{state | sockets: sockets}}
+  end
+
+  defp accept(state, %{"bring" => false} = frame, %{move: false} = input),
+    do: apply_view(state, frame, input)
+
+  defp accept(state, frame, input) do
+    case input_id(input) do
+      {:ok, stream, sequence} ->
+        stream = {frame["participant_id"], stream}
+        previous = Map.get(state.streams, stream, 0)
+
+        cond do
+          sequence <= previous ->
+            {:ok, state}
+
+          previous == 0 and map_size(state.streams) + map_size(state.legacy_views) >= @max_streams ->
+            {{:error, :overloaded}, state}
+
+          true ->
+            state = %{state | streams: Map.put(state.streams, stream, sequence)}
+            apply_view(state, frame, input)
+        end
+
+      :legacy ->
+        accept_legacy(state, frame, input)
+    end
+  end
+
+  defp accept_legacy(state, frame, input) do
+    person = frame["participant_id"]
+
+    if Map.get(input, :origin_participant_id, person) != person do
+      apply_view(state, frame, input)
+    else
+      stream = {person, Map.get(input, :origin_epoch, input.socket_id)}
+      rectangle = Map.take(frame, ~w(x y width height))
+      sequence = Map.get(input, :origin_sequence, 0)
+      {previous, watermark} = Map.get(state.legacy_views, stream, {nil, 0})
+
+      cond do
+        not frame["bring"] and (previous == rectangle or (sequence > 0 and sequence <= watermark)) ->
+          {:ok, state}
+
+        is_nil(previous) and
+            map_size(state.streams) + map_size(state.legacy_views) >= @max_streams ->
+          {{:error, :overloaded}, state}
+
+        true ->
+          legacy = Map.put(state.legacy_views, stream, {rectangle, max(sequence, watermark)})
+          apply_view(%{state | legacy_views: legacy}, frame, input)
+      end
+    end
+  end
+
+  defp input_id(%{input_id: id}) do
+    [stream, sequence] = String.split(id, ":")
+    {:ok, String.downcase(stream), String.to_integer(sequence)}
+  end
+
+  defp input_id(_input), do: :legacy
+
+  defp apply_view(state, frame, input) do
+    person = frame["participant_id"]
+    previous = Map.get(state.views, person)
+    candidate = canonical_rectangle(frame, input, state.views)
+
+    if candidate && (frame["bring"] || changed?(previous, candidate)) do
+      sequence = if previous, do: previous["owner_sequence"] + 1, else: 1
+      canonical = Map.merge(candidate, %{"owner_id" => state.id, "owner_sequence" => sequence})
+
+      Enum.each(state.sockets, fn {_ref, {socket, _}} ->
+        send(socket, {:whiteboard_v1_frame, canonical})
+      end)
+
+      {:ok, %{state | views: Map.put(state.views, person, canonical)}}
+    else
+      {:ok, state}
+    end
+  end
+
+  defp canonical_rectangle(frame, input, views) do
+    person = frame["participant_id"]
+    origin = Map.get(input, :origin_participant_id, person)
+
+    cond do
+      frame["bring"] -> frame
+      origin != person -> relay_rectangle(Map.get(views, origin), frame)
+      Map.get(input, :move, true) -> frame
+      Map.has_key?(views, person) -> nil
+      true -> frame
+    end
+  end
+
+  defp relay_rectangle(nil, _frame), do: nil
+
+  defp relay_rectangle(source, frame),
+    do: Map.merge(frame, Map.take(source, ~w(x y width height)))
+
+  defp changed?(nil, _view), do: true
+
+  defp changed?(left, right),
+    do: Map.take(left, ~w(x y width height)) != Map.take(right, ~w(x y width height))
+end
