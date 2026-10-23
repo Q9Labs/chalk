@@ -100,6 +100,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
             })),
           };
         }
+        // An answer without its transcript list can't say whether a transcript was made, so the recording is read again.
+        if (result.kind === "recording" && result.recording.transcripts === undefined) return next;
         next = {
           ...next,
           episodes: next.episodes.map((session) => ({

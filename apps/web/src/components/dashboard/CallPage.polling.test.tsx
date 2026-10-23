@@ -155,6 +155,42 @@ it("doesn't poll an ended call when this page's clock runs past a deadline the s
   expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call"]);
 });
 
+it("reads a recording again when its answer comes without the transcript list, so an automatic transcript still shows", async () => {
+  const recording = {
+    id: "recording",
+    status: "completed",
+    sourceStatus: "available",
+    exportStatus: "ready",
+    exportRetryable: false,
+    failureMessage: null,
+    transcriptionStatus: "pending",
+    sourceExpiresAt: null,
+    transcriptionExpiresAt: null,
+    createdAt: "2026-10-21T00:00:00Z",
+  } satisfies CallPageDTO["episodes"][number]["recordings"][number];
+  const episode = { id: "episode", status: "ended", startedAt: "2026-10-21T00:00:00Z", endedAt: "2026-10-21T00:05:00Z", participantCount: 1, recordingsNextCursor: null, recordings: [{ ...recording, transcripts: [] }] } satisfies CallPageDTO["episodes"][number];
+  const status = { latestEpisodeId: episode.id, episode: null, knocks: [] };
+  // The engine finished preparing and made a transcript, but the first read couldn't list it.
+  vi.mocked(readPage)
+    .mockResolvedValueOnce({ ...initial, call: { ...initial.call, admission: "anyone" }, episodes: [episode] })
+    .mockResolvedValueOnce(status)
+    .mockResolvedValueOnce(status)
+    .mockResolvedValueOnce({ kind: "recording", recording: { ...recording, transcriptionStatus: "ready" } })
+    .mockResolvedValueOnce(status)
+    .mockResolvedValueOnce(status)
+    .mockResolvedValueOnce({ kind: "recording", recording: { ...recording, transcriptionStatus: "ready", transcripts: [{ id: "transcript", status: "preparing", languages: ["en"], createdAt: "2026-10-21T00:05:00Z" }], transcriptsNextCursor: null } })
+    .mockResolvedValue(status);
+  await reactAct(async () => {
+    render(<CallPage spaceId="space" />);
+  });
+  for (let second = 5; second <= 20; second += 5)
+    await reactAct(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+  expect(screen.getByText("Transcript processing")).toBeTruthy();
+  expect(vi.mocked(readPage).mock.calls.map(([page]) => page)).toEqual(["call", "call-status", "call-status", "call-metadata", "call-status", "call-status", "call-metadata"]);
+});
+
 it("reads an idle Call overview at most once per period across repeated tab resumes, and never over a read in flight", async () => {
   let visibility: DocumentVisibilityState = "visible";
   vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import type { AttendanceDTO, PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, failureKind, readPage, readPageTimed } from "../../lib/dashboard/client";
 import { TRANSCRIPT, VIDEO, videoState } from "../../lib/dashboard/recording";
-import { attempt, dueReads, failed, nextDue, nextRead, selection, succeeded, transcriptView, type Attempt, type Due, type TranscriptView } from "../../lib/dashboard/tracking";
+import { attempt, dueReads, failed, nextDue, nextRead, reread, selection, succeeded, transcriptView, type Attempt, type Due, type TranscriptView } from "../../lib/dashboard/tracking";
 import { clock, duration, longDay, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
@@ -27,9 +27,10 @@ async function readItem(ids: Ids, due: Due): Promise<(item: Attempt) => Attempt>
     }
     const { data, offset } = await readPageTimed("call-metadata", { kind: "recording", spaceId: ids.spaceId, id: due.id });
     if (data.kind !== "recording") return (item) => item;
-    // The server lists the recording's transcripts in the same read when it can, which also answers the list.
+    // The server lists the recording's transcripts in the same read when it can, which also answers the list. When it
+    // can't, the list may have missed a transcript made since, so it is read on its own next.
     const listed = data.recording.transcripts !== undefined;
-    return (item) => ({ ...item, recording: { ...item.recording, ...data.recording }, offset: offset ?? item.offset, read: succeeded(Date.now()), listRead: listed ? succeeded(Date.now()) : item.listRead });
+    return (item) => ({ ...item, recording: { ...item.recording, ...data.recording }, offset: offset ?? item.offset, read: succeeded(Date.now()), listRead: listed ? succeeded(Date.now()) : { ...item.listRead, stale: true } });
   } catch (error) {
     const kind = failureKind(error);
     if (kind === "sign-in") throw error;
@@ -74,7 +75,7 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
       const writes = data.attempts.find((item) => item.recording.id === due.id)?.writes;
       const apply = await readItem(ids, due);
       // An answer that started before an action on the same attempt can't undo it, so that attempt is read again.
-      return new Change<Page>((page) => ({ ...page, attempts: page.attempts.map((item) => (item.recording.id !== due.id ? item : item.writes === writes ? apply(item) : { ...item, read: { ...item.read, stale: true }, listRead: { ...item.listRead, stale: true } })) }));
+      return new Change<Page>((page) => ({ ...page, attempts: page.attempts.map((item) => (item.recording.id !== due.id ? item : item.writes === writes ? apply(item) : reread(item, due.kind))) }));
     },
   });
   useWake(state.kind === "ready" ? nextDue(state.data.attempts, Date.now()) : undefined);
@@ -82,8 +83,8 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
   // An export answer carries no transcripts, so a replacement keeps the ones already read.
   const onRecording = useCallback((next: RecordingDTO) => change(next.id, (item) => ({ ...item, recording: { ...item.recording, ...next } })), [change]);
   const onTranscript = useCallback((id: string, transcript: TranscriptDTO) => change(id, (item) => ({ ...item, recording: { ...item.recording, transcripts: [transcript, ...(item.recording.transcripts ?? [])] } })), [change]);
-  // A refusal can mean a window closed or another request made a transcript, so the scheduler reads both again.
-  const onRefused = useCallback((id: string) => change(id, (item) => ({ ...item, read: { ...item.read, stale: true }, listRead: { ...item.listRead, stale: true } })), [change]);
+  // A refusal can mean a window closed or another request made a transcript, so the scheduler reads the recording again.
+  const onRefused = useCallback((id: string) => change(id, (item) => reread(item, "recording")), [change]);
   const phone = usePhone();
   const back = (name: string | null) => (
     <Link className="back" to="/dashboard/call/$spaceId" params={{ spaceId }}>

@@ -15,7 +15,7 @@ export type Read = {
   readonly failures: number;
   readonly retryAt: number;
   readonly failure: { readonly kind: "transient" | "terminal"; readonly message: string } | null;
-  /** A refused action asks for a reread at the next tick, so only the server's answer removes it. */
+  /** Asks for a reread at the next tick, when the last answer is known to be out of date. */
   readonly stale: boolean;
 };
 
@@ -64,6 +64,16 @@ export function attempt(recording: RecordingDTO, offset: number, at: number): At
   return { recording, offset, writes: 0, read: succeeded(at), listRead: succeeded(at), cues: null, cuesRead: succeeded(at) };
 }
 
+/**
+ * Asks for one item of an attempt to be read again at the next tick. The recording's answer lists its transcripts
+ * too, so rereading it answers the list as well. A transcript's lines are read until they load anyway.
+ */
+export function reread(item: Attempt, kind: Due["kind"]): Attempt {
+  if (kind === "recording") return { ...item, read: { ...item.read, stale: true } };
+  if (kind === "transcripts") return { ...item, listRead: { ...item.listRead, stale: true } };
+  return item;
+}
+
 /** What the page shows: the newest playable video, and separately the newest finished transcript. */
 export function selection(attempts: readonly Attempt[]) {
   const usable = (item: Attempt) => ["preparable", "retryable", "preparing"].includes(videoState(item.recording));
@@ -87,6 +97,9 @@ export function transcriptView(item: Attempt): TranscriptView {
   const transcript = listed.find(completedTranscript) ?? listed[0] ?? null;
   // Without a transcript the recording's own preparation decides, so a recording that can't be read can't decide it.
   if (!transcript && read.failure?.kind === "terminal") return { kind: "unreadable", message: read.failure.message };
+  // Nor can a list that failed or that a recording's answer came without, since it may have missed a new transcript.
+  if (!transcript && listRead.failure) return { kind: "unreadable", message: listRead.failure.message };
+  if (!transcript && listRead.stale) return { kind: "loading" };
   const kind = transcriptState(recording, transcript);
   if (kind !== "ready" || !transcript) return { kind: kind === "ready" ? "failed" : kind };
   if (item.cues?.transcriptId === transcript.id) return { kind: "ready", transcript, cues: item.cues.cues };

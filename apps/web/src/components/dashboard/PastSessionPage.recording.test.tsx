@@ -558,6 +558,24 @@ it("reads the transcripts again when the recording's transcription preparation c
   expect(screen.getByText("Saved speech")).toBeTruthy();
 });
 
+it("reads the transcript list again when the recording's answer comes without it, and offers no transcript meanwhile", async () => {
+  transcriptionSource = "pending";
+  transcriptStatus = "";
+  await open();
+  expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
+  // The engine finished preparing and made a transcript, but the server couldn't list it in the recording's read.
+  transcriptionSource = "ready";
+  transcriptStatus = "preparing";
+  transcriptHTTPStatus = 503;
+  await tick();
+  expect(screen.queryByRole("button", { name: "Make a transcript in English" })).toBeNull();
+  transcriptHTTPStatus = 200;
+  await tick();
+  expect(screen.queryByRole("button", { name: "Make a transcript in English" })).toBeNull();
+  expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
+  expect(requests.filter((request) => request.action === "transcripts")).toHaveLength(1);
+});
+
 it("retries a transcript list that failed to load instead of calling the transcript failed", async () => {
   transcriptHTTPStatus = 503;
   await open();
