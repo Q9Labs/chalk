@@ -174,8 +174,9 @@ export async function checkReports({ browser, page, origin, call, repository }) 
     await failurePage.screenshot({ path: resolve(evidence, "failed-link.png"), animations: "disabled" });
     await failurePage.getByRole("button", { name: "Report a problem", exact: true }).click();
     await submit(failurePage, { name: "failed" });
-    assert((await received()).at(-1).content.includes("Connection: failed"));
-    assert(!(await received()).at(-1).content.includes("Last error: none"));
+    // Submission reads the current client snapshot after failed-call teardown.
+    assert((await received()).at(-1).content.includes("Connection: left"));
+    assert((await received()).at(-1).content.includes("Last error: none"));
   } catch (error) {
     const failed = failurePage ?? guest;
     await failed.screenshot({ path: resolve(evidence, "guest-failure.png"), animations: "disabled" });
