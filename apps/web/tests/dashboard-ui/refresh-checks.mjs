@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
+const ARCHIVED = "00000000-0000-4000-8000-000000000100";
+
 export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   for (const final of ["complete", "terminal_failure"]) {
@@ -188,9 +190,11 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
         () => true,
         () => false,
       );
-    const stopped = await reads("home-status");
+    const idle = await reads("home-status");
     await tab.waitForTimeout(5500);
-    check("Home clears Live without a reload and stops polling when idle", ended && (await reads("home-status")) === stopped);
+    check("Home clears Live without a reload and keeps checking when idle", ended && (await reads("home-status")) > idle);
+    await fixture("set?newCall=Made in another tab");
+    check("Home shows a call made elsewhere without a reload", await visible(tab, "text=Made in another tab", 12000));
     await context.close();
   }
   {
@@ -337,13 +341,14 @@ export async function archivedPollingChecks({ open, fixture, check }) {
     await tab.getByText("Archived Q9 team", { exact: true }).waitFor();
     await tab.waitForTimeout(150);
     await tab.waitForLoadState("networkidle");
-    const reads = async () => (await fixture("log")).filter((entry) => entry.path === "/dashboard-api/home-status").length;
-    const before = await reads();
+    const archived = (await fixture("log")).length;
     await tab.clock.runFor(30000);
     await tab.waitForTimeout(150);
     await tab.waitForLoadState("networkidle");
-    const after = await reads();
-    check("Home stops polling an archived live row after its full refresh fails", (await tab.locator(".live").count()) === 0 && after === before, `status reads=${before}->${after}`);
+    const reads = (await fixture("log")).slice(archived).filter((entry) => entry.path === "/dashboard-api/home-status");
+    const polled = reads.filter((entry) => new URLSearchParams(entry.query).get("spaceIds")?.split(",").includes(ARCHIVED)).length;
+    // The archived row stays hidden but rides in every check, so a restore elsewhere brings it back.
+    check("Home hides an archived live row and keeps checking it after its full refresh fails", (await tab.locator(".live").count()) === 0 && reads.length > 0 && polled === reads.length, `status reads=${reads.length}, archived row reads=${polled}`);
   } finally {
     await context.close();
   }
@@ -405,8 +410,7 @@ export async function budgetChecks({ open, fixture, check, CALL }) {
     try {
       let full = 0;
       let fail = true;
-      const batches = [];
-      const metadataBatches = [];
+      const checks = [];
       const uuid = (n) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
       await tab.route("**/dashboard-api/home", async (route) => {
         full++;
@@ -415,46 +419,36 @@ export async function budgetChecks({ open, fixture, check, CALL }) {
         const calls = Array.from({ length: count }, (_, index) => ({ ...data.calls[0], id: uuid(0x8000 + index), name: `Live call ${index}` }));
         await route.fulfill({ response, json: { ...data, calls, live: calls.map((call) => ({ spaceId: call.id, episode: { ...data.live[0].episode, id: uuid(0x9000 + Number.parseInt(call.id.slice(-4), 16)) } })) } });
       });
+      // Every call has ended: each row gets its final activity.
       await tab.route("**/dashboard-api/home-status?*", async (route) => {
         const ids = new URL(route.request().url()).searchParams.get("spaceIds").split(",");
-        batches.push(ids);
-        if (fail && batches.length === 2) {
+        checks.push(ids);
+        if (fail) {
           fail = false;
           await route.fulfill({ status: 503, json: { error: "service_unavailable" } });
-        } else await route.fulfill({ json: { live: ids.map((spaceId) => ({ spaceId, episode: null })) } });
-      });
-      await tab.route("**/dashboard-api/home-metadata?*", async (route) => {
-        const ids = new URL(route.request().url()).searchParams.get("spaceIds").split(",");
-        metadataBatches.push(ids);
-        await route.fulfill({ json: { calls: ids.map((id) => ({ id, lastActiveAt: "2026-01-01T12:00:00Z", recentPeople: [{ id: uuid(0x700), name: "Final guest" }] })) } });
+        } else await route.fulfill({ json: { live: ids.map((spaceId) => ({ spaceId, episode: null })), calls: ids.map((id) => ({ id, lastActiveAt: "2026-01-01T12:00:00Z", recentPeople: [{ id: uuid(0x700), name: "Final guest" }] })) } });
       });
       await tab.reload();
       await tab.locator(".live").first().waitFor({ state: "visible" });
       await tab.waitForLoadState("networkidle");
       const initialFull = full;
-      const interval = 5000 * Math.ceil(count / 30);
-      await tab.clock.runFor(interval);
-      await tab.waitForTimeout(200);
-      check(`Home ${count} retains live data after a failed batch`, batches.length === 2 && (await tab.locator(".live").count()) === count);
-      await tab.clock.runFor(Math.ceil(Math.min(interval * 2, 30000) / interval) * interval);
+      const perTick = [];
+      const tick = async (ms = 5000) => {
+        const before = checks.length;
+        await tab.clock.runFor(ms);
+        await tab.waitForTimeout(100);
+        await tab.waitForLoadState("networkidle");
+        perTick.push(checks.length - before);
+      };
+      await tick();
+      check(`Home ${count} keeps every row when a check fails`, checks.length === 1 && (await tab.locator(".live").count()) === count);
+      // The first retry after a failure waits twice the interval.
+      await tick(10000);
       await tab.locator(".live").first().waitFor({ state: "hidden" });
-      const recovered = batches.slice(2).flat();
-      check(
-        `Home ${count} batches at most 30 ids and recovers next tick`,
-        batches.every((ids) => ids.length <= 30) && recovered.length === count && new Set(recovered).size === count && initialFull >= 1 && full === initialFull,
-        JSON.stringify({ batches: batches.map((ids) => ids.length), recovered: recovered.length, distinct: new Set(recovered).size, initialFull, full }),
-      );
-      const stopped = batches.length;
-      for (let tick = 1; tick < Math.ceil(count / 5); tick++) {
-        const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/home-metadata"));
-        await tab.clock.runFor(5000);
-        await response;
-        await tab.waitForTimeout(50);
-      }
-      check(`Home ${count} refreshes ended timestamps in bounded metadata batches`, metadataBatches.every((ids) => ids.length <= 5) && new Set(metadataBatches.flat()).size === count && (await tab.locator('.ra[aria-label*="1 Jan"]').count()) === count);
-      const finished = metadataBatches.length;
-      await tab.clock.runFor(interval * 2);
-      check(`Home ${count} stops polling after ended metadata drains`, batches.length === stopped && metadataBatches.length === finished);
+      check(`Home ${count} catches up on every row in the next check`, (await tab.locator('.ra[aria-label*="1 Jan"]').count()) === count);
+      await tick();
+      await tick();
+      check(`Home ${count} makes one request per check for every row and never rereads its pages`, perTick.every((reads) => reads === 1) && checks.every((ids) => ids.length === count) && full === initialFull, JSON.stringify({ perTick, ids: checks.map((ids) => ids.length), initialFull, full }));
     } finally {
       await context.close();
     }

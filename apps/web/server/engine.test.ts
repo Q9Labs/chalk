@@ -1,10 +1,91 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Effect } from "effect";
 import { createChalkEffectClient } from "@q9labsai/chalk-client/effect";
-import { run } from "./engine";
+import { run, withSessionEngine } from "./engine";
+import type { DashboardEnvironment } from "./config";
+import type { Identity } from "./identity";
 
 const privateDetail = "private-response-token-email-and-name";
 afterEach(() => vi.restoreAllMocks());
+
+const env: DashboardEnvironment = {
+  CHALK_ENVIRONMENT: "test",
+  CHALK_API_ORIGIN: "http://127.0.0.1:8788",
+  DASHBOARD_ORIGIN: "http://localhost:8789",
+  GOOGLE_CLIENT_ID: "fixture",
+  GOOGLE_CLIENT_SECRET: "fixture",
+  APPLE_SERVICES_ID: "fixture",
+  APPLE_TEAM_ID: "fixture",
+  APPLE_KEY_ID: "fixture",
+  APPLE_PRIVATE_KEY: "fixture",
+  SESSION_SECRET: "fixture-session-key-with-at-least-32-characters",
+  DASHBOARD_SERVICE_TOKEN: "fixture",
+  DASHBOARD_IDENTITY_PROVIDER: "fixture",
+};
+const person: Identity = { provider: "google", userId: "subject", sessionId: "session", name: "Person", email: "person@example.test", avatarUrl: null, expiresAt: Date.now() + 60_000 };
+const tenantId = "11111111-1111-4111-8111-111111111111";
+function tenantLookup() {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+    Response.json({
+      id: tenantId,
+      name: "Personal",
+      external_id: "google:test:subject",
+      cors_allowed_origins: [],
+      default_media_plane: null,
+      media_plane_provider_config: null,
+      storage_provider_config: null,
+      logo_key: null,
+      website: null,
+      transcription_ceiling: "on_demand",
+      transcription_default_mode: "on_demand",
+      provider_policy_version: "test",
+      recording_retention_seconds: 3600,
+      transcript_retention_seconds: 3600,
+      transcription_source_window_seconds: 3600,
+      created_at: "2026-10-18T12:00:00Z",
+      updated_at: "2026-10-18T12:00:00Z",
+    }),
+  );
+}
+async function tenantCookie() {
+  const response = await withSessionEngine(new Request(env.DASHBOARD_ORIGIN), env, person, async (engine) => Response.json({ tenantId: engine.tenantId }));
+  const cookie = response.headers.getSetCookie()[0]?.split(";")[0];
+  if (!cookie) throw new Error("tenant cache was not set");
+  return cookie;
+}
+
+it("resolves a tenant once per session across independent polling requests", async () => {
+  const lookup = tenantLookup();
+  const cookie = await tenantCookie();
+  for (let tick = 0; tick < 12; tick++) {
+    const response = await withSessionEngine(new Request(env.DASHBOARD_ORIGIN, { headers: { Cookie: cookie } }), env, person, async (engine) => Response.json({ tenantId: engine.tenantId }));
+    expect(await response.json()).toEqual({ tenantId });
+    expect(response.headers.getSetCookie()).toEqual([]);
+  }
+  expect(lookup).toHaveBeenCalledOnce();
+});
+
+it.each([
+  { name: "session", identity: { ...person, sessionId: "another-session" }, environment: env },
+  { name: "account", identity: { ...person, userId: "another-user" }, environment: env },
+  { name: "provider", identity: { ...person, provider: "apple" as const }, environment: env },
+  { name: "environment", identity: person, environment: { ...env, CHALK_ENVIRONMENT: "local" as const } },
+  { name: "engine", identity: person, environment: { ...env, CHALK_API_ORIGIN: "http://127.0.0.1:9999" } },
+])("does not reuse tenant authority for another $name", async ({ identity, environment }) => {
+  const lookup = tenantLookup();
+  const cookie = await tenantCookie();
+  await withSessionEngine(new Request(env.DASHBOARD_ORIGIN, { headers: { Cookie: cookie } }), environment, identity, async () => new Response());
+  expect(lookup).toHaveBeenCalledTimes(2);
+});
+
+it("rejects a modified tenant cache and renews an expired one", async () => {
+  const lookup = tenantLookup();
+  const cookie = await tenantCookie();
+  await expect(withSessionEngine(new Request(env.DASHBOARD_ORIGIN, { headers: { Cookie: cookie + "tampered" } }), env, person, async () => new Response())).rejects.toMatchObject({ status: 401 });
+  vi.spyOn(Date, "now").mockReturnValue(person.expiresAt + 1);
+  await withSessionEngine(new Request(env.DASHBOARD_ORIGIN, { headers: { Cookie: cookie } }), env, { ...person, expiresAt: person.expiresAt + 60_000 }, async () => new Response());
+  expect(lookup).toHaveBeenCalledTimes(2);
+});
 
 describe("engine failure diagnostics through the real SDK decoder", () => {
   it.each([

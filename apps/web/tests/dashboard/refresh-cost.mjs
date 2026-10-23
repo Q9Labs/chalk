@@ -12,8 +12,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
   const joined = await post(client, "/dashboard-api/call", { action: "join", spaceId: call.id, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
   assert.equal(joined.status, 200, await joined.clone().text());
   const episodeId = (await joined.json()).access.subject.episode_id;
-  assert.equal((await client.request(`/dashboard-api/home-status?spaceIds=${Array(31).fill(call.id).join(",")}`)).status, 400);
-  assert.equal((await client.request(`/dashboard-api/home-metadata?spaceIds=${Array(6).fill(call.id).join(",")}`)).status, 400);
+  assert.equal((await client.request(`/dashboard-api/home-status?spaceIds=${Array(301).fill(call.id).join(",")}`)).status, 400);
   const loadStart = engineRequests.length;
   const loaded = await client.request(`/dashboard-api/call?spaceId=${call.id}`);
   assert.equal(loaded.status, 200);
@@ -22,10 +21,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
   const lookupPath = "/v1/tenants/by-external-id?";
   const scoped = (entry) => entry.path.startsWith(`/v1/tenants/${tenantId}/`);
   assert(pageLoad.every((entry) => entry.method === "GET" && entry.status === 200));
-  assert.equal(pageLoad.filter((entry) => entry.path.startsWith(lookupPath)).length, 1);
+  assert.equal(pageLoad.filter((entry) => entry.path.startsWith(lookupPath)).length, 0);
   // Five fixed scoped reads, two per Episode, one per recording (up to 5 x 5).
   assert.equal(pageLoad.filter(scoped).length, 5 + 2 * initial.episodes.length + initial.episodes.reduce((sum, episode) => sum + episode.recordings.length, 0));
-  console.log(`PASS: call-page-fanout ${JSON.stringify({ total: pageLoad.length, scoped: pageLoad.filter(scoped).length, unscopedLookups: 1, writes: 0, maximumScoped: 40, maximumTotal: 41 })}`);
+  console.log(`PASS: call-page-fanout ${JSON.stringify({ total: pageLoad.length, scoped: pageLoad.filter(scoped).length, unscopedLookups: 0, writes: 0, maximumScoped: 40, maximumTotal: 40 })}`);
   const traffic = (start, stop) => {
     const requests = engineRequests.filter((entry) => entry.at >= start && entry.at < stop);
     assert(
@@ -83,6 +82,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const perMinute = observed.length / minutes;
     const windows = [0, 1].map((index) => observed.filter((read) => read.at >= start + index * 60000 && read.at < start + (index + 1) * 60000).length);
     assert(perMinute <= 60 && windows.every((count) => count <= 60), `Tenant reads exceed budget: ${perMinute}; windows ${windows}`);
+    const allPerMinute = normalTraffic.total / minutes;
+    const allWindows = [0, 1].map((index) => engineRequests.filter((read) => read.at >= start + index * 60000 && read.at < start + (index + 1) * 60000).length);
+    assert(allPerMinute <= 60 && allWindows.every((count) => count <= 60), `All engine reads exceed budget: ${allPerMinute}; windows ${allWindows}`);
+    assert.equal(normalTraffic.unscopedLookups, 0, "Polling reuses the session's tenant authority");
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, initialCallReads);
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/home").length, initialHomeReads);
     assert(dashboardReads.filter((path) => path === "/dashboard-api/call-status").length >= 23);
@@ -112,10 +115,10 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     const pendingTraffic = traffic(pendingStart, Date.now());
     const ticks = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length - pendingTicks;
     assert(ticks >= 19 && ticks <= 21, `Expected three-second status cadence, got ${ticks}`);
-    assert(pendingTraffic.scoped <= 52 && pendingTraffic.unscopedLookups <= 26);
+    assert(pendingTraffic.total <= 60 && pendingTraffic.scoped <= 52 && pendingTraffic.unscopedLookups === 0);
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, initialCallReads);
     console.log(
-      `PASS: refresh-cost-all-buckets ${JSON.stringify({ normalTwoPagesTwoMinutes: normalTraffic, pendingOnePageOneMinute: { ...pendingTraffic, ticks }, limitsPerMinute: { tenantRead: 300, tenantWrite: 60, serviceScopedRead: 6000, serviceUnscopedRead: 300 }, conservativeSinglePagePerMinute: { normal: { scoped: 36, unscoped: 18, total: 54, writes: 0 }, pending: { scoped: 52, unscoped: 26, total: 78, writes: 0 } } })}`,
+      `PASS: refresh-cost-all-buckets ${JSON.stringify({ normalTwoPagesTwoMinutes: normalTraffic, allReadsPerMinute: Number(allPerMinute.toFixed(2)), allFullMinuteWindows: allWindows, pendingOnePageOneMinute: { ...pendingTraffic, ticks }, limitsPerMinute: { tenantRead: 300, tenantWrite: 60, serviceScopedRead: 6000, serviceUnscopedRead: 300 }, conservativeSinglePagePerMinute: { normal: { scoped: 36, unscoped: 0, total: 36, writes: 0 }, pending: { scoped: 52, unscoped: 0, total: 52, writes: 0 } } })}`,
     );
     // Let the end transition checks continue to observe both pages.
     await homePage.goto(`${origin}/dashboard`);
@@ -130,7 +133,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     await callPage.locator('.srow a[aria-label^="Session"]').waitFor({ state: "visible", timeout: 12000 });
     await homePage.locator(".live").waitFor({ state: "hidden", timeout: 12000 });
     assert.equal(navigations, 0, "Both pages update without navigation or reload");
-    const finalMetadata = await client.request(`/dashboard-api/home-metadata?spaceIds=${call.id}`);
+    const finalMetadata = await client.request(`/dashboard-api/home-status?home=1&spaceIds=${call.id}`);
     assert.equal(finalMetadata.status, 200);
     const endedRow = (await finalMetadata.json()).calls[0];
     assert.equal(Date.parse(endedRow.lastActiveAt), Date.parse(sql(`select ended_at from episodes where id='${episodeId}'`)), "End timestamp comes from the real Episode");
@@ -157,6 +160,8 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     assert.equal(dashboardReads.filter((path) => path === "/dashboard-api/call").length, fullBeforeDeletion);
     assert(engineRequests.some((entry) => entry.path.endsWith(`/transcripts/${transcriptId}`) && entry.status === 404));
     console.log("PASS: real pending transcript deletion returns 404; browser removes it, retains Call and continues shared status polling without history reload");
+    // A poll still forwarded by the route above fails once the caller stops the Pages server, so let it finish first.
+    await context.unrouteAll({ behavior: "wait" });
   } finally {
     await browser?.close();
   }

@@ -46,8 +46,8 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
 - `POST /auth/sign-out`: strict empty JSON object. Clears session and binding
   cookies; clear this account's local bookmarks when `clearLocalBookmarks` is true.
   This is local sign-out, not Google/Apple account logout or token revocation.
-- `GET /dashboard-api/home?cursor=...`: owned, unarchived Spaces and one batch
-  live read. Invite links are fetched only on copy/share, not per row: invite reads
+- `GET /dashboard-api/home?cursor=...`: owned, unarchived Spaces and one activity
+  read for them. Invite links are fetched only on copy/share, not per row: invite reads
   mint tokens and consume the engine write bucket. `POST`: `HomeAction`.
 - `GET /dashboard-api/call?spaceId=...&cursor=...`: call, signed invite and Episode
   history. `POST`: `CallAction` (settings, rotate link, knocks, end for everyone).
@@ -57,8 +57,13 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   one tenant read for a transcript, or two for a recording and its latest transcripts.
   Recording polling includes pending audio preparation, so new automatic transcripts appear.
   Call pages share one metadata request per ten seconds between the live roster and pending artifacts.
-- `GET /dashboard-api/home-status?spaceIds=...`: one batch live read for the
-  visible live Spaces only. The server derives Tenant authority from the session.
+- `GET /dashboard-api/home-status?spaceIds=...&home=1`: Home's check. Live state, whether it
+  is archived, last active time and recent people for up to 300 Spaces in one tenant read
+  (`listSpaceActivity`), plus one read for the five newest unarchived Spaces; when any of them
+  isn't listed, the answer carries them as the first page (one more read for their activity).
+  Without `home=1`, the call page's roster
+  check: the full live roster from `listSpaceLiveEpisodes`, one read for up to 30 Spaces.
+  The server derives Tenant authority from the session.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
   recordings and attendance. `POST`: `PastSessionAction` (artifact URLs,
   transcripts, export, deletion). Artifact URLs expire; request again on expiry.
@@ -75,8 +80,13 @@ Nothing accepts arbitrary Participant IDs or promotes joined-only calls.
 The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
 
-Visible Call pages check status every five seconds; visible Home pages check only
-while they show live calls. Stable status never reloads page history. A changed
+Visible Call and Home pages check status every five seconds. Each Home check is one
+request for every shown row and then the archived calls Home holds, up to 300 IDs, and Home
+updates its rows from the answer. An archived call is hidden in its place and shows again
+when it is restored elsewhere. Calls made elsewhere go on top from the first page;
+when that page holds no call Home already has, Home reloads its list down to where its last
+row sat, two tenant reads per page of five.
+Stable status never reloads page history. A changed
 Episode or knock set reloads the expanded page once. Hidden pages pause checks
 and refresh once on return; failed background reads retain ready content.
 

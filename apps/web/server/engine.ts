@@ -1,12 +1,13 @@
 import { Effect, Schema } from "effect";
 import { HttpClientError } from "effect/unstable/http";
-import { createChalkEffectClient } from "@q9labsai/chalk-client/effect";
+import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
 import { dashboardWebsiteOrigin } from "../src/lib/dashboard/contracts";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
 import type { AttendanceDTO, LiveDTO } from "../src/lib/dashboard/contracts";
 import { DashboardError } from "./http";
+import { readCookie, seal, unseal, writeCookie } from "./cookies";
 
 function client(env: DashboardEnvironment) {
   return Effect.runPromise(
@@ -33,11 +34,19 @@ export async function resolveTenant(env: DashboardEnvironment, person: Identity,
   if (!provision) throw new DashboardError(409, "account_not_provisioned");
   return (await run(api.tenants.createTenant({ payload: { name: person.name || "Personal", external_id: externalId, cors_allowed_origins: [...new Set([dashboardWebsiteOrigin, env.DASHBOARD_ORIGIN])] } }))).id;
 }
-export async function engine(env: DashboardEnvironment, person: Identity) {
-  const tenantId = await resolveTenant(env, person);
-  return { api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN };
+export type Engine = { api: Awaited<ReturnType<typeof client>>; tenantId: Awaited<ReturnType<typeof resolveTenant>>; dashboardOrigin: string };
+const tenantSession = z.object({ scope: z.string(), tenantId: z.uuid(), expiresAt: z.number() });
+/** Cache only engine-derived authority, sealed and bound to the authenticated session and engine environment. */
+export async function withSessionEngine(request: Request, env: DashboardEnvironment, person: Identity, respond: (engine: Engine) => Promise<Response>): Promise<Response> {
+  const scope = JSON.stringify([env.CHALK_API_ORIGIN, env.CHALK_ENVIRONMENT, person.provider, person.userId, person.sessionId]);
+  const value = readCookie(request, env, "tenant");
+  const cached = value ? tenantSession.parse(await unseal(value, env.SESSION_SECRET, "tenant")) : null;
+  const hit = cached !== null && cached.scope === scope && cached.expiresAt > Date.now();
+  const tenantId = hit ? Schema.decodeUnknownSync(TenantIdSchema)(cached.tenantId) : await resolveTenant(env, person);
+  const response = await respond({ api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN });
+  if (!hit) writeCookie(response, env, "tenant", await seal({ scope, tenantId, expiresAt: person.expiresAt }, env.SESSION_SECRET, "tenant"), Math.max(0, Math.floor((person.expiresAt - Date.now()) / 1000)));
+  return response;
 }
-export type Engine = Awaited<ReturnType<typeof engine>>;
 const apiFailure = z.object({ error: z.object({ code: z.string().max(100) }) });
 export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
   const result = await Effect.runPromise(

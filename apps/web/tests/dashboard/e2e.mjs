@@ -79,7 +79,7 @@ try {
   }
   // Run the real named Pages route graph with a test-only composition root.
   for (const group of ["auth", "dashboard-api"]) {
-    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-invite", "call-status", "call-metadata", "home-status", "home-metadata", "past-session", "developer"];
+    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-invite", "call-status", "call-metadata", "home-status", "past-session", "developer"];
     await mkdir(resolve(sandbox, "functions", group));
     for (const name of names) {
       await mkdir(resolve(sandbox, "functions", group, name, ".."), { recursive: true });
@@ -476,7 +476,7 @@ try {
     assert.equal(historical.participantCount, 2);
     assert.equal(historical.recordings[0].status, "failed");
     assert.equal(historical.recordings[0].transcripts[0].status, "terminal_failure");
-    // Copy/share needs only tenant resolution and the invite, even when history fails.
+    // Copy/share uses the session's tenant and only reads the invite, even when history fails.
     rateLimitPath = `/v1/tenants/${firstTenant}/spaces/${spaceId}/episodes`;
     try {
       assert.equal((await ada.request(`/dashboard-api/call?spaceId=${spaceId}`)).status, 429);
@@ -486,14 +486,11 @@ try {
       assert.deepEqual(Object.keys(await invite.json()), ["inviteUrl"]);
       assert.deepEqual(
         engineRequests.slice(offset).map(({ method, path }) => [method, path.split("?")[0]]),
-        [
-          ["GET", "/v1/tenants/by-external-id"],
-          ["GET", `/v1/tenants/${firstTenant}/spaces/${spaceId}/public-invite`],
-        ],
+        [["GET", `/v1/tenants/${firstTenant}/spaces/${spaceId}/public-invite`]],
       );
       assert.equal((await ada.request("/dashboard-api/call-invite?spaceId=invalid")).status, 400);
       assert.equal((await ada.request(`/dashboard-api/call-invite?spaceId=${spaceId}&cursor=unexpected`)).status, 400);
-      console.log("PASS: invite-only read uses two engine GETs including tenant resolution despite failing history; rejects invalid IDs and extra fields");
+      console.log("PASS: invite-only read uses one engine GET with the cached session tenant despite failing history; rejects invalid IDs and extra fields");
     } finally {
       rateLimitPath = undefined;
     }
@@ -661,7 +658,7 @@ try {
     assert(throttled.headers.get("X-Request-ID"));
     assert.equal(blocked.cookies.has("local_chalk_session"), false);
     assert.equal(sql("select count(*) from tenants"), beforeThrottle);
-    assert.equal((await ada.request("/dashboard-api/home")).status, 429);
+    assert.equal((await ada.request("/dashboard-api/home")).status, 200, "A warm session does not repeat tenant lookup");
     rateLimitPath = `/v1/tenants/${firstTenant}/spaces`;
     assert.equal((await ada.request("/dashboard-api/home")).status, 429);
     rateLimitPath = undefined;

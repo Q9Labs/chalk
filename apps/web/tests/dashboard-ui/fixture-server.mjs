@@ -4,7 +4,7 @@
 // every request for the browser checks. It lives outside src/, so no build can bundle it.
 //
 //   node tests/dashboard-ui/fixture-server.mjs   (Vite on 3070, fixture on 3071)
-//   GET /__fixture/set?account=hasan|new&delay=ms&fail=home&limit=call&expire=1&freshSignIn=create-key&session=<id>
+//   GET /__fixture/set?account=hasan|new&delay=ms&fail=home&limit=call&expire=1&freshSignIn=create-key&session=<id>&newCall=<name>
 //   GET /__fixture/log   GET /__fixture/reset
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
@@ -207,6 +207,12 @@ async function auth(request, response, path, url) {
   return fail(response, 404, "route_not_found");
 }
 
+function homeDTO(data) {
+  const calls = data.calls.filter((call) => !call.archived);
+  const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
+  return { calls: calls.map(homeCallDTO), live, nextCursor: null };
+}
+
 async function dashboard(request, response, page, url, entry) {
   const account = cookies(request).fx_session;
   if (request.method === "POST" && request.headers.origin !== ORIGIN) return fail(response, 403, "origin_rejected");
@@ -219,13 +225,19 @@ async function dashboard(request, response, page, url, entry) {
     if (state.limit.has(page)) return fail(response, 429, "engine_rate_limited", { retryable: true, retryAfterSeconds: 60 });
     if (state.fail.has(page)) return fail(response, 503, "service_unavailable");
     const query = Object.fromEntries(url.searchParams);
-    if (page === "home-metadata") {
-      return send(response, 200, { calls: query.spaceIds.split(",").map((id) => ({ ...homeCallDTO(data.calls.find((call) => call.id === id)), id })) });
-    }
     if (page === "home-status") {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
-      const live = query.spaceIds.split(",").map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));
-      return send(response, 200, { live });
+      const ids = query.spaceIds ? query.spaceIds.split(",") : [];
+      const live = ids.map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));
+      // Like the server: every row's activity, and with `home` the first page when the newest call isn't listed.
+      const calls = ids
+        .map((spaceId) => data.calls.find((call) => call.id === spaceId))
+        .filter(Boolean)
+        .map(homeCallDTO)
+        .map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople }));
+      if (!query.home) return send(response, 200, { live, calls });
+      const newest = data.calls.find((call) => !call.archived)?.id;
+      return send(response, 200, newest && !ids.includes(newest) ? { live, calls, first: homeDTO(data) } : { live, calls });
     }
     if (page === "call-metadata") {
       const recordings = data.sessions.flatMap((session) => recordingsFor(session, true));
@@ -236,11 +248,7 @@ async function dashboard(request, response, page, url, entry) {
       const episode = data.live ? { id: uuid(0x2ff), status: "active" } : data.sessions.find((item) => item.status !== "ended");
       return send(response, 200, { latestEpisodeId: data.live ? uuid(0x2ff) : (data.sessions[0]?.id ?? null), episode: episode ? { id: episode.id, status: episode.status } : null, knocks: data.knocks ?? [] });
     }
-    if (page === "home") {
-      const calls = data.calls.filter((call) => !call.archived);
-      const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
-      return send(response, 200, { calls: calls.map(homeCallDTO), live, nextCursor: null });
-    }
+    if (page === "home") return send(response, 200, homeDTO(data));
     if (page === "call-invite") {
       const call = data.calls.find((item) => item.id === query.spaceId);
       return call ? send(response, 200, { inviteUrl: inviteURL(call) }) : fail(response, 404, "not_found");
@@ -449,6 +457,7 @@ const server = createServer(async (request, response) => {
             state.finishedTranscript = value;
           } else if (key === "transcript") state.transcript = value;
           else if (key === "signInError") state.signInError = value === "1";
+          else if (key === "newCall") accounts.hasan.calls.unshift({ id: uuid(0x1000 + accounts.hasan.calls.length), slug: "made-elsewhere", name: value, archived: false, admission: "knock", createdAt: new Date().toISOString() });
         }
         return send(response, 200, { ok: true });
       }

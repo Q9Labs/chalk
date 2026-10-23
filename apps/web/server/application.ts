@@ -5,13 +5,13 @@ import type { Authentication, Identity, IdentityProvider } from "./identity";
 import { binding, checkCsrf, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
 import { sealSession } from "./session";
 import { body, form, DashboardError, exactOrigin, json, redirect } from "./http";
-import { engine, resolveTenant, live } from "./engine";
-import { homeMutation, homePage, homeMetadata } from "./home";
+import { withSessionEngine, resolveTenant } from "./engine";
+import { homeMutation, homePage, homeStatus } from "./home";
 import { ownerAccess, viewerSeat } from "./owner-access";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
 import { pastMutation, pastSessionPage } from "./past-session";
 import { developerMutation, developerPage } from "./developer";
-import { callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, homeMetadataQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
+import { callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
@@ -99,57 +99,56 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
   if (request.method === "POST") exactOrigin(request, env.DASHBOARD_ORIGIN);
   const person = await current(request, env, provider);
   if (request.method === "POST") await checkCsrf(request, person, env);
-  const client = await engine(env, person);
-  if (request.method === "GET") {
+  return withSessionEngine(request, env, person, async (client) => {
+    if (request.method === "GET") {
+      switch (path) {
+        case "/dashboard-api/home":
+          return json(await homePage(client, pageQuery.parse(query(request)).cursor));
+        case "/dashboard-api/call-status":
+          return json(await callStatus(client, callStatusQuery.parse(query(request)).spaceId));
+        case "/dashboard-api/call-invite":
+          return json(await callInvite(client, callStatusQuery.parse(query(request)).spaceId));
+        case "/dashboard-api/call-metadata":
+          return json(await callMetadata(client, callMetadataQuery.parse(query(request))));
+        case "/dashboard-api/home-status":
+          return json(await homeStatus(client, homeStatusQuery.parse(query(request))));
+        case "/dashboard-api/call": {
+          const input = callQuery.parse(query(request));
+          return json(await callPage(client, input.spaceId, input.cursor));
+        }
+        case "/dashboard-api/past-session": {
+          const input = pastQuery.parse(query(request));
+          return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));
+        }
+        case "/dashboard-api/developer":
+          return json(await developerPage(client, developerQuery.parse(query(request))));
+        default:
+          throw new DashboardError(404, "route_not_found");
+      }
+    }
+    const input = await body(request);
     switch (path) {
-      case "/dashboard-api/home":
-        return json(await homePage(client, pageQuery.parse(query(request)).cursor));
-      case "/dashboard-api/call-status":
-        return json(await callStatus(client, callStatusQuery.parse(query(request)).spaceId));
-      case "/dashboard-api/call-invite":
-        return json(await callInvite(client, callStatusQuery.parse(query(request)).spaceId));
-      case "/dashboard-api/call-metadata":
-        return json(await callMetadata(client, callMetadataQuery.parse(query(request))));
-      case "/dashboard-api/home-metadata":
-        return json(await homeMetadata(client, homeMetadataQuery.parse(query(request)).spaceIds));
-      case "/dashboard-api/home-status":
-        return json({ live: await live(client, homeStatusQuery.parse(query(request)).spaceIds) });
+      case "/dashboard-api/home": {
+        const action = homeAction.parse(input);
+        return json(await homeMutation(client, action));
+      }
       case "/dashboard-api/call": {
-        const input = callQuery.parse(query(request));
-        return json(await callPage(client, input.spaceId, input.cursor));
+        const action = callAction.parse(input);
+        if (action.action === "join" || action.action === "refresh-access") return ownerAccess(request, env, client, person, action);
+        return json(await callMutation(client, action));
       }
       case "/dashboard-api/past-session": {
-        const input = pastQuery.parse(query(request));
-        return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));
+        const action = pastAction.parse(input);
+        return json(await pastMutation(client, action));
       }
-      case "/dashboard-api/developer":
-        return json(await developerPage(client, developerQuery.parse(query(request))));
+      case "/dashboard-api/developer": {
+        const action = developerAction.parse(input);
+        return json(await developerMutation(client, action));
+      }
       default:
         throw new DashboardError(404, "route_not_found");
     }
-  }
-  const input = await body(request);
-  switch (path) {
-    case "/dashboard-api/home": {
-      const action = homeAction.parse(input);
-      return json(await homeMutation(client, action));
-    }
-    case "/dashboard-api/call": {
-      const action = callAction.parse(input);
-      if (action.action === "join" || action.action === "refresh-access") return ownerAccess(request, env, client, person, action);
-      return json(await callMutation(client, action));
-    }
-    case "/dashboard-api/past-session": {
-      const action = pastAction.parse(input);
-      return json(await pastMutation(client, action));
-    }
-    case "/dashboard-api/developer": {
-      const action = developerAction.parse(input);
-      return json(await developerMutation(client, action));
-    }
-    default:
-      throw new DashboardError(404, "route_not_found");
-  }
+  });
 }
 function failure(error: unknown): Response {
   const status = error instanceof DashboardError ? error.status : error instanceof z.ZodError ? 400 : 503;
