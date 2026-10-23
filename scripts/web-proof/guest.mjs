@@ -18,7 +18,12 @@ export async function withProofCall({ app, screen }, run) {
     await screen.getByRole("button", "Join call", { exact: true }).click();
     await run(guest);
   } finally {
-    await guest.dispose();
+    try {
+      const leave = screen.getByRole("button", "Leave call", { exact: true });
+      if (await leave.count()) await leave.click();
+    } finally {
+      await guest.dispose();
+    }
   }
 }
 
@@ -30,6 +35,14 @@ async function prepareGuest(directory) {
   const ready = launchGuests(run, space, episode, "", run.config.proof_origin, true, 1);
   // The test awaits this promise after opening the app; keep early failure handled.
   ready.catch(() => {});
+  let leaving;
+  const leave = () =>
+    (leaving ??= ready.then((guest) =>
+      guest.pages[0].evaluate(async () => {
+        if (window.proofBoard) await window.proofClient.whiteboard.transport().setPresentation(false);
+        await window.proofClient.leave();
+      }),
+    ));
   return {
     ready,
     async playAudio() {
@@ -79,14 +92,13 @@ async function prepareGuest(directory) {
       elements: async () => (await ready).pages[0].evaluate(boardElements),
       view: async (view) => (await ready).pages[0].evaluate(boardView, view),
     },
-    async leave() {
-      const guest = await ready;
-      await guest.pages[0].evaluate(() => window.proofClient.leave());
-    },
+    leave,
     async dispose() {
-      await ready.catch(() => {});
+      const guest = await ready.catch(() => undefined);
+      const errors = [];
+      if (guest) await leave().catch((error) => errors.push(error));
       const results = await Promise.allSettled([...run.resources].reverse().map((resource) => resource.dispose()));
-      const errors = results.filter((result) => result.status === "rejected").map((result) => result.reason);
+      errors.push(...results.filter((result) => result.status === "rejected").map((result) => result.reason));
       if (errors.length) throw new AggregateError(errors, "SDK guest cleanup failed");
     },
   };
