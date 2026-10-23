@@ -401,6 +401,18 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     end
   end
 
+  defp resume_after_snapshot(state, missed_head) do
+    case resume_pending_bring(state) do
+      {:ok, resumed} ->
+        resumed = resume_stale_access(resumed)
+        resume_snapshot_requests(resumed)
+        catch_up_after_snapshot(resumed, missed_head)
+
+      {:error, _reason} ->
+        stop(state, 1012, "whiteboard delivery recovery required", :delivery_unavailable)
+    end
+  end
+
   defp catch_up_after_snapshot(state, nil) do
     {:ok, state}
   end
@@ -681,14 +693,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
               missed_head: nil
           }
 
-          with {:ok, resumed} <- resume_pending_bring(next) do
-            resumed = resume_stale_access(resumed)
-            resume_snapshot_requests(resumed)
-            catch_up_after_snapshot(resumed, state.missed_head)
-          else
-            {:error, _reason} ->
-              stop(next, 1012, "whiteboard delivery recovery required", :delivery_unavailable)
-          end
+          resume_after_snapshot(next, state.missed_head)
       end
     else
       stop(state, 1008, "invalid snapshot acknowledgement", :invalid_acknowledgement)

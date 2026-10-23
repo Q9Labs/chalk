@@ -1,6 +1,10 @@
 defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   use ExUnit.Case, async: true
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.ViewOwner
 
@@ -157,8 +161,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   end
 
   test "admits all 500 canonical Episode participants", c do
-    assert ChalkSync.Contract.GeneratedWhiteboardV1.limits()["viewPeopleMaxItems"] ==
-             ChalkSync.Episodes.Reducer.max_participants()
+    assert GeneratedWhiteboardV1.limits()["viewPeopleMaxItems"] ==
+             Reducer.max_participants()
 
     for _ <- 2..500 do
       assert {:ok, owner, _, []} = ViewOwner.join(c.episode, UUID.generate())
@@ -220,7 +224,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   end
 
   test "snapshots exclude 600 durable departures but keep a disconnected active person's view" do
-    episode = %ChalkSync.Stateholder.EpisodeKey{
+    episode = %EpisodeKey{
       tenant_id: UUID.generate(),
       space_id: UUID.generate(),
       episode_id: UUID.generate()
@@ -235,7 +239,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
 
     Process.sleep(2)
 
-    ChalkSync.WhiteboardV1.Authority.store(
+    Authority.store(
       episode,
       %{status: "active", participants: %{{active, 1} => "active"}},
       System.monotonic_time(:millisecond),
@@ -251,7 +255,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   end
 
   test "reversible leaving retains a view, durable left excludes it", c do
-    episode = %ChalkSync.Stateholder.EpisodeKey{
+    episode = %EpisodeKey{
       tenant_id: UUID.generate(),
       space_id: UUID.generate(),
       episode_id: UUID.generate()
@@ -263,7 +267,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     for {status, count} <- [{"leaving", 1}, {"left", 0}] do
       Process.sleep(2)
 
-      ChalkSync.WhiteboardV1.Authority.store(
+      Authority.store(
         episode,
         %{status: "active", participants: %{{c.person, 1} => status}},
         System.monotonic_time(:millisecond),
@@ -276,7 +280,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   end
 
   test "snapshots keep joins newer than the membership read and compare UUIDs without casing" do
-    episode = %ChalkSync.Stateholder.EpisodeKey{
+    episode = %EpisodeKey{
       tenant_id: UUID.generate(),
       space_id: UUID.generate(),
       episode_id: UUID.generate()
@@ -284,7 +288,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
 
     person = String.upcase(UUID.generate())
 
-    ChalkSync.WhiteboardV1.Authority.store(
+    Authority.store(
       episode,
       %{status: "active", participants: %{}},
       System.monotonic_time(:millisecond) - 10,
@@ -296,7 +300,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     {:ok, ^owner, _, [%{"participant_id" => ^person}]} = ViewOwner.join(episode, UUID.generate())
     Process.sleep(2)
 
-    ChalkSync.WhiteboardV1.Authority.store(
+    Authority.store(
       episode,
       %{status: "active", participants: %{{String.downcase(person), 1} => "active"}},
       System.monotonic_time(:millisecond),
