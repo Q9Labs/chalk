@@ -356,9 +356,9 @@ export class V1SyncClient implements V1CollaborationClient {
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
-    this.#emit();
     this.#connectStartedAt = this.#clock().now();
     this.#opened = false;
+    this.#emit();
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(this.#options.url);
@@ -400,12 +400,12 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#inbound = this.#inbound.then(() => this.#disconnected(socket));
       }, 0);
     };
-    // The browser follows error with close, which carries the actual code and reason.
     socket.onerror = () => {
       if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
         this.#connectFailure = { ...this.#connectDiagnostic(), code: "sync_websocket_failed" };
         this.#emit();
       }
+      socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
     };
   }
   async #authenticate(socket: V1Socket): Promise<void> {

@@ -19,6 +19,64 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 describe("V1SyncClient", () => {
+  it("publishes diagnostics for the first silent dial before any socket event", async () => {
+    const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", clock: new TestClock(), webSocket: { connect: () => new TestSocket() } });
+    const observed = vi.fn();
+    client.subscribe(observed);
+    try {
+      await client.start();
+      expect(observed.mock.lastCall?.[0].connection).toMatchObject({ phase: "connecting", connectAttempt: { stage: "upgrade", opened: false, durationMs: 0 } });
+    } finally {
+      client.stop();
+    }
+  });
+  it("publishes a fresh upgrade attempt when an opened socket is retried", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const observed = vi.fn();
+    client.subscribe(observed);
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      sockets[0]!.close(1012, "server draining");
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      expect(sockets).toHaveLength(2);
+      expect(observed.mock.lastCall?.[0].connection).toMatchObject({ phase: "connecting", connectAttempt: { stage: "upgrade", opened: false, durationMs: 0 } });
+    } finally {
+      client.stop();
+    }
+  });
+  it("closes and recovers a live socket that emits only a transport error", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      socket.error();
+      expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "transport error" });
+      clock.advance(0);
+      await settle();
+      expect(client.getSnapshot().connection.phase).toBe("connecting");
+      clock.advance(1);
+      expect(client.getSnapshot().connection.connectAttempt).toMatchObject({ stage: "upgrade", opened: false });
+    } finally {
+      client.stop();
+    }
+  });
   it.each(["live", "replay"] as const)("replaces a %s digest mismatch with one snapshot before durable replay", async (source) => {
     const clock = new TestClock();
     const sockets: TestSocket[] = [];
@@ -464,7 +522,7 @@ describe("V1SyncClient", () => {
     });
     await transportClient.start();
     transportSocket.error();
-    expect(transportSocket.closeCalls).toEqual([]);
+    expect(transportSocket.closeCalls).toEqual([{ code: 4000, reason: "transport error" }]);
     transportSocket.onclose?.({ code: 1006 });
     expect(transportClient.getSnapshot().connection.connectFailure).toMatchObject({ code: "sync_websocket_failed", stage: "upgrade", closeCode: 1006, opened: false });
     const authenticationSocket = new TestSocket();
@@ -2129,7 +2187,7 @@ async function wireSnapshot(initial: V1ControlState): Promise<Snapshot> {
 class TestSocket implements SyncSocket {
   onopen: (() => void) | null = null;
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
-  onclose: ((event: { readonly code: number }) => void) | null = null;
+  onclose: SyncSocket["onclose"] = null;
   onerror: (() => void) | null = null;
   readonly closeCalls: {
     readonly code: number;
@@ -2141,7 +2199,7 @@ class TestSocket implements SyncSocket {
   }
   close(code = 1000, reason?: string): void {
     this.closeCalls.push({ code, reason });
-    this.onclose?.({ code });
+    this.onclose?.({ code, reason });
   }
   error(): void {
     this.onerror?.();

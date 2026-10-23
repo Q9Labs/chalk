@@ -79,14 +79,14 @@ class ReactNativeSyncSocket implements SyncSocket {
   readonly #socket: ReactNativeWebSocket;
   onopen: (() => void) | null = null;
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
-  onclose: ((event: { readonly code: number }) => void) | null = null;
+  onclose: SyncSocket["onclose"] = null;
   onerror: (() => void) | null = null;
 
   constructor(socket: ReactNativeWebSocket) {
     this.#socket = socket;
     this.#socket.onopen = () => this.onopen?.();
     this.#socket.onmessage = (event) => this.onmessage?.({ data: event.data });
-    this.#socket.onclose = (event) => this.onclose?.({ code: typeof event.code === "number" ? event.code : 1006 });
+    this.#socket.onclose = (event) => this.onclose?.({ code: typeof event.code === "number" ? event.code : 1006, reason: typeof event.reason === "string" ? event.reason : undefined });
     this.#socket.onerror = () => this.onerror?.();
   }
 
@@ -103,14 +103,14 @@ class BrowserFallbackSyncSocket implements SyncSocket {
   readonly #socket: WebSocket;
   onopen: (() => void) | null = null;
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
-  onclose: ((event: { readonly code: number }) => void) | null = null;
+  onclose: SyncSocket["onclose"] = null;
   onerror: (() => void) | null = null;
 
   constructor(socket: WebSocket) {
     this.#socket = socket;
     this.#socket.addEventListener("open", () => this.onopen?.());
     this.#socket.addEventListener("message", (event) => this.onmessage?.({ data: event.data }));
-    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code }));
+    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code, reason: event.reason }));
     this.#socket.addEventListener("error", () => this.onerror?.());
   }
 

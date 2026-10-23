@@ -349,17 +349,21 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           let observedDialTimeouts = 0;
           let observedConnectFailure: V1EpisodeSnapshot["connection"]["connectFailure"];
           let snapshotQueued = false;
-          const unsubscribe = sync.subscribe((snapshot) => {
+          const recordSyncDiagnostics = (snapshot: V1EpisodeSnapshot) => {
+            if (sync !== model.sync) return;
             const failure = snapshot.connection.connectFailure;
-            if (sync === model.sync && failure && failure !== observedConnectFailure) {
+            if (failure && failure !== observedConnectFailure) {
               observedConnectFailure = failure;
               diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: failure.code, sync: failure });
             }
             const count = snapshot.connection.dialTimeoutCount ?? 0;
-            if (sync === model.sync && count > observedDialTimeouts) {
+            if (count > observedDialTimeouts) {
               observedDialTimeouts = count;
               diagnostics.record({ event: "sync_dial_timeout", state: model.state, epoch: model.epoch, attempt: count });
             }
+          };
+          const unsubscribe = sync.subscribe((snapshot) => {
+            recordSyncDiagnostics(snapshot);
             if (sync === model.sync && snapshot.connection.phase === "live") {
               const notice = snapshot.connection.noticeUnresponsive === true;
               if (notice !== model.syncNoticeUnresponsive) {
