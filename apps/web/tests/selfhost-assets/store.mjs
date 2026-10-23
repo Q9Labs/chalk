@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -23,24 +24,34 @@ async function fixture(t) {
     await rm(base, { recursive: true, force: true });
   });
   const bucket = await runtime.getR2Bucket("VENDOR_ASSETS");
-  const state = { puts: 0, requests: 0, status: 200, release: "A" };
-  const prefix = "/accounts/account/r2/buckets/test/objects/";
+  const state = { puts: 0, requests: 0, status: 200, release: "A", concurrent: false, lookups: 0, serveWorker: false, mime: undefined, missingCache: undefined, activated: undefined };
   // Emulate only Cloudflare's HTTP boundary; the uploader, Worker and R2 are real.
   const server = createServer(async (request, response) => {
     try {
       const path = new URL(request.url, "http://local").pathname;
-      if (!path.startsWith(prefix)) return response.end(`Pages ${state.release}`);
+      const prefix = /^\/(test|chalk-vendor-assets-nightly)\//.exec(path)?.[0];
+      if (!prefix) {
+        if (!state.serveWorker) return response.end(`Pages ${state.release}`);
+        if (state.activated) assert.ok(existsSync(state.activated), "Worker deployment must precede probes");
+        const served = await runtime.dispatchFetch(`https://chalk.test${path}`);
+        const headers = Object.fromEntries(served.headers);
+        if (served.status === 200 && state.mime) headers["content-type"] = state.mime;
+        if (served.status === 404 && state.missingCache) headers["cache-control"] = state.missingCache;
+        return response.writeHead(served.status, headers).end(Buffer.from(await served.arrayBuffer()));
+      }
       state.requests++;
       if (state.status !== 200) return response.writeHead(state.status).end();
       const key = decodeURIComponent(path.slice(prefix.length));
-      if (request.method === "GET") {
-        const object = await bucket.get(key);
-        return response.writeHead(object ? 200 : 404).end(object ? Buffer.from(await object.arrayBuffer()) : undefined);
-      }
       assert.equal(request.method, "PUT");
+      assert.equal(request.headers["if-none-match"], "*");
+      assert.match(request.headers.authorization, /^AWS4-HMAC-SHA256 /);
+      if (state.concurrent && ++state.lookups <= 2) {
+        while (state.lookups < 2) await new Promise((done) => setTimeout(done, 1));
+      }
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
-      await bucket.put(key, Buffer.concat(chunks), { httpMetadata: { contentType: request.headers["content-type"], cacheControl: request.headers["cache-control"] } });
+      const object = await bucket.put(key, Buffer.concat(chunks), { onlyIf: request.headers["if-none-match"] === "*" ? { etagDoesNotMatch: "*" } : undefined, httpMetadata: { contentType: request.headers["content-type"], cacheControl: request.headers["cache-control"] } });
+      if (!object) return response.writeHead(412).end();
       state.puts++;
       response.end();
     } catch (error) {
@@ -60,7 +71,7 @@ async function fixture(t) {
     bucket,
     state,
     apiOrigin,
-    upload: (directory) => uploadVendorAssets({ directory, bucket: "test", accountId: "account", token: "local-fixture", apiOrigin }),
+    upload: (directory) => uploadVendorAssets({ directory, bucket: "test", accountId: "account", accessKeyId: "fixture", token: "local-fixture", apiOrigin }),
     async build(number) {
       const directory = join(base, String(number));
       const roots = [];
@@ -93,7 +104,48 @@ test("uploads only missing objects and rejects corrupt bytes before any R2 reque
   assert.equal(assets.state.requests, before);
   const b = await assets.build(2);
   assets.state.status = 403;
-  await assert.rejects(assets.upload(b.directory), /R2 lookup.*HTTP 403/);
+  await assert.rejects(assets.upload(b.directory), /R2 upload.*HTTP 403/);
+  assert.equal(assets.state.puts, 10);
+});
+
+test("release preparation deploys the Worker before probes and rejects missing routes, bad MIME and cached 404s", async (t) => {
+  const { prepareVendorStore } = await import("../../scripts/prepare-vendor-store.ts");
+  const assets = await fixture(t);
+  const a = await assets.build(1);
+  const activated = join(assets.base, "activated");
+  const wrangler = join(assets.base, "wrangler");
+  await writeFile(wrangler, `#!/bin/sh\nprintf '%s\\n' "$*" >> '${activated}'\n`, { mode: 0o700 });
+  const options = { directory: a.directory, target: "nightly", accountId: "account", accessKeyId: "fixture", token: "local-fixture", apiOrigin: assets.apiOrigin, origin: assets.apiOrigin, wrangler };
+  await assert.rejects(prepareVendorStore(options), /Vendor Worker probe/);
+  assert.match(await readFile(activated, "utf8"), /deploy.*--env nightly/);
+  assets.state.serveWorker = true;
+  assets.state.activated = activated;
+  await prepareVendorStore(options);
+  assert.equal(assets.state.puts, 12, "retry must not replace application or probe objects");
+  assets.state.mime = "text/html";
+  await assert.rejects(prepareVendorStore({ ...options, verifyOnly: true }), /Vendor Worker probe/);
+  assets.state.mime = undefined;
+  assets.state.missingCache = "public, max-age=86400";
+  await assert.rejects(prepareVendorStore({ ...options, verifyOnly: true }), /Vendor Worker missing-key probe/);
+  assets.state.missingCache = undefined;
+  const legacy = join(assets.base, "legacy");
+  await mkdir(legacy);
+  await prepareVendorStore({ ...options, directory: legacy, verifyOnly: true });
+});
+
+test("two uploads of the same digest create each key once without overwriting", async (t) => {
+  const assets = await fixture(t);
+  const a = await assets.build(1);
+  assets.state.concurrent = true;
+  const results = await Promise.all([assets.upload(a.directory), assets.upload(a.directory)]);
+  assert.equal(
+    results.reduce((total, result) => total + result.uploaded, 0),
+    10,
+  );
+  assert.equal(
+    results.reduce((total, result) => total + result.skipped, 0),
+    10,
+  );
   assert.equal(assets.state.puts, 10);
 });
 

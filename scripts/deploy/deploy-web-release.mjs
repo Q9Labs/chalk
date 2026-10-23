@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const repositoryRoot = resolve(scriptDirectory, "../..");
 export const webDirectory = join(repositoryRoot, "apps/web");
-const vendorUploaderPath = join(webDirectory, "scripts/upload-vendor-assets.ts");
+const vendorUploaderPath = join(webDirectory, "scripts/prepare-vendor-store.ts");
 export const verifierPath = join(repositoryRoot, "scripts/deploy/verify-web-deploy.mjs");
 
 export const RELEASE_TOOL_VERSIONS = Object.freeze({
@@ -151,7 +151,7 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
   await checkPinnedWrangler(commandRunner, webPath, executionEnvironment);
 
   await buildWebArtifact({ build, commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, turboCacheDirectory: resolvedTurboCacheDirectory });
-  await commandRunner(commandSpec("pnpm", ["exec", "tsx", vendorUploaderPath, "--directory", join(webPath, "dist/client"), "--bucket", "chalk-vendor-assets"], repositoryRoot, { env: executionEnvironment }));
+  await commandRunner(commandSpec("pnpm", ["exec", "tsx", vendorUploaderPath, "--directory", join(webPath, "dist/client"), ...(executionEnvironment.CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY === "true" ? ["--verify-only"] : []), "--target", "production"], repositoryRoot, { env: executionEnvironment }));
   const stagingURL = await deployStagingArtifact({ commandRunner, environment: executionEnvironment, expectedSHA, rootDirectory, skipStaging: options.skipStaging, webPath });
 
   await commandRunner(commandSpec("pnpm", ["exec", "wrangler", "pages", "deploy", "dist/client", "--project-name", PRODUCTION_PROJECT, "--branch", "master", "--commit-hash", expectedSHA, "--commit-dirty=false"], webPath, { env: executionEnvironment }));
