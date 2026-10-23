@@ -221,7 +221,7 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
 
     // Following the guest by its tile moves the web view with the guest's view.
     await screen.getByLabel("Follow Proof").click();
-    const following = screen.getByRole("status").filter({ hasText: "Following Proof", has: screen.getByRole("button", "Stop", { exact: true }) });
+    const following = browser.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Proof" });
     await expect(following).toBeVisible();
     const wide = { x: 0, y: 0, width: 4000, height: 2500, bring: false };
     const wideZoom = await browser.evaluate(fittedZoomLabel, wide);
