@@ -278,7 +278,8 @@ it("reads the real engine history for keyboard edits and resets it after shared 
   await expect.poll(() => redo.isEnabled()).toBe(true);
   await page.getByRole("button", { name: "Board menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "Clear board", exact: true }).click();
-  await page.getByText("Board cleared", { exact: true }).waitFor();
+  await page.locator("[data-part=toast]").getByText("Board cleared", { exact: true }).waitFor();
+  await page.locator("[data-part=notice-announcer] [aria-live=polite]").getByText("Board cleared", { exact: true }).waitFor();
   expect(await undo.isEnabled()).toBe(false);
   expect(await redo.isEnabled()).toBe(false);
 });
