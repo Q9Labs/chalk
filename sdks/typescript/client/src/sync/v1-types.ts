@@ -100,6 +100,8 @@ export type V1EpisodeSnapshot = {
     readonly health?: import("./v1-health").SyncHealth;
     /** Cumulative count retained across successful retries; contains no URL or credentials. */
     readonly dialTimeoutCount?: number;
+    readonly connectAttempt?: import("./connect-diagnostics").SyncConnectDiagnostic;
+    readonly connectFailure?: import("./connect-diagnostics").SyncConnectFailure;
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;

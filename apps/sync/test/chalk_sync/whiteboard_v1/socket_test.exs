@@ -813,7 +813,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                          attributes: %{reason: ^reason, scene_id: @scene_id} = attributes
                        }}
 
-      refute Map.has_key?(attributes, :close_code)
+      assert attributes.close_code == nil
     end
 
     assert :ok =

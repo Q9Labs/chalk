@@ -48,3 +48,24 @@ Use these fields to distinguish undiscovered backlog from repeated delivery fail
 they do not establish the underlying cause of a `dependency_unavailable` result.
 The response contains no intent, Episode, participant, or Tenant identifiers.
 Readiness thresholds, retry scheduling, and the one-second query timeout are unchanged.
+
+### Sync connection failures
+
+`sync.websocket.handshake` records `client_ip` (the edge's `CF-Connecting-IP`,
+validated as an IP, or the direct peer) and a `user_agent` bounded to 512 characters.
+The edge must replace the IP header before forwarding requests to Sync.
+`sync.websocket.authenticated` adds verified `tenant_id`, `participant_id`, and
+`episode_id`; close events retain those fields even if recovery fails after hello.
+These lifecycle events include their structured fields in stdout as well as spans.
+`close_code` is null until a server close is selected. Bandit does not expose the
+peer's close frame to WebSock; peer codes remain null rather than guessed.
+No token, authorization header, or request URL is retained.
+
+The client retains `stage`, `opened`, `closeCode`, `closeReason`, and `durationMs`
+in `failure.sync` and connection diagnostics. The failure reference shows the same
+short summary. Before `open`, `stage=upgrade` means the opening handshake is pending;
+browser WebSocket APIs do not reveal DNS, TCP, or TLS progress. After `open`, the
+startup stage is `hello` (including initial recovery). Unknown peer reasons become
+`redacted`; only fixed protocol reasons are retained. The codes are
+`connection.sync_websocket_failed`, `connection.sync_dial_timeout`, and the existing
+`connection.sync_hello_timeout`. Retries can still succeed within the startup budget.

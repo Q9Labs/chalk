@@ -111,7 +111,7 @@ export const makeSpaceStoreLayer = Layer.effect(SpaceStoreService, SpaceStore.ma
 export const makeFakeSpaceStoreLayer = (store = new SpaceStore()) => Layer.succeed(SpaceStoreService, store);
 
 function connectionError(failure: ConnectionLifecycleSnapshot["failure"]): ConnectionSlice["lastError"] {
-  return failure ? empty({ code: connectionErrorCode(failure.code, failure.action), recoverable: failure.recoverable, message: failure.message }) : null;
+  return failure ? empty({ code: connectionErrorCode(failure.code, failure.action), recoverable: failure.recoverable, message: failure.message, ...(failure.sync ? { sync: failure.sync } : {}) }) : null;
 }
 
 function connectionStatus(snapshot: ConnectionLifecycleSnapshot): ConnectionSlice["status"] {

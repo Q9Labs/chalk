@@ -21,6 +21,17 @@ describe("failed call guidance", () => {
     }
   });
 
+  it("includes safe socket details in the failure reference", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<StatusSurface phase="failed" errorCode="connection.sync_websocket_failed" sync={{ stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: 24 }} />));
+      expect(container.textContent).toContain("Reference: connection.sync_websocket_failed [upgrade; open=0; close=1006; reason=none; 24ms]");
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it.each([
     ["access.invalid", "Refresh the page"],
     ["access.unavailable", "get access to the call"],

@@ -5,3 +5,5 @@ export * from "./space-client";
 export * from "./sync";
 export * from "./whiteboard";
 export * from "./public-invites";
+
+export { formatSyncConnectDiagnostic } from "./sync/connect-diagnostics";

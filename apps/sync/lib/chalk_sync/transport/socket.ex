@@ -20,6 +20,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.Transport.SocketClose
+  alias ChalkSync.Transport.SocketContext
   alias ChalkSync.UUID
 
   @hello_timeout_ms 5_000
@@ -31,12 +32,18 @@ defmodule ChalkSync.Transport.SocketV1 do
   def init(opts) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
 
+    connection_attributes =
+      opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
+
     observability =
       opts
       |> Map.new()
       |> Map.get(:observability)
       |> Observability.merge(nil)
-      |> Observability.root("sync.websocket.handshake", %{transport: "websocket", protocol: 1})
+      |> Observability.root(
+        "sync.websocket.handshake",
+        Map.merge(connection_attributes, %{transport: "websocket", protocol: 1})
+      )
 
     {:ok,
      %{
@@ -53,6 +60,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        collaboration_negotiated: false,
        collaboration_version: nil,
        collaboration_queue: CollaborationQueue.new(),
+       connection_attributes: connection_attributes,
        observability: observability
      }}
   end
@@ -235,6 +243,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         protocol: 1,
         phase: state.phase
       }
+      |> Map.merge(state.connection_attributes)
       |> Map.merge(SocketClose.attributes(reason, state.terminal))
     )
 
@@ -254,6 +263,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         protocol: 1,
         phase: state.phase
       }
+      |> Map.merge(state.connection_attributes)
       |> Map.merge(SocketClose.attributes(reason, state.terminal))
     )
 
@@ -272,46 +282,10 @@ defmodule ChalkSync.Transport.SocketV1 do
     state = merge_hello_observability(state, Map.get(hello, :correlation, %{}))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
-         {:ok, identity} <- identity(claims),
-         {:ok, _lifecycle} <-
-           Stateholder.apply_lifecycle_intent(
-             identity.episode,
-             identity.admission_lifecycle_intent_id
-           ),
-         {:ok, protocol_options, negotiated?, collaboration_version} <-
-           negotiate_collaboration(
-             identity,
-             Map.get(hello, :collaboration),
-             state.observability
-           ),
-         {:ok, coordinator} <-
-           Coordinator.begin_recovery(identity, self(), protocol_options) do
-      start_registered_recovery(
-        state,
-        identity,
-        cursor,
-        coordinator,
-        negotiated?,
-        collaboration_version
-      )
+         {:ok, identity} <- identity(claims) do
+      authenticated_hello(SocketContext.authenticated(state, identity), identity, cursor, hello)
     else
-      {:error, :invalid_token} ->
-        stop(state, 1008, "invalid token", :admission_rejected)
-
-      {:error, :invalid_identity} ->
-        stop(state, 1008, "invalid token", :admission_rejected)
-
-      {:error, :invalid_admission_intent} ->
-        stop(state, 1008, "policy violation", :admission_rejected)
-
-      {:error, reason} ->
-        Logger.warning("sync v1 hello failed: reason=#{reason}")
-
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-
-      {:retryable, reason} ->
-        Logger.warning("sync v1 hello retryable: #{reason}")
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+      {:error, _reason} -> stop(state, 1008, "invalid token", :admission_rejected)
     end
   end
 
@@ -853,4 +827,41 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp negotiation_outcome(true), do: "negotiated"
   defp negotiation_outcome(false), do: "not_requested"
+
+  defp authenticated_hello(state, identity, cursor, hello) do
+    with {:ok, _lifecycle} <-
+           Stateholder.apply_lifecycle_intent(
+             identity.episode,
+             identity.admission_lifecycle_intent_id
+           ),
+         {:ok, protocol_options, negotiated?, collaboration_version} <-
+           negotiate_collaboration(
+             identity,
+             Map.get(hello, :collaboration),
+             state.observability
+           ),
+         {:ok, coordinator} <-
+           Coordinator.begin_recovery(identity, self(), protocol_options) do
+      start_registered_recovery(
+        state,
+        identity,
+        cursor,
+        coordinator,
+        negotiated?,
+        collaboration_version
+      )
+    else
+      {:error, :invalid_admission_intent} ->
+        stop(state, 1008, "policy violation", :admission_rejected)
+
+      {:error, reason} ->
+        Logger.warning("sync v1 hello failed: reason=#{reason}")
+
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+
+      {:retryable, reason} ->
+        Logger.warning("sync v1 hello retryable: #{reason}")
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+    end
+  end
 end

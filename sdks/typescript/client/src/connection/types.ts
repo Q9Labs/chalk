@@ -99,6 +99,8 @@ export const CONNECTION_ERROR_CODES = [
   "sync_start_failed",
   "state_digest_recovery_failed",
   "sync_hello_timeout",
+  "sync_websocket_failed",
+  "sync_dial_timeout",
   "media_start_failed",
   "join_cleanup_unconfirmed",
   "sync_recovery_exhausted",
@@ -121,6 +123,7 @@ export type ConnectionFailure = {
   readonly action: ConnectionActionName | null;
   readonly recoverable: boolean;
   readonly message: string;
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 };
 
 export type ChalkPendingChatMessage = ChalkPendingChatMessageState<ConnectionFailure>;
@@ -132,12 +135,15 @@ export class ConnectionError extends Error {
   readonly action: ConnectionActionName | null;
   readonly recoverable: boolean;
 
+  readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+
   constructor(failure: ConnectionFailure, options?: ErrorOptions) {
     super(failure.message, options);
     this.name = "ConnectionError";
     this.code = failure.code;
     this.action = failure.action;
     this.recoverable = failure.recoverable;
+    this.sync = failure.sync;
   }
 }
 

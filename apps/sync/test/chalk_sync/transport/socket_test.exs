@@ -7,6 +7,84 @@ defmodule ChalkSync.Transport.SocketV1Test do
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.TestWSClient, as: Client
 
+  test "wire events correlate edge headers with verified hello identity", %{port: port} do
+    owner = self()
+    handler = "connect-diagnostics-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _, _, metadata, _ ->
+        if metadata.event in [
+             "sync.websocket.handshake",
+             "sync.websocket.authenticated",
+             "sync.websocket.closed"
+           ],
+           do: send(owner, {:socket_event, metadata.event, metadata.attributes})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+    host = identity()
+    seed_participants(host, [host])
+
+    client =
+      connect_live(port, host, [
+        {"cf-connecting-ip", "192.0.2.10"},
+        {"user-agent", "Windows Chrome fixture"},
+        {"authorization", "Bearer do-not-log"}
+      ])
+
+    assert_receive {:socket_event, "sync.websocket.handshake", connected}
+    assert connected.client_ip == "192.0.2.10"
+    assert connected.user_agent == "Windows Chrome fixture"
+    assert Map.has_key?(connected, :close_code)
+    refute Map.has_key?(connected, :tenant_id)
+    assert_receive {:socket_event, "sync.websocket.authenticated", authenticated}
+    assert authenticated.tenant_id == host.episode.tenant_id
+    assert authenticated.episode_id == host.episode.episode_id
+    assert authenticated.participant_id == host.participant_id
+    refute inspect(authenticated) =~ "do-not-log"
+    client = Client.close(client)
+    Client.recv(client)
+    assert_receive {:socket_event, "sync.websocket.closed", closed}
+    assert closed.client_ip == connected.client_ip
+    assert closed.user_agent == connected.user_agent
+    assert closed.tenant_id == authenticated.tenant_id
+    assert closed.participant_id == authenticated.participant_id
+    assert closed.episode_id == authenticated.episode_id
+    assert Map.has_key?(closed, :close_code)
+  end
+
+  test "a failure after authentication keeps the identity on close", %{port: port} do
+    owner = self()
+    handler = "failed-hello-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _, _, metadata, _ ->
+        if metadata.event == "sync.websocket.closed",
+          do: send(owner, {:failed_hello, metadata.attributes})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+    host = identity()
+    seed_participants(host, [host])
+    rejected = %{host | admission_lifecycle_intent_id: ChalkSync.UUID.generate()}
+    {:ok, client} = Client.connect(port)
+    client = Client.send_json(client, hello(rejected, %{}))
+    assert {:closed, 1012, _reason, _client} = Client.recv(client)
+    assert_receive {:failed_hello, closed}
+    assert closed.tenant_id == host.episode.tenant_id
+    assert closed.participant_id == host.participant_id
+    assert closed.episode_id == host.episode.episode_id
+    assert closed.close_code == 1012
+  end
+
   test "durable commands emit ACKs and events and preserve idempotency", %{port: port} do
     host = identity()
     seed_participants(host, [host])

@@ -65,6 +65,8 @@ export const MEDIA_FAILURE_POLICY = {
   "connection.sync_recovery_exhausted": unavailable,
   "connection.sync_start_failed": unavailable,
   "connection.sync_hello_timeout": unavailable,
+  "connection.sync_websocket_failed": unavailable,
+  "connection.sync_dial_timeout": unavailable,
   "environment.unsupported": {
     copy: {
       ...operationCopy,

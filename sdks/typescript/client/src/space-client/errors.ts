@@ -16,6 +16,8 @@ const CONNECTION_ERROR_CODE_MAP = {
   media_capture_failed: "media.capture_failed",
   sync_start_failed: "connection.sync_start_failed",
   state_digest_recovery_failed: "connection.state_digest_recovery_failed",
+  sync_websocket_failed: "connection.sync_websocket_failed",
+  sync_dial_timeout: "connection.sync_dial_timeout",
   sync_hello_timeout: "connection.sync_hello_timeout",
   media_start_failed: "connection.media_start_failed",
   join_cleanup_unconfirmed: "connection.join_cleanup_unconfirmed",
@@ -43,6 +45,7 @@ const INVALID_PAYLOAD_CODE_BY_ACTION: ReadonlyMap<ConnectionError["action"], Err
 
 const MEDIA_TIMEOUT_FAILURE = { code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." } as const;
 const SYNC_FAILURES: ReadonlyMap<string, { readonly failure: ClientFailure; readonly scope?: "media" }> = new Map([
+  ["sync_websocket_failed", { failure: { code: "connection.sync_websocket_failed", recoverable: true, message: "Sync WebSocket could not connect. Try again." } }],
   ["not_live", { failure: { code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." } }],
   ["signaling_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
   ["negotiation_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
@@ -64,6 +67,7 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
       code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
       recoverable: cause.recoverable,
       message: cause.message,
+      ...(cause.sync ? { sync: cause.sync } : {}),
     });
   }
   if (cause instanceof V1SyncError) {
@@ -78,7 +82,7 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
-  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message });
+  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.sync ? { sync: error.sync } : {}) });
 }
 
 export function isAccessInvalid(cause: unknown): boolean {

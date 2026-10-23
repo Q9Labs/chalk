@@ -29,6 +29,8 @@ const CASES = {
   "connection.state_digest_recovery_failed": row("connection.state_digest_recovery_failed", "generic", false),
   "connection.sync_recovery_exhausted": row("connection.sync_recovery_exhausted", "generic", false),
   "connection.sync_start_failed": row("connection.sync_start_failed", "generic", false),
+  "connection.sync_websocket_failed": row("connection.sync_websocket_failed", "generic", false),
+  "connection.sync_dial_timeout": row("connection.sync_dial_timeout", "generic", false),
   "connection.sync_hello_timeout": row("connection.sync_hello_timeout", "generic", false),
   "environment.unsupported": row("environment.unsupported", "unsupported", false),
   "episode.ended": row("episode.ended", "ended", false),
@@ -117,7 +119,7 @@ it("walks every client-code / operation / source / recoverability / retained-com
             });
             rows++;
           }
-  expect(rows).toBe(3600);
+  expect(rows).toBe(Object.keys(CASES).length * operations.length * sources.length * 2 * 2);
 });
 
 it("walks every actionable policy row through SpaceView and replays the exact failed start/stop command", async () => {
@@ -215,7 +217,7 @@ it.each([
         expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Try again")).toBe(false);
         rows++;
       }
-    expect(rows).toBe(60);
+    expect(rows).toBe(Object.keys(CASES).length * 2);
   } finally {
     await act(async () => root.unmount());
     container.remove();
