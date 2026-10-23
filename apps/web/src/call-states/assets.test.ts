@@ -34,9 +34,9 @@ it("loads call, board, sticky note, text and math assets from our origin", async
   const requests: { url: string; type: string }[] = [];
   const failed: string[] = [];
   const pageErrors: string[] = [];
+  let fonts: { family: string; status: string }[] = [];
   // Keep the request trace local to the browser context that owns it.
   // fallow-ignore-next-line code-duplication
-  let fonts: { family: string; status: string }[] = [];
   context.on("request", (request) => requests.push({ url: request.url(), type: request.resourceType() }));
   context.on("response", (response) => {
     if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
