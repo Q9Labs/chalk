@@ -4,6 +4,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
+type ReportConnection = Pick<ReturnType<SpaceClient["getSnapshot"]>["connection"], "lastError"> & { readonly status: string };
 export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
 const availability = z.object({ available: z.boolean() });
 
@@ -68,7 +69,7 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
   return available;
 }
 
-export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: () => ReturnType<SpaceClient["getSnapshot"]>["connection"] }): ReportProblem {
+export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: () => ReportConnection }): ReportProblem {
   return async ({ description, diagnostics }) => {
     const credential = mediaProof();
     const snapshot = connection();

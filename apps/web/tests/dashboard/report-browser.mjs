@@ -9,6 +9,16 @@ import { basename, resolve } from "node:path";
 export async function checkReports({ browser, page, origin, call, repository }) {
   const evidence = resolve(repository, "artifacts/report-discord");
   await mkdir(evidence, { recursive: true });
+  const regressions = [];
+  async function checkGuestRegression(name, check) {
+    try {
+      await check();
+      regressions.push({ name, passed: true });
+    } catch (error) {
+      regressions.push({ name, passed: false, error: String(error) });
+    }
+    await writeFile(resolve(evidence, "guest-regressions.json"), JSON.stringify(regressions, null, 2));
+  }
   const home = await page.context().newPage();
   try {
     await home.goto(`${origin}/dashboard`);
@@ -143,6 +153,18 @@ export async function checkReports({ browser, page, origin, call, repository }) 
     await guest.getByRole("button", { name: "Report a problem", exact: true }).click();
     await submit(guest, { name: "guest", diagnostics: false });
     assert((await received()).at(-1).content.includes("Report guest (guest)"));
+    await checkGuestRegression("focus returns to mounted Call Details trigger", async () => {
+      await guest.waitForFunction(() => document.activeElement?.matches('button[data-part="call-name"]'), undefined, { timeout: 3000 });
+      assert(
+        await guest
+          .getByRole("button", { name: "Call details", exact: true })
+          .first()
+          .evaluate((element) => element.isConnected && element === document.activeElement),
+      );
+      await guest.screenshot({ path: resolve(evidence, "guest-focus-return.png"), animations: "disabled" });
+    });
+    await guest.mouse.move(500, 500);
+    await guest.mouse.move(520, 500);
     if (process.env.CHALK_REPORT_SMOKE === "1") {
       await guest.getByRole("button", { name: "Leave call", exact: true }).click();
       await guest.getByRole("button", { name: "Report a problem", exact: true }).waitFor();
@@ -174,9 +196,59 @@ export async function checkReports({ browser, page, origin, call, repository }) 
     await failurePage.screenshot({ path: resolve(evidence, "failed-link.png"), animations: "disabled" });
     await failurePage.getByRole("button", { name: "Report a problem", exact: true }).click();
     await submit(failurePage, { name: "failed" });
-    // Submission reads the current client snapshot after failed-call teardown.
-    assert((await received()).at(-1).content.includes("Connection: left"));
-    assert((await received()).at(-1).content.includes("Last error: none"));
+    await checkGuestRegression("failed report retains captured terminal diagnostics", async () => {
+      const content = (await received()).at(-1).content.replaceAll("\\", "");
+      assert(content.includes("Connection: failed"), "Failed-call reports must retain the failed phase after client teardown");
+      assert(content.includes("Last error: connection.sync_hello_timeout"), "Failed-call reports must retain the captured Sync failure");
+    });
+
+    await checkGuestRegression("expired live guest hides the action and keeps an open draft", async () => {
+      const expiryContext = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+      try {
+        const expired = await expiryContext.newPage();
+        await expired.clock.install();
+        await expired.route("**/v1/public/space-invite-arrival/access-grants", (route) => route.fulfill({ status: 503, body: "{}" }));
+        await expired.goto(`${origin}${invite.pathname}${invite.search}${invite.hash}`);
+        await expired.getByLabel("Your name").fill("Report expiry guest");
+        await expired.getByRole("button", { name: "Join call", exact: true }).click();
+        await expired.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
+        await expired.getByRole("button", { name: "Call details", exact: true }).first().click();
+        await expired.getByRole("button", { name: "Report a problem", exact: true }).click();
+        const input = expired.getByLabel("What went wrong?");
+        await input.fill("Keep this guest draft after proof expiry");
+        await input.evaluate((element) => (element.dataset.expiryDraft = "kept"));
+        await expired.screenshot({ path: resolve(evidence, "guest-before-expiry.png"), animations: "disabled" });
+        await expired.clock.fastForward(301_000);
+        assert(await expired.locator('[data-tour="video-grid"]').first().isVisible(), "The guest call must stay live while access renewal is unavailable");
+        assert(await expired.getByRole("button", { name: "Send", exact: true }).isDisabled());
+        assert.equal(await input.inputValue(), "Keep this guest draft after proof expiry");
+        assert.equal(await input.getAttribute("data-expiry-draft"), "kept", "The same draft field must remain mounted");
+        await expired.screenshot({ path: resolve(evidence, "guest-after-expiry.png"), animations: "disabled" });
+        await expired.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expired.clock.runFor(500);
+        await expired.getByRole("button", { name: "Call details", exact: true }).first().press("Enter");
+        await expired.getByRole("button", { name: "Keyboard shortcuts", exact: true }).waitFor();
+        await expired.screenshot({ path: resolve(evidence, "guest-expired-menu.png"), animations: "disabled" });
+        assert.equal(await expired.getByRole("button", { name: "Report a problem", exact: true }).count(), 0, "Expired live guests must not see a usable report action");
+        await expired.setViewportSize({ width: 390, height: 844 });
+        await expired.clock.runFor(500);
+        await expired.getByRole("button", { name: "Keyboard shortcuts", exact: true }).waitFor();
+        assert.equal(await expired.getByRole("button", { name: "Report a problem", exact: true }).count(), 0);
+        await expired.screenshot({ path: resolve(evidence, "guest-expired-menu-phone.png"), animations: "disabled" });
+        await expired.keyboard.press("Escape");
+        await expired.clock.runFor(500);
+        const left = expired.waitForResponse((response) => response.url().endsWith("/v1/public/space-invite-arrival") && response.request().method() === "DELETE");
+        await expired.getByRole("button", { name: "Leave call", exact: true }).press("Enter");
+        assert.equal((await left).status(), 204, "The expiry proof must release its extra live seat before closing the tab");
+        await expired.getByRole("heading", { name: /You left/ }).waitFor();
+      } finally {
+        await expiryContext.close();
+      }
+    });
+    assert(
+      regressions.every(({ passed }) => passed),
+      JSON.stringify(regressions),
+    );
   } catch (error) {
     const failed = failurePage ?? guest;
     await failed.screenshot({ path: resolve(evidence, "guest-failure.png"), animations: "disabled" });

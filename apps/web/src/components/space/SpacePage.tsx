@@ -308,8 +308,9 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
           reportCredential={spaceAccess.prepared.reportCredential}
           reportCredentialExpiresAt={spaceAccess.prepared.reportCredentialExpiresAt}
           reportsAvailable={reportsAvailable}
+          reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
           onOpenReportProblem={(send, diagnostics) => {
-            reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+            reportTrigger.current = document.querySelector<HTMLButtonElement>('button[data-part="call-name"]');
             setReportDialog({ send, diagnostics });
             setReportOpen(true);
           }}
@@ -462,6 +463,7 @@ function LocalSpace({
   reportCredential,
   reportCredentialExpiresAt,
   reportsAvailable,
+  reportUnavailableReason,
   onOpenReportProblem,
   reloadMarker,
   credential,
@@ -477,6 +479,7 @@ function LocalSpace({
   readonly reportCredential: () => string;
   readonly reportCredentialExpiresAt: () => number;
   readonly reportsAvailable: boolean;
+  readonly reportUnavailableReason?: string;
   readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential;
@@ -513,9 +516,9 @@ function LocalSpace({
         /* Storage may be disabled. */
       }
       const terminalProof = reportCredential();
-      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => client.getSnapshot().connection }), reportCredentialExpiresAt());
+      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }), reportCredentialExpiresAt());
     },
-    [onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt, client],
+    [onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt],
   );
   useEffect(() => {
     if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
@@ -564,6 +567,7 @@ function LocalSpace({
         onColorSchemeChange={setPreference}
         client={client}
         onReportProblem={reportsAvailable ? reportProblem : undefined}
+        reportUnavailableReason={reportUnavailableReason}
         onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
         displayName={displayName}
         defaults={defaults}
