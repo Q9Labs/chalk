@@ -190,15 +190,17 @@ type Participant struct {
 }
 
 type ParticipantJoinSeat struct {
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	SpaceID       pgtype.UUID        `json:"space_id"`
-	EpisodeID     pgtype.UUID        `json:"episode_id"`
-	ParticipantID pgtype.UUID        `json:"participant_id"`
-	Generation    int64              `json:"generation"`
-	State         string             `json:"state"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	EntryTokenID  pgtype.Text        `json:"entry_token_id"`
+	TenantID                 pgtype.UUID        `json:"tenant_id"`
+	SpaceID                  pgtype.UUID        `json:"space_id"`
+	EpisodeID                pgtype.UUID        `json:"episode_id"`
+	ParticipantID            pgtype.UUID        `json:"participant_id"`
+	Generation               int64              `json:"generation"`
+	State                    string             `json:"state"`
+	ExpiresAt                pgtype.Timestamptz `json:"expires_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	EntryTokenID             pgtype.Text        `json:"entry_token_id"`
+	IssuedEntryGeneration    int64              `json:"issued_entry_generation"`
+	ConfirmedEntryGeneration int64              `json:"confirmed_entry_generation"`
 }
 
 type ParticipantMediaRefresh struct {

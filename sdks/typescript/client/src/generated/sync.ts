@@ -1272,7 +1272,7 @@ const WelcomeBase = {
   recovery_id: UuidSchema,
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
-  entry_generation: Schema.optionalKey(PositiveIntegerSchema),
+  entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
 export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));
