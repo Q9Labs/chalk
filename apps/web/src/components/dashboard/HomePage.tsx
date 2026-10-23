@@ -20,10 +20,19 @@ async function inviteLink(call: HomeCallDTO): Promise<string> {
 const merge = (row: HomeCallDTO, call: CallDTO): HomeCallDTO => ({ ...row, ...call });
 
 /**
- * Home shows and checks the 300 newest calls, so one status check covers every row. Calls pushed past 300 stay in the
- * list, so the page cursor still follows the last loaded call and an archive brings the next one back into view.
+ * Home shows the 300 newest calls it holds that aren't archived. Calls pushed past 300 stay in the list, so the page
+ * cursor still follows the last loaded call and an archive brings the next one back into view.
  */
-const shown = (data: HomeDTO): HomeCallDTO[] => data.calls.slice(0, HOME_STATUS_ROWS);
+const shown = (data: HomeDTO): HomeCallDTO[] => data.calls.filter((call) => !call.archived).slice(0, HOME_STATUS_ROWS);
+
+/**
+ * The calls one status check asks about: every shown row, then the archived calls Home holds, newest first, so a call
+ * restored elsewhere shows again. Archived calls get only what the shown rows leave of the 300.
+ */
+const checked = (data: HomeDTO): string[] => {
+  const rows = shown(data);
+  return [...rows, ...data.calls.filter((call) => call.archived).slice(0, HOME_STATUS_ROWS - rows.length)].map((call) => call.id);
+};
 
 /**
  * Where a call sits in Home's order: newest first by creation time, then by ID. The engine writes UTC timestamps with
@@ -31,9 +40,11 @@ const shown = (data: HomeDTO): HomeCallDTO[] => data.calls.slice(0, HOME_STATUS_
  * below every digit, the key compares as a string.
  */
 const sortKey = (call: HomeCallDTO): string => `${call.createdAt.slice(0, -1)} ${call.id}`;
+const newestFirst = (a: HomeCallDTO, b: HomeCallDTO) => (sortKey(a) > sortKey(b) ? -1 : 1);
 
 export function HomePage() {
   const boundary = useRef<string>(undefined);
+  const hidden = useRef<HomeCallDTO[]>([]);
   const { state, reload, update } = useLoad<HomeDTO>(
     async () => {
       let data = await readPage("home", {});
@@ -46,29 +57,34 @@ export function HomePage() {
         const older = await readPage("home", { cursor: data.nextCursor });
         data = { calls: [...data.calls, ...older.calls], live: [...data.live, ...older.live], nextCursor: older.nextCursor };
       }
-      return data;
+      // Pages list only unarchived calls, so keep the archived calls Home held within the depth it read.
+      const last = data.calls.at(-1);
+      const loaded = new Set(data.calls.map((call) => call.id));
+      const held = hidden.current.filter((call) => !loaded.has(call.id) && (!data.nextCursor || (last !== undefined && newestFirst(call, last) < 0)));
+      return held.length ? { ...data, calls: [...data.calls, ...held].sort(newestFirst) } : data;
     },
     "home",
     {
       // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
-      // every shown row: its live state, whether it was archived, its last active time and recent people, and the first
-      // page when a call was made elsewhere. A call archived elsewhere leaves the list, so the depth a reload replays to
-      // moves up with it. A failed check keeps the old rows and the next one catches up.
+      // every checked call: its live state, whether it is archived, its last active time and recent people, and the
+      // first page when a call was made elsewhere. A call archived elsewhere is hidden in its place, so the depth a
+      // reload replays to moves up past it, and it shows again when it is restored. A failed check keeps the old rows
+      // and the next one catches up.
       interval: () => 5000,
       read: async (data) => {
-        const ids = shown(data).map((call) => call.id);
+        const ids = checked(data);
         const status = await readPage("home-status", { home: "1", ...(ids.length ? { spaceIds: ids.join(",") } : {}) });
-        const archived = new Set(status.calls.filter((call) => call.archived).map((call) => call.id));
         const next = {
           ...data,
-          calls: data.calls.filter((call) => !archived.has(call.id)).map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })),
-          live: data.live.filter((item) => !archived.has(item.spaceId)).map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item),
+          calls: data.calls.map((call) => ({ ...call, ...status.calls.find((item) => item.id === call.id) })),
+          live: data.live.map((item) => status.live.find((row) => row.spaceId === item.spaceId) ?? item),
         };
         const first = status.first;
         if (!first) return next;
         // Calls made elsewhere are the newest, so they sit above every call Home holds: put the first page's calls above
         // the first one Home knows on top. With no known call on the page (five or more new calls), or an unknown call
-        // below a known one (a call restored elsewhere), reload to the same depth, unless the page is the whole list.
+        // below a known one (a call archived before Home loaded, then restored), reload to the same depth, unless the
+        // page is the whole list.
         const known = new Set(next.calls.map((call) => call.id));
         const overlap = first.calls.findIndex((call) => known.has(call.id));
         if (overlap < 0) return first.nextCursor ? null : first;
@@ -83,6 +99,7 @@ export function HomePage() {
     if (state.kind !== "ready") return;
     const end = shown(state.data).at(-1);
     boundary.current = end && sortKey(end);
+    hidden.current = state.data.calls.filter((call) => call.archived);
   }, [state]);
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
@@ -110,15 +127,19 @@ export function HomePage() {
   }
 
   async function archive(call: HomeCallDTO) {
-    const index = state.kind === "ready" ? state.data.calls.findIndex((item) => item.id === call.id) : -1;
     try {
       await act("home", { action: "archive-call", spaceId: call.id });
-      update((data) => ({ ...data, calls: data.calls.filter((item) => item.id !== call.id) }));
+      update((data) => ({ ...data, calls: data.calls.map((item) => (item.id === call.id ? { ...item, archived: true } : item)) }));
       toast(`Archived ${call.name}`, {
         icon: "trash",
         undo: () => {
           act("home", { action: "restore-call", spaceId: call.id }).then(
-            ({ call: restored }) => update((data) => ({ ...data, calls: [...data.calls.slice(0, index), merge(call, restored), ...data.calls.slice(index)] })),
+            ({ call: restored }) =>
+              update((data) => {
+                // A reload may have let go of the archived row, so put it back in its place.
+                const held = data.calls.find((item) => item.id === call.id) ?? call;
+                return { ...data, calls: [...data.calls.filter((item) => item.id !== call.id), merge(held, restored)].sort(newestFirst) };
+              }),
             (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
           );
         },
@@ -147,7 +168,7 @@ export function HomePage() {
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
         <ErrorPanel title="Couldn’t load your calls" detail={errorMessage(state.error)} onRetry={reload} />
-      ) : state.data.calls.length === 0 ? (
+      ) : shown(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
             <b>No calls yet</b>
@@ -161,7 +182,7 @@ export function HomePage() {
               <CallRow key={call.id} call={call} live={liveFor(state.data, call.id)} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
             ))}
           </div>
-          {state.data.calls.length >= HOME_STATUS_ROWS ? (
+          {shown(state.data).length >= HOME_STATUS_ROWS ? (
             <p className="help">Home shows your 300 most recent calls.</p>
           ) : state.data.nextCursor ? (
             <MoreButton

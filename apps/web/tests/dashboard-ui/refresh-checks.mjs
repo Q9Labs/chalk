@@ -347,7 +347,8 @@ export async function archivedPollingChecks({ open, fixture, check }) {
     await tab.waitForLoadState("networkidle");
     const reads = (await fixture("log")).slice(archived).filter((entry) => entry.path === "/dashboard-api/home-status");
     const polled = reads.filter((entry) => new URLSearchParams(entry.query).get("spaceIds")?.split(",").includes(ARCHIVED)).length;
-    check("Home stops polling an archived live row after its full refresh fails", (await tab.locator(".live").count()) === 0 && reads.length > 0 && polled === 0, `status reads=${reads.length}, archived row reads=${polled}`);
+    // The archived row stays hidden but rides in every check, so a restore elsewhere brings it back.
+    check("Home hides an archived live row and keeps checking it after its full refresh fails", (await tab.locator(".live").count()) === 0 && reads.length > 0 && polled === reads.length, `status reads=${reads.length}, archived row reads=${polled}`);
   } finally {
     await context.close();
   }

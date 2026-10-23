@@ -81,8 +81,9 @@ The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
 
 Visible Call and Home pages check status every five seconds. Each Home check is one
-request for every shown row (up to 300), and Home updates its rows from the answer.
-A call archived elsewhere leaves the list. Calls made elsewhere go on top from the first page;
+request for every shown row and then the archived calls Home holds, up to 300 IDs, and Home
+updates its rows from the answer. An archived call is hidden in its place and shows again
+when it is restored elsewhere. Calls made elsewhere go on top from the first page;
 when that page holds no call Home already has, Home reloads its list down to where its last
 row sat, two tenant reads per page of five.
 Stable status never reloads page history. A changed

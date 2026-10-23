@@ -343,28 +343,110 @@ it.each(depthCases)(
   20_000,
 );
 
-it("reloads when a call archived elsewhere comes back with a new call", async () => {
+const checkedIds = () => {
+  const [, query] =
+    requests()
+      .filter(([name]) => name === "home-status")
+      .at(-1) ?? [];
+  return query && "spaceIds" in query ? (query.spaceIds?.split(",") ?? []) : [];
+};
+const pageReads = (before: number) =>
+  requests()
+    .slice(before)
+    .filter(([name]) => name === "home").length;
+async function openOld12() {
   const truth: Truth = { calls: old12, live: {} };
   serve(truth);
   await open();
   await reactAct(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
   });
+  return truth;
+}
+const archivedOld = old12[7];
+if (!archivedOld) throw new Error("no call past the first page");
+
+it("hides a call past the first page archived elsewhere within one check and keeps checking it", async () => {
+  const truth = await openOld12();
+  const before = requests().length;
+  const engineReads = truth.engineReads ?? 0;
+  for (let check = 0; check < 12; check++) await tick();
+  const steadyMinute = (truth.engineReads ?? 0) - engineReads;
+  truth.calls = without(old12, 7);
+  await tick();
+  expect(screen.queryByText("Old 7")).toBeNull();
+  expect(screen.getAllByText(/^Old \d+$/).map((item) => item.textContent)).toEqual(names(without(old12, 7).slice(0, 9)));
+  const archivedFrom = truth.engineReads ?? 0;
+  for (let check = 1; check < 12; check++) await tick();
+  await tick();
+  // The hidden call rides in the same batched check, so the minute costs what it did before the archive.
+  expect(checkedIds()).toEqual([...without(old12, 7).slice(0, 9), archivedOld].map((call) => call.id));
+  expect((truth.engineReads ?? 0) - archivedFrom).toBe(steadyMinute);
+  expect(pageReads(before)).toBe(0);
+});
+
+it("shows a call past the first page in its place within one check when it is restored elsewhere", async () => {
+  const truth = await openOld12();
+  truth.calls = without(old12, 7);
+  await tick();
+  const before = requests().length;
+  truth.calls = old12;
+  await tick();
+  expect(screen.getAllByText(/^Old \d+$/).map((item) => item.textContent)).toEqual(names(old12.slice(0, 10)));
+  expect(pageReads(before)).toBe(0);
+});
+
+it("puts back a call archived elsewhere when it comes back with a new call, without a reload", async () => {
+  const truth = await openOld12();
   truth.calls = without(old12, 2);
   await tick();
   expect(screen.queryByText("Old 2")).toBeNull();
-  // The restored call sits below a call Home knows on the first page, so only a reload puts it back in place. The
-  // reload reads down to Old 9 in whole pages of five, which brings Old 10 and Old 11 too.
   truth.calls = [...fresh1, ...old12];
   const before = requests().length;
   await tick();
-  expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual([...names(fresh1), ...names(old12)]);
-  expect(
-    requests()
-      .slice(before)
-      .filter(([name]) => name === "home"),
-  ).toHaveLength(3);
+  expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual([...names(fresh1), ...names(old12.slice(0, 10))]);
+  expect(pageReads(before)).toBe(0);
 });
+
+it("keeps a call archived elsewhere through a reload, so its restore still shows", async () => {
+  const truth = await openOld12();
+  truth.calls = without(old12, 7);
+  await tick();
+  // Six new calls leave no known call on the first page, so Home reloads; pages list only unarchived calls.
+  truth.calls = [...fresh6, ...without(old12, 7)];
+  await tick();
+  expect(screen.queryByText("Old 7")).toBeNull();
+  await tick();
+  expect(checkedIds()).toContain(archivedOld.id);
+  truth.calls = [...fresh6, ...old12];
+  const before = requests().length;
+  await tick();
+  expect(screen.getAllByText(/^(New|Old) \d+$/).map((item) => item.textContent)).toEqual([...names(fresh6), ...names(old12.slice(0, 10))]);
+  expect(pageReads(before)).toBe(0);
+});
+
+it("lets go of the oldest archived calls first when shown rows and archived calls pass 300", async () => {
+  const rows = Array.from({ length: 310 }, (_, index) => row(uuid(0x1000 + index), `Call ${index}`));
+  const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
+  serve(truth);
+  await open();
+  for (let count = 1; count < 6; count++)
+    await reactAct(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
+    });
+  const [newer, older] = [rows[5], rows[7]];
+  if (!newer || !older) throw new Error("no rows to archive");
+  truth.calls = rows.filter((call) => call !== newer && call !== older);
+  await tick();
+  await tick();
+  const held = rows.slice(0, 300).filter((call) => call !== newer && call !== older);
+  expect(checkedIds()).toEqual([...held, newer, older].map((call) => call.id));
+  // One call made elsewhere takes one of the 300 places, and the older archived call gives it up, never a shown row.
+  truth.calls = [elsewhere, ...truth.calls];
+  await tick();
+  await tick();
+  expect(checkedIds()).toEqual([elsewhere, ...held, newer].map((call) => call.id));
+}, 20_000);
 
 it("ends a live call in the same check that finds a call made elsewhere", async () => {
   const truth: Truth = { calls: [planning], live: { [planning.id]: first } };
