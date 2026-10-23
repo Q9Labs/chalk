@@ -103,6 +103,13 @@ async function open() {
   });
 }
 
+async function showMoreCalls() {
+  await reactAct(async () => {
+    // Avoid scanning every row's accessible name just to find this setup button.
+    fireEvent.click(screen.getByText("Show more calls", { selector: "button" }));
+  });
+}
+
 it("shows a row that went live between two checks after the next check", async () => {
   const truth: Truth = { calls: [planning], live: {} };
   serve(truth);
@@ -185,10 +192,7 @@ it("never holds or checks more than 300 calls when a full list with an archived 
   if (!archived) throw new Error("no row to archive");
   vi.mocked(act).mockResolvedValue({ call: { ...archived, archived: true } });
   await open();
-  for (let count = 1; count < 6; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 6; count++) await showMoreCalls();
   // The archived call keeps its place among the 300, so Home shows 299 and offers no more pages.
   truth.calls = rows.filter((call) => call !== archived);
   truth.failFirstPage = true;
@@ -228,10 +232,7 @@ it("puts a call made elsewhere on top within one check and keeps the expanded hi
   const truth: Truth = { calls: history, live: {} };
   serve(truth);
   await open();
-  for (let count = 1; count < 20; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 20; count++) await showMoreCalls();
   expect(screen.getAllByText(/^Paged \d+$/)).toHaveLength(100);
   truth.calls = [elsewhere, ...history];
   const before = requests().length;
@@ -246,10 +247,7 @@ it("keeps every expanded row when more than a page of calls is made elsewhere", 
   const truth: Truth = { calls: history, live: {} };
   serve(truth);
   await open();
-  for (let count = 1; count < 20; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 20; count++) await showMoreCalls();
   // Six new calls fill the first page, so Home can't merge it and reloads every page it had read.
   const fresh = Array.from({ length: 6 }, (_, index) => row(uuid(0x50 + index), `New ${index}`));
   truth.calls = [...fresh, ...history];
@@ -302,10 +300,7 @@ it.each(depthCases)(
     const truth: Truth = { calls: history, live: {}, pageSize };
     serve(truth);
     await open();
-    for (let count = 1; count < opened; count++)
-      await reactAct(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-      });
+    for (let count = 1; count < opened; count++) await showMoreCalls();
     truth.calls = change();
     const before = requests().length;
     const engineReads = truth.engineReads ?? 0;
@@ -330,9 +325,7 @@ async function openOld12() {
   const truth: Truth = { calls: old12, live: {} };
   serve(truth);
   await open();
-  await reactAct(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-  });
+  await showMoreCalls();
   return truth;
 }
 const archivedOld = old12[7];
@@ -420,10 +413,7 @@ it("checks the 300 newest calls in sort order, archived or not, and lets go of t
   const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
   serve(truth);
   await open();
-  for (let count = 1; count < 6; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 6; count++) await showMoreCalls();
   const [newer, older] = [rows[5], rows[7]];
   if (!newer || !older) throw new Error("no rows to archive");
   truth.calls = rows.filter((call) => call !== newer && call !== older);
@@ -459,10 +449,7 @@ it("shows a call restored elsewhere in its place when Home holds 300 calls", asy
   const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
   serve(truth);
   await open();
-  for (let count = 1; count < 6; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 6; count++) await showMoreCalls();
   truth.calls = [elsewhere, ...rows];
   await tick();
   const restored = rows[5];
@@ -511,10 +498,7 @@ it("applies discovery to a restored overlapping row at the cap and settles to tw
   const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
   serve(truth);
   await open();
-  for (let count = 1; count < 6; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 6; count++) await showMoreCalls();
   truth.calls = rows.slice(1);
   await tick();
   // The activity read precedes the restore; discovery sees the restored row and a new call in the same tick.
@@ -587,10 +571,7 @@ it("makes one request per check however many rows are open", async () => {
   const truth: Truth = { calls: rows, live: Object.fromEntries(rows.slice(10, 35).map((call) => [call.id, first])) };
   serve(truth);
   await open();
-  for (let count = 1; count < 8; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 8; count++) await showMoreCalls();
   const before = requests().length;
   for (let count = 0; count < 4; count++) await tick();
   const checks = requests().slice(before);
@@ -604,10 +585,7 @@ it("stops at the 300 newest calls and checks them all in one request that fits a
   const truth: Truth = { calls: rows, live: {}, pageSize: 50 };
   serve(truth);
   await open();
-  for (let count = 1; count < 6; count++)
-    await reactAct(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show more calls" }));
-    });
+  for (let count = 1; count < 6; count++) await showMoreCalls();
   expect(screen.getAllByText(/^Call \d+$/)).toHaveLength(300);
   expect(screen.queryByRole("button", { name: "Show more calls" })).toBeNull();
   expect(screen.getByText("Home shows your 300 most recent calls.")).toBeTruthy();
