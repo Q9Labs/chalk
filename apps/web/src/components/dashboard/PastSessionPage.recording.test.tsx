@@ -33,6 +33,7 @@ let exportHTTPStatus = 202;
 let createHTTPStatus = 200;
 let serverLagMs = 0;
 let legacyExport = false;
+let metadataDelayMs = 0;
 const requests: { path: string; action?: string; id?: string; recordingId?: string }[] = [];
 
 // The API derives these states at read time by its own clock (recording_pipeline.sql:663-699), so the mock server does too.
@@ -91,6 +92,7 @@ beforeEach(() => {
   createHTTPStatus = 200;
   serverLagMs = 0;
   legacyExport = false;
+  metadataDelayMs = 0;
   vi.useFakeTimers();
   source = "available";
   artifact = "none";
@@ -106,6 +108,7 @@ beforeEach(() => {
     requests.push({ path, action: body?.action, id: url.searchParams.get("id") ?? undefined, recordingId: body?.recordingId });
     if (path === "/auth/session") return Response.json({ csrfToken: "fixture", profile: { name: "June", email: "june@example.test", avatarUrl: null } });
     if (path === "/dashboard-api/call") return Response.json({ call: { name: "Call" } });
+    if (path === "/dashboard-api/call-metadata" && metadataDelayMs) await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
     if (path === "/dashboard-api/call-metadata") return metadataStatus === 200 ? Response.json({ kind: "recording", recording: { ...recording(), id: url.searchParams.get("id") } }) : Response.json({ error: { code: "recording_not_found" } }, { status: metadataStatus });
     if (body?.action === "transcripts" && transcriptHTTPStatus !== 200) return Response.json({ error: { code: "recording_not_found" } }, { status: transcriptHTTPStatus });
     if (body?.action === "transcripts" && body.recordingId === stalledTranscripts) return new Promise<Response>(() => {});
@@ -715,6 +718,27 @@ it("moves a transcript still being prepared to closed when the server closes the
   expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
   await advance(65_000);
   expect(screen.getByText("A transcript can no longer be made for this recording.")).toBeTruthy();
+  const reads = metadataReads();
+  await tick();
+  expect(metadataReads()).toBe(reads);
+});
+
+it("reads attempts that reach their deadline together one at a time", async () => {
+  vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  expiresAt = "2026-10-22T12:01:00Z";
+  transcriptStatus = "";
+  const ids = ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
+  extraRecordings = ids.map((older) => ({ ...recording(), id: older }));
+  metadataDelayMs = 1_000;
+  await open();
+  await advance(60_000);
+  expect(metadataReads()).toBe(1);
+  await advance(1_000);
+  expect(metadataReads()).toBe(2);
+  await advance(1_000);
+  expect(metadataReads()).toBe(3);
+  await advance(1_000);
+  expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   const reads = metadataReads();
   await tick();
   expect(metadataReads()).toBe(reads);

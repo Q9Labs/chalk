@@ -65,8 +65,9 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
   const due = state.kind === "ready" ? state.data.session.recordings.filter((item) => lapsed(item, now)) : [];
   const dueIds = due.map((item) => item.id).join();
   useEffect(() => {
-    // Keyed by the due ids, so each due set is read once here; polling covers a stale or failed answer.
-    for (const item of due) void freshRecording(spaceId, item).then(replace, () => undefined);
+    // One read at a time, like polling: an answer that changes the due set reads the next one, and polling covers the rest.
+    const [first] = due;
+    if (first) void freshRecording(spaceId, first).then(replace, () => undefined);
   }, [dueIds, spaceId, replace]);
   const phone = usePhone();
   const back = (name: string | null) => (
