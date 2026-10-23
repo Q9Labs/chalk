@@ -81,6 +81,47 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     assert_receive {:whiteboard_v1_frame, %{"owner_sequence" => 2, "x" => 20}}
   end
 
+  for protocol <- [:owner, :legacy] do
+    @protocol protocol
+    test "#{protocol} relay heartbeats cannot reclaim another tab's real move", c do
+      source = UUID.generate()
+      test = self()
+
+      socket =
+        spawn(fn ->
+          {:ok, owner, _, _} = ViewOwner.join(c.episode, source)
+          :ok = ViewOwner.move(owner, frame(source, 10), input(UUID.generate(), 1))
+          send(test, :source_moved)
+          receive do: (:stop -> :ok)
+        end)
+
+      on_exit(fn -> Process.exit(socket, :kill) end)
+      assert_receive :source_moved
+      assert_receive {:whiteboard_v1_frame, %{"participant_id" => ^source}}
+
+      relay =
+        if @protocol == :owner,
+          do: Map.put(input(c.stream, 1), :move, false),
+          else: %{origin_epoch: c.stream}
+
+      relay = Map.put(relay, :origin_participant_id, source)
+      :ok = ViewOwner.move(c.owner, frame(c.person, 900), relay)
+      assert_receive {:whiteboard_v1_frame, %{"x" => 10, "owner_sequence" => 1}}
+      :ok = ViewOwner.move(c.owner, frame(c.person, 20), input(UUID.generate(), 1))
+      assert_receive {:whiteboard_v1_frame, %{"x" => 20, "owner_sequence" => 2}}
+      relay = if @protocol == :owner, do: %{relay | input_id: "#{c.stream}:2"}, else: relay
+      :ok = ViewOwner.move(c.owner, frame(c.person, 900), relay)
+      refute_receive {:whiteboard_v1_frame, _}
+
+      if @protocol == :owner do
+        :ok = ViewOwner.move(c.owner, frame(c.person, 30), input(c.stream, 3))
+        assert_receive {:whiteboard_v1_frame, %{"x" => 30, "owner_sequence" => 3}}
+        :ok = ViewOwner.move(c.owner, frame(c.person, 900), %{relay | input_id: "#{c.stream}:4"})
+        assert_receive {:whiteboard_v1_frame, %{"x" => 10, "owner_sequence" => 4}}
+      end
+    end
+  end
+
   test "the owner stops when the Episode's last socket exits" do
     test = self()
     episode = UUID.generate()

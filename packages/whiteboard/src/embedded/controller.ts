@@ -31,6 +31,7 @@ export type ChalkEmbeddedWhiteboardTransportElement = {
 };
 
 export type ChalkEmbeddedWhiteboardTransportEvent =
+  | { readonly type: "views_reset" }
   | {
       readonly type: "snapshot";
       readonly sceneId: string;
@@ -386,6 +387,7 @@ export class ChalkWhiteboardController {
       case "cursor":
         this.#send({ type: "apply_cursor", payload: event });
         return;
+      case "views_reset":
       case "view":
         // The mobile board does not follow views yet.
         return;

@@ -43,6 +43,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
        people: MapSet.new(),
        views: %{},
        streams: %{},
+       relays: %{},
        legacy_views: %{}
      }}
   end
@@ -96,11 +97,16 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
           sequence <= previous ->
             {:ok, state}
 
-          previous == 0 and map_size(state.streams) + map_size(state.legacy_views) >= @max_streams ->
+          previous == 0 and stream_count(state) >= @max_streams ->
             {{:error, :overloaded}, state}
 
           true ->
-            state = %{state | streams: Map.put(state.streams, stream, sequence)}
+            state = %{
+              state
+              | streams: Map.put(state.streams, stream, sequence),
+                relays: Map.delete(state.relays, stream)
+            }
+
             apply_view(state, frame, input)
         end
 
@@ -108,6 +114,34 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
         accept_legacy(state, frame, input)
     end
   end
+
+  defp accept_relay(state, frame, input) do
+    source = Map.get(state.views, input.origin_participant_id)
+    stream = {frame["participant_id"], relay_stream(input)}
+    previous = Map.get(state.relays, stream)
+    version = if source, do: {input.origin_participant_id, source["owner_sequence"]}
+
+    cond do
+      is_nil(version) or version == previous ->
+        {:ok, state}
+
+      is_nil(previous) and stream_count(state) >= @max_streams ->
+        {{:error, :overloaded}, state}
+
+      true ->
+        stamp_view(%{state | relays: Map.put(state.relays, stream, version)}, frame, input)
+    end
+  end
+
+  defp relay_stream(input) do
+    case input_id(input) do
+      {:ok, stream, _sequence} -> stream
+      :legacy -> Map.get(input, :origin_epoch, input.socket_id)
+    end
+  end
+
+  defp stream_count(state),
+    do: map_size(state.streams) + map_size(state.legacy_views) + map_size(state.relays)
 
   defp accept_legacy(state, frame, input) do
     person = frame["participant_id"]
@@ -124,8 +158,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
         not frame["bring"] and (previous == rectangle or (sequence > 0 and sequence <= watermark)) ->
           {:ok, state}
 
-        is_nil(previous) and
-            map_size(state.streams) + map_size(state.legacy_views) >= @max_streams ->
+        is_nil(previous) and stream_count(state) >= @max_streams ->
           {{:error, :overloaded}, state}
 
         true ->
@@ -142,7 +175,19 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
 
   defp input_id(_input), do: :legacy
 
-  defp apply_view(state, frame, input) do
+  defp apply_view(
+         state,
+         %{"participant_id" => person, "bring" => false} = frame,
+         %{
+           origin_participant_id: origin
+         } = input
+       )
+       when origin != person,
+       do: accept_relay(state, frame, input)
+
+  defp apply_view(state, frame, input), do: stamp_view(state, frame, input)
+
+  defp stamp_view(state, frame, input) do
     person = frame["participant_id"]
     previous = Map.get(state.views, person)
     candidate = canonical_rectangle(frame, input, state.views)
