@@ -175,6 +175,28 @@ def plan(github, args):
     outputs(result)
 
 
+def builds_fresh_artifacts():
+    # Mirrors the plan-managed and build-web conditions in ci.yml. Reuse deploys artifacts that an earlier, gated run
+    # built; a Pages rollback input alone does not stop either build.
+    flag = lambda name: os.environ.get(name) == 'true'
+    return not os.environ.get('MANIFEST_RUN_ID') and (flag('RELEASE_MANAGED') or flag('DEPLOY_MANAGED') or flag('DEPLOY_WEB'))
+
+
+def require_gate(github, args):
+    if not builds_fresh_artifacts():
+        print('Release builds nothing new; it deploys earlier artifacts without a new Gate check')
+        return
+    target = env('TARGET_SHA')
+    require(re.fullmatch('[0-9a-f]{40}', target), 'target_sha must be a full lowercase commit SHA')
+    # A called workflow sees its caller's event. Scheduled nightly plans its cut on the latest push Gate, so its child
+    # applies the same rule; an unfinished 01:17 scheduled Gate must not fail a cut that the plan already accepted.
+    push_only = os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
+    require(github.has_green_gate(target, push_only=push_only),
+            f'{target} has no successful {"push " if push_only else ""}Gate run on master. Pull request Gate runs do not count: '
+            'merge the change, wait for its master Gate to pass, then release that commit.')
+    print(f'Release: latest master {"push " if push_only else ""}Gate for {target} passed')
+
+
 def validate_choice(github, item):
     info = payload(item)
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
@@ -332,7 +354,7 @@ def invalidate(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production'))
+    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

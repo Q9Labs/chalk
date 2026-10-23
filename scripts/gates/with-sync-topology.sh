@@ -19,6 +19,8 @@ fi
 repository_root="$(cd "$(dirname "$0")/../.." && pwd)"
 topology_root="$(mktemp -d "${TMPDIR:-/tmp}/chalk-sync-topology.XXXXXX")"
 backend=""
+# shellcheck source=scripts/gates/owned-command.sh
+source "$(dirname "$0")/owned-command.sh"
 
 available_port() {
   ruby -rsocket -e \
@@ -225,6 +227,7 @@ start_docker_topology() {
 }
 
 cleanup() {
+  stop_owned
   if [[ "${backend}" == "native" ]]; then
     "${CHALK_SYNC_TOPOLOGY_PG_BIN}/pg_ctl" \
       -D "${CHALK_SYNC_TOPOLOGY_STANDBY_DATA}" \
@@ -246,7 +249,7 @@ cleanup() {
 
   rm -rf "${topology_root}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
 
 cd "${repository_root}"
 if pg_bin="$(native_pg18_bin)"; then
@@ -259,9 +262,9 @@ else
 fi
 
 if ((command_mode == 1)); then
-  "$@"
+  run_owned "$@"
 else
   for command in "$@"; do
-    "${command}"
+    run_owned "${command}"
   done
 fi

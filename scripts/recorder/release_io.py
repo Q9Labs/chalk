@@ -9,7 +9,7 @@ from pathlib import Path
 from release_core import require
 
 AWS_READS = {("ssm", "get-parameter"), ("ssm", "describe-parameters"), ("ssm", "get-document"),
-             ("ec2", "describe-instances"), ("scheduler", "get-schedule"),
+             ("ec2", "describe-instances"), ("ec2", "describe-addresses"), ("scheduler", "get-schedule"),
              ("lambda", "get-function-configuration"), ("s3api", "get-object"), ("s3api", "head-object"),
              ("sts", "get-caller-identity")}
 DO_READS = {("compute", "image", "get"), ("compute", "size", "list"),

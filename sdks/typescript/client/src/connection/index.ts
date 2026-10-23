@@ -13,6 +13,7 @@ export type ConnectionLifecycleSnapshot = {
   } | null;
   readonly connection: {
     readonly sync: ConnectionConnectionPhase;
+    readonly syncHealth?: import("../sync/v1-health").SyncHealth;
     readonly media: ConnectionConnectionPhase;
   };
   readonly failure: ConnectionFailure | null;

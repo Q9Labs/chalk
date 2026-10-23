@@ -262,6 +262,9 @@ type Querier interface {
 	LockActiveRecordingForTenantEnd(ctx context.Context, arg LockActiveRecordingForTenantEndParams) (pgtype.UUID, error)
 	LockAdmissionRequestForParticipant(ctx context.Context, arg LockAdmissionRequestForParticipantParams) (SyncAdmissionRequest, error)
 	LockAutoSpaceLifecycle(ctx context.Context, arg LockAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
+	// Reservations in one Space wait here, so the per-person count in the next statement sees every
+	// reservation committed before it. It returns no row when the Participant may not send chat.
+	LockChatAttachmentStream(ctx context.Context, arg LockChatAttachmentStreamParams) (pgtype.UUID, error)
 	LockDashboardJoinIntentForUpdate(ctx context.Context, arg LockDashboardJoinIntentForUpdateParams) (SyncLifecycleIntent, error)
 	LockDashboardParticipantForUpdate(ctx context.Context, arg LockDashboardParticipantForUpdateParams) (Participant, error)
 	LockDeadlineEpisodeForUpdate(ctx context.Context, arg LockDeadlineEpisodeForUpdateParams) (Episode, error)
@@ -316,6 +319,7 @@ type Querier interface {
 	MaterializeRecording(ctx context.Context, arg MaterializeRecordingParams) (Recording, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
+	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
 	RecordRecordingFleetWorkerObservation(ctx context.Context, arg RecordRecordingFleetWorkerObservationParams) (RecordRecordingFleetWorkerObservationRow, error)
 	RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExpiredArtifactJobsParams) ([]ArtifactJob, error)

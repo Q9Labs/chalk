@@ -7,6 +7,21 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it.each(["startup", "live"] as const)("surfaces a failed digest recovery during %s without replacing the Sync client", async (phase) => {
+    const fixture = recoveryFixture();
+    const createSync = vi.spyOn(fixture.dependencies, "createSyncClient");
+    if (phase === "startup") vi.spyOn(fixture.platform.sync, "start").mockImplementation(async () => fixture.failSync("state_digest_recovery_failed"));
+    await fixture.run(async (lifecycle) => {
+      if (phase === "live") {
+        expect(lifecycle.getSnapshot().state).toBe("live");
+        fixture.failSync("state_digest_recovery_failed");
+      }
+      await vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "state_digest_recovery_failed", recoverable: false } }));
+      await fixture.tick(60000);
+      expect(createSync).toHaveBeenCalledTimes(1);
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "state_digest_recovery_failed", recoverable: false } });
+    });
+  });
   it("leaves Sync recovery and command eligibility unchanged during a brief transport loss", async () => {
     const platform = createCoreTestPlatform();
     const access = parseParsedAccessGrant({
@@ -77,6 +92,26 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         expect(lifecycle.getSnapshot().state).toBe("live");
         expect(syncCreations).toBe(1);
         expect(mediaRestarts).toBe(0);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+  it("retains a redacted dial-timeout diagnostic after Sync recovers without duplicate events", async () => {
+    const platform = createCoreTestPlatform();
+    const layer = makeConnectionLifecycleLayer({
+      access: async () => parseParsedAccessGrant(opaqueAccessGrant("dial-diagnostic")),
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      dependencies: platform.dependencies,
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const lifecycle = yield* Effect.service(ConnectionLifecycleService);
+        yield* lifecycle.join();
+        const live = platform.sync.getSnapshot();
+        platform.emitSync({ ...live, connection: { phase: "connecting", dialTimeoutCount: 1 } });
+        platform.emitSync({ ...live, connection: { phase: "live", dialTimeoutCount: 1 } });
+        platform.emitSync({ ...live, connection: { phase: "live", dialTimeoutCount: 1 } });
+        expect(lifecycle.getDiagnostics().filter((event) => event.event === "sync_dial_timeout")).toEqual([{ timestamp: expect.any(Number), event: "sync_dial_timeout", state: "live", epoch: expect.any(Number), attempt: 1 }]);
       }).pipe(Effect.provide(layer)),
     );
   });

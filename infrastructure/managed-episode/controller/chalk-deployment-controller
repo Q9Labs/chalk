@@ -858,6 +858,92 @@ remove_migrator_secret() {
   fi
 }
 
+cleanup_unused_images() {
+  local protected_refs="${stage_root}/protected-images" protected_ids="${stage_root}/protected-image-ids"
+  local manifests=("$manifest_path")
+  local live_manifest="${run_root}/release/release-manifest.json"
+  if [[ -e "$live_manifest" || -L "$live_manifest" ]]; then
+    [[ -f "$live_manifest" && ! -L "$live_manifest" ]] || return 1
+    manifests+=("$live_manifest")
+  fi
+  if [[ -f "$active_pointer" ]]; then
+    local previous_id previous_hash previous_manifest
+    if [[ "$(jq -er '.schema_version' "$active_pointer")" != 2 ]]; then
+      printf 'WARN previous committed identity is unknown in legacy pointer; skipping image cleanup\n' >&2
+      return 1
+    fi
+    manifests+=("$(jq -er '.release_root' "$active_pointer")/release-manifest.json")
+    if jq -e '.previous_release != null' "$active_pointer" >/dev/null; then
+      previous_id="$(jq -er '.previous_release.release_id' "$active_pointer")" || return 1
+      previous_hash="$(jq -er '.previous_release.manifest_sha256' "$active_pointer")" || return 1
+      previous_manifest="${state_root}/releases/${previous_id}/release-manifest.json"
+      [[ -f "$previous_manifest" && ! -L "$previous_manifest" ]] || return 1
+      [[ "$(sha256_file "$previous_manifest")" == "$previous_hash" ]] || return 1
+      jq -e --arg id "$previous_id" '.release_id == $id' "$previous_manifest" >/dev/null || return 1
+      manifests+=("$previous_manifest")
+    fi
+  fi
+  local file image image_id status
+  : >"$protected_refs"
+  : >"$protected_ids"
+  for file in "${manifests[@]}"; do
+    [[ -f "$file" && ! -L "$file" ]] || return 1
+    jq -er '.images[]' "$file" >>"$protected_refs" || return 1
+  done
+  while IFS= read -r image; do
+    [[ "$image" =~ ^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$ ]] || return 1
+    if run_user_podman image exists "$image"; then
+      image_id="$(run_user_podman image inspect --format '{{.Id}}' "$image")" || return 1
+      image_id="${image_id#sha256:}"
+      [[ "$image_id" =~ ^[0-9a-f]{64}$ ]] || return 1
+      printf '%s\n' "$image_id" >>"$protected_ids"
+    else
+      status=$?
+      [[ "$status" == 1 ]] || return 1
+    fi
+  done <"$protected_refs"
+
+  local inventory="${stage_root}/image-inventory" containers refs ref protected
+  run_user_podman image list --all --no-trunc --format '{{.Id}} {{.Containers}} {{range .RepoDigests}}{{.}} {{end}}' >"$inventory" || return 1
+  while read -r image_id containers refs; do
+    image_id="${image_id#sha256:}"
+    [[ "$image_id" =~ ^[0-9a-f]{64}$ && "$containers" == 0 ]] || continue
+    grep -Fxq "$image_id" "$protected_ids" && continue
+    protected=false
+    for ref in $refs; do
+      if grep -Fq -- "@${ref##*@}" "$protected_refs"; then protected=true; break; fi
+    done
+    [[ "$protected" == false ]] || continue
+    # Bind untagging to the checked ID, even if another process moves its names.
+    # Non-force removal refuses any image that gains a container after inventory.
+    if ! run_user_podman image untag "sha256:${image_id}"; then
+      printf 'WARN unused image sha256:%s names could not be removed; continuing cleanup\n' "$image_id" >&2
+    fi
+    if ! run_user_podman image rm --no-prune "sha256:${image_id}"; then
+      if run_user_podman image exists "sha256:${image_id}"; then
+        printf 'WARN unused image sha256:%s could not be removed; continuing cleanup\n' "$image_id" >&2
+      else
+        status=$?
+        if [[ "$status" != 1 ]]; then
+          printf 'WARN unused image sha256:%s removal could not be verified (status %s); continuing cleanup\n' "$image_id" "$status" >&2
+        fi
+      fi
+    fi
+  done <"$inventory"
+}
+
+check_disk_space() {
+  local graph_root
+  graph_root="$(run_user_podman info --format '{{.Store.GraphRoot}}')" || fail "image storage location inspection failed before runtime cutover"
+  [[ "$graph_root" == /* ]] || fail "image storage location is invalid before runtime cutover"
+  # Match chalk-runtime-health's <90% usage policy, including a separate image filesystem.
+  df -Pk / "$graph_root" "$state_root" >"${stage_root}/disk-space" || fail "disk space inspection failed before runtime cutover"
+  if ! awk 'NR > 1 { seen=1; sub(/%$/, "", $5); if ($4 !~ /^[0-9]+$/ || $4 <= 0 || $5 !~ /^[0-9]+$/ || $5 >= 90) exit 1 } END { if (!seen) exit 1 }' "${stage_root}/disk-space"; then
+    cat "${stage_root}/disk-space" >&2
+    fail "insufficient disk space before runtime cutover (requires usage below 90%)"
+  fi
+}
+
 pull_images() {
   local host_architecture
   case "$(uname -m)" in
@@ -867,6 +953,12 @@ pull_images() {
   esac
   jq -e --arg architecture "linux/${host_architecture}" '.architectures | index($architecture) != null' "$manifest_path" >/dev/null || fail "release manifest does not support the host architecture"
   authenticate_ecr_registries
+
+  # Keep per-image refusals on stderr even when the rest of cleanup succeeds.
+  if ! cleanup_unused_images >"${stage_root}/image-prune.log"; then
+    tail -n 20 "${stage_root}/image-prune.log" >&2
+    printf 'WARN unused image cache cleanup failed; disk space gate will decide whether to proceed\n' >&2
+  fi
 
   local image image_architecture
   while IFS= read -r image; do
@@ -1134,6 +1226,10 @@ persist_release() {
   local runtime_checksums
   runtime_checksums="$(directory_checksums "${release_root}/runtime")"
   local pointer_tmp="${stage_root}/active-pointer.json"
+  local previous_release=null
+  if [[ -f "$pointer_file" ]]; then
+    previous_release="$(jq -c '{release_id,manifest_sha256}' "$pointer_file")"
+  fi
   jq -n \
     --arg release_id "$request_release_id" \
     --arg source_revision "$request_source_revision" \
@@ -1147,11 +1243,17 @@ persist_release() {
     --argjson excluded_secrets "$excluded_json" \
     --argjson inputs "$input_records_json" \
     --argjson runtime_sha256 "$runtime_checksums" \
-    '{schema_version:1,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,runtime_sha256:$runtime_sha256,release_root:$release_root,inputs:$inputs}' >"$pointer_tmp"
+    --argjson previous_release "$previous_release" \
+    '{schema_version:2,controller_version:$controller_version,release_id:$release_id,source_revision:$source_revision,environment:$environment,aws_region:$aws_region,parameter_prefix:$parameter_prefix,request_id:$request_id,requested_at:$requested_at,excluded_secrets:$excluded_secrets,manifest_sha256:$manifest_sha256,runtime_sha256:$runtime_sha256,release_root:$release_root,inputs:$inputs,previous_release:$previous_release}' >"$pointer_tmp"
   if [[ -e "$ledger_file" || -L "$ledger_file" ]]; then
     require_regular_file "$ledger_file"
   else
     reject_symlink_components "$ledger_file"
+  fi
+  if [[ -s "$ledger_file" ]]; then
+    local trailing_newlines
+    trailing_newlines="$(tail -c 1 "$ledger_file" | wc -l)" || fail "deployment ledger boundary inspection failed"
+    if ((trailing_newlines == 0)); then printf '\n' >>"$ledger_file"; fi
   fi
   jq -cn \
     --arg outcome "$outcome" --arg release_id "$request_release_id" --arg source_revision "$request_source_revision" \
@@ -1177,8 +1279,15 @@ load_active_pointer() {
   require_regular_file "$active_pointer"
   jq -e --argjson allowed "$INPUT_IDS" '
     type == "object" and
-    (keys | sort) == ["aws_region","controller_version","environment","excluded_secrets","inputs","manifest_sha256","parameter_prefix","release_id","release_root","request_id","requested_at","runtime_sha256","schema_version","source_revision"] and
-    .schema_version == 1 and .controller_version == 2 and
+    (keys - ["previous_release"] | sort) == ["aws_region","controller_version","environment","excluded_secrets","inputs","manifest_sha256","parameter_prefix","release_id","release_root","request_id","requested_at","runtime_sha256","schema_version","source_revision"] and
+    (if .schema_version == 1 then has("previous_release") | not
+     elif .schema_version == 2 then
+       has("previous_release") and (.previous_release == null or
+         (.previous_release | type == "object" and
+           (keys | sort) == ["manifest_sha256","release_id"] and
+           (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$") and (contains("..") | not)) and
+           (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$"))))
+     else false end) and .controller_version == 2 and
     (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     (.aws_region | type == "string" and test("^[a-z]{2}(?:-gov)?-[a-z]+-[1-9][0-9]*$")) and
@@ -1352,7 +1461,6 @@ deploy() {
     --rendered-root "$rendered_root" \
     --excluded-secrets "$missing_inputs_csv" >"${stage_root}/validate.log" 2>&1 || fail "candidate runtime validation failed"
   validate_host_quadlets "$rendered_root"
-  pull_images
   local stable_exists=false
   local stable_was_adopted=false
   if [[ -f "$active_pointer" && ! -L "$active_pointer" ]]; then
@@ -1360,7 +1468,10 @@ deploy() {
     stable_exists=true
   elif [[ -e "$active_pointer" ]]; then
     fail "active release pointer is unsafe"
-  elif [[ "$adopt_existing_release" == true ]]; then
+  fi
+  pull_images
+  check_disk_space
+  if [[ "$stable_exists" == false && "$adopt_existing_release" == true ]]; then
     local live_manifest="${run_root}/release/release-manifest.json"
     if [[ -f "$live_manifest" && ! -L "$live_manifest" ]]; then
       adopt_live_release

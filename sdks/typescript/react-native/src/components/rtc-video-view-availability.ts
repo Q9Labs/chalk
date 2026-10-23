@@ -12,5 +12,5 @@ export interface RtcVideoViewProps extends ViewProps {
 type RtcVideoViewComponent = ComponentType<RtcVideoViewProps>;
 
 export function canRenderRtcVideoView(component: unknown): component is RtcVideoViewComponent {
-  return typeof component === "function" || (typeof component === "object" && component !== null);
+  return (typeof component === "string" && component.length > 0) || typeof component === "function" || (typeof component === "object" && component !== null);
 }

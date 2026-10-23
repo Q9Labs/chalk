@@ -35,6 +35,7 @@ for (const path of [
   "/auth/sign-out",
   "/dashboard-api/home",
   "/dashboard-api/call",
+  "/dashboard-api/call-invite",
   "/dashboard-api/call-status",
   "/dashboard-api/call-metadata",
   "/dashboard-api/home-status",

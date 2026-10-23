@@ -122,6 +122,11 @@ export function planScene(): ChalkWhiteboardV1Element[] {
   return PLAN.map(({ id, type, ...payload }, position) => ({ id, type, version: 1, versionNonce: position + 1, index: `a${INDEX[position]}`, isDeleted: false, payload }));
 }
 
+/** One short word, far smaller than any viewport. */
+export function smallScene(): ChalkWhiteboardV1Element[] {
+  return planScene().filter((element) => element.id === "done-text");
+}
+
 /** Nora and Malik move their pointers around the plan, as cursor updates about 15 times a second. */
 export function boardActivity(people: readonly { readonly id: string; readonly name: string }[], emit: (event: ChalkWhiteboardV1Event) => void): () => void {
   const started = performance.now();

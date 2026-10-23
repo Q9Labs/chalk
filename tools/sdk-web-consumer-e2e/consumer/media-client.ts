@@ -118,7 +118,7 @@ export class FixtureMediaClient {
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     const local = this.#local.get(target.source);
-    if (!local) return { outcome: "terminal_failure", errorCode: "source_unavailable" };
+    if (!local) return target.enabled ? { outcome: "terminal_failure", errorCode: "source_unavailable" } : { outcome: "satisfied", errorCode: null };
     if (local.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
     await this.#applyLocalTarget(target, local);
     this.#sendPublications();

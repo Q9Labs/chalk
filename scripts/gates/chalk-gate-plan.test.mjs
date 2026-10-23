@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { classify } from "@q9labsai/gates";
 import gateConfig from "../../gate.config.ts";
@@ -182,20 +183,77 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
   assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "build"] });
-  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "build"] });
-  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
-  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "build"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "call-performance", "call-leaks", "build"] });
+  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
+  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
+  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
+});
+
+test("deployment tree changes run the gates that read them, not a full gate", () => {
+  for (const file of ["infrastructure/managed-episode/env/api.nightly.env.example", "infrastructure/nightly/transcription/main.tf"]) {
+    const plan = createGatePlan([file]);
+    assert.equal(plan.full, false, file);
+    assert.equal(plan.tasks.find((task) => task.id === "recorder")?.selected, true, file);
+    assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks"] }, file);
+  }
+  assert.equal(createGatePlan(["infrastructure/observability/new.yaml"]).full, true);
+});
+
+function ciJobsOutput(base) {
+  const stdout = execFileSync("node", [fileURLToPath(new URL("chalk-gate-plan.mjs", import.meta.url)), "--ci-jobs", base], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  return Object.fromEntries(
+    stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.split("=")),
+  );
+}
+
+const fullCiJobs = { api: "true", sync: "true", root_groups: JSON.stringify(ciJobs([], { full: true }).rootGroups), full: "true" };
+
+test("CI job selection that cannot resolve its base runs every job in full", () => {
+  assert.deepEqual(ciJobsOutput("origin/chalk-gate-plan-missing-base"), fullCiJobs);
+  assert.deepEqual(ciJobsOutput("--full"), fullCiJobs);
+  assert.equal(ciJobsOutput("HEAD").full, "false");
+});
+
+// When Select gate jobs fails, the workflow falls back to its own list of root groups.
+test("the Gate workflow falls back to every root lane group", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
+  const fallback = /needs\.changes\.outputs\.root_groups \|\| '([^']+)'/u.exec(workflow)?.[1];
+  assert.deepEqual(JSON.parse(fallback ?? "null"), ciJobs([], { full: true }).rootGroups);
+});
+
+// The runner still exports what a failed Select gate jobs wrote, such as root_groups=["checks"] and full=false
+// followed by a crash, so every place that narrows on those outputs must also see that the selection succeeded.
+test("the Gate workflow narrows only on a job selection that succeeded", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
+  const narrowing = workflow.split("\n").filter((line) => /needs\.changes\.outputs\.(root_groups|full)\b/u.test(line));
+  assert.equal(narrowing.length, 5);
+  for (const line of narrowing) assert.match(line, /needs\.changes\.result == 'success'|"\$\{\{ needs\.changes\.result \}\}" == "success"/u, line.trim());
+});
+
+test("browser CI groups each run only their own selected lane", () => {
+  const plan = createGatePlan(["apps/web/src/components/space/SpacePage.tsx"]);
+  for (const group of ["browser-tests", "call-performance", "call-leaks"]) {
+    assert.deepEqual(
+      laneGroupLanes(plan.tasks, group)
+        .filter((lane) => lane.selected)
+        .map((lane) => lane.id),
+      [group],
+    );
+  }
+  assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "call-performance", "call-leaks", "build"]);
 });
 
 test("every lane runs in exactly one CI lane group", () => {
   const lanes = gateConfig.lanes;
-  const groups = ["checks", "tests", "browser-tests", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
+  const groups = ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
   assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
   assert.equal(laneGroup("publint"), "build");
   assert.equal(laneGroup("browser-tests"), "browser-tests");
-  assert.equal(laneGroup("call-performance"), "browser-tests");
-  assert.equal(laneGroup("call-leaks"), "browser-tests");
+  assert.equal(laneGroup("call-performance"), "call-performance");
+  assert.equal(laneGroup("call-leaks"), "call-leaks");
   assert.equal(laneGroup("a-new-lane"), "checks");
   assert.equal(laneGroupLanes(lanes, undefined), lanes);
   assert.throws(

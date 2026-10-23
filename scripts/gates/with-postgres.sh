@@ -31,8 +31,13 @@ fi
 
 # Service suites can leave fixtures behind; each gate needs its own database.
 if ((command_mode == 0 && $# > 1)); then
+  # shellcheck source=scripts/gates/owned-command.sh
+  source "$(dirname "$0")/owned-command.sh"
+  # Each gate's own wrapper bounds its stop and cleanup, so this one waits longer before it uses KILL.
+  owned_grace=$((owned_grace + 5))
+  trap stop_owned EXIT
   for gate in "$@"; do
-    bash "${BASH_SOURCE[0]}" "${gate}"
+    run_owned bash "${BASH_SOURCE[0]}" "${gate}"
   done
   exit 0
 fi
@@ -44,7 +49,8 @@ docker_bin=""
 container=""
 native_root=""
 native_pg_bin=""
-callback_pid=""
+# shellcheck source=scripts/gates/owned-command.sh
+source "$(dirname "$0")/owned-command.sh"
 
 docker_binary() {
   local candidate
@@ -84,11 +90,7 @@ available_port() {
 }
 
 cleanup() {
-  if [[ -n "${callback_pid}" ]]; then
-    kill -TERM "${callback_pid}" >/dev/null 2>&1 || true
-    wait "${callback_pid}" >/dev/null 2>&1 || true
-    callback_pid=""
-  fi
+  stop_owned
   if [[ "${backend}" == "docker" ]]; then
     "${docker_bin}" rm -f --volumes "${container}" >/dev/null 2>&1 || true
   elif [[ "${backend}" == "native" ]]; then
@@ -101,7 +103,7 @@ cleanup() {
     fi
   fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
 
 postgres_ready() {
   # The container shell expands /proc state.
@@ -203,20 +205,12 @@ fi
 
 cd "${repository_root}"
 if ((command_mode == 1)); then
-  if ((api_gate_db_lane == 0)); then
-    "$@"
-    exit "$?"
+  if ((api_gate_db_lane == 1)); then
+    export CHALK_GATE_POSTGRES_CALLBACK=1
   fi
-
-  export CHALK_GATE_POSTGRES_CALLBACK=1
-  "$@" &
-  callback_pid="$!"
-  wait "${callback_pid}"
-  status="$?"
-  callback_pid=""
-  exit "${status}"
+  run_owned "$@"
 else
   for gate in "$@"; do
-    "${gate}"
+    run_owned "${gate}"
   done
 fi

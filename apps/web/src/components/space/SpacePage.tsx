@@ -1,4 +1,6 @@
+import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
+import type { ThemeMode } from "../../lib/theme";
 import { readReloadRejoin, writeReloadRejoin, reloadRejoinStorageKey, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ErrorCode, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { Chalk, CallLimbo, ChalkButton, StatusSurface } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -12,13 +14,24 @@ const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 type EntryFailure = { readonly message: string; readonly retryable: boolean };
 type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
-export function SpacePage({
-  slug,
-  navigatePublicSpace = replacePublicSpaceHistory,
-}: {
+type SpacePageProps = {
   readonly slug?: string;
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
-} = {}) {
+};
+export function SpacePage(props: SpacePageProps = {}) {
+  const { mode } = useTheme();
+  return (
+    <div data-chalk data-chalk-theme={mode} className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
+      <div className="mx-auto w-full max-w-5xl shrink-0 px-4">
+        <PrivacyNotice />
+      </div>
+      <div className="relative min-h-0 flex-1">
+        <SpaceEntry {...props} />
+      </div>
+    </div>
+  );
+}
+function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
   const [terminal, setTerminal] = useState<{ readonly phase: ExitPhase; readonly callName: string; readonly errorCode: ErrorCode | undefined; readonly cleanup: () => Promise<void> } | null>(null);
   const client = useMemo(() => createPublicInviteClient(), []);
@@ -52,6 +65,7 @@ export function SpacePage({
   const active = useRef(true);
   const reloadAttempted = useRef(false);
   const pendingRef = useRef<PendingArrival | null>(null);
+  const cancelRequested = useRef(false);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
@@ -104,6 +118,7 @@ export function SpacePage({
         setError({ message: neutralSpaceError, retryable: false });
         return;
       }
+      cancelRequested.current = false;
       setError(null);
       setPreparing(true);
       const preparation = arrive(client, normalizedDisplayName, slug, inviteToken);
@@ -161,6 +176,7 @@ export function SpacePage({
     start({ displayName: automaticName, ...devicesOff });
   }, [automaticName, reloadMarker, start]);
   useEffect(() => {
+    if (preparing || cancelRequested.current) return;
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
     let cancelled = false;
@@ -168,7 +184,7 @@ export function SpacePage({
     const poll = async () => {
       try {
         const arrival = await client.getSpacePublicInviteArrival(pending.arrival.arrival_handle ?? "");
-        if (cancelled || !active.current) return;
+        if (cancelled || cancelRequested.current || !active.current || pendingRef.current !== pending) return;
         if (arrival.state === "pending") {
           timer = globalThis.setTimeout(poll, retryDelay(arrival.retry_after));
           return;
@@ -176,13 +192,13 @@ export function SpacePage({
         if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
         const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
         const prepared = createPreparedPublicSpace(client, resumed);
-        if (cancelled || !active.current) {
+        if (cancelled || cancelRequested.current || !active.current || pendingRef.current !== pending) {
           await prepared.finish().catch(() => undefined);
           return;
         }
         complete(prepared, pending.inviteLink, pending.spaceName);
       } catch (cause) {
-        if (!cancelled && active.current) {
+        if (!cancelled && !cancelRequested.current && active.current && pendingRef.current === pending) {
           pendingRef.current = null;
           setPending(null);
           setError(neutralMessage(cause));
@@ -194,10 +210,12 @@ export function SpacePage({
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
-  }, [client, complete, displayName, pending]);
+  }, [client, complete, displayName, pending, preparing]);
   const cancel = useCallback(async () => {
     const arrivalHandle = pending?.arrival.arrival_handle;
     if (!arrivalHandle || preparing) return;
+    cancelRequested.current = true;
+    setError(null);
     setPreparing(true);
     try {
       await client.leaveSpacePublicInviteArrival(arrivalHandle);
@@ -230,7 +248,7 @@ export function SpacePage({
   );
   if (terminal)
     return (
-      <main className="relative h-dvh">
+      <main className="relative h-full">
         <StatusSurface
           phase={terminal.phase}
           callName={terminal.callName}
@@ -276,24 +294,27 @@ export function SpacePage({
     );
   }
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
-      {pending ? (
-        <CallLimbo spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
-      ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-        <CallLimbo spaceName={callName} message={`Joining ${callName}…`} />
-      ) : error ? (
-        <CallLimbo spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
-      ) : (
-        <NameNeeded
-          spaceName={callName}
-          displayName={displayName}
-          onDisplayNameChange={(name) => {
-            nameEdited.current = true;
-            setDisplayName(name);
-          }}
-          onJoin={() => start()}
-        />
-      )}
+    <main data-chalk data-chalk-theme={mode} className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="min-h-0 flex-1">
+        {pending ? (
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={pending.spaceName} message={error?.message ?? `Asking to join ${pending.spaceName}`} detail={error ? undefined : "The host will let you in."} action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }} />
+        ) : preparing || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName}…`} />
+        ) : error ? (
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: () => start() } : undefined} />
+        ) : (
+          <NameNeeded
+            spaceName={callName}
+            theme={mode}
+            displayName={displayName}
+            onDisplayNameChange={(name) => {
+              nameEdited.current = true;
+              setDisplayName(name);
+            }}
+            onJoin={() => start()}
+          />
+        )}
+      </div>
     </main>
   );
 }
@@ -466,7 +487,7 @@ function LocalSpace({
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
   }, [client, credential.space, displayName, onFinish, reloadMarker]);
   return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden">
+    <main className="h-full min-h-0 w-full overflow-hidden">
       {homeError ? <p role="alert">{homeError}</p> : null}
       <Chalk
         theme={{ colorScheme: mode }}
@@ -494,17 +515,17 @@ function LocalSpace({
   );
 }
 /** The web asks only for identity. Devices are requested inside the admitted call. */
-export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
+export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange, onJoin }: { readonly spaceName: string; readonly theme: ThemeMode; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
   return (
-    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`}>
+    <CallLimbo spaceName={spaceName} message={`Join ${spaceName}`} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
       <form
-        className="mt-6"
+        className="mt-4 flex w-full flex-col gap-2 text-left"
         onSubmit={(event) => {
           event.preventDefault();
           if (displayName.trim()) onJoin();
         }}
       >
-        <label htmlFor="join-display-name" className="mb-2 block text-sm text-[var(--chalk-app-text-muted)]">
+        <label htmlFor="join-display-name" className="text-[13px] font-semibold">
           Your name
         </label>
         <input
@@ -513,10 +534,10 @@ export function NameNeeded({ spaceName, displayName, onDisplayNameChange, onJoin
           autoFocus
           value={displayName}
           onChange={(event) => onDisplayNameChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3 text-center text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
         />
-        <ChalkButton type="submit" variant="outline" className="mt-4 !h-11" disabled={!displayName.trim()}>
-          Join
+        <ChalkButton type="submit" variant="solid" className="mt-1.5 !h-11 w-full" disabled={!displayName.trim()}>
+          Join call
         </ChalkButton>
       </form>
     </CallLimbo>

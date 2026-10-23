@@ -80,14 +80,16 @@ export function JoiningScreen({ apiBaseURL, target, displayName, colorScheme, on
     };
   }, [apiBaseURL, attempt, displayName, target]);
 
-  if (waiting) {
-    const retry = () => {
-      setWaiting(null);
-      setAttempt((current) => current + 1);
-    };
-    return <ChalkArrival callName={waiting.spaceName} colorScheme={colorScheme} onCancel={onCancel} onRetry={retry} state={waiting.state} />;
-  }
-  return <Joining callName={joiningName(target, displayName)} />;
+  const { colors } = useTheme();
+  const retry = () => {
+    setWaiting(null);
+    setAttempt((current) => current + 1);
+  };
+  return (
+    <View style={[styles.root, { backgroundColor: colors.canvas }]}>
+      <View style={styles.root}>{waiting ? <ChalkArrival callName={waiting.spaceName} colorScheme={colorScheme} onCancel={onCancel} onRetry={retry} state={waiting.state} /> : <Joining callName={joiningName(target, displayName)} />}</View>
+    </View>
+  );
 }
 
 /** T1 as drawn: the limbo on the call background. */

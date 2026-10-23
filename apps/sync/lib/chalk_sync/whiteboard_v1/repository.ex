@@ -1,6 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.Repository do
   @moduledoc "Durable whiteboard-v1 repository boundary."
 
+  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
 
   @type commit :: %{
@@ -12,6 +13,11 @@ defmodule ChalkSync.WhiteboardV1.Repository do
         }
 
   @callback connect(Identity.t()) :: {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  @callback episode_access(EpisodeKey.t()) ::
+              {:ok,
+               %{status: String.t(), participants: %{{String.t(), pos_integer()} => String.t()}}}
+              | {:error, :not_found}
+              | {:retryable, {:storage_unavailable, String.t()}}
   @callback commit_update(Identity.t(), map()) ::
               {:ok, commit()} | {:error, atom()} | {:retryable, atom()}
   @callback clear(Identity.t(), map()) ::
@@ -25,6 +31,7 @@ defmodule ChalkSync.WhiteboardV1.Repository do
               {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
 
   def connect(identity), do: impl().connect(identity)
+  def episode_access(episode), do: impl().episode_access(episode)
   def commit_update(identity, operation), do: impl().commit_update(identity, operation)
   def clear(identity, operation), do: impl().clear(identity, operation)
 

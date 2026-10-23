@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Exercise the controller's storage assumptions against Ubuntu 24.04's Podman 4.9.
+set -euo pipefail
+
+podman --version
+[[ "$(podman --version)" == 'podman version 4.9.'* ]] || { echo 'Expected Podman 4.9' >&2; exit 1; }
+fixture_root="$(mktemp -d)"
+cleanup() { rm -rf -- "$fixture_root"; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+p=(podman --root "${fixture_root}/store" --runroot "${fixture_root}/run" --storage-driver vfs --events-backend file)
+set -x
+mkdir -p "${fixture_root}/context"
+printf 'parent\n' >"${fixture_root}/context/parent"
+printf 'child\n' >"${fixture_root}/context/child"
+printf 'FROM scratch\nCOPY parent /parent\n' >"${fixture_root}/context/Containerfile"
+"${p[@]}" build --layers --format docker -t localhost/cleanup-parent "${fixture_root}/context"
+parent="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-parent)"
+"${p[@]}" tag "$parent" localhost/cleanup-alias
+"${p[@]}" image inspect --format '{{json .RepoTags}}' "$parent"
+inventory="$("${p[@]}" image list --all --no-trunc --format '{{.Id}} {{.Containers}} {{range .RepoDigests}}{{.}} {{end}}')"
+printf 'CAPTURE inventory with two names\n%s\n' "$inventory"
+awk -v id="${parent#sha256:}" '$1 == id || $1 == "sha256:" id { found=1; if ($2 != 0) exit 1 } END { if (!found) exit 1 }' <<<"$inventory"
+if "${p[@]}" image rm --no-prune "$parent"; then
+  echo 'Expected non-force ID removal to refuse multiple names' >&2; exit 1
+fi
+"${p[@]}" image untag "$parent"
+"${p[@]}" image rm --no-prune "$parent"
+status=0
+"${p[@]}" image exists "$parent" || status=$?
+[[ "$status" == 1 ]] || { echo "Expected removed image to be absent, got ${status}" >&2; exit 1; }
+echo 'PASS real multi-name ID refusal and ID-bound untag/removal'
+
+"${p[@]}" build --layers --format docker -t localhost/cleanup-parent "${fixture_root}/context"
+parent="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-parent)"
+printf 'FROM localhost/cleanup-parent\nCOPY child /child\n' >"${fixture_root}/context/Containerfile"
+"${p[@]}" build --layers --format docker -t localhost/cleanup-child "${fixture_root}/context"
+child="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-child)"
+"${p[@]}" image untag "$child"
+"${p[@]}" image rm --no-prune "$child"
+"${p[@]}" image exists "$parent"
+echo 'PASS real no-prune removal preserves the parent image'
+
+"${p[@]}" build --layers --format docker -t localhost/cleanup-child "${fixture_root}/context"
+child="$("${p[@]}" image inspect --format '{{.Id}}' localhost/cleanup-child)"
+child_layers="$("${p[@]}" image inspect --format '{{json .RootFS.Layers}}' "$child")"
+"${p[@]}" image untag "$parent"
+# Podman 4.9 accepts this removal; dependent layers still belong to the child.
+"${p[@]}" image rm --no-prune "$parent"
+"${p[@]}" image exists "$child"
+[[ "$("${p[@]}" image inspect --format '{{json .RootFS.Layers}}' "$child")" == "$child_layers" ]]
+echo 'PASS real intermediate removal preserves the child and its layers'
+
+# Creation is sufficient: no executable, network, running process or image pull is needed.
+"${p[@]}" tag "$child" localhost/cleanup-container
+container="$("${p[@]}" create --network none localhost/cleanup-container /unused)"
+"${p[@]}" image list --all --no-trunc --format '{{.Id}} {{.Containers}} {{range .RepoDigests}}{{.}} {{end}}'
+"${p[@]}" image untag "$child"
+if "${p[@]}" image rm --no-prune "$child"; then
+  echo 'Expected non-force removal to preserve a container-backed image' >&2; exit 1
+fi
+"${p[@]}" container exists "$container"
+"${p[@]}" image exists "$child"
+echo 'PASS real container-backed refusal preserves container and image'

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { EpisodeIdSchema, ParticipantIdSchema, SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
 import type { Engine } from "./engine";
@@ -30,11 +30,21 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
     if (!encoded) throw new DashboardError(401, "join_required");
     const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
     if (seat.userId !== person.userId || seat.sessionId !== person.sessionId || seat.spaceId !== action.spaceId || seat.expiresAt <= Date.now()) throw new DashboardError(401, "join_required");
+    const grantParams = { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(seat.episodeId), participant_id: Schema.decodeUnknownSync(ParticipantIdSchema)(seat.participantId) };
     const access = await run(
-      engine.api.default.issueAccessGrant({
-        params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(seat.episodeId), participant_id: Schema.decodeUnknownSync(ParticipantIdSchema)(seat.participantId) },
-        payload: { participant_generation: seat.generation, replace_media_connection: action.currentMediaToken === undefined, current_media_token: action.currentMediaToken },
-      }),
+      engine.api.default
+        .issueAccessGrant({
+          params: grantParams,
+          payload: { participant_generation: seat.generation, replace_media_connection: action.currentMediaToken === undefined, current_media_token: action.currentMediaToken },
+        })
+        .pipe(
+          Effect.catchTag("ParticipantConnectionSupersededError", () =>
+            engine.api.default.issueAccessGrant({
+              params: grantParams,
+              payload: { participant_generation: seat.generation, replace_media_connection: true },
+            }),
+          ),
+        ),
     );
     return json({ access } satisfies OwnerAccessDTO);
   }

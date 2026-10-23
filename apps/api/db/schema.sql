@@ -527,6 +527,41 @@ create unique index participants_dashboard_account_episode_idx
 create index participants_dashboard_account_space_idx
     on participants(tenant_id, space_id, account_id, created_at desc)
     where account_id is not null;
+-- Chat limits apply to a person: the account, else the identity, else that one row.
+create index participants_chat_person_idx
+    on participants(tenant_id, space_id, (coalesce(account_id, identity_id, id)));
+create function chat_person_participant_ids(p_tenant_id uuid, p_space_id uuid, p_participant_id uuid)
+returns table (participant_id uuid)
+language sql
+stable
+as $$
+    select sibling.id
+    from participants sender
+    join participants sibling
+        on sibling.tenant_id = sender.tenant_id
+        and sibling.space_id = sender.space_id
+        and coalesce(sibling.account_id, sibling.identity_id, sibling.id)
+            = coalesce(sender.account_id, sender.identity_id, sender.id)
+    where sender.tenant_id = p_tenant_id
+        and sender.space_id = p_space_id
+        and sender.id = p_participant_id
+$$;
+
+create table participant_media_refreshes (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    participant_generation bigint not null check (participant_generation > 0),
+    request_hash bytea not null check (octet_length(request_hash) = 32),
+    connection_id text not null,
+    response_ciphertext bytea not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, space_id, episode_id, participant_id, participant_generation, request_hash),
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id)
+        on delete cascade
+);
 
 create table sync_chat_streams (
     tenant_id uuid not null,
@@ -614,6 +649,8 @@ create index sync_chat_messages_space_created_at_idx
     on sync_chat_messages(tenant_id, space_id, created_at, sequence);
 create index sync_chat_messages_episode_sequence_idx
     on sync_chat_messages(tenant_id, space_id, episode_id, sequence);
+create index sync_chat_messages_participant_usage_idx
+    on sync_chat_messages(tenant_id, space_id, participant_id) include (created_at, encoded_bytes);
 
 create table sync_chat_attachments (
     tenant_id uuid not null,

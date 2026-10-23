@@ -1,3 +1,4 @@
+import { useConnection } from "../hooks/space-hooks";
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
 import { useDevScenario } from "../frame/dev-scenario";
@@ -29,14 +30,15 @@ export type DockProps = {
  * More and Leave. Spread across the phone in portrait, centred with 14 pt gaps in landscape.
  */
 export const Dock = memo(function Dock({ arrangement, microphoneOn, cameraOn, onToggleMicrophone, onToggleCamera, onOpenMore, onLeave, moreOpen, leaveOpen, moreRef, leaveRef }: DockProps) {
+  const live = useConnection().status === "live";
   const size = arrangement === "pad" ? 44 : 52;
   const dockStyle = [styles.dock, arrangement === "pad" ? styles.pad : arrangement === "landscape" ? styles.landscape : styles.portrait];
   const dockRef = useMeasuredRef<View>("frame.dock", dockStyle);
   const output = useAudioOutput();
   return (
     <View accessibilityLabel="Call controls" accessibilityRole="toolbar" pointerEvents="box-none" ref={dockRef} style={dockStyle} testID="frame.dock">
-      <IconButton accessibilityLabel={microphoneOn ? "Mute microphone" : "Unmute microphone"} icon={microphoneOn ? "mic" : "micOff"} off={!microphoneOn} onCanvas onPress={onToggleMicrophone} size={size} testID="dock.microphone" />
-      <IconButton accessibilityLabel={cameraOn ? "Turn off camera" : "Turn on camera"} icon={cameraOn ? "cam" : "camOff"} off={!cameraOn} onCanvas onPress={onToggleCamera} size={size} testID="dock.camera" />
+      <IconButton accessibilityLabel={microphoneOn ? "Mute microphone" : "Unmute microphone"} icon={microphoneOn ? "mic" : "micOff"} off={!microphoneOn} disabled={!live && !microphoneOn} onCanvas onPress={onToggleMicrophone} size={size} testID="dock.microphone" />
+      <IconButton accessibilityLabel={cameraOn ? "Turn off camera" : "Turn on camera"} icon={cameraOn ? "cam" : "camOff"} off={!cameraOn} disabled={!live && !cameraOn} onCanvas onPress={onToggleCamera} size={size} testID="dock.camera" />
       {output ? <AudioOutputButton captioned={arrangement === "portrait"} output={output} size={size} /> : null}
       <IconButton accessibilityLabel="More options" expanded={moreOpen} icon="more" onCanvas onPress={onOpenMore} ref={moreRef} size={size} testID="dock.more" />
       {arrangement === "pad" ? <View style={styles.gap} /> : null}

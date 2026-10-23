@@ -3,6 +3,7 @@ import { setStringAsync } from "expo-clipboard";
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { shareLink } from "../lib/share";
 import type { SpaceRoute } from "../lib/spaces";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
@@ -40,7 +41,7 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const youRef = useRef<View>(null);
   const joinRef = useRef<View>(null);
-  const { insets } = layout;
+  const insets = useSafeAreaInsets();
   // iPad keeps the phone layout in a 440 pt column.
   const side = layout.phone ? 16 : Math.max(16, layout.width / 2 - 220);
 

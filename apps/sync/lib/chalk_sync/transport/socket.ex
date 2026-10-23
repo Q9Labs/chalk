@@ -527,7 +527,7 @@ defmodule ChalkSync.Transport.SocketV1 do
              version: state.collaboration_version,
              observability: state.observability
            ) do
-      state = observe_collaboration(state, "chat.send", frame["outcome"])
+      state = observe_collaboration(state, "chat.send", frame["error_code"] || frame["outcome"])
       enqueue_collaboration(frame, state)
     end
   end

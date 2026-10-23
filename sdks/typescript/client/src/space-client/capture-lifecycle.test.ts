@@ -427,7 +427,7 @@ it("keeps an ended shared acquisition in the typed error channel", async () => {
   );
 });
 
-it("leaves an already enabled camera publication untouched", async () => {
+it("reuses an already enabled camera publication for a fresh enable", async () => {
   const platform = createCoreTestPlatform();
   const video = track("video");
   const capture = vi.fn(async () => stream([video]));
@@ -446,7 +446,7 @@ it("leaves an already enabled camera publication untouched", async () => {
     await client.media.setCameraEnabled(true);
     expect(clear).not.toHaveBeenCalled();
     expect(prepare).not.toHaveBeenCalled();
-    expect(enable).not.toHaveBeenCalled();
+    expect(enable).toHaveBeenCalledWith(true);
     expect(capture).toHaveBeenCalledOnce();
     expect(client.getSnapshot().media.local.camera.track).toBe(video);
     expect(video.readyState).toBe("live");

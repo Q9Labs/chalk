@@ -17,6 +17,9 @@ const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
 const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+// API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
+// proof validator. No workspace reads them, so they select those gates instead of a full gate.
+const deploymentRoots = ["infrastructure/managed-episode", "infrastructure/nightly"];
 // Their tests drive a real browser, so CI runs them in their own job with the browser installed.
 const browserTestWorkspaceNames = new Set(["web", "@chalk/sdk-web-consumer-e2e"]);
 const targetRoots = {
@@ -86,10 +89,10 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder"])) return true;
+  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/") || file.startsWith(".semgrep/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
-  return [".gitignore", ".gitleaks.toml", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
+  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
 function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
@@ -337,10 +340,10 @@ export function createGatePlan(files, options = {}) {
   const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api"]));
-  const sync = full || nonDocumentationFiles.some(isSyncReliabilityInput);
+  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", ...deploymentRoots]));
+  const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
-  const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder"]));
+  const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
   const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
@@ -362,10 +365,12 @@ export function createGatePlan(files, options = {}) {
       "scripts/dev/chalk-resources.test.mjs",
       "scripts/gates/with-postgres.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
+      "scripts/gates/codeql-languages.test.mjs",
       "apps/sync/scripts/reliability_harness.test.mjs",
       "scripts/gates/call-performance-metrics.test.mjs",
       "scripts/prod-proof/*.test.mjs",
       "scripts/web-proof/*.test.mjs",
+      "scripts/gates/gitleaks-policy.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
@@ -498,7 +503,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests", "call-performance", "call-leaks"], build: ["build", "publint", "attw"] };
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], "call-performance": ["call-performance"], "call-leaks": ["call-leaks"], build: ["build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";
@@ -521,12 +526,24 @@ function changedFiles(base) {
   return gitLines(["diff", "--name-only", `${base}...HEAD`]);
 }
 
+// A selection that cannot be planned runs every job in full rather than skipping lanes. full tells the jobs to pass
+// --full, because the base that broke the plan would break their own diff too.
+function selectCiJobs(base) {
+  if (base === "--full") return { ...ciJobs([], { full: true }), full: true };
+  try {
+    return { ...ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" } }), full: false };
+  } catch (error) {
+    console.error(`::warning title=Gate job selection failed::Running every gate job in full. Selection against ${base} failed: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
+    return { ...ciJobs([], { full: true }), full: true };
+  }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [flag, base] = process.argv.slice(2);
   if (flag !== "--ci-jobs" || !base) {
     console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full>");
     process.exit(2);
   }
-  const jobs = base === "--full" ? ciJobs([], { full: true }) : ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" } });
-  console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}`);
+  const jobs = selectCiJobs(base);
+  console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
 }

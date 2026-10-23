@@ -52,6 +52,7 @@ export class SpaceStore {
     const error = connectionError(snapshot.failure);
     const next: ConnectionSlice = {
       status: connectionStatus(snapshot),
+      syncHealth: snapshot.connection.syncHealth,
       episode: snapshot.episode,
       lastError: sameError(current.lastError, error) ? current.lastError : error,
       episodeEnded: snapshot.episodeEnded ?? false,
@@ -119,7 +120,7 @@ function connectionStatus(snapshot: ConnectionLifecycleSnapshot): ConnectionSlic
 }
 
 function sameConnection(left: ConnectionSlice, right: ConnectionSlice): boolean {
-  return left.status === right.status && sameEpisode(left.episode, right.episode) && left.lastError === right.lastError && left.episodeEnded === right.episodeEnded && left.removedByHost === right.removedByHost;
+  return left.status === right.status && left.syncHealth === right.syncHealth && sameEpisode(left.episode, right.episode) && left.lastError === right.lastError && left.episodeEnded === right.episodeEnded && left.removedByHost === right.removedByHost;
 }
 
 function sameEpisode(left: ConnectionSlice["episode"], right: ConnectionSlice["episode"]): boolean {

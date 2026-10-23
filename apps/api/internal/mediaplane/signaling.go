@@ -34,6 +34,9 @@ type TracksRequest struct {
 	ConnectionID       string
 	SessionDescription *SessionDescription
 	Tracks             []Track
+	// SpaceID and EpisodeID only label provider diagnostics; they are never sent upstream.
+	SpaceID   string
+	EpisodeID string
 }
 
 type TracksResponse struct {

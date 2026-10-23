@@ -15,6 +15,7 @@ const CONNECTION_ERROR_CODE_MAP = {
   device_constraint_invalid: "media.device_constraint_invalid",
   media_capture_failed: "media.capture_failed",
   sync_start_failed: "connection.sync_start_failed",
+  state_digest_recovery_failed: "connection.state_digest_recovery_failed",
   sync_hello_timeout: "connection.sync_hello_timeout",
   media_start_failed: "connection.media_start_failed",
   join_cleanup_unconfirmed: "connection.join_cleanup_unconfirmed",
@@ -48,6 +49,8 @@ const SYNC_FAILURES: ReadonlyMap<string, { readonly failure: ClientFailure; read
   ["media_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
   ["retry_exhausted", { failure: MEDIA_TIMEOUT_FAILURE, scope: "media" }],
   ["reaction_ack_timeout", { failure: { code: "collaboration.unavailable", recoverable: true, message: "Couldn’t confirm your reaction. Try again." } }],
+  ["overloaded", { failure: { code: "collaboration.unavailable", recoverable: true, message: "The call is busy right now. Try again." } }],
+  ["rate_limited", { failure: { code: "command.rate_limited", recoverable: true, message: "You are sending messages too fast. Wait a moment, then try again." } }],
 ]);
 
 export function normalizeMediaError(cause: unknown): SpaceClientError {

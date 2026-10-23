@@ -1,6 +1,6 @@
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { useConnection, useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { StageIcon } from "../stage/StageIcon";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -46,7 +46,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
   const [error, setError] = useState<string | null>(null);
   const status = state ?? (mediaVisible ? "live" : "connecting");
   const name = isLocal ? "Your screen" : `${sharedByName}'s screen`;
-  const source = capture?.surface === "monitor" ? "your screen" : capture?.surface === "browser" ? "a tab" : "a window";
+  const source = capture?.surface === "window" ? "a window" : capture?.surface === "browser" ? "a tab" : capture?.surface === "monitor" ? "your screen" : null;
   const run = async (command: () => Promise<unknown>) => {
     if (pending) return;
     setPending(true);
@@ -151,7 +151,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         {isLocal && primary ? (
           <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-[12px] bg-[rgba(12,14,18,.86)] p-2 pl-3.5 text-white max-[640px]:flex-wrap">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <b className="truncate font-semibold">You’re sharing {source}</b>
+              <b className="truncate font-semibold">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
               {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-[12px] text-[#c9cbd1]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
             </div>
             {onChangeShare ? (
@@ -227,6 +227,7 @@ export function ScreenShareViewSurface({ screenShareTrack, ...props }: ScreenSha
 }
 export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element {
   const client = useSpaceClient();
+  const connection = useConnection();
   const self = useSelf();
   const participantsSlice = useParticipants();
   const media = useMedia();
@@ -247,8 +248,20 @@ export function ScreenShareView(props: ScreenShareViewProps): React.JSX.Element 
       isLocal={active.isLocal}
       hasAudio={active.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === active.id)?.media.screenShareHasAudio}
       capture={active.isLocal ? media.screenShare.capture : undefined}
-      onStopSharing={active.isLocal ? () => client.media.setScreenShareEnabled(false) : undefined}
-      onChangeShare={active.isLocal ? (options) => client.media.setScreenShareEnabled(true, options) : undefined}
+      onStopSharing={
+        active.isLocal
+          ? async () => {
+              await client.media.setScreenShareEnabled(false);
+            }
+          : undefined
+      }
+      onChangeShare={
+        active.isLocal && connection.status === "live"
+          ? async (options) => {
+              await client.media.setScreenShareEnabled(true, options);
+            }
+          : undefined
+      }
     />
   );
 }

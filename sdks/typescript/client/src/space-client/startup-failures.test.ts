@@ -194,7 +194,7 @@ function accessGrant() {
     media: { token: token("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
   };
 }
-async function liveBrowser() {
+async function liveBrowser(invalidRecoverySnapshot = false) {
   browser();
   vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   const control: V1ControlState = {
@@ -234,7 +234,7 @@ async function liveBrowser() {
             snapshot: {
               control_revision: 1,
               state_schema_version: 1,
-              state_digest: digest,
+              state_digest: invalidRecoverySnapshot && sockets.length > 1 ? "f".repeat(64) : digest,
               status: "active",
               admission_policy: "open",
               deadline_at_ms: control.deadlineAtMs,
@@ -282,6 +282,43 @@ describe("public client capture warnings", () => {
 });
 
 describe("public client exhausted recovery", () => {
+  it("surfaces snapshot failure through the public client without starting another recovery", async () => {
+    const sockets = await liveBrowser(true);
+    const client = makeClient(async () => accessGrant());
+    const errors: ClientFailure[] = [];
+    client.on("error", ({ error }) => errors.push(error));
+    try {
+      await client.join({ microphone: false, camera: false });
+      vi.useFakeTimers();
+      sockets[0]!.dispatchEvent(
+        new MessageEvent("message", {
+          data: JSON.stringify({
+            type: "event",
+            stream: "control",
+            name: "hand_raised",
+            event_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24",
+            base_revision: 1,
+            revision: 2,
+            schema_version: 1,
+            resulting_state_digest: "f".repeat(64),
+            payload: { participant_id: participantId },
+            command_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25",
+          }),
+        }),
+      );
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: { code: "connection.state_digest_recovery_failed", recoverable: false } }));
+      expect(errors).toEqual([expect.objectContaining({ code: "connection.state_digest_recovery_failed", recoverable: false })]);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(sockets).toHaveLength(2);
+      expect(client.getSnapshot().connection.status).toBe("failed");
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
   it("keeps an exhausted media confirmation recoverable without exposing target internals", async () => {
     await liveBrowser();
     const client = makeClient(async () => accessGrant());

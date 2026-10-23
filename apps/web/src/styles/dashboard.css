@@ -1053,6 +1053,14 @@
   color: #fff;
 }
 
+/* A recording smaller than the player, or not 16:9, otherwise keeps its own size in the top-left corner of the 16:9 box. */
+.site .dash .player video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .site .dash .pctl {
   position: absolute;
   left: 0;

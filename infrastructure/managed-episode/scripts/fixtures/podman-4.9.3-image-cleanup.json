@@ -1,0 +1,13 @@
+{
+  "source": "https://github.com/Q9Labs/chalk/actions/runs/39790964467/artifacts/12432255069",
+  "scope": "Isolated CI VFS store, local scratch images, no production data. Intermediate-refusal assertion in that first job was incorrect; the real command returned success.",
+  "version": "podman version 4.9.3",
+  "multi_name": {
+    "tags": ["localhost/cleanup-alias:latest", "localhost/cleanup-parent:latest"],
+    "inventory": [
+      "05b19d70fa60cc04e894dd80874720420461f12a505315d0e22f3f44f0264d8e 0 localhost/cleanup-alias@sha256:a5116002f6996ffc4fcc7b881216a12a107c01f21bc83d2857ce6a8d9b3feb17 localhost/cleanup-parent@sha256:a5116002f6996ffc4fcc7b881216a12a107c01f21bc83d2857ce6a8d9b3feb17 ",
+      "05b19d70fa60cc04e894dd80874720420461f12a505315d0e22f3f44f0264d8e 0 localhost/cleanup-alias@sha256:a5116002f6996ffc4fcc7b881216a12a107c01f21bc83d2857ce6a8d9b3feb17 localhost/cleanup-parent@sha256:a5116002f6996ffc4fcc7b881216a12a107c01f21bc83d2857ce6a8d9b3feb17 "
+    ],
+    "refusal": "Error: unable to delete image \"05b19d70fa60cc04e894dd80874720420461f12a505315d0e22f3f44f0264d8e\" by ID with more than one tag ([localhost/cleanup-alias:latest localhost/cleanup-parent:latest]): please force removal"
+  }
+}

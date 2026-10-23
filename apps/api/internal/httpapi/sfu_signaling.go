@@ -144,6 +144,8 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		ConnectionID:       request.Body.ConnectionID,
 		SessionDescription: request.Body.SessionDescription,
 		Tracks:             request.Body.Tracks,
+		SpaceID:            request.SpaceID.String(),
+		EpisodeID:          request.EpisodeID.String(),
 	})
 	if err != nil {
 		observation, observed := remoteTrackObservationForFailure(request, err)

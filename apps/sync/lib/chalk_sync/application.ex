@@ -17,6 +17,7 @@ defmodule ChalkSync.Application do
         {Task.Supervisor, [name: ChalkSync.CommandTaskSupervisor]},
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
+        whiteboard_authority_child(),
         collaboration_fanout_child(),
         {ChalkSync.Operations, []},
         fanout_child(),
@@ -37,6 +38,25 @@ defmodule ChalkSync.Application do
   def prep_stop(state) do
     _result = ChalkSync.Operations.begin_drain(3000)
     state
+  end
+
+  # Board access pollers stay out of the Episode supervisor, which drains and counts Coordinators,
+  # and stop before the Authority table they write to. When Authority restarts, its table and its
+  # monitors are gone, so every poller restarts with it.
+  defp whiteboard_authority_child do
+    children = [
+      {ChalkSync.WhiteboardV1.Authority, []},
+      {DynamicSupervisor,
+       [strategy: :one_for_one, name: ChalkSync.WhiteboardV1.Authority.Pollers]}
+    ]
+
+    %{
+      id: ChalkSync.WhiteboardV1.Authority.Supervisor,
+      start:
+        {Supervisor, :start_link,
+         [children, [strategy: :rest_for_one, name: ChalkSync.WhiteboardV1.Authority.Supervisor]]},
+      type: :supervisor
+    }
   end
 
   defp stateholder_child do

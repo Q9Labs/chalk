@@ -127,7 +127,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
       </SiteRoot>
     );
   return (
-    <div style={{ position: "fixed", inset: 0 }}>
+    <div style={{ position: "absolute", inset: 0 }}>
       <Chalk client={client} inviteLink={state.data.inviteUrl} spaceName={state.data.call.name} displayName={profile.name} theme={{ colorScheme: theme }} onColorSchemeChange={setTheme} onLeft={leave} onEpisodeEnded={leave} />
     </div>
   );

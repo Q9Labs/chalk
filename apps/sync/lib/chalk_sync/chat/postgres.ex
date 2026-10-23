@@ -20,6 +20,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
+  # One person may send 30 messages in 10 seconds and hold at most 4% of a Space stream's
+  # 250,000 messages and 2 GiB, however many times they rejoin.
+  @person_limits %{
+    window_messages: 30,
+    window_ms: 10_000,
+    messages: 10_000,
+    bytes: 64 * 1024 * 1024
+  }
   @capabilities ["sendReaction", "sendChat"]
 
   @impl true
@@ -307,7 +315,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   defp append_after_authorization(connection, identity, input, fingerprint) do
     with {:ok, profile} <- lock_authority(connection, identity),
-         :ok <- require_capability(profile, "sendChat") do
+         :ok <- require_capability(profile, "sendChat"),
+         :ok <- early_checks(connection, identity, input) do
       params = space_params(identity.episode)
       Postgrex.query!(connection, SQL.insert_stream(), params)
 
@@ -337,9 +346,9 @@ defmodule ChalkSync.Chat.Repository.Postgres do
        ) do
     case select_idempotent(connection, identity, input.client_message_id) do
       nil ->
-        notify_attachment_commit_attempt(input)
+        observe(input, :attachment_commit_observer)
 
-        case lock_attachments(connection, identity, input.attachment_ids) do
+        case attachments(connection, identity, input.attachment_ids, SQL.lock_attachments()) do
           {:ok, attachments} ->
             append_new_message(
               connection,
@@ -377,6 +386,8 @@ defmodule ChalkSync.Chat.Repository.Postgres do
          fingerprint,
          sequence
        ) do
+    [[now]] = Postgrex.query!(connection, SQL.database_now(), []).rows
+
     message = %{
       message_id: UUID.generate(),
       client_message_id: input.client_message_id,
@@ -385,26 +396,61 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       display_name: display_name,
       text: input.text,
       attachments: attachments,
-      created_at: DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+      created_at: now |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
     }
 
     encoded_bytes = Message.encoded_bytes(message)
     params = space_params(identity.episode)
 
-    case Postgrex.query!(
-           connection,
-           SQL.reserve_message(),
-           params ++ [sequence, encoded_bytes]
-         ).rows do
-      [[^sequence]] ->
-        insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
-        attach_files(connection, identity, message, sequence)
-        %{outcome: :committed, message: message}
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :overloaded})
+    with :ok <- within_person_caps(connection, identity, encoded_bytes),
+         [[^sequence]] <-
+           Postgrex.query!(connection, SQL.reserve_message(), params ++ [sequence, encoded_bytes]).rows do
+      insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
+      attach_files(connection, identity, message, sequence)
+      %{outcome: :committed, message: message}
+    else
+      {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+      [] -> Postgrex.rollback(connection, {:error, :overloaded})
     end
   end
+
+  defp within_person_rate(connection, identity) do
+    limits = person_limits()
+
+    if person_count(connection, identity, SQL.person_recent_messages(), [limits.window_ms]) <
+         limits.window_messages,
+       do: :ok,
+       else: {:error, :rate_limited}
+  end
+
+  # The Space stream lock is held here, so two sends from one person, even on two Sync nodes,
+  # cannot both pass the window or the caps.
+  defp within_person_caps(connection, identity, encoded_bytes) do
+    limits = person_limits()
+
+    [[count, bytes, recent]] =
+      Postgrex.query!(
+        connection,
+        SQL.person_usage(),
+        person_params(identity) ++ [limits.window_ms]
+      ).rows
+
+    if recent < limits.window_messages and count < limits.messages and
+         bytes + encoded_bytes <= limits.bytes,
+       do: :ok,
+       else: {:error, :rate_limited}
+  end
+
+  defp person_count(connection, identity, sql, params) do
+    [[count]] = Postgrex.query!(connection, sql, person_params(identity) ++ params).rows
+    count
+  end
+
+  defp person_params(identity),
+    do: space_params(identity.episode) ++ [uuid(identity.participant_id)]
+
+  defp person_limits,
+    do: Map.merge(@person_limits, Application.get_env(:chalk_sync, :chat_person_limits, %{}))
 
   defp insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence) do
     Postgrex.query!(
@@ -426,17 +472,13 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     )
   end
 
-  defp lock_attachments(_connection, _identity, []), do: {:ok, []}
+  defp attachments(_connection, _identity, [], _query), do: {:ok, []}
 
-  defp lock_attachments(connection, identity, attachment_ids) do
+  defp attachments(connection, identity, attachment_ids, query) do
     dumped_ids = Enum.map(attachment_ids, &uuid/1)
 
     rows =
-      Postgrex.query!(
-        connection,
-        SQL.lock_attachments(),
-        episode_params(identity.episode) ++ [dumped_ids]
-      ).rows
+      Postgrex.query!(connection, query, episode_params(identity.episode) ++ [dumped_ids]).rows
 
     cond do
       length(rows) != length(attachment_ids) ->
@@ -461,8 +503,27 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     end
   end
 
-  defp notify_attachment_commit_attempt(input) do
-    case Map.get(input, :attachment_commit_observer) do
+  # Cheap checks before the Space stream lock, so a refused flood or a missing file never holds
+  # it. A retry whose original committed after the first duplicate lookup can fail them, because
+  # the original now fills the window and holds its files, so it goes on to the duplicate lookup
+  # under the lock instead.
+  defp early_checks(connection, identity, input) do
+    observe(input, :early_check_observer)
+
+    with :ok <- within_person_rate(connection, identity),
+         {:ok, _attachments} <-
+           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()) do
+      :ok
+    else
+      {:error, reason} ->
+        if select_idempotent(connection, identity, input.client_message_id),
+          do: :ok,
+          else: {:error, reason}
+    end
+  end
+
+  defp observe(input, key) do
+    case Map.get(input, key) do
       observer when is_function(observer, 0) -> observer.()
       _other -> :ok
     end

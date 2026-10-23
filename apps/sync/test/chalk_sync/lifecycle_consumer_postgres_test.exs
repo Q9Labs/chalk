@@ -1,6 +1,8 @@
 defmodule ChalkSync.LifecycleConsumerPostgresTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Operations.Probe
+  alias ChalkSync.Operations.Readiness
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -115,6 +117,67 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     for fixture <- poison do
       refute {fixture.episode, fixture.lifecycle_intent_id} in pending
     end
+  end
+
+  test "readiness retains bounded diagnostics for an aged retrying lifecycle intent", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    assert :ok =
+             Postgres.record_lifecycle_failure(
+               fixture.episode,
+               fixture.lifecycle_intent_id,
+               :dependency_unavailable
+             )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents
+      set created_at = now() - interval '1 minute', next_attempt_at = now() + interval '1 minute'
+      where lifecycle_intent_id = $1
+      """,
+      [UUID.dump!(fixture.lifecycle_intent_id)]
+    )
+
+    readiness =
+      start_supervised!({Readiness, name: nil, auto_probe?: false, probe_fun: &Probe.run/0})
+
+    health = Readiness.probe_now(readiness)
+    assert health.status == "unready"
+    assert health.dependencies.reason == "lifecycle_intent_lag"
+    database = health.dependencies.database
+    assert database.oldest_pending_lifecycle_intent_ms >= 60_000
+    assert database.lifecycle_intents.pending >= 1
+    assert database.lifecycle_intents.retrying >= 1
+    assert database.lifecycle_intents.due < database.lifecycle_intents.pending
+    assert database.lifecycle_intents.oldest_attempt_count == 1
+    assert database.lifecycle_intents.oldest_error_code == "dependency_unavailable"
+
+    private_error = "private diagnostic must not escape"
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents set last_error_code = $2 where lifecycle_intent_id = $1
+      """,
+      [UUID.dump!(fixture.lifecycle_intent_id), private_error]
+    )
+
+    redacted = Readiness.probe_now(readiness)
+    assert redacted.dependencies.database.lifecycle_intents.oldest_error_code == "other"
+    refute JSON.encode!(redacted) =~ private_error
+    refute JSON.encode!(redacted) =~ fixture.lifecycle_intent_id
+    refute JSON.encode!(redacted) =~ fixture.episode.episode_id
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
+
+    recovered = Readiness.probe_now(readiness)
+    assert recovered.dependencies == %{reason: "required_process_unavailable"}
   end
 
   defp intent_attempt(connection, fixture) do

@@ -64,6 +64,7 @@ export type ConnectionLifecycleCapability = {
       microphone: boolean;
       camera: boolean;
     }>,
+    start?: (media: ConnectionMediaClient, stream: MediaStream) => Effect.Effect<void, unknown>,
   ) => Effect.Effect<void>;
   readonly configureJoin: (
     intent: Readonly<{
@@ -92,6 +93,7 @@ type Model = {
   mediaSnapshot: ConnectionMediaSnapshot | null;
   failure: ConnectionFailure | null;
   initialMedia: InitialMedia;
+  startInitialMedia: ((media: ConnectionMediaClient, stream: MediaStream) => Effect.Effect<void, unknown>) | null;
   initialMediaIntent:
     | (() => Readonly<{
         microphone: boolean;
@@ -182,6 +184,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         syncNoticeUnresponsive: false,
         mediaSnapshot: null,
         failure: null,
+        startInitialMedia: null,
         initialMedia: (intent) =>
           Effect.tryPromise({
             try: () => (intent.microphone || intent.camera ? platform.mediaDevices.getUserMedia({ audio: intent.microphone, video: intent.camera }) : Promise.resolve(streamFromTracks([]))),
@@ -341,8 +344,14 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncBindingCleanup?.();
           model.syncNoticeUnresponsive = false;
           let latestSnapshot: V1EpisodeSnapshot | null = null;
+          let observedDialTimeouts = 0;
           let snapshotQueued = false;
           const unsubscribe = sync.subscribe((snapshot) => {
+            const count = snapshot.connection.dialTimeoutCount ?? 0;
+            if (sync === model.sync && count > observedDialTimeouts) {
+              observedDialTimeouts = count;
+              diagnostics.record({ event: "sync_dial_timeout", state: model.state, epoch: model.epoch, attempt: count });
+            }
             if (sync === model.sync && snapshot.connection.phase === "live") {
               const notice = snapshot.connection.noticeUnresponsive === true;
               if (notice !== model.syncNoticeUnresponsive) {
@@ -468,7 +477,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               [
                 trace(
                   "start_media",
-                  foreign(() => media.start(stream!), "media_start_failed", "The media layer could not start"),
+                  model.startInitialMedia ? model.startInitialMedia(media, stream!).pipe(Effect.mapError((cause) => lifecycleFailure("media_start_failed", true, "The media layer could not start", cause))) : foreign(() => media.start(stream!), "media_start_failed", "The media layer could not start"),
                 ),
                 trace("start_sync", foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))))),
               ],
@@ -959,9 +968,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         },
         getDiagnostics: () => diagnostics.snapshot(),
         getJoinTrace: () => diagnostics.joinTrace(),
-        setInitialMedia: (provider, intent) =>
+        setInitialMedia: (provider, intent, start) =>
           Effect.sync(() => {
             model.initialMedia = provider;
+            model.startInitialMedia = start ?? null;
             model.initialMediaIntent = intent ?? null;
           }),
         configureJoin: (intent) =>
@@ -1026,7 +1036,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     state: model.state,
     subject: subjectFor(access),
     episode: episodeFor(access, control),
-    connection: Object.freeze({ sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
+    connection: Object.freeze({ syncHealth: model.syncSnapshot?.connection.health, sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
     episodeEnded: model.episodeEndConfirmed,
     removedByHost: model.removedByHost,
@@ -1176,6 +1186,7 @@ function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | unde
 }
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const reason = snapshot.connection.terminalReason;
+  if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
   if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");

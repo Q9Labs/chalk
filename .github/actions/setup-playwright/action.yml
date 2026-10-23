@@ -1,0 +1,79 @@
+name: Set up Playwright browsers
+description: Restore the browsers that the pinned Playwright needs from the Actions cache, and install only the system packages that are missing.
+
+inputs:
+  browsers:
+    description: Space-separated Playwright browser names, for example "chromium firefox webkit".
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Playwright cache key
+      id: key
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        set -euo pipefail
+        version="$(pnpm --dir sdks/typescript/client exec playwright --version | awk '{print $2}')"
+        echo "key=playwright-${version}-${BROWSERS// /-}-${ImageOS}" >> "${GITHUB_OUTPUT}"
+
+    - name: Restore Playwright cache
+      id: restore
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Install browsers and missing system packages
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        set -euo pipefail
+        read -ra browsers <<< "${BROWSERS}"
+        playwright=(pnpm --dir sdks/typescript/client exec playwright)
+
+        # Playwright's check exits 0 when nothing is missing, and otherwise lists the missing packages one per line.
+        packages=()
+        if ! report="$("${playwright[@]}" install-deps --dry-run "${browsers[@]}" 2>&1)"; then
+          mapfile -t packages < <(sed -n 's/^ \{1,\}\([a-z0-9][a-z0-9.+-]*\)$/\1/p' <<< "${report}")
+          if (( ${#packages[@]} == 0 )); then
+            echo "${report}"
+            echo "::error title=Playwright setup failed::The Playwright dependency check failed without listing missing packages."
+            exit 1
+          fi
+        fi
+        echo "Missing system packages: ${#packages[@]}"
+
+        # The Azure Ubuntu mirror sometimes serves packages at a few kB/s, which stalled this step for 20 minutes.
+        # apt runs under a root timeout, because a timeout outside sudo cannot stop it, and the retry drops that mirror.
+        install_once() {
+          if (( ${#packages[@]} > 0 )); then
+            sudo timeout --kill-after=10s 3m sh -c 'apt-get update -qq && apt-get install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
+          fi
+          timeout --kill-after=10s 2m "${playwright[@]}" install "${browsers[@]}"
+        }
+        for attempt in 1 2; do
+          if install_once; then
+            break
+          fi
+          if [[ "${attempt}" == 2 ]]; then
+            echo "::error title=Playwright setup failed::Both install attempts failed or ran out of time."
+            exit 1
+          fi
+          echo "::warning title=Playwright setup retried::The first install attempt failed or ran out of time. Retrying without the Azure Ubuntu mirror."
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          sudo dpkg --configure -a
+        done
+
+        du -sh "${HOME}/.cache/ms-playwright"
+
+    # Like the other caches, only runs outside pull requests save, so pull requests do not evict each other's entries.
+    - name: Save Playwright cache
+      if: github.event_name != 'pull_request' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ steps.key.outputs.key }}

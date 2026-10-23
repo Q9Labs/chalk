@@ -1,4 +1,5 @@
 import { checkDocExamples } from "./docs-examples.mjs";
+import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
@@ -10,6 +11,11 @@ import { spawn } from "node:child_process";
 
 const fixtureDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryDirectory = resolve(fixtureDirectory, "../..");
+// Both the workspace test command and direct CI runner enter here before any
+// package build, browser dependency, temporary directory, or server starts.
+await run(process.execPath, ["--test", "--test-concurrency=1", "tools/sdk-web-consumer-e2e/scripts/media-client.test.mjs", "tools/sdk-web-consumer-e2e/scripts/recovery.test.mjs"], repositoryDirectory);
+if (process.argv.includes("--preflight-only")) process.exit(0);
+
 const requireFromClient = createRequire(join(repositoryDirectory, "sdks/typescript/client/package.json"));
 const { chromium, firefox, webkit } = requireFromClient("playwright");
 const arguments_ = new Set(process.argv.slice(2));
@@ -88,6 +94,7 @@ try {
         const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
         const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
         try {
+          await proveToastLayering(browser, baseURL);
           if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
           else await runLaunchSmoke(browser, browserName, baseURL);
         } finally {

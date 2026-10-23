@@ -30,6 +30,10 @@ its callback accepts only form data with `Origin: https://appleid.apple.com`,
 bound to an unexpired, provider-specific sealed login transaction and its state.
 All other mutation routes retain exact-Origin and session-bound CSRF checks.
 
+- `GET /dashboard-api/call-invite?spaceId=...`: only the invite URL. Uses one
+  tenant lookup and one scoped invite read; a missing invite retains the engine's
+  existing write admission guard before lazy creation.
+
 - `GET /auth/start?provider=google|apple&returnTo=/dashboard`: provider redirect.
   Google uses authorization code + S256 PKCE, state and nonce, scopes
   `openid email profile`. Apple uses code, state, nonce, scopes `name email`,

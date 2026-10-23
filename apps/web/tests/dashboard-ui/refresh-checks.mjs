@@ -69,6 +69,7 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
 }
 
 export async function refreshChecks({ open, fixture, check, CALL }) {
+  await missingMetadataChecks({ open, fixture, check, CALL });
   await archivedPollingChecks({ open, fixture, check });
   await pollingBackoffChecks({ open, fixture, check, CALL });
   await budgetChecks({ open, fixture, check, CALL });
@@ -290,6 +291,40 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       action === "deny" ? (await tab.locator(".orow").count()) === 0 : action === "rename" ? (await tab.getByRole("heading", { name: "Sample renamed call" }).count()) === 1 : (await tab.getByRole("button", { name: "Anyone with the link", exact: true }).getAttribute("aria-pressed")) === "true";
     check(`stale refresh cannot undo ${action}`, raced && kept);
     await context.close();
+  }
+}
+
+export async function missingMetadataChecks({ open, fixture, check, CALL }) {
+  for (const status of [403, 404, 410]) {
+    const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure&admission=knock", clock: true });
+    try {
+      await tab.getByText("Transcript processing", { exact: true }).waitFor();
+      const reads = async (page) => (await fixture("log")).filter((entry) => entry.path === `/dashboard-api/${page}`).length;
+      const full = await reads("call");
+      await tab.route("**/dashboard-api/call-metadata?*", (route) => route.fulfill({ status, json: { error: { code: "artifact_unavailable" } } }));
+      const metadata = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-metadata?"));
+      for (let tick = 0; tick < 2; tick++) {
+        const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+        await tab.clock.runFor(5000);
+        await (await response).finished();
+        await tab.waitForLoadState("networkidle");
+      }
+      await (await metadata).finished();
+      await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden" });
+      check(`metadata ${status} removes the transcript while keeping Call available`, (await tab.locator(".errp").count()) === 0 && (await tab.getByText("Transcript processing", { exact: true }).count()) === 0 && (await tab.locator(".srow").count()) > 0);
+      if (status === 404) {
+        await mkdir(resolve("artifacts/dashboard-followups"), { recursive: true });
+        await tab.screenshot({ path: resolve(`artifacts/dashboard-followups/metadata-${process.env.DASHBOARD_FOLLOWUP_PROOF ?? "after"}.png`), fullPage: true });
+      }
+      const before = await reads("call-status");
+      const next = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"), { timeout: 2000 }).catch(() => null);
+      await tab.clock.runFor(5000);
+      await (await next)?.finished();
+      await tab.waitForLoadState("networkidle");
+      check(`metadata ${status} keeps shared status polling without reloading history`, (await reads("call-status")) > before && (await reads("call")) === full);
+    } finally {
+      await context.close();
+    }
   }
 }
 
@@ -560,6 +595,9 @@ export async function reviewPollChecks({ open, fixture, check, CALL }) {
     try {
       const initial = await reads();
       await tab.getByRole("button", { name: "Deny", exact: true }).click();
+      const settled = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
+      await tab.clock.runFor(3000);
+      await settled;
       await tab.locator(".orow").waitFor({ state: "hidden" });
       await tab.waitForTimeout(150);
       await tab.waitForLoadState("networkidle");

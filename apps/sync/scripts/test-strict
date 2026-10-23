@@ -3,16 +3,23 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# shellcheck source=scripts/gates/owned-command.sh
+source ../../scripts/gates/owned-command.sh
+
 output="$(mktemp "${TMPDIR:-/tmp}/chalk-sync-test-output.XXXXXX")"
 cleanup() {
+  stop_owned
   rm -f "${output}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
 
-set +e
-mix test "$@" 2>&1 | tee "${output}"
-test_status="${PIPESTATUS[0]}"
-set -e
+strict_tests() {
+  mix test "$@" 2>&1 | tee "${output}"
+  return "${PIPESTATUS[0]}"
+}
+
+test_status=0
+run_owned strict_tests "$@" || test_status="$?"
 
 if ((test_status != 0)); then
   exit "${test_status}"

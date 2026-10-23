@@ -1,6 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { useWindowDimensions } from "react-native";
-import { useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
+import { useSafeAreaFrame, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
 import { arrangementFor, type Arrangement } from "./regions";
 
 export type DeviceLayout = {
@@ -15,7 +14,7 @@ export type DeviceLayout = {
 const DeviceLayoutContext = createContext<DeviceLayout | null>(null);
 
 export function DeviceLayoutProvider({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useSafeAreaFrame();
   const insets = useSafeAreaInsets();
   const value = useMemo<DeviceLayout>(() => {
     const arrangement = arrangementFor(width, height);

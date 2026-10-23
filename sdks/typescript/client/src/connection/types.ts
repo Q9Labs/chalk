@@ -97,6 +97,7 @@ export const CONNECTION_ERROR_CODES = [
   "device_constraint_invalid",
   "media_capture_failed",
   "sync_start_failed",
+  "state_digest_recovery_failed",
   "sync_hello_timeout",
   "media_start_failed",
   "join_cleanup_unconfirmed",
@@ -185,6 +186,7 @@ export type ConnectionSnapshot = {
   readonly episode: { readonly id: string; readonly startedAt: string | null; readonly deadline: string | null } | null;
   readonly connection: {
     readonly sync: ConnectionConnectionPhase;
+    readonly syncHealth?: import("../sync/v1-health").SyncHealth;
     readonly media: ConnectionConnectionPhase;
   };
   readonly admissionPolicy: ChalkAdmissionPolicy | null;

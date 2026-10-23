@@ -1,7 +1,7 @@
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
-import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult } from "../sync/v1-types";
+import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult, V1MediaPause } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
 import { Context, Layer } from "effect";
@@ -57,6 +57,7 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly stopRecording: (recordingId: string) => Promise<V1CommandResult>;
   readonly endEpisode: () => Promise<V1CommandResult>;
   readonly extendEpisode: (minutes: number) => Promise<V1CommandResult>;
+  readonly onMediaPause?: (listener: (pause: V1MediaPause) => void) => () => void;
   readonly onDirectedRequest: (listener: (request: V1DirectedRequest) => void) => () => void;
   readonly requestUnmute: (participantId: string) => Promise<V1DirectedRequestResult>;
   readonly requestStartCamera: (participantId: string) => Promise<V1DirectedRequestResult>;

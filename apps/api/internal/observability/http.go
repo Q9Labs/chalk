@@ -179,3 +179,13 @@ func requestOutcome(status int) string {
 	}
 	return "ok"
 }
+
+// LogAccessGrantFailure records only bounded stages and public error codes.
+// Neither caller-controlled credentials nor underlying error text belongs here.
+func LogAccessGrantFailure(ctx context.Context, stage, code string) {
+	logger, _ := ctx.Value(requestLoggerContextKey{}).(*slog.Logger)
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.WarnContext(ctx, "access grant rejected", "event", "access_grant.rejected", "reason", stage, "code", code)
+}

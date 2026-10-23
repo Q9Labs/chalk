@@ -44,7 +44,7 @@ async function performAttempt<T>(attempt: Attempt, index: number): Promise<T> {
   const response = await fetchAttempt(attempt, index);
   if (response.status === attempt.input.expectedStatus) return decodeSuccess<T>(response);
   if (canRetryResponse(response, attempt.retries, index)) return retryResponse<T>(response, attempt, index);
-  throw await responseError(response);
+  throw await responseError(response, attempt.input.retry !== "never");
 }
 
 async function fetchAttempt(attempt: Attempt, index: number): Promise<Response> {
@@ -56,7 +56,7 @@ async function fetchAttempt(attempt: Attempt, index: number): Promise<Response> 
 }
 
 async function retryTransport(attempt: Attempt, index: number): Promise<Response> {
-  if (index >= attempt.retries) throw new ChalkAPIError({ code: "network_error", retryable: true, status: 0 });
+  if (index >= attempt.retries) throw new ChalkAPIError({ code: "network_error", retryable: attempt.input.retry !== "never", status: 0 });
   await retryDelay(index);
   return fetchAttempt(attempt, index + 1);
 }
@@ -114,8 +114,8 @@ function setOptionalHeader(headers: Headers, name: string, value: string | undef
   if (value !== undefined) headers.set(name, value);
 }
 
-async function responseError(response: Response): Promise<ChalkAPIError> {
-  return new ChalkAPIError({ code: errorCode(await errorBody(response)), requestId: requestId(response.headers), retryable: retryableStatuses.has(response.status), status: response.status });
+async function responseError(response: Response, retryable: boolean): Promise<ChalkAPIError> {
+  return new ChalkAPIError({ code: errorCode(await errorBody(response)), requestId: requestId(response.headers), retryable: retryable && retryableStatuses.has(response.status), status: response.status });
 }
 
 async function errorBody(response: Response): Promise<unknown> {

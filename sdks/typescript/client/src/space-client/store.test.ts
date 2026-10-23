@@ -15,6 +15,8 @@ describe("SpaceStore connection notice", () => {
     };
     store.updateConnection(live);
     expect(store.getSnapshot().connection.status).toBe("live");
+    store.updateConnection({ ...live, connection: { ...live.connection, syncHealth: "degraded" } });
+    expect(store.getSnapshot().connection).toMatchObject({ status: "live", syncHealth: "degraded" });
 
     store.updateConnection({ ...live, connection: { sync: "unresponsive", media: "healthy" } });
     expect(store.getSnapshot().connection.status).toBe("reconnecting");

@@ -10,6 +10,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -67,6 +71,55 @@ func TestParticipantMediaRouteRejectsMismatchedConnectionBeforeProviderCall(t *t
 	if verifier.called != 1 || authorizer.called != 1 || authorizer.subject != subject {
 		t.Fatalf("authentication calls: verifier=%d authorizer=%d subject=%#v", verifier.called, authorizer.called, authorizer.subject)
 	}
+}
+
+func TestParticipantMediaAddTracksLabelsProviderCallWithRouteIDs(t *testing.T) {
+	subject := participantMediaSubject(t)
+	plane := &addTracksRouteFixture{}
+	router := chi.NewRouter()
+	router.Use(requireParticipantMedia(&participantMediaVerifierStub{subject: subject}, &activeParticipantAuthorizerStub{}))
+	sfuAddTracksEndpoint(plane, plane, plane, plane, nil).Mount(router, RateLimitOptions{})
+
+	path := fmt.Sprintf("/tenants/%s/spaces/%s/episodes/%s/participants/%s/media/sfu/tracks", subject.TenantID, subject.SpaceID, subject.EpisodeID, subject.ParticipantID)
+	request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"connection_id":"connection-123","tracks":[{"location":"remote","sessionId":"sender","trackName":"camera"}]}`))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if plane.request.SpaceID != subject.SpaceID.String() || plane.request.EpisodeID != subject.EpisodeID.String() {
+		t.Fatalf("provider request labels = space %q episode %q, want %s and %s", plane.request.SpaceID, plane.request.EpisodeID, subject.SpaceID, subject.EpisodeID)
+	}
+}
+
+type addTracksRouteFixture struct {
+	SpaceService
+	TenantService
+	mediaplane.Plane
+	request mediaplane.TracksRequest
+}
+
+func (*addTracksRouteFixture) GetSpace(context.Context, utilities.ID, utilities.ID) (spaces.Space, error) {
+	return spaces.Space{}, nil
+}
+func (*addTracksRouteFixture) GetTenant(context.Context, utilities.ID) (tenants.Tenant, error) {
+	return tenants.Tenant{}, nil
+}
+func (*addTracksRouteFixture) GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error) {
+	return episodes.Episode{}, nil
+}
+func (f *addTracksRouteFixture) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
+	return &service, nil
+}
+func (f *addTracksRouteFixture) AddTracks(_ context.Context, request mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
+	f.request = request
+	return mediaplane.TracksResponse{}, nil
+}
+func (*addTracksRouteFixture) Renegotiate(context.Context, mediaplane.RenegotiateRequest) error {
+	return nil
 }
 
 func participantMediaSubject(t *testing.T) accessgrants.Subject {

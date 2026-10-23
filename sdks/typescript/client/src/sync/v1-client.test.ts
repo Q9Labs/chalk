@@ -1,5 +1,10 @@
+import { Schema } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import admissionOrder from "../../test/fixtures/admission-order-v1.json";
+import { mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { SnapshotSchema } from "../generated/sync";
+import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
+import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
 import { V1SyncClient, V1SyncError } from "./v1-client";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
@@ -14,6 +19,327 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 describe("V1SyncClient", () => {
+  it.each(["live", "replay"] as const)("replaces a %s digest mismatch with one snapshot before durable replay", async (source) => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    // B1's second knock arrived after a larger request ID. The old server hashed
+    // sorted IDs while the client hashed arrival order (the retained #382 fixture).
+    const initial = await restoreV1Snapshot(Schema.decodeUnknownSync(SnapshotSchema)(admissionOrder.initial_snapshot));
+    const firstKnock = decodeV1ServerFrame(JSON.stringify(admissionOrder.events[0]));
+    const secondKnock = decodeV1ServerFrame(JSON.stringify(admissionOrder.events[1]));
+    if (firstKnock.type !== "event" || secondKnock.type !== "event") throw new Error("Expected admission events");
+    const state = await applyV1Event(initial, firstKnock);
+    const snapshot = await wireSnapshot(state);
+    const recoveredState = await applyV1Event(state, secondKnock);
+    const recoveredSnapshot = await wireSnapshot(recoveredState);
+    const badEvent = { ...secondKnock, resulting_state_digest: admissionOrder.legacy_resulting_state_digests[1] };
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+      if (source === "replay") {
+        sockets[0]!.close();
+        clock.advance(0);
+        await settle();
+        clock.advance(1);
+        sockets[1]!.open();
+        await settle();
+        sockets[1]!.receive({ type: "welcome", protocol: 1, participant_id: ownerId, participant_generation: 1, recovery_id: recoveryId, mode: "replay", head: { revision: 2, state_schema_version: 1, state_digest: badEvent.resulting_state_digest } });
+        sockets[1]!.receive({ type: "replay_page", recovery_id: recoveryId, first_revision: 2, last_revision: 2, events: [badEvent] });
+      } else sockets[0]!.receive(badEvent);
+      await settle();
+      clock.advance(2);
+      const recovery = sockets.at(-1)!;
+      recovery.open();
+      await settle();
+      expect(recovery.frames()[0]).toMatchObject({ type: "hello", streams: { control: { cursor: null } } });
+      const pending = client.setHandRaised(true, { commandId: commandIds[0] });
+      void pending.catch(() => {});
+      expect(recovery.frames().some((frame) => frame.type === "command")).toBe(false);
+      await recoverSocket(client, recovery, recoveredState, recoveredSnapshot, "snapshot");
+      expect(client.getSnapshot().control?.admissionRequests.map((request) => request.displayName)).toEqual(["First", "Second"]);
+      expect(recovery.frames().filter((frame) => frame.type === "command")).toHaveLength(1);
+      const count = sockets.length;
+      recovery.receive({ ...admissionOrder.events[2], resulting_state_digest: admissionOrder.legacy_resulting_state_digests[2] });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "state_digest_recovery_failed" });
+      clock.advance(60000);
+      await settle();
+      expect(sockets).toHaveLength(count);
+    } finally {
+      client.stop();
+    }
+  });
+  it.each([
+    { receiptTiming: "before", outcome: "committed" },
+    { receiptTiming: "after", outcome: "committed" },
+    { receiptTiming: "before", outcome: "satisfied" },
+    { receiptTiming: "after", outcome: "satisfied" },
+  ] as const)("reconciles older $outcome receipts received $receiptTiming the forced snapshot", async ({ receiptTiming, outcome }) => {
+    const clock = new TestClock();
+    const store = new InMemoryV1PendingTargetStore();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      pendingStore: store,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const initial = stateWithPeer("collaborator");
+    const snapshot = await wireSnapshot(initial);
+    const committed = { ...initial, revision: 2, participants: initial.participants.map((participant) => ({ ...participant, handRaised: participant.participantId === ownerId })) };
+    const committedDigest = await computeV1StateDigest(committed);
+    // Another participant advances the authoritative head beyond the receipt.
+    const authoritative = { ...committed, revision: 3, participants: committed.participants.map((participant) => ({ ...participant, handRaised: true })) };
+    const authoritativeSnapshot = await wireSnapshot(authoritative);
+    let result: unknown;
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, snapshotToState(snapshot), snapshot, "snapshot");
+      const command = client.setHandRaised(true, { commandId: commandIds[0] });
+      void command.then(
+        (value) => {
+          result = value;
+        },
+        () => {},
+      );
+      const rejected = client.setDisplayName("Rejected", { commandId: commandIds[1] }).catch((error: unknown) => error);
+      await settle();
+      const receipt = { type: "ack", command_id: commandIds[0], delivery: "duplicate", outcome, ...(outcome === "committed" ? { event_id: recoveryId } : {}), revision: 2, state_digest: committedDigest };
+      if (receiptTiming === "before") {
+        sockets[0]!.receive(receipt);
+        await settle();
+        expect(result).toBeUndefined();
+      }
+      sockets[0]!.receive({ type: "event", stream: "control", name: "hand_raised", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: "a".repeat(64), payload: { participant_id: ownerId }, command_id: commandIds[0] });
+      await settle();
+      clock.advance(1);
+      sockets[1]!.open();
+      await settle();
+      await recoverSocket(client, sockets[1]!, snapshotToState(authoritativeSnapshot), authoritativeSnapshot, "snapshot");
+      if (receiptTiming === "after") sockets[1]!.receive(receipt);
+      sockets[1]!.receive({ type: "ack", command_id: commandIds[1], delivery: "duplicate", outcome: "rejected", reason: "external_operation_failed" });
+      await settle();
+      expect(result).toMatchObject({ outcome, revision: 2, state_digest: committedDigest });
+      await expect(rejected).resolves.toMatchObject({ code: "rejected" });
+      expect(await store.load()).toEqual([]);
+      expect(client.getSnapshot()).toMatchObject({
+        pendingCommandCount: 0,
+        control: {
+          revision: 3,
+          participants: [
+            { participantId: ownerId, handRaised: true },
+            { participantId: peerId, handRaised: true },
+          ],
+        },
+      });
+      expect(sockets[1]!.frames().filter((frame) => frame.type === "command" && frame.command_id === commandIds[0])).toHaveLength(receiptTiming === "before" ? 0 : 1);
+      sockets[1]!.close();
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      sockets[2]!.open();
+      await settle();
+      await recoverSocket(client, sockets[2]!, snapshotToState(authoritativeSnapshot), authoritativeSnapshot, "up_to_date");
+      expect(sockets[2]!.frames().filter((frame) => frame.type === "command")).toEqual([]);
+      let unprovenSettled = false;
+      for (const [index, revision] of [3, 4].entries()) {
+        const pending = client.setHandRaised(false, { commandId: commandIds[index + 2] });
+        void pending.then(
+          () => {
+            unprovenSettled = true;
+          },
+          () => {},
+        );
+        await settle();
+        sockets[2]!.receive({ type: "ack", command_id: commandIds[index + 2], delivery: "duplicate", outcome: "satisfied", revision, state_digest: "f".repeat(64) });
+      }
+      await settle();
+      expect(unprovenSettled).toBe(false);
+      expect(await store.load()).toHaveLength(2);
+    } finally {
+      client.stop();
+    }
+  });
+  it.each(["digest", "head", "semantics", "replay"] as const)("stops an invalid replacement snapshot (%s) without installing or retrying it", async (fault) => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    let resume: (() => void) | undefined;
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      lifecycle: {
+        subscribe: (listener) => {
+          resume = () => listener("active");
+          return () => {
+            resume = undefined;
+          };
+        },
+      },
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+      sockets[0]!.receive({ ...eventBase("deadline_changed"), payload: { deadline_at_ms: 200000, deadline_generation: 2 }, external_operation_id: projectionId });
+      await settle();
+      clock.advance(1);
+      const recovery = sockets[1]!;
+      recovery.open();
+      await settle();
+      const pending = client.setHandRaised(true, { commandId: commandIds[0] }).catch((error: unknown) => error);
+      const invalidSnapshot = fault === "digest" ? { ...snapshot, state_digest: "f".repeat(64) } : fault === "semantics" ? { ...snapshot, participants: [...snapshot.participants, snapshot.participants[0]] } : snapshot;
+      recovery.receive({
+        type: "welcome",
+        protocol: 1,
+        participant_id: ownerId,
+        participant_generation: 1,
+        recovery_id: recoveryId,
+        head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: fault === "head" ? "f".repeat(64) : state.stateDigest },
+        ...(fault === "replay" ? { mode: "replay" } : { mode: "snapshot", snapshot: invalidSnapshot }),
+      });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "state_digest_recovery_failed" });
+      await expect(pending).resolves.toMatchObject({ code: "state_digest_recovery_failed" });
+      expect(client.getSnapshot().control).toBeNull();
+      expect(recovery.frames().filter((frame) => frame.type === "command" || frame.type === "recovery_ack")).toEqual([]);
+      clock.advance(60000);
+      await settle();
+      resume?.();
+      expect(sockets).toHaveLength(2);
+    } finally {
+      client.stop();
+    }
+  });
+  it("resumes recovery after a validated snapshot loses its transport before projections arrive", async () => {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: "ws://sync.test/v1/sync",
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    const snapshot = await wireSnapshot(baseState());
+    const state = snapshotToState(snapshot);
+    const head = { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest };
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await recoverSocket(client, sockets[0]!, state, snapshot, "snapshot");
+      sockets[0]!.receive({ ...eventBase("deadline_changed"), payload: { deadline_at_ms: 200000, deadline_generation: 2 }, external_operation_id: projectionId });
+      await settle();
+      clock.advance(1);
+      sockets[1]!.open();
+      await settle();
+      sockets[1]!.receive({ type: "welcome", protocol: 1, participant_id: ownerId, participant_generation: 1, recovery_id: recoveryId, mode: "snapshot", head, snapshot });
+      await settle();
+      expect(sockets[1]!.frames().at(-1)).toMatchObject({ type: "recovery_ack" });
+      sockets[1]!.close();
+      clock.advance(0);
+      await settle();
+      clock.advance(2);
+      sockets[2]!.open();
+      await settle();
+      expect(sockets[2]!.frames()[0]).toMatchObject({ streams: { control: { cursor: head } } });
+      await recoverSocket(client, sockets[2]!, state, snapshot, "up_to_date");
+    } finally {
+      client.stop();
+    }
+  });
+  it("keeps local media paused after a terminal Off protocol result", async () => {
+    const { client: sync, socket } = await liveClient();
+    const platform = createCoreTestPlatform();
+    const access = opaqueAccessGrant("r9-off-reject");
+    const track = mediaTrack();
+    const localTargets: boolean[] = [];
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => ({ ...access, subject: { ...access.subject, participant_id: ownerId } }) },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => mediaStream(track) },
+          createSyncClient: () => sync,
+          createMediaClient: (input) => ({
+            ...platform.dependencies.createMediaClient(input),
+            setLocalSourceIntent: (_source, enabled) => {
+              if (!enabled) track.enabled = false;
+            },
+            setLocalPublicationTarget: async (target) => {
+              localTargets.push(target.enabled);
+              track.enabled = target.enabled;
+              return { outcome: "confirmed", errorCode: null };
+            },
+          }),
+        },
+      },
+    );
+    try {
+      await client.join({ microphone: false, camera: false });
+      const on = client.media.setMicrophoneEnabled(true);
+      await vi.waitFor(() => expect(socket.frames().filter((frame) => frame.type === "live_target")).toHaveLength(1));
+      const first = socket.frames().find((frame) => frame.type === "live_target");
+      if (first?.type !== "live_target") throw new Error("missing On frame");
+      socket.receive({ type: "live_target_result", operation_id: first.operation_id, name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
+      await on;
+      const off = client.media.setMicrophoneEnabled(false).catch((error) => error);
+      await vi.waitFor(() => expect(socket.frames().filter((frame) => frame.type === "live_target")).toHaveLength(2));
+      const last = socket.frames().findLast((frame) => frame.type === "live_target");
+      if (last?.type !== "live_target") throw new Error("missing Off frame");
+      expect(last.enabled).toBe(false);
+      socket.receive({ type: "live_target_result", operation_id: last.operation_id, name: "set_microphone_enabled", outcome: "terminal_failure", error_code: "capability_denied" });
+      await expect(off).resolves.toMatchObject({ message: "capability_denied" });
+      expect({ trackEnabled: track.enabled, localTargets }).toEqual({ trackEnabled: false, localTargets: [false] });
+    } finally {
+      client.dispose();
+      sync.stop();
+    }
+  });
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",
@@ -126,7 +452,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().pendingCommandCount).toBe(1);
     expect(await store.load()).toHaveLength(1);
     const restarted = await liveClient({ pendingStore: store });
-    expect(restarted.socket.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_hand_raised" });
+    expect(restarted.socket.frames().findLast((frame) => frame.type === "command")).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_hand_raised" });
     restarted.client.stop();
   });
   it("uses browser-legal application close codes for client-initiated restarts", async () => {
@@ -180,17 +506,103 @@ describe("V1SyncClient", () => {
     lifecycle?.("inactive");
     expect(lifecycleSocket.closeCalls).toContainEqual({ code: 4000, reason: "lifecycle unavailable" });
   });
+  it("probes immediately so an in-budget first pong keeps a fresh connection healthy", async () => {
+    const clock = new TestClock();
+    const send = vi.spyOn(TestSocket.prototype, "send").mockImplementation(function (this: TestSocket, data: string) {
+      this.sent.push(data);
+      if (JSON.parse(data).type === "ping") clock.setTimeout(() => this.receive({ type: "pong" }), 700);
+    });
+    const { client } = await liveClient({ clock });
+    try {
+      clock.advance(700);
+      await settle();
+      clock.advance(50);
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy", noticeUnresponsive: false });
+    } finally {
+      client.stop();
+      send.mockRestore();
+    }
+  });
+  it("keeps one-in-four pong loss non-blocking and clears degradation only after stable pongs", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    try {
+      for (let tick = 1; tick <= 16; tick++) {
+        clock.advance(500);
+        if (tick % 4 === 0) {
+          socket.receive({ type: "pong" });
+          await settle();
+        }
+        expect(client.getSnapshot().connection.noticeUnresponsive).toBe(false);
+      }
+      expect(client.getSnapshot().connection).toMatchObject({ health: "degraded" });
+      for (let tick = 0; tick < 5; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy" });
+    } finally {
+      client.stop();
+    }
+  });
+  it("requires sustained silence to recover and stable pongs to return healthy", async () => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    try {
+      clock.advance(750);
+      expect(client.getSnapshot().connection).toMatchObject({ health: "degraded", noticeUnresponsive: false });
+      clock.advance(3250);
+      expect(client.getSnapshot().connection).toMatchObject({ health: "recovering", noticeUnresponsive: true });
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(client.getSnapshot().connection.noticeUnresponsive).toBe(true);
+      for (let tick = 0; tick < 4; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy", noticeUnresponsive: false });
+    } finally {
+      client.stop();
+    }
+  });
+  it.each([1000, 4500])("evaluates %i ms of suspended silence before accepting a queued pong", async (silence) => {
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
+    const now = vi.spyOn(clock, "now");
+    try {
+      // A queued socket event can run before overdue timers after the event loop resumes.
+      now.mockReturnValue(silence);
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ health: silence >= 4000 ? "recovering" : "degraded", noticeUnresponsive: silence >= 4000 });
+      for (const elapsed of [500, 1000, 1500]) {
+        now.mockReturnValue(silence + elapsed);
+        socket.receive({ type: "pong" });
+        await settle();
+        expect(client.getSnapshot().connection.health).not.toBe("healthy");
+      }
+      now.mockReturnValue(silence + 2000);
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ health: "healthy", noticeUnresponsive: false });
+    } finally {
+      client.stop();
+      now.mockRestore();
+    }
+  });
   it("signals a silent live socket for presentation without restarting it or changing its phase", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });
-    clock.advance(750);
+    clock.advance(4000);
     expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     expect(socket.closeCalls).toEqual([]);
     clock.advance(250);
-    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(2);
+    expect(socket.frames().filter((frame) => frame.type === "ping")).toHaveLength(9);
     socket.receive({ type: "pong" });
     await settle();
-    expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: false });
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "live", noticeUnresponsive: true });
     client.stop();
   });
   it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
@@ -677,6 +1089,27 @@ describe("V1SyncClient", () => {
     await recovering;
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
+  it.each([
+    ["participant_microphone_stopped", "microphone"],
+    ["participant_camera_stopped", "camera"],
+    ["participant_screen_share_stopped", "screen"],
+  ] as const)("delivers an explicit self %s once, not from projections", async (name, source) => {
+    const { client, socket, state } = await liveClient();
+    const pause = vi.fn();
+    const unsubscribe = client.onMediaPause(pause);
+    try {
+      const digest = await computeV1StateDigest({ ...state, revision: 2 });
+      const event = { ...eventBase("participant_microphone_stopped"), name, resulting_state_digest: digest, payload: { participant_id: ownerId }, external_operation_id: commandIds[0] };
+      socket.receive(event);
+      socket.receive(event);
+      await vi.waitFor(() => expect(client.getSnapshot().control?.revision).toBe(2));
+      await settle();
+      expect(pause).toHaveBeenCalledExactlyOnceWith({ source, revision: 2 });
+    } finally {
+      unsubscribe();
+      client.stop();
+    }
+  });
   it("sends self media as live targets and completes from explicit results", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const microphone = client.setMicrophoneEnabled(true, { requestId: commandIds[0] });
@@ -1066,7 +1499,7 @@ describe("V1SyncClient", () => {
     await settle();
     first.stop();
     const { socket } = await liveClient({ pendingStore: store });
-    expect(socket.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_display_name", payload: { display_name: "Persisted" } });
+    expect(socket.frames().findLast((frame) => frame.type === "command")).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_display_name", payload: { display_name: "Persisted" } });
   });
   it("retries failed cleanup for an expired restored target without replaying it", async () => {
     const clock = new TestClock();
@@ -1113,7 +1546,7 @@ describe("V1SyncClient", () => {
     await settle();
     expect(sockets[1]!.frames()[0]).toMatchObject({ streams: { control: { cursor: { revision: 1, state_schema_version: 1, state_digest: state.stateDigest } } } });
     await recoverSocket(client, sockets[1]!, state, snapshot, "up_to_date");
-    expect(sockets[1]!.frames().at(-1)).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_admission_policy" });
+    expect(sockets[1]!.frames().findLast((frame) => frame.type === "command")).toMatchObject({ type: "command", command_id: commandIds[0], name: "set_admission_policy" });
     expect(sockets[1]!.frames().some((frame) => frame.type === "directed_request")).toBe(false);
     client.stop();
   });
@@ -1128,6 +1561,68 @@ describe("V1SyncClient", () => {
   });
 });
 describe("V1SyncClient collaboration_v1", () => {
+  it("reports a real acknowledgement deadline through the public reaction API as recoverable", async () => {
+    const clock = new TestClock();
+    const { client: sync, socket } = await liveCollaborationClient({ clock });
+    const platform = createCoreTestPlatform();
+    const access = opaqueAccessGrant("reaction-timeout");
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => ({ ...access, subject: { ...access.subject, participant_id: ownerId } }) }, { ...platform, dependencies: { ...platform.dependencies, createSyncClient: () => sync } });
+    let failure: unknown;
+    try {
+      await client.join({ microphone: false, camera: false });
+      expect(client.getSnapshot().connection.status).toBe("live");
+      const pending = client.reactions.send("🎉").catch((cause: unknown) => {
+        failure = cause;
+      });
+      await vi.waitFor(() => expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1));
+      for (let tick = 0; tick < 10; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      await pending;
+      expect(failure).toMatchObject({ code: "collaboration.unavailable", recoverable: true, message: "Couldn’t confirm your reaction. Try again." });
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().reactions.active).toEqual([]);
+    } finally {
+      client.dispose();
+      sync.stop();
+    }
+  });
+  it("bounds dropped reaction acknowledgements despite healthy pongs, and never replays", async () => {
+    const clock = new TestClock();
+    const { client, socket, recover } = await liveCollaborationClient({ clock, reconnectDelayMs: 0 });
+    let outcome = "pending";
+    try {
+      void client.sendReaction("🎉").then(
+        () => {
+          outcome = "accepted";
+        },
+        (error: unknown) => {
+          outcome = error instanceof V1SyncError ? error.code : "unexpected";
+        },
+      );
+      for (let tick = 0; tick < 10; tick++) {
+        clock.advance(500);
+        socket.receive({ type: "pong" });
+        await settle();
+      }
+      expect(outcome).toBe("reaction_ack_timeout");
+      expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1);
+      socket.close(1006, "cut");
+      clock.advance(0);
+      await settle();
+      clock.advance(0);
+      await settle();
+      socket.open();
+      await settle();
+      await recover();
+      expect(client.getSnapshot().connection.phase).toBe("live");
+      expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveCollaborationClient();
     expect(socket.frames()[0]).toMatchObject({
@@ -1457,47 +1952,50 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   await client.start();
   socket.open();
   await settle();
-  socket.receive({
-    type: "welcome",
-    protocol: 1,
-    participant_id: ownerId,
-    participant_generation: 1,
-    recovery_id: recoveryId,
-    head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
-    mode: "snapshot",
-    snapshot,
-    extensions: [
-      {
-        name: "collaboration_v1",
-        capabilities: ["sendReaction", "sendChat"],
-        participant_capabilities: {
-          [ownerId]: ["sendReaction", "sendChat"],
-          [peerId]: ["sendReaction"],
-        },
-        chat_head_sequence: "8",
-        retained_floor_sequence: "2",
-        read_receipts: [
-          {
-            participant_id: peerId,
-            participant_generation: 1,
-            sequence: "7",
-            read_at: "2026-07-29T12:00:00.000Z",
+  const recover = async () => {
+    socket.receive({
+      type: "welcome",
+      protocol: 1,
+      participant_id: ownerId,
+      participant_generation: 1,
+      recovery_id: recoveryId,
+      head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
+      mode: "snapshot",
+      snapshot,
+      extensions: [
+        {
+          name: "collaboration_v1",
+          capabilities: ["sendReaction", "sendChat"],
+          participant_capabilities: {
+            [ownerId]: ["sendReaction", "sendChat"],
+            [peerId]: ["sendReaction"],
           },
-        ],
-      },
-    ],
-  });
-  socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
-  socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
-  socket.receive({
-    type: "recovery_complete",
-    recovery_id: recoveryId,
-    head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
-  });
-  for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
+          chat_head_sequence: "8",
+          retained_floor_sequence: "2",
+          read_receipts: [
+            {
+              participant_id: peerId,
+              participant_generation: 1,
+              sequence: "7",
+              read_at: "2026-07-29T12:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+    socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
+    socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
+    socket.receive({
+      type: "recovery_complete",
+      recovery_id: recoveryId,
+      head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
+    });
+    for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
+    expect(client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, media: { sequence: 0 }, presence: { sequence: 0 } });
+  };
+  await recover();
   expect(socket.closeCalls).toEqual([]);
-  expect(client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, media: { sequence: 0 }, presence: { sequence: 0 } });
-  return { client, socket, state };
+  return { client, socket, state, recover };
 }
 async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date"): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
@@ -1623,7 +2121,7 @@ async function wireSnapshot(initial: V1ControlState): Promise<Snapshot> {
       role: participant.role,
       capabilities: participant.capabilities,
     })),
-    admission_requests: [],
+    admission_requests: state.admissionRequests.map((request) => ({ admission_request_id: request.admissionRequestId, participant_id: request.participantId, display_name: request.displayName, role: request.initialRole, expires_at_ms: request.expiresAtMs })),
   };
 }
 class TestSocket implements SyncSocket {

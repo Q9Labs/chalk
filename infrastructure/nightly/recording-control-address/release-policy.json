@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadRecorderAddressAndTarget",
+      "Effect": "Allow",
+      "Action": ["ec2:DescribeAddresses", "ec2:DescribeInstances"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReassociateOnlyNightlyRecorderAllocation",
+      "Effect": "Allow",
+      "Action": "ec2:AssociateAddress",
+      "Resource": "arn:aws:ec2:ap-southeast-1:*:elastic-ip/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Name": "chalk-nightly-recording-control",
+          "aws:ResourceTag/chalk:environment": "nightly"
+        }
+      }
+    }
+  ]
+}

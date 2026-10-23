@@ -3011,6 +3011,253 @@ export const MediaConnectionNotFoundErrorSchema = MediaConnectionNotFoundErrorWi
   }),
 );
 
+export class MediaTokenExpiredError extends Schema.TaggedErrorClass<MediaTokenExpiredError>()("MediaTokenExpiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.expired"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenExpiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.expired"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenExpiredErrorSchema = MediaTokenExpiredErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenExpiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenExpiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenInvalidAudienceError extends Schema.TaggedErrorClass<MediaTokenInvalidAudienceError>()("MediaTokenInvalidAudienceError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_audience"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenInvalidAudienceErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_audience"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenInvalidAudienceErrorSchema = MediaTokenInvalidAudienceErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenInvalidAudienceError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenInvalidAudienceError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenInvalidHeaderError extends Schema.TaggedErrorClass<MediaTokenInvalidHeaderError>()("MediaTokenInvalidHeaderError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_header"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenInvalidHeaderErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_header"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenInvalidHeaderErrorSchema = MediaTokenInvalidHeaderErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenInvalidHeaderError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenInvalidHeaderError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenInvalidIssuerError extends Schema.TaggedErrorClass<MediaTokenInvalidIssuerError>()("MediaTokenInvalidIssuerError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_issuer"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenInvalidIssuerErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_issuer"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenInvalidIssuerErrorSchema = MediaTokenInvalidIssuerErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenInvalidIssuerError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenInvalidIssuerError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenInvalidSignatureError extends Schema.TaggedErrorClass<MediaTokenInvalidSignatureError>()("MediaTokenInvalidSignatureError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_signature"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenInvalidSignatureErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_signature"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenInvalidSignatureErrorSchema = MediaTokenInvalidSignatureErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenInvalidSignatureError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenInvalidSignatureError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenInvalidSubjectError extends Schema.TaggedErrorClass<MediaTokenInvalidSubjectError>()("MediaTokenInvalidSubjectError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_subject"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenInvalidSubjectErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_subject"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenInvalidSubjectErrorSchema = MediaTokenInvalidSubjectErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenInvalidSubjectError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenInvalidSubjectError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenInvalidTimeClaimsError extends Schema.TaggedErrorClass<MediaTokenInvalidTimeClaimsError>()("MediaTokenInvalidTimeClaimsError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_time_claims"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenInvalidTimeClaimsErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.invalid_time_claims"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenInvalidTimeClaimsErrorSchema = MediaTokenInvalidTimeClaimsErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenInvalidTimeClaimsError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenInvalidTimeClaimsError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenLifetimeExceededError extends Schema.TaggedErrorClass<MediaTokenLifetimeExceededError>()("MediaTokenLifetimeExceededError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.lifetime_exceeded"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenLifetimeExceededErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.lifetime_exceeded"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenLifetimeExceededErrorSchema = MediaTokenLifetimeExceededErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenLifetimeExceededError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenLifetimeExceededError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenMalformedError extends Schema.TaggedErrorClass<MediaTokenMalformedError>()("MediaTokenMalformedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.malformed"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenMalformedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.malformed"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenMalformedErrorSchema = MediaTokenMalformedErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenMalformedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenMalformedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenNotYetValidError extends Schema.TaggedErrorClass<MediaTokenNotYetValidError>()("MediaTokenNotYetValidError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.not_yet_valid"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenNotYetValidErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.not_yet_valid"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenNotYetValidErrorSchema = MediaTokenNotYetValidErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenNotYetValidError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenNotYetValidError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenRequiredError extends Schema.TaggedErrorClass<MediaTokenRequiredError>()("MediaTokenRequiredError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.required"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenRequiredErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.required"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenRequiredErrorSchema = MediaTokenRequiredErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenRequiredError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenRequiredError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenSubjectMismatchError extends Schema.TaggedErrorClass<MediaTokenSubjectMismatchError>()("MediaTokenSubjectMismatchError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.subject_mismatch"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenSubjectMismatchErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.subject_mismatch"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenSubjectMismatchErrorSchema = MediaTokenSubjectMismatchErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenSubjectMismatchError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenSubjectMismatchError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaTokenUnknownKeyError extends Schema.TaggedErrorClass<MediaTokenUnknownKeyError>()("MediaTokenUnknownKeyError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.unknown_key"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaTokenUnknownKeyErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media_token.unknown_key"),
+    message: Schema.String,
+  }),
+});
+export const MediaTokenUnknownKeyErrorSchema = MediaTokenUnknownKeyErrorWireSchema.pipe(
+  Schema.decodeTo(MediaTokenUnknownKeyError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaTokenUnknownKeyError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class MediaUnavailableError extends Schema.TaggedErrorClass<MediaUnavailableError>()("MediaUnavailableError", {
   error: Schema.Struct({
     code: Schema.Literal("media.unavailable"),
@@ -3140,6 +3387,25 @@ export const PaginationInvalidPageSizeErrorWireSchema = Schema.Struct({
 export const PaginationInvalidPageSizeErrorSchema = PaginationInvalidPageSizeErrorWireSchema.pipe(
   Schema.decodeTo(PaginationInvalidPageSizeError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "PaginationInvalidPageSizeError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class ParticipantConnectionSupersededError extends Schema.TaggedErrorClass<ParticipantConnectionSupersededError>()("ParticipantConnectionSupersededError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.connection_superseded"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantConnectionSupersededErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.connection_superseded"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantConnectionSupersededErrorSchema = ParticipantConnectionSupersededErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantConnectionSupersededError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantConnectionSupersededError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -4921,7 +5187,21 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
+  MediaTokenExpiredErrorSchema,
+  MediaTokenInvalidAudienceErrorSchema,
+  MediaTokenInvalidHeaderErrorSchema,
+  MediaTokenInvalidIssuerErrorSchema,
+  MediaTokenInvalidSignatureErrorSchema,
+  MediaTokenInvalidSubjectErrorSchema,
+  MediaTokenInvalidTimeClaimsErrorSchema,
+  MediaTokenLifetimeExceededErrorSchema,
+  MediaTokenMalformedErrorSchema,
+  MediaTokenNotYetValidErrorSchema,
+  MediaTokenRequiredErrorSchema,
+  MediaTokenSubjectMismatchErrorSchema,
+  MediaTokenUnknownKeyErrorSchema,
   MediaUnavailableErrorSchema,
+  ParticipantConnectionSupersededErrorSchema,
   ParticipantGenerationMismatchErrorSchema,
   ParticipantInvalidIdErrorSchema,
   ParticipantNotFoundErrorSchema,

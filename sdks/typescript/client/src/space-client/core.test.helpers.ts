@@ -1,3 +1,4 @@
+import type { V1MediaPause } from "../sync/v1-types";
 import type { AccessGrant } from "./index";
 import type { ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
 import type { SpaceClientPlatform } from "./core";
@@ -9,6 +10,7 @@ export type CoreTestPlatform = SpaceClientPlatform & {
     readonly emit: (snapshot: CoreTestMediaSnapshot) => void;
   };
   readonly sync: ConnectionSyncClient;
+  readonly emitMediaPause: (pause: V1MediaPause) => void;
   readonly emitSync: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void;
 };
 export function createCoreTestPlatform(): CoreTestPlatform {
@@ -51,6 +53,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       return () => mediaListeners.delete(listener);
     },
   } as unknown as ConnectionMediaClient;
+  const pauseListeners = new Set<(pause: V1MediaPause) => void>();
   const sync: ConnectionSyncClient = {
     start: async () => {
       syncSnapshot = { ...syncSnapshot, connection: { phase: "live" }, participantId: "participant-1", participantGeneration: 1 };
@@ -66,6 +69,10 @@ export function createCoreTestPlatform(): CoreTestPlatform {
     subscribeCollaboration: () => () => undefined,
     getCollaborationExtensionState: () => ({ version: 1, chatHeadSequence: null }),
     getParticipantCollaborationCapabilities: () => ({}),
+    onMediaPause: (listener: (pause: V1MediaPause) => void) => {
+      pauseListeners.add(listener);
+      return () => pauseListeners.delete(listener);
+    },
     onDirectedRequest: () => () => undefined,
   } as unknown as ConnectionSyncClient;
   return {
@@ -84,6 +91,9 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       },
     },
     sync,
+    emitMediaPause: (pause) => {
+      for (const listener of pauseListeners) listener(pause);
+    },
     emitSync: (snapshot) => {
       syncSnapshot = snapshot;
       for (const listener of syncListeners) listener(syncSnapshot);

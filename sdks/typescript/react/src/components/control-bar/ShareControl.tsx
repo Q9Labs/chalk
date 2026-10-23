@@ -27,11 +27,12 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   );
 }
 
-export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing: boolean; readonly onToggle?: () => void; readonly onStart?: (options: ScreenShareOptions) => void }) {
+export function ShareControl({ sharing, onToggle, onStart, disabled = false, startDisabled = false }: { readonly disabled?: boolean; readonly startDisabled?: boolean; readonly sharing: boolean; readonly onToggle?: () => void; readonly onStart?: (options: ScreenShareOptions) => void }) {
   const [surface, setSurface] = useState<ScreenShareSurface>("window");
   const [audio, setAudio] = useState(true);
   const [replace, setReplace] = useState(false);
   const start = (next: ScreenShareSurface) => {
+    if (disabled || startDisabled) return;
     setSurface(next);
     setReplace(false);
     onStart?.({ surface: next, audio: next === "browser" && audio });
@@ -40,7 +41,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
     <div data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing}>
       <ChalkTooltip
         trigger={
-          <button type="button" className="chalk-shell-main" aria-label={sharing ? "Stop sharing" : "Share screen"} aria-pressed={sharing} onClick={() => (sharing || !onStart ? onToggle?.() : start(surface))}>
+          <button type="button" className="chalk-shell-main" disabled={disabled} aria-label={sharing ? "Stop sharing" : "Share screen"} aria-pressed={sharing} onClick={() => (sharing || !onStart ? onToggle?.() : start(surface))}>
             <ShellIcon name={sharing ? "shareOff" : "share"} />
           </button>
         }
@@ -51,7 +52,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
         side="top"
         className="chalk-device-menu"
         trigger={
-          <button type="button" className="chalk-shell-caret" aria-label="Share options">
+          <button type="button" className="chalk-shell-caret" disabled={disabled || startDisabled} aria-label="Share options">
             <ShellIcon name="down" />
           </button>
         }
@@ -59,7 +60,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
         {sharing && !replace ? (
           <>
             <ChalkMenuLabel>Sharing your screen</ChalkMenuLabel>
-            <Menu.Item className="chalk-menu-item" closeOnClick={false} onClick={() => setReplace(true)}>
+            <Menu.Item className="chalk-menu-item" disabled={disabled || startDisabled} closeOnClick={false} onClick={() => setReplace(true)}>
               Share something else
             </Menu.Item>
             <ChalkMenuItem onClick={onToggle}>Stop sharing</ChalkMenuItem>
@@ -73,7 +74,7 @@ export function ShareControl({ sharing, onToggle, onStart }: { readonly sharing:
                 { value: "browser", label: "Browser tab", description: "One tab, and its sound if you like" },
               ] satisfies { value: ScreenShareSurface; label: string; description: string }[]
             ).map((option) => (
-              <Menu.Item key={option.value} className="chalk-menu-item chalk-shell-source" role="menuitemradio" aria-label={option.label} aria-checked={surface === option.value} onClick={() => start(option.value)}>
+              <Menu.Item key={option.value} className="chalk-menu-item chalk-shell-source" disabled={disabled || startDisabled} role="menuitemradio" aria-label={option.label} aria-checked={surface === option.value} onClick={() => start(option.value)}>
                 <SourceIcon source={option.value} />
                 <span className="chalk-shell-device-label">
                   <span>{option.label}</span>

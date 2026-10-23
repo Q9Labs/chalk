@@ -1,0 +1,67 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ChalkText, IconButton, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
+import { useEffect, useState } from "react";
+import { Linking, StyleSheet, View } from "react-native";
+import { MOBILE_PRIVACY_EFFECTIVE_DATE, MOBILE_PRIVACY_NOTICE_LINK_TEXT, MOBILE_PRIVACY_NOTICE_TEXT } from "./privacy-policy";
+
+const dismissalKey = `chalk:privacy-notice:${MOBILE_PRIVACY_EFFECTIVE_DATE}`;
+
+export function PrivacyNotice({ topInset = 0 }: { readonly topInset?: number } = {}): React.JSX.Element | null {
+  const [revision, setRevision] = useState(0);
+  const pending = Date.now() < Date.parse(MOBILE_PRIVACY_EFFECTIVE_DATE);
+  useEffect(() => {
+    if (!pending) return;
+    const remaining = Date.parse(MOBILE_PRIVACY_EFFECTIVE_DATE) - Date.now();
+    const timer = setTimeout(() => setRevision((current) => current + 1), Math.min(Math.max(remaining, 0), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [pending, revision]);
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+  const { colors } = useTheme();
+  const toasts = useToasts();
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(dismissalKey).then(
+      (value) => {
+        if (active) setDismissed(value === "dismissed");
+      },
+      () => {
+        if (active) setDismissed(false);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+  function dismiss() {
+    setDismissed(true);
+    void AsyncStorage.setItem(dismissalKey, "dismissed").catch(() => {
+      // Dismissal still applies for this visit if storage is unavailable.
+    });
+  }
+  if (!pending || dismissed !== false) return null;
+  return (
+    <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: colors.line, marginTop: topInset + 8 }]} testID="privacy.notice">
+      <ChalkText style={styles.text} variant="meta">
+        {MOBILE_PRIVACY_NOTICE_TEXT}{" "}
+        <ChalkText
+          accessibilityRole="link"
+          onPress={() => {
+            void Linking.openURL("https://chalkmeet.com/privacy").catch(() => toasts.show({ kind: "error", message: "Couldn’t open the Privacy Policy. Try again." }));
+          }}
+          style={styles.link}
+          variant="meta"
+          testID="privacy.notice.link"
+        >
+          {MOBILE_PRIVACY_NOTICE_LINK_TEXT}
+        </ChalkText>
+      </ChalkText>
+      <IconButton accessibilityLabel="Dismiss Privacy Policy notice" icon="x" onPress={dismiss} testID="privacy.notice.dismiss" tone="ghost" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  notice: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 8, marginVertical: 8 },
+  text: { flex: 1 },
+  link: { textDecorationLine: "underline" },
+});

@@ -99,7 +99,7 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
       try: () => validateFetchedAccess(currentAccess, next, now, shouldReplaceMediaConnection),
       catch: (cause) => new ConnectionAccessFailure({ code: "access.invalid", cause }),
     });
-    return [{ access: next, automaticMediaReplacement: mediaExpired && !input.replaceMediaConnection }, { access: next }] as const;
+    return [{ access: next, automaticMediaReplacement: currentAccess !== null && !input.replaceMediaConnection && !hasSameMediaConnection(currentAccess, next) }, { access: next }] as const;
   });
 }
 function connectionAccessRequest(input: FetchInput, replaceMediaConnection: boolean): Readonly<ConnectionAccessRequest> {
@@ -136,9 +136,10 @@ function validateExpiration(access: ParsedAccessGrant, now: number): void {
 }
 function validateRefresh(previous: ParsedAccessGrant, next: ParsedAccessGrant, replaceMediaConnection: boolean): void {
   if (!hasSameSubject(previous, next)) throw new TypeError("Access grant refresh changed its subject");
-  const mediaConnectionChanged = previous.media.provider !== next.media.provider || mediaBinding(previous) !== mediaBinding(next);
-  if (replaceMediaConnection === mediaConnectionChanged) return;
-  throw new TypeError(replaceMediaConnection ? "Access grant replacement did not change its media binding" : "Access grant refresh unexpectedly replaced its media connection");
+  if (replaceMediaConnection && hasSameMediaConnection(previous, next)) throw new TypeError("Access grant replacement did not change its media binding");
+}
+function hasSameMediaConnection(previous: ParsedAccessGrant, next: ParsedAccessGrant): boolean {
+  return previous.media.provider === next.media.provider && mediaBinding(previous) === mediaBinding(next);
 }
 function hasSameSubject(previous: ParsedAccessGrant, next: ParsedAccessGrant): boolean {
   const left = previous.subject;

@@ -286,27 +286,35 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       else await button.click();
       await page.waitForTimeout(350);
     };
-    if (scenario.id === "panels") {
-      const openPhoneNavigation = async () => {
-        if (!device.touch) return;
-        const before = await page.evaluate(() => {
-          window.__callPerf.navigationWindows.push({ start: performance.now(), end: Infinity });
-          window.__callPerf.last = null;
-          return window.__callVideoQuality.snapshot();
-        });
-        await click("More options");
+    const outsideSample = async (action) => {
+      const before = await page.evaluate(() => {
+        window.__callPerf.navigationWindows.push({ start: performance.now(), end: Infinity });
+        window.__callPerf.last = null;
+        return window.__callVideoQuality.snapshot();
+      });
+      try {
+        await action();
+      } finally {
         await page.evaluate((before) => {
           const after = window.__callVideoQuality.snapshot();
           for (const metric of ["frames", "dropped", "resets", "samples"]) window.__callPerf.navigationVideoQuality[metric] += after[metric] - before[metric];
           window.__callPerf.navigationWindows.at(-1).end = performance.now();
           window.__callPerf.last = null;
         }, before);
-      };
-      await openPhoneNavigation();
+      }
+    };
+    const visitChat = async () => {
       await click("Chat");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor();
       await click("Close panel");
       await page.getByRole("complementary", { name: "Chat panel" }).waitFor({ state: "hidden" });
+    };
+    if (scenario.id === "panels") {
+      const openPhoneNavigation = async () => {
+        if (device.touch) await outsideSample(() => click("More options"));
+      };
+      await openPhoneNavigation();
+      await visitChat();
       await openPhoneNavigation();
       await click(device.touch ? "People" : /^People, \d+$/);
       await page.getByRole("button", { name: "Close panel", exact: true }).waitFor();
@@ -327,10 +335,19 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     }
     if (scenario.id === "reconnect") {
       await page.locator("[data-perf-reconnect]").dispatchEvent("click");
-      await page.locator('[data-call-limbo][data-covered="true"][aria-hidden="false"]').waitFor({ timeout: 10_000 });
+      const notice = page.locator('[data-part="connection-notice"]');
+      await notice.filter({ hasText: "Reconnecting" }).waitFor({ timeout: 10_000 });
+      if ((await notice.evaluate((element) => getComputedStyle(element).pointerEvents)) !== "none") throw new Error("Recovery notice intercepts call controls");
+      if (await page.locator('[data-call-limbo][data-covered="true"][aria-hidden="false"]').count()) throw new Error("Recovery covers the call");
+      // Check recovery usability without turning this connection sample into a panel-navigation benchmark.
+      await outsideSample(async () => {
+        await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
+        if (device.touch) await click("More options");
+        await visitChat();
+      });
       await page.waitForTimeout(350);
       await page.locator("[data-perf-recover]").dispatchEvent("click");
-      await page.locator('[data-call-limbo][data-covered="false"][aria-hidden="true"]').waitFor({ state: "attached" });
+      await notice.waitFor({ state: "hidden" });
       await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
       await page.getByRole("button", { name: "Leave call", exact: true }).click({ trial: true });
     }
@@ -379,7 +396,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       jsGzipKiB,
       cssGzipKiB,
       durationMs: data.durationMs,
-      ...(device.touch && scenario.id === "panels" ? { excludedNavigationWindows: data.navigationWindows } : {}),
+      ...(data.navigationWindows.length ? { excludedNavigationWindows: data.navigationWindows } : {}),
       frameSamples: data.frames.length,
       trustedClicks: data.clicks,
       eventEntries: trustedEvents.length,
