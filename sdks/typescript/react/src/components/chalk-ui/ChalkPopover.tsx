@@ -1,5 +1,5 @@
 import { Popover } from "@base-ui/react/popover";
-import { useCallback, useState, type ReactElement, type ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { ChalkTooltip } from "./ChalkTooltip";
 import { cn } from "../../utils/cn";
 export function ChalkPopover({
@@ -21,16 +21,14 @@ export function ChalkPopover({
   readonly tooltip?: string;
   readonly alignOffset?: number;
 }) {
-  // The call's root holds and clips the popover, so it is also the room the popover fits in, even in a call embedded in a larger page.
-  const [root, setRoot] = useState<HTMLElement | null>(null);
-  const holder = useCallback((element: HTMLSpanElement | null) => {
-    if (element) setRoot(element.closest<HTMLElement>("[data-chalk]") ?? element);
-  }, []);
+  const [holder, setHolder] = useState<HTMLSpanElement | null>(null);
+  // A call's root holds and clips the popover, so it is also the room the popover fits in, even in a call embedded in a larger page. Outside a call, the popover keeps the window.
+  const root = holder?.closest<HTMLElement>("[data-chalk]") ?? null;
   return (
-    <span ref={holder} style={{ display: "contents" }}>
+    <span ref={setHolder} style={{ display: "contents" }}>
       <Popover.Root open={open} onOpenChange={onOpenChange}>
         {tooltip ? <ChalkTooltip trigger={<Popover.Trigger render={trigger} />}>{tooltip}</ChalkTooltip> : <Popover.Trigger render={trigger} />}
-        <Popover.Portal container={root}>
+        <Popover.Portal container={root ?? holder}>
           <Popover.Positioner side="bottom" align="start" alignOffset={alignOffset} sideOffset={8} collisionPadding={8} collisionBoundary={root ?? undefined} className="chalk-popover-positioner">
             <Popover.Popup aria-label={label} data-part="popover" className={cn("chalk-menu chalk-popover", className)}>
               {children}

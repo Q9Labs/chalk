@@ -3,7 +3,7 @@
 ## 5.1.0
 
 - Add optional `CallLimbo.className` for the message card, so a host can size the card around a form.
-- Place call notices only where they fit whole, clear of every control, sized to the call. A notice with no room waits, unmounted, in a header notice button. Adds optional `ToastStackProps.onFold` (folded notice ids) and `SpaceHeaderProps.notices`.
+- Keep call notices off the call's controls. A call shorter than 620px puts every notice, unmounted and announced once, in a header notice button; a taller one shows the newest three. Adds optional `ToastStackProps.onFold` (folded notice ids), `ChalkToastProps.announce` and `SpaceHeaderProps.notices`.
 - Route private camera previews through the SDK so granting permission refreshes the camera menu. Standalone `DevicePopover` and `ControlBarSurface` consumers can supply `captureCameraPreview`.
 - Preview the chosen camera privately when the call camera is off; while it is active, preview the published call track rather than an unpublished device selection.
 - Keep keyboard-shortcut dialog content fixed while opening and closing. Report a problem remains unchanged and appears only when a host supplies `onReportProblem`.

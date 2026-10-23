@@ -1240,7 +1240,7 @@
   pointer-events: none;
 }
 
-/* Notices sit in the band between the header and the controls under it, and an open reaction tray shrinks that band with padding, because a margin does not shrink a box held by both top and bottom. ToastStack shows only the newest notices that fit the band whole. */
+/* Notices sit in the band between the header and the controls under it, and an open reaction tray shrinks that band with padding, because a margin does not shrink a box held by both top and bottom. A call too short for the band's three notices folds them into the header instead (ToastStack's FOLD_BELOW_PX). */
 .chalk-toasts {
   --chalk-toast-top: 60px;
   --chalk-toast-lift: 92px;
@@ -1288,13 +1288,6 @@
 }
 .chalk-toast[data-type="error"] {
   max-width: min(560px, calc(100% - 32px));
-}
-/* ToastStack's inert copy of the newest notices, measured where they would show before any of them mounts. */
-.chalk-toasts[data-measure] {
-  visibility: hidden;
-}
-.chalk-toasts[data-measure] > .chalk-toast {
-  animation: none;
 }
 /* The header's notice button stays when a phone hides the header's other controls. */
 .chalk-notice-button {

@@ -1,8 +1,8 @@
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { memo, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
-import { ChalkToast, ToastFace, type ChalkToastProps } from "../chalk-ui/ChalkToast";
+import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
-export interface Toast extends Omit<ChalkToastProps, "onDismiss"> {
+export interface Toast extends Omit<ChalkToastProps, "onDismiss" | "announce"> {
   readonly id: string;
 }
 export interface ToastStackProps {
@@ -10,134 +10,97 @@ export interface ToastStackProps {
   readonly onDismiss: (id: string) => void;
   readonly maxVisible?: number;
   readonly className?: string;
-  /** Called with the ids of the notices that have no room on the stage, so the host can offer them elsewhere, such as from the header. Without it, the newest notice always shows. */
+  /**
+   * Called with the ids of the notices the stage has no room for, so the host can offer them elsewhere, such as from the header.
+   * With it, a call shorter than `FOLD_BELOW_PX` folds every notice and a taller one folds those past `maxVisible`, and the stack announces each folded notice once.
+   */
   readonly onFold?: (folded: readonly string[]) => void;
 }
-/** Controls a notice must never cover. Board controls are clipped by the board, so only their part inside it counts. */
-const RESERVED = ".chalk-frame-header :is(button, a, [role='button']), .chalk-board[data-primary] :is(.chalk-board-zoom, .chalk-board-island, .chalk-board-menu-button, .chalk-board-chip), .chalk-shell-reactions, [data-part='dock']";
 /**
- * Shows each notice as a toast only where it fits whole. To decide, the stack mounts an inert, hidden copy of the newest
- * notices, measures it, and removes it in the same commit, so the copy never paints or doubles a notice's text on the page.
- * Only the notices that fit mount as toasts, so a folded notice runs no timer and has no controls on the page.
+ * Calls shorter than this fold every notice. It is the height the mockup's three-notice stack needs at its tallest, on a phone with
+ * the board open: 108px for the header and the board's menu, an 8px gap, three camera errors wrapped to three lines (79px each, with
+ * 8px gaps), and the 242px the open drawing tools lift notices by, 611px in all.
  */
+export const FOLD_BELOW_PX = 620;
 export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisible = 3, className, onFold }: ToastStackProps) {
   const stack = useRef<HTMLDivElement>(null);
-  const measure = useRef<HTMLDivElement>(null);
-  const candidates = toasts.slice(-maxVisible);
-  const ids = candidates.map((toast) => toast.id).join(" ");
-  const [shownIds, setShownIds] = useState<readonly string[]>([]);
-  const [measuredIds, setMeasuredIds] = useState<string | null>(null);
-  const [refit, setRefit] = useState(false);
-  const measuring = refit || measuredIds !== ids;
+  const short = useShortCall(stack, onFold !== undefined);
+  // Until the call's height is known, a folding stack shows nothing, so no notice mounts and then folds.
+  const limit = onFold === undefined || short === false ? maxVisible : 0;
+  const shown = limit > 0 ? toasts.slice(-limit) : [];
+  const folded = onFold !== undefined && short !== null ? toasts.filter((toast) => !shown.includes(toast)) : [];
+  const foldedIds = folded.map((toast) => toast.id);
+  // Each notice is announced once: by its toast if it shows first, or by the announcer if it folds first.
+  const announced = useRef(new Set<string>());
+  const [unheard, setUnheard] = useState<readonly string[]>([]);
+  const reported = useRef<readonly string[]>([]);
   const fold = useRef(onFold);
   fold.current = onFold;
   useLayoutEffect(() => {
-    const layer = measure.current;
-    if (!measuring || !layer) return;
-    const all = ids ? ids.split(" ") : [];
-    const next = all.slice(all.length - fitNotices(layer, Boolean(fold.current)));
-    setShownIds((current) => (current.join(" ") === next.join(" ") ? current : next));
-    setMeasuredIds(ids);
-    setRefit(false);
-  }, [ids, measuring]);
-  const shownKey = shownIds.join(" ");
-  useLayoutEffect(() => {
-    const layer = measure.current;
-    if (!layer) return;
-    // Outside React, measure and apply the fit before the next paint or click.
-    const place = () => flushSync(() => setRefit(true));
-    const frame = layer.closest<HTMLElement>("[data-part='call-frame']") ?? layer.parentElement;
-    // Hosts that render in jsdom or on the server have no ResizeObserver, so there the stack keeps its first fit.
-    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
-    resize?.observe(layer);
-    if (frame) resize?.observe(frame);
-    // A notice also widens on its own, such as when the call's font loads.
-    for (const notice of stack.current?.children ?? []) resize?.observe(notice);
-    let live = true;
-    if ("fonts" in document) void document.fonts.ready.then(() => live && place());
-    // Controls appear or change place without resizing the stack first, such as the board's menu once the board is ready, or the tools opening and lifting the band's bottom. Refit in the same task, so no click lands while a notice still covers them. The hidden copy's own changes don't count.
-    const changes =
-      typeof MutationObserver === "undefined"
-        ? null
-        : new MutationObserver((records) => {
-            if (records.some((record) => !layer.contains(record.target))) place();
-          });
-    if (frame) changes?.observe(frame, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-ready", "data-place", "data-primary", "data-stage-role", "hidden"] });
-    frame?.addEventListener("transitionend", place);
-    return () => {
-      live = false;
-      resize?.disconnect();
-      changes?.disconnect();
-      frame?.removeEventListener("transitionend", place);
-    };
-  }, [ids, shownKey]);
-  const shown = candidates.filter((toast) => shownIds.includes(toast.id));
-  const foldedIds = toasts
-    .filter((toast) => !shownIds.includes(toast.id))
-    .map((toast) => toast.id)
-    .join(" ");
-  useLayoutEffect(() => {
-    fold.current?.(foldedIds ? foldedIds.split(" ") : []);
-  }, [foldedIds]);
-  useLayoutEffect(() => () => fold.current?.([]), []);
+    if (!fold.current) return;
+    const present = new Set(toasts.map((toast) => toast.id));
+    for (const id of announced.current) if (!present.has(id)) announced.current.delete(id);
+    const fresh = foldedIds.filter((id) => !announced.current.has(id));
+    for (const id of [...foldedIds, ...shown.map((toast) => toast.id)]) announced.current.add(id);
+    if (fresh.length) setUnheard(fresh);
+    if (sameIds(reported.current, foldedIds)) return;
+    reported.current = foldedIds;
+    fold.current(foldedIds);
+  });
+  useLayoutEffect(
+    () => () => {
+      reported.current = [];
+      fold.current?.([]);
+    },
+    [],
+  );
+  const announcing = folded.filter((toast) => unheard.includes(toast.id));
   return (
     <>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
-          <ChalkToast key={toast.id} {...toast} onDismiss={() => onDismiss(toast.id)} />
+          <ChalkToast key={toast.id} {...toast} announce={!announced.current.has(toast.id)} onDismiss={() => onDismiss(toast.id)} />
         ))}
       </div>
-      <div ref={measure} data-measure="" className={cn("chalk-toasts", className)} aria-hidden="true" inert>
-        {measuring
-          ? candidates.map((toast) => (
-              <div key={toast.id} data-type={toast.type ?? "info"} className="chalk-toast">
-                <ToastFace message={toast.message} type={toast.type ?? "info"} action={toast.action} icon={toast.icon} onDismiss={() => undefined} />
-              </div>
-            ))
-          : null}
-      </div>
+      {onFold ? (
+        <div data-part="notice-announcer" className="sr-only">
+          <div role="status">
+            {announcing
+              .filter((toast) => toast.type !== "error")
+              .map((toast) => (
+                <span key={toast.id}>{toast.message}</span>
+              ))}
+          </div>
+          <div role="alert">
+            {announcing
+              .filter((toast) => toast.type === "error")
+              .map((toast) => (
+                <span key={toast.id}>{toast.message}</span>
+              ))}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 });
 
-/** Counts the newest notices that fit the stack's band whole and clear of every reserved control. */
-function fitNotices(layer: HTMLElement, foldable: boolean): number {
-  const notices = [...layer.children].filter((child): child is HTMLElement => child instanceof HTMLElement);
-  const band = layer.getBoundingClientRect();
-  const style = getComputedStyle(layer);
-  const top = band.top + Number.parseFloat(style.paddingTop);
-  const bottom = band.bottom - Number.parseFloat(style.paddingBottom);
-  const frame = layer.closest("[data-part='call-frame']");
-  const reserved = frame ? [...frame.querySelectorAll(RESERVED)].map(visibleBox) : [];
-  let fitting = 0;
-  for (const notice of notices.slice().reverse()) {
-    // Layout offsets, because a notice slides in with a transform.
-    const left = band.left + notice.offsetLeft;
-    const noticeTop = band.top + notice.offsetTop;
-    const box = { left, right: left + notice.offsetWidth, top: noticeTop, bottom: noticeTop + notice.offsetHeight };
-    // Content wider or taller than its box would spill text or controls out of the notice.
-    const spills = notice.scrollWidth > notice.clientWidth + 1 || notice.scrollHeight > notice.clientHeight + 1;
-    const outside = box.top < top - 0.5 || box.bottom > bottom + 0.5 || box.left < band.left - 0.5 || box.right > band.right + 0.5;
-    if (spills || outside || reserved.some((control) => overlaps(box, control))) break;
-    fitting += 1;
-  }
-  return foldable ? fitting : Math.max(fitting, Math.min(1, notices.length));
+/** Whether the call holding the stack is shorter than `FOLD_BELOW_PX`, or null until known. A call with no layout, as in jsdom tests and server rendering, counts as tall. */
+function useShortCall(stack: RefObject<HTMLElement | null>, enabled: boolean): boolean | null {
+  const [short, setShort] = useState<boolean | null>(null);
+  useLayoutEffect(() => {
+    if (!enabled) return;
+    const call = stack.current?.closest<HTMLElement>("[data-part='call-frame']");
+    const read = () => setShort(Boolean(call && call.clientHeight > 0 && call.clientHeight < FOLD_BELOW_PX));
+    read();
+    if (!call || typeof ResizeObserver === "undefined") return;
+    // Fold in the same frame as the resize, so a notice never paints over a control that just moved.
+    const observer = new ResizeObserver(() => flushSync(read));
+    observer.observe(call);
+    return () => observer.disconnect();
+  }, [stack, enabled]);
+  return short;
 }
 
-interface Box {
-  readonly left: number;
-  readonly right: number;
-  readonly top: number;
-  readonly bottom: number;
-}
-
-function visibleBox(element: Element): Box {
-  const box = element.getBoundingClientRect();
-  const board = element.closest(".chalk-board")?.getBoundingClientRect();
-  if (!board) return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
-  return { left: Math.max(box.left, board.left), right: Math.min(box.right, board.right), top: Math.max(box.top, board.top), bottom: Math.min(box.bottom, board.bottom) };
-}
-
-function overlaps(a: Box, b: Box) {
-  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
 }

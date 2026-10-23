@@ -440,6 +440,8 @@ const noticeCalls = [
     { width: 568, height: 320 },
     { width: 844, height: 390 },
     { width: 390, height: 844 },
+    // The shortest call that still stacks notices, at a phone's width, where they wrap the most.
+    { width: 390, height: 620 },
   ].map(({ width, height }) => ({ name: `${width}x${height}`, width, height, embed: "" })),
   ...[390, 640, 844].map((width) => ({ name: `${width}x320 embed`, width, height: 844, embed: "320" })),
   { name: "300x320 embed in 600x760", width: 600, height: 760, embed: "300x320" },
@@ -654,6 +656,30 @@ it("keeps a join notice while it has no room, then lets it time out once it show
     await page.waitForTimeout(4_000);
     expect(await toast.count()).toBe(1);
     await expect.poll(() => toast.count(), { timeout: 3_000 }).toBe(0);
+  } finally {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+it("keeps both live shares reachable beside a short board whose faces can't float", async () => {
+  await page.setViewportSize({ width: 624, height: 320 });
+  try {
+    await open("board-shares-dark");
+    const board = page.locator('[data-stage-item="whiteboard"]');
+    if ((await board.getAttribute("data-stage-role")) !== "primary") await board.click();
+    await expect.poll(() => board.getAttribute("data-stage-role")).toBe("primary");
+    const stage = await page.getByTestId("stage").boundingBox();
+    expect([Math.round(stage?.width ?? 0), Math.round(stage?.height ?? 0)]).toEqual([608, 162]);
+    const shares = page.locator('[data-stage-item^="screen-share:"]');
+    await expect.poll(() => shares.count()).toBe(2);
+    for (const id of await shares.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-stage-item")))) {
+      const share = page.locator(`[data-stage-item="${id}"]`);
+      expect(await share.getAttribute("aria-hidden"), id ?? "").not.toBe("true");
+      await share.click();
+      await expect.poll(() => share.getAttribute("data-stage-role")).toBe("primary");
+      await board.click();
+      await expect.poll(() => board.getAttribute("data-stage-role")).toBe("primary");
+    }
   } finally {
     await page.setViewportSize({ width: 1440, height: 900 });
   }

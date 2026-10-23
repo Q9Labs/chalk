@@ -147,6 +147,11 @@ export const CALL_STATES: readonly CallState[] = [
     },
     { id: `board-share-${scheme}`, title: `Board beside a live share, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
     {
+      id: `board-shares-${scheme}`,
+      title: `Board beside two live shares, ${scheme}`,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [{ ...nora, sharing: true }, { ...malik, sharing: true }, akash], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
+    },
+    {
       id: `board-follow-${scheme}`,
       title: `Board following Nora, ${scheme}`,
       actions: [{ click: "Follow Nora" }],

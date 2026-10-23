@@ -46,6 +46,8 @@ export function useStageRefit(root: RefObject<HTMLElement | null>): void {
     };
   }, [root]);
 }
+// Folded notices count as an open layer, because the header's notice button is the only way to reach them.
+const ACTIVE_LAYERS = '[role="menu"],[role="dialog"],[data-part="toast"],[data-part="notice-button"],[data-chalk-drawer]';
 /** Chrome stays visible while a layer is open, on touch, and for keyboard focus. */
 export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [idle, setIdle] = useState(false);
@@ -58,7 +60,7 @@ export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: bool
       setIdle(false);
       clearTimeout(timer);
       timer = setTimeout(() => {
-        const layer = element.querySelector('[role="menu"],[role="dialog"],[data-part="toast"],[data-chalk-drawer]');
+        const layer = element.querySelector(ACTIVE_LAYERS);
         const focused = element.querySelector(".chalk-frame-header :focus-visible,.chalk-frame-dock :focus-visible");
         if (!layer && !focused) setIdle(true);
         else poke();
@@ -66,8 +68,7 @@ export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: bool
     };
     for (const event of ["pointermove", "pointerdown", "keydown", "focusin"]) element.addEventListener(event, poke);
     const observer = new MutationObserver((records) => {
-      const selector = '[role="menu"],[role="dialog"],[data-part="toast"],[data-chalk-drawer]';
-      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element && (node.matches(selector) || node.querySelector(selector))))) poke();
+      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element && (node.matches(ACTIVE_LAYERS) || node.querySelector(ACTIVE_LAYERS))))) poke();
     });
     observer.observe(element, { childList: true, subtree: true });
     poke();

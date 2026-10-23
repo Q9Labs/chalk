@@ -121,9 +121,9 @@ describe("a board on a phone", () => {
   // The zoom control fills the board's bottom-right 64px and rises 60px while the drawing tools are open; the board menu fills its top 56px.
   const shares = ["share-1", "share-2", "share-3"];
   const people = ["me", "nora", "malik", "akash", "sofia"];
-  for (const stage of [box, { width: 624, height: 162 }, { width: 358, height: 162 }, { width: 461, height: 246 }, { width: 608, height: 202 }]) {
-    for (const ids of [people.slice(0, 3), people, ["share-1", ...people.slice(0, 3)], [...shares, ...people]]) {
-      it(`keeps ${ids.length} tiles inside a ${stage.width}x${stage.height} stage and off the board's controls`, () => {
+  for (const stage of [box, { width: 624, height: 162 }, { width: 608, height: 162 }, { width: 358, height: 162 }, { width: 461, height: 246 }, { width: 608, height: 202 }]) {
+    for (const ids of [people.slice(0, 3), people, ["share-1", ...people.slice(0, 3)], ["share-1", "share-2", ...people.slice(0, 3)], [...shares, ...people]]) {
+      it(`keeps ${ids.length} tiles inside a ${stage.width}x${stage.height} stage, off the board's controls, and every share out of +N`, () => {
         const geometry = fitSpotlight(stage, "whiteboard", ids, { ...options, wideIds: ["whiteboard", ...shares] });
         const [board, ...tiles] = geometry.frames;
         if (!board) throw new Error("no board frame");
@@ -139,6 +139,8 @@ describe("a board on a phone", () => {
         }
         const shown = tiles.filter((tile) => tile.id !== MORE_TILE_ID).length;
         if (shown < ids.length) expect(tiles.map((tile) => tile.id)).toContain(MORE_TILE_ID);
+        // +N opens the people list, so a share left out of the stage could never be picked.
+        for (const share of ids.filter((id) => shares.includes(id))) expect(tiles.map((tile) => tile.id)).toContain(share);
       });
     }
   }
