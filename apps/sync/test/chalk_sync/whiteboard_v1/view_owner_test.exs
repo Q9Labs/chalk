@@ -4,8 +4,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.UUID
+  alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.ViewOwner
 
   setup do
