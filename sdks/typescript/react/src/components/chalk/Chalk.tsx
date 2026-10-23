@@ -61,6 +61,8 @@ export type ChalkProps = SpaceIntegration &
     readonly theme?: ChalkTheme;
     readonly shareUrl?: string;
     readonly onReportProblem?: import("../space-header/SpaceHeader").SpaceHeaderProps["onReportProblem"];
+    /** Hides new report actions and disables Send without discarding an open report. */
+    readonly reportUnavailableReason?: string;
     readonly onColorSchemeChange?: (colorScheme: ChalkColorScheme) => void;
     readonly pickChatFiles?: () => Promise<readonly ChatUploadFile[]>;
     readonly spaceName?: string;
@@ -84,12 +86,13 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   };
   const [reportOpen, setReportOpen] = useState(false);
   const reportTrigger = useRef<HTMLButtonElement>(null);
-  const openReport = props.onReportProblem
-    ? () => {
-        reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
-        setReportOpen(true);
-      }
-    : undefined;
+  const openReport =
+    props.onReportProblem && !props.reportUnavailableReason
+      ? () => {
+          reportTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+          setReportOpen(true);
+        }
+      : undefined;
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -121,7 +124,15 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
           {props.onReportProblem ? (
             <>
               <ShellStyles />
-              <CallDialog kind="report" open={reportOpen} onClose={() => setReportOpen(false)} onReportProblem={props.onReportProblem} diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`} returnFocus={reportTrigger} />
+              <CallDialog
+                kind="report"
+                open={reportOpen}
+                onClose={() => setReportOpen(false)}
+                onReportProblem={props.onReportProblem}
+                unavailableReason={props.reportUnavailableReason}
+                diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`}
+                returnFocus={reportTrigger}
+              />
             </>
           ) : null}
         </ChalkProvider>
@@ -290,6 +301,7 @@ function SpaceSurface(
       colorScheme={props.resolvedColorScheme}
       shareUrl={props.shareUrl}
       onReportProblem={props.onReportProblem}
+      reportUnavailableReason={props.reportUnavailableReason}
       onColorSchemeChange={props.onColorSchemeChange}
       spaceName={props.spaceName}
       inviteLink={props.inviteLink}

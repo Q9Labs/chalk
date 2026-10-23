@@ -9,7 +9,7 @@ import { getAccount } from "../../lib/account-api";
 import { canonicalSpaceInviteLink, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
-import { problemReporter, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
+import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
@@ -290,7 +290,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
         />
         {reportsAvailable && terminal.reportProblem ? (
           <ReportProblemDialog
-            unavailableReason={reportExpired ? "Your call access has expired, so this report cannot be sent. You can copy your text before closing." : undefined}
+            unavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
             diagnostics={`Connection: ${terminal.phase}\nLast error: ${terminal.errorCode ?? "none"}`}
             returnFocus={reportTrigger}
             open={reportOpen}

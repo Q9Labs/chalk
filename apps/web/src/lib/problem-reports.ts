@@ -5,6 +5,7 @@ import type { ChalkProps } from "@q9labsai/chalk-react";
 import { ReportCredentialsError } from "@q9labsai/chalk-react/utils";
 
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
+export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
 const credentialRejection = z.object({ error: z.object({ code: z.literal("reports.credentials_detected"), message: z.string().max(300) }) });
 const availability = z.object({ available: z.boolean() });
 

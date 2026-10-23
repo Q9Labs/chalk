@@ -37,6 +37,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const content = (
     <CallDetails
       {...props}
+      onReportProblem={props.reportUnavailableReason ? undefined : props.onReportProblem}
       onClose={() => setOpen(false)}
       sounds={sounds}
       onSoundsChange={setSounds}
@@ -111,7 +112,15 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
         ) : null}
         {onLayoutChange ? <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} /> : null}
       </div>
-      <CallDialog returnFocus={triggerRef} kind={dialog.kind} open={dialog.open} onClose={() => setDialog((current) => ({ ...current, open: false }))} onReportProblem={props.onReportProblem} diagnostics={props.diagnostics?.map(({ label, value }) => `${label}: ${value}`).join("\n") ?? ""} />
+      <CallDialog
+        returnFocus={triggerRef}
+        kind={dialog.kind}
+        open={dialog.open}
+        onClose={() => setDialog((current) => ({ ...current, open: false }))}
+        onReportProblem={props.onReportProblem}
+        unavailableReason={props.reportUnavailableReason}
+        diagnostics={props.diagnostics?.map(({ label, value }) => `${label}: ${value}`).join("\n") ?? ""}
+      />
     </header>
   );
 });

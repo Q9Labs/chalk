@@ -11,7 +11,7 @@ import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
 
-import { problemReporter, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
+import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL } from "../../lib/chalk-access";
 const ownerReloadIntent = z.object({ ownerJoinKey: z.uuid() });
 
@@ -142,5 +142,5 @@ function OwnerCallSurface({ client, owner, baseURL, ...props }: Omit<React.Compo
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(owner.reportCredentialExpiresAt());
   const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection }), [baseURL, tenantId, owner, connection]);
-  return <Chalk {...props} client={client} onReportProblem={reportsAvailable && !reportExpired ? onReportProblem : undefined} />;
+  return <Chalk {...props} client={client} onReportProblem={reportsAvailable ? onReportProblem : undefined} reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined} />;
 }
