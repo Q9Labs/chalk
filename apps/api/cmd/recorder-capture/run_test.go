@@ -41,3 +41,20 @@ func TestParseKeyFrameInterval(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCaptureSlots(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{{"", 1}, {"1", 1}, {"4", 4}, {"12", 12}} {
+		got, err := parseCaptureSlots(tc.value)
+		if err != nil || got != tc.want {
+			t.Fatalf("parse slots %q = %d, %v", tc.value, got, err)
+		}
+	}
+	for _, value := range []string{"0", "-1", "four", "1.5"} {
+		if _, err := parseCaptureSlots(value); err == nil {
+			t.Fatalf("accepted slots %q", value)
+		}
+	}
+}

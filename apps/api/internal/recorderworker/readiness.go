@@ -29,9 +29,8 @@ var (
 	ErrWorkerDraining         = errors.New("recorder worker is draining")
 )
 
-// WorkerReadiness describes this process's qualified serial processing slot.
-// It is capacity, not a claim-time idle counter: each daemon itself permits
-// only one active claim and the fleet controller accounts for active leases.
+// WorkerReadiness describes total process capacity, not a claim-time idle counter.
+// The daemon bounds claims and the fleet controller accounts for active leases.
 type WorkerReadiness struct {
 	AdmissionOpen bool
 	ReadyCapacity int
@@ -132,6 +131,7 @@ type ReadinessReporter struct {
 	refreshInterval time.Duration
 	requestTimeout  time.Duration
 	shutdownGrace   time.Duration
+	capacity        int
 	after           func(time.Duration) <-chan time.Time
 }
 
@@ -149,6 +149,11 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 	if r == nil || r.control == nil || r.after == nil || r.refreshInterval <= 0 || r.requestTimeout <= 0 || r.shutdownGrace < r.requestTimeout || daemon == nil {
 		return ErrInvalidWorkerReadiness
 	}
+	r.capacity = SerialWorkerReadyCapacity
+	if capacity, ok := daemon.(interface{ ReadyCapacity() int }); ok {
+		r.capacity = capacity.ReadyCapacity()
+	}
+
 	receipt, err := r.publish(ctx, true)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -270,7 +275,7 @@ func (r *ReadinessReporter) publish(ctx context.Context, ready bool) (WorkerRead
 	readiness := WorkerReadiness{Reason: ReadinessReasonDraining}
 	if ready {
 		readiness = WorkerReadiness{
-			AdmissionOpen: true, ReadyCapacity: SerialWorkerReadyCapacity, Reason: ReadinessReasonReady,
+			AdmissionOpen: true, ReadyCapacity: r.capacity, Reason: ReadinessReasonReady,
 		}
 	}
 	if sample, err := sampleProcessResources(); err == nil && sample.Valid(time.Now().UTC()) {
