@@ -1625,7 +1625,7 @@ it("keeps the dockable island available on an 820-point native tablet", async ()
     async (container) => {
       expect(container.querySelector('.chalk-board-island[data-place="bottom"]')).not.toBeNull();
       const island = container.querySelector('[role="toolbar"][aria-label="Drawing tools"]');
-      expect([...island!.querySelectorAll("button")].map((button) => button.getAttribute("aria-label"))).toEqual(["Pen", "Shapes", "Text", "Sticky note", "Eraser", "Colour: Ink", "Undo", "Redo"]);
+      expect([...island!.querySelectorAll("button")].map((button) => button.getAttribute("aria-label"))).toEqual(["Pen", "Shapes", "Text", "Sticky note", "Eraser", "Colour: Ink", "Undo", "Redo", "Select", "Hand", "Highlighter", "Laser pointer"]);
       await clickControl(container, "Board menu");
       const positions = container.querySelector('[aria-label="Tool island"]');
       expect([...(positions?.querySelectorAll('[role="menuitemradio"]') ?? [])].map((item) => item.textContent?.replace("✓", ""))).toEqual(["Top", "Bottom", "Left"]);
