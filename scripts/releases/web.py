@@ -58,7 +58,8 @@ def build(target, sha, output, source_root):
 def pages(project, route='', method='GET'):
     require(project, 'missing explicit Pages project')
     account = os.environ['CLOUDFLARE_ACCOUNT_ID']
-    url = f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
+    base_url = os.environ.get('CLOUDFLARE_API_BASE_URL', 'https://api.cloudflare.com/client/v4').rstrip('/')
+    url = f'{base_url}/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
