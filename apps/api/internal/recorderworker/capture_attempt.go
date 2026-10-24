@@ -400,14 +400,13 @@ type PionCaptureAttempt struct {
 	lifecycle   CaptureLifecyclePort
 	config      CaptureAttemptConfig
 
-	running      bool
-	closing      bool
-	closed       bool
-	closeDone    chan struct{}
-	closeErr     error
-	bootstrapped bool
-	ready        bool
-	readyEvent   CaptureReadyEvent
+	running    bool
+	closing    bool
+	closed     bool
+	closeDone  chan struct{}
+	closeErr   error
+	ready      bool
+	readyEvent CaptureReadyEvent
 }
 
 type captureCoordinator interface {
@@ -479,19 +478,6 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		return a.finishFailure(err, writer)
 	}
 
-	plan, err := a.initialPlan(runCtx)
-	if err != nil {
-		return finish(err, nil)
-	}
-	snapshot, err := a.coordinator.Bootstrap(runCtx, plan)
-	if err != nil {
-		return finish(err, nil)
-	}
-	a.mu.Lock()
-	a.bootstrapped = true
-	a.mu.Unlock()
-
-	writer := newCaptureBundleWriter(a)
 	if !a.authority.HardDeadline.IsZero() {
 		deadline := a.config.After(a.authority.HardDeadline.Sub(a.config.Now().UTC()))
 		go func() {
@@ -502,21 +488,39 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 		}()
 	}
+	plan, err := a.initialPlan(runCtx)
+	if err != nil {
+		return finish(err, nil)
+	}
+	planEvents := make(chan capturePlanEvent, 1)
+	var snapshot recordercapture.Snapshot
+	emptyBootstrap := len(plan.Tracks()) == 0
+	if emptyBootstrap {
+		// An empty bootstrap performs no provider I/O. Keep its origin before
+		// polling can advance no-RTP checkpoints.
+		snapshot, err = a.coordinator.Bootstrap(runCtx, plan)
+	} else {
+		go a.planLoop(runCtx, planEvents, plan.Revision())
+		snapshot, plan, err = a.bootstrapWhileWatchingPlans(runCtx, plan, planEvents)
+	}
+	if err != nil {
+		return finish(err, nil)
+	}
+	writer := newCaptureBundleWriter(a)
 	if plan.StopState() != captureplan.StopStateRunning {
 		return a.finishSuccess(runCtx, writer, plan)
 	}
-	planEvents := make(chan capturePlanEvent, 1)
 	readers := make(map[string]CaptureMediaTrack)
 	if len(snapshot.Tracks) == 0 {
-		// Empty initial plans have no blocking track bind to supervise. Establish
-		// the recording origin before polling can advance no-RTP checkpoints.
 		readyAt := a.config.Now().UTC()
 		if err := a.emitReadyAt(runCtx, true, readyAt); err != nil {
 			return finish(err, writer)
 		}
 		writer.setOrigin(readyAt)
 	}
-	go a.planLoop(runCtx, planEvents)
+	if emptyBootstrap {
+		go a.planLoop(runCtx, planEvents, plan.Revision())
+	}
 	if len(snapshot.Tracks) > 0 {
 		var stopped bool
 		readers, plan, stopped, err = a.bindTracksWhileWatchingPlans(runCtx, writer, plan, snapshot, planEvents, nil, nil)
@@ -607,6 +611,60 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 }
 
+// Bootstrap owns the coordinator until its goroutine has joined. Plan polling
+// can cancel blocked provider I/O without concurrently mutating the coordinator.
+func (a *PionCaptureAttempt) bootstrapWhileWatchingPlans(ctx context.Context, initial captureplan.Plan, events <-chan capturePlanEvent) (recordercapture.Snapshot, captureplan.Plan, error) {
+	bootstrapCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type result struct {
+		snapshot recordercapture.Snapshot
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		snapshot, err := a.coordinator.Bootstrap(bootstrapCtx, initial)
+		done <- result{snapshot, err}
+	}()
+	latest := initial
+	for {
+		select {
+		case completed := <-done:
+			if completed.err != nil {
+				return recordercapture.Snapshot{}, latest, completed.err
+			}
+			if latest.Revision() > initial.Revision() {
+				snapshot, err := a.coordinator.Reconcile(ctx, latest)
+				return snapshot, latest, err
+			}
+			return completed.snapshot, latest, nil
+		case event := <-events:
+			if event.checkpointNoRTP {
+				continue
+			}
+			if event.err == nil && event.plan.StopState() == captureplan.StopStateRunning {
+				latest = event.plan
+				continue
+			}
+			cancel()
+			completed := <-done
+			if completed.err != nil && !errors.Is(completed.err, context.Canceled) {
+				return recordercapture.Snapshot{}, latest, completed.err
+			}
+			if event.err != nil {
+				return recordercapture.Snapshot{}, latest, event.err
+			}
+			return completed.snapshot, event.plan, nil
+		case <-ctx.Done():
+			cancel()
+			completed := <-done
+			if completed.err != nil {
+				return recordercapture.Snapshot{}, latest, completed.err
+			}
+			return recordercapture.Snapshot{}, latest, ctx.Err()
+		}
+	}
+}
+
 func (a *PionCaptureAttempt) initialPlan(ctx context.Context) (captureplan.Plan, error) {
 	a.mu.Lock()
 	lease := a.lease
@@ -621,13 +679,7 @@ func (a *PionCaptureAttempt) initialPlan(ctx context.Context) (captureplan.Plan,
 	return a.plans.WaitForPlan(ctx, input)
 }
 
-func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capturePlanEvent) {
-	snapshot, err := a.coordinator.Snapshot()
-	if err != nil {
-		sendCapturePlanEvent(ctx, output, capturePlanEvent{err: err})
-		return
-	}
-	afterRevision := snapshot.PlanRevision
+func (a *PionCaptureAttempt) planLoop(ctx context.Context, output chan<- capturePlanEvent, afterRevision captureplane.PlanRevision) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return
@@ -1051,15 +1103,12 @@ func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBund
 	}
 	a.closing = true
 	a.closeDone = make(chan struct{})
-	bootstrapped := a.bootstrapped
 	a.mu.Unlock()
 
 	var result error
 	// Stop remote ingress before the bounded durable tail. A storage timeout must
 	// fail the attempt, but it must not consume the provider shutdown budget first.
-	if bootstrapped {
-		result = a.coordinator.Close(ctx, true)
-	}
+	result = a.coordinator.Close(ctx, true)
 	result = errors.Join(result, a.peer.Close())
 	if writer != nil {
 		endedAt := a.config.Now().UTC()

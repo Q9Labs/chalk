@@ -378,7 +378,8 @@ func TestCapturePlaneCloseTracksUsesForceAndPulledMids(t *testing.T) {
 
 func TestCapturePlaneCloseConnectionDetachesActiveTracksWithoutDeleteEndpoint(t *testing.T) {
 	client := &captureSequenceClient{responses: []captureHTTPResponse{
-		{status: http.StatusOK, body: `{"tracks":[{"mid":"7"},{"mid":"8"}]}`},
+		{status: http.StatusOK, body: `{"tracks":[{"mid":"9"}]}`},
+		{status: http.StatusOK, body: `{"tracks":[{"mid":"7"},{"mid":"8"},{"mid":"9"}]}`},
 	}}
 	adapter := newCaptureTestAdapter(t, client)
 	metadata := captureMetadata("close-connection-1")
@@ -393,14 +394,14 @@ func TestCapturePlaneCloseConnectionDetachesActiveTracksWithoutDeleteEndpoint(t 
 	if !result.Closed {
 		t.Fatal("close connection did not confirm detached state")
 	}
-	if len(client.requests) != 1 || client.requests[0].method != http.MethodPut {
+	if len(client.requests) != 2 || client.requests[0].method != http.MethodGet || client.requests[1].method != http.MethodPut {
 		t.Fatalf("requests = %#v, want one force close", client.requests)
 	}
 	var request captureCloseTracksRequest
-	if err := json.Unmarshal(client.requests[0].body, &request); err != nil {
+	if err := json.Unmarshal(client.requests[1].body, &request); err != nil {
 		t.Fatalf("decode close connection request: %v", err)
 	}
-	if !request.Force || len(request.Tracks) != 2 || request.Tracks[0].Mid != "7" || request.Tracks[1].Mid != "8" {
+	if !request.Force || len(request.Tracks) != 3 || request.Tracks[0].Mid != "7" || request.Tracks[1].Mid != "8" || request.Tracks[2].Mid != "9" {
 		t.Fatalf("close connection request = %#v", request)
 	}
 }
@@ -585,7 +586,7 @@ func TestCapturePullClassifiesMissingPublicationsAndPreservesFailures(t *testing
 		wantUnavailable int
 	}{
 		{name: "all publications not found", results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "not_found_track_error")}, wantGone: 2},
-		{name: "request failure with track-shaped body", status: http.StatusInternalServerError, results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "not_found_track_error")}, wantRetryable: true, wantClass: captureplane.ProviderFailureUnavailable, wantCode: "provider_http_status_500"},
+		{name: "request failure with track-shaped body", status: http.StatusInternalServerError, results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "not_found_track_error")}, wantRetryable: false, wantClass: captureplane.ProviderFailureUnavailable, wantCode: "provider_http_status_500"},
 		{name: "all subscriptions empty", results: []captureTrackResult{failed(requested[0], "empty_track_error"), failed(requested[1], "empty_track_error")}, wantRetryable: true, wantClass: captureplane.ProviderFailureNotFound, wantCode: "empty_track_error"},
 		{name: "mixed documented absence codes", results: []captureTrackResult{failed(requested[0], "not_found_track_error"), failed(requested[1], "empty_track_error")}, wantGone: 1, wantUnavailable: 1},
 		{name: "unknown code with absence description", results: []captureTrackResult{describedFailure(requested[0]), describedFailure(requested[1])}, wantClass: captureplane.ProviderFailureProtocol, wantCode: "provider_track_200"},

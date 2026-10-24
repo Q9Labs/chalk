@@ -63,6 +63,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 							}
 							return
 						}
+						timedOut.Store(r.URL.Path, true)
 						w.WriteHeader(http.StatusInternalServerError)
 						_, _ = fmt.Fprint(w, `{"errorCode":"internal_error","errorDescription":"fixture provider outage"}`)
 						return
@@ -160,7 +161,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if state != recordingpipeline.JobStateTerminalFailure || attempts != recordingpipeline.DefaultCaptureAttemptLimit || backoff < 4*time.Minute {
 						t.Fatalf("permanent outage did not exhaust a bounded multi-minute budget: state=%s attempts=%d backoff=%s", state, attempts, backoff)
 					}
-				} else if state != recordingpipeline.JobStateSucceeded || attempts != 4 || calls.Load() != 6 || timeoutFailures != 3 {
+				} else if state != recordingpipeline.JobStateSucceeded || attempts != 6 || calls.Load() != 6 || timeoutFailures != 3 {
 					t.Fatalf("transient outage lost the recording before provider recovery: state=%s attempts=%d", state, attempts)
 				}
 			})

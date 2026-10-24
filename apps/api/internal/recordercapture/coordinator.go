@@ -163,6 +163,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 		c.bootstrapped = true
 		return c.snapshotLocked(), nil
 	}
+	c.plan = plan
 	createNegotiation, err := c.createConnection(ctx, plan)
 	if err != nil {
 		return Snapshot{}, err
@@ -175,6 +176,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.validatePulledTracks(pull, pullMetadata, requested); err != nil {
 		return Snapshot{}, err
 	}
+	c.setActiveTracks(pull.Tracks)
 	if err := c.peer.RegisterTracks(pull.Tracks); err != nil {
 		return Snapshot{}, fmt.Errorf("register initial capture tracks: %w", err)
 	}
@@ -263,9 +265,6 @@ func (c *Coordinator) Close(ctx context.Context, force bool) error {
 	defer c.mu.Unlock()
 	if c.closed {
 		return nil
-	}
-	if !c.bootstrapped {
-		return ErrNotBootstrapped
 	}
 	if c.connection.ConnectionReference.IsZero() {
 		c.closed = true

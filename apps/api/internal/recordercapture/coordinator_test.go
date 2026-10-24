@@ -19,6 +19,30 @@ import (
 
 var coordinatorNow = time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 
+func TestCloseCleansConnectionAfterBootstrapPullFailure(t *testing.T) {
+	authority := newAttempt(t)
+	signaling := &bootstrapFailureSignaling{fakeSignaling: &fakeSignaling{}}
+	coordinator := newCoordinator(t, authority, signaling, &fakePeer{}, Config{})
+	if _, err := coordinator.Bootstrap(t.Context(), newPlan(t, authority, 1, []planTrack{{name: "one"}})); err == nil {
+		t.Fatal("bootstrap unexpectedly succeeded")
+	}
+	if err := coordinator.Close(t.Context(), true); err != nil {
+		t.Fatalf("close partial bootstrap: %v", err)
+	}
+	if countOperation(signaling.operations, captureplane.OperationCloseCaptureConnection) != 1 {
+		t.Fatal("allocated connection was not retired after uncertain pull")
+	}
+}
+
+type bootstrapFailureSignaling struct{ *fakeSignaling }
+
+func (s *bootstrapFailureSignaling) Execute(ctx context.Context, request capturesignaling.ExecuteRequest) (capturesignaling.Execution, error) {
+	if request.Command.Identity.Operation == captureplane.OperationPullCaptureTracks {
+		return capturesignaling.Execution{}, capturesignaling.ProviderFailureError{Failure: captureplane.ProviderError{Class: captureplane.ProviderFailureUnavailable, Code: "internal_error"}}
+	}
+	return s.fakeSignaling.Execute(ctx, request)
+}
+
 func TestNewAttemptAuthorityAndPlanFence(t *testing.T) {
 	attempt := newAttempt(t)
 	plan := newPlan(t, attempt, 1, []planTrack{{name: "one"}})
