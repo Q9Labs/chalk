@@ -3,7 +3,6 @@ package postgres
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -190,7 +189,7 @@ func TestRecordingParticipantMigrationPostgres(t *testing.T) {
 	}
 	for _, text := range []string{"reserved_episodes <= 20", "reserved_participants <= 200", "reserved_input_bitrate_bps >= 0"} {
 		if !strings.Contains(bounds, text) {
-			t.Fatal(fmt.Sprintf("missing %s in %s", text, bounds))
+			t.Fatalf("missing %s in %s", text, bounds)
 		}
 	}
 }
