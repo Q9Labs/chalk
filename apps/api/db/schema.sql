@@ -4688,4 +4688,3 @@ create table automatic_transcript_space_policy_backup (
     transcription_policy text not null,
     updated_at timestamptz not null
 );
-

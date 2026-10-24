@@ -3,7 +3,6 @@ package postgres_test
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -34,7 +33,7 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			id := func(value [16]byte) utilities.ID { return mustID(t, sqlcUUIDString(value)) }
+			id := utilities.IDFromBytes
 			tenantID := id(row.TenantID.Bytes)
 			var expiry time.Time
 			if err := tx.QueryRow(ctx, `select lease_expires_at from recording_jobs where id=$1`, fixture.jobID.Bytes()).Scan(&expiry); err != nil {
@@ -48,7 +47,13 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 			}
 			// Read the Space default for the new Episode; also prove a tenant can opt
 			// back into on-demand without changing the automatic ceiling.
-			execCleanupFixture(t, tx, `update spaces set transcription_policy=$2 where id=$1`, authority.SpaceID.Bytes(), mode)
+			var defaultMode string
+			if err := tx.QueryRow(ctx, `select transcription_policy from spaces where id=$1`, authority.SpaceID.Bytes()).Scan(&defaultMode); err != nil || defaultMode != "automatic" {
+				t.Fatalf("Space default = %s error=%v", defaultMode, err)
+			}
+			if mode == "on_demand" {
+				execCleanupFixture(t, tx, `update spaces set transcription_policy='on_demand' where id=$1`, authority.SpaceID.Bytes())
+			}
 			execCleanupFixture(t, tx, `update episodes e set config_snapshot=jsonb_set(e.config_snapshot,'{artifact_policy,transcription,mode}',to_jsonb(s.transcription_policy)) from spaces s where e.space_id=s.id and e.id=$1`, authority.EpisodeID.Bytes())
 			execCleanupFixture(t, tx, `update recordings set status='pending',completed_at=null where id=$1`, fixture.recordingID.Bytes())
 			execCleanupFixture(t, tx, `delete from recording_transcription_preparation_commits where transcription_job_id=$1`, fixture.jobID.Bytes())
@@ -148,10 +153,6 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 	}
 }
 
-func sqlcUUIDString(value [16]byte) string {
-	return fmt.Sprintf("%x-%x-%x-%x-%x", value[:4], value[4:6], value[6:8], value[8:10], value[10:])
-}
-
 func cleanupAutomaticTranscriptServiceFixture(t *testing.T, pool *pgxpool.Pool, tenantID utilities.ID) {
 	t.Helper()
 	ctx := context.Background()
@@ -163,13 +164,14 @@ func cleanupAutomaticTranscriptServiceFixture(t *testing.T, pool *pgxpool.Pool, 
 	defer tx.Rollback(ctx)
 	// These test facts include immutable capture authority and cyclic source
 	// leases. Disable triggers only in this cleanup transaction, on this gate DB.
-	for _, table := range []string{"recording_transcription_preparation_commits", "artifact_jobs", "transcript_chunks", "recording_transcription_source_chunks", "recording_transcription_sources", "transcriptions", "recording_render_object_allocations", "recording_render_inputs", "recording_data_keys", "recording_presentations", "recording_presentation_sources", "recording_presentation_baselines", "recording_job_attempt_authorities", "recording_jobs", "recording_pipelines", "recording_reservations", "recordings", "episodes", "spaces", "tenant_artifact_policies", "tenants"} {
+	tables := []string{"recording_transcription_preparation_commits", "artifact_jobs", "transcript_chunks", "recording_transcription_source_chunks", "recording_transcription_sources", "transcriptions", "recording_render_object_allocations", "recording_render_inputs", "recording_data_keys", "recording_presentations", "recording_presentation_sources", "recording_presentation_baselines", "recording_job_attempt_authorities", "recording_jobs", "recording_pipelines", "recording_reservations", "recordings", "episodes", "spaces", "tenant_artifact_policies", "tenants"}
+	for _, table := range tables {
 		if _, err := tx.Exec(ctx, "alter table "+table+" disable trigger all"); err != nil {
 			t.Error(err)
 			return
 		}
 	}
-	for _, table := range []string{"recording_transcription_preparation_commits", "artifact_jobs", "transcript_chunks", "recording_transcription_source_chunks", "recording_transcription_sources", "transcriptions", "recording_render_object_allocations", "recording_render_inputs", "recording_data_keys", "recording_presentations", "recording_presentation_sources", "recording_presentation_baselines", "recording_job_attempt_authorities", "recording_jobs", "recording_pipelines", "recording_reservations", "recordings", "episodes", "spaces", "tenant_artifact_policies", "tenants"} {
+	for _, table := range tables {
 		predicate := "tenant_id=$1"
 		if table == "tenants" {
 			predicate = "id=$1"

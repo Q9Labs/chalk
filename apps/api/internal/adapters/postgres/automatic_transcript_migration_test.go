@@ -43,7 +43,7 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 		exec(`insert into tenants(id,name) values($1,'migration proof')`, tenantID.Bytes())
 		exec(`insert into tenant_artifact_policies(tenant_id,transcription_ceiling,transcription_default_mode,provider_policy_version,source_window_seconds)
 		values($1,$2,$2,case when $2='disabled' then '' else 'custom-version' end,case when $2='disabled' then 0 else 12345 end)`, tenantID.Bytes(), mode)
-		exec(`insert into spaces(id,tenant_id,name,slug,media_plane,transcription_policy) values($1,$2,'migration proof',$1::text,'cf_sfu',$3)`, spaceID.Bytes(), tenantID.Bytes(), mode)
+		exec(`insert into spaces(id,tenant_id,name,slug,media_plane,transcription_policy) values($1,$2,'migration proof',$1::uuid::text,'cf_sfu',$3)`, spaceID.Bytes(), tenantID.Bytes(), mode)
 	}
 	// Whole-row comparisons also guard timestamps, retention, and recording policy.
 	exec(`create temporary table original_tenant_policies on commit drop as select * from tenant_artifact_policies`)
@@ -62,6 +62,10 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 	}
 	assertNone(`select count(*) from tenant_artifact_policies where transcription_ceiling <> 'automatic' or transcription_default_mode <> 'automatic' or source_window_seconds <= 0 or provider_policy_version <> 'chalk-automatic-v1'`)
 	assertNone(`select count(*) from spaces where transcription_policy <> 'automatic'`)
+	for _, table := range []string{"episodes", "recordings", "artifact_jobs"} {
+		original := map[string]string{"episodes": "original_episodes", "recordings": "original_recordings", "artifact_jobs": "original_jobs"}[table]
+		assertNone(`select count(*) from ((select * from ` + table + ` except select * from ` + original + `) union all (select * from ` + original + ` except select * from ` + table + `)) difference`)
+	}
 	exec(down)
 	for _, table := range []string{"tenant_artifact_policies", "spaces", "episodes", "recordings", "artifact_jobs"} {
 		original := map[string]string{"tenant_artifact_policies": "original_tenant_policies", "spaces": "original_spaces", "episodes": "original_episodes", "recordings": "original_recordings", "artifact_jobs": "original_jobs"}[table]
