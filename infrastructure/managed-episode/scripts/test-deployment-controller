@@ -328,6 +328,7 @@ set -euo pipefail
 printf 'systemctl %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
 if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE:-}" && "$*" == *"${FAKE_SYSTEMCTL_FAIL_ONCE}"* && ! -e "${FAKE_SYSTEMCTL_FAILURE_STATE:?}" ]]; then
   : >"${FAKE_SYSTEMCTL_FAILURE_STATE}"
+  printf 'Job for %s canceled.\n' "${*: -1}" >&2
   exit 1
 fi
 case "${1:-}" in
@@ -1146,6 +1147,15 @@ fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
 make_request candidate "${fixture_root}/candidate-request.json"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_SYSTEMCTL_FAIL_ONCE='stop chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/stop-failure.log" 2>&1; then
+  fail "runtime stop failure was accepted"
+fi
+grep -Fq 'FAIL runtime stop chalk-api-migrate.service exited 1' "${fixture_root}/stop-failure.log" || fail "runtime stop failure did not name its unit and exit status"
+grep -Fq 'Job for chalk-api-migrate.service canceled.' "${fixture_root}/stop-failure.log" || fail "first stop stderr was lost during fencing and rollback"
+grep -Fq '"rolled_back":true' "${fixture_root}/stop-failure.log" || fail "runtime stop failure did not restore the stable release"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer changed after runtime stop failure"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
 if FAKE_SYSTEMCTL_FAIL_ONCE='start chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/migration-failure.log" 2>&1; then
