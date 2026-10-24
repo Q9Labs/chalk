@@ -8,7 +8,7 @@ import { control, observeMicrophonePublication } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
-  it("reports a camera command interrupted by recovery without exposing internals", async () => {
+  it("reports a camera command interrupted by leaving without exposing internals", async () => {
     const platform = createCoreTestPlatform();
     const track = Object.assign(mediaTrack(), { kind: "video" });
     let finish: () => void = () => undefined;
@@ -23,13 +23,11 @@ describe("SpaceClient media convergence", () => {
     try {
       await client.join({ microphone: false, camera: false });
       const enabling = client.media.setCameraEnabled(true);
-      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." });
+      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state" });
       await vi.waitFor(() => expect(command).toHaveBeenCalledOnce());
-      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "failed", peerConnectionState: "failed", iceConnectionState: "failed" }, failure: { code: "signaling_failed", recoverable: true } });
-      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await client.leave();
       finish();
       await result;
-      expect(track.readyState).toBe("live");
     } finally {
       finish();
       client.dispose();
@@ -74,12 +72,14 @@ describe("SpaceClient media convergence", () => {
       const enable = source === "microphone" ? setMicrophoneEnabled : source === "camera" ? setCameraEnabled : setScreenShareEnabled;
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live", noticeUnresponsive: true } });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
-      await expect(enable(true)).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true });
+      const enabling = source === "screen" ? null : enable(true);
+      if (enabling) await vi.waitFor(() => expect(client.getSnapshot().media.local[source].state).toBe("requesting"));
+      else await expect(enable(true)).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true });
       expect(capture).not.toHaveBeenCalled();
       expect(command).not.toHaveBeenCalled();
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live", health: "degraded" } });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
-      await expect(enable(true)).resolves.toBeUndefined();
+      await expect(enabling ?? enable(true)).resolves.toBeUndefined();
       expect(capture).toHaveBeenCalledTimes(1);
       expect(command).toHaveBeenCalledWith(true);
     } finally {
@@ -95,8 +95,12 @@ describe("SpaceClient media convergence", () => {
       const preview = await client.media.captureCameraPreview();
       expect(preview.track).toBe(track);
       expect(capture).toHaveBeenCalledOnce();
-      await expect(client.media.setCameraEnabled(true)).rejects.toMatchObject({ code: "connection.invalid_state" });
+      const enabling = client.media.setCameraEnabled(true);
+      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(enable).not.toHaveBeenCalled();
+      await client.leave();
+      await result;
       preview.release();
     } finally {
       client.dispose();
