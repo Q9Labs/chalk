@@ -1,14 +1,21 @@
 package postgres
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 
 	"github.com/q9labs/chalk/apps/api/db/migrations"
 )
 
 func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
-	pool := accountTenantIntegrationPool(t)
+	pool := automaticTranscriptMigrationPool(t)
 	ctx := t.Context()
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -21,7 +28,7 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The gate has already applied Up. Reproduce the previous release in a
+	// The isolated database has already applied Up. Reproduce the previous release in a
 	// rolled-back transaction, using the real tables and their constraints.
 	exec(`drop table automatic_transcript_space_policy_backup, automatic_transcript_tenant_policy_backup`)
 	previous, err := migrations.Files.ReadFile("20261003120000_on_demand_transcript_defaults.sql")
@@ -77,4 +84,38 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 	}
 	assertNone(`select count(*) from information_schema.columns where table_schema='public' and ((table_name='tenant_artifact_policies' and column_name in ('transcription_ceiling','transcription_default_mode')) or (table_name='spaces' and column_name='transcription_policy')) and column_default <> '''on_demand''::text'`)
 	assertNone(`select count(*) from information_schema.columns where table_schema='public' and table_name='tenant_artifact_policies' and column_name='provider_policy_version' and column_default <> '''chalk-on-demand-v1''::text'`)
+}
+
+func automaticTranscriptMigrationPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	admin := accountTenantIntegrationPool(t)
+	ctx := t.Context()
+	name := pgx.Identifier{"chalk_transcript_migration_" + strings.ReplaceAll(accountTenantIntegrationID(t).String(), "-", "")}
+	if _, err := admin.Exec(ctx, "create database "+name.Sanitize()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := admin.Exec(ctx, "drop database "+name.Sanitize()+" with (force)"); err != nil {
+			t.Error(err)
+		}
+	})
+	config := admin.Config().Copy()
+	config.ConnConfig.Database = name[0]
+	database := stdlib.OpenDB(*config.ConnConfig)
+	defer database.Close()
+	provider, err := goose.NewProvider(goose.DialectPostgres, database, migrations.Files, goose.WithLogger(goose.NopLogger()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
 }
