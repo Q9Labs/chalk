@@ -11,7 +11,7 @@ export type LogoProps = {
   readonly variant?: LogoVariant;
 };
 
-const DEFAULT_COLOR = "#16181c";
+const DEFAULT_COLOR = "currentColor";
 const DEFAULT_HEIGHT = 32;
 const DEFAULT_VARIANT: LogoVariant = "wordmark";
 const WORDMARK_VIEW_BOX = "0 0 200 80";
