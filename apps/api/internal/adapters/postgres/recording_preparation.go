@@ -50,7 +50,7 @@ func (r RecordingPreparationRepository) Cancel(ctx context.Context, input record
 }
 
 func (r RecordingPreparationRepository) Get(ctx context.Context, tenantID, spaceID utilities.ID, now time.Time) (recordingpreparation.Preparation, error) {
-	return getRecordingPreparation(ctx, r.queries, tenantID, spaceID, now, r.admissionLimits.WithDefaults().RecordingCap)
+	return getRecordingPreparation(ctx, r.queries, tenantID, spaceID, now, r.admissionLimits.WithDefaults())
 }
 
 func (r RecordingPreparationRepository) mutate(ctx context.Context, input recordingpreparation.Input, now time.Time, change func(*sqlc.Queries) error) (recordingpreparation.Preparation, error) {
@@ -71,7 +71,7 @@ func (r RecordingPreparationRepository) mutate(ctx context.Context, input record
 		}
 		return recordingpreparation.Preparation{}, fmt.Errorf("update recording preparation: %w", err)
 	}
-	preparation, err := getRecordingPreparation(ctx, queries, input.TenantID, input.SpaceID, now, r.admissionLimits.WithDefaults().RecordingCap)
+	preparation, err := getRecordingPreparation(ctx, queries, input.TenantID, input.SpaceID, now, r.admissionLimits.WithDefaults())
 	if err != nil {
 		return recordingpreparation.Preparation{}, err
 	}
@@ -81,9 +81,9 @@ func (r RecordingPreparationRepository) mutate(ctx context.Context, input record
 	return preparation, nil
 }
 
-func getRecordingPreparation(ctx context.Context, queries recordingPreparationQuerier, tenantID, spaceID utilities.ID, now time.Time, recordingCap int) (recordingpreparation.Preparation, error) {
+func getRecordingPreparation(ctx context.Context, queries recordingPreparationQuerier, tenantID, spaceID utilities.ID, now time.Time, limits recordingpipeline.AdmissionLimits) (recordingpreparation.Preparation, error) {
 	row, err := queries.GetRecordingPreparation(ctx, sqlc.GetRecordingPreparationParams{
-		RecordingCap: int32(recordingCap), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), ObservedAt: timestamptzValue(now),
+		RecordingCap: int32(limits.RecordingCap), ParticipantCap: int32(limits.ParticipantCap), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), ObservedAt: timestamptzValue(now),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpreparation.Preparation{}, recordingpreparation.ErrNotFound

@@ -108,9 +108,18 @@ func TestRecordingPreparationCapsPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, cap := range []int32{0, 10, 20} {
-		row, err := q.GetRecordingPreparation(ctx, sqlc.GetRecordingPreparationParams{TenantID: uuid(tenant), SpaceID: uuid(space), ObservedAt: timestamptzValue(now), RecordingCap: cap})
+		row, err := q.GetRecordingPreparation(ctx, sqlc.GetRecordingPreparationParams{TenantID: uuid(tenant), SpaceID: uuid(space), ObservedAt: timestamptzValue(now), RecordingCap: cap, ParticipantCap: 200})
 		if err != nil || row.CapacityAvailable != (cap == 20) {
 			t.Fatalf("cap %d preparation=%+v, %v", cap, row, err)
+		}
+	}
+	// With room for more Recordings but no participant headroom, readiness must
+	// not promise a start that admission will reject (Sync reserves ten per start).
+	exec(`insert into recording_pool_health(role,admission_open,ready_capacity,reason,observed_at) values('capture',true,20,'ready',$1) on conflict(role) do update set admission_open=true,ready_capacity=20,reason='ready',observed_at=excluded.observed_at`, now)
+	for _, participantCap := range []int32{100, 109, 110} {
+		row, err := q.GetRecordingPreparation(ctx, sqlc.GetRecordingPreparationParams{TenantID: uuid(tenant), SpaceID: uuid(space), ObservedAt: timestamptzValue(now), RecordingCap: 20, ParticipantCap: participantCap})
+		if err != nil || row.CapacityAvailable != (participantCap == 110) || row.Ready != (participantCap == 110) {
+			t.Fatalf("participant cap %d preparation=%+v, %v", participantCap, row, err)
 		}
 	}
 	// Twenty distinct preparations exercise the SQL preparation-demand ceiling.

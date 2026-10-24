@@ -126,7 +126,11 @@ with eligible as (
       and preparation.starts_at > $3::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
 ), capacity as (
-    select greatest(0, coalesce(nullif($4::integer, 0), 10) - reserved_episodes)::integer as available, reserved_episodes as occupied
+    -- Sync reserves ten participants for each new Recording.
+    select greatest(0, least(
+        coalesce(nullif($4::integer, 0), 10) - reserved_episodes,
+        (coalesce(nullif($5::integer, 0), 100) - reserved_participants) / 10
+    ))::integer as available, reserved_episodes as occupied
     from recording_capacity where id = 1
 ), ready as (
     select coalesce(max(ready_capacity), 0)::integer as available from recording_pool_health
@@ -144,10 +148,11 @@ where preparation.tenant_id = $1 and preparation.space_id = $2
 `
 
 type GetRecordingPreparationParams struct {
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	SpaceID      pgtype.UUID        `json:"space_id"`
-	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
-	RecordingCap int32              `json:"recording_cap"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	SpaceID        pgtype.UUID        `json:"space_id"`
+	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	RecordingCap   int32              `json:"recording_cap"`
+	ParticipantCap int32              `json:"participant_cap"`
 }
 
 type GetRecordingPreparationRow struct {
@@ -171,6 +176,7 @@ func (q *Queries) GetRecordingPreparation(ctx context.Context, arg GetRecordingP
 		arg.SpaceID,
 		arg.ObservedAt,
 		arg.RecordingCap,
+		arg.ParticipantCap,
 	)
 	var i GetRecordingPreparationRow
 	err := row.Scan(
