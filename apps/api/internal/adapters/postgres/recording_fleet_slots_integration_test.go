@@ -31,9 +31,14 @@ func TestFleetRegisteredAtCreateFirstManagedClaimRequiresRow(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				execCleanupFixture(t, tx, `insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
+					select $2, tenant_id, space_id, episode_id, 'pending', storage_provider from recordings where id=$1`, fixture.recordingID.Bytes(), claimJobID.Bytes())
+				execCleanupFixture(t, tx, `insert into recording_reservations (id, tenant_id, space_id, episode_id, recording_id, idempotency_key, request_fingerprint, policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state, ends_at)
+					select gen_random_uuid(), tenant_id, space_id, episode_id, $2, 'create-first-claim:' || $2::uuid::text, request_fingerprint, policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state, ends_at from recording_reservations where recording_id=$1`, fixture.recordingID.Bytes(), claimJobID.Bytes())
+				execCleanupFixture(t, tx, `insert into recording_pipelines (recording_id, tenant_id, reservation_id, state)
+					select recording_id, tenant_id, id, 'reserved' from recording_reservations where recording_id=$1`, claimJobID.Bytes())
 				execCleanupFixture(t, tx, `insert into recording_jobs (id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, available_at, attempt_limit)
-					select $2, tenant_id, episode_id, recording_id, kind, 'create-first-claim:' || $2::uuid::text, 1, 'pending', now(), 3 from recording_jobs where id=$1`, fixture.jobID.Bytes(), claimJobID.Bytes())
-				execCleanupFixture(t, tx, `update recording_pipelines set state='reserved', capture_completed_at=null where recording_id=$1`, fixture.recordingID.Bytes())
+					select $2, tenant_id, episode_id, $2, kind, 'create-first-claim:' || $2::uuid::text, 1, 'pending', now(), 3 from recording_jobs where id=$1`, fixture.jobID.Bytes(), claimJobID.Bytes())
 			} else {
 				prepareFleetRenderClaim(t, tx, fixture.jobID)
 			}
@@ -299,19 +304,21 @@ func TestFleetAbandonCannotRevokeIssuedIdentityWithPostgres(t *testing.T) {
 func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 	tx, fixture := newAllocationCleanupFixture(t, true, "capture")
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	otherRecording, err := utilities.NewID()
-	if err != nil {
-		t.Fatal(err)
+	for range 9 {
+		otherRecording, err := utilities.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		execCleanupFixture(t, tx, `insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
+			select $2, tenant_id, space_id, episode_id, status, storage_provider from recordings where id=$1`, fixture.recordingID.Bytes(), otherRecording.Bytes())
+		execCleanupFixture(t, tx, `insert into recording_reservations (id, tenant_id, space_id, episode_id, recording_id, idempotency_key, request_fingerprint, policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state, ends_at)
+			select gen_random_uuid(), tenant_id, space_id, episode_id, $2, 'floor:' || $2::uuid::text, request_fingerprint, policy_snapshot_version, 1, max_duration_seconds, 1000, state, ends_at from recording_reservations where recording_id=$1`, fixture.recordingID.Bytes(), otherRecording.Bytes())
 	}
-	execCleanupFixture(t, tx, `insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
-		select $2, tenant_id, space_id, episode_id, status, storage_provider from recordings where id=$1`, fixture.recordingID.Bytes(), otherRecording.Bytes())
-	execCleanupFixture(t, tx, `insert into recording_reservations (id, tenant_id, space_id, episode_id, recording_id, idempotency_key, request_fingerprint, policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state, ends_at)
-		select gen_random_uuid(), tenant_id, space_id, episode_id, $2, 'floor:' || $2::uuid::text, request_fingerprint, policy_snapshot_version, 1, max_duration_seconds, 0, state, ends_at from recording_reservations where recording_id=$1`, fixture.recordingID.Bytes(), otherRecording.Bytes())
 	repository := postgres.NewRecordingFleetAuthorityRepository(sqlc.New(tx))
-	for _, tc := range []struct{ participants, bitrate, floor int }{{100, 32000000, 3}, {2, 64000000, 4}, {2, 0, 0}} {
-		execCleanupFixture(t, tx, `update recording_reservations set participant_count=$2, input_bitrate_bps=$3 where recording_id=$1`, fixture.recordingID.Bytes(), tc.participants-1, tc.bitrate)
+	for _, tc := range []struct{ participants, bitrate, floor int }{{100, 32000000, 3}, {10, 40000000, 3}, {10, 10000, 1}} {
+		execCleanupFixture(t, tx, `update recording_reservations set participant_count=$2, input_bitrate_bps=$3 where episode_id=(select episode_id from recordings where id=$1)`, fixture.recordingID.Bytes(), tc.participants/10, tc.bitrate/10)
 		demand, err := repository.GetDemand(t.Context(), fleetRecoveryConfig(workeridentity.RoleCapture).Key, time.Now())
-		if err != nil || demand.CaptureCapacity == nil || demand.CaptureCapacity.SlotDemand != 2 || demand.CaptureCapacity.PhysicalNodeFloor != tc.floor || demand.DesiredNodes != max(2, tc.floor) {
+		if err != nil || demand.CaptureCapacity == nil || demand.CaptureCapacity.SlotDemand != 10 || demand.CaptureCapacity.PhysicalNodeFloor != tc.floor || demand.DesiredNodes != max(10, tc.floor) {
 			t.Fatalf("participants=%d bitrate=%d: demand=%+v capacity=%+v error=%v", tc.participants, tc.bitrate, demand, demand.CaptureCapacity, err)
 		}
 		if err := demand.Validate(); err != nil {
@@ -321,7 +328,7 @@ func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 			continue
 		}
 		config := fleetRecoveryConfig(workeridentity.RoleCapture)
-		config.SlotsPerNode, config.MaxNodes = 4, 10
+		config.SlotsPerNode, config.MaxNodes = 8, 10
 		service, err := recorderfleetauthority.NewService(config.Key.Environment, repository, &fleetRecoveryIssuer{})
 		if err != nil {
 			t.Fatal(err)
@@ -348,7 +355,7 @@ func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 				t.Fatal(err)
 			}
 			ready := time.Now()
-			if _, err := service.RecordWorkerObservation(t.Context(), recorderfleetauthority.WorkerObservation{Identity: workeridentity.Identity{WorkerID: workerID, Role: config.Key.Role}, Ready: true, AdmissionOpen: true, ReadyCapacity: 4, ObservedAt: ready}); err != nil {
+			if _, err := service.RecordWorkerObservation(t.Context(), recorderfleetauthority.WorkerObservation{Identity: workeridentity.Identity{WorkerID: workerID, Role: config.Key.Role}, Ready: true, AdmissionOpen: true, ReadyCapacity: 8, ObservedAt: ready}); err != nil {
 				t.Fatal(err)
 			}
 			journal.state.Nodes[node.ProviderID] = recorderfleet.ManagedNode{ProviderID: node.ProviderID, Name: node.Name, BootGeneration: generation, Identity: &identity, Phase: recorderfleet.PhaseReady, LastReadyAt: &ready}
@@ -368,7 +375,7 @@ func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 			t.Fatal(err)
 		}
 		if result, err := r.Reconcile(t.Context()); err != nil || result.Action != recorderfleet.ActionCreatePlanned {
-			t.Fatalf("two Recordings / 100 participants / 32 Mbps must retain three nodes: %+v %v", result, err)
+			t.Fatalf("ten Recordings / 100 participants / 32 Mbps / eight slots must retain three nodes: %+v %v", result, err)
 		}
 	}
 }
