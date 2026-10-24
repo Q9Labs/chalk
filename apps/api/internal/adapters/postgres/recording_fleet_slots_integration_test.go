@@ -317,6 +317,59 @@ func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 		if err := demand.Validate(); err != nil {
 			t.Fatal(err)
 		}
+		if tc.participants != 100 {
+			continue
+		}
+		config := fleetRecoveryConfig(workeridentity.RoleCapture)
+		config.SlotsPerNode, config.MaxNodes = 4, 10
+		service, err := recorderfleetauthority.NewService(config.Key.Environment, repository, &fleetRecoveryIssuer{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		provider := &fleetRecoveryProvider{nodes: map[string]recorderfleet.Node{}}
+		journal := &fleetRecoveryJournal{state: recorderfleet.NewJournal()}
+		journal.state.NextBootGeneration = 3
+		for generation := uint64(1); generation <= 2; generation++ {
+			node := fleetRecoveryNode(config, fmt.Sprint(generation))
+			node.BootGeneration = generation
+			node.Name = recorderfleet.NodeName(config.Key, config.Release.ReleaseID, generation)
+			node.Tags = recorderfleet.RequiredTags(config.Key, config.OwnerTag, config.Release, generation)
+			provider.nodes[node.ProviderID] = node
+			workerID, err := utilities.NewID()
+			if err != nil {
+				t.Fatal(err)
+			}
+			identity := recorderfleet.NodeIdentity{ProviderID: node.ProviderID, WorkerID: workerID.String(), Role: config.Key.Role, BootGeneration: generation}
+			request := recorderfleet.BootstrapRequest{Key: config.Key, ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region, ReleaseID: config.Release.ReleaseID, ImageDigest: config.Release.ImageDigest, BootGeneration: generation, InventoryDigest: recorderfleet.InventoryDigest(node)}
+			if _, err := repository.ReserveBootstrap(t.Context(), request); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repository.ActivateBootstrap(t.Context(), request, identity); err != nil {
+				t.Fatal(err)
+			}
+			ready := time.Now()
+			if _, err := service.RecordWorkerObservation(t.Context(), recorderfleetauthority.WorkerObservation{Identity: workeridentity.Identity{WorkerID: workerID, Role: config.Key.Role}, Ready: true, AdmissionOpen: true, ReadyCapacity: 4, ObservedAt: ready}); err != nil {
+				t.Fatal(err)
+			}
+			journal.state.Nodes[node.ProviderID] = recorderfleet.ManagedNode{ProviderID: node.ProviderID, Name: node.Name, BootGeneration: generation, Identity: &identity, Phase: recorderfleet.PhaseReady, LastReadyAt: &ready}
+		}
+		server := httptest.NewTLSServer(httpapi.NewRecorderFleetControllerRouter(service, fleetRecoveryVerifier{}, config.Key.Environment, nil))
+		defer server.Close()
+		control, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: config.Key})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wire, err := control.GetDemand(t.Context(), config.Key)
+		if err != nil || wire.CaptureCapacity == nil || *wire.CaptureCapacity != *demand.CaptureCapacity {
+			t.Fatalf("capacity lost across HTTP: %+v %v", wire, err)
+		}
+		r, err := recorderfleet.NewReconciler(config, control, journal, provider, control, control)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result, err := r.Reconcile(t.Context()); err != nil || result.Action != recorderfleet.ActionCreatePlanned {
+			t.Fatalf("two Recordings / 100 participants / 32 Mbps must retain three nodes: %+v %v", result, err)
+		}
 	}
 }
 
