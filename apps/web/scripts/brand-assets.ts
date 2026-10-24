@@ -88,11 +88,8 @@ function ogSvg(channel: Channel): string {
   const height = 630;
   const background = channel === "production" ? `<rect width="${width}" height="${height}" fill="${OG_BACKGROUND}"/>` : backdrop(channel, width, height, 640);
   const badge =
-    channel === "nightly"
-      ? `<rect x="294" y="86" width="128" height="40" rx="20" fill="none" stroke="${OG_TEXT}" stroke-opacity="0.4"/><text x="358" y="113" text-anchor="middle" font-family="Figtree" font-weight="600" font-size="20" letter-spacing="3" fill="${OG_TEXT}">NIGHTLY</text>`
-      : "";
-  const mark = (x: number, y: number, side: number, opacity: number) =>
-    `<svg x="${x}" y="${y}" width="${side}" height="${side}" viewBox="0 0 ${MARK.viewBox} ${MARK.viewBox}" opacity="${opacity}">${markSvgBody(ICON_COLORS.mark)}</svg>`;
+    channel === "nightly" ? `<rect x="294" y="86" width="128" height="40" rx="20" fill="none" stroke="${OG_TEXT}" stroke-opacity="0.4"/><text x="358" y="113" text-anchor="middle" font-family="Figtree" font-weight="600" font-size="20" letter-spacing="3" fill="${OG_TEXT}">NIGHTLY</text>` : "";
+  const mark = (x: number, y: number, side: number, opacity: number) => `<svg x="${x}" y="${y}" width="${side}" height="${side}" viewBox="0 0 ${MARK.viewBox} ${MARK.viewBox}" opacity="${opacity}">${markSvgBody(ICON_COLORS.mark)}</svg>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
 ${background}
 ${mark(780, 30, 600, 0.07)}
