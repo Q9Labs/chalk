@@ -90,7 +90,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     1008 => %{
       "code" => 1008,
       "connection" => "closed",
-      "reasons" => ["invalid token", "policy violation"]
+      "reasons" => ["invalid token", "policy violation", "entry timeout"]
     },
     1009 => %{
       "code" => 1009,
@@ -109,7 +109,14 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       "field" => "protocol",
       "value" => 1,
       "transport" => "websocket-json-text",
-      "route" => "/v1/sync"
+      "route" => "/v1/sync",
+      "entryGeneration" => %{
+        "queryParameter" => "entry_generation",
+        "newEntry" => "new",
+        "resume" => "previous welcome entry_generation",
+        "confirmation" => "monotonic compare-and-set",
+        "scope" => "participant"
+      }
     },
     "directions" => %{
       "clientToServer" => "client-to-server",
@@ -129,6 +136,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       %{
         "id" => "live",
         "accepts" => [
+          "entered",
           "command",
           "live_target",
           "directed_request",
@@ -498,7 +506,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       %{
         "code" => 1008,
         "connection" => "closed",
-        "reasons" => ["invalid token", "policy violation"]
+        "reasons" => ["invalid token", "policy violation", "entry timeout"]
       },
       %{
         "code" => 1009,
@@ -648,6 +656,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "chat_read_set" -> decode_chat_read_set(frame)
         "delivery_ack" -> decode_delivery_ack(frame)
         "recovery_ack" -> decode_recovery_ack(frame)
+        "entered" -> if(exact_keys?(frame, ["type"]), do: {:ok, :entered}, else: {:error,
+            :invalid_entered})
         "ping" -> if(exact_keys?(frame, ["type"]), do: {:ok, :ping}, else: {:error,
             :invalid_ping})
         nil -> {:error, :missing_type}
@@ -943,6 +953,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       do: correlation_exact_keys?(frame, ["type", "code", "detail"]) and
       code in @protocol_error_codes and bounded_string?(detail, 0,
       @limits["protocolErrorDetailBytes"])
+  def valid_server_frame?(%{"type" => "entered_ack"} = frame), do: correlation_exact_keys?(frame,
+      ["type"])
   def valid_server_frame?(%{"type" => "pong"} = frame), do: correlation_exact_keys?(frame,
       ["type"])
   def valid_server_frame?(_frame), do: false
@@ -968,10 +980,20 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     base = ["type", "protocol", "participant_id", "participant_generation", "recovery_id",
         "head", "mode"]
     base = if Map.has_key?(frame, "extensions"), do: base ++ ["extensions"], else: base
+    base = if Map.has_key?(frame, "entry_confirmation"), do: base ++ ["entry_confirmation"],
+        else: base
+    base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
+        else: base
+    valid_generation = not Map.has_key?(frame, "entry_generation") or
+        (valid_positive_integer?(frame["entry_generation"]) and
+        frame["entry_generation"] <= 9_007_199_254_740_991)
     valid_extensions = not Map.has_key?(frame, "extensions") or
         valid_collaborations_welcome_extensions?(frame["extensions"])
+    valid_entry = not Map.has_key?(frame, "entry_confirmation") or
+        frame["entry_confirmation"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
-        valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions
+        valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
+        valid_generation
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,

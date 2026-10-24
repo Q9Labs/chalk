@@ -19,6 +19,7 @@ affected_components_arg=""
 output=""
 allow_dirty=false
 reuse_envelope=false
+enforce_entry_ownership=false
 architectures_json='["linux/amd64","linux/arm64"]'
 architectures_set=false
 source_revision="$(git -C "${repo_root}" rev-parse HEAD)"
@@ -88,6 +89,10 @@ while (($# > 0)); do
       release_id_override="${2:-}"
       shift 2
       ;;
+    --enforce-entry-ownership)
+      enforce_entry_ownership=true
+      shift
+      ;;
     --reuse-envelope)
       reuse_envelope=true
       shift
@@ -145,7 +150,13 @@ validate_stable_manifest() {
         (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64", "linux/arm64"]) and
         (.images | type == "object" and (["api", "sync", "redis", "cloudflared"] - keys | length == 0)) and
         (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
-        (.protocol_compatibility == {sync:1}) and
+        (.protocol_compatibility.sync == 1 and
+          ((.protocol_compatibility | keys) - ["sync","entry_writer","entry_migrator","entry_enforcement"] | length == 0) and
+          ((.protocol_compatibility.entry_writer // 1) == 1) and
+          ((.protocol_compatibility.entry_migrator // 1) == 1) and
+          ((.protocol_compatibility.entry_enforcement // false) | type == "boolean") and
+          (.protocol_compatibility.entry_enforcement != true or
+            (.protocol_compatibility.entry_writer == 1 and .protocol_compatibility.entry_migrator == 1))) and
         (.runtime_artifacts | type == "object" and length > 0)
       ' "${file}" >/dev/null || fail "stable manifest v1 contract is invalid"
       ;;
@@ -161,7 +172,13 @@ validate_stable_manifest() {
         (.affected_components | type == "array" and unique == . and (. == [] or length == 1 or . == ["api", "sync"]) and all(.[]; . == "api" or . == "sync")) and
         (.component_releases | type == "object" and (keys | sort) == ["api", "sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id", "source_revision"] and (.release_id | type == "string" and length > 0) and (.source_revision | test("^[0-9a-f]{40}$")))) and
         (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
-        (.protocol_compatibility == {sync:1}) and
+        (.protocol_compatibility.sync == 1 and
+          ((.protocol_compatibility | keys) - ["sync","entry_writer","entry_migrator","entry_enforcement"] | length == 0) and
+          ((.protocol_compatibility.entry_writer // 1) == 1) and
+          ((.protocol_compatibility.entry_migrator // 1) == 1) and
+          ((.protocol_compatibility.entry_enforcement // false) | type == "boolean") and
+          (.protocol_compatibility.entry_enforcement != true or
+            (.protocol_compatibility.entry_writer == 1 and .protocol_compatibility.entry_migrator == 1))) and
         (.runtime_artifacts | type == "object" and length > 0)
       ' "${file}" >/dev/null || fail "stable manifest v2 contract is invalid"
       ;;
@@ -341,6 +358,21 @@ if [[ -n "${stable_manifest}" ]]; then
   if [[ "$reuse_envelope" == true ]]; then
     database_compatibility_json="$(jq -c '.database_compatibility' "$stable_manifest")"
   fi
+fi
+
+if [[ "$reuse_envelope" != true ]]; then
+  if [[ ",$affected_components_arg," == *,sync,* ]]; then
+    protocol_compatibility_json="$(jq -c '.entry_writer=1' <<<"$protocol_compatibility_json")"
+  fi
+  if [[ ",$affected_components_arg," == *,api,* ]]; then
+    protocol_compatibility_json="$(jq -c '.entry_migrator=1' <<<"$protocol_compatibility_json")"
+  fi
+fi
+if [[ "$enforce_entry_ownership" == true ]]; then
+  [[ -n "$stable_manifest" ]] || fail "entry enforcement requires an expanded rollback baseline"
+  jq -e '.protocol_compatibility.entry_writer == 1 and .protocol_compatibility.entry_migrator == 1' "$stable_manifest" >/dev/null || fail "entry enforcement requires an expanded rollback baseline"
+  jq -e '.entry_writer == 1 and .entry_migrator == 1' <<<"$protocol_compatibility_json" >/dev/null || fail "entry enforcement requires expanded candidate writers"
+  protocol_compatibility_json="$(jq -c '.entry_enforcement=true' <<<"$protocol_compatibility_json")"
 fi
 
 mkdir -p "$(dirname "${output}")"

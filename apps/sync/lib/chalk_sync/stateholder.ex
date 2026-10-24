@@ -30,6 +30,15 @@ defmodule ChalkSync.Stateholder do
               {:ok, [map()]} | {:error, atom()} | {:retryable, atom()}
   @callback apply_lifecycle_intent(EpisodeKey.t(), String.t()) ::
               {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback confirm_admission(Identity.t()) ::
+              {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}
+
+  @callback admit_entry(
+              Identity.t(),
+              :new | :legacy | pos_integer() | {:socket, :new | :legacy | pos_integer()}
+            ) ::
+              {:ok, Identity.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback prepare_entry_leave(EpisodeKey.t(), String.t()) :: :ready | :pending | :superseded
   @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
               :ok | {:retryable, atom()}
   @callback pending_lifecycle_intents(pos_integer()) ::
@@ -134,6 +143,30 @@ defmodule ChalkSync.Stateholder do
 
     result
   end
+
+  def confirm_admission(%Identity{} = identity) do
+    started_at = System.monotonic_time(:microsecond)
+    result = impl().confirm_admission(identity)
+
+    Telemetry.execute(
+      [:lifecycle, :decision],
+      %{duration_us: elapsed_us(started_at)},
+      %{outcome: lifecycle_outcome(result)}
+    )
+
+    result
+  end
+
+  def admit_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
+  def admit_entry(%Identity{} = identity, requested), do: impl().admit_entry(identity, requested)
+
+  def admit_socket_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
+
+  def admit_socket_entry(%Identity{} = identity, requested),
+    do: impl().admit_entry(identity, {:socket, requested})
+
+  def prepare_entry_leave(%EpisodeKey{} = episode, operation_id),
+    do: impl().prepare_entry_leave(episode, operation_id)
 
   @spec record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
           :ok | {:retryable, atom()}

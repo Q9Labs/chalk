@@ -13,6 +13,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
   alias ChalkSync.Stateholder.Postgres.FaultHooks
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
   alias ChalkSync.Stateholder.Postgres.Scope
@@ -44,6 +45,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
           )
 
         with :ok <- Authority.validate_operation_actor(identity, operation, policy, participant),
+             :ok <- JoinSeats.validate_leave(connection, identity, operation),
              {:ok, state} <- Control.validate_fold(identity.episode, control, policy),
              {:ok, context} <- prepare_operation(connection, identity, operation, policy, state),
              :ok <- ensure_operation_capacity(connection, identity.episode) do
@@ -562,7 +564,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
       request_key: operation.request_key,
       request_fingerprint: operation.fingerprint,
       name: operation.name,
-      payload: persisted_operation_payload(operation, context),
+      payload: persisted_operation_payload(identity, operation, context),
       status: :pending,
       attempt_count: 0,
       actor_kind: if(identity, do: "participant", else: operation.payload["actorKind"]),
@@ -585,7 +587,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   defp optional_field(nil, _field), do: nil
   defp optional_field(value, field), do: Map.get(value, field)
 
-  defp persisted_operation_payload(operation, context) do
+  defp persisted_operation_payload(identity, %{name: :participant_leave} = operation, _context),
+    do: Map.put(operation.payload, "entryGeneration", identity.entry_generation || 0)
+
+  defp persisted_operation_payload(_identity, operation, context) do
     case context[:recording_reservation] do
       reservation when is_map(reservation) ->
         Map.put(operation.payload, "recording_reservation", reservation)
@@ -719,7 +724,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   defp mark_operation_participant_leaving(connection, episode, external) do
     params =
       Scope.episode(episode) ++
-        [Scope.uuid(external.target_participant_id), external.target_participant_generation]
+        [
+          Scope.uuid(external.target_participant_id),
+          external.target_participant_generation,
+          external.name == :participant_leave,
+          external.payload["entryGeneration"]
+        ]
 
     case Postgrex.query!(connection, SQL.mark_participant_leaving(), params).rows do
       [[_id]] -> :ok

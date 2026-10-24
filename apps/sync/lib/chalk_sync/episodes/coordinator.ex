@@ -107,7 +107,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   end
 
   @spec pop(pid(), pid()) ::
-          {:ok, binary(), false | {:terminal, pos_integer(), String.t()}}
+          {:ok, binary(), false | :recovery_complete | {:terminal, pos_integer(), String.t()}}
           | :empty
           | {:error, atom()}
   def pop(coordinator, socket \\ self()) do
@@ -304,9 +304,6 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   def handle_call({:advance_recovery, socket}, _from, state) do
     case Map.fetch(state.sockets, socket) do
-      {:ok, %{mode: :recovering, recovery: %{queued_kind: :complete}} = subscriber} ->
-        finish_socket_recovery(state, socket, subscriber)
-
       {:ok, %{mode: :recovering} = subscriber} ->
         case enqueue_next_recovery_frame(socket, subscriber) do
           {:ok, next_subscriber} ->
@@ -915,6 +912,18 @@ defmodule ChalkSync.Episodes.Coordinator do
     {:reply, {:ok, entry.encoded, true}, remove_socket(state, socket)}
   end
 
+  defp popped_recovery_entry(
+         state,
+         socket,
+         %{recovery: %{queued_kind: :complete}} = subscriber,
+         entry
+       ) do
+    case finish_socket_recovery(state, socket, subscriber) do
+      {:reply, :ok, next} -> {:reply, {:ok, entry.encoded, :recovery_complete}, next}
+      error -> error
+    end
+  end
+
   defp popped_recovery_entry(state, socket, subscriber, entry) do
     if is_nil(subscriber.recovery.expected_ack) do
       send(socket, {:sync_recovery_advance, self()})
@@ -959,7 +968,6 @@ defmodule ChalkSync.Episodes.Coordinator do
             sockets: Map.put(state.sockets, socket, live)
         }
 
-        send(socket, {:sync_recovery_live, self()})
         send(self(), :repair_now)
         {:reply, :ok, next}
 

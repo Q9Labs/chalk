@@ -44,7 +44,18 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["sync"],
-      "properties": { "sync": { "const": 1 } }
+      "properties": {
+        "sync": { "const": 1 },
+        "entry_writer": { "const": 1 },
+        "entry_migrator": { "const": 1 },
+        "entry_enforcement": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["entry_enforcement"], "properties": { "entry_enforcement": { "const": true } } },
+          "then": { "required": ["entry_writer", "entry_migrator"] }
+        }
+      ]
     },
     "runtime_artifacts": {
       "type": "object",

@@ -11,6 +11,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Authority, as: AuthoritySQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: SQL
@@ -78,16 +79,36 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
     :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
-  def transaction(connection, episode, lifecycle_intent_id) do
+  def transaction(connection, episode, lifecycle_intent_id, identity \\ nil) do
     Transaction.configure(connection)
     control = lock_lifecycle_control(connection, episode)
     intent = lock_intent(connection, episode, lifecycle_intent_id)
+    prepared = JoinSeats.prepare(connection, episode, intent, identity)
 
-    case intent.status do
-      "applied" -> lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
-      "superseded" -> superseded_lifecycle_decision(lifecycle_intent_id, intent)
-      "pending" -> apply_pending_lifecycle(connection, episode, control, intent)
-    end
+    intent =
+      if prepared in [:expired, :entry_expired],
+        do: lock_intent(connection, episode, lifecycle_intent_id),
+        else: intent
+
+    decision =
+      case {intent.status, prepared} do
+        {"applied", _prepared} ->
+          lifecycle_decision(connection, episode, lifecycle_intent_id, intent)
+
+        {"superseded", :entry_expired} ->
+          %{superseded_lifecycle_decision(lifecycle_intent_id, intent) | reason: :entry_expired}
+
+        {"superseded", _prepared} ->
+          superseded_lifecycle_decision(lifecycle_intent_id, intent)
+
+        {"pending", _prepared} ->
+          apply_pending_lifecycle(connection, episode, control, intent)
+      end
+
+    if decision.result in [:applied, :already_applied],
+      do: JoinSeats.claim_entry(connection, identity)
+
+    decision
   end
 
   defp lock_lifecycle_control(connection, episode) do
@@ -642,7 +663,20 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   defp lifecycle_terminal_reason("participant_generation_replaced"),
     do: :participant_generation_replaced
 
-  def resolve_uncertain(episode, lifecycle_intent_id) do
+  def resolve_uncertain(episode, lifecycle_intent_id, %{entry_generation: generation} = identity)
+      when is_integer(generation) and generation > 0 do
+    connection = Database.connection(episode, 1)
+    params = Scope.participant(identity) ++ [identity.participant_generation, generation]
+
+    case Postgrex.query(connection, SQL.read_entry_confirmation(), params, timeout: 1_000) do
+      {:ok, %{rows: [[true]]}} -> resolve_uncertain(episode, lifecycle_intent_id, nil)
+      _ -> {:retryable, :decision_unavailable}
+    end
+  catch
+    :exit, _reason -> {:retryable, :decision_unavailable}
+  end
+
+  def resolve_uncertain(episode, lifecycle_intent_id, _identity) do
     connection = Database.connection(episode, 1)
     params = Scope.lifecycle_intent(episode, lifecycle_intent_id)
 

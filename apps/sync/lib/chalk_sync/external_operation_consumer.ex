@@ -152,13 +152,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
     result =
-      dispatch_with_context(
-        episode,
-        operation,
-        media_plane,
-        recording_plane,
-        adapter_timeout_ms
-      )
+      dispatch_with_context(episode, operation, media_plane, recording_plane, adapter_timeout_ms)
 
     case result do
       {:confirmed, authority} ->
@@ -175,6 +169,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
           else: :pending
     end
   end
+
+  defp prepare_entry_leave(episode, %{name: :participant_leave} = operation),
+    do: Stateholder.prepare_entry_leave(episode, operation.external_operation_id)
+
+  defp prepare_entry_leave(_episode, _operation), do: :ready
 
   defp poll(state) do
     case state.claim_operations.(state.page_size) do
@@ -486,6 +485,19 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp dispatch_with_context(episode, operation, media_plane, recording_plane, timeout_ms) do
+    case prepare_entry_leave(episode, operation) do
+      :ready ->
+        dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms)
+
+      :pending ->
+        :pending
+
+      :superseded ->
+        {:terminal_failure, :participant_inactive}
+    end
+  end
+
+  defp dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms) do
     if provider_bridge_adapter?(media_plane) or provider_bridge_adapter?(recording_plane) do
       Observability.with_worker_span(
         persisted_provider_context(operation),

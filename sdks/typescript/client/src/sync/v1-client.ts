@@ -76,6 +76,9 @@ export class V1SyncClient implements V1CollaborationClient {
   #snapshotRevision: number | null = null;
   readonly #controlEvents = new Map<number, string>();
   readonly #liveTargets: V1LiveTargetCoordinator;
+  #entryPending = false;
+  // Older Sync rejects new hello fields, so entry confirmation is requested on the URL and granted in welcome.
+  #entryNegotiated = false;
   readonly #requests = new Map<string, RequestDeferred>();
   readonly #mediaEventEvidence = new Map<number, string>();
   readonly #presenceEventEvidence = new Map<number, string>();
@@ -86,6 +89,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #presence: V1Projection<V1Presence> | null = null;
   #participantId: string | null = null;
   #participantGeneration: number | null = null;
+  #entryGeneration: number | null = null;
   #recovery: Recovery | null = null;
   #snapshotRecoveryRequested = false;
   #lastDigestRecoveryAt: number | null = null;
@@ -179,6 +183,8 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   stop(): void {
     this.#started = false;
+    this.#entryPending = false;
+    this.#entryGeneration = null;
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
@@ -197,6 +203,16 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#remotePublications = [];
     this.#liveTargets.resetLocalMedia();
     this.#emit();
+  }
+  /** Announces completed startup; transport recovery resends until acknowledged. */
+  async confirmEntered(): Promise<void> {
+    this.#requireLive();
+    // Completed startup survives an older Sync that confirms at hello. A later
+    // connection may negotiate confirmation for the first time.
+    this.#entryPending = true;
+    // Without negotiation, Sync confirmed the entry at hello.
+    if (!this.#entryNegotiated) return;
+    this.#send({ type: "entered" });
   }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
@@ -360,9 +376,10 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#opened = false;
     this.#connectFailure = undefined;
     this.#emit();
+    this.#entryNegotiated = false;
     let socket: V1Socket;
     try {
-      socket = this.#options.webSocket.connect(this.#options.url);
+      socket = this.#options.webSocket.connect(entryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
     } catch {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
@@ -398,7 +415,13 @@ export class V1SyncClient implements V1CollaborationClient {
       }
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
-        this.#inbound = this.#inbound.then(() => this.#disconnected(socket));
+        this.#inbound = this.#inbound.then(() => {
+          if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
+            this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
+            this.#emit();
+          }
+          this.#disconnected(socket);
+        });
       }, 0);
     };
     socket.onerror = () => {
@@ -536,6 +559,10 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "error":
         throw new V1ReplicaError(frame.code);
+      case "entered_ack":
+        this.#requireLive();
+        this.#entryPending = false;
+        return;
       case "pong": {
         this.#requireLive();
         this.#missedHeartbeats = 0;
@@ -556,6 +583,8 @@ export class V1SyncClient implements V1CollaborationClient {
   ): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#collaborationState.acceptWelcome(frame);
+    this.#entryNegotiated = frame.entry_confirmation === true;
+    this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
     this.#updateLocalMediaStates();
@@ -706,6 +735,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#connectFailure = undefined;
     this.#reconnectAttempt = 0;
     this.#missedHeartbeats = 0;
+    if (this.#entryPending && this.#entryNegotiated) this.#send({ type: "entered" });
     this.#commandScheduler.enterLive();
     this.#liveTargets.enterLive();
     this.#startHeartbeat();
@@ -1007,6 +1037,12 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
     (publication.publicationId === null || typeof publication.publicationId === "string") &&
     (!publication.enabled || publication.publicationId !== null)
   );
+}
+function entryUrl(value: string, generation: number | null, confirmation: boolean): string {
+  const url = new URL(value);
+  url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
+  if (confirmation) url.searchParams.set("entry_confirmation", "1");
+  return url.toString();
 }
 function assertV1Url(value: string): void {
   const url = new URL(value);

@@ -1,0 +1,180 @@
+[
+  {
+    "version": "5.0.0",
+    "package_sha256": "aa3ecd218a577c24c978f7f4e518e9b465841d9c0c475977f6233e6dc254f8d4",
+    "path": "/v1/sync",
+    "hello": {
+      "type": "hello",
+      "protocol": 1,
+      "token": "published-regression-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "extensions": [
+        {
+          "name": "collaboration_v1",
+          "chat_cursor": {
+            "after_sequence": null,
+            "retained_floor_sequence": null
+          }
+        }
+      ]
+    },
+    "reconnect_hello": {
+      "type": "hello",
+      "protocol": 1,
+      "token": "published-regression-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "extensions": [
+        {
+          "name": "collaboration_v1",
+          "chat_cursor": {
+            "after_sequence": null,
+            "retained_floor_sequence": null
+          }
+        }
+      ]
+    },
+    "retry_hello": {
+      "type": "hello",
+      "protocol": 1,
+      "token": "published-regression-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "extensions": [
+        {
+          "name": "collaboration_v1",
+          "chat_cursor": {
+            "after_sequence": null,
+            "retained_floor_sequence": null
+          }
+        }
+      ]
+    }
+  },
+  {
+    "version": "5.1.0",
+    "package_sha256": "c576deb13c01381b029eb70511fd73c584c0414d7f9a4a4d57e110b42b8f3e2c",
+    "path": "/v1/sync",
+    "hello": {
+      "type": "hello",
+      "protocol": 1,
+      "token": "published-regression-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "extensions": [
+        {
+          "name": "collaboration_v1",
+          "chat_cursor": {
+            "after_sequence": null,
+            "retained_floor_sequence": null
+          }
+        }
+      ]
+    },
+    "reconnect_hello": {
+      "type": "hello",
+      "protocol": 1,
+      "token": "published-regression-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "extensions": [
+        {
+          "name": "collaboration_v1",
+          "chat_cursor": {
+            "after_sequence": null,
+            "retained_floor_sequence": null
+          }
+        }
+      ]
+    },
+    "retry_hello": {
+      "type": "hello",
+      "protocol": 1,
+      "token": "published-regression-token",
+      "streams": {
+        "control": {
+          "cursor": null
+        },
+        "media": {
+          "cursor": null
+        },
+        "presence": {
+          "cursor": null
+        },
+        "requests": {
+          "cursor": null
+        }
+      },
+      "extensions": [
+        {
+          "name": "collaboration_v1",
+          "chat_cursor": {
+            "after_sequence": null,
+            "retained_floor_sequence": null
+          }
+        }
+      ]
+    }
+  }
+]

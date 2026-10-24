@@ -78,6 +78,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
     set status = 'active', updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'leaving'
+      and (not $6::boolean or not exists (
+        select 1 from participant_join_seats seat
+        where seat.tenant_id=$1 and seat.space_id=$2 and seat.episode_id=$3
+          and seat.participant_id=$4 and seat.generation=$5
+          and seat.confirmed_entry_generation <> coalesce($7::bigint,0)
+      ))
     returning id
     """
   end
@@ -88,6 +94,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
     set status = 'left', left_at = now(), last_left_reason = 'left', updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'leaving'
+      and (not $6::boolean or not exists (
+        select 1 from participant_join_seats seat
+        where seat.tenant_id=$1 and seat.space_id=$2 and seat.episode_id=$3
+          and seat.participant_id=$4 and seat.generation=$5
+          and seat.confirmed_entry_generation <> coalesce($7::bigint,0)
+      ))
     returning id, identity_id, space_id, episode_id, name, status, joined_at, left_at, updated_at
     """
   end

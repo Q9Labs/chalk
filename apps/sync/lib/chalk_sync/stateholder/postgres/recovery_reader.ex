@@ -6,6 +6,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Postgres.Control
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Recovery, as: SQL
   alias ChalkSync.Stateholder.Recovery
@@ -85,28 +86,54 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   defp validate_recovery_identity(connection, identity, _status) do
     case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
       [[generation, _status]] when generation != identity.participant_generation ->
-        {:terminal, :stale_participant_generation}
+        {:error, :stale_participant_generation}
 
-      [[_generation, "active"]] ->
-        validate_admission_intent(connection, identity)
+      [[_generation, status]] when status in ["active", "joining"] ->
+        validate_admission_intent(connection, identity, status)
+
+      [[_generation, "leaving"]] ->
+        if JoinSeats.awaiting_entry?(connection, identity),
+          do: validate_admission_intent(connection, identity, "leaving"),
+          else: expired_entry(connection, identity)
 
       [[_generation, _status]] ->
-        {:terminal, :participant_inactive}
+        expired_entry(connection, identity)
 
       [] ->
         {:terminal, :participant_inactive}
     end
   end
 
-  defp validate_admission_intent(_connection, %Identity{admission_lifecycle_intent_id: nil}),
-    do: :ok
+  defp validate_admission_intent(
+         _connection,
+         %Identity{admission_lifecycle_intent_id: nil},
+         status
+       )
+       when status in ["active", "leaving"],
+       do: :ok
 
-  defp validate_admission_intent(connection, identity) do
+  defp validate_admission_intent(connection, identity, status) do
     params = Scope.participant(identity) ++ [Scope.uuid(identity.admission_lifecycle_intent_id)]
 
     case Postgrex.query!(connection, SQL.read_admission_intent(), params).rows do
-      [["applied"]] -> :ok
+      [["applied", _state, _valid]] when status in ["active", "leaving"] -> :ok
+      [["pending", "pending", true]] when status == "joining" -> :ok
+      [["pending", "pending", false]] when status == "joining" -> {:error, :entry_expired}
+      [["pending", nil, nil]] when status == "joining" -> :ok
       _ -> {:error, :invalid_admission_intent}
+    end
+  end
+
+  # A lease that ran out before entry is a timeout, not a departure or rejection.
+  defp expired_entry(_connection, %Identity{admission_lifecycle_intent_id: nil}),
+    do: {:terminal, :participant_inactive}
+
+  defp expired_entry(connection, identity) do
+    params = Scope.participant(identity) ++ [Scope.uuid(identity.admission_lifecycle_intent_id)]
+
+    case Postgrex.query!(connection, SQL.read_admission_intent(), params).rows do
+      [["superseded", "expired", _valid]] -> {:error, :entry_expired}
+      _ -> {:terminal, :participant_inactive}
     end
   end
 

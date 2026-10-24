@@ -187,7 +187,7 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		}
 		intent, err := queries.LockLifecycleIntentForRequestForUpdate(ctx, lifecycleIntentRequestParams(input, episodes.IntentParticipantJoined))
 		if err == nil {
-			return resolveAdmissionRetry(ctx, queries, input, intent, &result)
+			return resolveAdmissionRetry(ctx, queries, tx, input, intent, &result)
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("lock participant admission intent: %w", err)
@@ -250,6 +250,10 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 			return fmt.Errorf("create lifecycle participant: %w", err)
 		}
 
+		if err := createParticipantJoinSeat(ctx, tx, participant); err != nil {
+			return err
+		}
+
 		intentID, err := utilities.NewID()
 		if err != nil {
 			return fmt.Errorf("create lifecycle intent id: %w", err)
@@ -274,6 +278,13 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		})
 		if err != nil {
 			return fmt.Errorf("create participant admission intent: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `update sync_lifecycle_intents set next_attempt_at = seat.expires_at
+            from participant_join_seats seat where sync_lifecycle_intents.tenant_id=seat.tenant_id
+            and sync_lifecycle_intents.episode_id=seat.episode_id
+            and sync_lifecycle_intents.participant_id=seat.participant_id
+            and sync_lifecycle_intents.lifecycle_intent_id=$1`, uuid(intentID)); err != nil {
+			return fmt.Errorf("schedule pending join expiry: %w", err)
 		}
 		result = episodes.Admission{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant), Intent: mapLifecycleIntent(intent), JoinIntent: mapLifecycleIntent(intent)}
 		return nil
@@ -355,7 +366,7 @@ func createKnockAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx,
 	return nil
 }
 
-func resolveAdmissionRetry(ctx context.Context, queries *sqlc.Queries, input episodes.AdmitParticipantInput, intent sqlc.SyncLifecycleIntent, result *episodes.Admission) error {
+func resolveAdmissionRetry(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, input episodes.AdmitParticipantInput, intent sqlc.SyncLifecycleIntent, result *episodes.Admission) error {
 	if err := idempotencyConflict(intent, input.Request); err != nil {
 		return err
 	}
@@ -364,6 +375,17 @@ func resolveAdmissionRetry(ctx context.Context, queries *sqlc.Queries, input epi
 		return err
 	}
 	participant, err := lockLifecycleParticipant(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, nullableID(intent.ParticipantID))
+	if err != nil {
+		return err
+	}
+	if err := retryParticipantJoinSeat(ctx, tx, participant); err != nil {
+		return err
+	}
+	participant, err = lockLifecycleParticipant(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, nullableID(intent.ParticipantID))
+	if err != nil {
+		return err
+	}
+	intent, err = queries.LockLifecycleIntentForRequestForUpdate(ctx, lifecycleIntentRequestParams(input, episodes.IntentParticipantJoined))
 	if err != nil {
 		return err
 	}

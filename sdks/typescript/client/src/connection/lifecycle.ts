@@ -116,6 +116,7 @@ type Model = {
   refreshInFlight: boolean;
   recoveryQueued: RecoveryKind | null;
   joinCancelled: boolean;
+  admissionCleanupConfirmed: boolean;
   closed: boolean;
   epoch: number;
 };
@@ -204,12 +205,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         refreshInFlight: false,
         recoveryQueued: null,
         joinCancelled: false,
+        admissionCleanupConfirmed: true,
         closed: false,
         epoch: 0,
       };
       const mediaAttempt: MediaRecoveryAttempt = { expiresAt: null };
       const foreign = <A>(operation: () => Promise<A>, code: LifecycleFailureCode = "internal_error", message = "A browser transport operation failed"): Effect.Effect<A, ConnectionLifecycleFailure> =>
-        Effect.tryPromise({ try: operation, catch: (cause) => lifecycleFailure(code, true, message, cause) });
+        Effect.tryPromise({ try: operation, catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause)) });
       const withinForegroundBudget = <A, E>(effect: Effect.Effect<A, E>, milliseconds: number, failure: ConnectionLifecycleFailure | (() => ConnectionLifecycleFailure)): Effect.Effect<A, E | ConnectionLifecycleFailure> =>
         Effect.raceFirst(
           effect,
@@ -436,6 +438,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           Effect.tapError(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed" }))),
         );
       };
+      const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
+        const confirmEntered = sync.confirmEntered?.bind(sync);
+        return confirmEntered ? trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed")) : Effect.void;
+      };
       const performJoin = (reason: "join" | "access_retry" = "join", retried = false): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           if (model.state === "live") return;
@@ -456,7 +462,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             stream = captured.stream;
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const grant = yield* trace("access_initialize", access.initialize(reason));
+            const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
+            model.admissionCleanupConfirmed = false;
             const media = yield* trace(
               "create_media_client",
               Effect.try({
@@ -501,6 +508,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               ],
               { concurrency: "unbounded", discard: true },
             );
+            if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            yield* confirmSyncEntry(sync);
           }).pipe(
             Effect.matchEffect({
               onFailure: (cause) =>
@@ -515,8 +524,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
                   const retry = !retried && failure.code === "invalid_access";
                   if (!retry) yield* recordFailure(failure);
+                  model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
                   yield* stopPorts();
-                  if (retry) return yield* performJoin("access_retry", true);
+                  if (retry) return yield* performJoin(model.admissionCleanupConfirmed ? "join" : "access_retry", true);
                   yield* transition("failed");
                   return yield* Effect.fail(failure);
                 }),
@@ -535,7 +545,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const performLeave = (): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* performLeaveEffect() {
-          if (model.state === "idle" || model.state === "left") return;
+          if (model.state === "idle") return;
+          if (model.state === "left") {
+            if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
+            return;
+          }
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
@@ -544,12 +558,29 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* transition("left");
           if (!confirmed) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, "The Episode left locally without a durable Leave acknowledgement"));
         });
+      const cancelPendingAdmission = (): Effect.Effect<boolean> =>
+        Effect.gen(function* () {
+          const grant = access.currentUnsafe();
+          if (!grant) return model.admissionCleanupConfirmed;
+          const cancel = platform.cancelPendingAdmission;
+          if (!cancel) return false;
+          const result = yield* Effect.exit(
+            Effect.tryPromise({
+              try: (signal) => cancel(grant, signal),
+              catch: (cause) => lifecycleFailure("internal_error", true, "Admission cancellation failed", cause),
+            }).pipe(Effect.timeout(3000)),
+          );
+          return result._tag === "Success" && result.value;
+        });
       const leaveIsConfirmed = (): Effect.Effect<boolean> =>
         Effect.gen(function* leaveIsConfirmedEffect() {
           const sync = model.sync;
-          if (!sync || model.episodeEndConfirmed || access.currentUnsafe() === null) return true;
-          const leave = foreign(() => sync.leave()).pipe(Effect.timeout(LEAVE_TIMEOUT_MS));
-          return (yield* Effect.exit(leave))._tag === "Success";
+          if (model.episodeEndConfirmed) return true;
+          if (sync && (sync.getSnapshot().connection.phase === "live" || sync.getSnapshot().control !== null)) {
+            const leave = foreign(() => sync.leave()).pipe(Effect.timeout(LEAVE_TIMEOUT_MS));
+            if ((yield* Effect.exit(leave))._tag === "Success") return true;
+          }
+          return yield* cancelPendingAdmission();
         });
       const publishFreshAccess = (): Effect.Effect<void> =>
         enqueue(
@@ -774,7 +805,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         if (snapshot.connection.phase === "idle" || snapshot.connection.phase === "stopped") return Effect.succeed(true);
         if (snapshot.connection.phase !== "terminal") return Effect.succeed(false);
         const failure = syncTerminalFailure(snapshot);
-        return failure.recoverable ? Effect.succeed(true) : Effect.fail(failure);
+        return syncAutoRecoverable(snapshot, failure) ? Effect.succeed(true) : Effect.fail(failure);
       };
       const recoverSync = (attempt: SyncRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
@@ -822,6 +853,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               else if (attempt.client === sync) attempt.started = true;
             }),
           ).pipe(
+            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000))),
+            Effect.andThen(Effect.suspend(() => (sync === model.sync && model.epoch === epoch && active(model) ? confirmSyncEntry(sync) : Effect.fail(lifecycleFailure("invalid_state", false, "Sync recovery was superseded"))))),
             Effect.tapError(() =>
               enqueue(
                 Effect.gen(function* () {
@@ -834,7 +867,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               ),
             ),
           );
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
         });
       const handleSyncSnapshot = (sync: ConnectionSyncClient, snapshot: V1EpisodeSnapshot): Effect.Effect<void> =>
         Effect.gen(function* handleSyncSnapshotEffect() {
@@ -857,7 +889,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           if (snapshot.connection.phase !== "terminal") return false;
           const failure = syncTerminalFailure(snapshot);
-          if (failure.recoverable) return false;
+          if (syncAutoRecoverable(snapshot, failure)) return false;
           yield* failForSnapshot(failure);
           return true;
         });
@@ -1206,7 +1238,8 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
   const reason = snapshot.connection.terminalReason;
   if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
-  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "entry_timeout") return lifecycleFailure("sync_start_failed", true, "Call entry was not confirmed in time");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
 }
 
@@ -1214,4 +1247,9 @@ function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFai
   const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
   const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
   return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
+}
+
+// The expired seat cannot reconnect with the same grant; only a new admission can retry it.
+function syncAutoRecoverable(snapshot: V1EpisodeSnapshot, failure: ConnectionLifecycleFailure): boolean {
+  return failure.recoverable && snapshot.connection.terminalReason !== "entry_timeout";
 }

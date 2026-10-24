@@ -589,6 +589,7 @@ func run() error {
 		EntranceInvites:            entranceInvites,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
+		ParticipantJoins:           episodeService,
 		SyncTokens:                 syncTokenService,
 		SyncTokenRefresh:           syncTokenRefresh,
 		TenantAuthz:                tenantAuthz,

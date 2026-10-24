@@ -8,46 +8,24 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims, as: SQL
   alias ChalkSync.UUID
 
-  def claim_operations(limit) when is_integer(limit) and limit in 1..64 do
-    claim_operation_rows(SQL.claim_operations(), limit)
-  end
+  def claim_operations(connection, limit),
+    do: claim_operation_rows(connection, SQL.claim_operations(), limit)
 
-  def claim_local_operations(limit) when is_integer(limit) and limit in 1..64 do
-    claim_operation_rows(SQL.claim_local_operations(), limit)
-  end
+  def claim_local_operations(connection, limit),
+    do: claim_operation_rows(connection, SQL.claim_local_operations(), limit)
 
-  defp claim_operation_rows(query, limit) do
-    episode = %EpisodeKey{
-      tenant_id: "background",
-      space_id: "background",
-      episode_id: "background"
-    }
+  defp claim_operation_rows(connection, query, limit) do
+    %{rows: rows} = Postgrex.query!(connection, query, [limit], timeout: 2_000)
 
-    case Postgrex.query(
-           Database.connection(episode),
-           query,
-           [limit],
-           timeout: 2_000
-         ) do
-      {:ok, %{rows: rows}} ->
-        {:ok,
-         Enum.map(rows, fn row ->
-           operation = ExternalOperationRecord.from_row(row)
+    Enum.map(rows, fn row ->
+      operation = ExternalOperationRecord.from_row(row)
 
-           {%EpisodeKey{
-              tenant_id: UUID.load!(Enum.at(row, 0)),
-              space_id: UUID.load!(Enum.at(row, 1)),
-              episode_id: UUID.load!(Enum.at(row, 2))
-            }, operation}
-         end)}
-
-      {:error, _reason} ->
-        {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+      {%EpisodeKey{
+         tenant_id: UUID.load!(Enum.at(row, 0)),
+         space_id: UUID.load!(Enum.at(row, 1)),
+         episode_id: UUID.load!(Enum.at(row, 2))
+       }, operation}
+    end)
   end
 
   def read_operation(%EpisodeKey{} = episode, external_operation_id)

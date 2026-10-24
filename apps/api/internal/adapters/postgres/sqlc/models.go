@@ -189,6 +189,21 @@ type Participant struct {
 	LastLeftReason            pgtype.Text        `json:"last_left_reason"`
 }
 
+type ParticipantJoinSeat struct {
+	TenantID                 pgtype.UUID        `json:"tenant_id"`
+	SpaceID                  pgtype.UUID        `json:"space_id"`
+	EpisodeID                pgtype.UUID        `json:"episode_id"`
+	ParticipantID            pgtype.UUID        `json:"participant_id"`
+	Generation               int64              `json:"generation"`
+	State                    string             `json:"state"`
+	ExpiresAt                pgtype.Timestamptz `json:"expires_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	EntryTokenID             pgtype.Text        `json:"entry_token_id"`
+	IssuedEntryGeneration    int64              `json:"issued_entry_generation"`
+	ConfirmedEntryGeneration int64              `json:"confirmed_entry_generation"`
+	IssuedEntryExpiresAt     pgtype.Timestamptz `json:"issued_entry_expires_at"`
+}
+
 type ParticipantMediaRefresh struct {
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 	SpaceID               pgtype.UUID        `json:"space_id"`
@@ -1082,6 +1097,13 @@ type SyncControlEvent struct {
 	ResultingStateDigest []byte             `json:"resulting_state_digest"`
 	EncodedBytes         int32              `json:"encoded_bytes"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncEntryRollout struct {
+	Singleton  bool               `json:"singleton"`
+	Enforced   bool               `json:"enforced"`
+	EnforcedAt pgtype.Timestamptz `json:"enforced_at"`
+	ReleaseID  pgtype.Text        `json:"release_id"`
 }
 
 type SyncEpisodeControl struct {

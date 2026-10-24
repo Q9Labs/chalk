@@ -27,17 +27,18 @@ defmodule ChalkSync.Transport.SocketV1 do
   @heartbeat_interval_ms 20_000
   @missed_heartbeat_limit 2
   @terminal_ack_timeout_ms 5_000
+  @entry_timeout_ms 120_000
 
   @impl true
   def init(opts) do
     timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
+    opts = Map.new(opts)
 
     connection_attributes =
       opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
 
     observability =
       opts
-      |> Map.new()
       |> Map.get(:observability)
       |> Observability.merge(nil)
       |> Observability.root(
@@ -51,6 +52,9 @@ defmodule ChalkSync.Transport.SocketV1 do
        terminal: nil,
        hello_timer: timer,
        heartbeat_timer: nil,
+       entry_timer: nil,
+       entry_confirmation: Map.get(opts, :entry_confirmation, false),
+       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
        terminal_ack_timer: nil,
        terminal_head: nil,
        missed_heartbeats: 0,
@@ -81,6 +85,21 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
+
+  def handle_info(:entry_timeout, %{phase: :live, entry_timer: timer, identity: identity} = state)
+      when not is_nil(timer) do
+    case Stateholder.participant_authority(
+           identity.episode,
+           identity.participant_id,
+           identity.participant_generation
+         ) do
+      {:ok, _authority} -> {:ok, %{state | entry_timer: nil}}
+      {:retryable, _reason} -> stop(state, 1012, "service restart", :dependency_unavailable)
+      {:error, _reason} -> stop(state, 1008, "entry timeout", :entry_timeout)
+    end
+  end
+
+  def handle_info(:entry_timeout, state), do: {:ok, state}
 
   def handle_info(:heartbeat_check, %{phase: :live} = state) do
     missed = state.missed_heartbeats + 1
@@ -130,18 +149,6 @@ defmodule ChalkSync.Transport.SocketV1 do
       ) do
     pop_outbound(state)
   end
-
-  def handle_info(
-        {:sync_recovery_live, coordinator},
-        %{phase: :recovering, coordinator: coordinator} = state
-      ) do
-    state
-    |> Map.put(:phase, :live)
-    |> start_heartbeat()
-    |> push_collaboration()
-  end
-
-  def handle_info({:sync_recovery_live, _coordinator}, state), do: {:ok, state}
 
   def handle_info(
         {:sync_v1_live_frame, coordinator, frame},
@@ -231,6 +238,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   @impl true
   def terminate(reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
     cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.entry_timer)
     cancel_timer(state.terminal_ack_timer)
     unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
@@ -252,6 +260,7 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   def terminate(reason, state) do
     cancel_timer(state.heartbeat_timer)
+    cancel_timer(state.entry_timer)
     cancel_timer(state.terminal_ack_timer)
     unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
@@ -290,6 +299,38 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp handle_frame({:hello, _hello}, state), do: protocol_error(:already_authenticated, state)
+
+  defp handle_frame(:entered, %{phase: :live, entry_confirmation: false} = state),
+    do: protocol_error(:entry_confirmation_not_negotiated, state)
+
+  defp handle_frame(:entered, %{phase: :live, identity: identity} = state) do
+    case Stateholder.confirm_admission(identity) do
+      {:ok, %{result: result}} when result in [:applied, :already_applied] ->
+        cancel_timer(state.entry_timer)
+
+        {:push, {:text, encode_with_context(state, ProtocolV1.entered_ack())},
+         %{state | entry_timer: nil}}
+
+      {:ok, %{result: :superseded, reason: :entry_expired}} ->
+        stop(state, 1008, "entry timeout", :entry_timeout)
+
+      {:ok, %{result: :superseded}} ->
+        stop(state, 1008, "policy violation", :admission_rejected)
+
+      {:error, :entry_expired} ->
+        stop(state, 1008, "entry timeout", :entry_timeout)
+
+      {:error, reason}
+      when reason in [:stale_participant_generation, :invalid_admission_intent] ->
+        stop(state, 1008, "invalid token", :admission_rejected)
+
+      {outcome, reason} when outcome in [:error, :retryable] ->
+        Logger.warning("sync v1 entered failed: reason=#{reason}")
+        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
+    end
+  end
+
+  defp handle_frame(:entered, state), do: protocol_error(:recovery_required, state)
 
   defp handle_frame(
          {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
@@ -537,39 +578,48 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame(:ping, state),
     do: {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
 
+  defp confirm_legacy_entry(_identity, true), do: :ok
+
+  defp confirm_legacy_entry(identity, false) do
+    case Stateholder.confirm_admission(identity) do
+      {:ok, %{result: result}} when result in [:applied, :already_applied] -> :ok
+      {:ok, %{result: :superseded}} -> {:error, :invalid_admission_intent}
+      error -> error
+    end
+  end
+
   defp start_registered_recovery(
          state,
          identity,
-         cursor,
+         recovery,
          coordinator,
          collaboration_negotiated,
          collaboration_version
        ) do
-    with {:ok, recovery} <- Stateholder.recover(identity, cursor),
-         :ok <-
-           Coordinator.activate_recovery(
-             coordinator,
-             recovery,
-             self(),
-             recovery_timeout()
-           ) do
-      Process.cancel_timer(state.hello_timer)
+    case Coordinator.activate_recovery(
+           coordinator,
+           recovery,
+           self(),
+           recovery_timeout()
+         ) do
+      :ok ->
+        Process.cancel_timer(state.hello_timer)
 
-      {:ok,
-       %{
-         state
-         | phase: :recovering,
-           hello_timer: nil,
-           identity: identity,
-           coordinator: coordinator,
-           collaboration_negotiated: collaboration_negotiated,
-           collaboration_version: collaboration_version
-       }
-       |> observe_collaboration(
-         "extension.negotiate",
-         negotiation_outcome(collaboration_negotiated)
-       )}
-    else
+        {:ok,
+         %{
+           state
+           | phase: :recovering,
+             hello_timer: nil,
+             identity: identity,
+             coordinator: coordinator,
+             collaboration_negotiated: collaboration_negotiated,
+             collaboration_version: collaboration_version
+         }
+         |> observe_collaboration(
+           "extension.negotiate",
+           negotiation_outcome(collaboration_negotiated)
+         )}
+
       {:error, reason} ->
         Coordinator.unsubscribe(coordinator, self())
         Logger.warning("sync v1 recovery failed: reason=#{reason}")
@@ -697,6 +747,11 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp pop_outbound(%{coordinator: coordinator} = state) do
     case Coordinator.pop(coordinator, self()) do
+      {:ok, encoded, :recovery_complete} ->
+        next = state |> Map.put(:phase, :live) |> start_heartbeat() |> start_entry_deadline()
+        send(self(), :collaboration_drain)
+        {:push, {:text, encode_with_context(next, encoded)}, next}
+
       {:ok, encoded, false} ->
         {:push, {:text, encode_with_context(state, encoded)}, mark_control_checked(state)}
 
@@ -720,6 +775,12 @@ defmodule ChalkSync.Transport.SocketV1 do
         stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
+
+  defp start_entry_deadline(%{entry_confirmation: true} = state) do
+    %{state | entry_timer: Process.send_after(self(), :entry_timeout, @entry_timeout_ms)}
+  end
+
+  defp start_entry_deadline(state), do: state
 
   defp start_heartbeat(state) do
     state
@@ -829,11 +890,15 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, _lifecycle} <-
-           Stateholder.apply_lifecycle_intent(
-             identity.episode,
-             identity.admission_lifecycle_intent_id
-           ),
+    with {:ok, identity} <-
+           Stateholder.admit_socket_entry(identity, state.requested_entry_generation),
+         state = %{
+           state
+           | entry_confirmation:
+               state.entry_confirmation && identity.entry_ownership != :compatibility
+         },
+         :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
+         {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
@@ -841,18 +906,34 @@ defmodule ChalkSync.Transport.SocketV1 do
              state.observability
            ),
          {:ok, coordinator} <-
-           Coordinator.begin_recovery(identity, self(), protocol_options) do
+           Coordinator.begin_recovery(
+             identity,
+             self(),
+             protocol_options
+             |> Map.put(:entry_confirmation, state.entry_confirmation)
+             |> Map.put(
+               :entry_generation,
+               state.requested_entry_generation != :legacy &&
+                 not is_nil(identity.entry_generation)
+             )
+           ) do
       start_registered_recovery(
         state,
         identity,
-        cursor,
+        recovery,
         coordinator,
         negotiated?,
         collaboration_version
       )
     else
+      {:error, :stale_participant_generation} ->
+        stop(state, 1008, "invalid token", :admission_rejected)
+
       {:error, :invalid_admission_intent} ->
         stop(state, 1008, "policy violation", :admission_rejected)
+
+      {:error, :entry_expired} ->
+        stop(state, 1008, "entry timeout", :entry_timeout)
 
       {:error, reason} ->
         Logger.warning("sync v1 hello failed: reason=#{reason}")

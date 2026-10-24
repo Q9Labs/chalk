@@ -17,6 +17,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
@@ -268,7 +269,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   defp participant_capabilities_transaction(connection, identity) do
     configure_transaction(connection)
 
-    case lock_authority(connection, identity) do
+    case lock_authority(connection, identity, true) do
       {:ok, profile} -> capability_state(connection, identity, profile)
       {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
     end
@@ -589,18 +590,22 @@ defmodule ChalkSync.Chat.Repository.Postgres do
     :exit, _reason -> {:error, :dependency_unavailable}
   end
 
-  defp lock_authority(connection, identity) do
+  defp lock_authority(connection, identity, allow_pending \\ false) do
     params =
       episode_params(identity.episode) ++ [uuid(identity.participant_id)]
 
     case Postgrex.query!(connection, SQL.lock_authority(), params).rows do
-      [["active", generation, "active", display_name, _role, capabilities]]
+      [["active", generation, status, display_name, _role, capabilities]]
       when generation == identity.participant_generation and is_binary(display_name) ->
-        {:ok,
-         %{
-           display_name: display_name,
-           capabilities: ordered_capabilities(capabilities)
-         }}
+        if participant_available?(connection, identity, status, allow_pending) do
+          {:ok,
+           %{
+             display_name: display_name,
+             capabilities: ordered_capabilities(capabilities)
+           }}
+        else
+          {:error, :participant_stale}
+        end
 
       [[episode_status, _generation, _participant_status, _display_name, _role, _capabilities]]
       when episode_status != "active" ->
@@ -613,6 +618,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
         {:error, :participant_stale}
     end
   end
+
+  defp participant_available?(_connection, _identity, "active", _allow_pending), do: true
+  defp participant_available?(_connection, _identity, "joining", true), do: true
+
+  defp participant_available?(connection, identity, "leaving", true),
+    do: JoinSeats.awaiting_entry?(connection, identity)
+
+  defp participant_available?(_connection, _identity, _status, _allow_pending), do: false
 
   defp require_capability(profile, capability) do
     if capability in profile.capabilities, do: :ok, else: {:error, :capability_denied}

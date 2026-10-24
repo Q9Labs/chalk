@@ -147,6 +147,7 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     lifecycle,
     webSocket,
     dialTimeoutMs,
+    entryConfirmation: true,
     ...(storage ? { pendingStore: new AsyncStorageV1PendingTargetStore({ scope, storage }) } : {}),
   });
 }

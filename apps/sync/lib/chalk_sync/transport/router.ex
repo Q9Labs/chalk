@@ -36,12 +36,17 @@ defmodule ChalkSync.Transport.Router do
       case WebSockAdapter.UpgradeValidation.validate_upgrade(conn) do
         :ok ->
           observability = ChalkSync.Observability.context(conn.req_headers)
+          conn = fetch_query_params(conn)
+          # Previous Sync ignores this query; hello itself must stay unchanged for it.
+          entry_confirmation = conn.query_params["entry_confirmation"] == "1"
 
           conn
           |> WebSockAdapter.upgrade(
             ChalkSync.Transport.SocketV1,
             %{
               observability: observability,
+              entry_confirmation: entry_confirmation,
+              entry_generation: entry_generation(conn.query_params["entry_generation"]),
               connection_attributes: SocketContext.request(conn)
             },
             timeout: 60_000
@@ -82,6 +87,18 @@ defmodule ChalkSync.Transport.Router do
   defp not_found(conn) do
     send_json(conn, 404, %{"error" => "not_found"})
   end
+
+  defp entry_generation(nil), do: :legacy
+  defp entry_generation("new"), do: :new
+
+  defp entry_generation(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {generation, ""} when generation > 0 and generation <= 9_007_199_254_740_991 -> generation
+      _ -> :invalid
+    end
+  end
+
+  defp entry_generation(_value), do: :invalid
 
   defp send_upgrade_error(conn) do
     {status, error} =

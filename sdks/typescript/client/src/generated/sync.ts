@@ -10,6 +10,13 @@ export const SyncProtocolMetadata = {
     value: 1,
     transport: "websocket-json-text",
     route: "/v1/sync",
+    entryGeneration: {
+      queryParameter: "entry_generation",
+      newEntry: "new",
+      resume: "previous welcome entry_generation",
+      confirmation: "monotonic compare-and-set",
+      scope: "participant",
+    },
   },
   directions: {
     clientToServer: "client-to-server",
@@ -33,7 +40,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
+      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 2,
@@ -313,7 +320,7 @@ export const SyncProtocolMetadata = {
     {
       code: 1008,
       connection: "closed",
-      reasons: ["invalid token", "policy violation"],
+      reasons: ["invalid token", "policy violation", "entry timeout"],
     },
     {
       code: 1009,
@@ -511,6 +518,8 @@ function strictClientFrame(value: unknown): boolean {
       return exactObject(value, ["type", "stream", "revision", "state_digest"]);
     case "recovery_ack":
       return exactObject(value, ["type", "recovery_id", "revision", "state_digest"]);
+    case "entered":
+      return exactObject(value, ["type"]);
     case "ping":
       return exactObject(value, ["type"]);
     default:
@@ -602,7 +611,8 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
-  const fields = extensionValid ? [...base, "extensions"] : base;
+  if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
+  const fields = [...base, ...(extensionValid ? ["extensions"] : []), ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []), ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : [])];
   if (!strictCursor(value.head)) return false;
   if (value.mode === "snapshot") return exactObjectWithCorrelation(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
   if (value.mode === "terminal") return exactObjectWithCorrelation(value, [...fields, "reason"]);
@@ -686,6 +696,8 @@ function strictServerFrame(value: unknown): boolean {
       return exactObjectWithCorrelation(value, ["type", "command_id", "code"]);
     case "error":
       return exactObjectWithCorrelation(value, ["type", "code", "detail"]);
+    case "entered_ack":
+      return exactObjectWithCorrelation(value, ["type"]);
     case "pong":
       return exactObjectWithCorrelation(value, ["type"]);
     default:
@@ -1252,7 +1264,16 @@ export const CollaborationWelcomeExtensionSchema = Schema.Struct({
   retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema),
   read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)),
 }).check(exactKeys(["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]));
-const WelcomeBase = { type: Schema.Literal("welcome"), protocol: Schema.Literal(1), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema };
+const WelcomeBase = {
+  type: Schema.Literal("welcome"),
+  protocol: Schema.Literal(1),
+  participant_id: UuidSchema,
+  participant_generation: PositiveIntegerSchema,
+  recovery_id: UuidSchema,
+  head: ControlCursorSchema,
+  entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
+  entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
+};
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
 export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("snapshot"), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));
 export const WelcomeReplayFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal("replay"), ...ServerCorrelationFields });
@@ -1436,6 +1457,8 @@ export const RejectedChatReadResultFrameSchema = Schema.Struct({ type: Schema.Li
 export const ChatReadResultFrameSchema = Schema.Union([AcceptedChatReadResultFrameSchema, RejectedChatReadResultFrameSchema]);
 export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("retryable_error"), command_id: CommandIdSchema, code: RetryableErrorCodeSchema, ...ServerCorrelationFields });
 export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024), ...ServerCorrelationFields });
+export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal("entered") });
+export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal("entered_ack"), ...ServerCorrelationFields });
 export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
 export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong"), ...ServerCorrelationFields });
 
@@ -1471,6 +1494,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         ChatReactionSetFrameSchema,
         DeliveryAckFrameSchema,
         RecoveryAckFrameSchema,
+        EnteredFrameSchema,
         PingFrameSchema,
       ]),
     ),
@@ -1505,6 +1529,7 @@ export const SyncV1ServerFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         ChatReactionResultFrameSchema,
         RetryableErrorFrameSchema,
         ErrorFrameSchema,
+        EnteredAckFrameSchema,
         PongFrameSchema,
       ]),
     ),

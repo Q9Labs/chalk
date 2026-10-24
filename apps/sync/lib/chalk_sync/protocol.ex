@@ -80,8 +80,19 @@ defmodule ChalkSync.ProtocolV1 do
           frame
       end
 
-    encode!(frame)
+    frame =
+      if Map.get(options, :entry_confirmation, false),
+        do: Map.put(frame, "entry_confirmation", true),
+        else: frame
+
+    frame |> maybe_entry_generation(identity, options) |> encode!()
   end
+
+  defp maybe_entry_generation(frame, %{entry_generation: generation}, %{entry_generation: true})
+       when is_integer(generation),
+       do: Map.put(frame, "entry_generation", generation)
+
+  defp maybe_entry_generation(frame, _identity, _options), do: frame
 
   def recovery_page([_ | _] = events, recovery_id) do
     page = Enum.take(events, @replay_page_events)
@@ -202,6 +213,8 @@ defmodule ChalkSync.ProtocolV1 do
         "code" => Atom.to_string(code),
         "detail" => binary_part(detail, 0, min(byte_size(detail), @error_detail_bytes))
       })
+
+  def entered_ack, do: encode!(%{"type" => "entered_ack"})
 
   def pong, do: encode!(%{"type" => "pong"})
 

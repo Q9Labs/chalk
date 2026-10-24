@@ -32,14 +32,16 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Recovery do
 
   def read_admission_intent do
     """
-    select status
-    from sync_lifecycle_intents
-    where tenant_id = $1
-      and space_id = $2
-      and episode_id = $3
-      and participant_id = $4
-      and lifecycle_intent_id = $5
-      and participant_generation = (
+    select i.status, s.state, s.expires_at > now()
+    from sync_lifecycle_intents i
+    left join participant_join_seats s
+      on s.participant_id = i.participant_id and s.generation = i.participant_generation
+    where i.tenant_id = $1
+      and i.space_id = $2
+      and i.episode_id = $3
+      and i.participant_id = $4
+      and i.lifecycle_intent_id = $5
+      and i.participant_generation = (
         select generation
         from participants
         where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4

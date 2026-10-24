@@ -32,6 +32,8 @@ export type ConnectionMediaDevices = {
 };
 export type ConnectionSyncClient = V1CollaborationClient & {
   readonly start: () => Promise<void>;
+  /** Confirms entry after Sync is live and media has started. Without it, Sync confirms the entry at hello. */
+  readonly confirmEntered?: () => Promise<void>;
   readonly restartTransport?: () => void;
   readonly stop: () => void;
   readonly getSnapshot: () => V1EpisodeSnapshot;
@@ -93,6 +95,7 @@ export type ConnectionChatFileFactoryInput = {
 };
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
+  readonly cancelPendingAdmission?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<boolean>;
   readonly mediaDevices: ConnectionMediaDevices;
   readonly createMediaClient: (input: ConnectionMediaFactoryInput) => ConnectionMediaClient;
   readonly createSyncClient: (input: ConnectionSyncFactoryInput) => ConnectionSyncClient;

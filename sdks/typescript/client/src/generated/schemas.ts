@@ -537,6 +537,11 @@ export const MembershipListSchema = Schema.Struct({
 });
 export type MembershipList = typeof MembershipListSchema.Type;
 
+export const ParticipantJoinCancellationSchema = Schema.Struct({
+  cancelled: Schema.Boolean,
+});
+export type ParticipantJoinCancellation = typeof ParticipantJoinCancellationSchema.Type;
+
 export const ParticipantLifecycleSchema = Schema.Struct({
   access: Schema.optional(Schema.NullOr(AccessGrantSchema)),
   admission_request: Schema.optional(
@@ -1352,6 +1357,24 @@ export const ArriveBySpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type ArriveBySpacePublicInvite429ResponseHeaders = typeof ArriveBySpacePublicInvite429ResponseHeadersSchema.Type;
+
+export const CancelEpisodeParticipantJoinPathParamsSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  participant_id: ParticipantIdSchema,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type CancelEpisodeParticipantJoinPathParams = typeof CancelEpisodeParticipantJoinPathParamsSchema.Type;
+
+export const CancelEpisodeParticipantJoinResponseSchema = ParticipantJoinCancellationSchema;
+export type CancelEpisodeParticipantJoinResponse = typeof CancelEpisodeParticipantJoinResponseSchema.Type;
+
+export const CancelEpisodeParticipantJoin429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type CancelEpisodeParticipantJoin429ResponseHeaders = typeof CancelEpisodeParticipantJoin429ResponseHeadersSchema.Type;
 
 export const CancelSpaceRecordingPreparationPathParamsSchema = Schema.Struct({
   space_id: SpaceIdSchema,
@@ -4870,6 +4893,19 @@ export const ArriveBySpacePublicInviteErrorSchema = Schema.Union([
 ]);
 export type ArriveBySpacePublicInviteError = typeof ArriveBySpacePublicInviteErrorSchema.Type;
 
+export const CancelEpisodeParticipantJoinErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+]);
+export type CancelEpisodeParticipantJoinError = typeof CancelEpisodeParticipantJoinErrorSchema.Type;
+
 export const CancelSpaceRecordingPreparationErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -5929,6 +5965,7 @@ export const ChalkOperationPolicies = {
   approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  cancelEpisodeParticipantJoin: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

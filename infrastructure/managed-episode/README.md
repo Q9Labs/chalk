@@ -349,3 +349,36 @@ The production image build consumes the checked-in Sync lockfile. Keep the
 patched `hpax` and `plug` releases current and rerun the Sync gate before every
 publish; a clean dependency fetch must not reintroduce the retired vulnerable
 versions.
+
+### Participant entry rollout
+
+Entry ownership has two releases. The first is an **expand** release: its Sync
+writer advertises `protocol_compatibility.entry_writer: 1`, its migration image
+advertises `entry_migrator: 1`, and sockets keep compatibility entry/Leave behavior.
+Old hosts and old sockets may continue writing during this phase. Applying the
+additive migrations alone does not enable entry ownership.
+
+After an expanded release is the retained rollback baseline, run the Release
+workflow with `enforce_entry_ownership: true` and fresh managed manifest generation.
+The generator exposes the same choice as `--enforce-entry-ownership`. The generator and controller both
+check the candidate and retained baseline capabilities. Before starting runtime,
+the migration job records enforcement in `sync_entry_rollout`. It waits for
+entry/Leave transactions and refuses activation while a claimed Leave has an
+unresolved provider result. Retry the deployment after those operations finish.
+There is no runtime operation to turn enforcement off.
+
+Once recorded, the database rejects old Sync entry/Leave mutations, including
+old-host consumers and delayed finalization. A still-current compatibility socket
+may enqueue its Leave for the new consumer; an old consumer cannot claim it. New Sync identifies each transaction
+with a transaction-local writer setting. Existing compatibility sockets may leave
+until a replacement confirms ownership; new connections receive entry generations.
+The old API may still create admissions and request admin removals; Sync applies
+them. Runtime rollback keeps migrations and the enforcement record, and the
+expanded rollback image reads that same record. The migration command rejects an
+obsolete Sync target once enforcement is recorded. An obsolete controller or a
+separate old host also cannot bypass the database write fence; do not select an
+obsolete release as a supported rollback baseline after enforcement.
+
+Enforcement is a deliberate later release, never the first deployment of this
+schema. Restore and rollback must retain an expanded Sync/migration image. Neither
+runtime rollback nor host replacement may run migration Down or clear the record.

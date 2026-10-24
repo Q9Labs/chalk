@@ -5,7 +5,14 @@
     "field": "protocol",
     "value": 1,
     "transport": "websocket-json-text",
-    "route": "/v1/sync"
+    "route": "/v1/sync",
+    "entryGeneration": {
+      "queryParameter": "entry_generation",
+      "newEntry": "new",
+      "resume": "previous welcome entry_generation",
+      "confirmation": "monotonic compare-and-set",
+      "scope": "participant"
+    }
   },
   "directions": {
     "clientToServer": "client-to-server",
@@ -132,7 +139,7 @@
     },
     {
       "id": "live",
-      "accepts": ["command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
+      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       "heartbeat": {
         "intervalMs": 20000,
         "missedDeadlinesBeforeClose": 2
@@ -398,6 +405,18 @@
     }
   },
   "welcome": {
+    "entryConfirmation": {
+      "wireName": "entry_confirmation",
+      "optional": true,
+      "value": true
+    },
+    "entryGeneration": {
+      "wireName": "entry_generation",
+      "optional": true,
+      "kind": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
     "direction": "server-to-client",
     "type": "welcome",
     "participantId": {
@@ -732,7 +751,32 @@
     "extension": "collaboration_v1",
     "messageReactionsExtension": "collaboration_v2",
     "capabilities": ["sendReaction", "sendChat"],
-    "reactions": ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"],
+    "reactions": [
+      "\ud83d\udc4d",
+      "\u2764\ufe0f",
+      "\ud83d\ude02",
+      "\ud83d\ude2e",
+      "\ud83c\udf89",
+      "\ud83d\udc4f",
+      "\ud83d\ude00",
+      "\ud83d\ude05",
+      "\ud83d\ude4f",
+      "\ud83d\udd25",
+      "\u2705",
+      "\ud83d\udc40",
+      "\ud83d\udcaf",
+      "\ud83e\udd14",
+      "\ud83d\ude22",
+      "\ud83d\ude4c",
+      "\ud83d\ude80",
+      "\ud83d\udc4c",
+      "\ud83d\ude0d",
+      "\ud83e\udd1d",
+      "\ud83d\udca1",
+      "\u2b50",
+      "\ud83d\ude0e",
+      "\ud83e\udd73"
+    ],
     "attachmentMimeTypes": [
       "image/png",
       "image/jpeg",
@@ -1162,6 +1206,14 @@
       "maxBytes": 1024
     }
   },
+  "entered": {
+    "direction": "client-to-server",
+    "type": "entered"
+  },
+  "enteredAck": {
+    "direction": "server-to-client",
+    "type": "entered_ack"
+  },
   "ping": {
     "direction": "client-to-server",
     "type": "ping"
@@ -1210,7 +1262,7 @@
     {
       "code": 1008,
       "connection": "closed",
-      "reasons": ["invalid token", "policy violation"]
+      "reasons": ["invalid token", "policy violation", "entry timeout"]
     },
     {
       "code": 1009,

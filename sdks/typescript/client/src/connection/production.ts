@@ -12,6 +12,21 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
     },
     mediaDevices: createBrowserMediaDevices(),
+    cancelPendingAdmission: async (access, signal) => {
+      const { tenantId, spaceId, episodeId, participantId } = access.subject;
+      const path = [tenantId, spaceId, episodeId, participantId].map(encodeURIComponent);
+      let baseEnd = options.apiBaseURL.length;
+      while (baseEnd > 0 && options.apiBaseURL[baseEnd - 1] === "/") baseEnd--;
+      const baseURL = options.apiBaseURL.slice(0, baseEnd);
+      const response = await fetch(`${baseURL}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/cancel-join`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${access.media.token}` },
+        signal,
+      });
+      if (!response.ok) throw new Error(`Admission cancellation failed with HTTP ${response.status}`);
+      const body: unknown = await response.json();
+      return typeof body === "object" && body !== null && "cancelled" in body && body.cancelled === true;
+    },
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, input),
     createSyncClient: (input) => createSyncClient(options.syncURL, input),
     createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
@@ -125,6 +140,7 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
     mediaPlane: input.media,
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
+    entryConfirmation: true,
   });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {

@@ -24,6 +24,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
   alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
+  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Lifecycle
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
@@ -69,11 +70,48 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: CommandDecision.resolve_receipt(identity, command)
 
   @impl ChalkSync.Stateholder
-  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id)
-      when is_binary(lifecycle_intent_id) do
+  def apply_lifecycle_intent(%EpisodeKey{} = episode, lifecycle_intent_id),
+    do: apply_lifecycle(episode, lifecycle_intent_id, nil)
+
+  @impl ChalkSync.Stateholder
+  def confirm_admission(%Identity{} = identity),
+    do: apply_lifecycle(identity.episode, identity.admission_lifecycle_intent_id, identity)
+
+  @impl ChalkSync.Stateholder
+  def admit_entry(%Identity{} = identity, requested) do
+    case Postgrex.transaction(
+           Database.connection(identity.episode),
+           &JoinSeats.admit_entry(&1, identity, requested),
+           timeout: @transaction_timeout_ms
+         ) do
+      {:ok, admitted} -> {:ok, admitted}
+      {:error, {:error, reason}} -> {:error, reason}
+      {:error, {:retryable, reason}} -> {:retryable, reason}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  end
+
+  @impl ChalkSync.Stateholder
+  def prepare_entry_leave(episode, operation_id) do
+    case Postgrex.transaction(
+           Database.connection(episode),
+           &JoinSeats.prepare_leave(&1, episode, operation_id),
+           timeout: @transaction_timeout_ms
+         ) do
+      {:ok, disposition} -> disposition
+      {:error, _reason} -> :pending
+    end
+  rescue
+    _exception -> :pending
+  catch
+    :exit, _reason -> :pending
+  end
+
+  defp apply_lifecycle(episode, lifecycle_intent_id, identity)
+       when is_binary(lifecycle_intent_id) do
     case UUID.dump(lifecycle_intent_id) do
       {:ok, _uuid} ->
-        case run_lifecycle_transaction(episode, lifecycle_intent_id) do
+        case run_lifecycle_transaction(episode, lifecycle_intent_id, identity) do
           {:ok, %LifecycleDecision{} = decision} ->
             FaultHooks.lifecycle(:after_commit_before_reply, episode, lifecycle_intent_id)
             WebhookObservation.lifecycle(episode, lifecycle_intent_id, decision)
@@ -86,7 +124,7 @@ defmodule ChalkSync.Stateholder.Postgres do
             {:error, reason}
 
           {:error, _reason} ->
-            Lifecycle.resolve_uncertain(episode, lifecycle_intent_id)
+            Lifecycle.resolve_uncertain(episode, lifecycle_intent_id, identity)
         end
 
       :error ->
@@ -95,11 +133,11 @@ defmodule ChalkSync.Stateholder.Postgres do
   rescue
     exception ->
       Logger.error("sync lifecycle transaction became uncertain: #{Exception.message(exception)}")
-      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id)
+      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id, identity)
   catch
     :exit, reason ->
       Logger.error("sync lifecycle transaction exited before resolution: #{inspect(reason)}")
-      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id)
+      Lifecycle.resolve_uncertain(episode, lifecycle_intent_id, identity)
   end
 
   @impl ChalkSync.Stateholder
@@ -166,11 +204,31 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def claim_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: ExternalOperationClaims.claim_operations(limit)
+    do: claim_operation_rows(&ExternalOperationClaims.claim_operations(&1, limit))
 
   @impl ChalkSync.Stateholder
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: ExternalOperationClaims.claim_local_operations(limit)
+    do: claim_operation_rows(&ExternalOperationClaims.claim_local_operations(&1, limit))
+
+  defp claim_operation_rows(claim) do
+    episode = %EpisodeKey{
+      tenant_id: "background",
+      space_id: "background",
+      episode_id: "background"
+    }
+
+    case Postgrex.transaction(Database.connection(episode), fn connection ->
+           Transaction.configure(connection)
+           claim.(connection)
+         end) do
+      {:ok, rows} -> {:ok, rows}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
+  end
 
   @impl ChalkSync.Stateholder
   def read_operation(%EpisodeKey{} = episode, external_operation_id)
@@ -386,10 +444,10 @@ defmodule ChalkSync.Stateholder.Postgres do
     )
   end
 
-  defp run_lifecycle_transaction(episode, lifecycle_intent_id) do
+  defp run_lifecycle_transaction(episode, lifecycle_intent_id, identity) do
     Postgrex.transaction(
       Database.connection(episode),
-      &Lifecycle.transaction(&1, episode, lifecycle_intent_id),
+      &Lifecycle.transaction(&1, episode, lifecycle_intent_id, identity),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync lifecycle intent"
     )

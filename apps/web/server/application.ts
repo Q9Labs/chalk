@@ -42,7 +42,7 @@ async function current(request: Request, env: DashboardEnvironment, provider: Id
   return result.identity;
 }
 async function sessionDTO(person: Identity, env: DashboardEnvironment): Promise<SessionDTO> {
-  return { profile: { name: person.name, email: person.email, avatarUrl: person.avatarUrl }, csrfToken: await csrfToken(person, env) };
+  return { profile: { id: person.userId, name: person.name, email: person.email, avatarUrl: person.avatarUrl }, csrfToken: await csrfToken(person, env) };
 }
 async function auth(request: Request, env: DashboardEnvironment, provider: IdentityProvider, path: string): Promise<Response> {
   if (request.method === "GET" && path === "/auth/start") {

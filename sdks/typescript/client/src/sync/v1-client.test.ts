@@ -398,6 +398,209 @@ describe("V1SyncClient", () => {
       sync.stop();
     }
   });
+  it("confirms a replacement Sync client's generation once before its later Leave", async () => {
+    const first = await liveClient({}, baseState(), ownerId, true, 7);
+    const replacement = await liveClient({}, baseState(), ownerId, true, 8);
+    const platform = createCoreTestPlatform();
+    const access = opaqueAccessGrant("replacement-entry");
+    const createSyncClient = vi.fn().mockReturnValueOnce(first.client).mockReturnValue(replacement.client);
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => ({ ...access, subject: { ...access.subject, participant_id: ownerId } }) }, { ...platform, dependencies: { ...platform.dependencies, createSyncClient } });
+    const firstSnapshot = first.client.getSnapshot();
+    try {
+      await client.join({ microphone: false, camera: false });
+      expect(first.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+      vi.spyOn(first.client, "getSnapshot").mockReturnValue({ ...firstSnapshot, connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+      first.socket.close();
+      await vi.waitFor(() => expect(createSyncClient).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(replacement.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1));
+      expect(new URL(replacement.urls[0]!).searchParams.get("entry_generation")).toBe("new");
+      replacement.socket.receive({ type: "entered_ack" });
+      replacement.socket.receive({ type: "pong" });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      replacement.client.restartTransport();
+      await vi.waitFor(() => expect(replacement.urls).toHaveLength(2));
+      expect(new URL(replacement.urls[1]!).searchParams.get("entry_generation")).toBe("8");
+      replacement.socket.open();
+      await settle();
+      await recoverSocket(replacement.client, replacement.socket, replacement.state, await wireSnapshot(baseState()), "up_to_date", true, 8);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      expect(first.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+      expect(replacement.socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+
+      const leaving = client.leave();
+      await vi.waitFor(() => expect(replacement.socket.frames().some((frame) => frame.type === "operation" && frame.name === "participant_leave")).toBe(true));
+      const operation = replacement.socket.frames().find((frame) => frame.type === "operation" && frame.name === "participant_leave");
+      if (!operation) throw new Error("Replacement did not send Leave");
+      expect(first.socket.frames().some((frame) => frame.type === "operation" && frame.name === "participant_leave")).toBe(false);
+      replacement.socket.receive({ type: "ack", command_id: operation.command_id, delivery: "original", outcome: "satisfied", revision: replacement.state.revision, state_digest: replacement.state.stateDigest });
+      await leaving;
+      expect(client.getSnapshot().connection.status).toBe("left");
+    } finally {
+      client.dispose();
+      first.client.stop();
+      replacement.client.stop();
+      vi.restoreAllMocks();
+    }
+  });
+  it("requests entry confirmation on the URL and sends entered only after Sync grants it", async () => {
+    const { client, socket, urls } = await liveClient();
+    try {
+      expect(new URL(urls[0]!).searchParams.get("entry_confirmation")).toBe("1");
+      expect(socket.frames().find((frame) => frame.type === "hello")).not.toHaveProperty("entry_confirmation");
+      await client.confirmEntered();
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
+  it("never asks for entry confirmation unless its caller opts in", async () => {
+    const { client, socket, urls } = await liveClient({}, baseState(), ownerId, false);
+    try {
+      expect(new URL(urls[0]!).searchParams.has("entry_confirmation")).toBe(false);
+      await client.confirmEntered();
+      expect(socket.frames().map((frame) => frame.type)).not.toContain("entered");
+    } finally {
+      client.stop();
+    }
+  });
+  it("enters a previous Sync through the legacy hello and never sends entered", async () => {
+    const { client, socket } = await liveClient({ entryConfirmation: true }, baseState(), ownerId, false);
+    try {
+      // Previous Sync accepts only these hello keys and has no entered frame.
+      const hello = socket.frames().find((frame) => frame.type === "hello")!;
+      expect(
+        Object.keys(hello)
+          .filter((key) => !["extensions", "journey_id", "traceparent", "tracestate"].includes(key))
+          .sort(),
+      ).toEqual(["protocol", "streams", "token", "type"]);
+      await client.confirmEntered();
+      expect(socket.frames().map((frame) => frame.type)).not.toContain("entered");
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+  it.each(["", "invalid token", "policy violation"])("treats policy rejection %j as rejected access instead of reconnecting with the stale credential", async (reason) => {
+    const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
+    try {
+      socket.close(1008, reason);
+      await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "access_rejected" }));
+    } finally {
+      client.stop();
+    }
+  });
+  it("reports an entry timeout as its own terminal reason instead of rejected access", async () => {
+    const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
+    try {
+      socket.close(1008, "entry timeout");
+      await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "entry_timeout" }));
+    } finally {
+      client.stop();
+    }
+  });
+  it("reconnects after a hello timeout without rejecting valid access", async () => {
+    const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
+    try {
+      socket.close(1008, "hello timeout");
+      await vi.waitFor(() => expect(client.getSnapshot().connection.phase).toBe("connecting"));
+      expect(client.getSnapshot().connection).not.toMatchObject({ terminalReason: "access_rejected" });
+    } finally {
+      client.stop();
+    }
+  });
+  it("does not turn fully entered readiness into failed startup when the entry acknowledgement is lost", async () => {
+    const { client, socket } = await liveClient();
+    try {
+      await expect(client.confirmEntered()).resolves.toBeUndefined();
+      expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: "entered" }));
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+  it("does not resend entry to a previous Sync after a rollback reconnect", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      await client.confirmEntered();
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", false);
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+      expect(client.getSnapshot().connection.phase).toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
+  it.each([true, false])("keeps its server entry generation when refreshed recovery has acknowledged entry=%s", async (acknowledged) => {
+    const clock = new TestClock();
+    let token = "before-refresh";
+    const { client, socket, state, urls } = await liveClient({ clock, reconnectDelayMs: 1, token: async () => token }, baseState(), ownerId, true, 7);
+    try {
+      expect(new URL(urls[0]!).searchParams.get("entry_generation")).toBe("new");
+      await client.confirmEntered();
+      if (acknowledged) socket.receive({ type: "entered_ack" });
+      await settle();
+      token = "after-refresh";
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      expect(new URL(urls.at(-1)!).searchParams.get("entry_generation")).toBe("7");
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, 7);
+      expect(socket.frames().findLast((frame) => frame.type === "hello")).toMatchObject({ token: "after-refresh" });
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(acknowledged ? 1 : 2);
+    } finally {
+      client.stop();
+    }
+  });
+  it("keeps acknowledged ownership across a reconnect through an older Sync", async () => {
+    const clock = new TestClock();
+    const { client, socket, state, urls } = await liveClient({ clock, reconnectDelayMs: 1 }, baseState(), ownerId, true, 7);
+    try {
+      await client.confirmEntered();
+      socket.receive({ type: "entered_ack" });
+      await settle();
+      for (const entryConfirmation of [false, true]) {
+        socket.close(1012);
+        clock.advance(0);
+        await settle();
+        clock.advance(1);
+        expect(new URL(urls.at(-1)!).searchParams.get("entry_generation")).toBe("7");
+        socket.open();
+        await settle();
+        await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", entryConfirmation, entryConfirmation ? 7 : undefined);
+      }
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+    } finally {
+      client.stop();
+    }
+  });
+  it("resends unacknowledged entry after transport recovery", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      await client.confirmEntered();
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date");
+      expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(2);
+      socket.receive({ type: "entered_ack" });
+      await settle();
+    } finally {
+      client.stop();
+    }
+  });
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
       type: "command",
@@ -1971,11 +2174,17 @@ describe("v1 exact decoding and durable state", () => {
     for (const snapshot of malformed) await expect(restoreV1Snapshot(snapshot)).rejects.toBeInstanceOf(V1ReplicaError);
   });
 });
-async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId) {
+async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true, entryGeneration?: number) {
   const socket = new TestSocket();
-  const factory: SyncWebSocketFactory = { connect: () => socket };
+  const urls: string[] = [];
+  const factory: SyncWebSocketFactory = {
+    connect: (url) => {
+      urls.push(url);
+      return socket;
+    },
+  };
   const mediaPlane = new TestMediaPlane();
-  const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: factory, mediaPlane, ...overrides });
+  const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: factory, mediaPlane, entryConfirmation, ...overrides });
   const snapshot = await wireSnapshot(initialState);
   const state = snapshotToState(snapshot);
   await client.start();
@@ -1990,13 +2199,15 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode: "snapshot",
     snapshot,
+    ...(entryConfirmation ? { entry_confirmation: true } : {}),
+    ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "recovery_complete", recovery_id: recoveryId, head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest } });
   for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
   expect(client.getSnapshot().connection.phase).toBe("live");
-  return { client, socket, state, mediaPlane };
+  return { client, socket, state, mediaPlane, urls };
 }
 async function liveCollaborationClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}) {
   const socket = new TestSocket();
@@ -2057,7 +2268,7 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date"): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2069,6 +2280,8 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     head: { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest },
     mode,
     ...(mode === "snapshot" ? { snapshot } : {}),
+    ...(entryConfirmation ? { entry_confirmation: true } : {}),
+    ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

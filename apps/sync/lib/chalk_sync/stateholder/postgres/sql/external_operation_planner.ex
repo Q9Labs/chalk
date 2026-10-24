@@ -106,6 +106,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner do
     set status = 'leaving', updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'active'
+      and (not $6::boolean or not exists (
+        select 1 from participant_join_seats seat
+        where seat.tenant_id=$1 and seat.space_id=$2 and seat.episode_id=$3
+          and seat.participant_id=$4 and seat.generation=$5
+          and seat.confirmed_entry_generation <> coalesce($7::bigint,0)
+      ))
     returning id
     """
   end
