@@ -72,14 +72,12 @@ describe("SpaceClient media convergence", () => {
       const enable = source === "microphone" ? setMicrophoneEnabled : source === "camera" ? setCameraEnabled : setScreenShareEnabled;
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live", noticeUnresponsive: true } });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
-      const enabling = source === "screen" ? null : enable(true);
-      if (enabling) await vi.waitFor(() => expect(client.getSnapshot().media.local[source].state).toBe("requesting"));
-      else await expect(enable(true)).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true });
+      await expect(enable(true)).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true });
       expect(capture).not.toHaveBeenCalled();
       expect(command).not.toHaveBeenCalled();
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live", health: "degraded" } });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
-      await expect(enabling ?? enable(true)).resolves.toBeUndefined();
+      await expect(enable(true)).resolves.toBeUndefined();
       expect(capture).toHaveBeenCalledTimes(1);
       expect(command).toHaveBeenCalledWith(true);
     } finally {
@@ -95,12 +93,8 @@ describe("SpaceClient media convergence", () => {
       const preview = await client.media.captureCameraPreview();
       expect(preview.track).toBe(track);
       expect(capture).toHaveBeenCalledOnce();
-      const enabling = client.media.setCameraEnabled(true);
-      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state" });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await expect(client.media.setCameraEnabled(true)).rejects.toMatchObject({ code: "connection.invalid_state" });
       expect(enable).not.toHaveBeenCalled();
-      await client.leave();
-      await result;
       preview.release();
     } finally {
       client.dispose();

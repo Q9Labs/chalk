@@ -113,7 +113,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
-  readonly #pendingSources = new Set<MediaSource>();
+  readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
   readonly #requestGenerations = new Map<string, number>();
@@ -284,32 +284,35 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return Effect.suspend<A, E | SpaceClientError, never>(() => (!enabling || this.#store.getSnapshot().connection.status === "live" ? operation : Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live")))));
   }
   #waitForLive(source: MediaSource, revision: number, ports?: ConnectionPorts): ClientEffect<void> {
-    return Effect.callback<void, SpaceClientError>((resume) => {
-      const check = (failure?: SpaceClientError) => {
-        if (failure) return resume(Effect.fail(failure));
-        if (this.#sources[source].desired.revision !== revision) return resume(Effect.void);
-        if (ports && (this.#ports?.sync !== ports.sync || this.#ports.media !== ports.media)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
-        const state = this.#connection.getSnapshot().state;
-        if (state === "live" && this.#syncLive && this.#store.getSnapshot().connection.status === "live") return resume(Effect.void);
-        if (state !== "joining" && state !== "reconnecting" && state !== "live") resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
-      };
-      this.#readinessChecks.add(check);
-      const unsubscribe = this.#connection.subscribe(() => check());
-      const unsubscribeStore = this.#store.subscribe(() => check());
-      const unsubscribePorts = this.#connection.subscribePorts(() => check());
-      const timer = this.#connection.scheduleUnsafe(() => check(new SpaceClientError({ code: "media.timeout", recoverable: true, message: "The call did not connect in time. Try again." })), MEDIA_READY_TIMEOUT_MS);
-      check();
-      return Effect.sync(() => {
-        this.#readinessChecks.delete(check);
-        unsubscribe();
-        unsubscribeStore();
-        unsubscribePorts();
-        this.#connection.cancelScheduleUnsafe(timer);
-      });
+    return Effect.suspend(() => {
+      let cleanup = () => {};
+      return Effect.callback<void, SpaceClientError>((resume) => {
+        const check = (failure?: SpaceClientError) => {
+          if (failure) return resume(Effect.fail(failure));
+          if (this.#sources[source].desired.revision !== revision) return resume(Effect.void);
+          if (ports && (this.#ports?.sync !== ports.sync || this.#ports.media !== ports.media)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
+          const state = this.#connection.getSnapshot().state;
+          if (state === "live" && this.#syncLive && this.#store.getSnapshot().connection.status === "live") return resume(Effect.void);
+          if (state !== "joining" && state !== "reconnecting" && state !== "live") resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
+        };
+        this.#readinessChecks.add(check);
+        const unsubscribe = this.#connection.subscribe(() => check());
+        const unsubscribeStore = this.#store.subscribe(() => check());
+        const unsubscribePorts = this.#connection.subscribePorts(() => check());
+        const timer = this.#connection.scheduleUnsafe(() => check(new SpaceClientError({ code: "media.timeout", recoverable: true, message: "The call did not connect in time. Try again." })), MEDIA_READY_TIMEOUT_MS);
+        cleanup = () => {
+          this.#readinessChecks.delete(check);
+          unsubscribe();
+          unsubscribeStore();
+          unsubscribePorts();
+          this.#connection.cancelScheduleUnsafe(timer);
+        };
+        check();
+      }).pipe(Effect.ensuring(Effect.sync(() => cleanup())));
     });
   }
   #set(source: "microphone" | "camera", enabled: boolean): ClientEffect<void> {
-    return this.#act(source, enabled);
+    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
   }
   #startScreen(options?: ScreenShareOptions): ClientEffect<void> {
     return this.#act("screen", true, options);
@@ -362,7 +365,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               ),
             )
           : Effect.void;
-      return this.#serialize(source, ready.pipe(Effect.andThen(this.#work(source)))).pipe(
+      return this.#pending(source, ready.pipe(Effect.andThen(this.#serialize(source, this.#work(source))))).pipe(
         Effect.andThen(
           Effect.suspend(() => {
             if (enabled && (source === "screen" || this.#sources[source].desired.enabled) && this.#store.getSnapshot().connection.status !== "live") return this.#mediaAction(true, Effect.void);
@@ -594,7 +597,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         await (source === "microphone" ? ports.sync.setMicrophoneEnabled(enabled) : source === "camera" ? ports.sync.setCameraEnabled(enabled) : ports.sync.setScreenShareEnabled(enabled));
       }).pipe(
         Effect.andThen(enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void),
-        Effect.tap(() => Effect.sync(() => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"))),
+        Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"), catch: (cause) => cause })),
       ),
     );
   }
@@ -622,18 +625,21 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return pause;
   }
   #serialize<A>(source: MediaSource, effect: Effect.Effect<A, unknown>): Effect.Effect<A, unknown> {
-    return this.#gates.get(source)!.withPermit(
-      Effect.sync(() => {
-        this.#pendingSources.add(source);
-        this.#publish();
-      }).pipe(
-        Effect.andThen(effect),
-        Effect.ensuring(
-          Effect.sync(() => {
-            this.#pendingSources.delete(source);
-            this.#publish();
-          }),
-        ),
+    return this.#gates.get(source)!.withPermit(this.#pending(source, effect));
+  }
+  #pending<A>(source: MediaSource, effect: Effect.Effect<A, unknown>): Effect.Effect<A, unknown> {
+    return Effect.sync(() => {
+      this.#pendingSources.set(source, (this.#pendingSources.get(source) ?? 0) + 1);
+      this.#publish();
+    }).pipe(
+      Effect.andThen(effect),
+      Effect.ensuring(
+        Effect.sync(() => {
+          const remaining = this.#pendingSources.get(source)! - 1;
+          if (remaining === 0) this.#pendingSources.delete(source);
+          else this.#pendingSources.set(source, remaining);
+          this.#publish();
+        }),
       ),
     );
   }
