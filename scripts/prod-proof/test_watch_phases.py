@@ -47,6 +47,13 @@ class ReleaseWatchTest(unittest.TestCase):
             self.assertFalse(watch.evaluate(snapshot("new", sync=503), at)["rollback"])
         self.assertTrue(watch.evaluate(snapshot("new", sync=503), 60)["rollback"])
 
+    def test_watch_waits_for_new_web_without_treating_ready_backend_as_down(self):
+        watch = ReleaseWatch(target())
+        result = watch.evaluate(snapshot("new"), 150, ssm_started_at=0, stopped_at=1, web_ready=False)
+        self.assertEqual(result["phase"], "swap")
+        self.assertFalse(result["rollback"])
+        self.assertEqual(watch.evaluate(snapshot("new"), 160, web_ready=True)["watch_started_at"], 160)
+
     def test_successful_sample_resets_consecutive_failures(self):
         watch = ReleaseWatch(target())
         watch.evaluate(snapshot("new"), 0, ssm_started_at=0, stopped_at=0)

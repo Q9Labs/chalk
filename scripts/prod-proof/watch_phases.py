@@ -20,7 +20,7 @@ class ReleaseWatch:
             return "watch"
         return "swap" if self.ssm_started_at is not None else "baseline"
 
-    def evaluate(self, snapshot, at, *, ssm_started_at=None, stopped_at=None, events=()):
+    def evaluate(self, snapshot, at, *, ssm_started_at=None, stopped_at=None, web_ready=True, events=()):
         if ssm_started_at is not None:
             self.ssm_started_at = ssm_started_at
         if stopped_at is not None:
@@ -34,7 +34,7 @@ class ReleaseWatch:
             and containers.get("chalk-" + name, {}).get("image") == self.manifest["images"][name]
             for name in self.failures
         )
-        if self.phase == "swap" and self.stopped_at is not None and self.stopped_at >= self.ssm_started_at and candidate_live and services_ready:
+        if self.phase == "swap" and self.stopped_at is not None and self.stopped_at >= self.ssm_started_at and candidate_live and services_ready and web_ready:
             self.watch_started_at = at
             self.failures = dict.fromkeys(self.failures, 0)
         hold, rollback = [], []
