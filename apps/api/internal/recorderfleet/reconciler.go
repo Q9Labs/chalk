@@ -113,7 +113,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
 	}
 	targetNodes := r.targetNodes(demand, state, nodes, observed, now)
-	state, result, handled, err = r.advanceReadiness(ctx, state, nodes, observed, targetNodes, now)
+	state, result, handled, err = r.advanceReadiness(ctx, state, nodes, observed, demand, targetNodes, now)
 	if err != nil || handled {
 		result.Quarantined = quarantined
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
@@ -254,7 +254,7 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 				if observation.Identity.ProviderID != providerID {
 					continue
 				}
-				if err := observation.Validate(r.config.Key, Node{ProviderID: providerID, BootGeneration: managed.BootGeneration}, r.config.SlotsPerNode); err != nil {
+				if err := observation.Validate(r.config.Key, Node{ProviderID: providerID, BootGeneration: managed.BootGeneration}); err != nil {
 					return state, Result{}, true, err
 				}
 				identity := observation.Identity
@@ -294,7 +294,7 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 			return state, Result{}, true, err
 		}
 		nodes[node.ProviderID] = node
-		state, _, _, err = r.advanceReadiness(ctx, state, map[string]Node{node.ProviderID: node}, nil, 1, now)
+		state, _, _, err = r.advanceReadiness(ctx, state, map[string]Node{node.ProviderID: node}, nil, demand, 1, now)
 		return state, Result{Action: ActionNodeEnsured, ProviderNodeID: node.ProviderID}, true, err
 	}
 
@@ -320,7 +320,7 @@ func (r *Reconciler) observeIdentity(ctx context.Context, identity NodeIdentity)
 	if err != nil {
 		return NodeObservation{}, fmt.Errorf("observe recorder identity leases: %w", err)
 	}
-	if observation.Identity != identity || observation.Validate(r.config.Key, Node{ProviderID: identity.ProviderID, BootGeneration: identity.BootGeneration}, r.config.SlotsPerNode) != nil {
+	if observation.Identity != identity || observation.Validate(r.config.Key, Node{ProviderID: identity.ProviderID, BootGeneration: identity.BootGeneration}) != nil {
 		return NodeObservation{}, ErrRoleFence
 	}
 	return observation, nil
@@ -351,7 +351,7 @@ func (r *Reconciler) reconcileAbsentObservations(ctx context.Context, state Jour
 		if _, exists := nodes[identity.ProviderID]; exists || observation.IdentityRevoked {
 			continue
 		}
-		if err := observation.Validate(r.config.Key, Node{ProviderID: identity.ProviderID, BootGeneration: identity.BootGeneration}, r.config.SlotsPerNode); err != nil {
+		if err := observation.Validate(r.config.Key, Node{ProviderID: identity.ProviderID, BootGeneration: identity.BootGeneration}); err != nil {
 			return state, Result{}, false, err
 		}
 		exists, err := r.provider.NodeExists(ctx, r.config.Key, identity.ProviderID)
@@ -382,7 +382,7 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 			}
 			return nil, ErrInventoryDrift
 		}
-		if err := observation.Validate(r.config.Key, node, r.config.SlotsPerNode); err != nil {
+		if err := observation.Validate(r.config.Key, node); err != nil {
 			return nil, err
 		}
 		if managed, exists := state.Nodes[node.ProviderID]; exists && managed.Identity != nil && observation.Identity != *managed.Identity {
@@ -405,9 +405,26 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 	return indexed, nil
 }
 
-func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes map[string]Node, observed map[string]NodeObservation, targetNodes int, now time.Time) (Journal, Result, bool, error) {
+func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes map[string]Node, observed map[string]NodeObservation, demand Demand, targetNodes int, now time.Time) (Journal, Result, bool, error) {
 	needed := make(map[string]struct{})
-	for _, providerID := range sortedNodeIDs(nodes) {
+	providerIDs := sortedNodeIDs(nodes)
+	if r.config.Key.Role == workeridentity.RoleCapture && demand.CaptureCapacity != nil {
+		// Bootstrap the same capacity that the slot planner counts toward its target.
+		current, _ := r.partitionNodes(nodes, state, observed, now)
+		providerIDs = providerIDs[:0]
+		for _, managed := range current {
+			providerIDs = append(providerIDs, managed.ProviderID)
+		}
+		slices.SortFunc(providerIDs, func(left, right string) int {
+			leftSlots := plannedWorkerSlots(state.Nodes[left], observed[left], r.config.SlotsPerNode)
+			rightSlots := plannedWorkerSlots(state.Nodes[right], observed[right], r.config.SlotsPerNode)
+			if leftSlots != rightSlots {
+				return rightSlots - leftSlots
+			}
+			return strings.Compare(left, right)
+		})
+	}
+	for _, providerID := range providerIDs {
 		managed := state.Nodes[providerID]
 		if len(needed) >= targetNodes {
 			break

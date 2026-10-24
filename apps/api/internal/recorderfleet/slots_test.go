@@ -68,58 +68,29 @@ func TestDensityControllerReconcilesOldAPIDemandAtOneSlot(t *testing.T) {
 }
 
 func TestCaptureSlotDemandReplay(t *testing.T) {
-	f := newFleetFixture(t)
-	f.config.SlotsPerNode, f.config.FreeSlots, f.config.MaxNodes = 4, 8, 5
-	f.config.Now = func() time.Time { return f.now }
-	f.provider.config = f.config
-	r := f.reconciler(t)
-	// Every event is followed by reconciliation to steady state. The floor
-	// absorbs starts while the provider boots replacements; a burst beyond
-	// eight available slots cannot have an instantaneous physical guarantee.
-	for _, active := range []int{0, 1, 4, 8, 12, 9, 3, 0} {
-		settled := false
-		for range 100 {
-			f.now = f.now.Add(time.Second)
-			f.demand.value = Demand{Revision: fmt.Sprint(active), DesiredNodes: active, ObservedAt: f.now, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: active}}
-			f.runtime.observations = nil
-			remaining := active
-			for _, id := range sortedNodeIDs(f.provider.nodes) {
-				managed := f.journal.state.Nodes[id]
-				if managed.Identity == nil {
-					continue
+	for _, delay := range []int{0, 6} {
+		t.Run(fmt.Sprintf("boot-delay=%d-ticks", delay), func(t *testing.T) {
+			active := []int{0, 1, 4, 8, 12, 9, 3, 0}
+			const phaseTicks = 100
+			run := runSlotReplay(t, 4, 8, 5, delay, phaseTicks*len(active), time.Second, func(tick int) Demand {
+				count := active[tick/phaseTicks]
+				return Demand{Revision: fmt.Sprint(count), DesiredNodes: count, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: count}}
+			})
+			for phase, count := range active {
+				target := (count + 8 + 3) / 4
+				end := (phase+1)*phaseTicks - 1
+				if run.trace[end] != target || run.readySlots[end]-count < 8 {
+					t.Fatalf("active=%d nodes=%d ready slots=%d target=%d", count, run.trace[end], run.readySlots[end], target)
 				}
-				leases := 0
-				ready := managed.Phase == PhaseBootstrapping || managed.Phase == PhaseReady
-				if ready {
-					leases = min(4, remaining)
-					remaining -= leases
-				}
-				f.runtime.observations = append(f.runtime.observations, NodeObservation{Identity: *managed.Identity, Ready: ready, AdmissionOpen: ready, ReadyCapacity: 4, ActiveLeases: leases, ObservedAt: f.now, LeasesObservedAt: f.now})
-			}
-			result := f.step(t, r)
-			if len(f.provider.nodes) > f.config.MaxNodes {
-				t.Fatal("fleet exceeded cap")
-			}
-			if result.Action == ActionNone || result.Action == ActionCapacityPublished {
-				readySlots := 0
-				for _, managed := range f.journal.state.Nodes {
-					if managed.Phase == PhaseReady {
-						readySlots += 4
+				if phase == 0 || count >= active[phase-1] {
+					for tick := phase * phaseTicks; tick <= end; tick++ {
+						if run.trace[tick] > target {
+							t.Fatalf("tick=%d active=%d nodes=%d target=%d", tick, count, run.trace[tick], target)
+						}
 					}
 				}
-				if readySlots-active < 8 {
-					t.Fatalf("active=%d ready slots=%d: lost floor", active, readySlots)
-				}
-				if len(f.provider.nodes) != (active+8+3)/4 {
-					t.Fatalf("active=%d nodes=%d", active, len(f.provider.nodes))
-				}
-				settled = true
-				break
 			}
-		}
-		if !settled {
-			t.Fatalf("active=%d did not settle", active)
-		}
+		})
 	}
 }
 

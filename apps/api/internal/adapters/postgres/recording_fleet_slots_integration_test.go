@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/recorderfleetcontrol"
@@ -304,6 +306,7 @@ func TestFleetAbandonCannotRevokeIssuedIdentityWithPostgres(t *testing.T) {
 func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 	tx, fixture := newAllocationCleanupFixture(t, true, "capture")
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	isolateFleetDemandFixture(t, tx, fixture)
 	for range 9 {
 		otherRecording, err := utilities.NewID()
 		if err != nil {
@@ -383,11 +386,10 @@ func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 func TestFleetSlotDemandPhysicalFloorWithPreparation(t *testing.T) {
 	tx, fixture := newAllocationCleanupFixture(t, true, "capture")
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	isolateFleetDemandFixture(t, tx, fixture)
 	// Current admission limits each reservation to ten participants and 4 Mbps.
 	// A transaction-local fixture lets the real query exercise resource-dominant
 	// demand without changing those production limits or locking the shared table.
-	execCleanupFixture(t, tx, `create temporary table recording_reservations on commit drop as
-		select * from public.recording_reservations where recording_id=$1`, fixture.recordingID.Bytes())
 	execCleanupFixture(t, tx, `insert into recording_reservations select * from recording_reservations`)
 	execCleanupFixture(t, tx, `update recording_reservations set participant_count=50, input_bitrate_bps=16000000`)
 	execCleanupFixture(t, tx, `insert into recording_preparations (tenant_id, space_id, starts_at, state, revision, request_revision, request_kind)
@@ -416,6 +418,7 @@ func TestFleetSlotDemandUsesDatabaseLeaseClock(t *testing.T) {
 			t.Run(fmt.Sprintf("expired=%v/skew=%s", expired, skew), func(t *testing.T) {
 				tx, fixture := newAllocationCleanupFixture(t, expired, "capture")
 				defer func() { _ = tx.Rollback(context.Background()) }()
+				isolateFleetDemandFixture(t, tx, fixture)
 				execCleanupFixture(t, tx, `update recording_reservations set ends_at=clock_timestamp()-interval '2 hours' where recording_id=$1`, fixture.recordingID.Bytes())
 				delta := 30
 				if expired {
@@ -434,4 +437,19 @@ func TestFleetSlotDemandUsesDatabaseLeaseClock(t *testing.T) {
 			})
 		}
 	}
+}
+
+func isolateFleetDemandFixture(t *testing.T, tx pgx.Tx, fixture transcriptionAllocationCleanupFixture) {
+	t.Helper()
+	execCleanupFixture(t, tx, `create temporary table recording_reservations
+        (like public.recording_reservations including defaults) on commit drop`)
+	execCleanupFixture(t, tx, `insert into pg_temp.recording_reservations
+        select * from public.recording_reservations where recording_id=$1`, fixture.recordingID.Bytes())
+	execCleanupFixture(t, tx, `create temporary table recording_jobs
+        (like public.recording_jobs including defaults) on commit drop`)
+	execCleanupFixture(t, tx, `insert into pg_temp.recording_jobs
+        select * from public.recording_jobs where id=$1`, fixture.jobID.Bytes())
+	execCleanupFixture(t, tx, `create temporary table recording_preparations
+        (like public.recording_preparations including defaults) on commit drop`)
+	execCleanupFixture(t, tx, `set local search_path = pg_temp, public`)
 }

@@ -21,7 +21,7 @@ func (r *Reconciler) targetNodes(demand Demand, state Journal, nodes map[string]
 	for _, managed := range current {
 		capacity := 1
 		if demand.CaptureCapacity != nil {
-			capacity = workerSlots(observed[managed.ProviderID])
+			capacity = plannedWorkerSlots(managed, observed[managed.ProviderID], slotsPerNode)
 		}
 		capacities = append(capacities, capacity)
 	}
@@ -38,6 +38,13 @@ func (r *Reconciler) targetNodes(demand Demand, state Journal, nodes map[string]
 		needed += (remaining-1)/uint64(slotsPerNode) + 1
 	}
 	return int(min(max(needed, uint64(physicalFloor)), uint64(r.config.MaxNodes)))
+}
+
+func plannedWorkerSlots(managed ManagedNode, observation NodeObservation, slotsPerNode int) int {
+	if (managed.Phase == PhaseAwaitingBootstrap || managed.Phase == PhaseBootstrapping) && !observation.Ready {
+		return slotsPerNode
+	}
+	return workerSlots(observation)
 }
 
 func workerSlots(observation NodeObservation) int {
