@@ -471,6 +471,9 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		for errors.Unwrap(cause) != nil {
 			cause = errors.Unwrap(cause)
 		}
+		if cause == capturesignaling.ErrMediaStopped {
+			return a.finishSuccess(writer)
+		}
 		if cause == recordercapture.ErrDeadlineExpired ||
 			(cause == context.Canceled && errors.Is(context.Cause(runCtx), recordercapture.ErrDeadlineExpired)) {
 			return a.finishStopped(writer, a.authority.HardDeadline, recordingbundle.CloseReasonMaxDuration)
@@ -508,7 +511,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 	writer := newCaptureBundleWriter(a)
 	if plan.StopState() != captureplan.StopStateRunning {
-		return a.finishSuccess(runCtx, writer, plan)
+		return a.finishSuccess(writer)
 	}
 	readers := make(map[string]CaptureMediaTrack)
 	if len(snapshot.Tracks) == 0 {
@@ -529,7 +532,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		}
 		if stopped {
 			cancel(nil)
-			return a.finishSuccess(runCtx, writer, plan)
+			return a.finishSuccess(writer)
 		}
 	}
 	if len(readers) == 0 && len(snapshot.Tracks) > 0 {
@@ -591,7 +594,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 			if event.plan.StopState() != captureplan.StopStateRunning {
 				cancel(nil)
-				return a.finishSuccess(runCtx, writer, event.plan)
+				return a.finishSuccess(writer)
 			}
 			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers)
 			if err != nil {
@@ -600,7 +603,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 			if stopped {
 				cancel(nil)
-				return a.finishSuccess(runCtx, writer, appliedPlan)
+				return a.finishSuccess(writer)
 			}
 			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events); err != nil {
 				cancel(nil)
@@ -1031,7 +1034,7 @@ func sameCaptureBinding(left, right CaptureMediaTrack) bool {
 	return left.CaptureTrack() == right.CaptureTrack()
 }
 
-func (a *PionCaptureAttempt) finishSuccess(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan) error {
+func (a *PionCaptureAttempt) finishSuccess(writer *captureBundleWriter) error {
 	// A planned stop is terminal for this capture epoch. Active publishers may
 	// still have tracks when an Episode ends, and the provider contract requires
 	// force for that close. Cleanup uses the same value so a retry preserves the
