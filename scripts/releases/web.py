@@ -68,7 +68,7 @@ def pages(project, route='', method='GET'):
             'Pages API override must use a loopback host')
     url = f'{base_url}/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
-    open_url = urllib.request.build_opener(NoRedirect()).open if 'CLOUDFLARE_API_BASE_URL' in os.environ else urllib.request.urlopen
+    open_url = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open if 'CLOUDFLARE_API_BASE_URL' in os.environ else urllib.request.urlopen
     try:
         with open_url(request, timeout=60) as response:
             result = json.load(response)

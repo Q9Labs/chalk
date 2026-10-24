@@ -91,6 +91,41 @@ class PagesRollback(unittest.TestCase):
                                     for method, path in requests))
 
 
+    def test_override_ignores_environment_proxy(self):
+        received = []
+
+        class API(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                received.append((self.server.label, self.headers.get('Authorization')))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps(dict(success=True, result=dict(canonical_deployment=dict(
+                    id='saved', environment='production', latest_stage=dict(status='success'))))).encode())
+
+        with contextlib.ExitStack() as stack:
+            target, proxy = [stack.enter_context(ThreadingHTTPServer(('127.0.0.1', 0), API)) for _ in range(2)]
+            for server, label in ((target, 'target'), (proxy, 'proxy')):
+                server.label = label
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                stack.callback(thread.join, 5)
+                stack.callback(server.shutdown)
+            directory = stack.enter_context(tempfile.TemporaryDirectory())
+            output = Path(directory, 'outputs')
+            output.touch()
+            proxy_url = f'http://127.0.0.1:{proxy.server_port}'
+            with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://127.0.0.1:{target.server_port}',
+                            HTTP_PROXY=proxy_url, http_proxy=proxy_url, NO_PROXY='', no_proxy='',
+                            CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='dummy-token',
+                            GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(io.StringIO()):
+                web.rollback('example-project', 'saved')
+            self.assertEqual(received, [('target', 'Bearer dummy-token')] * 2)
+            self.assertEqual(output.read_text(), 'pages_deployment_id=saved\n')
+
+
     def test_override_does_not_follow_redirect(self):
         received = []
 
