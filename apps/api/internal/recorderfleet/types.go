@@ -249,7 +249,11 @@ type NodeObservation struct {
 }
 
 func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity int) error {
-	if err := observation.Identity.Validate(key, node); err != nil || observation.ReadyCapacity < 0 || observation.ReadyCapacity > maxCapacity || observation.ActiveLeases < 0 || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen {
+	// A lease-only authority read cannot assert a worker heartbeat or readiness.
+	if observation.ObservedAt.IsZero() && (observation.LeasesObservedAt.IsZero() || observation.Ready || observation.AdmissionOpen || observation.ReadyCapacity != 0) {
+		return ErrRoleFence
+	}
+	if err := observation.Identity.Validate(key, node); err != nil || observation.ReadyCapacity < 0 || observation.ReadyCapacity > maxCapacity || observation.ActiveLeases < 0 || !observation.Ready && observation.AdmissionOpen {
 		return ErrRoleFence
 	}
 	return nil

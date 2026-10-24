@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestRecoveryAbsentActiveRowDoesNotBlockSibling(t *testing.T) {
 			r := recoveryReconciler(t, f, provider, runtime, bootstrap)
 			// Adoption may take one pass; the absent row must then be revoked and stop
 			// blocking bootstrap of the unrelated sibling.
-			for range 3 {
+			for range 5 {
 				recoveryStep(t, f, r)
 			}
 			if bootstrap.revokeCalls != 1 || bootstrap.ensureCalls != 1 || provider.deleteCalls != 0 {
@@ -33,6 +34,9 @@ func TestRecoveryAbsentActiveRowDoesNotBlockSibling(t *testing.T) {
 			}
 			if !runtime.observations[0].IdentityRevoked {
 				t.Fatal("missing row was not revoked")
+			}
+			if !slices.Equal(f.events, []string{"close_admission", "revoke", "bootstrap"}) {
+				t.Fatalf("missing node skipped the normal admission fence: %v", f.events)
 			}
 		})
 	}
@@ -68,6 +72,7 @@ func TestRecoveryAbsentInventoryStaysClosedWithoutProof(t *testing.T) {
 				if journaled {
 					f.journal.found = true
 					f.journal.state = NewJournal()
+					f.journal.state.LastProjection = &PoolProjection{Key: f.config.Key, DemandRevision: "old", AdmissionOpen: true, ReadyCapacity: 1, Reason: "ready", ObservedAt: f.now}
 					f.journal.state.NextBootGeneration = 2
 					f.journal.state.Nodes[identity.ProviderID] = ManagedNode{ProviderID: identity.ProviderID, Name: "missing", Phase: PhaseReady, BootGeneration: 1, Identity: &identity, LastReadyAt: &f.now}
 				}
@@ -77,6 +82,9 @@ func TestRecoveryAbsentInventoryStaysClosedWithoutProof(t *testing.T) {
 				}
 				if bootstrap.revokeCalls != 0 || provider.deleteCalls != 0 {
 					t.Fatal("unsafe revocation or deletion")
+				}
+				if len(runtime.published) == 0 || runtime.published[len(runtime.published)-1].AdmissionOpen {
+					t.Fatal("unsafe inventory retained open capacity")
 				}
 			})
 		}
@@ -188,6 +196,12 @@ func (r *recoveryRuntime) ObserveNodes(ctx context.Context, key PoolKey) ([]Node
 }
 func (r *recoveryRuntime) ObserveIdentity(_ context.Context, identity NodeIdentity) (NodeObservation, error) {
 	if r.identityObservation == nil {
+		for _, observation := range r.observations {
+			if observation.Identity == identity {
+				observation.LeasesObservedAt = r.now.Add(r.skew)
+				return observation, r.identityErr
+			}
+		}
 		return NodeObservation{}, ErrProviderUnavailable
 	}
 	observation := *r.identityObservation

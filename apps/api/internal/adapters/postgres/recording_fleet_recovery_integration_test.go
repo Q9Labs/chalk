@@ -88,7 +88,7 @@ func TestFleetRecoveryLostAndRevokedRowsWithPostgres(t *testing.T) {
 							if i > 0 {
 								clockSkew = skew
 							}
-							if _, err := r.Reconcile(t.Context()); err != nil {
+							if _, err := r.Reconcile(t.Context()); err != nil && !(clockSkew < 0 && errors.Is(err, recorderfleet.ErrInventoryDrift)) {
 								t.Fatal(err)
 							}
 						}
@@ -166,13 +166,15 @@ func TestFleetRecoveryAbsentActiveRowWithPostgres(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result, err := r.Reconcile(t.Context()); err != nil || result.Action != recorderfleet.ActionIdentityRevoked {
-				t.Fatalf("missing active row: %+v %v", result, err)
+			for _, action := range []recorderfleet.Action{recorderfleet.ActionAdmissionClosed, recorderfleet.ActionIdentityRevoked, recorderfleet.ActionMissingNodeReconciled} {
+				if result, err := r.Reconcile(t.Context()); err != nil || result.Action != action {
+					t.Fatalf("missing active row: want %s got %+v %v", action, result, err)
+				}
 			}
 			if result, err := r.Reconcile(t.Context()); err != nil || result.Action != recorderfleet.ActionCreatePlanned {
 				t.Fatalf("missing row blocked replacement: %+v %v", result, err)
 			}
-			if issuer.revokes != 1 || provider.deletes != 0 || provider.gets != 1 {
+			if issuer.revokes != 1 || provider.deletes != 0 || provider.gets != 3 {
 				t.Fatalf("revoke/delete/exact-get=%d/%d/%d", issuer.revokes, provider.deletes, provider.gets)
 			}
 		})

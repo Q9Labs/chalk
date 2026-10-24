@@ -104,7 +104,7 @@ func (c *Client) ObserveIdentity(ctx context.Context, identity recorderfleet.Nod
 		return recorderfleet.NodeObservation{}, err
 	}
 	observation := response.Observation.NodeObservation
-	if response.SchemaVersion != recorderfleet.CommandSchemaVersion || response.Environment != c.key.Environment || observation.Identity != identity || observation.LeasesObservedAt.IsZero() || observation.ObservedAt.IsZero() || response.Observation.ActiveLeases == nil || *response.Observation.ActiveLeases < 0 {
+	if response.SchemaVersion != recorderfleet.CommandSchemaVersion || response.Environment != c.key.Environment || observation.Identity != identity || observation.LeasesObservedAt.IsZero() || response.Observation.ActiveLeases == nil || *response.Observation.ActiveLeases < 0 {
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
 	}
 	observation.ActiveLeases = *response.Observation.ActiveLeases

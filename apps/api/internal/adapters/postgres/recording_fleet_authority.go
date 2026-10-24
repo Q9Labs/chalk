@@ -132,7 +132,7 @@ func (r RecordingFleetAuthorityRepository) ObserveIdentity(ctx context.Context, 
 	if row.ActiveLeases < 0 {
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrInventoryDrift
 	}
-	return recorderfleet.NodeObservation{Identity: identity, ActiveLeases: int(row.ActiveLeases), ObservedAt: observedAt, LeasesObservedAt: observedAt, IdentityAbsent: row.IdentityAbsent, IdentityRevoked: row.IdentityRevoked}, nil
+	return recorderfleet.NodeObservation{Identity: identity, ActiveLeases: int(row.ActiveLeases), LeasesObservedAt: observedAt, IdentityAbsent: row.IdentityAbsent, IdentityRevoked: row.IdentityRevoked}, nil
 }
 
 func (r RecordingFleetAuthorityRepository) ReserveBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) (recorderfleetauthority.BootstrapRecord, error) {

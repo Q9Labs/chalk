@@ -15,10 +15,12 @@ import (
 func TestIdentityLeaseReadRequiresExplicitAuthorityAndCount(t *testing.T) {
 	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleRender}
 	identity := recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: key.Role, BootGeneration: 3}
-	for _, scenario := range []string{"valid-zero", "valid-positive", "old-api-404", "missing-ack", "missing-count", "null-count", "missing-timestamp", "wrong-identity", "unknown-field"} {
+	for _, scenario := range []string{"valid-zero", "valid-positive", "valid-no-heartbeat", "old-api-404", "missing-ack", "missing-count", "null-count", "missing-timestamp", "wrong-identity", "unknown-field"} {
 		t.Run(scenario, func(t *testing.T) {
 			observation := map[string]any{"identity": identity, "active_leases": 0, "observed_at": time.Now().UTC(), "leases_observed_at": time.Now().UTC(), "identity_absent": true}
 			switch scenario {
+			case "valid-no-heartbeat":
+				delete(observation, "observed_at")
 			case "valid-positive":
 				observation["active_leases"] = 1
 			case "missing-count":
