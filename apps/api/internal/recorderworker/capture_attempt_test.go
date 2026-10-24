@@ -2626,7 +2626,7 @@ func TestCapturePlanPollingDoesNotRetireTracksBeforeConsumerAppliesPlan(t *testi
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		attempt.planLoop(ctx, events)
+		attempt.planLoop(ctx, events, 1)
 	}()
 	select {
 	case <-coordinator.reconciled:
