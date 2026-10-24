@@ -198,3 +198,29 @@ func TestFleetAbandonCannotRevokeIssuedIdentityWithPostgres(t *testing.T) {
 		t.Fatalf("404 cleanup left active row: %s %v", state, err)
 	}
 }
+
+func TestFleetSlotDemandUsesDatabaseLeaseClock(t *testing.T) {
+	for _, expired := range []bool{false, true} {
+		for _, skew := range []time.Duration{-time.Minute, time.Minute} {
+			t.Run(fmt.Sprintf("expired=%v/skew=%s", expired, skew), func(t *testing.T) {
+				tx, fixture := newAllocationCleanupFixture(t, expired, "capture")
+				defer func() { _ = tx.Rollback(context.Background()) }()
+				execCleanupFixture(t, tx, `update recording_reservations set ends_at=clock_timestamp()-interval '2 hours' where recording_id=$1`, fixture.recordingID.Bytes())
+				delta := 30
+				if expired {
+					delta = -30
+				}
+				execCleanupFixture(t, tx, `update recording_jobs set lease_expires_at=clock_timestamp()+$2*interval '1 second' where id=$1`, fixture.jobID.Bytes(), delta)
+				repository := postgres.NewRecordingFleetAuthorityRepository(sqlc.New(tx))
+				demand, err := repository.GetDemand(t.Context(), fleetRecoveryConfig(workeridentity.RoleCapture).Key, time.Now().Add(skew))
+				want := 1
+				if expired {
+					want = 0
+				}
+				if err != nil || demand.DesiredNodes != want {
+					t.Fatalf("demand=%+v want=%d err=%v", demand, want, err)
+				}
+			})
+		}
+	}
+}

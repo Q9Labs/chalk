@@ -237,7 +237,7 @@ with reservation_demand as (
 job_demand as (
     select
         count(*) filter (where state in ('pending', 'retryable_failure'))::integer as queued_jobs,
-        count(*) filter (where state = 'leased' and lease_expires_at > $2::timestamptz)::integer as leased_jobs,
+        count(*) filter (where state = 'leased' and lease_expires_at > clock_timestamp())::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
     where (
