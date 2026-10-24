@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import parse_qs
 
 import release
 import web
@@ -63,24 +64,30 @@ class MemoryGitHub(GitHub):
         return self.archives[target]
 
     def request(self, route, data=None):
+        if route.startswith('deployments?'):
+            query = parse_qs(route.split('?', 1)[1])
+            items = [item for item in reversed(self.items)
+                     if item.get('environment') == query['environment'][0]
+                     and item.get('task', item['payload'].get('channel')) == query['task'][0]
+                     and ('sha' not in query or item['payload'].get('target_sha') == query['sha'][0])]
+            start = (int(query['page'][0]) - 1) * 100
+            return items[start:start + 100]
         if route == 'git/ref/heads/master':
             return dict(object=dict(sha=self.tip))
         if route == 'deployments':
             item = dict(data, id=len(self.items) + 1, created_at=self.created_at, latest_status='pending')
             self.items.append(item)
             return item
+        if route.startswith('deployments/') and data is None:
+            item = self.items[int(route.split('/')[1]) - 1]
+            if '/statuses' in route:
+                return [] if item['latest_status'] == 'pending' else [dict(state=item['latest_status'])]
+            return item
         if '/statuses' in route:
             self.items[int(route.split('/')[1]) - 1]['latest_status'] = data['state']
             return {}
         return dict(head_branch='master', head_repository={'full_name': self.repository},
                     path='.github/workflows/nightly.yml', event='schedule')
-
-    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
-        return [item for item in reversed(self.items) if item.get('environment') == environment
-                and (task != 'production-release' or item['latest_status'] == 'success')
-                and item['payload'].get('channel') == task
-                and (not sha or item['payload'].get('target_sha') == sha)
-                and (not manifest_sha256 or item['payload'].get('manifest_sha256') == manifest_sha256)]
 
     def pages(self, route, key):
         if '/workflows/gate.yml/' in route:
@@ -183,24 +190,20 @@ class CutTests(unittest.TestCase):
         self.assertEqual([item['payload']['release_id'] for item in held_candidates(api.items)], ['B'])
 
     @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA)
-    def test_manual_web_write_revokes_held_even_when_invalidation_is_interrupted(self):
+    def test_manual_web_write_keeps_saved_held_bytes_promotable(self):
         api = MemoryGitHub()
         with patch.dict(os.environ, GITHUB_RUN_ID='1', RELEASE_ID='A'):
             release.invalidate(api, None)
             with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success', PROOF_RESULT='passed', WEB_E2E_RESULT='passed'):
                 release.record(api, None)
-        # Simulate API loss after the durable marker but before the inactive status.
-        request = api.request
-        def interrupted(route, data=None):
-            if '/statuses' in route:
-                raise ValueError('connection lost')
-            return request(route, data)
-        with patch.object(api, 'request', side_effect=interrupted), patch.dict(os.environ, GITHUB_RUN_ID='2', RELEASE_ID=''):
-            with self.assertRaisesRegex(ValueError, 'connection lost'):
-                release.invalidate(api, None)
-        self.assertTrue(held_candidates(api.items))
-        with self.assertRaisesRegex(ValueError, 'newer nightly write'):
-            release.select(api, None)
+        with patch.dict(os.environ, GITHUB_RUN_ID='2', RELEASE_ID=''):
+            release.invalidate(api, None)
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, GITHUB_OUTPUT=str(Path(directory) / 'output'),
+                            GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')):
+                release.select(api, None)
+            selected = json.loads((Path(directory) / 'output').read_text().split('selection=', 1)[1])
+        self.assertEqual(selected['selection']['release_id'], 'A')
 
     @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA, GITHUB_RUN_ID='1', RELEASE_ID='A')
     def test_same_run_web_write_keeps_the_applied_identity_recordable(self):
@@ -312,12 +315,171 @@ class CutTests(unittest.TestCase):
     @patch.dict(os.environ, TARGET_SHA=SHA, GITHUB_RUN_ID='1')
     def test_shared_invalidation_never_loses_the_completed_cut_baseline(self):
         item = held()
-        def status(*_):
-            item['latest_status'] = 'inactive'
-        release.invalidate(SimpleNamespace(deployments=lambda _: [item], request=status), None)
-        self.assertEqual(held_candidates([item]), [])
+        release.invalidate(SimpleNamespace(request=lambda *_: {}), None)
+        self.assertEqual(held_candidates([item]), [item])
         self.assertFalse(cut_decision(SHA, [item], NOW)[0])
         self.assertTrue(cut_decision('b' * 40, [item], NOW)[0])
+
+
+
+class HeldSelectionTests(unittest.TestCase):
+    def cut(self, api, run, identity, passed=True):
+        with patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA,
+                        GITHUB_RUN_ID=run, RELEASE_ID=identity):
+            release.invalidate(api, None)
+            with patch.dict(os.environ, RELEASE=json.dumps(api.info(run, identity)), DEPLOY_RESULT='success',
+                            PROOF_RESULT='passed' if passed else 'failed', WEB_E2E_RESULT='passed'):
+                release.record(api, None)
+
+    def test_selection_matrix(self):
+        for state, expected in [('alone', 'A'), ('in-flight', 'A'), ('held', 'B'), ('failed', 'A')]:
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
+                api = MemoryGitHub()
+                self.cut(api, '1', 'A')
+                if state == 'in-flight':
+                    with patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA, GITHUB_RUN_ID='2', RELEASE_ID='B'):
+                        release.invalidate(api, None)
+                elif state in ('held', 'failed'):
+                    self.cut(api, '2', 'B', passed=state == 'held')
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(Path(directory) / 'output'),
+                                GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')):
+                    release.select(api, None)
+                selected = json.loads((Path(directory) / 'output').read_text().split('selection=', 1)[1])
+                self.assertEqual(selected['selection']['release_id'], expected)
+
+    def test_approval_recheck_allows_inflight_but_rejects_newly_held_replacement(self):
+        api = MemoryGitHub()
+        self.cut(api, '1', 'A')
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, GITHUB_OUTPUT=str(Path(directory) / 'output'),
+                            GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')):
+                release.select(api, None)
+            selection = (Path(directory) / 'output').read_text().split('selection=', 1)[1]
+        with patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA, GITHUB_RUN_ID='2', RELEASE_ID='B'):
+            release.invalidate(api, None)
+        with patch.dict(os.environ, SELECTION=selection):
+            release.recheck(api, None)
+            self.cut(api, '2', 'B')
+            with self.assertRaisesRegex(ValueError, 'newer held nightly'):
+                release.recheck(api, None)
+
+    def test_pending_record_creation_and_failed_success_post_keep_previous_held(self):
+        api = MemoryGitHub()
+        self.assertIs(type(api).deployments, GitHub.deployments)
+        self.cut(api, '1', 'A')
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'output'
+            def select():
+                output.write_text('')
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')):
+                    release.select(api, None)
+                return json.loads(output.read_text().split('selection=', 1)[1])
+            selection = select()
+            info = api.info('2', 'B')
+            info.update(channel='nightly-cut', target_sha=SHA, proof_result='passed')
+            info['web'] = json.loads(info['web'])
+            external_request = api.request
+            def interrupted_status(route, data=None):
+                if (route.endswith('/statuses') and data and data.get('state') == 'success'
+                        and api.items[int(route.split('/')[1]) - 1]['payload']['channel'] == 'nightly-cut'):
+                    # The create/status gap, through the real deployment reader.
+                    self.assertEqual(select()['selection']['release_id'], 'A')
+                    with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                        release.recheck(api, None)
+                    raise ValueError('status POST failed')
+                return external_request(route, data)
+            with patch.object(api, 'request', side_effect=interrupted_status), patch.dict(os.environ, GITHUB_RUN_ID='2'):
+                with self.assertRaisesRegex(ValueError, 'status POST failed'):
+                    api.record(SHA, info, True)
+            pending = next(item for item in api.items if item['payload'].get('release_id') == 'B')
+            self.assertEqual(pending['latest_status'], 'pending')
+            # No successful status ever arrives: subsequent reads still use A.
+            self.assertEqual(select()['selection']['release_id'], 'A')
+            with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                release.recheck(api, None)
+            api.request(f"deployments/{pending['id']}/statuses", {'state': 'success'})
+            self.assertEqual(select()['selection']['release_id'], 'B')
+            for state in ('failure', 'inactive'):
+                api.request(f"deployments/{pending['id']}/statuses", {'state': state})
+                with self.assertRaisesRegex(ValueError, 'no held nightly'):
+                    select()
+
+    def test_corrupt_newest_held_never_falls_back(self):
+        api = MemoryGitHub()
+        self.cut(api, '1', 'A')
+        self.cut(api, '2', 'B')
+        api.items[-1]['payload']['manifest_sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+            release.select(api, None)
+
+
+class ImagePreflightTests(unittest.TestCase):
+    def test_workflow_checks_every_digest_before_any_mutation(self):
+        workflow = (release.ROOT / '.github/workflows/ci.yml').read_text()
+        start = workflow.index('          if [[ "$MANAGED_ENVIRONMENT" == production ]]; then\n            python3 scripts/releases/release.py verify_images')
+        end = workflow.index('          if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then', start)
+        script = textwrap.dedent(workflow[start:end])
+        for mode in ('present', 'missing', 'denied', 'public-missing'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest = root / 'held.json'
+                manifest.write_text(json.dumps({'images': {
+                    name: '123456789012.dkr.ecr.eu-west-1.amazonaws.com/' + name + '@sha256:' + 'a' * 64
+                    for name in ('api', 'sync', 'recorder_control')}, 'schema_version': 2}))
+                value = json.loads(manifest.read_text())
+                value['images'].update({name: 'docker.io/example/' + name + '@sha256:' + 'b' * 64
+                                        for name in ('redis', 'cloudflared')})
+                manifest.write_text(json.dumps(value))
+                manifest.with_suffix('.media.json').write_text('{}')
+                trace = root / 'trace'
+                aws = root / 'aws'
+                aws.write_text("#!/usr/bin/env python3\n" + textwrap.dedent("""
+                    import json, os, sys
+                    repository = sys.argv[sys.argv.index('--repository-name') + 1]
+                    with open(os.environ['TRACE'], 'a') as trace:
+                        trace.write('describe:' + repository + '\\n')
+                    if repository == 'sync' and os.environ['MODE'] in ('missing', 'denied'):
+                        print('ImageNotFoundException' if os.environ['MODE'] == 'missing' else 'An error occurred (AccessDeniedException) when calling DescribeImages', file=sys.stderr)
+                        sys.exit(1)
+                    print(json.dumps({'imageDetails': [{'imageDigest': 'sha256:' + 'a' * 64}]}))
+                    """))
+                aws.chmod(0o755)
+                docker = root / 'docker'
+                docker.write_text('#!/bin/sh\necho public-image >> "$TRACE"\n[ "$MODE" != public-missing ]\n')
+                docker.chmod(0o755)
+                stubs = """
+                    node() { echo "host:$*" >> "$TRACE"; }
+                    python3() {
+                      if [[ "$1" == scripts/releases/media.py ]]; then
+                        echo "parameter:$2" >> "$TRACE"
+                      else
+                        command python3 "$@"
+                      fi
+                    }
+                """
+                result = subprocess.run(['bash', '-e', '-c', stubs + script], cwd=release.ROOT,
+                                        env={**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                                             'TRACE': str(trace), 'MODE': mode, 'manifest': str(manifest),
+                                             'GITHUB_REPOSITORY': 'example/release-test',
+                                             'MANAGED_ENVIRONMENT': 'production', 'RUNNER_TEMP': directory},
+                                        capture_output=True, text=True)
+                self.assertTrue(trace.exists(), result.stderr)
+                events = trace.read_text().splitlines()
+                if mode == 'present':
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(events[:5], ['describe:api', 'describe:sync', 'describe:recorder_control',
+                                                  'public-image', 'public-image'])
+                    self.assertIn('parameter:pin_archives', events)
+                    self.assertEqual(sum(item.startswith('host:') for item in events), 2)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    if mode == 'public-missing':
+                        self.assertEqual(events, ['describe:api', 'describe:sync', 'describe:recorder_control', 'public-image'])
+                        self.assertIn('redis: public image check failed', result.stderr)
+                    else:
+                        self.assertEqual(events, ['describe:api', 'describe:sync'])
+                        self.assertIn('sync:', result.stderr)
+                        self.assertIn('missing from ECR' if mode == 'missing' else 'AccessDeniedException', result.stderr)
 
 
 class ArtifactTests(unittest.TestCase):

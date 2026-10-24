@@ -847,6 +847,9 @@ jobs:
               exit 1
             }
           fi
+          if [[ "$MANAGED_ENVIRONMENT" == production ]]; then
+            python3 scripts/releases/release.py verify_images --manifest "$manifest"
+          fi
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}" --dry-run > "$RUNNER_TEMP/managed-preflight.json"
           if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
             python3 scripts/releases/release.py invalidate

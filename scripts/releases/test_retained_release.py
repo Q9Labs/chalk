@@ -35,8 +35,13 @@ class RetainedReleaseTests(unittest.TestCase):
             info = release.previous_production(api)
             self.assertEqual(info['manifest_sha256'], digest(data))
             # A deleted run and expired artifacts must not be read on rollback.
+            external_request = api.request
+            def retained_request(route, data=None):
+                if route.startswith('actions/'):
+                    raise AssertionError('deleted Actions run read')
+                return external_request(route, data)
             with patch.object(api, 'artifact', side_effect=AssertionError('expired Actions artifact read')):
-                with patch.object(api, 'request', side_effect=AssertionError('deleted Actions run read')):
+                with patch.object(api, 'request', side_effect=retained_request):
                     self.assertEqual(release.manifest_bytes(api, info), data)
             api.items[0]['payload']['manifest_base64'] = base64.b64encode(data + b' ').decode()
             with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
