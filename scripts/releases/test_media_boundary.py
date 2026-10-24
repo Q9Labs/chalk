@@ -21,7 +21,8 @@ def fixture_state(config, manifest_digest, archive_hash, corpus):
     environment = dict(CHALK_ENVIRONMENT='nightly', CHALK_RELEASE_ID='example-release',
                        CHALK_RELEASE_MANIFEST_DIGEST=manifest_digest, CHALK_CONFIG_DIGEST='sha256:' + '0' * 64,
                        DEEPINFRA_CORPUS_DIGEST=corpus, CONTROL_API_BASE_URL='https://nightly-api.chalkmeet.com',
-                       CONTROL_API_AUDIENCE='chalk-nightly-control-api')
+                       CONTROL_API_AUDIENCE='chalk-nightly-control-api', TRANSCRIPTION_PRIVACY_GATE_ACCEPTED='true',
+                       CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN='arn:aws:ssm:example:000000000000:parameter/example/workload-auth')
     environment['CHALK_CONFIG_DIGEST'] = 'sha256:' + media.digest(json.dumps({key: value for key, value in environment.items() if key != 'CHALK_CONFIG_DIGEST'}, sort_keys=True, separators=(',', ':')))
     function = dict(environment=[dict(variables=environment)], function_name=config['dispatcher']['function_name'],
                     source_code_hash=base64.b64encode(bytes.fromhex(archive_hash)).decode(), s3_bucket='example-artifacts',
@@ -93,35 +94,73 @@ COMMANDS = {
     'import-log': tofu('import', '-input=false', 'module.dispatcher.aws_cloudwatch_log_group.dispatcher', '/aws/lambda/chalk-nightly-transcription-dispatcher'),
 }
 INSTALLED = 'config list state state artifact list state state'
+START = INSTALLED + ' upload lambda init'
+FIRST_INSTALL = 'config list artifact list upload init-first list import-role import-scheduler-role import-log'
 CASE_COMMANDS = {
     ('no-op', ''): INSTALLED + ' lambda init plan-log show plan-lambda show plan show state lambda schedule',
-    ('changed-zip', ''): INSTALLED + ' upload lambda init plan-log show apply plan-lambda show apply plan show apply state lambda schedule',
-    ('binding', ''): INSTALLED + ' upload lambda init plan-log show apply plan-lambda show apply plan show apply state lambda schedule',
+    ('changed-zip', ''): START + ' plan-log show apply plan-lambda show apply plan show apply state lambda schedule',
+    ('binding', ''): START + ' plan-log show apply plan-lambda show apply plan show apply state lambda schedule',
     ('output-update', ''): INSTALLED + ' lambda init plan-log show apply plan-lambda show apply plan show apply state lambda schedule',
-    ('forbidden-update', ''): INSTALLED + ' lambda init plan-log show',
     ('bad-json', ''): INSTALLED + ' lambda init plan-log show',
-    ('missing-state', ''): 'config list artifact list upload init-first list import-role import-scheduler-role import-log plan show apply state lambda schedule',
+    ('missing-state', ''): FIRST_INSTALL + ' plan show apply state lambda schedule',
     ('partial-state', ''): 'config list state artifact list state upload init-first list state-list import-log plan show apply state lambda schedule',
+    ('no-op', 'disabled-scheduler'): INSTALLED + ' lambda init plan-log show plan-lambda show plan show state lambda schedule',
+    ('missing-state', 'production'): 'config list artifact list',
+    ('missing-state', 'plan-final-replace'): FIRST_INSTALL + ' plan show',
+    ('changed-zip', 'unversioned-upload'): INSTALLED + ' upload',
+    ('no-op', 'fail-init'): INSTALLED + ' lambda init',
+    ('no-op', 'fail-plan'): INSTALLED + ' lambda init plan-log',
+    ('changed-zip', 'fail-apply'): START + ' plan-log show apply',
+    ('missing-state', 'fail-import'): FIRST_INSTALL.removesuffix(' import-scheduler-role import-log'),
 }
 for mode in ('no-op', 'changed-zip'):
     for fault in ('unhealthy', 'wrong-zip', 'stale-release'):
         CASE_COMMANDS[mode, fault] = CASE_COMMANDS[mode, ''].removesuffix(' schedule')
+for stage, plan, before in (('log', 'plan-log', ''), ('lambda', 'plan-lambda', ' plan-log show apply'), ('final', 'plan', ' plan-log show apply plan-lambda show apply')):
+    for kind in ('field', 'replace', 'resource'):
+        CASE_COMMANDS['changed-zip', f'plan-{stage}-{kind}'] = START + before + f' {plan} show'
+REJECTIONS = {'unhealthy': 'dispatcher update is not healthy', 'wrong-zip': 'dispatcher ZIP digest changed',
+              'stale-release': 'dispatcher runtime release binding mismatch', 'disabled-scheduler': 'dispatcher scheduler is not enabled',
+              'production': 'production dispatcher must already be provisioned', 'unversioned-upload': 'dispatcher destination bucket is not versioned', 'field': 'dispatcher plan changes more than code',
+              'resource': 'dispatcher update exceeds resource allowlist', 'replace': 'dispatcher update must not create, replace or delete resources'}
+ZIP_DIGEST = media.digest(b'ZIP')
+
+
+def rejection(mode, fault):
+    """Return the error that ends a case, or None when the release must succeed."""
+    if mode == 'bad-json':
+        return 'Expecting value'
+    if fault.startswith('fail-'):
+        return 'tofu operation failed'
+    if mode == 'missing-state' and fault == 'plan-final-replace':
+        return 'first-install dispatcher plan must not destroy or replace resources'
+    return REJECTIONS.get(fault) or REJECTIONS.get(fault.rsplit('-', 1)[-1])
+
+
+def released(mode):
+    """Return the success payload: uploads get a new object, other cases keep the installed one."""
+    uploaded = mode in ('changed-zip', 'binding', 'missing-state', 'partial-state')
+    return dict(release_id='example-release', verified=True, artifact_sha256=ZIP_DIGEST, artifact_bucket='example-artifacts', scheduler_state='ENABLED',
+                artifact_key='transcription-dispatcher/example-release/' + (ZIP_DIGEST if uploaded else 'example') + '.zip',
+                artifact_version_id='uploaded-' + ZIP_DIGEST[:8] if uploaded else 'example-version')
+
+
 TEMPORARY_STATE = re.compile(re.escape(tempfile.gettempdir()) + r'/chalk-release-state-\w+')
+
+
+WORK = re.compile(re.escape(tempfile.gettempdir()) + r'/chalk-dispatcher-release-\w+')
 
 
 def recorded_commands(calls):
     """Name each recorded call by its argv, with the case's temporary directories made stable."""
-    work = next(word.removeprefix('-chdir=') for call in calls for word in call if word.startswith('-chdir='))
-    assert re.fullmatch(re.escape(tempfile.gettempdir()) + r'/chalk-dispatcher-release-\w+', work), work
+    work = WORK.search(' '.join(word for call in calls for word in call)).group()
     return [tuple(TEMPORARY_STATE.sub('<state>', word.replace(work, '<work>')) for word in call) for call in calls]
 
 
 class DispatcherBoundary(unittest.TestCase):
     def test_dispatcher_release_through_executables(self):
-        cases = [(mode, '') for mode in ('no-op', 'changed-zip', 'binding', 'output-update', 'forbidden-update', 'bad-json', 'missing-state', 'partial-state')]
-        cases += [(mode, fault) for mode in ('no-op', 'changed-zip') for fault in ('unhealthy', 'wrong-zip', 'stale-release')]
-        for mode, fault in cases:
-            with self.subTest(mode=mode, final_fault=fault), tempfile.TemporaryDirectory() as directory:
+        for mode, fault in CASE_COMMANDS:
+            with self.subTest(mode=mode, fault=fault), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 executable = '#!' + sys.executable + '\n' + (Path(__file__).parent / 'fixtures/media_commands.py').read_text()
                 for name in ('aws', 'tofu'):
@@ -129,6 +168,9 @@ class DispatcherBoundary(unittest.TestCase):
                     path.write_text(executable)
                     path.chmod(0o700)
                 config = fixture_config()
+                if fault == 'production':
+                    config['runtime']['parameter_prefix'] = config['runtime']['parameter_prefix'].replace('nightly', 'production')
+                    config['bootstrap_ca_parameter'] = config['bootstrap_ca_parameter'].replace('nightly', 'production')
                 manifest = root / 'manifest.json'
                 manifest.write_text(json.dumps(dict(component_releases=dict(api=dict(release_id='example-release')))))
                 value = members()
@@ -153,27 +195,25 @@ class DispatcherBoundary(unittest.TestCase):
                                                  'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'))
                 aws_environment['AWS_PROFILE'] = ''
                 (root / 'aws-environment.json').write_text(json.dumps(aws_environment))
-                args = SimpleNamespace(region='example', config_parameter='/example/config', environment='nightly',
+                (root / 'paths.json').write_text(json.dumps(dict(module=str(media.MODULE), root=str(media.ROOT / 'infrastructure/nightly/transcription'))))
+                args = SimpleNamespace(region='example', config_parameter='/example/config', environment='production' if fault == 'production' else 'nightly',
                                        manifest=manifest, output=output, dry_run=False)
                 stdout = io.StringIO()
                 with patch.dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'], AWS_PROFILE='',
-                                MEDIA_FIXTURE=directory, MEDIA_CASE=mode, MEDIA_FINAL_FAULT=fault, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(stdout):
+                                MEDIA_FIXTURE=directory, MEDIA_CASE=mode, MEDIA_FAULT=fault, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(stdout):
                     for key, value in aws_environment.items():
                         if value is None:
                             os.environ.pop(key, None)
-                    if fault:
-                        messages = {'unhealthy': 'dispatcher update is not healthy', 'wrong-zip': 'dispatcher ZIP digest changed',
-                                    'stale-release': 'dispatcher runtime release binding mismatch'}
-                        with self.assertRaisesRegex(ValueError, messages[fault]):
-                            media.deploy_dispatcher(args)
-                        self.assertEqual(stdout.getvalue(), '')
-                    elif mode in ('forbidden-update', 'bad-json'):
-                        with self.assertRaisesRegex(ValueError, 'resource allowlist' if mode == 'forbidden-update' else 'Expecting value'):
+                    for key in [key for key in os.environ if key.startswith('TF_')]:
+                        del os.environ[key]
+                    message = rejection(mode, fault)
+                    if message:
+                        with self.assertRaisesRegex((ValueError, RuntimeError), message):
                             media.deploy_dispatcher(args)
                         self.assertEqual(stdout.getvalue(), '')
                     else:
                         media.deploy_dispatcher(args)
-                        self.assertTrue(json.loads(stdout.getvalue())['verified'])
+                        self.assertEqual(json.loads(stdout.getvalue()), released(mode))
                 calls = [json.loads(line) for line in (root / 'calls.jsonl').read_text().splitlines()]
                 self.assertEqual(recorded_commands(calls), [COMMANDS[name] for name in CASE_COMMANDS[mode, fault].split()])
 
