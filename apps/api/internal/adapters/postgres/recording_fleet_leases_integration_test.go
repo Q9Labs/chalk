@@ -12,7 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
-func TestRenderFleetObservationCountsLiveJobLeases(t *testing.T) {
+func TestRenderFleetObservationCountsDatabaseLiveLeasesUnderClockSkew(t *testing.T) {
 	for _, kind := range []string{"render", "transcription"} {
 		t.Run(kind, func(t *testing.T) {
 			transaction, fixture := newAllocationCleanupFixture(t, false, kind)
@@ -21,11 +21,15 @@ func TestRenderFleetObservationCountsLiveJobLeases(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			now := time.Now().UTC().Truncate(time.Microsecond)
-			heartbeat := now.Add(-10 * time.Second)
+			var databaseNow time.Time
+			if err := transaction.QueryRow(t.Context(), `select clock_timestamp()`).Scan(&databaseNow); err != nil {
+				t.Fatal(err)
+			}
+			now := databaseNow.Add(time.Minute)
+			heartbeat := databaseNow.Add(-5 * time.Hour)
 			execCleanupFixture(t, transaction, `
 				update recording_jobs set lease_owner = $2, lease_expires_at = $3 where id = $1`,
-				fixture.jobID.Bytes(), workerID.String(), now.Add(time.Hour))
+				fixture.jobID.Bytes(), workerID.String(), databaseNow.Add(30*time.Second))
 			execCleanupFixture(t, transaction, `
 				insert into recording_fleet_nodes (
 					environment, role, provider_id, node_name, region, release_id,
@@ -35,13 +39,20 @@ func TestRenderFleetObservationCountsLiveJobLeases(t *testing.T) {
 					'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 					1, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', $2,
 					'draining', $3)`, workerID.String(), workerID.Bytes(), heartbeat)
+			var databaseLive bool
+			if err := transaction.QueryRow(t.Context(), `select state = 'leased' and lease_expires_at > clock_timestamp() from recording_jobs where id = $1`, fixture.jobID.Bytes()).Scan(&databaseLive); err != nil {
+				t.Fatal(err)
+			}
+			if !databaseLive {
+				t.Fatal("fixture lease expired before the skew check")
+			}
 			repository := postgres.NewRecordingFleetAuthorityRepository(sqlc.New(transaction))
 			key := recorderfleet.PoolKey{Environment: "fleetdrain-test", Role: workeridentity.RoleRender}
 			observations, err := repository.ObserveNodes(t.Context(), key, now)
 			if err != nil || len(observations) != 1 || observations[0].ActiveLeases != 1 || !observations[0].ObservedAt.Equal(heartbeat) || !observations[0].LeasesObservedAt.Equal(now) {
 				t.Fatalf("live %s lease with old heartbeat: observations=%+v, error=%v", kind, observations, err)
 			}
-			execCleanupFixture(t, transaction, `update recording_jobs set lease_expires_at = $2 where id = $1`, fixture.jobID.Bytes(), now)
+			execCleanupFixture(t, transaction, `update recording_jobs set lease_expires_at = $2 where id = $1`, fixture.jobID.Bytes(), databaseNow)
 			observations, err = repository.ObserveNodes(t.Context(), key, now)
 			if err != nil || len(observations) != 1 || observations[0].ActiveLeases != 0 || !observations[0].ObservedAt.Equal(heartbeat) || !observations[0].LeasesObservedAt.Equal(now) {
 				t.Fatalf("expired %s lease: observations=%+v, error=%v", kind, observations, err)

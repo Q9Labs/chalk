@@ -94,6 +94,36 @@ func TestRecorderFleetNodesOnlyExtendsResponseForOptedInControllers(t *testing.T
 	}
 }
 
+func TestRecorderFleetNodesFailsClosedForLegacyControllersWithLiveLeases(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	for _, heartbeat := range []time.Time{now.Add(2 * time.Second), now.Add(-5 * time.Hour), now} {
+		service := &recorderFleetControllerServiceStub{nodes: []recorderfleet.NodeObservation{{
+			Identity:     recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 3},
+			ActiveLeases: 1, ObservedAt: heartbeat, LeasesObservedAt: now,
+		}}}
+		router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
+		for _, optedIn := range []bool{false, true} {
+			request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
+			if optedIn {
+				request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if !optedIn {
+				if response.Code != http.StatusServiceUnavailable {
+					t.Fatalf("legacy controller could discard live lease: heartbeat=%s status=%d body=%s", heartbeat, response.Code, response.Body.String())
+				}
+				continue
+			}
+			var result recorderFleetNodesResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || len(result.Nodes) != 1 || result.Nodes[0] != service.nodes[0] {
+				t.Fatalf("new controller lost positive lease: status=%d response=%+v error=%v", response.Code, result, err)
+			}
+		}
+	}
+}
+
 func TestRecorderFleetControllerRouterRequiresControllerAndStrictSchema(t *testing.T) {
 	t.Parallel()
 	service := &recorderFleetControllerServiceStub{}

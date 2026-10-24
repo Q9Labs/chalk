@@ -88,6 +88,43 @@ func TestScaleDownDoesNotTrustOutdatedLeaseRead(t *testing.T) {
 	}
 }
 
+func TestScaleDownPreservesPositiveLeaseWithClockSkew(t *testing.T) {
+	for _, phase := range []Phase{PhaseDraining, PhaseIdentityRevoked, PhaseDeleting} {
+		for _, leaseRead := range []string{"missing", "fresh", "future", "expired"} {
+			t.Run(string(phase)+"/"+leaseRead, func(t *testing.T) {
+				fixture := claimedNodeFixture(t)
+				fixture.config.Now = func() time.Time { return fixture.now }
+				reconciler := fixture.reconciler(t)
+				if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
+					t.Fatalf("start drain: %+v", result)
+				}
+				fixture.now = fixture.now.Add(fixture.config.DrainTimeout + time.Second)
+				fixture.demand.value.ObservedAt = fixture.now
+				observation := &fixture.runtime.observations[0]
+				observation.ActiveLeases = 1
+				observation.ObservedAt = fixture.now.Add(2 * time.Second)
+				switch leaseRead {
+				case "fresh":
+					observation.LeasesObservedAt = fixture.now
+				case "future":
+					observation.LeasesObservedAt = fixture.now.Add(time.Minute)
+				case "expired":
+					observation.LeasesObservedAt = fixture.now.Add(-fixture.config.ObservationMaxAge - time.Second)
+				}
+				managed := fixture.journal.state.Nodes[observation.Identity.ProviderID]
+				managed.Phase = phase
+				fixture.journal.state.Nodes[managed.ProviderID] = managed
+				// Two ticks cover both revocation and deletion on the unfixed controller.
+				for range 2 {
+					if result := fixture.step(t, reconciler); result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+						t.Fatalf("clock-skewed positive lease was not protected: %+v, revoke/delete=%d/%d", result, fixture.bootstrap.revokeCalls, fixture.provider.deleteCalls)
+					}
+				}
+			})
+		}
+	}
+}
+
 func claimedNodeFixture(t *testing.T) *fleetFixture {
 	t.Helper()
 	fixture := newFleetFixture(t)
