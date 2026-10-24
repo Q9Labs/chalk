@@ -23,7 +23,8 @@ func TestVersionedSlotDemandAndLegacyFallback(t *testing.T) {
 		{"missing floor", recorderfleet.SlotDemandSchemaVersion, `,"capture_capacity":{"slot_demand":2}`, false, false},
 		{"negative floor", recorderfleet.SlotDemandSchemaVersion, `,"capture_capacity":{"slot_demand":2,"physical_node_floor":-1}`, false, false},
 		{"unknown field", recorderfleet.SlotDemandSchemaVersion, `,"capture_capacity":{"slot_demand":2,"physical_node_floor":3,"slots":8}`, false, false},
-		{"inconsistent demand", recorderfleet.SlotDemandSchemaVersion, `,"capture_capacity":{"slot_demand":2,"physical_node_floor":2}`, false, false},
+		{"legacy preparation surplus", recorderfleet.SlotDemandSchemaVersion, `,"capture_capacity":{"slot_demand":2,"physical_node_floor":2}`, true, false},
+		{"inconsistent demand", recorderfleet.SlotDemandSchemaVersion, `,"capture_capacity":{"slot_demand":2,"physical_node_floor":4}`, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var logs bytes.Buffer

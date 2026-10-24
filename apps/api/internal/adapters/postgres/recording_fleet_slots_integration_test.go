@@ -380,6 +380,36 @@ func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
 	}
 }
 
+func TestFleetSlotDemandPhysicalFloorWithPreparation(t *testing.T) {
+	tx, fixture := newAllocationCleanupFixture(t, true, "capture")
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	// Current admission limits each reservation to ten participants and 4 Mbps.
+	// A transaction-local fixture lets the real query exercise resource-dominant
+	// demand without changing those production limits or locking the shared table.
+	execCleanupFixture(t, tx, `create temporary table recording_reservations on commit drop as
+		select * from public.recording_reservations where recording_id=$1`, fixture.recordingID.Bytes())
+	execCleanupFixture(t, tx, `insert into recording_reservations select * from recording_reservations`)
+	execCleanupFixture(t, tx, `update recording_reservations set participant_count=50, input_bitrate_bps=16000000`)
+	execCleanupFixture(t, tx, `insert into recording_preparations (tenant_id, space_id, starts_at, state, revision, request_revision, request_kind)
+		select tenant_id, space_id, clock_timestamp(), 'scheduled', 1, 1, 'prepare' from recordings where id=$1`, fixture.recordingID.Bytes())
+	config := fleetRecoveryConfig(workeridentity.RoleCapture)
+	repository := postgres.NewRecordingFleetAuthorityRepository(sqlc.New(tx))
+	service, err := recorderfleetauthority.NewService(config.Key.Environment, repository, &fleetRecoveryIssuer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewTLSServer(httpapi.NewRecorderFleetControllerRouter(service, fleetRecoveryVerifier{}, config.Key.Environment, nil))
+	defer server.Close()
+	control, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: config.Key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	demand, err := control.GetDemand(t.Context(), config.Key)
+	if err != nil || demand.DesiredNodes != 4 || demand.ScheduledPrewarms != 1 || demand.CaptureCapacity == nil || demand.CaptureCapacity.SlotDemand != 3 || demand.CaptureCapacity.PhysicalNodeFloor != 3 {
+		t.Fatalf("legacy demand adds a preparation; slot demand must not add a physical node: demand=%+v capacity=%+v error=%v", demand, demand.CaptureCapacity, err)
+	}
+}
+
 func TestFleetSlotDemandUsesDatabaseLeaseClock(t *testing.T) {
 	for _, expired := range []bool{false, true} {
 		for _, skew := range []time.Duration{-time.Minute, time.Minute} {

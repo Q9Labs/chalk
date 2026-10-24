@@ -113,7 +113,7 @@ type CaptureCapacityDemand struct {
 }
 
 func (d Demand) Validate() error {
-	if d.CaptureCapacity != nil && (d.CaptureCapacity.SlotDemand < 0 || d.CaptureCapacity.PhysicalNodeFloor < 0 || d.DesiredNodes != max(d.CaptureCapacity.SlotDemand, d.CaptureCapacity.PhysicalNodeFloor)) {
+	if d.CaptureCapacity != nil && (d.CaptureCapacity.SlotDemand < 0 || d.CaptureCapacity.PhysicalNodeFloor < 0 || d.DesiredNodes < max(d.CaptureCapacity.SlotDemand, d.CaptureCapacity.PhysicalNodeFloor)) {
 		return ErrInvalidDemand
 	}
 	if strings.TrimSpace(d.Revision) == "" || len(d.Revision) > 128 || d.DesiredNodes < 0 || d.ScheduledPrewarms < 0 || d.HeldStarts < 0 || d.QueuedJobs < 0 || d.ObservedAt.IsZero() {
