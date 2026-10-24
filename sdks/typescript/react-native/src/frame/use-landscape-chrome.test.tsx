@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { durations } from "../theme/tokens";
 import { useLandscapeChrome } from "./use-landscape-chrome";
 
+vi.mock("react-native-reanimated", () => ({ Easing: { bezier: () => (value: number) => value, linear: (value: number) => value } }));
+
 const roots: ReturnType<typeof createRoot>[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
