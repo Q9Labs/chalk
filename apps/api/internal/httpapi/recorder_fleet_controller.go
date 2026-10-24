@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -145,6 +146,13 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 		}
 		if nodes == nil {
 			nodes = []recorderfleet.NodeObservation{}
+		}
+		// Older controllers reject unknown JSON fields in the v1 response.
+		if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
+			nodes = slices.Clone(nodes)
+			for index := range nodes {
+				nodes[index].LeasesObservedAt = time.Time{}
+			}
 		}
 		writeJSON(w, http.StatusOK, recorderFleetNodesResponse{
 			SchemaVersion: recorderfleet.NodesSchemaVersion, Environment: environment,

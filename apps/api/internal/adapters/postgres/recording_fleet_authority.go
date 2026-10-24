@@ -104,6 +104,7 @@ func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key
 		observations = append(observations, recorderfleet.NodeObservation{
 			Identity: identity, Ready: row.Ready, AdmissionOpen: row.AdmissionOpen,
 			ReadyCapacity: int(row.ReadyCapacity), ActiveLeases: int(row.ActiveLeases), ObservedAt: row.ObservedAt.Time,
+			LeasesObservedAt: observedAt,
 		})
 	}
 	return observations, nil

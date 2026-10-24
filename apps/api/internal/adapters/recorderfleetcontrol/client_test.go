@@ -34,6 +34,9 @@ func TestClientUsesVersionedRoleFencedContracts(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"nightly","role":"capture","revision":"demand-7","desired_nodes":1,"scheduled_prewarms":1,"held_starts":0,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
 		case 2:
 			assertRequest(t, request, http.MethodGet, "/internal/v1/recorder/fleet/nodes", "role=capture", false)
+			if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
+				t.Fatal("client did not opt in to lease-read timestamps")
+			}
 			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_nodes.v1","environment":"nightly","role":"capture","nodes":[{"identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":3},"ready":true,"admission_open":true,"ready_capacity":4,"active_leases":0,"observed_at":"2026-09-06T12:00:00Z"}]}`), nil
 		case 3:
 			assertRequest(t, request, http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/bootstrap", "", true)

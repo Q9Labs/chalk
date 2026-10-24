@@ -159,6 +159,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		return recorderfleet.ErrInvalidConfig
 	}
 	request.Header.Set("Accept", "application/json")
+	if path == fleetPath+"/nodes" {
+		request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+	}
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}

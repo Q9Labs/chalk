@@ -273,7 +273,8 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 			return nil, ErrRoleFence
 		}
 		if observation.ObservedAt.After(now.Add(time.Second)) || now.Sub(observation.ObservedAt) > r.config.ObservationMaxAge {
-			if state.Nodes[node.ProviderID].Phase == PhaseDraining && observation.ActiveLeases > 0 && !observation.ObservedAt.After(now) {
+			// A stopped heartbeat does not invalidate the authority's current job-lease read.
+			if state.Nodes[node.ProviderID].Phase == PhaseDraining && (observation.leasesFresh(now, r.config.ObservationMaxAge) || observation.ActiveLeases > 0 && !observation.ObservedAt.After(now)) {
 				indexed[node.ProviderID] = observation
 			}
 			continue
@@ -408,7 +409,8 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		}
 		// Registered workers can claim before the controller records readiness.
 		if managed.Identity != nil && now.Before(deadline) {
-			if !observation.ObservedAt.After(*managed.DrainStartedAt) {
+			leaseReadAfterClose := observation.leasesFresh(now, r.config.ObservationMaxAge) && observation.LeasesObservedAt.After(*managed.DrainStartedAt)
+			if !leaseReadAfterClose && !observation.ObservedAt.After(*managed.DrainStartedAt) {
 				return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
 			}
 		}
