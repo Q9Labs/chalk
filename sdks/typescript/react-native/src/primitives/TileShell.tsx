@@ -9,6 +9,7 @@ import { fixed, radii } from "../theme/tokens";
 export type TileShellProps = {
   readonly children: ReactNode;
   /** The live ring shows only on a speaking person whose camera is on; a camera-off face reacts instead. */
+  readonly selected?: boolean;
   readonly speaking?: boolean;
   readonly cameraOn?: boolean;
   /** Speaking level from 0 to 1; the ring's opacity follows it (0.3 + 0.7 × level). */
@@ -21,7 +22,7 @@ export type TileShellProps = {
  * content, and the live ring drawn over the video. The stage fills it with video or an
  * avatar and a `NameTag`.
  */
-export const TileShell = memo(function TileShell({ children, speaking = false, cameraOn = false, level, testID }: TileShellProps): React.JSX.Element {
+export const TileShell = memo(function TileShell({ children, selected = false, speaking = false, cameraOn = false, level, testID }: TileShellProps): React.JSX.Element {
   const { colors } = useTheme();
   const { phone } = useDeviceLayout();
   const radius = phone ? radii.tilePhone : radii.tile;
@@ -38,6 +39,7 @@ export const TileShell = memo(function TileShell({ children, speaking = false, c
   return (
     <View style={[styles.tile, { borderRadius: radius, backgroundColor: colors.tile }]} testID={testID}>
       {children}
+      {selected ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: 2, borderColor: colors.text, zIndex: 6 }]} /> : null}
       <Animated.View pointerEvents="none" style={[styles.ring, { borderRadius: radius }, ringStyle]} testID={testID ? `${testID}.ring` : undefined}>
         <View style={[styles.ringShade, { borderRadius: radius - 3 }]} />
       </Animated.View>

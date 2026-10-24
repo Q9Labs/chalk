@@ -8,6 +8,7 @@ import { ChalkText } from "./ChalkText";
 export type NameTagProps = {
   readonly name: string;
   readonly muted?: boolean;
+  readonly following?: boolean;
   readonly pinned?: boolean;
   /** A leading icon for a tile that isn't a person, such as `share` on a shared screen or `pen` on the board. */
   readonly icon?: IconName;
@@ -20,7 +21,7 @@ export type NameTagProps = {
 };
 
 /** The mockup's name tag (`.tag`): bottom-left of a tile, white on the dark overlay in both themes. */
-export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, icon, you = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
+export const NameTag = memo(function NameTag({ name, muted = false, pinned = false, following = false, icon, you = false, handRaised = false, handOrder, testID }: NameTagProps): React.JSX.Element {
   const tagRef = useMeasuredRef<View>(testID, styles.tag);
   return (
     <View pointerEvents="none" style={styles.slot}>
@@ -30,6 +31,11 @@ export const NameTag = memo(function NameTag({ name, muted = false, pinned = fal
         <ChalkText color={fixed.overlayText} numberOfLines={1} style={styles.name} variant="label">
           {name}
         </ChalkText>
+        {following ? (
+          <ChalkText color={fixed.overlayText} variant="label">
+            following
+          </ChalkText>
+        ) : null}
         {you ? (
           <ChalkText color={fixed.overlayText} style={styles.you} variant="label">
             (You)

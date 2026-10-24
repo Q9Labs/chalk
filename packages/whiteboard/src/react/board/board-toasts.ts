@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
-import type { Toast } from "../toast-stack/ToastStack";
+import type { ReactNode } from "react";
 
-export type BoardToast = Omit<Toast, "id">;
+export type BoardToast = {
+  readonly message: ReactNode;
+  readonly icon?: ReactNode;
+  readonly type?: "info" | "success" | "warning" | "error";
+  readonly duration?: number;
+  readonly action?: { readonly label: string; readonly onClick: () => void };
+};
 
 /** Null drops the board lifetime’s toasts, including their action callbacks.
  * Board events join the call's own toast stack, so they look, sit and time out like every other toast. */

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { ViewVersions } from "./board-view-versions";
+import { ViewVersions } from "../../../../../../packages/whiteboard/src/react/board/board-view-versions";
 
 it("accepts a restarted origin epoch while rejecting repeated sequences in the same epoch", () => {
   const versions = new ViewVersions();

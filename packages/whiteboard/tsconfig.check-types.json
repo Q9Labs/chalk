@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../..",
+    "paths": {
+      "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
+      "@q9labsai/facehash/react": ["../facehash/src/react.ts"],
+      "@q9labsai/facehash": ["../facehash/src/index.ts"]
+    }
+  },
+  "references": []
+}

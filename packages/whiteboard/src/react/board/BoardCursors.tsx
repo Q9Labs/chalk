@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
-import { Avatar } from "../atomic/Avatar";
+import type { ReactNode } from "react";
 import { CursorArrow } from "./BoardIcon";
 import { springStep, type Camera } from "./board-model";
 
@@ -29,7 +29,19 @@ export function rememberCursor(cursors: Map<string, RemoteCursor>, cursor: Remot
  * Remote people's cursors over the board: a rounded arrow, the Facehash and the name, in the person's colour.
  * Updates arrive about 15 times a second and unevenly, so each shown cursor is a spring chasing the newest one.
  */
-export function BoardCursors({ cursorsRef, cameraRef, colorFor, hidden }: { readonly cursorsRef: MutableRefObject<Map<string, RemoteCursor>>; readonly cameraRef: MutableRefObject<Camera>; readonly colorFor: (participantId: string) => string; readonly hidden: boolean }) {
+export function BoardCursors({
+  cursorsRef,
+  cameraRef,
+  colorFor,
+  hidden,
+  renderAvatar,
+}: {
+  readonly cursorsRef: MutableRefObject<Map<string, RemoteCursor>>;
+  readonly cameraRef: MutableRefObject<Camera>;
+  readonly colorFor: (participantId: string) => string;
+  readonly hidden: boolean;
+  readonly renderAvatar?: (name: string) => ReactNode;
+}) {
   const layer = useRef<HTMLDivElement>(null);
   const [people, setPeople] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
   const tracked = useRef(new Map<string, Tracked>());
@@ -121,7 +133,7 @@ export function BoardCursors({ cursorsRef, cameraRef, colorFor, hidden }: { read
             <span className="chalk-board-cursor-name" style={{ background: colorFor(person.id) }}>
               {person.name.split(" ")[0]}
             </span>
-            <Avatar name={person.name} size="xs" animated={false} className="chalk-board-cursor-avatar" />
+            {renderAvatar?.(person.name)}
           </span>
         </div>
       ))}

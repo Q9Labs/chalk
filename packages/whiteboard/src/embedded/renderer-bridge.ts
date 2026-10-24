@@ -1,3 +1,4 @@
+import type { WhiteboardView } from "../collab/view";
 import type { WhiteboardCommit } from "../collab/wire";
 import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, decodeEmbeddedWhiteboardHostMessage, encodeEmbeddedWhiteboardMessage, type ChalkEmbeddedWhiteboardHostEnvelope, type ChalkEmbeddedWhiteboardRendererMessage } from "./protocol";
 
@@ -10,7 +11,7 @@ declare global {
 type PendingRequest = {
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: Error) => void;
-  readonly timer: ReturnType<typeof setTimeout>;
+  readonly timer: ReturnType<typeof setTimeout> | undefined;
 };
 
 type HostListener = (message: ChalkEmbeddedWhiteboardHostEnvelope) => void;
@@ -67,8 +68,25 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request<WhiteboardCommit>("local_update", input);
   }
 
+  async sendView(view: WhiteboardView): Promise<boolean> {
+    await this.#request<void>("view", view);
+    return true;
+  }
+
+  exportImage(payload: { readonly format: "png"; readonly mimeType: "image/png"; readonly dataURL: string; readonly action: "download" | "copy" }): Promise<void> {
+    return this.#request<void>("user_export", payload, payload.action === "download" ? null : undefined);
+  }
+
   requestSnapshot(): Promise<void> {
     return this.#request<void>("request_snapshot", {});
+  }
+
+  setDrawPolicy(policy: import("../react/board/board-draw-policy").WhoCanDraw["policy"]): Promise<void> {
+    return this.#request("set_draw_policy", { policy });
+  }
+
+  setDrawPermission(participantId: string, canDraw: boolean): Promise<void> {
+    return this.#request("set_draw_permission", { participantId, canDraw });
   }
 
   clear(): Promise<WhiteboardCommit> {
@@ -79,13 +97,16 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request("file_read", { fileId });
   }
 
-  #request<T>(type: "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>): Promise<T> {
+  #request<T>(type: "set_draw_policy" | "set_draw_permission" | "view" | "user_export" | "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>, timeoutMs: number | null = 20_000): Promise<T> {
     const requestId = this.#context.nextMessageId();
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.#pending.delete(requestId);
-        reject(new Error(`embedded whiteboard ${type} timed out`));
-      }, 20_000);
+      const timer =
+        timeoutMs === null
+          ? undefined
+          : setTimeout(() => {
+              this.#pending.delete(requestId);
+              reject(new Error(`embedded whiteboard ${type} timed out`));
+            }, timeoutMs);
       this.#pending.set(requestId, { resolve: (value) => resolve(value as T), reject, timer });
       this.post({ type, payload: { requestId, ...payload } } as ChalkEmbeddedWhiteboardRendererMessage);
     });

@@ -1,5 +1,5 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
-import { Menu } from "@base-ui/react/menu";
+import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
 import { useEffect, useRef, useState } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";

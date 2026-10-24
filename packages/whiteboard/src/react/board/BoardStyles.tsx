@@ -76,7 +76,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board :focus-visible {outline:2px solid var(--chalk-focus); outline-offset:2px;}
 .chalk-board button {font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer;}
 
-.chalk-board-island, .chalk-board-zoom, .chalk-board-menu-button, .chalk-board-chip, .chalk-board-view-only {background:var(--chalk-surface); color:var(--chalk-text); box-shadow:var(--board-shadow);}
+.chalk-board-island, .chalk-board-zoom, .chalk-board .chalk-board-menu-button, .chalk-board-chip, .chalk-board-view-only {background:var(--chalk-surface); color:var(--chalk-text); box-shadow:var(--board-shadow);}
 .chalk-board-chips {position:absolute; left:0; right:0; top:12px; z-index:5; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none;}
 .chalk-board-chips[data-low] {top:76px;}
 .chalk-board-chip {display:flex; align-items:center; gap:8px; height:36px; padding:0 6px 0 14px; border-radius:999px; font-size:13px; font-weight:600; pointer-events:auto;}
@@ -91,6 +91,14 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-menu-button:active {transform:scale(.94);}
 .chalk-board-menu-button[aria-expanded="true"], .chalk-board-menu-button[data-popup-open] {background:var(--chalk-text); color:var(--chalk-canvas);}
 .chalk-menu.chalk-board-menu {width:304px;}
+.chalk-menu.chalk-board-menu-mobile {width:264px;}
+.chalk-board-menu-mobile .chalk-menu-item {min-height:44px;}
+.chalk-board-options {display:grid;}
+.chalk-board-options .chalk-board-tile {display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 10px; border:0; font-size:14px; font-weight:500; text-align:left;}
+.chalk-board-options .chalk-board-tile-preview {width:22px; height:22px; flex:none;}
+.chalk-board-options .chalk-board-tile-preview svg {display:none;}
+.chalk-board-options .chalk-board-tile[data-checked] {border:0;}
+.chalk-board-option-check {margin-left:auto;}
 .chalk-board-menu-rule {border:0; border-top:1px solid var(--chalk-line); margin:4px 0;}
 .chalk-board-menu-sublabel {padding:6px 10px 4px; font-size:12px; font-weight:600; color:var(--chalk-muted-text);}
 .chalk-board-tiles {display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; padding:2px 4px 8px;}
@@ -126,6 +134,9 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-island[data-place="expanded"] {left:12px; right:12px; bottom:12px; padding:4px; border-radius:28px; overflow-x:auto; scrollbar-width:none;}
 .chalk-board-island[data-dragging] {z-index:6; cursor:grabbing; box-shadow:0 0 0 1px var(--chalk-line-strong), 0 14px 36px rgba(0,0,0,.45);}
 .chalk-board:has(.chalk-board-island[data-place="expanded"]) .chalk-board-zoom {translate:0 -60px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-island {padding:4px; border-radius:28px;}
+.chalk-board[data-presentation="mobile"]:has(.chalk-board-island[data-place="expanded"]) .chalk-board-zoom {translate:0 -64px;}
+.chalk-board[data-presentation="mobile"][data-call-controls] :is(.chalk-board-island[data-place="bottom"], .chalk-board-island[data-place="compact"], .chalk-board-island[data-place="expanded"], .chalk-board-zoom) {bottom:76px;}
 .chalk-board-group {display:contents;}
 .chalk-board-separator {flex:none; width:1px; height:24px; margin:0 4px; background:var(--chalk-line-strong);}
 .chalk-board-island[data-place="left"] .chalk-board-separator {width:24px; height:1px; margin:4px 0;}
@@ -136,6 +147,10 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-tool[aria-pressed="true"]:hover {background:var(--chalk-text-strong);}
 .chalk-board-tool:disabled {opacity:.35; cursor:default; transform:none; background:none;}
 .chalk-board[data-compact] .chalk-board-tool {width:44px; height:44px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-tool {width:44px; height:44px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-zoom {height:52px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-zoom button {height:44px; min-width:44px;}
+.chalk-board[data-presentation="mobile"] .chalk-board-menu-button {width:44px; height:44px;}
 @media (pointer:coarse) {.chalk-board-tool {width:44px; height:44px;}}
 .chalk-board-tool-caret {position:absolute; right:3px; bottom:3px;}
 .chalk-board-tool-swatch {width:22px; height:22px; border-radius:50%; box-shadow:0 0 0 2px var(--chalk-surface), 0 0 0 3.5px var(--chalk-muted-text);}
@@ -166,7 +181,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 
 .chalk-board-announcer {position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap;}
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) {
   .chalk-board-zoom {height:52px;}
   .chalk-board-zoom button {height:44px; min-width:44px;}
   .chalk-board-menu-button {width:44px; height:44px;}

@@ -26,7 +26,7 @@ const temporaryDirectory = await mkdtemp(join(tmpdir(), "chalk-sdk-web-consumer-
 const archiveDirectory = join(temporaryDirectory, "archives");
 const consumerDirectory = join(temporaryDirectory, "consumer");
 const tenantAPIKey = `chalk_sk_fixture.${randomBytes(32).toString("base64url")}`;
-const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "packages/whiteboard", "sdks/typescript/client", "sdks/typescript/react", "sdks/typescript/react-native"];
+const packedPackages = ["packages/assets", "packages/facehash", "packages/recording-presentation", "packages/ui", "sdks/typescript/client", "packages/whiteboard", "sdks/typescript/react", "sdks/typescript/react-native"];
 let serverProcess;
 
 try {

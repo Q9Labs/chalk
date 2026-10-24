@@ -7,7 +7,7 @@ import { ChalkProvider } from "../../bindings/context";
 import { useCanDrawWhiteboard } from "../../bindings/hooks";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { useWhoCanDraw, type WhoCanDraw } from "./board-draw-policy";
-import { BoardMenu } from "./BoardMenu";
+import { BoardMenu } from "../../../../../../packages/whiteboard/src/react/board/BoardMenu";
 
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 

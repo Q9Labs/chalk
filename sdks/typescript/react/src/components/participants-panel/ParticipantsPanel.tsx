@@ -1,4 +1,4 @@
-import { Popover } from "@base-ui/react/popover";
+import { ChalkPopoverPrimitive as Popover } from "../chalk-ui";
 import React, { useMemo, useState } from "react";
 import { ChalkButton, ChalkPopover } from "../chalk-ui";
 import { CallCardStyles } from "../call-card/CallCardStyles";

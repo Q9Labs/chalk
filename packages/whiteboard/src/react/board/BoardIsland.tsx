@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { ChalkMenu, ChalkMenuItem, ChalkPopover, ChalkTooltip } from "../chalk-ui";
+import { usePrefersReducedMotion } from "./useMediaQuery";
+import { ChalkMenu, ChalkMenuItem, ChalkPopover, ChalkTooltip } from "./controls";
 import { BoardIcon, GripIcon, type BoardGlyph } from "./BoardIcon";
 import { ISLAND_PLACES, PEN_COLORS, PEN_WIDTHS, SHAPES, penHex, type BoardSurface, type BoardTool, type CallTheme, type IslandPlace, type PenColor, type PenWidth, type ShapeTool } from "./board-model";
 
@@ -21,6 +21,7 @@ export type IslandProps = {
   readonly place: IslandPlace;
   readonly onPlace: (place: IslandPlace, announce: boolean) => void;
   readonly compact: boolean;
+  readonly primaryToolsFirst?: boolean;
 };
 
 const TOOLS: readonly (readonly { readonly tool: BoardTool; readonly label: string; readonly key: string; readonly glyph: BoardGlyph }[])[] = [
@@ -148,19 +149,38 @@ function Separator() {
   return <span className="chalk-board-separator" aria-hidden="true" />;
 }
 
-function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, ...colors }: IslandProps & { readonly place: IslandPlace }) {
+function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, primaryToolsFirst, ...colors }: IslandProps & { readonly place: IslandPlace }) {
+  const primaryTools = ["pen", "text", "note", "eraser"];
+  const entries = TOOLS.flat();
+  const shapes = <ShapesButton tool={tool} shape={shape} onTool={onTool} side={place === "top" ? "bottom" : "top"} />;
+  const button = (entry: (typeof entries)[number]) => <ToolButton key={entry.tool} entry={entry} active={tool === entry.tool} onTool={onTool} />;
   const groups: ReactNode[] = TOOLS.map((group, index) => (
     <span key={index} className="chalk-board-group">
       {group.map((entry) => (
         <ToolButton key={entry.tool} entry={entry} active={tool === entry.tool} onTool={onTool} />
       ))}
-      {index === 1 ? <ShapesButton tool={tool} shape={shape} onTool={onTool} side={place === "top" ? "bottom" : "top"} /> : null}
+      {index === 1 ? shapes : null}
     </span>
   ));
   return (
     <>
-      {groups.flatMap((group, index) => [index > 0 ? <Separator key={`s${index}`} /> : null, group])}
+      {primaryToolsFirst
+        ? entries
+            .filter((entry) => primaryTools.includes(entry.tool))
+            .map((entry) => (
+              <span key={entry.tool} className="chalk-board-group">
+                {button(entry)}
+                {entry.tool === "pen" ? shapes : null}
+              </span>
+            ))
+        : groups.flatMap((group, index) => [index > 0 ? <Separator key={`s${index}`} /> : null, group])}
       <Separator />
+      {primaryToolsFirst ? (
+        <>
+          <ColorButton {...colors} />
+          <Separator />
+        </>
+      ) : null}
       <Tip label="Undo" keyName="⌘Z">
         <button type="button" className="chalk-board-tool" aria-label="Undo" disabled={!canUndo} onClick={onUndo}>
           <BoardIcon name="undo" />
@@ -171,8 +191,17 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
           <BoardIcon name="redo" />
         </button>
       </Tip>
-      <Separator />
-      <ColorButton {...colors} />
+      {primaryToolsFirst ? (
+        <>
+          <Separator />
+          {entries.filter((entry) => !primaryTools.includes(entry.tool)).map(button)}
+        </>
+      ) : (
+        <>
+          <Separator />
+          <ColorButton {...colors} />
+        </>
+      )}
     </>
   );
 }
@@ -327,13 +356,13 @@ export function BoardIsland(props: IslandProps) {
             </button>
             <Separator />
           </>
-        ) : (
+        ) : !props.primaryToolsFirst ? (
           <Tip label="Move the tools">
             <button type="button" className="chalk-board-grip" aria-label="Move the tools. Use Alt and the arrow keys to dock them left, bottom or top." onPointerDown={startDrag} onKeyDown={gripKeys}>
               <GripIcon />
             </button>
           </Tip>
-        )}
+        ) : null}
         <ToolRow {...props} place={compact ? "bottom" : place} />
       </div>
     </>
