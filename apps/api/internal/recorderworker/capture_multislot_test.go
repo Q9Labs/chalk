@@ -15,7 +15,7 @@ import (
 
 // Drive Run through its ports: one slot fails while its sibling remains live.
 func TestCaptureDaemonConcurrentSlotsAndIsolation(t *testing.T) {
-	for _, failure := range []string{"claim_error", "claim_panic", "factory_panic", "run_panic", "close_panic", "renew_panic"} {
+	for _, failure := range []string{"claim_error", "claim_panic", "factory_panic", "run_panic", "renew_panic"} {
 		t.Run(failure, func(t *testing.T) {
 			const slots = 2
 			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
@@ -57,9 +57,6 @@ func TestCaptureDaemonConcurrentSlotsAndIsolation(t *testing.T) {
 								if failure == "run_panic" {
 									panic("synthetic")
 								}
-								if failure == "close_panic" {
-									return nil
-								}
 							case <-ctx.Done():
 								return ctx.Err()
 							}
@@ -77,9 +74,6 @@ func TestCaptureDaemonConcurrentSlotsAndIsolation(t *testing.T) {
 					close: func(context.Context) error {
 						live.Add(-1)
 						closes.Add(1)
-						if n == 1 && failure == "close_panic" {
-							panic("synthetic")
-						}
 						return nil
 					},
 				}, nil

@@ -24,6 +24,11 @@ func startCaptureSenderReports(ctx context.Context, mid string, track CaptureMed
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		defer func() {
+			if recover() != nil {
+				sendCaptureRuntimeEvent(ctx, events, captureRuntimeEvent{mid: mid, track: track, err: capturePanicError()})
+			}
+		}()
 		for ctx.Err() == nil {
 			if err := reader.SetRTCPReadDeadline(time.Now().Add(deadline)); err != nil {
 				return
