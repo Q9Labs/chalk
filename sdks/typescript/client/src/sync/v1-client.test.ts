@@ -19,6 +19,33 @@ const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const projectionId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c24";
 const commandIds = Array.from({ length: 20 }, (_, index) => `018f2f65-2a77-7a44-8e9a-${(0x5b0b6f8d4d00 + index).toString(16)}`);
 describe("V1SyncClient", () => {
+  it.each(["inactive", "offline"] as const)("stops reporting live immediately when lifecycle becomes %s", async (event) => {
+    let lifecycle = (_event: "online" | "offline" | "active" | "inactive") => {};
+    const { client, socket, urls } = await liveClient({
+      lifecycle: {
+        subscribe: (listener) => {
+          lifecycle = listener;
+          return () => {};
+        },
+      },
+    });
+    const close = vi.spyOn(socket, "close").mockImplementation(() => {});
+    const observed = vi.fn();
+    const unsubscribe = client.subscribe(observed);
+    try {
+      lifecycle(event);
+      expect(client.getSnapshot().connection.phase).toBe("connecting");
+      expect(observed.mock.lastCall?.[0].connection.phase).toBe("connecting");
+      await expect(client.setMicrophoneEnabled(true)).rejects.toMatchObject({ code: "not_live" });
+      lifecycle(event === "inactive" ? "active" : "online");
+      expect(urls).toHaveLength(2);
+    } finally {
+      unsubscribe();
+      client.stop();
+      close.mockRestore();
+    }
+  });
+
   it("publishes diagnostics for the first silent dial before any socket event", async () => {
     const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", clock: new TestClock(), webSocket: { connect: () => new TestSocket() } });
     const observed = vi.fn();

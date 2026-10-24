@@ -1,5 +1,5 @@
 import { forwardRef, memo } from "react";
-import { Pressable, StyleSheet, View, type View as ViewType } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View, type View as ViewType } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { Icon, type IconName } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
@@ -27,12 +27,13 @@ export type IconButtonProps = {
   /** Sits directly on the call canvas (dock, header); the light theme rings it with a hairline. */
   readonly onCanvas?: boolean;
   readonly disabled?: boolean;
+  readonly busy?: boolean;
   readonly testID?: string;
 };
 
 /** The mockup's round button (`.rb`): press scale 0.94 over 150 ms, background switches at once. */
 export const IconButton = memo(
-  forwardRef<ViewType, IconButtonProps>(function IconButton({ icon, accessibilityLabel, onPress, size = 44, tone = "raised", selected = false, off = false, caption, expanded, onCanvas = false, disabled = false, testID }, ref) {
+  forwardRef<ViewType, IconButtonProps>(function IconButton({ icon, accessibilityLabel, onPress, size = 44, tone = "raised", selected = false, off = false, caption, expanded, onCanvas = false, disabled = false, busy = false, testID }, ref) {
     const { colors, elevation } = useTheme();
     const press = usePressAnimation("round");
     const base = selected ? colors.text : BASE[tone](colors);
@@ -51,8 +52,8 @@ export const IconButton = memo(
       <Pressable
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
-        accessibilityState={{ selected, disabled, expanded }}
-        disabled={disabled}
+        accessibilityState={{ selected, disabled: disabled || busy, expanded, busy }}
+        disabled={disabled || busy}
         hitSlop={size < 44 ? (44 - size) / 2 : undefined}
         onPress={onPress}
         onPressIn={press.onPressIn}
@@ -61,7 +62,7 @@ export const IconButton = memo(
         testID={testID}
       >
         <Animated.View ref={roundRef} style={[roundStyle, background, press.scaleStyle]}>
-          <Icon color={iconColor} name={icon} size={tone === "ghost" ? 18 : 20} />
+          {busy ? <ActivityIndicator color={iconColor} size="small" /> : <Icon color={iconColor} name={icon} size={tone === "ghost" ? 18 : 20} />}
         </Animated.View>
         {caption ? (
           <View pointerEvents="none" style={styles.captionBox}>

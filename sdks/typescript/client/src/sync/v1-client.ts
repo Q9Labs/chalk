@@ -802,9 +802,10 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#presence = null;
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
-    if (!this.#started || !this.#transportAvailable || this.#phase.phase === "terminal") return;
+    if (!this.#started || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
     this.#emit();
+    if (!this.#transportAvailable) return;
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
     // Cover brief service restarts without a growing gap; sustained failures
@@ -852,8 +853,13 @@ export class V1SyncClient implements V1CollaborationClient {
     if (event === "online" || event === "offline") this.#online = event === "online";
     else this.#active = event === "active";
     this.#transportAvailable = this.#online && this.#active;
-    if (!this.#transportAvailable) this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "lifecycle unavailable");
-    else this.#connect();
+    if (!this.#transportAvailable) {
+      const socket = this.#socket;
+      if (socket) {
+        socket.close(CLIENT_RESTART_CLOSE_CODE, "lifecycle unavailable");
+        this.#disconnected(socket);
+      }
+    } else this.#connect();
   }
   #rejectEphemeral(code: string): void {
     this.#rejectRequests(code);
