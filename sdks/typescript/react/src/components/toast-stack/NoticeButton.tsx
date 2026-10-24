@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChalkButton } from "../chalk-ui/ChalkButton";
-import { ChalkPopover } from "../chalk-ui/ChalkPopover";
+import { ChalkPopover } from "../chalk-ui";
 import type { Toast } from "./ToastStack";
 export interface NoticeButtonProps {
   readonly toasts: readonly Toast[];
