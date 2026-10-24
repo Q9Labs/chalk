@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,9 +17,9 @@ func TestCaptureCleanupExpiredSessionAndProviderFailure(t *testing.T) {
 	for _, operation := range []string{"tracks", "connection"} {
 		for _, status := range []int{http.StatusGone, http.StatusServiceUnavailable} {
 			t.Run(operation+"/"+http.StatusText(status), func(t *testing.T) {
-				calls := 0
+				var calls atomic.Int32
 				vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					calls++
+					calls.Add(1)
 					if r.Method != http.MethodPut || r.URL.Path != "/apps/test-app/sessions/closed-session/tracks/close" {
 						t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 					}
@@ -54,8 +55,8 @@ func TestCaptureCleanupExpiredSessionAndProviderFailure(t *testing.T) {
 					if err := close(); err != nil {
 						t.Fatalf("cleanup replay: %v", err)
 					}
-					if calls != 1 {
-						t.Fatalf("expired cleanup retried %d times", calls)
+					if calls.Load() != 1 {
+						t.Fatalf("expired cleanup retried %d times", calls.Load())
 					}
 				} else {
 					var failure captureplane.ProviderError
@@ -63,8 +64,8 @@ func TestCaptureCleanupExpiredSessionAndProviderFailure(t *testing.T) {
 						t.Fatalf("real provider failure must stay retryable: %v", err)
 					}
 					_ = close()
-					if calls != 2 {
-						t.Fatalf("real provider failure was cached as success: %d calls", calls)
+					if calls.Load() != 2 {
+						t.Fatalf("real provider failure was cached as success: %d calls", calls.Load())
 					}
 				}
 			})

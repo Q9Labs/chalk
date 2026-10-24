@@ -64,7 +64,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
       base_url: info["base_url"],
       certfile: Path.join(directory, "cert.pem"),
       keyfile: Path.join(directory, "key.pem"),
-      cacertfile: Path.join(directory, "cert.pem")
+      cacertfile: Path.join(directory, "ca.pem")
     ]
 
     Application.put_env(:chalk_sync, :provider_bridge, options)
@@ -95,6 +95,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
     for task <- tasks, do: assert({:ok, :satisfied} = Task.await(task, 35_000))
 
     Port.close(bridge)
+    await_status(503)
     for _ <- 1..3, do: Readiness.probe_now()
     {status, body} = ready_response()
     IO.puts("bridge down readiness: #{status} #{body}")

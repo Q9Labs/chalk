@@ -145,13 +145,23 @@ func run() error {
 }
 
 func certificates(directory string) (tls.Certificate, *x509.CertPool, error) {
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "bridge.test CA"}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, ca, ca, &caKey.PublicKey, caKey)
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, nil, err
 	}
 	identity, _ := url.Parse("spiffe://bridge.test/environment/test/sync/11111111-1111-4111-8111-111111111111")
-	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "bridge.test"}, NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, URIs: []*url.URL{identity}}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	template := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "bridge.test"}, NotBefore: ca.NotBefore, NotAfter: ca.NotAfter, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, DNSNames: []string{"localhost", "127.0.0.1"}, URIs: []*url.URL{identity}}
+	der, err := x509.CreateCertificate(rand.Reader, template, ca, &key.PublicKey, caKey)
 	if err != nil {
 		return tls.Certificate{}, nil, err
 	}
@@ -161,7 +171,7 @@ func certificates(directory string) (tls.Certificate, *x509.CertPool, error) {
 		return tls.Certificate{}, nil, err
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
-	for name, data := range map[string][]byte{"cert.pem": certPEM, "key.pem": keyPEM} {
+	for name, data := range map[string][]byte{"cert.pem": certPEM, "key.pem": keyPEM, "ca.pem": caPEM} {
 		if err := os.WriteFile(filepath.Join(directory, name), data, 0600); err != nil {
 			return tls.Certificate{}, nil, err
 		}
@@ -171,6 +181,6 @@ func certificates(directory string) (tls.Certificate, *x509.CertPool, error) {
 		return tls.Certificate{}, nil, err
 	}
 	roots := x509.NewCertPool()
-	roots.AppendCertsFromPEM(certPEM)
+	roots.AppendCertsFromPEM(caPEM)
 	return cert, roots, nil
 }
