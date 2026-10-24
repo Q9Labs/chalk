@@ -4685,6 +4685,7 @@ create table automatic_transcript_tenant_policy_backup (
 
 create table automatic_transcript_space_policy_backup (
     space_id uuid primary key,
+    tenant_id uuid not null,
     transcription_policy text not null,
     updated_at timestamptz not null
 );

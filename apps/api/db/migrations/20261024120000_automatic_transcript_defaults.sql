@@ -1,7 +1,12 @@
 -- +goose Up
 -- Save original values once, including disabled policies that need a source
 -- window. Do not change frozen Episode snapshots or queue past Recordings.
-lock table tenant_artifact_policies, spaces in share row exclusive mode;
+create table if not exists automatic_transcript_space_policy_backup (
+    space_id uuid primary key,
+    tenant_id uuid not null,
+    transcription_policy text not null,
+    updated_at timestamptz not null
+);
 
 create table if not exists automatic_transcript_tenant_policy_backup (
     tenant_id uuid primary key,
@@ -12,11 +17,8 @@ create table if not exists automatic_transcript_tenant_policy_backup (
     updated_at timestamptz not null
 );
 
-create table if not exists automatic_transcript_space_policy_backup (
-    space_id uuid primary key,
-    transcription_policy text not null,
-    updated_at timestamptz not null
-);
+-- Match tenant purge's alphabetical table-lock order, including the backups.
+lock table automatic_transcript_space_policy_backup, automatic_transcript_tenant_policy_backup, spaces, tenant_artifact_policies in share row exclusive mode;
 
 insert into automatic_transcript_tenant_policy_backup
 select tenant_id, transcription_ceiling, transcription_default_mode,
@@ -25,7 +27,7 @@ from tenant_artifact_policies
 on conflict (tenant_id) do nothing;
 
 insert into automatic_transcript_space_policy_backup
-select id, transcription_policy, updated_at from spaces
+select id, tenant_id, transcription_policy, updated_at from spaces
 on conflict (space_id) do nothing;
 
 alter table tenant_artifact_policies
@@ -44,7 +46,7 @@ set transcription_ceiling = 'automatic',
 update spaces set transcription_policy = 'automatic';
 
 -- +goose Down
-lock table tenant_artifact_policies, spaces in share row exclusive mode;
+lock table automatic_transcript_space_policy_backup, automatic_transcript_tenant_policy_backup, spaces, tenant_artifact_policies in share row exclusive mode;
 
 update tenant_artifact_policies as policy
 set transcription_ceiling = backup.transcription_ceiling,

@@ -75,4 +75,5 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 		assertNone(`select count(*) from ((select * from ` + table + ` except select * from ` + original + `) union all (select * from ` + original + ` except select * from ` + table + `)) difference`)
 	}
 	assertNone(`select count(*) from information_schema.columns where table_schema='public' and ((table_name='tenant_artifact_policies' and column_name in ('transcription_ceiling','transcription_default_mode')) or (table_name='spaces' and column_name='transcription_policy')) and column_default <> '''on_demand''::text'`)
+	assertNone(`select count(*) from information_schema.columns where table_schema='public' and table_name='tenant_artifact_policies' and column_name='provider_policy_version' and column_default <> '''chalk-on-demand-v1''::text'`)
 }
