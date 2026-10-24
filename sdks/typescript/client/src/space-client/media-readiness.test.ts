@@ -46,6 +46,70 @@ describe("media readiness", () => {
     }
   });
 
+  it.each(["camera", "microphone"] as const)("does not publish a captured %s after readiness expires while access loads", async (source) => {
+    const platform = createCoreTestPlatform();
+    const track = Object.assign(mediaTrack(), { kind: source === "camera" ? "video" : "audio", stop: vi.fn() });
+    let finishAccess = () => {};
+    const access = new Promise<void>((resolve) => {
+      finishAccess = resolve;
+    });
+    const getAccess = vi.fn(async () => {
+      await access;
+      return opaqueAccessGrant("captured");
+    });
+    const start = vi.fn((_stream: MediaStream) => {});
+    const command = vi.fn(async (_enabled: boolean) => ({ operationId: "captured", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const }));
+    const client = createSpaceClientForPlatform(
+      { space: "captured", getAccess },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { getUserMedia: async () => mediaStream(track), getDisplayMedia: async () => mediaStream(track), enumerateDevices: async () => [] },
+          createMediaClient: (input) => {
+            const media = platform.dependencies.createMediaClient(input);
+            return {
+              ...media,
+              start: async (stream) => {
+                start(stream);
+                await media.start(stream);
+              },
+            };
+          },
+          createSyncClient: () => ({ ...platform.sync, setCameraEnabled: command, setMicrophoneEnabled: command }),
+        },
+      },
+    );
+    let expire = () => {};
+    const schedule = platform.dependencies.clock.setTimeout;
+    const timer = vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => {
+      if (milliseconds === 10000) {
+        expire = callback;
+        return null;
+      }
+      return schedule(callback, milliseconds);
+    });
+    try {
+      const joining = client.join({ camera: source === "camera", microphone: source === "microphone" });
+      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledOnce());
+      const setEnabled = source === "camera" ? client.media.setCameraEnabled : client.media.setMicrophoneEnabled;
+      await setEnabled(false);
+      const result = setEnabled(true).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(client.getSnapshot().media.local[source].state).toBe("requesting"));
+      expire();
+      expect(await result).toMatchObject({ code: "media.timeout" });
+      finishAccess();
+      await joining;
+      expect(start).toHaveBeenCalledOnce();
+      expect(start.mock.calls[0]![0].getTracks()).not.toContain(track);
+      expect(command.mock.calls.every(([enabled]) => !enabled)).toBe(true);
+    } finally {
+      finishAccess();
+      client.dispose();
+      timer.mockRestore();
+    }
+  });
+
   it("clears readiness timers after a successful toggle", async () => {
     const { client, platform, setEnabled } = createConvergenceScenario("camera");
     try {

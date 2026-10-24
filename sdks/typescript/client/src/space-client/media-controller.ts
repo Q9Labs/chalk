@@ -360,7 +360,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
           ? this.#waitForLive(source, desired.revision).pipe(
               Effect.tapError((cause) =>
                 Effect.sync(() => {
-                  if (this.#sources[source].desired.revision === desired.revision) this.#sources[source].result = { revision: desired.revision, status: "failed", cause, cleanup: false };
+                  if (this.#sources[source].desired.revision === desired.revision) {
+                    const cancelled = this.#recordIntent(source, false);
+                    this.#sources[source].result = { revision: cancelled.revision, status: "failed", cause, cleanup: false };
+                  }
                 }),
               ),
             )
