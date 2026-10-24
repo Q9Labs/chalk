@@ -201,10 +201,9 @@ func TestCapturePlanePullsRemoteTracksWithExplicitIdentityHints(t *testing.T) {
 	}
 }
 
-func TestCapturePlaneRetriesOnlyWholeRequestPull404(t *testing.T) {
+func TestCapturePlaneDoesNotRetryTopLevelPull404(t *testing.T) {
 	client := &captureSequenceClient{responses: []captureHTTPResponse{
 		{status: http.StatusNotFound, body: `{"errors":[{"code":"track_not_found"}]}`},
-		{status: http.StatusOK, body: capturePulledTracksProviderBody(t)},
 	}}
 	adapter := newCaptureTestAdapter(t, client)
 	input := captureplane.PullCaptureTracksInput{
@@ -218,15 +217,9 @@ func TestCapturePlaneRetriesOnlyWholeRequestPull404(t *testing.T) {
 		t.Fatal("first pull unexpectedly succeeded")
 	} else {
 		var failure captureplane.ProviderError
-		if !errors.As(err, &failure) || failure.Class != captureplane.ProviderFailureNotFound || !failure.Retryable {
-			t.Fatalf("first pull failure = %v, want retryable not_found", err)
+		if !errors.As(err, &failure) || failure.Class != captureplane.ProviderFailureNotFound || failure.Retryable {
+			t.Fatalf("first pull failure = %v, want nonretryable not_found", err)
 		}
-	}
-	if _, err := adapter.PullCaptureTracks(context.Background(), input); err != nil {
-		t.Fatalf("pull after publisher becomes available: %v", err)
-	}
-	if len(client.requests) != 2 || client.requests[0].path != client.requests[1].path || !bytes.Equal(client.requests[0].body, client.requests[1].body) {
-		t.Fatal("retry changed the provider pull request")
 	}
 	for _, failure := range []providerFailure{
 		newProviderFailure("add_tracks", failureStageHTTPStatus, http.StatusGone, "track_not_found"),

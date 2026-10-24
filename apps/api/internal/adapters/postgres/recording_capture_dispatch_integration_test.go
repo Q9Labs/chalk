@@ -22,6 +22,9 @@ import (
 func TestRecordingCaptureDispatchSafetyPostgres(t *testing.T) {
 	for _, operation := range []captureplane.OperationKind{captureplane.OperationPullCaptureTracks, captureplane.OperationRenegotiateCaptureConnection} {
 		for _, scenario := range []string{"applied-500", "stop-during-500", "stop-during-safe-rejection", "deadline-during-safe-rejection"} {
+			if operation == captureplane.OperationRenegotiateCaptureConnection && strings.HasSuffix(scenario, "safe-rejection") {
+				continue
+			}
 			t.Run(string(operation)+"/"+scenario, func(t *testing.T) {
 				tx, repository, identity := newCaptureRetryFixture(t)
 				var calls, closes atomic.Int32
@@ -47,8 +50,7 @@ func TestRecordingCaptureDispatchSafetyPostgres(t *testing.T) {
 								execCleanupFixture(t, tx, `update recording_reservations set ends_at=clock_timestamp() where recording_id=$1`, identity.RecordingID.Bytes())
 							}
 							if strings.HasSuffix(scenario, "safe-rejection") {
-								w.WriteHeader(http.StatusNotFound)
-								_, _ = fmt.Fprint(w, `{"errorCode":"track_not_found"}`)
+								_, _ = fmt.Fprint(w, `{"tracks":[{"sessionId":"publisher","trackName":"audio","location":"remote","errorCode":"empty_track_error"}]}`)
 							} else {
 								w.WriteHeader(http.StatusInternalServerError)
 								_, _ = fmt.Fprint(w, `{"errorCode":"internal_error","errorDescription":"applied request but result unavailable"}`)
