@@ -110,8 +110,11 @@ Existing workers count only their fresh reported capacity; old or unknown
 workers count as one slot. The controller adds nodes when this mixed fleet
 cannot cover demand plus the floor, without exceeding its configured cap.
 
-The controller still reads the v1 one-slot demand contract, including held
-starts and preparations. Render does not divide that demand. Bootstrap rows
+Capture negotiates v2 demand on the existing private endpoint. It divides only
+slot demand, including held starts and preparations. Participant and bitrate
+floors remain node counts. Old controllers receive the unchanged v1 response.
+An old API forces the new controller to count one slot per node and log a
+warning; it still reconciles. Render does not divide its demand. Bootstrap rows
 are reserved at create, before provider activation. A stuck create uses the
 bootstrap abandonment fence; an issued identity uses the confirmed-404 lease
 recovery path. Scale-down closes admission only after a fresh zero lease read,

@@ -296,6 +296,30 @@ func TestFleetAbandonCannotRevokeIssuedIdentityWithPostgres(t *testing.T) {
 	}
 }
 
+func TestFleetSlotDemandSeparatesPhysicalNodeFloors(t *testing.T) {
+	tx, fixture := newAllocationCleanupFixture(t, true, "capture")
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	otherRecording, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execCleanupFixture(t, tx, `insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
+		select $2, tenant_id, space_id, episode_id, status, storage_provider from recordings where id=$1`, fixture.recordingID.Bytes(), otherRecording.Bytes())
+	execCleanupFixture(t, tx, `insert into recording_reservations (id, tenant_id, space_id, episode_id, recording_id, idempotency_key, request_fingerprint, policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state, ends_at)
+		select gen_random_uuid(), tenant_id, space_id, episode_id, $2, 'floor:' || $2::uuid::text, request_fingerprint, policy_snapshot_version, 1, max_duration_seconds, 0, state, ends_at from recording_reservations where recording_id=$1`, fixture.recordingID.Bytes(), otherRecording.Bytes())
+	repository := postgres.NewRecordingFleetAuthorityRepository(sqlc.New(tx))
+	for _, tc := range []struct{ participants, bitrate, floor int }{{100, 32000000, 3}, {2, 64000000, 4}, {2, 0, 0}} {
+		execCleanupFixture(t, tx, `update recording_reservations set participant_count=$2, input_bitrate_bps=$3 where recording_id=$1`, fixture.recordingID.Bytes(), tc.participants-1, tc.bitrate)
+		demand, err := repository.GetDemand(t.Context(), fleetRecoveryConfig(workeridentity.RoleCapture).Key, time.Now())
+		if err != nil || demand.CaptureCapacity == nil || demand.CaptureCapacity.SlotDemand != 2 || demand.CaptureCapacity.PhysicalNodeFloor != tc.floor || demand.DesiredNodes != max(2, tc.floor) {
+			t.Fatalf("participants=%d bitrate=%d: demand=%+v capacity=%+v error=%v", tc.participants, tc.bitrate, demand, demand.CaptureCapacity, err)
+		}
+		if err := demand.Validate(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestFleetSlotDemandUsesDatabaseLeaseClock(t *testing.T) {
 	for _, expired := range []bool{false, true} {
 		for _, skew := range []time.Duration{-time.Minute, time.Minute} {

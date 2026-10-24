@@ -44,6 +44,11 @@ facts as (
         case when sqlc.arg(role)::text = 'capture' then reservation_demand.held_starts else 0 end::integer as held_starts,
         job_demand.queued_jobs,
         job_demand.leased_jobs,
+		greatest(reservation_demand.episode_count, job_demand.queued_jobs + job_demand.leased_jobs)::integer as slot_demand,
+		greatest(
+		    ((reservation_demand.participant_count + 39) / 40)::integer,
+		    ((reservation_demand.input_bitrate_bps + 15999999) / 16000000)::integer
+		)::integer as physical_node_floor,
         case
             when sqlc.arg(role)::text = 'capture' then greatest(
                 reservation_demand.episode_count,
@@ -66,6 +71,8 @@ select
     (scheduled_prewarms + prepared_nodes)::integer as scheduled_prewarms,
     held_starts,
     queued_jobs,
+	(slot_demand + prepared_nodes)::integer as slot_demand,
+	(physical_node_floor + prepared_nodes)::integer as physical_node_floor,
     sqlc.arg(observed_at)::timestamptz as observed_at
 from target;
 

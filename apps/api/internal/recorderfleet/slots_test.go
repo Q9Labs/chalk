@@ -28,6 +28,44 @@ func TestSlotDefaultsMatchOneNodeDemand(t *testing.T) {
 	}
 }
 
+func TestCapturePhysicalFloorsAndLegacyDemand(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		demand          Demand
+		free, cap, want int
+	}{
+		{"physical floor", Demand{DesiredNodes: 3, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 2, PhysicalNodeFloor: 3}}, 0, 10, 3},
+		{"free slots", Demand{DesiredNodes: 3, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 2, PhysicalNodeFloor: 3}}, 12, 10, 4},
+		{"cap", Demand{DesiredNodes: 3, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 2, PhysicalNodeFloor: 3}}, 0, 2, 2},
+		{"old API forces one slot", Demand{DesiredNodes: 3}, 0, 10, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFleetFixture(t)
+			f.config.SlotsPerNode, f.config.FreeSlots, f.config.MaxNodes = 4, tc.free, tc.cap
+			state, nodes, observed := slotNodes(f, 2, 4)
+			r := &Reconciler{config: f.config}
+			if got := r.targetNodes(tc.demand, state, nodes, observed, f.now); got != tc.want {
+				t.Fatalf("target=%d want=%d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDensityControllerReconcilesOldAPIDemandAtOneSlot(t *testing.T) {
+	f := newFleetFixture(t)
+	f.config.SlotsPerNode = 4
+	f.demand.value = Demand{Revision: "legacy", DesiredNodes: 3, ObservedAt: f.now}
+	state, nodes, observed := slotNodes(f, 2, 4)
+	state.NextBootGeneration = 3
+	f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+	for _, observation := range observed {
+		f.runtime.observations = append(f.runtime.observations, observation)
+	}
+	if result := f.step(t, f.reconciler(t)); result.Action != ActionCreatePlanned {
+		t.Fatalf("legacy API did not reconcile with one-slot capacity: %+v", result)
+	}
+}
+
 func TestCaptureSlotDemandReplay(t *testing.T) {
 	f := newFleetFixture(t)
 	f.config.SlotsPerNode, f.config.FreeSlots, f.config.MaxNodes = 4, 8, 5
@@ -41,7 +79,7 @@ func TestCaptureSlotDemandReplay(t *testing.T) {
 		settled := false
 		for range 100 {
 			f.now = f.now.Add(time.Second)
-			f.demand.value = Demand{Revision: fmt.Sprint(active), DesiredNodes: active, ObservedAt: f.now}
+			f.demand.value = Demand{Revision: fmt.Sprint(active), DesiredNodes: active, ObservedAt: f.now, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: active}}
 			f.runtime.observations = nil
 			remaining := active
 			for _, id := range sortedNodeIDs(f.provider.nodes) {
@@ -108,7 +146,7 @@ func TestSlotDemandCountsWorkerCapacityNotControllerConfig(t *testing.T) {
 					observed[id] = observation
 				}
 			}
-			if got := r.targetNodes(Demand{DesiredNodes: 1}, state, nodes, observed, f.now); got != tc.want {
+			if got := r.targetNodes(Demand{DesiredNodes: 1, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 1}}, state, nodes, observed, f.now); got != tc.want {
 				t.Fatalf("target=%d want=%d", got, tc.want)
 			}
 		})

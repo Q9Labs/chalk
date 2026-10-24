@@ -23,6 +23,7 @@ const (
 	JournalSchemaVersion             = "recorder_fleet_journal.v2"
 	LegacyJournalSchemaVersion       = "recorder_fleet_journal.v1"
 	DemandSchemaVersion              = "recorder_fleet_demand.v1"
+	SlotDemandSchemaVersion          = "recorder_fleet_demand.v2"
 	NodesSchemaVersion               = "recorder_fleet_nodes.v1"
 	BootstrapSchemaVersion           = "recorder_fleet_bootstrap.v1"
 	BootstrapAbandonSchemaVersion    = "recorder_fleet_bootstrap_abandon.v1"
@@ -97,15 +98,24 @@ func (key PoolKey) Validate() error {
 }
 
 type Demand struct {
-	Revision          string    `json:"revision"`
-	DesiredNodes      int       `json:"desired_nodes"`
-	ScheduledPrewarms int       `json:"scheduled_prewarms"`
-	HeldStarts        int       `json:"held_starts"`
-	QueuedJobs        int       `json:"queued_jobs"`
-	ObservedAt        time.Time `json:"observed_at"`
+	Revision          string                 `json:"revision"`
+	DesiredNodes      int                    `json:"desired_nodes"`
+	ScheduledPrewarms int                    `json:"scheduled_prewarms"`
+	HeldStarts        int                    `json:"held_starts"`
+	QueuedJobs        int                    `json:"queued_jobs"`
+	ObservedAt        time.Time              `json:"observed_at"`
+	CaptureCapacity   *CaptureCapacityDemand `json:"capture_capacity,omitempty"`
+}
+
+type CaptureCapacityDemand struct {
+	SlotDemand        int `json:"slot_demand"`
+	PhysicalNodeFloor int `json:"physical_node_floor"`
 }
 
 func (d Demand) Validate() error {
+	if d.CaptureCapacity != nil && (d.CaptureCapacity.SlotDemand < 0 || d.CaptureCapacity.PhysicalNodeFloor < 0 || d.DesiredNodes != max(d.CaptureCapacity.SlotDemand, d.CaptureCapacity.PhysicalNodeFloor)) {
+		return ErrInvalidDemand
+	}
 	if strings.TrimSpace(d.Revision) == "" || len(d.Revision) > 128 || d.DesiredNodes < 0 || d.ScheduledPrewarms < 0 || d.HeldStarts < 0 || d.QueuedJobs < 0 || d.ObservedAt.IsZero() {
 		return ErrInvalidDemand
 	}
