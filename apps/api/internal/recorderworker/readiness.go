@@ -106,7 +106,7 @@ func (c *ControlPlaneClient) ReportReadiness(ctx context.Context, readiness Work
 
 func validateWorkerReadiness(readiness WorkerReadiness) error {
 	if readiness.Reason == "" || strings.TrimSpace(readiness.Reason) != readiness.Reason || len(readiness.Reason) > maximumReadinessReasonSize ||
-		readiness.AdmissionOpen && readiness.ReadyCapacity != SerialWorkerReadyCapacity ||
+		readiness.AdmissionOpen && readiness.ReadyCapacity <= 0 ||
 		!readiness.AdmissionOpen && readiness.ReadyCapacity != 0 ||
 		readiness.Resources != nil && !readiness.Resources.Valid(time.Now().UTC()) {
 		return ErrInvalidWorkerReadiness

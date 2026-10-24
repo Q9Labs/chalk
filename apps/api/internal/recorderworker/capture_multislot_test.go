@@ -165,10 +165,9 @@ func TestCaptureSlotsReadinessAndDrain(t *testing.T) {
 	for _, slots := range []int{0, 1, 4, 8, 12} {
 		t.Run(fmt.Sprint(slots), func(t *testing.T) {
 			control := &multislotControl{claim: func(ctx context.Context, _ utilities.ID, _ time.Duration) (ClaimResult, error) {
-				<-ctx.Done()
-				return ClaimResult{}, ctx.Err()
+				return ClaimResult{}, ErrNoWork
 			}}
-			daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) { return nil, errors.New("no jobs") }), CaptureDaemonConfig{Slots: slots})
+			daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) { return nil, errors.New("no jobs") }), CaptureDaemonConfig{Slots: slots, NoWorkWait: time.Millisecond})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -204,5 +203,36 @@ func TestCaptureSlotsReadinessAndDrain(t *testing.T) {
 				t.Fatal("no closed admission")
 			}
 		})
+	}
+}
+
+func TestCaptureDaemonPreservesDrainCleanupFailure(t *testing.T) {
+	claim := captureDaemonClaim(t, 7)
+	started := make(chan struct{})
+	cleanupErr := errors.New("synthetic cleanup failure")
+	control := &multislotControl{claim: func(context.Context, utilities.ID, time.Duration) (ClaimResult, error) { return claim, nil }}
+	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(ctx context.Context) error { close(started); <-ctx.Done(); return ctx.Err() }, close: func(context.Context) error { return cleanupErr }}, nil
+	}), CaptureDaemonConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- daemon.Run(ctx) }()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("attempt did not start")
+	}
+	daemon.Drain()
+	select {
+	case err := <-done:
+		if !errors.Is(err, cleanupErr) || !errors.Is(err, ErrCaptureAttemptShutdown) {
+			t.Fatalf("lost cleanup error: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("daemon did not drain")
 	}
 }

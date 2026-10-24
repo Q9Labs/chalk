@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -117,11 +118,13 @@ func (d *CaptureDaemon) Run(ctx context.Context) error {
 	}
 	defer d.running.Store(false)
 	var slots sync.WaitGroup
+	results := make(chan error, d.config.Slots)
 	for range d.config.Slots {
 		slots.Go(func() {
 			for ctx.Err() == nil && !d.draining.Load() {
 				err := captureOperation(func() error { return d.runLoop(ctx) })
 				if ctx.Err() != nil || d.draining.Load() {
+					results <- err
 					return
 				}
 				slog.ErrorContext(ctx, "recorder capture slot restarting", "error", err)
@@ -140,10 +143,15 @@ func (d *CaptureDaemon) Run(ctx context.Context) error {
 		})
 	}
 	slots.Wait()
-	if ctx.Err() != nil {
-		return errors.Join(ErrCaptureDaemonStopped, ctx.Err())
+	close(results)
+	var result error
+	for err := range results {
+		result = errors.Join(result, err)
 	}
-	return ErrWorkerDraining
+	if ctx.Err() != nil {
+		return errors.Join(ErrCaptureDaemonStopped, ctx.Err(), result)
+	}
+	return errors.Join(ErrWorkerDraining, result)
 }
 
 // ReadyCapacity is total capacity, not the number of idle loops.
@@ -152,10 +160,18 @@ func (d *CaptureDaemon) ReadyCapacity() int { return d.config.Slots }
 func captureOperation(operation func() error) (err error) {
 	defer func() {
 		if recover() != nil {
-			err = errors.New("recorder capture operation panicked")
+			err = capturePanicError()
 		}
 	}()
 	return operation()
+}
+
+// Keep the source location without logging arbitrary panic values, which may
+// contain credentials or media. Bound the stack so recovery cannot flood logs.
+func capturePanicError() error {
+	stack := debug.Stack()
+	slog.Error("recorder capture operation panicked", "stack", string(stack[:min(len(stack), 16*1024)]))
+	return errors.New("recorder capture operation panicked")
 }
 
 func (d *CaptureDaemon) runLoop(ctx context.Context) error {
@@ -241,7 +257,7 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) (err er
 	defer func() {
 		if recover() != nil {
 			_, closeErr, shutdownErr := shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
-			err = errors.Join(errors.New("recorder capture claim panicked"), closeErr, shutdownErr)
+			err = errors.Join(capturePanicError(), closeErr, shutdownErr)
 		}
 	}()
 	for {
