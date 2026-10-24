@@ -37,7 +37,7 @@ In a call you can:
 - watch a screen or whiteboard someone else shares
 - pick your audio output and turn your phone sideways for a bigger view
 
-Each person without a camera gets a friendly animated face, so a call never feels like a wall of initials. Chalk comes in Dark and Light and follows your phone's setting.
+Each person without a camera gets a friendly animated face, so a call never feels like a wall of initials. Chalk comes in Dark and Light, and you choose which one you want.
 
 Chalk is open source (MIT), and one engine runs web, iOS and Android.
 
@@ -70,7 +70,7 @@ In a call you can:
 - watch a screen or whiteboard someone else shares
 - pick your audio output and turn your phone sideways for a bigger view
 
-Each person without a camera gets a friendly animated face, so a call never feels like a wall of initials. Chalk comes in Dark and Light and follows your phone's setting.
+Each person without a camera gets a friendly animated face, so a call never feels like a wall of initials. Chalk comes in Dark and Light, and you choose which one you want.
 
 Chalk is open source (MIT), and one engine runs web, iOS and Android.
 
@@ -85,12 +85,13 @@ Spotlight, More, Chat and People.
 ## Google testing instructions
 
 Provide a test call invite URL. Reviewers can open the link or paste it in
-the app, grant camera and microphone, and join. Screen share uses Android media
-projection and prompts before capturing.
+the app, grant camera and microphone, and join. The app shows a screen or
+whiteboard that another person shares. It does not start a share itself.
 
 ## Apple review notes
 
 Provide a test call invite URL and a second device as another participant.
 Reviewers can open the link to join. Camera and microphone are used while in a
-call. Screen sharing uses ReplayKit and is user-initiated; the app declares the
-audio and VoIP background modes for live media.
+call. The app shows a screen or whiteboard that another person shares and does
+not start a share itself. It declares the audio and VoIP background modes for
+live media.
