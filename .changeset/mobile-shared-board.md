@@ -2,7 +2,6 @@
 "@q9labsai/chalk-whiteboard": minor
 "@q9labsai/chalk-react": minor
 "@q9labsai/chalk-react-native": minor
-"@q9labsai/chalk-client": patch
 ---
 
 Share Chalk board controls, notes, surfaces and Follow with mobile. Subscribe to

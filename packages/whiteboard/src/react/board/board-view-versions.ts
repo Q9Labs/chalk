@@ -1,1 +1,1 @@
-export { ChalkWhiteboardViewVersions as ViewVersions } from "../../collab/view-versions";
+export { ChalkWhiteboardViewVersions as ViewVersions } from "@q9labsai/chalk-client";
