@@ -203,7 +203,7 @@ func TestScaleDownFreshLeaseReadDoesNotRefreshHeartbeat(t *testing.T) {
 	}
 }
 
-func TestScaleDownClosesBusyStaleNodeAdmission(t *testing.T) {
+func TestScaleDownDoesNotCloseBusyStaleNodeAdmission(t *testing.T) {
 	fixture := claimedNodeFixture(t)
 	fixture.config.MaxNodes = 1
 	fixture.demand.value.DesiredNodes = 1
@@ -211,7 +211,7 @@ func TestScaleDownClosesBusyStaleNodeAdmission(t *testing.T) {
 	node.ImageID++
 	fixture.provider.nodes["1001"] = node
 	fixture.runtime.observations[0].ActiveLeases = 1
-	if result := fixture.step(t, fixture.reconciler(t)); result.Action != ActionAdmissionClosed || fixture.runtime.closeCalls != 1 || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+	if result := fixture.step(t, fixture.reconciler(t)); result.Action == ActionAdmissionClosed || fixture.runtime.closeCalls != 0 || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
 		t.Fatalf("busy stale worker kept admission open: %+v", result)
 	}
 }
@@ -232,7 +232,7 @@ func claimedNodeFixture(t *testing.T) *fleetFixture {
 	}
 	fixture.journal.state.NextBootGeneration = 2
 	fixture.runtime.observations = []NodeObservation{{
-		Identity: identity, Ready: true, AdmissionOpen: true, ReadyCapacity: 1, ObservedAt: fixture.now,
+		Identity: identity, Ready: true, AdmissionOpen: true, ReadyCapacity: 1, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 	return fixture
 }

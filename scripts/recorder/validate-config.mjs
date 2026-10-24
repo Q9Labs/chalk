@@ -28,26 +28,27 @@ function assertNonNegative(name, value) {
 }
 
 // fallow-ignore-next-line complexity
-export function desiredCaptureNodes({ episodes, participants, inputMbps, episodesPerNode = 1, participantsPerNode = 40, inputMbpsPerNode = 16, readySpare = 0 }) {
+export function desiredCaptureNodes({ episodes, participants, inputMbps, episodesPerNode = 1, participantsPerNode = 40, inputMbpsPerNode = 16, readySpare = 0, maxNodes = CAPTURE_LIMITS.maxNodes }) {
   assertInteger("episodes", episodes, 0, CAPTURE_LIMITS.maxEpisodes);
   assertInteger("participants", participants, 0, CAPTURE_LIMITS.maxParticipants);
   assertNonNegative("inputMbps", inputMbps);
-  assertNonNegative("episodesPerNode", episodesPerNode);
+  assertInteger("episodesPerNode", episodesPerNode, 1, 100);
   assertNonNegative("participantsPerNode", participantsPerNode);
   assertNonNegative("inputMbpsPerNode", inputMbpsPerNode);
-  assertInteger("readySpare", readySpare, 0, 0);
-  if (episodesPerNode !== 1) throw new Error("capture profile requires one Recording per node");
+  assertInteger("readySpare", readySpare, 0, Number.MAX_SAFE_INTEGER);
+  assertInteger("maxNodes", maxNodes, 1, Number.MAX_SAFE_INTEGER);
+  if (Math.ceil(readySpare / episodesPerNode) > maxNodes) throw new Error("capture cap cannot hold its free-slot floor");
   if (inputMbps > 40) throw new Error("capture input exceeds the 40 Mbps admission limit");
   if (episodesPerNode === 0 || participantsPerNode === 0 || inputMbpsPerNode === 0) {
     throw new Error("capture density must be positive");
   }
 
-  const episodeNodes = Math.ceil(episodes / episodesPerNode);
+  const episodeNodes = Math.ceil((episodes + readySpare) / episodesPerNode);
   const participantNodes = Math.ceil(participants / participantsPerNode);
   const bitrateNodes = Math.ceil(inputMbps / inputMbpsPerNode);
-  const desired = Math.max(episodeNodes, participantNodes, bitrateNodes) + readySpare;
-  if (desired > CAPTURE_LIMITS.maxNodes) {
-    throw new Error(`capture demand requires ${desired} nodes, above the qualified ${CAPTURE_LIMITS.maxNodes}-node bound`);
+  const desired = Math.max(episodeNodes, participantNodes, bitrateNodes);
+  if (desired > maxNodes) {
+    throw new Error(`capture demand requires ${desired} nodes, above the qualified ${maxNodes}-node bound`);
   }
   return desired;
 }

@@ -15,7 +15,7 @@ with reservation_demand as (
 job_demand as (
     select
         count(*) filter (where state in ('pending', 'retryable_failure'))::integer as queued_jobs,
-        count(*) filter (where state = 'leased' and lease_expires_at > sqlc.arg(observed_at)::timestamptz)::integer as leased_jobs,
+        count(*) filter (where state = 'leased' and lease_expires_at > clock_timestamp())::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
     where (
@@ -44,6 +44,11 @@ facts as (
         case when sqlc.arg(role)::text = 'capture' then reservation_demand.held_starts else 0 end::integer as held_starts,
         job_demand.queued_jobs,
         job_demand.leased_jobs,
+		greatest(reservation_demand.episode_count, job_demand.queued_jobs + job_demand.leased_jobs)::integer as slot_demand,
+		greatest(
+		    ((reservation_demand.participant_count + 39) / 40)::integer,
+		    ((reservation_demand.input_bitrate_bps + 15999999) / 16000000)::integer
+		)::integer as physical_node_floor,
         case
             when sqlc.arg(role)::text = 'capture' then greatest(
                 reservation_demand.episode_count,
@@ -66,6 +71,8 @@ select
     (scheduled_prewarms + prepared_nodes)::integer as scheduled_prewarms,
     held_starts,
     queued_jobs,
+	(slot_demand + prepared_nodes)::integer as slot_demand,
+	physical_node_floor,
     sqlc.arg(observed_at)::timestamptz as observed_at
 from target;
 
@@ -124,7 +131,8 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.image_digest = excluded.image_digest
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
-  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+  -- An issued identity must use close-admission, a later lease read, and revoke.
+  and recording_fleet_nodes.state in ('requested', 'revoked')
 returning provider_id;
 
 -- name: ListRecordingFleetNodeObservations :many

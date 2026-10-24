@@ -80,10 +80,14 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 	if row.Revision == "" || !row.ObservedAt.Valid {
 		return recorderfleet.Demand{}, recorderfleet.ErrInventoryDrift
 	}
-	return recorderfleet.Demand{
+	demand := recorderfleet.Demand{
 		Revision: row.Revision, DesiredNodes: int(row.DesiredNodes), ScheduledPrewarms: int(row.ScheduledPrewarms),
 		HeldStarts: int(row.HeldStarts), QueuedJobs: int(row.QueuedJobs), ObservedAt: row.ObservedAt.Time,
-	}, nil
+	}
+	if key.Role == workeridentity.RoleCapture {
+		demand.CaptureCapacity = &recorderfleet.CaptureCapacityDemand{SlotDemand: int(row.SlotDemand), PhysicalNodeFloor: int(row.PhysicalNodeFloor)}
+	}
+	return demand, nil
 }
 
 func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key recorderfleet.PoolKey, observedAt time.Time) ([]recorderfleet.NodeObservation, error) {

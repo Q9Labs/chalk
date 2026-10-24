@@ -3,11 +3,11 @@ locals {
   # provider can propose creating a replacement bucket.
   bucket_name = var.recording_bucket_name != null ? var.recording_bucket_name : (var.environment == "nightly" ? "chalk-recorder-nightly" : "")
 
-  capture_episode_nodes      = var.reserved_capture_episodes == 0 ? 0 : ceil(var.reserved_capture_episodes / var.capture_episodes_per_node)
+  capture_episode_nodes      = ceil((var.reserved_capture_episodes + var.ready_spare) / var.capture_episodes_per_node)
   capture_participant_nodes  = var.reserved_capture_participants == 0 ? 0 : ceil(var.reserved_capture_participants / var.capture_participants_per_node)
   capture_bitrate_nodes      = var.reserved_capture_input_mbps == 0 ? 0 : ceil(var.reserved_capture_input_mbps / var.capture_input_mbps_per_node)
-  desired_capture_nodes_raw  = max(local.capture_episode_nodes, local.capture_participant_nodes, local.capture_bitrate_nodes) + var.ready_spare
-  desired_capture_nodes      = min(local.desired_capture_nodes_raw, 10)
+  desired_capture_nodes_raw  = max(local.capture_episode_nodes, local.capture_participant_nodes, local.capture_bitrate_nodes)
+  desired_capture_nodes      = min(local.desired_capture_nodes_raw, var.capture_max_nodes)
   desired_render_nodes       = var.render_desired_nodes
   global_compute_nodes       = local.desired_capture_nodes + local.desired_render_nodes
   control_plane_role         = coalesce(var.control_plane_role_arn, "")
@@ -42,13 +42,13 @@ check "capture_admission_ceiling" {
   }
 
   assert {
-    condition     = var.capture_episodes_per_node > 0 && var.capture_participants_per_node > 0 && var.capture_input_mbps_per_node > 0
+    condition     = var.capture_episodes_per_node >= 1 && floor(var.capture_episodes_per_node) == var.capture_episodes_per_node && var.capture_participants_per_node > 0 && var.capture_input_mbps_per_node > 0
     error_message = "capture density inputs must be positive."
   }
 
   assert {
-    condition     = local.desired_capture_nodes_raw <= 10
-    error_message = "capture demand exceeds the ten-node profile; production admission must close."
+    condition     = local.desired_capture_nodes_raw <= var.capture_max_nodes && ceil(var.ready_spare / var.capture_episodes_per_node) <= var.capture_max_nodes
+    error_message = "capture demand or its free-slot floor exceeds capture_max_nodes."
   }
 
   assert {
