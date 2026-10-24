@@ -54,6 +54,7 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 	exec(`create temporary table original_episodes on commit drop as select * from episodes`)
 	exec(`create temporary table original_recordings on commit drop as select * from recordings`)
 	exec(`create temporary table original_jobs on commit drop as select * from artifact_jobs`)
+	exec(`create temporary table original_recording_jobs on commit drop as select * from recording_jobs`)
 	exec(up)
 	exec(up)
 	assertNone := func(sql string) {
@@ -65,13 +66,13 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 	}
 	assertNone(`select count(*) from tenant_artifact_policies where transcription_ceiling <> 'automatic' or transcription_default_mode <> 'automatic' or source_window_seconds <= 0 or provider_policy_version <> 'chalk-automatic-v1'`)
 	assertNone(`select count(*) from spaces where transcription_policy <> 'automatic'`)
-	for _, table := range []string{"episodes", "recordings", "artifact_jobs"} {
-		original := map[string]string{"episodes": "original_episodes", "recordings": "original_recordings", "artifact_jobs": "original_jobs"}[table]
+	for _, table := range []string{"episodes", "recordings", "artifact_jobs", "recording_jobs"} {
+		original := map[string]string{"episodes": "original_episodes", "recordings": "original_recordings", "artifact_jobs": "original_jobs", "recording_jobs": "original_recording_jobs"}[table]
 		assertNone(`select count(*) from ((select * from ` + table + ` except select * from ` + original + `) union all (select * from ` + original + ` except select * from ` + table + `)) difference`)
 	}
 	exec(down)
-	for _, table := range []string{"tenant_artifact_policies", "spaces", "episodes", "recordings", "artifact_jobs"} {
-		original := map[string]string{"tenant_artifact_policies": "original_tenant_policies", "spaces": "original_spaces", "episodes": "original_episodes", "recordings": "original_recordings", "artifact_jobs": "original_jobs"}[table]
+	for _, table := range []string{"tenant_artifact_policies", "spaces", "episodes", "recordings", "artifact_jobs", "recording_jobs"} {
+		original := map[string]string{"tenant_artifact_policies": "original_tenant_policies", "spaces": "original_spaces", "episodes": "original_episodes", "recordings": "original_recordings", "artifact_jobs": "original_jobs", "recording_jobs": "original_recording_jobs"}[table]
 		assertNone(`select count(*) from ((select * from ` + table + ` except select * from ` + original + `) union all (select * from ` + original + ` except select * from ` + table + `)) difference`)
 	}
 	assertNone(`select count(*) from information_schema.columns where table_schema='public' and ((table_name='tenant_artifact_policies' and column_name in ('transcription_ceiling','transcription_default_mode')) or (table_name='spaces' and column_name='transcription_policy')) and column_default <> '''on_demand''::text'`)

@@ -91,6 +91,7 @@ type AutoSpaceLifecycle struct {
 
 type AutomaticTranscriptSpacePolicyBackup struct {
 	SpaceID             pgtype.UUID        `json:"space_id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
 	TranscriptionPolicy string             `json:"transcription_policy"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
