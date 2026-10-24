@@ -461,9 +461,15 @@ export class ChalkWhiteboardController {
       case "cursor":
         this.#send({ type: "apply_cursor", payload: event });
         return;
-      case "view":
+      case "view": {
+        if (event.bring) {
+          const board = this.#board ?? this.options.board;
+          if (board) this.#board = { ...board, following: event.participantId };
+          this.options.onFollow?.(event.participantId);
+        }
         this.#send({ type: "apply_view", payload: event });
         return;
+      }
       case "reset_required":
         this.#sceneGeneration = null;
         this.#send({ type: "reset_required", payload: event });

@@ -17,7 +17,7 @@ const board: ChalkEmbeddedBoardContext = {
 };
 const view = { x: 80, y: 100, width: 390, height: 500, bring: false, ownerId: "owner", ownerSequence: 9, lead: false, originParticipantId: "web", originSequence: 7, originEpoch: "connection-2" } as const;
 
-function fixture(canClear = true) {
+function fixture(canClear = true, rendererReady = true) {
   let rendererListener = (_message: string) => {};
   let transportListener = (_event: ChalkEmbeddedWhiteboardTransportEvent) => {};
   let sequence = 0;
@@ -62,8 +62,9 @@ function fixture(canClear = true) {
   });
   controller.start();
   const deliver = (message: ChalkEmbeddedWhiteboardRendererMessage) => rendererListener(encodeEmbeddedWhiteboardMessage(message, { journeyId: "mixed-call", rendererGeneration: "renderer", nextMessageId: () => `renderer-${++sequence}` }));
-  deliver({ type: "ready", payload: { excalidrawVersion: "0.18.1", supportedBridgeVersions: [1] } });
-  return { controller, deliver, emit: (event: ChalkEmbeddedWhiteboardTransportEvent) => transportListener(event), posted, sendView, setDrawPolicy, setDrawPermission, onFollow, onCloseBoard, onError };
+  const ready = () => deliver({ type: "ready", payload: { excalidrawVersion: "0.18.1", supportedBridgeVersions: [1] } });
+  if (rendererReady) ready();
+  return { controller, deliver, ready, emit: (event: ChalkEmbeddedWhiteboardTransportEvent) => transportListener(event), posted, sendView, setDrawPolicy, setDrawPermission, onFollow, onCloseBoard, onError };
 }
 
 it("forwards web views with relay identity and reconnect epoch intact, without echoing", () => {
@@ -154,6 +155,24 @@ it("rejects guest changes to drawing permissions", async () => {
     await vi.waitFor(() => expect(f.posted.map((raw) => decodeEmbeddedWhiteboardHostMessage(raw)).filter((message) => message.type === "operation_result" && !message.payload.ok)).toHaveLength(2));
     expect(f.setDrawPolicy).not.toHaveBeenCalled();
     expect(f.setDrawPermission).not.toHaveBeenCalled();
+  } finally {
+    f.controller.stop();
+  }
+});
+
+it.each(["initial load", "renderer recovery"])("retains Bring's Follow transition during %s", async (phase) => {
+  const f = fixture(true, phase === "renderer recovery");
+  try {
+    if (phase === "renderer recovery") f.controller.rendererReloaded();
+    const bring = { ...view, bring: true, participantId: "web", displayName: "Web", occurredAt: "2026-10-24T00:00:00Z" } as const;
+    f.emit({ type: "view", ...bring });
+    expect(f.onFollow).toHaveBeenCalledWith("web");
+    f.ready();
+    await vi.waitFor(() => expect(f.posted.map((raw) => decodeEmbeddedWhiteboardHostMessage(raw))).toContainEqual(expect.objectContaining({ type: "initialize", payload: expect.objectContaining({ board: expect.objectContaining({ following: "web" }) }) })));
+    // Cached transport views deliberately clear Bring; Follow must already be selected.
+    f.emit({ type: "view", ...bring, bring: false, ownerSequence: view.ownerSequence + 1 });
+    expect(f.onFollow).toHaveBeenCalledTimes(1);
+    expect(f.posted.map((raw) => decodeEmbeddedWhiteboardHostMessage(raw)).at(-1)).toMatchObject({ type: "apply_view", payload: { bring: false, ownerId: view.ownerId, ownerSequence: view.ownerSequence + 1 } });
   } finally {
     f.controller.stop();
   }
