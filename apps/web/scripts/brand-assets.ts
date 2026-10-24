@@ -55,12 +55,7 @@ function stars(width: number, height: number, fromX: number): string {
 /** What sits behind the mark, drawn in a `width` by `height` box. */
 function backdrop(channel: Channel, width: number, height: number, starsFromX = 0): string {
   if (channel === "production") return `<rect width="${width}" height="${height}" fill="${ICON_COLORS.plate}"/>`;
-  return [
-    `<defs><linearGradient id="sky" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#0d1330"/><stop offset="1" stop-color="#2d2262"/></linearGradient>`,
-    `<radialGradient id="glow" cx="0.2" cy="1" r="0.8"><stop offset="0" stop-color="#6d4fc2" stop-opacity="0.55"/><stop offset="1" stop-color="#6d4fc2" stop-opacity="0"/></radialGradient></defs>`,
-    `<rect width="${width}" height="${height}" fill="url(#sky)"/><rect width="${width}" height="${height}" fill="url(#glow)"/>`,
-    stars(width, height, starsFromX),
-  ].join("");
+  return [`<defs><linearGradient id="sky" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#0a1630"/><stop offset="1" stop-color="#183a73"/></linearGradient></defs>`, `<rect width="${width}" height="${height}" fill="url(#sky)"/>`, stars(width, height, starsFromX)].join("");
 }
 
 /** The mark centred in a box of `box` units, drawn in a `SIZE` square. */
@@ -87,15 +82,12 @@ function ogSvg(channel: Channel): string {
   const width = 1200;
   const height = 630;
   const background = channel === "production" ? `<rect width="${width}" height="${height}" fill="${OG_BACKGROUND}"/>` : backdrop(channel, width, height, 640);
-  const badge =
-    channel === "nightly" ? `<rect x="294" y="86" width="128" height="40" rx="20" fill="none" stroke="${OG_TEXT}" stroke-opacity="0.4"/><text x="358" y="113" text-anchor="middle" font-family="Figtree" font-weight="600" font-size="20" letter-spacing="3" fill="${OG_TEXT}">NIGHTLY</text>` : "";
   const mark = (x: number, y: number, side: number, opacity: number) => `<svg x="${x}" y="${y}" width="${side}" height="${side}" viewBox="0 0 ${MARK.viewBox} ${MARK.viewBox}" opacity="${opacity}">${markSvgBody(ICON_COLORS.mark)}</svg>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
 ${background}
 ${mark(780, 30, 600, 0.07)}
 ${mark(76, 70, 64, 1)}
 <text x="148" y="122" font-family="Figtree" font-weight="700" font-size="48" fill="${OG_TEXT}">chalk</text>
-${badge}
 <text x="80" y="370" font-family="Figtree" font-weight="700" font-size="72" letter-spacing="-1.5" fill="${OG_TEXT}">Calls for your team,</text>
 <text x="80" y="454" font-family="Figtree" font-weight="700" font-size="72" letter-spacing="-1.5" fill="${OG_TEXT}">and inside your product.</text>
 <text x="80" y="540" font-family="Figtree" font-weight="400" font-size="30" fill="${OG_MUTED}">Open source for web, iOS and Android.</text>
