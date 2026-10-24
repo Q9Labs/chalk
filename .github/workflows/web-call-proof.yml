@@ -56,10 +56,35 @@ jobs:
       - name: Install browser and evidence tools
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec e2e-web install chromium --with-deps
-          pnpm --filter @q9labsai/chalk-client exec playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y age
+      - name: Resolve web engine browser cache key
+        id: web-browser-key
+        run: |
+          node --input-type=module <<'JS' >> "$GITHUB_OUTPUT"
+          import { createRequire } from "node:module";
+          const requireEngine = createRequire(import.meta.resolve("@e2e-dev/web"));
+          const version = requireEngine("playwright-core/package.json").version;
+          console.log(`key=e2e-web-playwright-${version}-chromium-${process.env.ImageOS}-${process.env.RUNNER_ARCH}`);
+          JS
+      - name: Restore web engine browser cache
+        id: web-browser-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.web-browser-key.outputs.key }}
+      - name: Install web engine Chromium before the proof
+        run: pnpm exec e2e-web install chromium --with-deps
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
+          verify-engine: true
+      - name: Save web engine browser cache
+        if: steps.web-browser-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.web-browser-key.outputs.key }}
       - name: Validate evidence recipient before creating a call
         run: |
           test -n "$EVIDENCE_RECIPIENT"
