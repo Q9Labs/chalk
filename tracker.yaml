@@ -645,7 +645,7 @@ wishlist:
         origin.
     theory: theory.md#product-goals
     code:
-      - apps/web/src/routes/space.tsx
+      - apps/web/src/routes/_space.tsx
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
   - id: integrations_and_webhooks.management_ui
     title: Connect third-party apps

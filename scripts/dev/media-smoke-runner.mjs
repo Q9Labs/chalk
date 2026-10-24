@@ -64,7 +64,7 @@ export async function runMediaProof(input, options = {}) {
       await joinParticipant(participant, runtime);
       participant.joined = true;
       const inviteURL = new URL(participant.page.url());
-      if (!hasSpaceInviteToken(inviteURL.hash)) unsupported(UNSUPPORTED_ASSERTIONS.inviteCapability);
+      if (!hasSpaceInviteToken(inviteURL)) unsupported(UNSUPPORTED_ASSERTIONS.inviteCapability);
       participant.inviteURL = inviteURL.toString();
       return participant;
     });
@@ -112,8 +112,9 @@ export async function runMediaProof(input, options = {}) {
   return redactProof(report);
 }
 
-function hasSpaceInviteToken(hash) {
-  if (!hash || !hash.startsWith("#")) return false;
-  const token = new URLSearchParams(hash.slice(1)).get("spaceInviteToken");
+function hasSpaceInviteToken(url) {
+  if (/^\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url.pathname)) return true;
+  if (!url.hash.startsWith("#")) return false;
+  const token = new URLSearchParams(url.hash.slice(1)).get("spaceInviteToken");
   return typeof token === "string" && token.startsWith("cspi1");
 }

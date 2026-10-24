@@ -17,6 +17,7 @@ type EntryFailure = { readonly message: string; readonly retryable: boolean };
 type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 type SpacePageProps = {
   readonly slug?: string;
+  readonly inviteCode?: string;
   readonly navigatePublicSpace?: (canonicalSlug: string, inviteLink: string) => Promise<void>;
 };
 export function SpacePage(props: SpacePageProps = {}) {
@@ -32,7 +33,7 @@ export function SpacePage(props: SpacePageProps = {}) {
     </div>
   );
 }
-function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
+function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpaceHistory }: SpacePageProps) {
   const { mode } = useTheme();
   const [terminal, setTerminal] = useState<{
     readonly phase: ExitPhase;
@@ -48,9 +49,10 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const [reportDialog, setReportDialog] = useState<{ send: ReportProblem; diagnostics: string } | null>(null);
   const reportFocusScope = useRef<HTMLDivElement>(null);
   const [reloadMarker] = useState(() => {
-    if (!slug) return null;
+    const routeKey = slug ?? inviteCode;
+    if (!routeKey) return null;
     try {
-      const marker = readReloadRejoin(globalThis.sessionStorage, slug);
+      const marker = readReloadRejoin(globalThis.sessionStorage, routeKey);
       return marker?.arrivalHandle ? marker : null;
     } catch {
       return null; // Storage may be disabled; manual entry remains available.
@@ -103,13 +105,13 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
     setSpaceAccess({ prepared, inviteLink, spaceName });
   }, []);
   useEffect(() => {
-    if (reloadAttempted.current || !slug || !reloadMarker) return;
+    if (reloadAttempted.current || !reloadMarker) return;
     reloadAttempted.current = true;
     const marker = reloadMarker;
     setDisplayName(marker.displayName);
     setEntranceSettings({ displayName: marker.displayName, ...devicesOff });
     setPreparing(true);
-    const recovery = resumePublicSpace(client, marker).then((prepared) => ({ prepared, spaceName: prepared.arrival.space?.name }));
+    const recovery = resumePublicSpace(client, marker, slug).then((prepared) => ({ prepared, spaceName: prepared.arrival.space?.name }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
       .catch(() => {
@@ -122,7 +124,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
   const start = useCallback(
     (settings: WebJoinSettings = defaultJoinOptions) => {
       const normalizedDisplayName = settings.displayName.trim();
-      const inviteToken = spaceInviteToken();
+      const inviteToken = inviteCode ?? spaceInviteToken();
       if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
       setDisplayName(normalizedDisplayName);
       setEntranceSettings({ displayName: normalizedDisplayName, ...devicesOff });
@@ -131,7 +133,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
       } catch {
         /* Joining works with storage disabled. */
       }
-      if (slug && !inviteToken) {
+      if ((slug || inviteCode) && !inviteToken) {
         setError({ message: neutralSpaceError, retryable: false });
         return;
       }
@@ -170,7 +172,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, defaultJoinOptions, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, defaultJoinOptions, inviteCode, navigatePublicSpace, pending, preparing, slug, spaceAccess],
   );
   useEffect(() => {
     if (automaticName || reloadMarker) return;
@@ -207,7 +209,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
           return;
         }
         if (arrival.state !== "admitted") throw new AdmissionError(arrival.state);
-        const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName);
+        const resumed = arrival.access ? arrival : await resumePendingArrival(client, pending, displayName, inviteCode);
         const prepared = createPreparedPublicSpace(client, resumed);
         if (cancelled || cancelRequested.current || !active.current || pendingRef.current !== pending) {
           await prepared.finish().catch(() => undefined);
@@ -227,7 +229,7 @@ function SpaceEntry({ slug, navigatePublicSpace = replacePublicSpaceHistory }: S
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
-  }, [client, complete, displayName, pending, preparing]);
+  }, [client, complete, displayName, inviteCode, pending, preparing]);
   const cancel = useCallback(async () => {
     const arrivalHandle = pending?.arrival.arrival_handle;
     if (!arrivalHandle || preparing) return;
@@ -427,8 +429,8 @@ function retryDelay(retryAfter: number | undefined): number {
   if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter) || retryAfter < 0) return 1000;
   return Math.min(Math.max(retryAfter * 1000, 250), 30000);
 }
-async function resumePendingArrival(client: PublicInviteClient, pending: PendingArrival, displayName: string): Promise<Awaited<ReturnType<PublicInviteClient["arriveBySpacePublicInvite"]>>> {
-  const inviteToken = spaceInviteToken();
+async function resumePendingArrival(client: PublicInviteClient, pending: PendingArrival, displayName: string, inviteCode?: string): Promise<Awaited<ReturnType<PublicInviteClient["arriveBySpacePublicInvite"]>>> {
+  const inviteToken = inviteCode ?? spaceInviteToken();
   const arrivalHandle = pending.arrival.arrival_handle;
   if (!inviteToken || !arrivalHandle) throw new Error(neutralSpaceError);
   return client.arriveBySpacePublicInvite(inviteToken, displayName.trim(), { arrivalHandle });

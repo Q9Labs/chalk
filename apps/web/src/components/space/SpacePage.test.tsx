@@ -245,6 +245,15 @@ describe("public Space entry", () => {
     await waitFor(() => expect(mocks.holder.chalkProps).toMatchObject({ spaceName: "Design Lab" }));
   });
 
+  it("uses the route invite code as the public credential", async () => {
+    window.history.replaceState({}, "", "/abc-defg-hij");
+    render(<SpacePage inviteCode="abc-defg-hij" />);
+    enterName("Ada");
+
+    await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledWith("abc-defg-hij", "Ada"));
+    expect(mocks.publicClient.createPublicSpace).not.toHaveBeenCalled();
+  });
+
   it("shows a failed cancellation without hiding the pending request", async () => {
     window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
     mocks.publicClient.arriveBySpacePublicInvite.mockResolvedValue({ state: "pending", arrival_handle: "arrival-pending", retry_after: 30, space: { slug: "design-lab", name: "Design Lab" } });

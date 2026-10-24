@@ -47,7 +47,7 @@ const intentKey=()=>crypto.randomUUID();
 const act=(_route,input)=>{admissions.push(input);return new Promise(()=>{});};
 const readPage=async()=>{if(pageFailures>0){pageFailures--;throw Error('Transient call read failure');}return {live:liveEpisodeId?{id:liveEpisodeId}:null};};
 const useSession=()=>({profile:{id:'user-one',name:'Synthetic owner'}});
-const useLoad=()=>({state:ready?{kind:'ready',data:{inviteUrl:'http://engine.local/space/call-test',call:{name:'Call'}}}:{kind:'loading'}});
+const useLoad=()=>({state:ready?{kind:'ready',data:{inviteUrl:'http://engine.local/abc-defg-hij',call:{name:'Call'}}}:{kind:'loading'}});
 const useSiteTheme=()=>({theme:'dark'});
 const useNavigate=()=>()=>{};
 const SiteRoot=({children})=>children;

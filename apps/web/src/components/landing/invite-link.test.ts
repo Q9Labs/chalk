@@ -6,6 +6,10 @@ const origin = "https://chalkmeet.com";
 
 describe("callPathFromLink", () => {
   it.each([
+    ["abc-defg-hij", "/abc-defg-hij"],
+    ["ABCDEFGHIJ", "/abc-defg-hij"],
+    ["https://chalkmeet.com/ABC-DEFG-HIJ", "/abc-defg-hij"],
+    ["/abc-defg-hij", "/abc-defg-hij"],
     ["https://chalkmeet.com/space/q9-team", "/space/q9-team"],
     ["chalkmeet.com/space/q9-team", "/space/q9-team"],
     ["  www.chalkmeet.com/space/q9-team  ", "/space/q9-team"],

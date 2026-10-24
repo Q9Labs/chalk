@@ -2,3 +2,4 @@
 /dashboard /space/ 200
 /dashboard/* /space/ 200
 /docs/reactions /docs/chat 301
+/:a-:b-:c /_shell/ 200

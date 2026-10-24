@@ -26,9 +26,9 @@ function JoinForm() {
     <div className="joinwrap">
       <form className={invalid ? "join bad" : "join"} onSubmit={join} noValidate>
         <label className="sr" htmlFor="hero-join">
-          Call link
+          Call link or code
         </label>
-        <input id="hero-join" name="link" placeholder="Paste a call link" inputMode="url" autoComplete="off" spellCheck={false} aria-invalid={invalid} aria-describedby={invalid ? "hero-join-error" : undefined} onChange={() => setInvalid(false)} />
+        <input id="hero-join" name="link" placeholder="Paste a call link or code" inputMode="url" autoCapitalize="none" autoComplete="off" spellCheck={false} aria-invalid={invalid} aria-describedby={invalid ? "hero-join-error" : undefined} onChange={() => setInvalid(false)} />
         <button className="btn" type="submit">
           Join
         </button>
@@ -36,7 +36,7 @@ function JoinForm() {
       {invalid ? (
         <p className="err" id="hero-join-error" role="alert">
           <Icon name="alert" />
-          That isn’t a Chalk link. A call link looks like chalkmeet.com/space/q9-team.
+          That isn’t a Chalk link or code. A call link looks like chalkmeet.com/abc-defg-hij.
         </p>
       ) : null}
     </div>
