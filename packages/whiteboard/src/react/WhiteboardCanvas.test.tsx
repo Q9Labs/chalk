@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, StrictMode } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 
@@ -25,10 +25,11 @@ function createApi() {
 }
 
 // Excalidraw cannot draw in a DOM runner. The stand-in keeps the one behaviour under test: like the real
-// editor, it hands over its API from its class constructor, while React is still rendering.
+// editor, it hands over its API from its class constructor, while React is still rendering. Strict Mode
+// wraps only the editor, so React builds it twice and keeps one, as it does in a Strict Mode app.
 vi.mock("@excalidraw/excalidraw", async () => {
-  const { Component } = await import("react");
-  class Excalidraw extends Component<{ readonly excalidrawAPI: (api: FakeApi) => void }> {
+  const { Component, createElement, StrictMode } = await import("react");
+  class Editor extends Component<{ readonly excalidrawAPI: (api: FakeApi) => void }> {
     readonly editor = { api: createApi(), mounted: false };
     constructor(props: { readonly excalidrawAPI: (api: FakeApi) => void }) {
       super(props);
@@ -49,7 +50,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
     newElementWith: <T extends object>(element: T, update: Partial<T>) => ({ ...element, ...update }),
     reconcileElements: (_local: readonly object[], remote: readonly object[]) => [...remote],
     restoreElements: (elements: readonly object[]) => [...elements],
-    Excalidraw,
+    Excalidraw: (props: { readonly excalidrawAPI: (api: FakeApi) => void }) => createElement(StrictMode, null, createElement(Editor, props)),
   };
 });
 
@@ -63,6 +64,7 @@ afterEach(() => {
 
 it("collaborates on the editor React keeps when Strict Mode builds it twice", async () => {
   const listeners = new Set<(event: WhiteboardCollaborationEvent) => void>();
+  const loadErrors: Error[] = [];
   const collab: WhiteboardCollaborationOptions = {
     canDraw: false,
     submitUpdate: async (input) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }),
@@ -78,14 +80,13 @@ it("collaborates on the editor React keeps when Strict Mode builds it twice", as
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(async () =>
-      root.render(
-        <StrictMode>
-          <WhiteboardCanvas collab={collab} />
-        </StrictMode>,
-      ),
+    await act(async () => root.render(<WhiteboardCanvas collab={collab} onLoadError={(error) => loadErrors.push(error)} />));
+    await act(() =>
+      vi.waitFor(() => {
+        expect(loadErrors).toEqual([]);
+        expect(listeners.size).toBe(1);
+      }),
     );
-    await vi.waitFor(() => expect(listeners.size).toBe(1));
 
     // Strict Mode built a second editor and threw one away. Only the kept one may receive the board.
     expect(fake.editors).toHaveLength(2);
