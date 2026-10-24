@@ -171,7 +171,7 @@ jobs:
   require-gate:
     name: Require a green master Gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Require the target's latest master Gate run to pass
