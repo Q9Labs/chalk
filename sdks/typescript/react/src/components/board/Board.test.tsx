@@ -883,7 +883,16 @@ it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s 
 async function withOpenBoard(
   check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null) => Promise<void>) => Promise<void>,
   primary = true,
-  options: { capabilities?: readonly Capability[]; canDraw?: boolean; phone?: boolean; presentation?: BoardProps["presentation"]; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClose?: BoardProps["onClose"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
+  options: {
+    capabilities?: readonly Capability[];
+    canDraw?: boolean;
+    phone?: boolean;
+    presentation?: BoardProps["presentation"];
+    sendView?: (view: ChalkWhiteboardView) => boolean;
+    onFollow?: BoardProps["onFollow"];
+    onClose?: BoardProps["onClose"];
+    onClient?: (client: ReturnType<typeof createPreviewClient>) => void;
+  } = {},
 ) {
   const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
   options.onClient?.(client);
