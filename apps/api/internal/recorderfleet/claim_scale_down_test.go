@@ -1,6 +1,8 @@
 package recorderfleet
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -64,27 +66,37 @@ func TestScaleDownFinishesWithFreshLeaseReadAndStaleHeartbeat(t *testing.T) {
 }
 
 func TestScaleDownDoesNotTrustOutdatedLeaseRead(t *testing.T) {
-	for _, leaseRead := range []string{"missing", "expired", "future"} {
-		t.Run(leaseRead, func(t *testing.T) {
-			fixture := claimedNodeFixture(t)
-			fixture.config.DrainTimeout = 14*time.Hour + 15*time.Minute
-			fixture.config.Now = func() time.Time { return fixture.now }
-			reconciler := fixture.reconciler(t)
-			if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
-				t.Fatalf("start drain: %+v", result)
-			}
-			fixture.now = fixture.now.Add(5 * time.Hour)
-			fixture.demand.value.ObservedAt = fixture.now
-			switch leaseRead {
-			case "expired":
-				fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(-fixture.config.ObservationMaxAge - time.Second)
-			case "future":
-				fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(time.Minute)
-			}
-			if result := fixture.step(t, reconciler); result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
-				t.Fatalf("untrusted zero lease count allowed drain: %+v", result)
-			}
-		})
+	for _, elapsed := range []time.Duration{time.Second, time.Hour} {
+		for _, leaseRead := range []string{"missing", "expired", "future", "before close", "at close"} {
+			t.Run(elapsed.String()+"/"+leaseRead, func(t *testing.T) {
+				fixture := claimedNodeFixture(t)
+				fixture.config.Now = func() time.Time { return fixture.now }
+				reconciler := fixture.reconciler(t)
+				if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
+					t.Fatalf("start drain: %+v", result)
+				}
+				closedAt := fixture.now
+				fixture.now = fixture.now.Add(elapsed)
+				fixture.demand.value.ObservedAt = fixture.now
+				// A fresh heartbeat cannot make an old API's zero count authoritative.
+				fixture.runtime.observations[0].ObservedAt = fixture.now
+				switch leaseRead {
+				case "expired":
+					fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(-fixture.config.ObservationMaxAge - time.Second)
+				case "future":
+					fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(time.Minute)
+				case "before close":
+					fixture.runtime.observations[0].LeasesObservedAt = closedAt.Add(-time.Second)
+				case "at close":
+					fixture.runtime.observations[0].LeasesObservedAt = closedAt
+				}
+				for range 2 {
+					if result := fixture.step(t, reconciler); result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+						t.Fatalf("untrusted zero lease count allowed drain: %+v", result)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -122,6 +134,45 @@ func TestScaleDownPreservesPositiveLeaseWithClockSkew(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestScaleDownIgnoresDeletedRevokedIdentities(t *testing.T) {
+	fixture := claimedNodeFixture(t)
+	deleted := fixture.runtime.observations[0]
+	deleted.Identity.ProviderID = "deleted"
+	deleted.IdentityRevoked = true
+	deleted.Ready, deleted.AdmissionOpen, deleted.ReadyCapacity = false, false, 0
+	fixture.runtime.observations = append(fixture.runtime.observations, deleted)
+	if result := fixture.step(t, fixture.reconciler(t)); result.Action != ActionAdmissionClosed {
+		t.Fatalf("retained revoked identity blocked draining: %+v", result)
+	}
+}
+
+func TestScaleDownFailsClosedOnLeaseReadErrorAfterTimeout(t *testing.T) {
+	for _, phase := range []Phase{PhaseDraining, PhaseIdentityRevoked, PhaseDeleting} {
+		t.Run(string(phase), func(t *testing.T) {
+			fixture := claimedNodeFixture(t)
+			fixture.config.Now = func() time.Time { return fixture.now }
+			reconciler := fixture.reconciler(t)
+			if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
+				t.Fatalf("start drain: %+v", result)
+			}
+			fixture.now = fixture.now.Add(fixture.config.DrainTimeout + time.Second)
+			fixture.demand.value.ObservedAt = fixture.now
+			// Even a zero stamped fresh must be ignored when its read failed.
+			fixture.runtime.observations[0].LeasesObservedAt = fixture.now
+			fixture.runtime.observeErr = ErrProviderUnavailable
+			managed := fixture.journal.state.Nodes[fixture.runtime.observations[0].Identity.ProviderID]
+			managed.Phase = phase
+			fixture.journal.state.Nodes[managed.ProviderID] = managed
+			for range 2 {
+				result, err := reconciler.Reconcile(context.Background())
+				if !errors.Is(err, ErrProviderUnavailable) || result.Projection.AdmissionOpen || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+					t.Fatalf("failed lease read allowed drain: %+v, error=%v", result, err)
+				}
+			}
+		})
 	}
 }
 

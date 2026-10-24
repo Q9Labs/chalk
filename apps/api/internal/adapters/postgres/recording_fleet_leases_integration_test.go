@@ -52,9 +52,14 @@ func TestRenderFleetObservationCountsDatabaseLiveLeasesUnderClockSkew(t *testing
 			if err != nil || len(observations) != 1 || observations[0].ActiveLeases != 1 || !observations[0].ObservedAt.Equal(heartbeat) || !observations[0].LeasesObservedAt.Equal(now) {
 				t.Fatalf("live %s lease with old heartbeat: observations=%+v, error=%v", kind, observations, err)
 			}
+			execCleanupFixture(t, transaction, `update recording_fleet_nodes set state = 'revoked', revoked_at = clock_timestamp() where provider_id = $1`, workerID.String())
+			observations, err = repository.ObserveNodes(t.Context(), key, now)
+			if err != nil || len(observations) != 1 || observations[0].ActiveLeases != 1 {
+				t.Fatalf("revoked identity hid a live %s lease: observations=%+v, error=%v", kind, observations, err)
+			}
 			execCleanupFixture(t, transaction, `update recording_jobs set lease_expires_at = $2 where id = $1`, fixture.jobID.Bytes(), databaseNow)
 			observations, err = repository.ObserveNodes(t.Context(), key, now)
-			if err != nil || len(observations) != 1 || observations[0].ActiveLeases != 0 || !observations[0].ObservedAt.Equal(heartbeat) || !observations[0].LeasesObservedAt.Equal(now) {
+			if err != nil || len(observations) != 1 || !observations[0].IdentityRevoked || observations[0].ActiveLeases != 0 || !observations[0].ObservedAt.Equal(heartbeat) || !observations[0].LeasesObservedAt.Equal(now) {
 				t.Fatalf("expired %s lease: observations=%+v, error=%v", kind, observations, err)
 			}
 		})

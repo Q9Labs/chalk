@@ -80,6 +80,10 @@ func TestRecorderFleetNodesOnlyExtendsResponseForOptedInControllers(t *testing.T
 		Identity:   recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 3},
 		ObservedAt: time.Now().UTC(), LeasesObservedAt: time.Now().UTC(),
 	}}}
+	service.nodes = append(service.nodes, recorderfleet.NodeObservation{
+		Identity:   recorderfleet.NodeIdentity{ProviderID: "43", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 2},
+		ObservedAt: time.Now().UTC(), LeasesObservedAt: time.Now().UTC(), IdentityRevoked: true,
+	})
 	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
 	for _, includeLeaseRead := range []bool{false, true} {
 		request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
@@ -88,7 +92,15 @@ func TestRecorderFleetNodesOnlyExtendsResponseForOptedInControllers(t *testing.T
 		}
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
-		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), `"leases_observed_at"`) != includeLeaseRead {
+		var result recorderFleetNodesResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		wantNodes := 1
+		if includeLeaseRead {
+			wantNodes = 2
+		}
+		if response.Code != http.StatusOK || len(result.Nodes) != wantNodes || strings.Contains(response.Body.String(), `"identity_revoked"`) != includeLeaseRead || strings.Contains(response.Body.String(), `"leases_observed_at"`) != includeLeaseRead {
 			t.Fatalf("include lease read=%v: status=%d body=%s", includeLeaseRead, response.Code, response.Body.String())
 		}
 	}

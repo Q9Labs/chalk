@@ -56,6 +56,7 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 
 	fixture.runtime.observations[0].ActiveLeases = 0
 	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(time.Nanosecond)
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
 		t.Fatalf("revoke result = %+v, calls %d", result, fixture.bootstrap.revokeCalls)
@@ -96,6 +97,7 @@ func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
 		t.Fatalf("expiry did not drain: %+v", result)
 	}
 	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(time.Nanosecond)
 	fixture.runtime.observations[0].AdmissionOpen = false
 	fixture.runtime.observations[0].Ready = false
 	if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
@@ -439,7 +441,7 @@ func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
 						t.Fatalf("unsafe drain = %+v, revoke/delete = %d/%d", result, fixture.bootstrap.revokeCalls, fixture.provider.deleteCalls)
 					}
 				}
-				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now}}
+				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}}
 				if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
 					t.Fatalf("lease ended: %+v", result)
 				}
@@ -451,7 +453,7 @@ func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
 	}
 }
 
-func TestReconcilerDrainTimeoutOnlyRevokesWithoutLiveLease(t *testing.T) {
+func TestReconcilerDrainTimeoutStillRequiresLeaseEvidence(t *testing.T) {
 	for _, activeLeases := range []int{0, 1} {
 		t.Run(fmt.Sprintf("active leases=%d", activeLeases), func(t *testing.T) {
 			fixture := newFleetFixture(t)
@@ -478,8 +480,12 @@ func TestReconcilerDrainTimeoutOnlyRevokesWithoutLiveLease(t *testing.T) {
 				}
 				return
 			}
+			if result := fixture.step(t, reconciler); result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+				t.Fatalf("timeout without evidence = %+v", result)
+			}
+			fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}}
 			if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
-				t.Fatalf("timeout revoke = %+v", result)
+				t.Fatalf("timeout with authoritative zero = %+v", result)
 			}
 			if result := fixture.step(t, reconciler); result.Action != ActionNodeDeleted || fixture.provider.deleteCalls != 1 {
 				t.Fatalf("timeout deletion = %+v", result)
@@ -849,6 +855,7 @@ func (f *fakeBootstrap) identity(node Node) NodeIdentity {
 }
 
 type fakeRuntime struct {
+	observeErr   error
 	observations []NodeObservation
 	closeCalls   int
 	published    []PoolProjection
@@ -856,7 +863,7 @@ type fakeRuntime struct {
 }
 
 func (f *fakeRuntime) ObserveNodes(context.Context, PoolKey) ([]NodeObservation, error) {
-	return append([]NodeObservation(nil), f.observations...), nil
+	return append([]NodeObservation(nil), f.observations...), f.observeErr
 }
 
 func (f *fakeRuntime) CloseAdmission(_ context.Context, identity NodeIdentity) error {

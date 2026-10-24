@@ -145,13 +145,14 @@ select
         )
           and job.state = 'leased'
           and job.lease_owner = node.worker_id::text
-          and job.lease_expires_at > sqlc.arg(observed_at)::timestamptz
+          and job.lease_expires_at > clock_timestamp()
     ), 0)::integer as active_leases,
-    node.observed_at
+    node.observed_at,
+    (node.state = 'revoked') as identity_revoked
 from recording_fleet_nodes node
 where node.environment = sqlc.arg(environment)
   and node.role = sqlc.arg(role)
-  and node.state in ('active', 'draining')
+  and node.state in ('active', 'draining', 'revoked')
   and node.observed_at is not null
 order by node.provider_id;
 

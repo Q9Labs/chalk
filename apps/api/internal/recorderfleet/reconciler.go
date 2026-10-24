@@ -261,6 +261,10 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 	for _, observation := range observations {
 		node, exists := nodes[observation.Identity.ProviderID]
 		if !exists {
+			// The authority retains revoked identities after their provider node is gone.
+			if observation.IdentityRevoked {
+				continue
+			}
 			return nil, ErrInventoryDrift
 		}
 		if err := observation.Validate(r.config.Key, node, r.config.SlotsPerNode); err != nil {
@@ -273,8 +277,9 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 			return nil, ErrRoleFence
 		}
 		if observation.ObservedAt.After(now.Add(time.Second)) || now.Sub(observation.ObservedAt) > r.config.ObservationMaxAge {
-			// A stopped heartbeat does not invalidate the authority's current job-lease read.
-			if state.Nodes[node.ProviderID].Phase == PhaseDraining && (observation.leasesFresh(now, r.config.ObservationMaxAge) || observation.ActiveLeases > 0 && !observation.ObservedAt.After(now)) {
+			// An invalid heartbeat cannot erase positive lease evidence or prove readiness.
+			if observation.ActiveLeases > 0 || observation.leasesFresh(now, r.config.ObservationMaxAge) {
+				observation.Ready, observation.AdmissionOpen, observation.ReadyCapacity = false, false, 0
 				indexed[node.ProviderID] = observation
 			}
 			continue
@@ -390,6 +395,14 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 }
 
 func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed ManagedNode, node Node, observation NodeObservation, now time.Time) (Journal, Result, error) {
+	if observation.ActiveLeases > 0 {
+		return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
+	}
+	registeredDrain := managed.Identity != nil && (managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting)
+	// Neither a legacy zero nor the timeout proves that database-live work ended.
+	if registeredDrain && (managed.DrainStartedAt == nil || !observation.leasesFresh(now, r.config.ObservationMaxAge) || !observation.LeasesObservedAt.After(*managed.DrainStartedAt)) {
+		return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
+	}
 	switch managed.Phase {
 	case PhaseIdentityRevoked, PhaseDeleting:
 		// Preserve the exact observed ownership tags rather than reconstructing
@@ -403,17 +416,6 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		state, err := r.save(ctx, state)
 		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 	case PhaseDraining:
-		deadline := managed.DrainStartedAt.Add(r.config.DrainTimeout)
-		if observation.ActiveLeases > 0 {
-			return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
-		}
-		// Registered workers can claim before the controller records readiness.
-		if managed.Identity != nil && now.Before(deadline) {
-			leaseReadAfterClose := observation.leasesFresh(now, r.config.ObservationMaxAge) && observation.LeasesObservedAt.After(*managed.DrainStartedAt)
-			if !leaseReadAfterClose && !observation.ObservedAt.After(*managed.DrainStartedAt) {
-				return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
-			}
-		}
 		if managed.Identity != nil {
 			if err := r.bootstrap.RevokeIdentity(ctx, *managed.Identity); err != nil {
 				return state, Result{}, fmt.Errorf("revoke recorder node identity: %w", err)

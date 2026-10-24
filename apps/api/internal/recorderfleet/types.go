@@ -244,6 +244,7 @@ type NodeObservation struct {
 	ObservedAt    time.Time    `json:"observed_at"`
 	// LeasesObservedAt dates the authority's job-lease read, not the worker heartbeat.
 	LeasesObservedAt time.Time `json:"leases_observed_at,omitzero"`
+	IdentityRevoked  bool      `json:"identity_revoked,omitzero"`
 }
 
 func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity int) error {

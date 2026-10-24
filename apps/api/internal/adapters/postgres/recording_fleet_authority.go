@@ -90,7 +90,7 @@ func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key
 		return nil, recorderfleet.ErrProviderUnavailable
 	}
 	rows, err := r.queries.ListRecordingFleetNodeObservations(ctx, sqlc.ListRecordingFleetNodeObservationsParams{
-		ObservedAt: timestamptzValue(observedAt), Environment: key.Environment, Role: string(key.Role),
+		Environment: key.Environment, Role: string(key.Role),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list recording fleet observations: %w", err)
@@ -104,7 +104,8 @@ func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key
 		observations = append(observations, recorderfleet.NodeObservation{
 			Identity: identity, Ready: row.Ready, AdmissionOpen: row.AdmissionOpen,
 			ReadyCapacity: int(row.ReadyCapacity), ActiveLeases: int(row.ActiveLeases), ObservedAt: row.ObservedAt.Time,
-			LeasesObservedAt: observedAt,
+			// Request freshness is separate from the database clock used for lease expiry.
+			LeasesObservedAt: observedAt, IdentityRevoked: row.IdentityRevoked,
 		})
 	}
 	return observations, nil
