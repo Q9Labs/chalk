@@ -5,6 +5,22 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("media readiness", () => {
+  it.each(["camera", "microphone"] as const)("preserves a first %s permission failure during recovery", async (source) => {
+    const { client, platform, capture, command, setEnabled } = createConvergenceScenario(source);
+    capture.mockImplementationOnce(async () => {
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      throw new DOMException("Permission denied", "NotAllowedError");
+    });
+    try {
+      await client.join({ microphone: false, camera: false });
+      await expect(setEnabled(true)).rejects.toMatchObject({ code: "media.permission_denied" });
+      expect(command).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it.each([
     { source: "camera", repeated: false },
     { source: "microphone", repeated: false },
