@@ -326,8 +326,19 @@ cat >"${fixture_root}/bin/systemctl" <<'SYSTEMCTL'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'systemctl %s\n' "$*" >>"${FAKE_COMMAND_LOG:?}"
+if [[ "${FAKE_SYSTEMCTL_COMPETING_START:-false}" == true && "$*" == *'stop chalk-api-migrate.service'* && ! -e "${FAKE_SYSTEMCTL_FAILURE_STATE:?}" ]]; then
+  : >"${FAKE_SYSTEMCTL_FAILURE_STATE}"
+  if [[ "$*" != *'--job-mode=replace-irreversibly'* ]]; then
+    printf 'Job for chalk-api-migrate.service canceled.\n' >&2
+    exit 1
+  fi
+fi
 if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE:-}" && "$*" == *"${FAKE_SYSTEMCTL_FAIL_ONCE}"* && ! -e "${FAKE_SYSTEMCTL_FAILURE_STATE:?}" ]]; then
   : >"${FAKE_SYSTEMCTL_FAILURE_STATE}"
+  if [[ "${FAKE_SYSTEMCTL_OVERSIZED_STDERR:-false}" == true ]]; then
+    printf 'discarded stderr prefix\n%65536s' '' >&2
+  fi
+  printf 'Job for %s canceled.\n' "${*: -1}" >&2
   exit 1
 fi
 case "${1:-}" in
@@ -1009,6 +1020,13 @@ fi
 
 stable_state="${fixture_root}/stable-state"
 if group_enabled healthy; then
+make_request concurrent-stop "${fixture_root}/concurrent-stop-request.json"
+make_manifest concurrent-stop >"${fixture_root}/concurrent-stop-manifest.json"
+if ! FAKE_SYSTEMCTL_COMPETING_START=true run_controller "${fixture_root}/concurrent-stop-state" "${fixture_root}/concurrent-stop-request.json" "${fixture_root}/concurrent-stop-manifest.json" ok >"${fixture_root}/concurrent-stop.log" 2>&1; then
+  fail "concurrent start canceled runtime stop"
+fi
+jq -e '.release_id == "concurrent-stop"' "${fixture_root}/concurrent-stop-state/active-release.json" >/dev/null || fail "competing start prevented the candidate from becoming active"
+rm -f "${fixture_root}/systemctl-failed"
 mkdir -p "$stable_state"
 mkdir -p "${fixture_root}/systemd"
 for alert_unit in chalk-alert-state.service chalk-alert-state.timer; do
@@ -1146,6 +1164,26 @@ fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
 make_request candidate "${fixture_root}/candidate-request.json"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_SYSTEMCTL_FAIL_ONCE='stop chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/stop-failure.log" 2>&1; then
+  fail "runtime stop failure was accepted"
+fi
+grep -Fq 'FAIL runtime stop chalk-api-migrate.service exited 1' "${fixture_root}/stop-failure.log" || fail "runtime stop failure did not name its unit and exit status"
+grep -Fq 'Job for chalk-api-migrate.service canceled.' "${fixture_root}/stop-failure.log" || fail "first stop stderr was lost during fencing and rollback"
+grep -Fq '"rolled_back":true' "${fixture_root}/stop-failure.log" || fail "runtime stop failure did not restore the stable release"
+jq -e '.release_id == "stable"' "${stable_state}/active-release.json" >/dev/null || fail "stable pointer changed after runtime stop failure"
+printf '0' >"${fixture_root}/health-index"
+rm -f "${fixture_root}/systemctl-failed"
+if FAKE_SYSTEMCTL_FAIL_ONCE='stop chalk-api-migrate.service' FAKE_SYSTEMCTL_OVERSIZED_STDERR=true run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/oversized-stop-failure.json" 2>"${fixture_root}/oversized-stop-failure.log"; then
+  fail "runtime stop failure with oversized stderr was accepted"
+fi
+[[ "$(wc -c <"${fixture_root}/oversized-stop-failure.log")" -le 4608 ]] || fail "runtime stop stderr exceeded its bounded excerpt"
+grep -Fq 'FAIL runtime stop chalk-api-migrate.service exited 1' "${fixture_root}/oversized-stop-failure.log" || fail "oversized stop stderr lost its unit and exit status"
+grep -Fq 'stderr truncated; showing last 4096 bytes' "${fixture_root}/oversized-stop-failure.log" || fail "oversized stop stderr was not marked as truncated"
+grep -Fq 'Job for chalk-api-migrate.service canceled.' "${fixture_root}/oversized-stop-failure.log" || fail "oversized stop stderr lost its tail"
+! grep -Fq 'discarded stderr prefix' "${fixture_root}/oversized-stop-failure.log" || fail "oversized stop stderr retained its prefix"
+grep -Fq '"rolled_back":true' "${fixture_root}/oversized-stop-failure.json" || fail "runtime stop failure with oversized stderr did not restore the stable release"
 printf '0' >"${fixture_root}/health-index"
 rm -f "${fixture_root}/systemctl-failed"
 if FAKE_SYSTEMCTL_FAIL_ONCE='start chalk-api-migrate.service' run_controller "$stable_state" "${fixture_root}/candidate-request.json" "${fixture_root}/candidate-manifest.json" ok >"${fixture_root}/migration-failure.log" 2>&1; then
