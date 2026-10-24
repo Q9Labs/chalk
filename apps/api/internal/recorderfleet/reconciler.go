@@ -426,7 +426,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		managed := state.Nodes[providerID]
 		node := nodes[providerID]
 		_, required := needed[providerID]
-		if observation, ok := observed[providerID]; ok && managed.Identity == nil && managed.PendingBootstrap != nil {
+		if observation, ok := observed[providerID]; ok && managed.Identity == nil {
 			identity := observation.Identity
 			managed.Identity, managed.PendingBootstrap = &identity, nil
 			managed.Phase = PhaseBootstrapping

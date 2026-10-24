@@ -47,8 +47,8 @@ func drainable(managed ManagedNode, observation NodeObservation, now time.Time, 
 		return false
 	}
 	if managed.Identity == nil {
-		// No worker identity has been issued. AbandonBootstrap fences the pending
-		// registration before its provider node can be removed.
+		// Observed identities are recovered before selection. AbandonBootstrap
+		// fences an unissued registration before its provider node is removed.
 		return true
 	}
 	return observation.leasesFresh(now, maxAge)

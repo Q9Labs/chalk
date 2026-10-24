@@ -258,3 +258,26 @@ func TestMixedDensityPromotesNewReadyWorker(t *testing.T) {
 		t.Fatalf("new worker capacity hidden: %+v", result)
 	}
 }
+
+func TestAdoptedWorkerIdentityIsRecoveredBeforeDrain(t *testing.T) {
+	f := claimedNodeFixture(t)
+	managed := f.journal.state.Nodes["1001"]
+	managed.Identity, managed.LastReadyAt = nil, nil
+	managed.Phase = PhaseAwaitingBootstrap
+	f.journal.state.Nodes["1001"] = managed
+	r := f.reconciler(t)
+	result := f.step(t, r)
+	if result.Action != ActionBootstrapEnsured || f.journal.state.Nodes["1001"].Identity == nil || f.runtime.closeCalls != 0 || f.provider.deleteCalls != 0 {
+		t.Fatalf("adopted identity not recovered before drain: %+v", result)
+	}
+	f.step(t, r)
+	result = f.step(t, r)
+	if result.Action != ActionAdmissionClosed || f.runtime.closeCalls != 1 {
+		t.Fatalf("recovered identity admission not closed: %+v", result)
+	}
+	f.runtime.observations[0].ActiveLeases = 1
+	result = f.step(t, r)
+	if result.Action != ActionDrainWaiting || f.bootstrap.revokeCalls != 0 || f.provider.deleteCalls != 0 {
+		t.Fatalf("late claim lost: %+v", result)
+	}
+}
