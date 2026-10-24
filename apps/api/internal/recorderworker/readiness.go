@@ -189,31 +189,18 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 			}
 			return errors.Join(readinessFailure("run recorder worker daemon", daemonErr), closeErr)
 		case <-ctx.Done():
-			return r.shutdown(ctx, daemon, cancelRun, daemonResult)
+			return r.shutdown(ctx, daemon, cancelRun, daemonResult, nil)
 		case <-refresh:
 			if capacity, ok := daemon.(interface{ ReadyCapacity() int }); ok {
 				r.capacity = capacity.ReadyCapacity()
 			}
 			receipt, err := r.publish(ctx, r.capacity > 0)
 			if err != nil {
-				if ctx.Err() != nil {
-					return r.shutdown(ctx, daemon, cancelRun, daemonResult)
+				var failure error
+				if ctx.Err() == nil || !errors.Is(err, ctx.Err()) {
+					failure = readinessFailure("refresh recorder worker readiness", err)
 				}
-				cancelRun()
-				shutdownExpired := r.after(r.shutdownGrace)
-				closeErr := r.closeAdmission(ctx)
-				var daemonErr error
-				select {
-				case daemonErr = <-daemonResult:
-				case <-shutdownExpired:
-				case <-ctx.Done():
-				}
-				return errors.Join(
-					readinessFailure("refresh recorder worker readiness", err),
-					daemonErr,
-					ctx.Err(),
-					closeErr,
-				)
+				return r.shutdown(ctx, daemon, cancelRun, daemonResult, failure)
 			}
 			if !receipt.AdmissionOpen {
 				daemon.Drain()
@@ -226,16 +213,20 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 	}
 }
 
-func (r *ReadinessReporter) shutdown(ctx context.Context, daemon DrainableWorkerDaemon, cancelRun context.CancelFunc, daemonResult <-chan error) error {
+func (r *ReadinessReporter) shutdown(ctx context.Context, daemon DrainableWorkerDaemon, cancelRun context.CancelFunc, daemonResult <-chan error, failure error) error {
 	daemon.Drain()
 	shutdownExpired := r.after(r.shutdownGrace)
+	if failure != nil {
+		cancelRun()
+	}
 	closeErr := r.closeAdmission(ctx)
+	// Parent cancellation cannot shorten or restart this shutdown budget.
 	select {
 	case daemonErr := <-daemonResult:
-		return errors.Join(ctx.Err(), unexpectedDaemonError(daemonErr, true), closeErr)
+		return errors.Join(failure, ctx.Err(), unexpectedDaemonError(daemonErr, true), closeErr)
 	case <-shutdownExpired:
 		cancelRun()
-		return errors.Join(ctx.Err(), closeErr)
+		return errors.Join(failure, ctx.Err(), closeErr)
 	}
 }
 
