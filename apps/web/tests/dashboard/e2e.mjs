@@ -54,7 +54,7 @@ async function tenantFor(person, provider = "google") {
   return response.json();
 }
 function sql(statement) {
-  return execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atqc", statement], { encoding: "utf8" }).trim();
+  return execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atqc", statement], { encoding: "utf8", env: { ...process.env, PGOPTIONS: "-c chalk.entry_writer=1" } }).trim();
 }
 // macOS tmpdir() sits behind the /var symlink; the fixture imports below are relative to the real path.
 const sandbox = await realpath(await mkdtemp(resolve(tmpdir(), "chalk-dashboard-pages-")));
