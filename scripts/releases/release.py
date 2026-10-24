@@ -221,7 +221,6 @@ def select(github, args):
     held = held_candidates(records)
     require(held, 'no held nightly')
     selected = held[0]  # Never fall back when the newest held record is invalid.
-    require_current_write(github.deployments('nightly', 'nightly-write'), payload(selected))
     info = validate_choice(github, selected)
     previous = previous_production(github)
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
@@ -236,7 +235,8 @@ def recheck(github, args):
     status = github.request(f"deployments/{item['id']}/statuses?per_page=1")
     item['latest_status'] = status[0]['state'] if status else 'pending'
     require(held_candidates([item]) and payload(item) == selection['selection'], 'selected nightly changed or is no longer held')
-    require_current_write(github.deployments('nightly', 'nightly-write'), payload(item))
+    newest = held_candidates(github.deployments('nightly'))
+    require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
     validate_choice(github, item)
     manifest_bytes(github, selection['previous'])
     require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
@@ -346,21 +346,45 @@ def invalidate(github, args):
         require_current_write(github.deployments('nightly', 'nightly-write'),
                               dict(run_id=env('GITHUB_RUN_ID'), applied_release_id=backend),
                               "a newer nightly write replaced this run's backend; refusing stale web write")
-    # Persist first: partial invalidation must not leave an older cut selectable.
+    # Track live writes for proof ownership, not promotion of saved held bytes.
     github.request('deployments', {'ref': env('TARGET_SHA'), 'environment': 'nightly', 'task': 'nightly-write', 'auto_merge': False,
                    'required_contexts': [], 'payload': dict(channel='nightly-write', run_id=env('GITHUB_RUN_ID'),
                                                           release_id=backend or os.environ.get('RELEASE_ID', ''))})
-    for item in held_candidates(github.deployments('nightly')):
-        github.request(f"deployments/{item['id']}/statuses", {'state': 'inactive', 'auto_inactive': False})
 
+
+def verify_images(github, args):
+    require(args.manifest, 'image check requires --manifest')
+    images = json.loads(args.manifest.read_bytes())['images']
+    require(images, 'release has no container images')
+    for component, image in images.items():
+        match = re.fullmatch(r'([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?/([a-z0-9._/-]+)@(sha256:[0-9a-f]{64})', image)
+        require(match, f'{component}: expected a digest-addressed ECR image')
+        registry, region, repository, checksum = match.groups()
+        try:
+            result = subprocess.run(['aws', 'ecr', 'describe-images', '--registry-id', registry,
+                                     '--region', region, '--repository-name', repository,
+                                     '--image-ids', 'imageDigest=' + checksum, '--output', 'json'],
+                                    capture_output=True, text=True, timeout=60,
+                                    env={**os.environ, 'AWS_PAGER': ''})
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ValueError(f'{component}: ECR image check failed; refusing deployment') from error
+        if result.returncode:
+            require('ImageNotFoundException' not in result.stderr,
+                    f'{component}: held container image is missing from ECR; cut a new nightly')
+            raise ValueError(f'{component}: ECR image check failed; refusing deployment')
+        details = json.loads(result.stdout).get('imageDetails', [])
+        require(any(item['imageDigest'] == checksum for item in details),
+                f'{component}: held container image is missing from ECR; cut a new nightly')
+    print('All release container digests exist in ECR')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production'))
+    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')
+    parser.add_argument('--manifest', type=Path)
     args = parser.parse_args()
     globals()[args.command](GitHub(), args)
 
