@@ -1001,7 +1001,10 @@ stop_runtime_unit() {
   run_user_systemctl --job-mode=replace-irreversibly stop "$unit" >/dev/null 2>"$error_log" || status=$?
   if ((status != 0)); then
     printf 'FAIL runtime stop %s exited %s\n' "$unit" "$status" >&2
-    cat "$error_log" >&2 || printf 'WARN runtime stop detail could not be read\n' >&2
+    if [[ "$(wc -c <"$error_log")" -gt 4096 ]]; then
+      printf 'WARN runtime stop stderr truncated; showing last 4096 bytes\n' >&2
+    fi
+    tail -c 4096 "$error_log" >&2 || printf 'WARN runtime stop detail could not be read\n' >&2
   fi
   return "$status"
 }
