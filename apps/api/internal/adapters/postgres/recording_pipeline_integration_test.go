@@ -1736,7 +1736,7 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 		t.Fatal("capture DB completion span was missing")
 	}
 
-	priorMediaJob, _ := seedStoppedCapture("6a9b6a12-7457-4fe9-a58b-8b234d0be060", "6a9b6a12-7457-4fe9-a58b-8b234d0be061", "6a9b6a12-7457-4fe9-a58b-8b234d0be062", "6a9b6a12-7457-4fe9-a58b-8b234d0be063", "6a9b6a12-7457-4fe9-a58b-8b234d0be064", 4)
+	priorMediaJob, _ := seedStoppedCapture("6a9b6a12-7457-4fe9-a58b-8b234d0be060", "6a9b6a12-7457-4fe9-a58b-8b234d0be061", "6a9b6a12-7457-4fe9-a58b-8b234d0be062", "6a9b6a12-7457-4fe9-a58b-8b234d0be063", "6a9b6a12-7457-4fe9-a58b-8b234d0be064", recordingpipeline.DefaultCaptureAttemptLimit-1)
 	if priorMediaJob.AttemptCount != priorMediaJob.AttemptLimit {
 		t.Fatalf("stopped Capture did not exhaust media budget: %+v", priorMediaJob)
 	}
