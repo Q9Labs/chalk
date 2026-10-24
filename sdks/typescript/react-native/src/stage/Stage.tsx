@@ -77,6 +77,11 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   const next = nextStageOrder(order, present, structure.selfId, structure.speaker);
   if (next !== order) setOrder(next);
 
+  useEffect(() => {
+    view.setBoardOpen(null);
+    view.setFollowing(null);
+  }, [structure.board, view.setBoardOpen, view.setFollowing]);
+
   const boardVisible = view.boardOpen ?? structure.board;
   const content = useMemo<SharedContent | null>(() => (boardVisible ? { kind: "board" } : structure.sharer !== null ? { kind: "screen", sharerId: structure.sharer } : null), [boardVisible, structure.sharer]);
   const pinned = view.pinned !== null && present.includes(view.pinned) ? view.pinned : null;

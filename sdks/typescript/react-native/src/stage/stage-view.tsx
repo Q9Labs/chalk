@@ -7,7 +7,7 @@ export type StageView = {
   readonly layout: StageLayoutChoice;
   readonly pinned: string | null;
   readonly boardOpen: boolean | null;
-  readonly setBoardOpen: (open: boolean) => void;
+  readonly setBoardOpen: (open: boolean | null) => void;
   readonly following: string | null;
   readonly setFollowing: (participantId: string | null) => void;
   /** Whether your own front-camera video is mirrored, as in a mirror. On by default. */
