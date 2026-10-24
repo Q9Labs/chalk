@@ -486,11 +486,12 @@ class EnvelopeTests(unittest.TestCase):
 
     def test_pages_rollback_restores_exact_saved_identity_without_archives(self):
         os.environ.setdefault('GITHUB_OUTPUT', os.devnull)
-        with patch.object(web, 'pages', return_value={'id': 'saved'}) as request:
+        with patch.object(web.subprocess, 'run') as probe, patch.object(web, 'pages', return_value={'id': 'saved'}) as request:
             with patch.object(web, 'current', return_value='saved'):
                 web.rollback('chalk-web', 'saved')
             request.assert_called_once_with('chalk-web', '/deployments/saved/rollback', 'POST')
-        with patch.object(web, 'pages', return_value={'id': 'other'}):
+            self.assertTrue(probe.call_args.args[0][1].endswith('/verify-vendor-store.mjs'))
+        with patch.object(web.subprocess, 'run'), patch.object(web, 'pages', return_value={'id': 'other'}):
             with self.assertRaisesRegex(ValueError, 'did not restore'):
                 web.rollback('chalk-web', 'saved')
 

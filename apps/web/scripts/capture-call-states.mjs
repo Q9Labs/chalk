@@ -61,7 +61,7 @@ async function capture(state, viewportName, viewport) {
       if (message.type() === "error") problems.push({ state: state.id, viewport: viewportName, kind: "console", message: message.text() });
     });
     // The board waits for its stylesheet from the CDN; holding it back keeps the loading screen, as on a slow network.
-    if (state.stallBoard) await page.route(/cdn\.jsdelivr\.net\/npm\/@excalidraw/, () => undefined);
+    if (state.stallBoard) await page.route(/\/chalk-whiteboard\//, () => undefined);
     await page.goto(`${ORIGIN}/call-states.html?state=${state.id}`, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(SETTLE_MS);

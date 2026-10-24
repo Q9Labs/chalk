@@ -17,7 +17,9 @@
       "@q9labsai/chalk-whiteboard": ["../../packages/whiteboard/src/index.ts"],
       "@q9labsai/chalk-whiteboard/react": ["../../packages/whiteboard/src/react/index.ts"],
       "@q9labsai/facehash": ["../../packages/facehash/src/index.ts"],
-      "@q9labsai/facehash/react": ["../../packages/facehash/src/react.ts"]
+      "@q9labsai/facehash/react": ["../../packages/facehash/src/react.ts"],
+      "@q9labsai/chalk-whiteboard/assets": ["../../packages/whiteboard/src/assets.ts"],
+      "@q9labsai/chalk-whiteboard/embedded": ["../../packages/whiteboard/src/embedded/index.ts"]
     }
   }
 }

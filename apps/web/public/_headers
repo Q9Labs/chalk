@@ -1,17 +1,29 @@
+/*
+  Cache-Control: public, max-age=0, s-maxage=0, must-revalidate
+
+/fonts/*
+  ! Cache-Control
+  Cache-Control: public, max-age=86400, must-revalidate
+
 /assets/*
+  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
 /sw.js
+  ! Cache-Control
   Cache-Control: public, max-age=0, must-revalidate
 
 /manifest.json
+  ! Cache-Control
   Cache-Control: public, max-age=0, must-revalidate
 
 /llms.txt
+  ! Cache-Control
   Cache-Control: public, max-age=3600, must-revalidate
   Content-Type: text/plain; charset=utf-8
 
 /sitemap.xml
+  ! Cache-Control
   Cache-Control: public, max-age=3600, must-revalidate
   Content-Type: application/xml; charset=utf-8
 
@@ -29,9 +41,6 @@
 
 /space*
   X-Robots-Tag: noindex, nofollow, noarchive
-
-/*
-  Cache-Control: public, max-age=0, s-maxage=0, must-revalidate
 
 /.well-known/apple-app-site-association
   Content-Type: application/json

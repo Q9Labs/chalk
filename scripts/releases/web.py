@@ -76,7 +76,8 @@ def current(project):
     return deployment['id']
 
 
-def rollback(project, deployment_id):
+def rollback(project, deployment_id, target='production'):
+    subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-vendor-store.mjs'), '--target', target], check=True)
     deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
     require(deployment['id'] == deployment_id and current(project) == deployment_id, 'Pages rollback did not restore the saved deployment')
     outputs({'pages_deployment_id': deployment_id})
@@ -90,6 +91,9 @@ def deploy(target, sha, run, member, project):
     with tempfile.TemporaryDirectory() as directory:
         with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
             archive.extractall(directory, filter='data')
+        subprocess.run([str(ROOT / 'node_modules/.bin/tsx'), str(ROOT / 'apps/web/scripts/prepare-vendor-store.ts'),
+                        '--directory', str(Path(directory) / 'dist/client'), '--target', target,
+                        *(['--verify-only'] if os.environ.get('CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY') == 'true' else [])], check=True)
         subprocess.run([str(ROOT / 'node_modules/.bin/wrangler'), 'pages', 'deploy', 'dist/client',
                         '--project-name', project, '--branch', 'master', '--commit-hash', sha,
                         '--commit-dirty=false'], cwd=directory, check=True)
@@ -112,6 +116,6 @@ if __name__ == '__main__':
     elif args.command == 'current':
         outputs({'pages_deployment_id': current(os.environ['PAGES_PROJECT'])})
     elif args.command == 'rollback':
-        rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'])
+        rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'], args.target)
     else:
         deploy(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), os.environ['PAGES_PROJECT'])

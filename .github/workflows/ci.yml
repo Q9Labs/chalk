@@ -1010,6 +1010,10 @@ jobs:
       # Preserve today's production destination; new configuration is nightly-only.
       CLOUDFLARE_ACCOUNT_ID: ${{ inputs.managed_environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
+      CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ vars.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+      # The Pages-only credential cannot deploy Workers. Probe both live routes and fail closed.
+      CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY: "true"
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
       - uses: actions/checkout@v4
@@ -1048,4 +1052,5 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id != '')
         env:
           PAGES_ROLLBACK_ID: ${{ inputs.pages_rollback_id }}
-        run: python3 scripts/releases/web.py rollback
+          WEB_TARGET: ${{ inputs.managed_environment }}
+        run: python3 scripts/releases/web.py rollback --target "$WEB_TARGET"
