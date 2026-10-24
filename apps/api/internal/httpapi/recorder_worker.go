@@ -107,7 +107,7 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service, controls.Logger))
 		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority, controls.Logger))
 		if controls.CapturePlans != nil {
-			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans))
+			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans, controls.Logger))
 		}
 		mountRecorderCaptureSignalingRoutes(r, controls.CaptureSignaling)
 		mountRecorderRecordingAuthorityRoutes(r, controls.RecordingKeys, controls.RecordingObjects)
@@ -304,7 +304,10 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 	}
 }
 
-func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService) http.HandlerFunc {
+func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService, logger *slog.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
 		if !ok {
@@ -332,7 +335,22 @@ func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService) ht
 			return
 		}
 		if err != nil {
-			writeRecorderCapturePlanError(w, err)
+			apiErr := recorderCapturePlanAPIError(err)
+			if apiErr.Status >= http.StatusInternalServerError {
+				detail := err.Error()
+				if len(detail) > 256 {
+					detail = detail[:256]
+				}
+				logger.ErrorContext(request.Context(), "recorder capture plan wait failed", "event", "http.failure",
+					"operation", "capture_plan.wait", "method", request.Method, "route", "/internal/v1/recorder/plans/wait",
+					"code", apiErr.Code, "error", detail, "tenant_id", input.TenantID.String(),
+					"space_id", input.SpaceID.String(), "episode_id", input.EpisodeID.String(),
+					"recording_id", input.RecordingID.String(), "job_id", input.JobID.String(),
+					"plan_handle", string(input.PlanHandle), "worker_id", identity.WorkerID.String(),
+					"attempt_count", input.AttemptCount, "fencing_generation", input.FencingGeneration,
+					"capture_epoch", uint64(input.CaptureEpoch), "after_revision", uint64(input.AfterRevision))
+			}
+			writeAPIError(w, apiErr)
 			return
 		}
 		writeJSON(w, http.StatusOK, recorderWorkerCapturePlanResponse{Plan: plan, Fingerprint: plan.FingerprintHex()})
@@ -769,15 +787,17 @@ func recorderWorkerAPIError(err error) APIError {
 	}
 }
 
-func writeRecorderCapturePlanError(w http.ResponseWriter, err error) {
+func recorderCapturePlanAPIError(err error) APIError {
 	switch {
 	case errors.Is(err, captureplan.ErrInvalidWaitInput):
-		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture plan wait")
+		return APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid capture plan wait"}
 	case errors.Is(err, captureplan.ErrPlanAuthorityMismatch), errors.Is(err, captureplan.ErrStalePlan), errors.Is(err, captureplan.ErrLeaseExpired):
-		writeError(w, http.StatusConflict, "lease.stale", "Capture plan authority is stale or unavailable")
+		return APIError{Status: http.StatusConflict, Code: "lease.stale", Message: "Capture plan authority is stale or unavailable"}
 	case errors.Is(err, captureplan.ErrRepositoryUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Capture plan service is unavailable")
+		return APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Capture plan service is unavailable"}
+	case errors.Is(err, context.DeadlineExceeded):
+		return APIError{Status: http.StatusGatewayTimeout, Code: "request.timeout", Message: "Capture plan wait deadline exceeded"}
 	default:
-		writeError(w, http.StatusInternalServerError, "internal.error", "Capture plan operation failed")
+		return APIError{Status: http.StatusInternalServerError, Code: "internal.error", Message: "Capture plan operation failed"}
 	}
 }
