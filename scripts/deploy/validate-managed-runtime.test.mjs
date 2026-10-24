@@ -83,6 +83,39 @@ test("the real runtime validator binds telemetry to the selected environment", a
   }
 });
 
+test("the real runtime validator accepts rendered entry-ownership migration units and rejects altered ones", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-runtime-entry-migrator-"));
+  try {
+    await runtimeFixture(directory);
+    const manifestPath = join(directory, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const validate = (rendered) =>
+      spawnSync("bash", [new URL("scripts/validate-runtime", managedRoot).pathname, "--env-root", directory, "--secret-root", join(directory, "secrets"), "--manifest", manifestPath, "--sync-proof", join(directory, "proof.json"), "--excluded-secrets", excluded, "--rendered-root", rendered], {
+        encoding: "utf8",
+      });
+    for (const [name, protocol] of [
+      ["expanded", { sync: 1, entry_writer: 1, entry_migrator: 1 }],
+      ["enforced", { sync: 1, entry_writer: 1, entry_migrator: 1, entry_enforcement: true }],
+    ]) {
+      await writeFile(manifestPath, JSON.stringify({ ...manifest, protocol_compatibility: protocol }));
+      const rendered = join(directory, `rendered-${name}`);
+      const render = spawnSync("bash", [new URL("scripts/render-runtime", managedRoot).pathname, manifestPath, rendered], { encoding: "utf8" });
+      assert.equal(render.status, 0, render.stderr);
+      const unitPath = join(rendered, "quadlet", "chalk-api-migrate.container");
+      const unit = await readFile(unitPath, "utf8");
+      assert.match(unit, /^Exec=.* --entry-writer-protocol 1( --enforce-entry-ownership runtime-environment-test --rollback-entry-writer-protocol 1)?$/m);
+      const accepted = validate(rendered);
+      assert.equal(accepted.status, 0, accepted.stderr);
+      await writeFile(unitPath, unit.replace("--entry-writer-protocol 1", "--entry-writer-protocol 0"));
+      const altered = validate(rendered);
+      assert.notEqual(altered.status, 0);
+      assert.match(altered.stderr, /migration Quadlet target or bounded repairs differ from the release contract/);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the nightly examples validate with recording, transcription and freshly issued TLS inputs", async () => {
   const directory = await mkdtemp(join(tmpdir(), "chalk-nightly-full-runtime-"));
   try {
