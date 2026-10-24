@@ -64,7 +64,7 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
     engine.api.episodes.admitEpisodeParticipant({
       params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) },
       headers: { "Idempotency-Key": action.idempotencyKey },
-      payload: { admission: "direct", participant_id: await ownerParticipantId(engine.tenantId, person.userId, action.spaceId, episodeId, action.idempotencyKey), role: "owner", name: person.name || person.email, identity: { kind: "user", external_id: `${person.provider}:${person.userId}` } },
+      payload: { admission: "direct", participant_id: await ownerParticipantId(engine.tenantId, person.userId, action.spaceId, episodeId, action.idempotencyKey), role: "owner", name: person.name || person.email },
     }),
   );
   if (!result.access) throw new DashboardError(409, "admission_pending");

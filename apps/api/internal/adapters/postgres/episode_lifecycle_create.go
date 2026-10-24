@@ -214,20 +214,6 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		if !ok {
 			return episodes.ErrInvalidRole
 		}
-		if input.Identity != nil {
-			identityID, err := utilities.NewID()
-			if err != nil {
-				return fmt.Errorf("create admission identity id: %w", err)
-			}
-			identity, err := queries.UpsertAdmissionIdentity(ctx, sqlc.UpsertAdmissionIdentityParams{ID: uuid(identityID), TenantID: uuid(input.TenantID), Kind: input.Identity.Kind, ExternalID: input.Identity.ExternalID, DisplayName: input.Name})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return episodes.ErrIdempotencyConflict
-			}
-			if err != nil {
-				return fmt.Errorf("upsert admission identity: %w", err)
-			}
-			input.IdentityID = utilities.IDFromBytes(identity.ID.Bytes)
-		}
 		payload := input.Request.Payload()
 		if input.Admission != episodes.AdmissionDirect {
 			mode, err := configAdmissionMode(config.AdmissionPolicy)

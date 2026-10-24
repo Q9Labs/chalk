@@ -1,7 +1,7 @@
 -- name: GetEpisodeAttendance :many
 select e.id as episode_id, p.id as participant_id, p.name as display_name,
     (case when i.id is not null then i.kind
-          when p.account_id is not null then 'user'
+          when p.account_id is not null or p.role = 'owner' then 'user'
           else 'guest' end)::text as identity_kind,
     i.external_id, coalesce(p.first_joined_at, p.joined_at)::timestamptz as first_joined_at,
     (case when e.status = 'ended' and p.status != 'left' then e.ended_at

@@ -16,6 +16,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -147,6 +149,63 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 	if ended.Participants[1].LastLeftAt == nil || !ended.Participants[1].LastLeftAt.Equal(explicitLeave) || *ended.Participants[1].LeftReason != "left" {
 		t.Fatal("Episode end overwrote explicit leave")
 	}
+	t.Run("historical member roles without identities", func(t *testing.T) {
+		for _, seat := range []struct {
+			role, kind string
+			identity   utilities.ID
+		}{{"owner", "user", utilities.ID{}}, {"collaborator", "guest", utilities.ID{}}, {"observer", "guest", utilities.ID{}}, {"owner", "agent", agentIdentity}} {
+			id := accountTenantIntegrationID(t)
+			exec(`insert into participants(id,tenant_id,space_id,episode_id,generation,status,role,capabilities,name,identity_id,joined_at,left_at) values($1,$2,$3,$4,1,'left',$5,'{subscribe}','Historical attendee',$6,$7,$8)`, uuid(id), uuid(tenant), uuid(space), uuid(episode), seat.role, uuid(seat.identity), first, end)
+			result := read(tenant, space, episode, key, http.StatusOK)
+			found := false
+			for _, person := range result.Participants {
+				if person.ParticipantID == id.String() {
+					found = true
+					if person.IdentityKind != seat.kind || seat.identity.IsZero() && person.ExternalID != nil {
+						t.Fatalf("role=%s attendance=%+v, want %s", seat.role, person, seat.kind)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("historical attendee missing")
+			}
+		}
+	})
+	t.Run("guest link collaborator stays guest", func(t *testing.T) {
+		spaceService := spaces.NewService(NewSpaceRepository(queries, pool))
+		linkedSpace, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
+			TenantID: tenant, Name: "Guest link", Slug: "call-" + accountTenantIntegrationID(t).String(), MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
+			DefaultEpisodeDurationSeconds: 3600, MaximumEpisodeDurationSeconds: 86400, LingerWindowSeconds: 60, RequestKey: accountTenantIntegrationID(t).String(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		invites := publicinvites.NewService(NewPublicInviteRepositoryWithPool(pool))
+		invite, err := invites.EnsureInvite(ctx, tenant, linkedSpace.ID, utilities.ID{}, publicinvites.AdmissionOpen)
+		if err != nil {
+			t.Fatal(err)
+		}
+		arrival, err := invites.CreateArrival(ctx, publicinvites.CreateArrivalInput{
+			TenantID: tenant, SpaceID: linkedSpace.ID, Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch,
+			IdentityMode: publicinvites.IdentityGuest, DisplayName: "Link guest", GuestCredential: []byte("attendance-test-guest-credential"), IdempotencyKey: accountTenantIntegrationID(t).String(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		joined, err := episodes.NewService(NewEpisodeLifecycleRepository(pool)).JoinPublic(ctx, episodes.PublicJoinInput{
+			TenantID: tenant, SpaceID: linkedSpace.ID, KnockArrivalID: arrival.Arrival.ArrivalHandle, IdentityMode: "guest", DisplayName: "Link guest", Role: invite.PublicRole,
+			Request: episodes.Request{Key: accountTenantIntegrationID(t).String()},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Attendance starts when Sync records the actual join, not when admission reserves a seat.
+		exec(`update participants set status='active',joined_at=now(),first_joined_at=now() where id=$1`, uuid(joined.Participant.ID))
+		result := read(tenant, linkedSpace.ID, joined.Episode.ID, key, http.StatusOK)
+		if joined.Participant.Role != "collaborator" || len(result.Participants) != 1 || result.Participants[0].IdentityKind != "guest" || result.Participants[0].ExternalID != nil {
+			t.Fatalf("guest link role=%s attendance=%+v", joined.Participant.Role, result)
+		}
+	})
 	if empty := read(tenant, space, emptyEpisode, key, http.StatusOK); empty.Participants == nil || len(empty.Participants) != 0 {
 		t.Fatalf("empty Episode: %+v", empty)
 	}

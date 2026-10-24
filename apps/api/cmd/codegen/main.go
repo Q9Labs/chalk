@@ -698,10 +698,6 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	switch fieldName {
 	case "recording_render_mode":
 		return []string{"on_demand", "automatic"}
-	case "kind":
-		if schemaName == "AdmitEpisodeParticipantRequest" {
-			return []string{"user", "agent"}
-		}
 	case "admission":
 		if schemaName == "AdmitEpisodeParticipantRequest" {
 			return []string{string(episodes.AdmissionPolicy), string(episodes.AdmissionDirect)}

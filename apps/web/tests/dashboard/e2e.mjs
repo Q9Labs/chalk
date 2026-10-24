@@ -331,7 +331,7 @@ try {
       const ownerAttendance = (await ownPast.json()).attendance.participants[0];
       assert.equal(ownerAttendance.isYou, true);
       assert.equal(ownerAttendance.kind, "user");
-      assert.equal(ownerAttendance.externalId, "google:fixture_ada");
+      assert.equal(ownerAttendance.externalId, null);
       sql(
         `update participants set status='joining', joined_at=null, first_joined_at=null where id='${grant.subject.participant_id}'; update sync_episode_control set folded_state=jsonb_set(folded_state,'{participants}','[]'::jsonb) where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`,
       );

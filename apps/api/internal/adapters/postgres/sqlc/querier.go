@@ -382,7 +382,6 @@ type Querier interface {
 	UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error)
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)
 	UpdateWebhookEndpoint(ctx context.Context, arg UpdateWebhookEndpointParams) (WebhookEndpoint, error)
-	UpsertAdmissionIdentity(ctx context.Context, arg UpsertAdmissionIdentityParams) (Identity, error)
 	UpsertRecordingPoolHealth(ctx context.Context, arg UpsertRecordingPoolHealthParams) (UpsertRecordingPoolHealthRow, error)
 }
 

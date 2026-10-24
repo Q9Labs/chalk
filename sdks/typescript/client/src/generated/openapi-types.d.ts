@@ -1162,11 +1162,6 @@ export interface components {
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */
       admission?: "policy" | "direct";
-      identity?: {
-        external_id: string;
-        /** @enum {string} */
-        kind: "user" | "agent";
-      } | null;
       identity_id?: components["schemas"]["UUID"];
       metadata?:
         | {

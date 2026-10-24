@@ -184,11 +184,6 @@ const (
 	AdmissionDirect AdmissionMode = "direct"
 )
 
-type AdmissionIdentity struct {
-	Kind       string `json:"kind"`
-	ExternalID string `json:"external_id"`
-}
-
 type AdmitParticipantInput struct {
 	Admission     AdmissionMode
 	TenantID      utilities.ID
@@ -199,7 +194,6 @@ type AdmitParticipantInput struct {
 	Metadata      json.RawMessage
 	Role          string
 	IdentityID    utilities.ID
-	Identity      *AdmissionIdentity
 	Request       Request
 }
 

@@ -12236,23 +12236,6 @@
             "enum": ["policy", "direct"],
             "type": "string"
           },
-          "identity": {
-            "additionalProperties": false,
-            "properties": {
-              "external_id": {
-                "maxLength": 512,
-                "minLength": 1,
-                "type": "string",
-                "x-chalk-length-unit": "code-points"
-              },
-              "kind": {
-                "enum": ["user", "agent"],
-                "type": "string"
-              }
-            },
-            "required": ["external_id", "kind"],
-            "type": ["object", "null"]
-          },
           "identity_id": {
             "$ref": "#/components/schemas/UUID"
           },
