@@ -207,13 +207,6 @@ jobs:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
-      - name: Validate release source and pre-deploy contracts
-        env:
-          DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
-          RELEASE_MANAGED: ${{ inputs.release_managed }}
-          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
-        run: scripts/releases/check-contracts.sh --plan
-
       - name: Download stable release manifest
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id == ''
         uses: actions/download-artifact@v4
@@ -326,6 +319,30 @@ jobs:
             echo "- recorder CPU image affected: \`$(jq -r '.recorder_image_affected' "$PLAN_FILE")\`"
             echo "- restart closure: \`$(jq -c '.restart_closure' "$PLAN_FILE")\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  check-managed-contracts:
+    name: Validate release source and pre-deploy contracts
+    needs: plan-managed
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_sha }}
+          fetch-depth: 0
+
+      - name: Set up Go for release contracts
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Validate release source and pre-deploy contracts
+        env:
+          DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
+          RELEASE_MANAGED: ${{ inputs.release_managed }}
+          MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
+        run: scripts/releases/check-contracts.sh --plan
 
   build-managed-images:
     name: Build ${{ matrix.component }} image
@@ -557,9 +574,10 @@ jobs:
     outputs:
       artifact_id: ${{ steps.manifest-upload.outputs.artifact-id }}
       media_sha256: ${{ steps.media-hash.outputs.sha256 }}
-    needs: [plan-managed, build-managed-images, build-media]
+    needs: [plan-managed, check-managed-contracts, build-managed-images, build-media]
     if: >-
       always() &&
+      needs.check-managed-contracts.result == 'success' &&
       needs.plan-managed.outputs.should_publish == 'true' &&
       (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && (inputs.managed_environment != 'nightly' || needs.plan-managed.outputs.recorder_control != 'true'))) &&
       (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
