@@ -137,8 +137,8 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			if err := s.port.FailCommand(ctx, Failure{Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken, ProviderError: failure}); err != nil {
 				return Execution{}, ErrAmbiguousOutcome
 			}
-			if failure.Retryable && key.Operation == captureplane.OperationPullCaptureTracks && failure.Class == captureplane.ProviderFailureNotFound {
-				// Reclaim the same fenced pull after the port's durable backoff.
+			if retryCaptureCommand(key.Operation, failure) {
+				// Reclaim the same fenced command after the port's durable backoff.
 				continue
 			}
 			return Execution{}, ProviderFailureError{Failure: failure}
@@ -178,6 +178,20 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			return Execution{}, ErrAmbiguousOutcome
 		}
 		return Execution{Key: key, Result: result, ResultBytes: resultBytes}, nil
+	}
+}
+
+func retryCaptureCommand(operation captureplane.OperationKind, failure captureplane.ProviderError) bool {
+	if !failure.Retryable {
+		return false
+	}
+	switch operation {
+	case captureplane.OperationPullCaptureTracks:
+		return failure.Class == captureplane.ProviderFailureNotFound || failure.Class == captureplane.ProviderFailureUnavailable || failure.Class == captureplane.ProviderFailureRateLimited
+	case captureplane.OperationRenegotiateCaptureConnection:
+		return failure.Class == captureplane.ProviderFailureUnavailable || failure.Class == captureplane.ProviderFailureRateLimited
+	default:
+		return false
 	}
 }
 

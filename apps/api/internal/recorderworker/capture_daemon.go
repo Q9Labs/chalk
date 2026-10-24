@@ -24,7 +24,7 @@ const (
 	DefaultRelinquishTimeout  = 3 * time.Second
 	DefaultNoWorkWait         = 2 * time.Second
 	DefaultClaimRetryWait     = time.Second
-	DefaultAttemptRetryDelay  = 5 * time.Second
+	DefaultAttemptRetryDelay  = 15 * time.Second
 	DefaultCaptureCompletion  = 5 * time.Minute
 	DefaultCompletionRetry    = 2 * time.Minute
 	defaultCaptureFailureCode = "capture_attempt_failed"
