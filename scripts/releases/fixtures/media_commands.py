@@ -14,6 +14,10 @@ config = json.loads((root / 'config.json').read_text())
 state = json.loads((root / 'state.json').read_text())
 
 
+SERVICE_OF = {'get-parameter': 'ssm', 'list-objects-v2': 's3api', 'get-object': 's3api', 'put-object': 's3api',
+              'get-function-configuration': 'lambda', 'get-schedule': 'scheduler'}
+
+
 def reply(value):
     print(json.dumps(value))
 
@@ -22,6 +26,9 @@ if command == 'aws':
     environment = {**json.loads((root / 'aws-environment.json').read_text()), 'AWS_PAGER': '', 'AWS_CLI_AUTO_PROMPT': 'off'}
     if {key: os.environ.get(key) for key in environment} != environment:
         raise SystemExit('unexpected AWS environment')
+    operation = next((name for name in SERVICE_OF if name in args), None)
+    if operation is None or args[args.index(operation) - 1] != SERVICE_OF[operation]:
+        raise SystemExit('unexpected AWS service')
     if 'get-parameter' in args:
         reply(dict(Parameter=dict(Value=json.dumps(config))))
     elif 'list-objects-v2' in args:
