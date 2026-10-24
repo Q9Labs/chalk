@@ -133,8 +133,9 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
 
   defp ready_response do
     {_, listener, _, _} =
-      Enum.find(Supervisor.which_children(ChalkSync.Supervisor), fn {id, _, _, _} ->
-        id == Bandit
+      Enum.find(Supervisor.which_children(ChalkSync.Supervisor), fn
+        {{Bandit, _reference}, _pid, _type, _modules} -> true
+        _child -> false
       end)
 
     {:ok, {_, port}} = ThousandIsland.listener_info(listener)
