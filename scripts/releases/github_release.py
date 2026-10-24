@@ -155,6 +155,8 @@ class GitHub:
                 if task in ('nightly-cut', 'production-release'):
                     status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
                     item['latest_status'] = status[0]['state'] if status else 'pending'
+                    if task == 'nightly-cut' and item['latest_status'] in ('pending', 'queued', 'in_progress'):
+                        continue
                     if task == 'production-release' and item['latest_status'] != 'success':
                         continue
                 return [item]

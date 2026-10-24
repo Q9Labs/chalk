@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import parse_qs
 
 import release
 import web
@@ -63,6 +64,14 @@ class MemoryGitHub(GitHub):
         return self.archives[target]
 
     def request(self, route, data=None):
+        if route.startswith('deployments?'):
+            query = parse_qs(route.split('?', 1)[1])
+            items = [item for item in reversed(self.items)
+                     if item.get('environment') == query['environment'][0]
+                     and item.get('task', item['payload'].get('channel')) == query['task'][0]
+                     and ('sha' not in query or item['payload'].get('target_sha') == query['sha'][0])]
+            start = (int(query['page'][0]) - 1) * 100
+            return items[start:start + 100]
         if route == 'git/ref/heads/master':
             return dict(object=dict(sha=self.tip))
         if route == 'deployments':
@@ -71,19 +80,14 @@ class MemoryGitHub(GitHub):
             return item
         if route.startswith('deployments/') and data is None:
             item = self.items[int(route.split('/')[1]) - 1]
-            return [dict(state=item['latest_status'])] if '/statuses' in route else item
+            if '/statuses' in route:
+                return [] if item['latest_status'] == 'pending' else [dict(state=item['latest_status'])]
+            return item
         if '/statuses' in route:
             self.items[int(route.split('/')[1]) - 1]['latest_status'] = data['state']
             return {}
         return dict(head_branch='master', head_repository={'full_name': self.repository},
                     path='.github/workflows/nightly.yml', event='schedule')
-
-    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
-        return [item for item in reversed(self.items) if item.get('environment') == environment
-                and (task != 'production-release' or item['latest_status'] == 'success')
-                and item['payload'].get('channel') == task
-                and (not sha or item['payload'].get('target_sha') == sha)
-                and (not manifest_sha256 or item['payload'].get('manifest_sha256') == manifest_sha256)]
 
     def pages(self, route, key):
         if '/workflows/gate.yml/' in route:
@@ -358,6 +362,47 @@ class HeldSelectionTests(unittest.TestCase):
             self.cut(api, '2', 'B')
             with self.assertRaisesRegex(ValueError, 'newer held nightly'):
                 release.recheck(api, None)
+
+    def test_pending_record_creation_and_failed_success_post_keep_previous_held(self):
+        api = MemoryGitHub()
+        self.assertIs(type(api).deployments, GitHub.deployments)
+        self.cut(api, '1', 'A')
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'output'
+            def select():
+                output.write_text('')
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')):
+                    release.select(api, None)
+                return json.loads(output.read_text().split('selection=', 1)[1])
+            selection = select()
+            info = api.info('2', 'B')
+            info.update(channel='nightly-cut', target_sha=SHA, proof_result='passed')
+            info['web'] = json.loads(info['web'])
+            external_request = api.request
+            def interrupted_status(route, data=None):
+                if (route.endswith('/statuses') and data and data.get('state') == 'success'
+                        and api.items[int(route.split('/')[1]) - 1]['payload']['channel'] == 'nightly-cut'):
+                    # The create/status gap, through the real deployment reader.
+                    self.assertEqual(select()['selection']['release_id'], 'A')
+                    with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                        release.recheck(api, None)
+                    raise ValueError('status POST failed')
+                return external_request(route, data)
+            with patch.object(api, 'request', side_effect=interrupted_status), patch.dict(os.environ, GITHUB_RUN_ID='2'):
+                with self.assertRaisesRegex(ValueError, 'status POST failed'):
+                    api.record(SHA, info, True)
+            pending = next(item for item in api.items if item['payload'].get('release_id') == 'B')
+            self.assertEqual(pending['latest_status'], 'pending')
+            # No successful status ever arrives: subsequent reads still use A.
+            self.assertEqual(select()['selection']['release_id'], 'A')
+            with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                release.recheck(api, None)
+            api.request(f"deployments/{pending['id']}/statuses", {'state': 'success'})
+            self.assertEqual(select()['selection']['release_id'], 'B')
+            for state in ('failure', 'inactive'):
+                api.request(f"deployments/{pending['id']}/statuses", {'state': state})
+                with self.assertRaisesRegex(ValueError, 'no held nightly'):
+                    select()
 
     def test_corrupt_newest_held_never_falls_back(self):
         api = MemoryGitHub()
