@@ -458,6 +458,7 @@ func TestCaptureDrainSurvivesRelinquishPanic(t *testing.T) {
 func TestCaptureRetiredSlotReducesReadiness(t *testing.T) {
 	claim := captureDaemonClaim(t, 7)
 	var claims atomic.Int32
+	siblingStarted := make(chan struct{})
 	control := &multislotControl{claim: func(_ context.Context, id utilities.ID, lease time.Duration) (ClaimResult, error) {
 		c := claim
 		c.ClaimRequestID = id
@@ -471,6 +472,7 @@ func TestCaptureRetiredSlotReducesReadiness(t *testing.T) {
 			if failed {
 				return errors.New("media failure")
 			}
+			close(siblingStarted)
 			<-ctx.Done()
 			return ctx.Err()
 		}, close: func(context.Context) error {
@@ -495,6 +497,11 @@ func TestCaptureRetiredSlotReducesReadiness(t *testing.T) {
 	go func() { done <- reporter.Run(ctx, daemon) }()
 	defer func() { cancel(); <-done }()
 	assertReadinessReport(t, reports.reports, true, 2, ReadinessReasonReady)
+	select {
+	case <-siblingStarted:
+	case <-time.After(time.Second):
+		t.Fatal("sibling did not start")
+	}
 	deadline := time.After(time.Second)
 	for daemon.ReadyCapacity() != 1 {
 		select {
