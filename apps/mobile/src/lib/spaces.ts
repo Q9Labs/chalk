@@ -16,7 +16,7 @@ export type SpaceRoute = {
 };
 
 type SpaceInvite = {
-  readonly slug?: string;
+  readonly slug: string;
   readonly spaceInviteToken: string;
 };
 
@@ -240,7 +240,7 @@ function storedArrival(value: PublicSpaceArrival, route: SpaceInvite, guestCrede
   const arrivalHandle = value.arrival_handle?.trim();
   const credential = guestCredential?.trim() ?? value.guest_credential?.trim();
   if (!arrivalHandle || !credential) throw new Error("Chalk did not return a Guest arrival credential.");
-  return { arrivalHandle, guestCredential: credential, slug: route.slug, spaceInviteToken: route.spaceInviteToken };
+  return { arrivalHandle, guestCredential: credential, slug: value.space?.slug?.trim() || route.slug, spaceInviteToken: route.spaceInviteToken };
 }
 
 function requiredAccess(value: PublicSpaceArrival): AccessGrant {

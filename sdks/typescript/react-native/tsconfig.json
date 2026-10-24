@@ -13,6 +13,7 @@
     "paths": {
       "@q9labsai/chalk-client": ["../client/dist/index.d.ts"],
       "@q9labsai/chalk-client/effect": ["../client/dist/effect.d.ts"],
+      "@q9labsai/chalk-client/invites": ["../client/dist/public-invites/index.d.ts"],
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.native.ts"],
       "@q9labsai/facehash/react-native": ["../../../packages/facehash/src/index.native.ts"]
     }

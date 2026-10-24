@@ -176,7 +176,7 @@ function finiteNonNegative(value) {
 }
 
 function redactString(value) {
-  const redacted = value.replace(SECRET_VALUE, "[redacted]");
+  const redacted = value.replace(SECRET_VALUE, "[redacted]").replace(/\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?=[/?#\s]|$)/gi, "/[redacted]");
   return redacted.replace(/((?:https?:\/\/|\/)[^\s?#]+)([?#][^\s]*)/g, (_match, path, queryOrFragment) => `${path}${redactURLValues(queryOrFragment)}`);
 }
 

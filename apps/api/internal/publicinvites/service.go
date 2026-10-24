@@ -222,8 +222,6 @@ func (s Service) ResolveInviteToken(ctx context.Context, raw string) (Invite, To
 	return invite, token, nil
 }
 
-// withFreshInviteHandle retries the rare invite code collision with a new
-// handle, because the code is derived from the handle.
 func withFreshInviteHandle(generationError string, attempt func([]byte) (Invite, error)) (Invite, error) {
 	err := ErrInviteCodeTaken
 	for range 3 {

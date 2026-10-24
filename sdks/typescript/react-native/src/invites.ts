@@ -60,7 +60,7 @@ export function parseChalkInviteLink(input: string): ChalkInviteLink | null {
     const pathSegments = parsed.pathname.split("/").filter(Boolean);
     if (CHALK_CUSTOM_PROTOCOLS.has(parsed.protocol)) pathSegments.unshift(parsed.hostname);
     if (pathSegments.length !== 1 || parsed.search || parsed.hash) return null;
-    const pathCode = parseInviteCode(pathSegments[0]);
+    const pathCode = parseInviteCode(pathSegments[0] ?? "");
     return pathCode ? { spaceInviteToken: pathCode } : null;
   } catch {
     return null;
