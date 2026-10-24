@@ -85,10 +85,15 @@ func TestRecorderFleetNodesOnlyExtendsResponseForOptedInControllers(t *testing.T
 		ObservedAt: time.Now().UTC(), LeasesObservedAt: time.Now().UTC(), IdentityRevoked: true,
 	})
 	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
-	for _, includeLeaseRead := range []bool{false, true} {
+	for _, capability := range []string{"legacy", "lease-read", "authority"} {
+		includeLeaseRead := capability != "legacy"
+		includeRevoked := capability == "authority"
 		request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
 		if includeLeaseRead {
 			request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+		}
+		if includeRevoked {
+			request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
 		}
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
@@ -97,10 +102,10 @@ func TestRecorderFleetNodesOnlyExtendsResponseForOptedInControllers(t *testing.T
 			t.Fatal(err)
 		}
 		wantNodes := 1
-		if includeLeaseRead {
+		if includeRevoked {
 			wantNodes = 2
 		}
-		if response.Code != http.StatusOK || len(result.Nodes) != wantNodes || strings.Contains(response.Body.String(), `"identity_revoked"`) != includeLeaseRead || strings.Contains(response.Body.String(), `"leases_observed_at"`) != includeLeaseRead {
+		if (response.Header().Get("X-Chalk-Fleet-Lease-Authority") == "1") != includeRevoked || response.Code != http.StatusOK || len(result.Nodes) != wantNodes || strings.Contains(response.Body.String(), `"identity_revoked"`) != includeRevoked || strings.Contains(response.Body.String(), `"leases_observed_at"`) != includeLeaseRead {
 			t.Fatalf("include lease read=%v: status=%d body=%s", includeLeaseRead, response.Code, response.Body.String())
 		}
 	}
@@ -115,10 +120,14 @@ func TestRecorderFleetNodesFailsClosedForLegacyControllersWithLiveLeases(t *test
 			ActiveLeases: 1, ObservedAt: heartbeat, LeasesObservedAt: now,
 		}}}
 		router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
-		for _, optedIn := range []bool{false, true} {
+		for _, capability := range []string{"legacy", "lease-read", "authority"} {
+			optedIn := capability == "authority"
 			request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
-			if optedIn {
+			if capability != "legacy" {
 				request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+			}
+			if optedIn {
+				request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
 			}
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -129,7 +138,7 @@ func TestRecorderFleetNodesFailsClosedForLegacyControllersWithLiveLeases(t *test
 				continue
 			}
 			var result recorderFleetNodesResponse
-			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != http.StatusOK || len(result.Nodes) != 1 || result.Nodes[0] != service.nodes[0] {
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || (response.Header().Get("X-Chalk-Fleet-Lease-Authority") == "1") != optedIn || response.Code != http.StatusOK || len(result.Nodes) != 1 || result.Nodes[0] != service.nodes[0] {
 				t.Fatalf("new controller lost positive lease: status=%d response=%+v error=%v", response.Code, result, err)
 			}
 		}

@@ -33,11 +33,21 @@ func TestScaleDownDoesNotRevokeClaimAfterDrainTimeout(t *testing.T) {
 }
 
 func TestScaleDownFinishesWithFreshLeaseReadAndStaleHeartbeat(t *testing.T) {
-	for _, heartbeat := range []string{"before close", "after close"} {
+	for _, heartbeat := range []string{"before close", "after close", "never"} {
 		t.Run(heartbeat, func(t *testing.T) {
 			fixture := claimedNodeFixture(t)
 			fixture.config.DrainTimeout = 14*time.Hour + 15*time.Minute
 			fixture.config.Now = func() time.Time { return fixture.now }
+			if heartbeat == "never" {
+				node := fixture.provider.nodes["1001"]
+				node.CreatedAt = fixture.now.Add(-fixture.config.StartupTimeout - time.Second)
+				fixture.provider.nodes["1001"] = node
+				managed := fixture.journal.state.Nodes["1001"]
+				managed.Phase, managed.LastReadyAt = PhaseBootstrapping, nil
+				fixture.journal.state.Nodes["1001"] = managed
+				fixture.runtime.observations[0].ObservedAt = node.CreatedAt
+				fixture.runtime.observations[0].Ready, fixture.runtime.observations[0].AdmissionOpen = false, false
+			}
 			reconciler := fixture.reconciler(t)
 			if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
 				t.Fatalf("start drain: %+v", result)
@@ -173,6 +183,36 @@ func TestScaleDownFailsClosedOnLeaseReadErrorAfterTimeout(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestScaleDownFreshLeaseReadDoesNotRefreshHeartbeat(t *testing.T) {
+	fixture := claimedNodeFixture(t)
+	fixture.config.Now = func() time.Time { return fixture.now }
+	fixture.config.MaxNodes = 1
+	fixture.demand.value.DesiredNodes = 1
+	readyAt := fixture.now
+	managed := fixture.journal.state.Nodes["1001"]
+	managed.LastReadyAt = &readyAt
+	fixture.journal.state.Nodes["1001"] = managed
+	fixture.now = fixture.now.Add(fixture.config.ObservationMaxAge + time.Second)
+	fixture.demand.value.ObservedAt = fixture.now
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now
+	if result := fixture.step(t, fixture.reconciler(t)); result.Action != ActionAdmissionClosed {
+		t.Fatalf("fresh lease read hid a stopped heartbeat: %+v", result)
+	}
+}
+
+func TestScaleDownClosesBusyStaleNodeAdmission(t *testing.T) {
+	fixture := claimedNodeFixture(t)
+	fixture.config.MaxNodes = 1
+	fixture.demand.value.DesiredNodes = 1
+	node := fixture.provider.nodes["1001"]
+	node.ImageID++
+	fixture.provider.nodes["1001"] = node
+	fixture.runtime.observations[0].ActiveLeases = 1
+	if result := fixture.step(t, fixture.reconciler(t)); result.Action != ActionAdmissionClosed || fixture.runtime.closeCalls != 1 || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+		t.Fatalf("busy stale worker kept admission open: %+v", result)
 	}
 }
 

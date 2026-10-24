@@ -148,20 +148,22 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 		if nodes == nil {
 			nodes = []recorderfleet.NodeObservation{}
 		}
-		// Older controllers reject unknown JSON fields in the v1 response.
-		if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
+		leaseAuthority := request.Header.Get("X-Chalk-Fleet-Lease-Authority") == "1"
+		// Older controllers cannot preserve live counts under skew or decode revoked identities.
+		if !leaseAuthority {
 			nodes = slices.Clone(nodes)
 			for index := range nodes {
-				// Old controllers can discard positive counts under clock skew, even after timeout.
-				// Their clock is unknown, so no live-lease response is safe to return.
 				if nodes[index].ActiveLeases > 0 {
 					writeRecorderFleetError(w, request, logger, "observe_nodes", fmt.Errorf("%w: legacy controller cannot safely observe live leases", recorderfleet.ErrProviderUnavailable))
 					return
 				}
-				nodes[index].LeasesObservedAt = time.Time{}
+				if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
+					nodes[index].LeasesObservedAt = time.Time{}
+				}
 			}
-			// Legacy controllers treat already-deleted identities as inventory drift.
 			nodes = slices.DeleteFunc(nodes, func(node recorderfleet.NodeObservation) bool { return node.IdentityRevoked })
+		} else {
+			w.Header().Set("X-Chalk-Fleet-Lease-Authority", "1")
 		}
 		writeJSON(w, http.StatusOK, recorderFleetNodesResponse{
 			SchemaVersion: recorderfleet.NodesSchemaVersion, Environment: environment,

@@ -161,6 +161,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 	request.Header.Set("Accept", "application/json")
 	if path == fleetPath+"/nodes" {
 		request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+		request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
 	}
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -195,6 +196,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 			}
 		}
 		return fmt.Errorf("%w: recorder fleet control status %d", recorderfleet.ErrProviderUnavailable, response.StatusCode)
+	}
+	if path == fleetPath+"/nodes" && response.Header.Get("X-Chalk-Fleet-Lease-Authority") != "1" {
+		return fmt.Errorf("%w: database lease authority is required", recorderfleet.ErrProviderUnavailable)
 	}
 	if output == nil {
 		if len(bytes.TrimSpace(responseBody)) != 0 {

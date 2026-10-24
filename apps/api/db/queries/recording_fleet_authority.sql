@@ -147,13 +147,14 @@ select
           and job.lease_owner = node.worker_id::text
           and job.lease_expires_at > clock_timestamp()
     ), 0)::integer as active_leases,
-    node.observed_at,
+    -- Creation only anchors age for registered workers that never reported readiness.
+    coalesce(node.observed_at, node.created_at) as observed_at,
     (node.state = 'revoked') as identity_revoked
 from recording_fleet_nodes node
 where node.environment = sqlc.arg(environment)
   and node.role = sqlc.arg(role)
   and node.state in ('active', 'draining', 'revoked')
-  and node.observed_at is not null
+  and node.worker_id is not null
 order by node.provider_id;
 
 -- name: CloseRecordingFleetNodeAdmission :one

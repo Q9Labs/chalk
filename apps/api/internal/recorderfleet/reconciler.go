@@ -280,6 +280,7 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 			// An invalid heartbeat cannot erase positive lease evidence or prove readiness.
 			if observation.ActiveLeases > 0 || observation.leasesFresh(now, r.config.ObservationMaxAge) {
 				observation.Ready, observation.AdmissionOpen, observation.ReadyCapacity = false, false, 0
+				observation.ObservedAt = time.Time{}
 				indexed[node.ProviderID] = observation
 			}
 			continue
@@ -395,10 +396,11 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 }
 
 func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed ManagedNode, node Node, observation NodeObservation, now time.Time) (Journal, Result, error) {
-	if observation.ActiveLeases > 0 {
+	draining := managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting
+	if observation.ActiveLeases > 0 && (draining || managed.Identity == nil) {
 		return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
 	}
-	registeredDrain := managed.Identity != nil && (managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting)
+	registeredDrain := managed.Identity != nil && draining
 	// Neither a legacy zero nor the timeout proves that database-live work ended.
 	if registeredDrain && (managed.DrainStartedAt == nil || !observation.leasesFresh(now, r.config.ObservationMaxAge) || !observation.LeasesObservedAt.After(*managed.DrainStartedAt)) {
 		return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
