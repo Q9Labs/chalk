@@ -328,7 +328,10 @@ try {
       assert.equal(liveDTO.episodes[0].participantCount, 1);
       const ownPast = await ada.request(`/dashboard-api/past-session?spaceId=${ownerSpaceId}&episodeId=${grant.subject.episode_id}`);
       assert.equal(ownPast.status, 200, await ownPast.clone().text());
-      assert.equal((await ownPast.json()).attendance.participants[0].isYou, true);
+      const ownerAttendance = (await ownPast.json()).attendance.participants[0];
+      assert.equal(ownerAttendance.isYou, true);
+      assert.equal(ownerAttendance.kind, "user");
+      assert.equal(ownerAttendance.externalId, "google:fixture_ada");
       sql(
         `update participants set status='joining', joined_at=null, first_joined_at=null where id='${grant.subject.participant_id}'; update sync_episode_control set folded_state=jsonb_set(folded_state,'{participants}','[]'::jsonb) where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`,
       );

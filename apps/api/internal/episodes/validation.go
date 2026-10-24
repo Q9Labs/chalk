@@ -102,6 +102,12 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	}
 	input.Role = role
 
+	if input.Identity != nil {
+		if !input.IdentityID.IsZero() || (input.Identity.Kind != "user" && input.Identity.Kind != "agent") || input.Identity.ExternalID == "" || len(input.Identity.ExternalID) > 512 || !utf8.ValidString(input.Identity.ExternalID) {
+			return ErrInvalidIntentPayload
+		}
+	}
+
 	metadata, err := utilities.JSON(input.Metadata)
 	if err != nil {
 		return ErrInvalidIntentPayload
@@ -118,22 +124,23 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		fingerprintAdmission = ""
 	}
 	input.Request.Fingerprint = lifecycleFingerprint(struct {
-		Admission     AdmissionMode   `json:"admission,omitempty"`
-		TenantID      string          `json:"tenant_id"`
-		SpaceID       string          `json:"space_id"`
-		EpisodeID     string          `json:"episode_id"`
-		ParticipantID string          `json:"participant_id"`
-		IntentName    string          `json:"intent_name"`
-		Name          string          `json:"name"`
-		Metadata      json.RawMessage `json:"metadata"`
-		Role          string          `json:"role"`
-		IdentityID    string          `json:"identity_id"`
-		Payload       json.RawMessage `json:"payload"`
+		Admission     AdmissionMode      `json:"admission,omitempty"`
+		TenantID      string             `json:"tenant_id"`
+		SpaceID       string             `json:"space_id"`
+		EpisodeID     string             `json:"episode_id"`
+		ParticipantID string             `json:"participant_id"`
+		IntentName    string             `json:"intent_name"`
+		Name          string             `json:"name"`
+		Metadata      json.RawMessage    `json:"metadata"`
+		Role          string             `json:"role"`
+		IdentityID    string             `json:"identity_id"`
+		Identity      *AdmissionIdentity `json:"identity,omitempty"`
+		Payload       json.RawMessage    `json:"payload"`
 	}{
 		Admission: fingerprintAdmission,
 		TenantID:  input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
 		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name,
-		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), Payload: payload,
+		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), Identity: input.Identity, Payload: payload,
 	})
 	return nil
 }

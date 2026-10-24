@@ -229,6 +229,57 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 			if got, want := journeyRoot(t, admitted.Intent.ID), "map[admission:direct request:participant.admission_requested]"; got != want {
 				t.Fatalf("direct admission journey root = %s, want %s", got, want)
 			}
+			for _, kind := range []string{"user", "agent"} {
+				t.Run("attendance_"+kind, func(t *testing.T) {
+					id := accountTenantIntegrationID(t)
+					externalID := kind + "-" + id.String()
+					requestKey := "identity-admission-" + id.String()
+					body := fmt.Sprintf(`{"participant_id":%q,"name":"Identified participant","role":"custom_guest","admission":"direct","identity":{"kind":%q,"external_id":%q}}`, id.String(), kind, externalID)
+					identified := post(t, base+"/"+episode.ID+"/participants", writer, requestKey, body, http.StatusCreated)
+					retried := post(t, base+"/"+episode.ID+"/participants", writer, requestKey, body, http.StatusCreated)
+					if retried.Participant.ID != identified.Participant.ID || retried.Intent.ID != identified.Intent.ID {
+						t.Fatal("identity admission retry created another participant")
+					}
+					exec(`update participants set status='active',joined_at=now(),first_joined_at=now() where id=$1`, uuid(id))
+					request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+base+"/"+episode.ID+"/attendance", nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					request.Header.Set("Authorization", "Bearer "+reader)
+					response, err := server.Client().Do(request)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer response.Body.Close()
+					var attendance struct {
+						Participants []struct {
+							ID         string `json:"participant_id"`
+							Kind       string `json:"identity_kind"`
+							ExternalID string `json:"external_id"`
+						} `json:"participants"`
+					}
+					if response.StatusCode != http.StatusOK {
+						t.Fatalf("attendance status=%d", response.StatusCode)
+					}
+					if err := json.NewDecoder(response.Body).Decode(&attendance); err != nil {
+						t.Fatal(err)
+					}
+					found := false
+					for _, person := range attendance.Participants {
+						if person.ID == id.String() {
+							found = true
+							if person.Kind != kind || person.ExternalID != externalID {
+								t.Fatalf("attendance identity=%+v", person)
+							}
+						}
+					}
+					if !found {
+						t.Fatal("identified participant missing from attendance")
+					}
+					changed := strings.Replace(body, `"external_id":"`+externalID+`"`, `"external_id":"other"`, 1)
+					post(t, base+"/"+episode.ID+"/participants", writer, requestKey, changed, http.StatusConflict)
+				})
+			}
 			var payload json.RawMessage
 			if err := pool.QueryRow(ctx, `select payload from sync_lifecycle_intents where lifecycle_intent_id=$1`, admitted.Intent.ID).Scan(&payload); err != nil {
 				t.Fatal(err)

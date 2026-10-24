@@ -442,6 +442,14 @@ insert into identities (
 )
 returning *;
 
+-- name: UpsertAdmissionIdentity :one
+insert into identities (id, tenant_id, kind, external_id, display_name)
+values (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(kind), sqlc.arg(external_id), sqlc.arg(display_name))
+on conflict (tenant_id, external_id) do update
+set display_name = excluded.display_name, updated_at = now()
+where identities.kind = excluded.kind
+returning *;
+
 -- name: GetTenantIdentityByExternalID :one
 select *
 from identities

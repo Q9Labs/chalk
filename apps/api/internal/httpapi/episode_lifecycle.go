@@ -68,12 +68,13 @@ type createEpisodeEndpointRequest struct {
 }
 
 type admitParticipantRequest struct {
-	Admission     episodes.AdmissionMode `json:"admission,omitempty"`
-	ParticipantID string                 `json:"participant_id,omitempty"`
-	Name          string                 `json:"name"`
-	Metadata      utilities.OptionalJSON `json:"metadata"`
-	Role          string                 `json:"role"`
-	IdentityID    string                 `json:"identity_id,omitempty"`
+	Admission     episodes.AdmissionMode      `json:"admission,omitempty"`
+	ParticipantID string                      `json:"participant_id,omitempty"`
+	Name          string                      `json:"name"`
+	Metadata      utilities.OptionalJSON      `json:"metadata"`
+	Role          string                      `json:"role"`
+	IdentityID    string                      `json:"identity_id,omitempty"`
+	Identity      *episodes.AdmissionIdentity `json:"identity,omitempty"`
 }
 
 type admitParticipantEndpointRequest struct {
@@ -329,7 +330,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		if service == nil {
 			return participantLifecycleResponse{}, apiErrorServiceUnavailable
 		}
-		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, Request: episodes.Request{Key: request.RequestKey}})
+		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, Identity: request.Body.Identity, Request: episodes.Request{Key: request.RequestKey}})
 		if err != nil {
 			return participantLifecycleResponse{}, err
 		}
