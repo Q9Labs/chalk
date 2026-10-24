@@ -120,54 +120,53 @@ it("walks every client-code / operation / source / recoverability / retained-com
   expect(rows).toBe(Object.keys(CASES).length * operations.length * sources.length * 2 * 2);
 });
 
-it("walks every actionable policy row through SpaceView and replays the exact failed start/stop command", async () => {
-  let rows = 0;
-  for (const { code, family, retry } of Object.values(CASES)) {
-    if (!retry) continue;
-    for (const source of ["camera", "microphone", "screen"] as const)
-      for (const operation of ["start", "stop"] as const) {
-        const snapshot = createSnapshot(["publishAudio", "publishVideo", "publishScreen"]);
-        const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" } });
-        if (operation === "stop") {
-          await preview.media.setCameraEnabled(true);
-          await preview.media.setMicrophoneEnabled(true);
-          await preview.media.setScreenShareEnabled(true);
-        }
-        const command = vi.fn(async (_enabled: boolean) => {
-          throw new SpaceClientError({ code, recoverable: true, message: "Private implementation details" });
-        });
-        const client = { ...preview, media: { ...preview.media, setCameraEnabled: command, setMicrophoneEnabled: command, setScreenShareEnabled: command } };
-        const container = document.body.appendChild(document.createElement("div"));
-        const root = createRoot(container);
-        try {
-          await act(async () =>
-            root.render(
-              <ChalkProvider client={client}>
-                <SpaceView features={{ sounds: false }} generatedAvatars={false} />
-              </ChalkProvider>,
-            ),
-          );
-          const part = source === "camera" ? "video" : source === "microphone" ? "mic" : "share";
-          const button = container.querySelector<HTMLButtonElement>(`[data-part="${part}-split"] .chalk-shell-main`);
-          expect(button, `${code}/${source}/${operation}`).toBeDefined();
-          await act(async () => button?.click());
-          expect(container.textContent).toContain(expectedMessage(family, source, operation, true));
-          const retryButton = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "Try again");
-          expect(retryButton, `${code}/${source}/${operation}`).toBeDefined();
-          await act(async () => retryButton?.click());
-          expect(command).toHaveBeenCalledTimes(2);
-          expect(command.mock.calls[0]?.[0]).toBe(operation === "start");
-          expect(command.mock.calls[1]).toEqual(command.mock.calls[0]);
-          expect(container.textContent).toContain(expectedMessage(family, source, operation, true));
-          rows++;
-        } finally {
-          await act(async () => root.unmount());
-          container.remove();
-          preview.dispose();
-        }
-      }
+const actionableCases = Object.values(CASES)
+  .filter(({ retry }) => retry)
+  .flatMap(({ code, family }) => (["camera", "microphone", "screen"] as const).flatMap((source) => (["start", "stop"] as const).map((operation) => ({ code, family, source, operation }))));
+
+it("covers all 42 actionable policy rows", () => {
+  expect(actionableCases).toHaveLength(42);
+});
+
+it.each(actionableCases)("replays the exact failed $operation command for $source / $code through SpaceView", async ({ code, family, source, operation }) => {
+  const snapshot = createSnapshot(["publishAudio", "publishVideo", "publishScreen"]);
+  const preview = createPreviewClient({ ...snapshot, connection: { ...snapshot.connection, status: "live" } });
+  if (operation === "stop") {
+    await preview.media.setCameraEnabled(true);
+    await preview.media.setMicrophoneEnabled(true);
+    await preview.media.setScreenShareEnabled(true);
   }
-  expect(rows).toBe(42);
+  const command = vi.fn(async (_enabled: boolean) => {
+    throw new SpaceClientError({ code, recoverable: true, message: "Private implementation details" });
+  });
+  const client = { ...preview, media: { ...preview.media, setCameraEnabled: command, setMicrophoneEnabled: command, setScreenShareEnabled: command } };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <SpaceView features={{ sounds: false }} generatedAvatars={false} />
+        </ChalkProvider>,
+      ),
+    );
+    const part = source === "camera" ? "video" : source === "microphone" ? "mic" : "share";
+    const button = container.querySelector<HTMLButtonElement>(`[data-part="${part}-split"] .chalk-shell-main`);
+    expect(button, `${code}/${source}/${operation}`).toBeDefined();
+    await act(async () => button?.click());
+    expect(container.textContent).toContain(expectedMessage(family, source, operation, true));
+    const retryButton = Array.from(container.querySelectorAll("button")).find((item) => item.textContent === "Try again");
+    expect(retryButton, `${code}/${source}/${operation}`).toBeDefined();
+    await act(async () => retryButton?.click());
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(command.mock.calls[0]?.[0]).toBe(operation === "start");
+    expect(command.mock.calls[1]).toEqual(command.mock.calls[0]);
+    expect(container.textContent).toContain(expectedMessage(family, source, operation, true));
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    preview.dispose();
+  }
 });
 
 it("uses safe terminal copy for unknown runtime codes in every media context", () => {
