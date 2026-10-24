@@ -68,9 +68,9 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
 
   @impl true
   def handle_call({:join, socket, person}, _from, state) do
-    if map_size(state.sockets) < @max_streams and
-         (MapSet.member?(state.people, person) or
-            MapSet.size(state.people) < Reducer.max_participants()) do
+    state = if room?(state, person), do: state, else: retire_dead_sockets(state)
+
+    if room?(state, person) do
       ref = Process.monitor(socket)
       sockets = Map.put(state.sockets, ref, {socket, person})
 
@@ -125,16 +125,37 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    sockets = Map.delete(state.sockets, ref)
+    next = retire_sockets(state, [ref])
+
+    if map_size(next.sockets) == 0,
+      do: {:stop, :normal, next},
+      else: {:noreply, next}
+  end
+
+  defp room?(state, person) do
+    map_size(state.sockets) < @max_streams and
+      (MapSet.member?(state.people, person) or
+         MapSet.size(state.people) < Reducer.max_participants())
+  end
+
+  defp retire_dead_sockets(state) do
+    refs =
+      for {ref, {socket, _person}} <- state.sockets,
+          node(socket) == node(),
+          not Process.alive?(socket),
+          do: ref
+
+    retire_sockets(state, refs)
+  end
+
+  defp retire_sockets(state, refs) do
+    Enum.each(refs, &Process.demonitor(&1, [:flush]))
+    sockets = Map.drop(state.sockets, refs)
 
     # Retire disconnected identities from admission, but retain bounded retry receipts.
     people = MapSet.new(sockets, fn {_ref, {_socket, person}} -> person end)
     admitted_at = Map.take(state.admitted_at, Map.keys(state.views) ++ MapSet.to_list(people))
-    next = %{state | sockets: sockets, people: people, admitted_at: admitted_at}
-
-    if map_size(sockets) == 0,
-      do: {:stop, :normal, next},
-      else: {:noreply, next}
+    %{state | sockets: sockets, people: people, admitted_at: admitted_at}
   end
 
   defp accept(state, %{"bring" => false} = frame, %{move: false} = input),
