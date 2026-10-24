@@ -576,6 +576,47 @@ func TestPrivateWorkerRouterPersistsFleetNodeObservation(t *testing.T) {
 	}
 }
 
+func TestRecorderWorkerPoolHealthRejectsOversizedCapacity(t *testing.T) {
+	workerID := mustRecorderWorkerID(t, workerTestID)
+	fleetCalls := 0
+	legacyCalls := 0
+	handler := NewRecorderWorkerRouterWithControls(recorderWorkerServiceStub{
+		health: func(_ context.Context, input recordingpipeline.PoolHealth) (recordingpipeline.PoolHealth, error) {
+			legacyCalls++
+			return input, nil
+		},
+	}, recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}}, RecorderWorkerControlServices{
+		FleetAuthority: recorderFleetWorkerServiceStub{record: func(_ context.Context, observation recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error) {
+			fleetCalls++
+			return recorderfleet.NodeObservation{
+				Identity: recorderfleet.NodeIdentity{ProviderID: "provider-7", WorkerID: observation.Identity.WorkerID.String(), Role: observation.Identity.Role, BootGeneration: 7},
+				Ready:    observation.Ready, AdmissionOpen: observation.AdmissionOpen,
+				ReadyCapacity: observation.ReadyCapacity, ObservedAt: observation.ObservedAt,
+			}, nil
+		}},
+	})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":101,"reason":"ready"}`))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("oversized capacity status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if fleetCalls != 0 || legacyCalls != 0 {
+		t.Fatalf("oversized capacity reached fleet=%d legacy=%d", fleetCalls, legacyCalls)
+	}
+	decoded := decodeRecorderWorkerJSON(t, response)
+	apiErr, _ := decoded["error"].(map[string]any)
+	if apiErr["code"] != "request.invalid" || apiErr["message"] != "Recorder ready capacity must be between 0 and 100" {
+		t.Fatalf("oversized capacity error = %#v", decoded["error"])
+	}
+
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":100,"reason":"ready"}`))
+	if response.Code != http.StatusOK || fleetCalls != 1 || legacyCalls != 0 {
+		t.Fatalf("boundary capacity status=%d fleet=%d legacy=%d body=%s", response.Code, fleetCalls, legacyCalls, response.Body.String())
+	}
+}
+
 func TestPrivateWorkerRouterPreservesProviderBridgePrefix(t *testing.T) {
 	handler := NewPrivateWorkerRouter(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/internal/v1/sync/provider-bridge/ready" {

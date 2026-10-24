@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	maxWorkerSlots = 100
+	// MaxWorkerSlots bounds the slot capacity a worker may report.
+	MaxWorkerSlots = 100
 	// DiagnosticTag marks separately owned boot probes, never live capacity.
 	DiagnosticTag                    = "chalk-recorder-diagnostic"
 	JournalSchemaVersion             = "recorder_fleet_journal.v2"
@@ -193,7 +194,7 @@ func (c Config) Validate() error {
 	if err := c.Key.Validate(); err != nil {
 		return err
 	}
-	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.SlotsPerNode <= 0 || c.SlotsPerNode > maxWorkerSlots || c.FreeSlots < 0 || c.FreeSlots > 0 && (c.FreeSlots-1)/c.SlotsPerNode >= c.MaxNodes || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
+	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.SlotsPerNode <= 0 || c.SlotsPerNode > MaxWorkerSlots || c.FreeSlots < 0 || c.FreeSlots > 0 && (c.FreeSlots-1)/c.SlotsPerNode >= c.MaxNodes || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
 		return ErrInvalidConfig
 	}
 	if c.Key.Role == workeridentity.RoleRender && (c.MaxNodes > 10 || c.FreeSlots != 0) {
@@ -265,7 +266,7 @@ func (observation NodeObservation) Validate(key PoolKey, node Node) error {
 	if observation.ObservedAt.IsZero() && (observation.LeasesObservedAt.IsZero() || observation.Ready || observation.AdmissionOpen || observation.ReadyCapacity != 0) {
 		return ErrRoleFence
 	}
-	if err := observation.Identity.Validate(key, node); err != nil || observation.ReadyCapacity < 0 || observation.ReadyCapacity > maxWorkerSlots || observation.ActiveLeases < 0 || !observation.Ready && observation.AdmissionOpen {
+	if err := observation.Identity.Validate(key, node); err != nil || observation.ReadyCapacity < 0 || observation.ReadyCapacity > MaxWorkerSlots || observation.ActiveLeases < 0 || !observation.Ready && observation.AdmissionOpen {
 		return ErrRoleFence
 	}
 	return nil

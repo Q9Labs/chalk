@@ -269,6 +269,177 @@ func TestMixedDensityPromotesNewReadyWorker(t *testing.T) {
 	}
 }
 
+func TestCaptureDrainCheckUsesSlotDemandNotPhysicalFloor(t *testing.T) {
+	f := newFleetFixture(t)
+	f.config.SlotsPerNode, f.config.FreeSlots, f.config.MaxNodes = 4, 14, 10
+	f.config.Now = func() time.Time { return f.now }
+	f.provider.config = f.config
+	state, nodes, observed := slotNodes(f, 5, 4)
+	state.NextBootGeneration = 6
+	f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+	live := observed["1"]
+	live.ActiveLeases = 1
+	observed["1"] = live
+	for _, observation := range observed {
+		f.runtime.observations = append(f.runtime.observations, observation)
+	}
+	// Slot demand is 1; DesiredNodes=3 only carries the physical node floor.
+	f.demand.value = Demand{Revision: "floor-drain", DesiredNodes: 3, ObservedAt: f.now,
+		CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 1, PhysicalNodeFloor: 3}}
+	r := f.reconciler(t)
+	step := func() Result {
+		t.Helper()
+		f.now = f.now.Add(time.Second)
+		f.demand.value.ObservedAt = f.now
+		for i := range f.runtime.observations {
+			f.runtime.observations[i].ObservedAt = f.now
+			f.runtime.observations[i].LeasesObservedAt = f.now
+			if _, ok := f.provider.nodes[f.runtime.observations[i].Identity.ProviderID]; !ok {
+				f.runtime.observations[i].IdentityRevoked = true
+			}
+		}
+		return f.step(t, r)
+	}
+	result := step()
+	if result.Action != ActionAdmissionClosed || result.ProviderNodeID == "1" {
+		t.Fatalf("physical floor fenced the idle drain: %+v", result)
+	}
+	if _, ok := f.provider.nodes["1"]; !ok || len(f.provider.nodes) != 5 {
+		t.Fatalf("drain touched the live-lease node: %+v", result)
+	}
+	for steps := 0; len(f.provider.nodes) > 4 && steps < 12; steps++ {
+		step()
+	}
+	if len(f.provider.nodes) != 4 {
+		t.Fatalf("fleet did not settle at the target: %d nodes", len(f.provider.nodes))
+	}
+	if _, ok := f.provider.nodes["1"]; !ok {
+		t.Fatal("live-lease node was drained")
+	}
+	for range 3 {
+		if result := step(); result.Action == ActionAdmissionClosed || result.Action == ActionIdentityRevoked || result.Action == ActionNodeDeleted {
+			t.Fatalf("drain continued past the target: %+v", result)
+		}
+	}
+}
+
+func TestLegacyDesiredNodesDrainCheckUnchanged(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		desired   int
+		freeSlots int
+		wantNodes int
+	}{
+		{"surplus drains to demand", 2, 1, 3},
+		{"free slots hold the surplus", 4, 1, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFleetFixture(t)
+			f.config.SlotsPerNode, f.config.FreeSlots, f.config.MaxNodes = 1, tc.freeSlots, 10
+			f.config.Now = func() time.Time { return f.now }
+			f.provider.config = f.config
+			state, nodes, observed := slotNodes(f, 5, 1)
+			state.NextBootGeneration = 6
+			f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+			live := observed["1"]
+			live.ActiveLeases = 1
+			observed["1"] = live
+			for _, observation := range observed {
+				f.runtime.observations = append(f.runtime.observations, observation)
+			}
+			f.demand.value = Demand{Revision: tc.name, DesiredNodes: tc.desired, ObservedAt: f.now}
+			r := f.reconciler(t)
+			for range 16 {
+				f.now = f.now.Add(time.Second)
+				f.demand.value.ObservedAt = f.now
+				for i := range f.runtime.observations {
+					f.runtime.observations[i].ObservedAt = f.now
+					f.runtime.observations[i].LeasesObservedAt = f.now
+					if _, ok := f.provider.nodes[f.runtime.observations[i].Identity.ProviderID]; !ok {
+						f.runtime.observations[i].IdentityRevoked = true
+					}
+				}
+				f.step(t, r)
+			}
+			if len(f.provider.nodes) != tc.wantNodes {
+				t.Fatalf("nodes=%d want=%d", len(f.provider.nodes), tc.wantNodes)
+			}
+			if _, ok := f.provider.nodes["1"]; !ok {
+				t.Fatal("live-lease node was drained")
+			}
+		})
+	}
+}
+
+func TestOversizedObservationFencesWholeReconcile(t *testing.T) {
+	// Companion to the pool-health rejection: a persisted heartbeat above the
+	// slot bound fences the whole reconcile, which is why the API drops it.
+	f := newFleetFixture(t)
+	state, nodes, observed := slotNodes(f, 2, 4)
+	f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+	poisoned := observed["1"]
+	poisoned.ReadyCapacity = 101
+	observed["1"] = poisoned
+	for _, observation := range observed {
+		f.runtime.observations = append(f.runtime.observations, observation)
+	}
+	f.demand.value = Demand{Revision: "poisoned", DesiredNodes: 1, ObservedAt: f.now}
+	if _, err := f.reconciler(t).Reconcile(t.Context()); !errors.Is(err, ErrRoleFence) {
+		t.Fatalf("oversized observation error = %v", err)
+	}
+	if f.provider.ensureCalls != 0 || f.provider.deleteCalls != 0 || f.runtime.closeCalls != 0 {
+		t.Fatalf("fenced reconcile still mutated the fleet: ensure=%d delete=%d close=%d",
+			f.provider.ensureCalls, f.provider.deleteCalls, f.runtime.closeCalls)
+	}
+}
+
+func TestRejectedHeartbeatLeavesLastAcceptedObservation(t *testing.T) {
+	// The API now rejects a 101 heartbeat, so the reconciler keeps seeing this
+	// worker's last accepted observation: capacity 4 with a live lease.
+	f := newFleetFixture(t)
+	f.config.SlotsPerNode, f.config.FreeSlots, f.config.MaxNodes = 4, 8, 10
+	f.config.Now = func() time.Time { return f.now }
+	f.provider.config = f.config
+	state, nodes, observed := slotNodes(f, 4, 4)
+	state.NextBootGeneration = 5
+	f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+	retained := observed["1"]
+	retained.ActiveLeases = 1
+	observed["1"] = retained
+	for _, observation := range observed {
+		f.runtime.observations = append(f.runtime.observations, observation)
+	}
+	f.demand.value = Demand{Revision: "retained", DesiredNodes: 1, ObservedAt: f.now,
+		CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 1}}
+	r := f.reconciler(t)
+	step := func() Result {
+		t.Helper()
+		f.now = f.now.Add(time.Second)
+		f.demand.value.ObservedAt = f.now
+		for i := range f.runtime.observations {
+			f.runtime.observations[i].ObservedAt = f.now
+			f.runtime.observations[i].LeasesObservedAt = f.now
+			if _, ok := f.provider.nodes[f.runtime.observations[i].Identity.ProviderID]; !ok {
+				f.runtime.observations[i].IdentityRevoked = true
+			}
+		}
+		return f.step(t, r)
+	}
+	result := step()
+	if result.Action != ActionAdmissionClosed || result.ProviderNodeID == "1" {
+		t.Fatalf("rejected heartbeat fenced the idle drain: %+v", result)
+	}
+	for steps := 0; len(f.provider.nodes) > 3 && steps < 12; steps++ {
+		step()
+	}
+	if len(f.provider.nodes) != 3 {
+		t.Fatalf("fleet did not settle at the target: %d nodes", len(f.provider.nodes))
+	}
+	if _, ok := f.provider.nodes["1"]; !ok {
+		t.Fatal("node with the rejected heartbeat was drained")
+	}
+}
+
 func TestAdoptedWorkerIdentityIsRecoveredBeforeDrain(t *testing.T) {
 	f := claimedNodeFixture(t)
 	managed := f.journal.state.Nodes["1001"]
