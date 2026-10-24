@@ -25,6 +25,21 @@ def private_json(path, value):
     temporary.replace(path)
 
 
+def tofu_error_class(stderr):
+    # Only fixed labels leave this boundary; diagnostics can contain credentials and IDs.
+    text = stderr.lower()
+    for label, markers in (
+        ("state-lock", ("error acquiring the state lock", "error releasing the state lock")),
+        ("authentication", ("no valid credential sources", "expiredtoken", "invalidclienttokenid")),
+        ("authorization", ("accessdenied", "access denied", "not authorized")),
+        ("configuration", ("unsupported argument", "missing required argument", "invalid value for")),
+        ("network", ("connection refused", "no such host", "tls handshake timeout", "i/o timeout")),
+    ):
+        if any(marker in text for marker in markers):
+            return label
+    return "unclassified"
+
+
 class Provider:
     def __init__(self, region, profile, dry_run=False):
         self.region, self.profile, self.dry_run = region, profile, dry_run
@@ -39,7 +54,8 @@ class Provider:
                                 env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(environment or {})})
         if result.returncode:
             # Provider errors can quote secret payloads. Never echo stdout/stderr here.
-            raise RuntimeError(f"{arguments[0]} operation failed (exit {result.returncode}); no payload logged")
+            error_class = f"; error class: {tofu_error_class(result.stderr)}" if arguments[0] == "tofu" else ""
+            raise RuntimeError(f"{arguments[0]} operation failed (exit {result.returncode}){error_class}; no payload logged")
         return result.stdout
 
     def aws(self, service, operation, *arguments, payload=None, timeout=120):
