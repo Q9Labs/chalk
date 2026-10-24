@@ -52,7 +52,7 @@ func TestNewTenantSpaceTranscriptDefaults(t *testing.T) {
 				t.Fatal(err)
 			}
 			policy := tenant.ArtifactPolicy
-			if policy.TranscriptionCeiling != artifactpolicy.TranscriptionOnDemand || policy.TranscriptionDefault != artifactpolicy.TranscriptionOnDemand || policy.ProviderPolicyVersion == "" || policy.TranscriptionSourceWindow != 24*time.Hour {
+			if policy.TranscriptionCeiling != artifactpolicy.TranscriptionAutomatic || policy.TranscriptionDefault != artifactpolicy.TranscriptionAutomatic || policy.ProviderPolicyVersion == "" || policy.TranscriptionSourceWindow != 24*time.Hour {
 				t.Fatalf("new Tenant policy = %+v", policy)
 			}
 			if scenario.tenantDisabled {
@@ -75,7 +75,7 @@ func TestNewTenantSpaceTranscriptDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantMode := artifactpolicy.TranscriptionOnDemand
+			wantMode := artifactpolicy.TranscriptionAutomatic
 			if scenario.spaceDisabled || scenario.tenantDisabled || scenario.defaultDisabled {
 				wantMode = artifactpolicy.TranscriptionDisabled
 			}
@@ -118,7 +118,7 @@ func TestNewTenantSpaceTranscriptDefaults(t *testing.T) {
 			}
 			_, _, err = repository.Request(ctx, transcriptPolicyRequestInput(t, tenantID, recordingID, "default-request"))
 			if err != nil {
-				t.Fatalf("request default on-demand Transcript: %v", err)
+				t.Fatalf("request default automatic Transcript: %v", err)
 			}
 			assertTranscriptArtifactCounts(t, ctx, connection, recordingID, 1, 1)
 		})

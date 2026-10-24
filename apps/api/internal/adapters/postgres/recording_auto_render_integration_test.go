@@ -70,7 +70,7 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 	if _, err := pool.Exec(ctx, `insert into spaces (id, name, tenant_id, slug, media_plane) values ($1, 'automatic render test', $2, 'automatic-render-test', 'cf_sfu')`, spaceID.Bytes(), tenantID.Bytes()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0}'::jsonb)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
+	if _, err := pool.Exec(ctx, `insert into episodes (id, status, space_id, tenant_id, config_snapshot) values ($1, 'active', $2, $3, '{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0,"artifact_policy":{"schema_version":"episode_config.v2","recording":{"mode":"automatic","profile":"composite_720p_v1","retention_seconds":0},"transcription":{"mode":"automatic","provider_policy_version":"chalk-automatic-v1","retention_seconds":0,"source_window_seconds":86400}}}'::jsonb)`, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
 		t.Fatal(err)
 	}
 	if mode == "automatic" {
@@ -84,7 +84,7 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 			t.Error(err)
 		}
 	}()
-	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
+	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool).WithTranscriptionEnabled(true)
 	newID := func() utilities.ID {
 		id, err := utilities.NewID()
 		if err != nil {
@@ -144,9 +144,13 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 				t.Fatalf("rollback must discard both the render job and its journey: count=%d err=%v", count, err)
 			}
 		}
-		_, err = repository.CompleteCapture(ctx, lease, newID())
+		_, err = recordingpipeline.NewService(repository).CompleteCapture(ctx, lease)
 		if err != nil {
 			t.Fatalf("complete %d: %v", i, err)
+		}
+		var preparationJobs int
+		if err := pool.QueryRow(ctx, `select count(*) from recording_jobs where recording_id=$1 and kind='transcription' and state='pending'`, reservation.RecordingID.Bytes()).Scan(&preparationJobs); err != nil || preparationJobs != 1 {
+			t.Fatalf("automatic Space must queue audio preparation without a transcript request: count=%d error=%v", preparationJobs, err)
 		}
 		if mode == "on_demand" {
 			var count int

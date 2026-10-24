@@ -250,7 +250,7 @@ func TestTenantBackfillRaisesOnlyAndNeverChangesServiceSpaces(t *testing.T) {
 	if _, err := repo.ApplyBackfill(ctx, plan, fixtureReceipt(t, plan)); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []struct{ id, recording, transcript string }{{f.legacySpace, "automatic", "on_demand"}, {f.serviceSpace, "disabled", "disabled"}, {f.heldSpace, "manual", "automatic"}} {
+	for _, expected := range []struct{ id, recording, transcript string }{{f.legacySpace, "automatic", "automatic"}, {f.serviceSpace, "disabled", "disabled"}, {f.heldSpace, "manual", "automatic"}} {
 		var recording, transcript string
 		if err := pool.QueryRow(ctx, `select recording_policy,transcription_policy from spaces where id=$1`, expected.id).Scan(&recording, &transcript); err != nil || recording != expected.recording || transcript != expected.transcript {
 			t.Fatalf("held/raised Space: %s %s %v", recording, transcript, err)
