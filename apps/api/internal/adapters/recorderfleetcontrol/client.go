@@ -192,7 +192,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
 	}
 	if strings.HasSuffix(path, "/leases") {
-		request.Header.Set("X-Chalk-Fleet-Identity-Leases", "1")
+		request.Header.Set("X-Chalk-Fleet-Identity-Leases", "2")
 	}
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -231,8 +231,8 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 	if path == fleetPath+"/nodes" && response.Header.Get("X-Chalk-Fleet-Lease-Authority") != "1" {
 		return fmt.Errorf("%w: database lease authority is required", recorderfleet.ErrProviderUnavailable)
 	}
-	if strings.HasSuffix(path, "/leases") && response.Header.Get("X-Chalk-Fleet-Identity-Leases") != "1" {
-		return fmt.Errorf("%w: identity lease authority is required", recorderfleet.ErrProviderUnavailable)
+	if strings.HasSuffix(path, "/leases") && response.Header.Get("X-Chalk-Fleet-Identity-Leases") != "2" {
+		return fmt.Errorf("%w: transactionally fenced identity lease authority is required", recorderfleet.ErrProviderUnavailable)
 	}
 	if output == nil {
 		if len(bytes.TrimSpace(responseBody)) != 0 {

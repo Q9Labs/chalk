@@ -339,20 +339,20 @@ func (s *recorderFleetControllerServiceStub) ObserveIdentity(_ context.Context, 
 func TestRecorderFleetIdentityLeasesRequireNegotiation(t *testing.T) {
 	service := &recorderFleetControllerServiceStub{nodes: []recorderfleet.NodeObservation{{Identity: recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 3}, ObservedAt: time.Now(), LeasesObservedAt: time.Now()}}}
 	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
-	for _, capability := range []string{"", "unknown", "1"} {
+	for _, capability := range []string{"", "unknown", "1", "2"} {
 		t.Run("capability="+capability, func(t *testing.T) {
 			body, _ := json.Marshal(recorderFleetCommandRequest{SchemaVersion: recorderfleet.CommandSchemaVersion, Environment: "nightly", Identity: service.nodes[0].Identity})
 			request := httptest.NewRequest(http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/leases", bytes.NewReader(body))
 			request.Header.Set("X-Chalk-Fleet-Identity-Leases", capability)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
-			if capability != "1" {
+			if capability != "1" && capability != "2" {
 				if response.Code != http.StatusBadRequest || response.Header().Get("X-Chalk-Fleet-Identity-Leases") != "" {
 					t.Fatalf("unnegotiated lease proof: %d %s", response.Code, response.Body)
 				}
 				return
 			}
-			if response.Code != http.StatusOK || response.Header().Get("X-Chalk-Fleet-Identity-Leases") != "1" {
+			if response.Code != http.StatusOK || response.Header().Get("X-Chalk-Fleet-Identity-Leases") != capability {
 				t.Fatalf("negotiation failed: %d %s", response.Code, response.Body)
 			}
 		})

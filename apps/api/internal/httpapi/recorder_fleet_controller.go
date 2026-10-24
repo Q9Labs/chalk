@@ -203,7 +203,9 @@ func recorderFleetIdentityLeasesHandler(service RecorderFleetControllerService, 
 		if !ok {
 			return
 		}
-		if body.SchemaVersion != recorderfleet.CommandSchemaVersion || body.Environment != environment || body.Identity.ProviderID != chi.URLParam(request, "providerID") || request.Header.Get("X-Chalk-Fleet-Identity-Leases") != "1" {
+		// Version 2 also promises that managed claims require a fleet row.
+		capability := request.Header.Get("X-Chalk-Fleet-Identity-Leases")
+		if body.SchemaVersion != recorderfleet.CommandSchemaVersion || body.Environment != environment || body.Identity.ProviderID != chi.URLParam(request, "providerID") || (capability != "1" && capability != "2") {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder identity lease request")
 			return
 		}
@@ -212,7 +214,7 @@ func recorderFleetIdentityLeasesHandler(service RecorderFleetControllerService, 
 			writeRecorderFleetError(w, request, logger, "observe_identity_leases", err)
 			return
 		}
-		w.Header().Set("X-Chalk-Fleet-Identity-Leases", "1")
+		w.Header().Set("X-Chalk-Fleet-Identity-Leases", capability)
 		writeJSON(w, http.StatusOK, struct {
 			SchemaVersion string                        `json:"schema_version"`
 			Environment   string                        `json:"environment"`

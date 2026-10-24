@@ -15,7 +15,7 @@ import (
 func TestIdentityLeaseReadRequiresExplicitAuthorityAndCount(t *testing.T) {
 	key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleRender}
 	identity := recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: key.Role, BootGeneration: 3}
-	for _, scenario := range []string{"valid-zero", "valid-positive", "valid-no-heartbeat", "old-api-404", "missing-ack", "missing-count", "null-count", "missing-timestamp", "wrong-identity", "unknown-field"} {
+	for _, scenario := range []string{"valid-zero", "valid-positive", "valid-no-heartbeat", "old-api-404", "old-api-unfenced", "missing-ack", "missing-count", "null-count", "missing-timestamp", "wrong-identity", "unknown-field"} {
 		t.Run(scenario, func(t *testing.T) {
 			observation := map[string]any{"identity": identity, "active_leases": 0, "observed_at": time.Now().UTC(), "leases_observed_at": time.Now().UTC(), "identity_absent": true}
 			switch scenario {
@@ -38,7 +38,7 @@ func TestIdentityLeaseReadRequiresExplicitAuthorityAndCount(t *testing.T) {
 			}
 			body, _ := json.Marshal(map[string]any{"schema_version": recorderfleet.CommandSchemaVersion, "environment": key.Environment, "observation": observation})
 			httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-				if request.Method != http.MethodPost || request.URL.Path != "/internal/v1/recorder/fleet/nodes/42/leases" || request.Header.Get("X-Chalk-Fleet-Identity-Leases") != "1" {
+				if request.Method != http.MethodPost || request.URL.Path != "/internal/v1/recorder/fleet/nodes/42/leases" || request.Header.Get("X-Chalk-Fleet-Identity-Leases") != "2" {
 					t.Fatalf("request not fenced: %+v", request)
 				}
 				status := http.StatusOK
@@ -47,7 +47,10 @@ func TestIdentityLeaseReadRequiresExplicitAuthorityAndCount(t *testing.T) {
 				}
 				response := jsonResponse(status, string(body))
 				if scenario != "missing-ack" {
-					response.Header.Set("X-Chalk-Fleet-Identity-Leases", "1")
+					response.Header.Set("X-Chalk-Fleet-Identity-Leases", "2")
+					if scenario == "old-api-unfenced" {
+						response.Header.Set("X-Chalk-Fleet-Identity-Leases", "1")
+					}
 				}
 				return response, nil
 			})}
