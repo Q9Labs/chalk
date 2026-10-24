@@ -14,9 +14,98 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
+
+func TestFleetRegisteredAtCreateFirstManagedClaimRequiresRow(t *testing.T) {
+	for _, role := range []workeridentity.Role{workeridentity.RoleCapture, workeridentity.RoleRender} {
+		t.Run(string(role), func(t *testing.T) {
+			tx, fixture := newAllocationCleanupFixture(t, true, string(role))
+			defer func() { _ = tx.Rollback(context.Background()) }()
+			execCleanupFixture(t, tx, `update recording_jobs set state='pending', lease_owner=null, lease_token=null, lease_expires_at=null where id=$1`, fixture.jobID.Bytes())
+			if role == workeridentity.RoleCapture {
+				execCleanupFixture(t, tx, `update recording_pipelines set state='reserved', capture_completed_at=null where recording_id=$1`, fixture.recordingID.Bytes())
+			} else {
+				prepareFleetRenderClaim(t, tx, fixture.jobID)
+			}
+			config := fleetRecoveryConfig(role)
+			repository := postgres.NewRecordingFleetAuthorityRepository(sqlc.New(tx))
+			provider := &slotRegistrationProvider{fleetRecoveryProvider: &fleetRecoveryProvider{nodes: map[string]recorderfleet.Node{}}}
+			service, err := recorderfleetauthority.NewService(config.Key.Environment, repository, &slotRegistrationIssuer{provider: provider})
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewTLSServer(httpapi.NewRecorderFleetControllerRouter(service, fleetRecoveryVerifier{}, config.Key.Environment, nil))
+			defer server.Close()
+			control, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: config.Key})
+			if err != nil {
+				t.Fatal(err)
+			}
+			journal := &fleetRecoveryJournal{state: recorderfleet.NewJournal()}
+			r, err := recorderfleet.NewReconciler(config, fleetRecoveryDemand{now: time.Now, desired: 1}, journal, provider, control, control)
+			if err != nil {
+				t.Fatal(err)
+			}
+			step := func() {
+				t.Helper()
+				if _, err := r.Reconcile(t.Context()); err != nil && !errors.Is(err, recorderfleet.ErrBootstrapPending) {
+					t.Fatal(err)
+				}
+			}
+			step() // Persist create intent.
+			step() // Register while the droplet is still new.
+			var state string
+			if err := tx.QueryRow(t.Context(), `select state from recording_fleet_nodes where environment=$1 and role=$2 and provider_id='1'`, config.Key.Environment, string(role)).Scan(&state); err != nil || state != "requested" || provider.nodes["1"].Status != "new" {
+				t.Fatalf("row not reserved at create: state=%q error=%v", state, err)
+			}
+			node := provider.nodes["1"]
+			node.Status = "active"
+			provider.nodes["1"] = node
+			for range 4 {
+				if journal.state.Nodes["1"].Identity != nil {
+					break
+				}
+				step()
+			}
+			identity := journal.state.Nodes["1"].Identity
+			if identity == nil {
+				t.Fatal("registered droplet never activated")
+			}
+			workerID, err := utilities.ParseID(identity.WorkerID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			worker := workeridentity.Identity{WorkerID: workerID, Role: role}
+			if _, err := service.RecordWorkerObservation(t.Context(), recorderfleetauthority.WorkerObservation{Identity: worker, Ready: true, AdmissionOpen: true, ReadyCapacity: 1, ObservedAt: time.Now()}); err != nil {
+				t.Fatal(err)
+			}
+			if err := service.AuthorizeWorkerClaim(t.Context(), worker); err != nil {
+				t.Fatal(err)
+			}
+			claim := func() (recordingpipeline.Job, error) {
+				t.Helper()
+				requestID, err := utilities.NewID()
+				if err != nil {
+					t.Fatal(err)
+				}
+				pipeline := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(sqlc.New(tx), judgeNestedClaimTransaction{tx}, nil)
+				return pipeline.Claim(t.Context(), recordingpipeline.ClaimInput{ManagedWorker: true, ClaimRequestID: requestID, Kind: recordingpipeline.JobKind(role), Owner: identity.WorkerID, LeaseToken: "registered-first-claim", LeaseFor: time.Minute})
+			}
+			execCleanupFixture(t, tx, `savepoint missing_fleet_row`)
+			execCleanupFixture(t, tx, `delete from recording_fleet_nodes where worker_id=$1`, workerID.Bytes())
+			if _, err := claim(); !errors.Is(err, recordingpipeline.ErrJobNotFound) {
+				t.Fatalf("managed claim survived missing row: %v", err)
+			}
+			execCleanupFixture(t, tx, `rollback to savepoint missing_fleet_row`)
+			job, err := claim()
+			if err != nil || job.ID != fixture.jobID {
+				t.Fatalf("first claim from create-time row: job=%s error=%v", job.ID, err)
+			}
+		})
+	}
+}
 
 func TestFleetRegistersAtCreateAndRevokesStuckBootstrapWithPostgres(t *testing.T) {
 	tx, _ := newAllocationCleanupFixture(t, true, "capture")
