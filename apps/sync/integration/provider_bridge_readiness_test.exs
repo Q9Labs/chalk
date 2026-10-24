@@ -11,7 +11,9 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
 
   @tag timeout: 90_000
   test "slow vendor cleanup cannot starve readiness, but a down bridge does fail readiness" do
-    database_url = System.fetch_env!("CHALK_DATABASE_URL")
+    database_url =
+      System.get_env("CHALK_SYNC_TEST_DATABASE_URL") || System.fetch_env!("CHALK_DATABASE_URL")
+
     Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
     Application.put_env(:chalk_sync, :database_url, database_url)
     Application.put_env(:chalk_sync, :port, 0)
@@ -33,6 +35,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
         :binary,
         :exit_status,
         {:line, 16_384},
+        {:env, [{~c"CHALK_DATABASE_URL", String.to_charlist(database_url)}]},
         {:args, [String.to_charlist(directory)]}
       ])
 
