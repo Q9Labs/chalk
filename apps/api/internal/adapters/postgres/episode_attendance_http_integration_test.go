@@ -172,16 +172,17 @@ func TestEpisodeAttendancePublicHTTP(t *testing.T) {
 		}
 	})
 	t.Run("guest link collaborator stays guest", func(t *testing.T) {
+		exec(`insert into tenant_artifact_policies(tenant_id) values($1)`, uuid(tenant))
 		spaceService := spaces.NewService(NewSpaceRepository(queries, pool))
 		linkedSpace, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
-			TenantID: tenant, Name: "Guest link", Slug: "call-" + accountTenantIntegrationID(t).String(), MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
+			TenantID: tenant, Name: "Guest link", Slug: "call-" + accountTenantIntegrationID(t).String(), MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"knock"}`),
 			DefaultEpisodeDurationSeconds: 3600, MaximumEpisodeDurationSeconds: 86400, LingerWindowSeconds: 60, RequestKey: accountTenantIntegrationID(t).String(),
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		invites := publicinvites.NewService(NewPublicInviteRepositoryWithPool(pool))
-		invite, err := invites.EnsureInvite(ctx, tenant, linkedSpace.ID, utilities.ID{}, publicinvites.AdmissionOpen)
+		invite, err := invites.EnsureInvite(ctx, tenant, linkedSpace.ID, utilities.ID{}, publicinvites.AdmissionKnock)
 		if err != nil {
 			t.Fatal(err)
 		}
