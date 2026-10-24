@@ -54,7 +54,7 @@ async function tenantFor(person, provider = "google") {
   return response.json();
 }
 function sql(statement) {
-  return execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atqc", statement], { encoding: "utf8" }).trim();
+  return execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atqc", statement], { encoding: "utf8", env: { ...process.env, PGOPTIONS: "-c chalk.entry_writer=1" } }).trim();
 }
 // macOS tmpdir() sits behind the /var symlink; the fixture imports below are relative to the real path.
 const sandbox = await realpath(await mkdtemp(resolve(tmpdir(), "chalk-dashboard-pages-")));
@@ -328,13 +328,17 @@ try {
       assert.equal(liveDTO.episodes[0].participantCount, 1);
       const ownPast = await ada.request(`/dashboard-api/past-session?spaceId=${ownerSpaceId}&episodeId=${grant.subject.episode_id}`);
       assert.equal(ownPast.status, 200, await ownPast.clone().text());
-      assert.equal((await ownPast.json()).attendance.participants[0].isYou, true);
+      const ownerAttendance = (await ownPast.json()).attendance.participants[0];
+      assert.equal(ownerAttendance.isYou, true);
+      assert.equal(ownerAttendance.kind, "user");
+      assert.equal(ownerAttendance.externalId, null);
       sql(
         `update participants set status='joining', joined_at=null, first_joined_at=null where id='${grant.subject.participant_id}'; update sync_episode_control set folded_state=jsonb_set(folded_state,'{participants}','[]'::jsonb) where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`,
       );
       const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
-      // Before Sync has committed participant_joined, refresh must fail closed.
-      assert.equal(refreshedAccess.status, 404, await refreshedAccess.clone().text());
+      // An admitted joining seat can refresh before Sync confirms entry.
+      assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
+      assert.equal((await refreshedAccess.json()).access.subject.participant_id, grant.subject.participant_id);
       if (admission === "knock") {
         const guest = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${ownerSpaceId}/episodes/${grant.subject.episode_id}/participants`, {
           method: "POST",
@@ -353,7 +357,7 @@ try {
       assert.equal(rejoin.status, 200, await rejoin.clone().text());
       assert.notEqual((await rejoin.json()).access.subject.participant_id, grant.subject.participant_id);
     }
-    console.log("PASS: owner open/knock direct grants, same-key seat replay, pre-Sync refresh rejection, new-key rejoin seat, guest knock still waits");
+    console.log("PASS: owner open/knock direct grants, same-key seat replay, pre-Sync refresh stays on seat, new-key rejoin seat, guest knock still waits");
     // Completed decisions are history, not new knocks the owner can answer again.
     const knockingCall = await post(ada, "/dashboard-api/home", { action: "create-call", admission: "knock", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(knockingCall.status, 200);
@@ -465,7 +469,7 @@ try {
     assert.equal(past.status, 200, await past.clone().text());
     const pastDTO = await past.json();
     assert.equal(pastDTO.attendance.participants.length, 2);
-    assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "guest" && p.isYou === false && p.firstJoinedAt && Date.parse(p.lastLeftAt) === Date.parse(pastDTO.episode.endedAt)));
+    assert(pastDTO.attendance.participants.every((p) => p.name === "Same name" && p.kind === "user" && p.externalId === null && p.isYou === false && p.firstJoinedAt && Date.parse(p.lastLeftAt) === Date.parse(pastDTO.episode.endedAt)));
     assert.equal(pastDTO.recordings[0].id, foreign.recordingId);
     const ownTranscripts = await post(ada, "/dashboard-api/past-session", { action: "transcripts", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId }, session.csrfToken);
     assert.equal(ownTranscripts.status, 200, await ownTranscripts.clone().text());
