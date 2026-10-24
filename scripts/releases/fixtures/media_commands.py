@@ -1,5 +1,6 @@
 """Offline AWS/OpenTofu executables for the dispatcher release boundary tests."""
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -40,6 +41,9 @@ if command == 'aws':
         destination.write_text(json.dumps(state)) if args[args.index('--key') + 1] == config['dispatcher']['state_key'] else destination.write_bytes(b'ZIP')
         reply({})
     elif operation == 'put-object':
+        body = Path(words[words.index('--body') + 1]).read_bytes()
+        if Path(words[words.index('--key') + 1]).name != hashlib.sha256(body).hexdigest() + '.zip':
+            raise SystemExit('uploaded bytes do not match the content-addressed key')
         reply(dict(VersionId='example-version'))
     elif operation == 'get-function-configuration':
         expected = ['--region', 'example', 'lambda', 'get-function-configuration',
