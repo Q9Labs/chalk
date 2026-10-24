@@ -20,6 +20,11 @@ from github_release import GitHub, outputs, require
 ROOT = Path(__file__).resolve().parents[2]
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, url):
+        return None
+
+
 def public_config(target, sha):
     nightly = target == 'nightly'
     return {'CHALK_ENVIRONMENT': target, 'CHALK_COMMIT_SHA': sha,
@@ -63,8 +68,9 @@ def pages(project, route='', method='GET'):
             'Pages API override must use a loopback host')
     url = f'{base_url}/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
+    open_url = urllib.request.build_opener(NoRedirect()).open if 'CLOUDFLARE_API_BASE_URL' in os.environ else urllib.request.urlopen
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with open_url(request, timeout=60) as response:
             result = json.load(response)
     except urllib.error.HTTPError as error:
         raise ValueError(f'Pages API {method} {route or "/"} returned {error.code}: {error.read(500).decode(errors="replace")}') from error

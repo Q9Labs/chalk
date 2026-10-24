@@ -15,8 +15,11 @@ import web
 
 class PagesRollback(unittest.TestCase):
     def test_rollback_over_http(self):
+        rejected_hosts = {'non-loopback': '0.0.0.0', 'localhost-substring': 'localhost.evil.example',
+                          'ipv4-substring': '127.0.0.1.evil.example', 'userinfo-host': 'user@evil.example',
+                          'mapped-dotted': '[::ffff:127.0.0.1]', 'mapped-hex': '[::ffff:7f00:1]'}
         for case in ('restore', 'already-live', 'stale', 'http-error', 'invalid-json',
-                     'api-error', 'preview', 'failed', 'missing', 'post-id-mismatch', 'non-loopback'):
+                     'api-error', 'preview', 'failed', 'missing', 'post-id-mismatch', *rejected_hosts):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
                 requests = []
                 live = 'saved' if case == 'already-live' else 'old'
@@ -50,7 +53,7 @@ class PagesRollback(unittest.TestCase):
                 output.touch()
                 stdout = io.StringIO()
                 try:
-                    host = '0.0.0.0' if case == 'non-loopback' else '127.0.0.1'
+                    host = rejected_hosts.get(case, '127.0.0.1')
                     with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://{host}:{server.server_port}', NO_PROXY='*', no_proxy='*',
                                     CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='example-token',
                                     GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(stdout):
@@ -63,8 +66,12 @@ class PagesRollback(unittest.TestCase):
                             cause = failure.exception.__cause__
                             if isinstance(cause, web.urllib.error.HTTPError):
                                 cause.close()
-                            if case == 'non-loopback':
+                            if case in rejected_hosts:
                                 self.assertIn('override must use a loopback host', str(failure.exception))
+                            if case == 'non-loopback':
+                                os.environ.pop('CLOUDFLARE_API_TOKEN')
+                                with self.assertRaisesRegex(ValueError, 'override must use a loopback host'):
+                                    web.rollback('example-project', 'saved')
                             if case == 'post-id-mismatch':
                                 self.assertIn('returned a different deployment', str(failure.exception))
                             if case == 'stale':
@@ -78,10 +85,61 @@ class PagesRollback(unittest.TestCase):
                 methods = [method for method, _ in requests]
                 self.assertEqual(methods, ['GET', 'POST', 'GET'] if case in ('restore', 'stale') else
                                  ['GET', 'GET'] if case == 'already-live' else
-                                 ['GET', 'POST'] if case == 'post-id-mismatch' else [] if case == 'non-loopback' else ['GET'])
+                                 ['GET', 'POST'] if case == 'post-id-mismatch' else [] if case in rejected_hosts else ['GET'])
                 prefix = '/accounts/example-account/pages/projects/example-project'
                 self.assertTrue(all(path == prefix if method == 'GET' else path == prefix + '/deployments/saved/rollback'
                                     for method, path in requests))
+
+
+    def test_override_does_not_follow_redirect(self):
+        received = []
+
+        class Destination(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_GET(self):
+                received.append(self.headers.get('Authorization'))
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps(dict(success=True, result=dict(canonical_deployment=dict(
+                    id='saved', environment='production', latest_stage=dict(status='success'))))).encode())
+
+        @contextlib.contextmanager
+        def serving(handler):
+            with ThreadingHTTPServer(('127.0.0.1', 0), handler) as server:
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    yield server
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=5)
+
+        with serving(Destination) as destination:
+            class Redirect(BaseHTTPRequestHandler):
+                def log_message(self, *args):
+                    pass
+
+                def do_GET(self):
+                    self.send_response(302)
+                    self.send_header('Location', f'http://0.0.0.0:{destination.server_port}/capture')
+                    self.end_headers()
+
+            with serving(Redirect) as redirect, tempfile.TemporaryDirectory() as directory:
+                output = Path(directory, 'outputs')
+                output.touch()
+                stdout = io.StringIO()
+                with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://127.0.0.1:{redirect.server_port}',
+                                CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='dummy-token',
+                                GITHUB_OUTPUT=str(output), NO_PROXY='*', no_proxy='*'), contextlib.redirect_stdout(stdout):
+                    with self.assertRaises(ValueError) as failure:
+                        web.rollback('example-project', 'saved')
+                    if isinstance(failure.exception.__cause__, web.urllib.error.HTTPError):
+                        failure.exception.__cause__.close()
+                self.assertEqual(received, [])
+                self.assertEqual(output.read_text(), '')
+                self.assertEqual(stdout.getvalue(), '')
 
 
 if __name__ == '__main__':

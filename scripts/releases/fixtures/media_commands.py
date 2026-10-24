@@ -31,6 +31,8 @@ if command == 'aws':
     elif 'put-object' in args:
         reply(dict(VersionId='example-version'))
     elif 'get-function-configuration' in args:
+        if any(arg.startswith('--qualifier') for arg in args) or '--function-name' not in args or args[args.index('--function-name') + 1] != config['dispatcher']['function_name']:
+            raise SystemExit('expected configured unqualified dispatcher function')
         function = next(item['instances'][0]['attributes'] for item in state['resources'] if item['type'] == 'aws_lambda_function')
         counter = root / 'lambda-reads'
         reads = int(counter.read_text()) + 1 if counter.exists() else 1
