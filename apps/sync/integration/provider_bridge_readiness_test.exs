@@ -7,6 +7,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.Config
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.UUID
 
   @tag timeout: 90_000
   test "slow vendor cleanup cannot starve readiness, but a down bridge does fail readiness" do
@@ -37,7 +38,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
 
     on_exit(fn ->
       if Port.info(bridge), do: Port.close(bridge)
-      Enum.each(fixtures, &SyncPostgres.cleanup(connection, &1.episode))
+      Enum.each(fixtures, &cleanup_fixture(connection, &1))
       Application.stop(:chalk_sync)
     end)
 
@@ -101,6 +102,18 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
     IO.puts("bridge down readiness: #{status} #{body}")
     assert status == 503
     assert body =~ "provider_bridge_unavailable"
+  end
+
+  defp cleanup_fixture(connection, fixture) do
+    for query <- [
+          "delete from provider_operation_observations where tenant_id = $1",
+          "delete from provider_operation_observation_heads where tenant_id = $1",
+          "delete from provider_operation_receipts where tenant_id = $1"
+        ] do
+      Postgrex.query!(connection, query, [UUID.dump!(fixture.episode.tenant_id)])
+    end
+
+    SyncPostgres.cleanup(connection, fixture.episode)
   end
 
   defp await_queued_requests(count, attempts \\ 100)
