@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
@@ -60,7 +61,8 @@ func (r RecordingFleetAuthorityRepository) AbandonBootstrap(ctx context.Context,
 }
 
 type RecordingFleetAuthorityRepository struct {
-	queries recordingFleetAuthorityQuerier
+	admissionLimits recordingpipeline.AdmissionLimits
+	queries         recordingFleetAuthorityQuerier
 }
 
 func NewRecordingFleetAuthorityRepository(queries recordingFleetAuthorityQuerier) RecordingFleetAuthorityRepository {
@@ -72,7 +74,7 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 		return recorderfleet.Demand{}, recorderfleet.ErrProviderUnavailable
 	}
 	row, err := r.queries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{
-		Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
+		RecordingCap: int32(r.admissionLimits.WithDefaults().RecordingCap), Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
 	})
 	if err != nil {
 		return recorderfleet.Demand{}, fmt.Errorf("read recording fleet demand: %w", err)
@@ -384,3 +386,8 @@ func isUniqueViolation(err error) bool {
 }
 
 var _ recorderfleetauthority.Repository = RecordingFleetAuthorityRepository{}
+
+func (r RecordingFleetAuthorityRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingFleetAuthorityRepository {
+	r.admissionLimits = limits.WithDefaults()
+	return r
+}

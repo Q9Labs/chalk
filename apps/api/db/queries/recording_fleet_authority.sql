@@ -61,7 +61,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.*, least(preparation_demand.count, greatest(0, 10 - base_nodes))::integer as prepared_nodes,
+    select facts.*, least(preparation_demand.count, greatest(0, coalesce(nullif(sqlc.arg(recording_cap)::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )

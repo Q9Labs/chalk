@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -20,8 +21,9 @@ type recordingPreparationQuerier interface {
 }
 
 type RecordingPreparationRepository struct {
-	pool    *pgxpool.Pool
-	queries recordingPreparationQuerier
+	admissionLimits recordingpipeline.AdmissionLimits
+	pool            *pgxpool.Pool
+	queries         recordingPreparationQuerier
 }
 
 func NewRecordingPreparationRepository(pool *pgxpool.Pool) RecordingPreparationRepository {
@@ -48,7 +50,7 @@ func (r RecordingPreparationRepository) Cancel(ctx context.Context, input record
 }
 
 func (r RecordingPreparationRepository) Get(ctx context.Context, tenantID, spaceID utilities.ID, now time.Time) (recordingpreparation.Preparation, error) {
-	return getRecordingPreparation(ctx, r.queries, tenantID, spaceID, now)
+	return getRecordingPreparation(ctx, r.queries, tenantID, spaceID, now, r.admissionLimits.WithDefaults().RecordingCap)
 }
 
 func (r RecordingPreparationRepository) mutate(ctx context.Context, input recordingpreparation.Input, now time.Time, change func(*sqlc.Queries) error) (recordingpreparation.Preparation, error) {
@@ -69,7 +71,7 @@ func (r RecordingPreparationRepository) mutate(ctx context.Context, input record
 		}
 		return recordingpreparation.Preparation{}, fmt.Errorf("update recording preparation: %w", err)
 	}
-	preparation, err := getRecordingPreparation(ctx, queries, input.TenantID, input.SpaceID, now)
+	preparation, err := getRecordingPreparation(ctx, queries, input.TenantID, input.SpaceID, now, r.admissionLimits.WithDefaults().RecordingCap)
 	if err != nil {
 		return recordingpreparation.Preparation{}, err
 	}
@@ -79,9 +81,9 @@ func (r RecordingPreparationRepository) mutate(ctx context.Context, input record
 	return preparation, nil
 }
 
-func getRecordingPreparation(ctx context.Context, queries recordingPreparationQuerier, tenantID, spaceID utilities.ID, now time.Time) (recordingpreparation.Preparation, error) {
+func getRecordingPreparation(ctx context.Context, queries recordingPreparationQuerier, tenantID, spaceID utilities.ID, now time.Time, recordingCap int) (recordingpreparation.Preparation, error) {
 	row, err := queries.GetRecordingPreparation(ctx, sqlc.GetRecordingPreparationParams{
-		TenantID: uuid(tenantID), SpaceID: uuid(spaceID), ObservedAt: timestamptzValue(now),
+		RecordingCap: int32(recordingCap), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), ObservedAt: timestamptzValue(now),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpreparation.Preparation{}, recordingpreparation.ErrNotFound
@@ -127,4 +129,9 @@ func (r RecordingPreparationRepository) PrepareEntrance(ctx context.Context, ten
 	}
 	slog.InfoContext(ctx, "Capture pre-warmed for Entrance", "event", "recording.entrance.prewarmed", "revision", row.Revision+1)
 	return true, nil
+}
+
+func (r RecordingPreparationRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingPreparationRepository {
+	r.admissionLimits = limits.WithDefaults()
+	return r
 }

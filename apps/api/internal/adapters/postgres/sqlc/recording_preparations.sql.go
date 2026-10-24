@@ -126,7 +126,7 @@ with eligible as (
       and preparation.starts_at > $3::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
 ), capacity as (
-    select greatest(0, 10 - reserved_episodes)::integer as available, reserved_episodes as occupied
+    select greatest(0, coalesce(nullif($4::integer, 0), 10) - reserved_episodes)::integer as available, reserved_episodes as occupied
     from recording_capacity where id = 1
 ), ready as (
     select coalesce(max(ready_capacity), 0)::integer as available from recording_pool_health
@@ -144,9 +144,10 @@ where preparation.tenant_id = $1 and preparation.space_id = $2
 `
 
 type GetRecordingPreparationParams struct {
-	TenantID   pgtype.UUID        `json:"tenant_id"`
-	SpaceID    pgtype.UUID        `json:"space_id"`
-	ObservedAt pgtype.Timestamptz `json:"observed_at"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	SpaceID      pgtype.UUID        `json:"space_id"`
+	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
+	RecordingCap int32              `json:"recording_cap"`
 }
 
 type GetRecordingPreparationRow struct {
@@ -165,7 +166,12 @@ type GetRecordingPreparationRow struct {
 }
 
 func (q *Queries) GetRecordingPreparation(ctx context.Context, arg GetRecordingPreparationParams) (GetRecordingPreparationRow, error) {
-	row := q.db.QueryRow(ctx, getRecordingPreparation, arg.TenantID, arg.SpaceID, arg.ObservedAt)
+	row := q.db.QueryRow(ctx, getRecordingPreparation,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.ObservedAt,
+		arg.RecordingCap,
+	)
 	var i GetRecordingPreparationRow
 	err := row.Scan(
 		&i.TenantID,
