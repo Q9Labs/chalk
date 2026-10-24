@@ -49,7 +49,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const head = read(headFile);
   const found = baseFile === undefined ? [...head].sort() : newFindings(head, read(baseFile));
   const known = head.size - found.length;
-  if (known > 0) console.log(`${known} finding(s) also exist on the base branch. Master pushes and the nightly run report them.`);
+  if (known > 0) console.log(`${known} finding(s) also exist on the base branch. The daily full scan reports them.`);
   for (const finding of found) console.log(`${baseFile === undefined ? "Finding" : "New finding"}: ${finding}`);
   process.exit(found.length > 0 ? 1 : 0);
 }

@@ -43,13 +43,25 @@ scan_report "${report_directory}/head" "${report_directory}/raw.json" --config /
 scan_report "${report_directory}/head" "${report_directory}/head.json"
 (cd "${report_directory}/head" && node "${script_directory}/zod-exception.mjs" pnpm-lock.yaml "${report_directory}/head.json")
 
-if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
+# Branch creation has no previous tip, so it must fail on all findings.
+push_base="${GATE_OSV_BASE_COMMIT:-}"
+if [[ "$push_base" == 0000000000000000000000000000000000000000 ]]; then
+  push_base=""
+fi
+if [[ -z "$push_base" && -z "${GATE_VULN_BASE_REF:-}" ]]; then
   node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json"
   exit 0
 fi
 
 # Discover the base's tracked tree too, with the same symlink handling.
-base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
+if [[ -n "$push_base" ]]; then
+  [[ "$push_base" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid push baseline' >&2; exit 2; }
+  # Force pushes can remove the old tip from checkout's fetched history. Fail closed if unavailable.
+  git cat-file -e "${push_base}^{commit}" 2>/dev/null || git fetch --no-tags origin "$push_base"
+  base="$push_base"
+else
+  base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
+fi
 snapshot "${base}" "${report_directory}/base"
 scan_report "${report_directory}/base" "${report_directory}/base.json"
 node "${script_directory}/new-vulnerabilities.mjs" osv "${report_directory}/head.json" "${report_directory}/base.json"
