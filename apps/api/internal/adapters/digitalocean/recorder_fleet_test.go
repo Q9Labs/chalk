@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -473,5 +474,39 @@ report_failure(dict(release_id='selected-release', manifest_digest='sha256:'+'a'
 		}
 	default:
 		t.Fatal("archive failure was not retained")
+	}
+}
+
+func TestRecorderFleetNodeExistsRequiresExact404(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusNotFound, http.StatusForbidden, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/v2/droplets/42" || r.URL.RawQuery != "" {
+					t.Fatalf("not an exact GET: %s", r.URL)
+				}
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"droplet":{"id":42,"tags":["wrong-owner"]}}`))
+			}))
+			defer server.Close()
+			fleet, err := NewRecorderFleet(RecorderFleetConfig{Token: "test-token", BaseURL: server.URL, HTTPClient: server.Client(), Environment: "nightly", Role: workeridentity.RoleCapture, OwnerTag: "chalk-recorder-owned"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			exists, err := fleet.NodeExists(t.Context(), recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}, "42")
+			switch status {
+			case http.StatusNotFound:
+				if err != nil || exists {
+					t.Fatalf("404 = %t %v", exists, err)
+				}
+			case http.StatusOK:
+				if err != nil || !exists {
+					t.Fatalf("200 with wrong tags must not prove absence: %t %v", exists, err)
+				}
+			default:
+				if err == nil {
+					t.Fatalf("provider %d proved absence", status)
+				}
+			}
+		})
 	}
 }

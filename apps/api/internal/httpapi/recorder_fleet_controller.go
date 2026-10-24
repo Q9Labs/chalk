@@ -16,6 +16,7 @@ import (
 )
 
 type RecorderFleetControllerService interface {
+	ObserveIdentity(context.Context, recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error)
 	GetDemand(context.Context, recorderfleet.PoolKey) (recorderfleet.Demand, error)
 	ObserveNodes(context.Context, recorderfleet.PoolKey) ([]recorderfleet.NodeObservation, error)
 	EnsureBootstrap(context.Context, recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error)
@@ -43,6 +44,7 @@ func NewRecorderFleetControllerRouter(service RecorderFleetControllerService, ve
 		router.Use(func(next http.Handler) http.Handler { return requireRecorderFleetController(verifier, next) })
 		router.Get("/demand", recorderFleetDemandHandler(service, environment, logger))
 		router.Get("/nodes", recorderFleetNodesHandler(service, environment, logger))
+		router.Post("/nodes/{providerID}/leases", recorderFleetIdentityLeasesHandler(service, environment, logger))
 		router.Post("/nodes/{providerID}/bootstrap", recorderFleetBootstrapHandler(service, environment, logger))
 		router.Post("/nodes/{providerID}/bootstrap/abandon", recorderFleetBootstrapAbandonHandler(service, environment, logger))
 		router.Post("/nodes/{providerID}/admission/close", recorderFleetCommandHandler(service, environment, false, logger))
@@ -192,6 +194,30 @@ func recorderFleetBootstrapHandler(service RecorderFleetControllerService, envir
 			SchemaVersion: recorderfleet.BootstrapSchemaVersion, Environment: environment,
 			Role: body.Key.Role, Identity: identity,
 		})
+	}
+}
+
+func recorderFleetIdentityLeasesHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		body, ok := decodeRecorderWorkerBody[recorderFleetCommandRequest](w, request)
+		if !ok {
+			return
+		}
+		if body.SchemaVersion != recorderfleet.CommandSchemaVersion || body.Environment != environment || body.Identity.ProviderID != chi.URLParam(request, "providerID") || request.Header.Get("X-Chalk-Fleet-Identity-Leases") != "1" {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder identity lease request")
+			return
+		}
+		observation, err := service.ObserveIdentity(request.Context(), body.Identity)
+		if err != nil {
+			writeRecorderFleetError(w, request, logger, "observe_identity_leases", err)
+			return
+		}
+		w.Header().Set("X-Chalk-Fleet-Identity-Leases", "1")
+		writeJSON(w, http.StatusOK, struct {
+			SchemaVersion string                        `json:"schema_version"`
+			Environment   string                        `json:"environment"`
+			Observation   recorderfleet.NodeObservation `json:"observation"`
+		}{recorderfleet.CommandSchemaVersion, environment, observation})
 	}
 }
 

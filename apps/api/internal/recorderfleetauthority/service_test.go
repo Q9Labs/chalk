@@ -238,3 +238,7 @@ func (a *workerAuthorizerStub) AuthorizeWorkerClaim(context.Context, workerident
 	a.claimCalls++
 	return a.claimErr
 }
+
+func (s *authorityRepositoryStub) ObserveIdentity(context.Context, string, recorderfleet.NodeIdentity, time.Time) (recorderfleet.NodeObservation, error) {
+	return recorderfleet.NodeObservation{}, recorderfleet.ErrProviderUnavailable
+}

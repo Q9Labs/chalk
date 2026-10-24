@@ -19,6 +19,7 @@ import (
 )
 
 type recordingFleetAuthorityQuerier interface {
+	ObserveRecordingFleetIdentityLeases(context.Context, sqlc.ObserveRecordingFleetIdentityLeasesParams) (sqlc.ObserveRecordingFleetIdentityLeasesRow, error)
 	AbandonRecordingFleetBootstrap(context.Context, sqlc.AbandonRecordingFleetBootstrapParams) (string, error)
 	ActivateRecordingFleetBootstrap(context.Context, sqlc.ActivateRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error)
 	AuthorizeRecordingFleetWorker(context.Context, sqlc.AuthorizeRecordingFleetWorkerParams) (bool, error)
@@ -111,6 +112,29 @@ func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key
 	return observations, nil
 }
 
+func (r RecordingFleetAuthorityRepository) ObserveIdentity(ctx context.Context, environment string, identity recorderfleet.NodeIdentity, observedAt time.Time) (recorderfleet.NodeObservation, error) {
+	workerID, generation, err := recordingFleetMutationIdentity(identity)
+	if err != nil {
+		return recorderfleet.NodeObservation{}, err
+	}
+	if r.queries == nil {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrProviderUnavailable
+	}
+	row, err := r.queries.ObserveRecordingFleetIdentityLeases(ctx, sqlc.ObserveRecordingFleetIdentityLeasesParams{
+		Environment: environment, Role: string(identity.Role), ProviderID: identity.ProviderID, WorkerID: workerID, BootGeneration: generation,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+	}
+	if err != nil {
+		return recorderfleet.NodeObservation{}, fmt.Errorf("observe recorder identity leases: %w", err)
+	}
+	if row.ActiveLeases < 0 {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrInventoryDrift
+	}
+	return recorderfleet.NodeObservation{Identity: identity, ActiveLeases: int(row.ActiveLeases), ObservedAt: observedAt, LeasesObservedAt: observedAt, IdentityAbsent: row.IdentityAbsent, IdentityRevoked: row.IdentityRevoked}, nil
+}
+
 func (r RecordingFleetAuthorityRepository) ReserveBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) (recorderfleetauthority.BootstrapRecord, error) {
 	if r.queries == nil {
 		return recorderfleetauthority.BootstrapRecord{}, recorderfleet.ErrProviderUnavailable
@@ -190,6 +214,9 @@ func (r RecordingFleetAuthorityRepository) MarkRevoked(ctx context.Context, envi
 		RevokedAt: timestamptzValue(revokedAt), Environment: environment, Role: string(identity.Role),
 		ProviderID: identity.ProviderID, WorkerID: workerID, BootGeneration: bootGeneration,
 	})
+	if isUniqueViolation(err) {
+		return recorderfleet.ErrRoleFence
+	}
 	return recordingFleetNodeMutationError("revoke recording fleet node", err)
 }
 

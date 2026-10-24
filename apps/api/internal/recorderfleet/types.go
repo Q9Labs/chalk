@@ -245,6 +245,7 @@ type NodeObservation struct {
 	// LeasesObservedAt dates the authority's job-lease read, not the worker heartbeat.
 	LeasesObservedAt time.Time `json:"leases_observed_at,omitzero"`
 	IdentityRevoked  bool      `json:"identity_revoked,omitzero"`
+	IdentityAbsent   bool      `json:"identity_absent,omitzero"`
 }
 
 func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity int) error {
@@ -331,6 +332,7 @@ type DemandSource interface {
 }
 
 type Provider interface {
+	NodeExists(context.Context, PoolKey, string) (bool, error)
 	ListNodes(context.Context, PoolKey) ([]Node, error)
 	EnsureNode(context.Context, EnsureNodeRequest) (Node, error)
 	DeleteNode(context.Context, DeleteNodeRequest) error
@@ -343,6 +345,12 @@ type BootstrapAuthority interface {
 	EnsureBootstrap(context.Context, BootstrapRequest) (NodeIdentity, error)
 	AbandonBootstrap(context.Context, BootstrapRequest) error
 	RevokeIdentity(context.Context, NodeIdentity) error
+}
+
+// IdentityLeaseObserver reads database-live leases even when the fleet row is lost.
+// Unsupported authorities must return an error, never an implicit zero.
+type IdentityLeaseObserver interface {
+	ObserveIdentity(context.Context, NodeIdentity) (NodeObservation, error)
 }
 
 type RuntimeControl interface {

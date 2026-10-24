@@ -157,6 +157,32 @@ where node.environment = sqlc.arg(environment)
   and node.worker_id is not null
 order by node.provider_id;
 
+-- name: ObserveRecordingFleetIdentityLeases :one
+-- Count by the fenced journal worker, not by a fleet-row join: a lost row
+-- must not hide live work. Refuse any conflicting provider or worker binding.
+select (
+    select count(*) from recording_jobs job
+    where job.lease_owner = sqlc.arg(worker_id)::uuid::text
+      and (job.kind = sqlc.arg(role) or (sqlc.arg(role) = 'render' and job.kind = 'transcription'))
+      and job.state = 'leased' and job.lease_expires_at > clock_timestamp()
+)::integer as active_leases,
+not exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = sqlc.arg(environment) and node.provider_id = sqlc.arg(provider_id)
+) as identity_absent,
+exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = sqlc.arg(environment) and node.provider_id = sqlc.arg(provider_id) and node.state = 'revoked'
+) as identity_revoked
+where not exists (
+    select 1 from recording_fleet_nodes node
+    where ((node.environment = sqlc.arg(environment) and node.provider_id = sqlc.arg(provider_id))
+        or node.worker_id = sqlc.arg(worker_id))
+      and not coalesce((node.environment = sqlc.arg(environment) and node.role = sqlc.arg(role)
+        and node.provider_id = sqlc.arg(provider_id) and node.worker_id = sqlc.arg(worker_id)
+        and node.boot_generation = sqlc.arg(boot_generation) and node.state in ('active', 'draining', 'revoked')), false)
+);
+
 -- name: CloseRecordingFleetNodeAdmission :one
 update recording_fleet_nodes
 set state = 'draining', ready = false, admission_open = false,
@@ -170,16 +196,26 @@ where environment = sqlc.arg(environment)
 returning provider_id;
 
 -- name: RevokeRecordingFleetNode :one
-update recording_fleet_nodes
-set state = 'revoked', ready = false, admission_open = false,
-    ready_capacity = 0, revoked_at = coalesce(revoked_at, sqlc.arg(revoked_at)),
-    updated_at = now()
-where environment = sqlc.arg(environment)
-  and role = sqlc.arg(role)
-  and provider_id = sqlc.arg(provider_id)
-  and worker_id = sqlc.arg(worker_id)
-  and boot_generation = sqlc.arg(boot_generation)
-  and state in ('active', 'draining', 'revoked')
+-- A lost row still needs a durable fence against bootstrap replay. Metadata
+-- unavailable after row loss uses explicit tombstone placeholders; it can never
+-- authorize a worker or be activated as a bootstrap reservation.
+insert into recording_fleet_nodes (
+    environment, role, provider_id, worker_id, boot_generation, state, revoked_at,
+    node_name, region, release_id, image_digest, inventory_digest
+) values (
+    sqlc.arg(environment), sqlc.arg(role), sqlc.arg(provider_id), sqlc.arg(worker_id),
+    sqlc.arg(boot_generation), 'revoked', sqlc.arg(revoked_at),
+    sqlc.arg(provider_id), 'unknown', 'revoked-identity',
+    'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    '0000000000000000000000000000000000000000000000000000000000000000'
+)
+on conflict (environment, provider_id) do update
+set state = 'revoked', ready = false, admission_open = false, ready_capacity = 0,
+    revoked_at = coalesce(recording_fleet_nodes.revoked_at, excluded.revoked_at), updated_at = now()
+where recording_fleet_nodes.role = excluded.role
+  and recording_fleet_nodes.worker_id = excluded.worker_id
+  and recording_fleet_nodes.boot_generation = excluded.boot_generation
+  and recording_fleet_nodes.state in ('active', 'draining', 'revoked')
 returning provider_id;
 
 -- name: RecordRecordingFleetWorkerObservation :one

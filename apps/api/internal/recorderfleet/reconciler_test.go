@@ -741,6 +741,8 @@ func cloneJournal(state Journal) Journal {
 }
 
 type fakeProvider struct {
+	existsErr   error
+	omitID      string
 	config      Config
 	nodes       map[string]Node
 	nextID      int
@@ -749,9 +751,17 @@ type fakeProvider struct {
 	events      *[]string
 }
 
+func (f *fakeProvider) NodeExists(_ context.Context, _ PoolKey, id string) (bool, error) {
+	_, exists := f.nodes[id]
+	return exists, f.existsErr
+}
+
 func (f *fakeProvider) ListNodes(context.Context, PoolKey) ([]Node, error) {
 	nodes := make([]Node, 0, len(f.nodes))
 	for _, node := range f.nodes {
+		if node.ProviderID == f.omitID {
+			continue
+		}
 		nodes = append(nodes, node)
 	}
 	slices.SortFunc(nodes, func(left, right Node) int {
@@ -855,11 +865,25 @@ func (f *fakeBootstrap) identity(node Node) NodeIdentity {
 }
 
 type fakeRuntime struct {
-	observeErr   error
-	observations []NodeObservation
-	closeCalls   int
-	published    []PoolProjection
-	events       *[]string
+	identityObservation *NodeObservation
+	identityErr         error
+	observeErr          error
+	observations        []NodeObservation
+	closeCalls          int
+	published           []PoolProjection
+	events              *[]string
+}
+
+func (f *fakeRuntime) ObserveIdentity(_ context.Context, identity NodeIdentity) (NodeObservation, error) {
+	if f.identityObservation != nil {
+		return *f.identityObservation, f.identityErr
+	}
+	for _, observation := range f.observations {
+		if observation.Identity == identity {
+			return observation, f.identityErr
+		}
+	}
+	return NodeObservation{Identity: identity, ObservedAt: time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)}, f.identityErr
 }
 
 func (f *fakeRuntime) ObserveNodes(context.Context, PoolKey) ([]NodeObservation, error) {

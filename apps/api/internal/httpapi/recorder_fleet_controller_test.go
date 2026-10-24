@@ -323,3 +323,12 @@ func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
 		})
 	}
 }
+
+func (s *recorderFleetControllerServiceStub) ObserveIdentity(_ context.Context, identity recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error) {
+	for _, observation := range s.nodes {
+		if observation.Identity == identity {
+			return observation, nil
+		}
+	}
+	return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+}
