@@ -136,7 +136,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board:has(.chalk-board-island[data-place="expanded"]) .chalk-board-zoom {translate:0 -60px;}
 .chalk-board[data-presentation="mobile"] .chalk-board-island {padding:4px; border-radius:28px;}
 .chalk-board[data-presentation="mobile"]:has(.chalk-board-island[data-place="expanded"]) .chalk-board-zoom {translate:0 -64px;}
-.chalk-board[data-presentation="mobile"][data-call-controls] :is(.chalk-board-island[data-place="compact"], .chalk-board-island[data-place="expanded"], .chalk-board-zoom) {bottom:76px;}
+.chalk-board[data-presentation="mobile"][data-call-controls] :is(.chalk-board-island[data-place="bottom"], .chalk-board-island[data-place="compact"], .chalk-board-island[data-place="expanded"], .chalk-board-zoom) {bottom:76px;}
 .chalk-board-group {display:contents;}
 .chalk-board-separator {flex:none; width:1px; height:24px; margin:0 4px; background:var(--chalk-line-strong);}
 .chalk-board-island[data-place="left"] .chalk-board-separator {width:24px; height:1px; margin:4px 0;}

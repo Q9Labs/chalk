@@ -881,13 +881,20 @@ it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s 
 });
 
 async function withOpenBoard(
-  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null) => Promise<void>) => Promise<void>,
+  check: (
+    container: HTMLElement,
+    engine: TestEngine,
+    peer: ReturnType<typeof createPeer>,
+    toast: ReturnType<typeof vi.fn>,
+    render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people" | "presentation" | "landscapeControlsVisible">> | null) => Promise<void>,
+  ) => Promise<void>,
   primary = true,
   options: {
     capabilities?: readonly Capability[];
     canDraw?: boolean;
     phone?: boolean;
     presentation?: BoardProps["presentation"];
+    landscapeControlsVisible?: BoardProps["landscapeControlsVisible"];
     sendView?: (view: ChalkWhiteboardView) => boolean;
     onFollow?: BoardProps["onFollow"];
     onClose?: BoardProps["onClose"];
@@ -902,7 +909,7 @@ async function withOpenBoard(
   document.body.append(container);
   const root = createRoot(container);
   const toast = vi.fn();
-  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">>) {
+  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people" | "presentation" | "landscapeControlsVisible">>) {
     const [following, setFollowing] = useState<string | null>("remote");
     return (
       <Board
@@ -911,6 +918,7 @@ async function withOpenBoard(
         visible
         phone={options.phone}
         presentation={options.presentation}
+        landscapeControlsVisible={options.landscapeControlsVisible}
         onClose={options.onClose}
         colorScheme="dark"
         people={[]}
@@ -924,7 +932,7 @@ async function withOpenBoard(
       />
     );
   }
-  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null = {}) => {
+  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people" | "presentation" | "landscapeControlsVisible">> | null = {}) => {
     await act(async () =>
       root.render(
         props === null ? null : (
@@ -1637,6 +1645,32 @@ it("keeps the dockable island available on a wide native tablet", async () => {
     },
     true,
     { phone: false, presentation: "mobile" },
+  );
+});
+
+it("keeps wide native tablet tools above landscape call controls", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() {
+        this.onResize([{ contentRect: { width: 1200, height: 900 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  await withOpenBoard(
+    async (container, _engine, _peer, _toast, render) => {
+      const island = container.querySelector<HTMLElement>('.chalk-board-island[data-place="bottom"]');
+      expect(island).not.toBeNull();
+      expect(getComputedStyle(island!).bottom).toBe("76px");
+      await render({ landscapeControlsVisible: false });
+      expect(getComputedStyle(island!).bottom).toBe("12px");
+      await render({ presentation: "web", landscapeControlsVisible: true });
+      expect(getComputedStyle(island!).bottom).toBe("12px");
+    },
+    true,
+    { phone: false, presentation: "mobile", landscapeControlsVisible: true },
   );
 });
 
