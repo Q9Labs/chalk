@@ -75,6 +75,8 @@ jobs:
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      # Compare pushes with the exact previous tip, including non-ancestor force pushes.
+      GATE_OSV_BASE_COMMIT: ${{ github.event_name == 'push' && github.event.before || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
       VITEST_MAX_WORKERS: "2"
     steps:

@@ -43,9 +43,13 @@ When OSV-Scanner (`osv` lane) or govulncheck (API gate) finds a vulnerability,
 `osv-scanner.sh` and `govulncheck.sh` run the same scan on the merge base, and
 `new-vulnerabilities.mjs` fails the pull request only for a finding the base
 lacks, that is, a package version the pull request changed. A new advisory
-against a package nobody changed fails the next master push or nightly run
-instead, because those runs leave `GATE_VULN_BASE_REF` empty and fail on every
-finding.
+against a package nobody changed fails the nightly run instead. Master pushes set
+`GATE_OSV_BASE_COMMIT` to `github.event.before`: OSV compares against that exact
+commit, not the merge base (including force pushes and merge commits). Branch
+creation's all-zero SHA has no baseline and fails on all findings. An unavailable
+old tip is fetched by SHA; a failed fetch fails the check. PR behavior is unchanged.
+The separate Daily OSV workflow also scans without a baseline, stays red on any
+finding, and reports to the standing `security-osv-daily` issue.
 
 Only pushes to `master` save the Go build caches and the Metro cache, so pull
 requests start from the latest master caches and do not evict each other's.
