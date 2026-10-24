@@ -26,6 +26,7 @@ func TestFleetRegisteredAtCreateFirstManagedClaimRequiresRow(t *testing.T) {
 			defer func() { _ = tx.Rollback(context.Background()) }()
 			execCleanupFixture(t, tx, `update recording_jobs set state='pending', lease_owner=null, lease_token=null, lease_expires_at=null where id=$1`, fixture.jobID.Bytes())
 			if role == workeridentity.RoleCapture {
+				execCleanupFixture(t, tx, `delete from recording_job_attempt_authorities where job_id=$1`, fixture.jobID.Bytes())
 				execCleanupFixture(t, tx, `update recording_pipelines set state='reserved', capture_completed_at=null where recording_id=$1`, fixture.recordingID.Bytes())
 			} else {
 				prepareFleetRenderClaim(t, tx, fixture.jobID)
