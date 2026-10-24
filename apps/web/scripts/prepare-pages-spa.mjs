@@ -3,7 +3,7 @@ import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 
 import { DOCS_PAGES } from "../src/docs/manifest.ts";
-import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
+import { BRAND_DIR, FAVICON_ICO, IS_NIGHTLY, SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
 
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");
@@ -88,6 +88,21 @@ for (const page of DOCS_PAGES) {
   const docsPageDir = resolve(clientDir, ...page.href.slice(1).split("/"));
   mkdirSync(docsPageDir, { recursive: true });
   writeFileSync(resolve(docsPageDir, "index.html"), buildDocsHtml(page));
+}
+
+if (IS_NIGHTLY) {
+  // Same manifest as production, with the nightly name and icons so an installed nightly is told apart on the home screen.
+  const manifestPath = resolve(clientDir, "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const nightlyIcons = (icons) => icons.map((icon) => ({ ...icon, src: icon.src === "/favicon.ico" ? FAVICON_ICO : icon.src.replace("/brand/chalk/", `${BRAND_DIR}/`) }));
+  const nightlyManifest = {
+    ...manifest,
+    name: "Chalk Nightly",
+    short_name: "Chalk Nightly",
+    icons: nightlyIcons(manifest.icons),
+    shortcuts: manifest.shortcuts.map((shortcut) => ({ ...shortcut, icons: nightlyIcons(shortcut.icons) })),
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(nightlyManifest, null, 2)}\n`);
 }
 
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));

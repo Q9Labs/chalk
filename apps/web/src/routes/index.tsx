@@ -9,7 +9,7 @@ import { SpeedSection } from "../components/landing/SpeedSection";
 import { SiteFooter } from "../components/site/SiteFooter";
 import { SiteNav } from "../components/site/SiteNav";
 import { SiteRoot } from "../components/site/theme";
-import { buildPublicSiteHead, SITE_ORIGIN } from "../lib/site-head";
+import { buildPublicSiteHead, SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../lib/site-head";
 
 const title = "Chalk | Calls for your team, and inside your product";
 const description = "Start a call and share one link that keeps working next week, or render the same call in your own app with a few lines of React. Chalk is open source.";
@@ -41,7 +41,7 @@ const structuredData = {
       description,
       applicationCategory: "DeveloperApplication",
       operatingSystem: "Web, iOS, Android",
-      image: `${SITE_ORIGIN}/images/social/chalk-og-product-20260819.png`,
+      image: SOCIAL_IMAGE_URL,
       provider: { "@id": `${SITE_ORIGIN}/#organization` },
     },
   ],
@@ -53,7 +53,7 @@ export const Route = createFileRoute("/")({
       path: "/",
       title,
       description,
-      imageAlt: "A Chalk call with four people",
+      imageAlt: "Chalk: calls for your team, and inside your product",
     }),
   component: LandingPage,
 });

@@ -1,5 +1,14 @@
 export const SITE_ORIGIN = "https://chalkmeet.com";
-export const SOCIAL_IMAGE_URL = `${SITE_ORIGIN}/images/social/chalk-og-product-20260819.png`;
+
+// Vite exposes the build's public URL as `import.meta.env`; the docs prerender script runs under tsx, where only `process.env` has it.
+const appUrl = new URL((import.meta.env ?? process.env).VITE_PUBLIC_APP_URL || SITE_ORIGIN);
+
+/** Nightly builds keep canonical URLs on production but carry their own icons and share image. */
+export const IS_NIGHTLY = appUrl.hostname.startsWith("nightly.");
+export const BRAND_DIR = IS_NIGHTLY ? "/brand/chalk/nightly" : "/brand/chalk";
+export const FAVICON_ICO = IS_NIGHTLY ? `${BRAND_DIR}/favicon.ico` : "/favicon.ico";
+// Absolute, and on the deploy's own origin, so a nightly link never depends on production having shipped the file yet.
+export const SOCIAL_IMAGE_URL = `${appUrl.origin}/images/social/chalk-og${IS_NIGHTLY ? "-nightly" : ""}-20261024.png`;
 
 const SITE_NAME = "Chalk";
 
