@@ -1,6 +1,6 @@
 import unittest
 
-from watch_phases import ReleaseWatch
+from watch_phases import ReleaseWatch, confirmed_readiness_failures
 
 
 def snapshot(revision="old", api=200, sync=200):
@@ -18,6 +18,37 @@ def target():
 
 
 class ReleaseWatchTest(unittest.TestCase):
+    def test_single_vantage_connection_loss_never_counts(self):
+        sample = snapshot("new", api=None, sync=None)
+        events = [{"type":"public-status","network":"air","timestamp":150,"api":{"http":None},"sync":{"http":None}},
+                  {"type":"public-status","network":"instabox","timestamp":151,"api":{"http":200,"body":{"status":"ok"}},"sync":{"http":200,"body":{"status":"ready"}}}]
+        watch = ReleaseWatch(target())
+        self.assertFalse(watch.evaluate(sample, 152, ssm_started_at=0, stopped_at=1, events=events)["rollback"])
+        watch = ReleaseWatch(target())
+        watch.evaluate(snapshot("new"), 0, ssm_started_at=0, stopped_at=0)
+        for at in (30,60):
+            current = [{**event,"timestamp":at} for event in events]
+            self.assertFalse(watch.evaluate(sample, at, events=current)["rollback"])
+
+    def test_both_network_connection_failures_in_same_window_count(self):
+        watch = ReleaseWatch(target())
+        watch.evaluate(snapshot("new"),0,ssm_started_at=0,stopped_at=0)
+        for at in (30,60):
+            events=[{"type":"public-status","network":network,"timestamp":at,"sync":{"http":None}} for network in ("air","instabox")]
+            result=watch.evaluate(snapshot("new"),at,events=events)
+        self.assertTrue(result["rollback"])
+
+    def test_http_response_or_bad_body_counts_from_one_network(self):
+        for response in ({"http":503},{"http":200,"body":{"status":"not_ready"}}):
+            event={"type":"public-status","network":"air","timestamp":30,"sync":response}
+            self.assertTrue(confirmed_readiness_failures(snapshot("new"),30,[event])["sync"])
+            self.assertFalse(confirmed_readiness_failures(snapshot("new"),60,[event],since=30)["sync"])
+
+    def test_connection_failures_outside_same_window_do_not_count(self):
+        events=[{"type":"public-status","network":"air","timestamp":0,"sync":{"http":None}},
+                {"type":"public-status","network":"instabox","timestamp":31,"sync":{"http":None}}]
+        self.assertFalse(confirmed_readiness_failures(snapshot("new",sync=None),31,events)["sync"])
+
     def test_old_readiness_failure_holds_without_rollback(self):
         watch = ReleaseWatch(target())
         for at in (0, 30, 60):
