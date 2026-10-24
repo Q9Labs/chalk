@@ -37,6 +37,7 @@ func TestCaptureSlotDemandReplay(t *testing.T) {
 	// absorbs starts while the provider boots replacements; a burst beyond
 	// eight available slots cannot have an instantaneous physical guarantee.
 	for _, active := range []int{0, 1, 4, 8, 12, 9, 3, 0} {
+		settled := false
 		for range 100 {
 			f.now = f.now.Add(time.Second)
 			f.demand.value = Demand{Revision: fmt.Sprint(active), DesiredNodes: active, ObservedAt: f.now}
@@ -72,8 +73,12 @@ func TestCaptureSlotDemandReplay(t *testing.T) {
 				if len(f.provider.nodes) != (active+8+3)/4 {
 					t.Fatalf("active=%d nodes=%d", active, len(f.provider.nodes))
 				}
+				settled = true
 				break
 			}
+		}
+		if !settled {
+			t.Fatalf("active=%d did not settle", active)
 		}
 	}
 }
@@ -121,6 +126,7 @@ func TestScaleDownRequiresFreshZeroBeforeClosingAdmission(t *testing.T) {
 					f.config.MaxNodes = 1
 				}
 				observation := &f.runtime.observations[0]
+				observation.LeasesObservedAt = f.now
 				switch evidence {
 				case "positive":
 					observation.ActiveLeases = 1
@@ -153,7 +159,8 @@ func slotNodes(f *fleetFixture, count, capacity int) (Journal, map[string]Node, 
 		node := f.provider.nodeFor(f.ensureRequest(uint64(index+1)), id)
 		nodes[id] = node
 		identity := f.bootstrap.identity(node)
-		state.Nodes[id] = ManagedNode{ProviderID: id, Name: node.Name, BootGeneration: uint64(index + 1), Identity: &identity, Phase: PhaseReady}
+		identity.Role = f.config.Key.Role
+		state.Nodes[id] = ManagedNode{ProviderID: id, Name: node.Name, BootGeneration: uint64(index + 1), Identity: &identity, Phase: PhaseReady, LastReadyAt: &f.now}
 		observed[id] = NodeObservation{Identity: identity, Ready: true, AdmissionOpen: true, ReadyCapacity: capacity, ObservedAt: f.now, LeasesObservedAt: f.now}
 	}
 	return state, nodes, observed
@@ -168,6 +175,61 @@ func TestSlotConfigRejectsInvalidDensityFloorAndCap(t *testing.T) {
 		config.SlotsPerNode, config.FreeSlots, config.MaxNodes = tc.slots, tc.floor, tc.cap
 		if err := config.Validate(); (err == nil) != tc.valid {
 			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+}
+
+func TestDefaultFleetDecisionsMatchMasterScenarios(t *testing.T) {
+	for _, role := range []workeridentity.Role{workeridentity.RoleCapture, workeridentity.RoleRender} {
+		for _, tc := range []struct {
+			name          string
+			demand, nodes int
+			want          Action
+		}{
+			{"empty", 0, 0, ActionCapacityPublished},
+			{"cold start", 1, 0, ActionCreatePlanned},
+			{"prewarm", 2, 1, ActionCreatePlanned},
+			{"steady", 3, 3, ActionCapacityPublished},
+			{"scale down", 1, 2, ActionAdmissionClosed},
+			{"to zero", 0, 1, ActionAdmissionClosed},
+			{"cap", 20, 10, ActionCapacityPublished},
+		} {
+			t.Run(string(role)+"/"+tc.name, func(t *testing.T) {
+				f := newFleetFixture(t)
+				f.config.Key.Role, f.config.SlotsPerNode, f.config.MaxNodes = role, 1, 10
+				f.config.Release.Archive.Key = "recorder/" + string(role) + "/" + f.config.Release.Archive.SHA256 + ".tar.gz"
+				f.provider.config = f.config
+				state, nodes, observations := slotNodes(f, tc.nodes, 1)
+				state.NextBootGeneration = uint64(tc.nodes + 1)
+				f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+				for _, observation := range observations {
+					f.runtime.observations = append(f.runtime.observations, observation)
+				}
+				f.demand.value = Demand{Revision: tc.name, DesiredNodes: tc.demand, ObservedAt: f.now}
+				if result := f.step(t, f.reconciler(t)); result.Action != tc.want {
+					t.Fatalf("default decision=%s master=%s", result.Action, tc.want)
+				}
+			})
+		}
+	}
+}
+
+func TestPendingBootstrapDoesNotBlockSibling(t *testing.T) {
+	f := newFleetFixture(t)
+	f.config.SlotsPerNode = 1
+	f.provider.config = f.config
+	f.demand.value.DesiredNodes = 2
+	f.bootstrap.ensureErr = ErrBootstrapPending
+	r := f.reconciler(t)
+	for range 8 {
+		f.step(t, r)
+	}
+	if len(f.provider.nodes) != 2 {
+		t.Fatalf("pending certificate blocked sibling create: %d nodes", len(f.provider.nodes))
+	}
+	for _, node := range f.journal.state.Nodes {
+		if node.PendingBootstrap == nil {
+			t.Fatal("sibling was never registered")
 		}
 	}
 }

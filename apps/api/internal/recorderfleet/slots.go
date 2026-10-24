@@ -1,6 +1,7 @@
 package recorderfleet
 
 import (
+	"slices"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -10,20 +11,35 @@ func (r *Reconciler) targetNodes(demand Demand, state Journal, nodes map[string]
 	if r.config.Key.Role != workeridentity.RoleCapture {
 		return min(demand.DesiredNodes, r.config.MaxNodes)
 	}
-	// v1 demand is measured in one-slot workers. Keep that wire contract so an
-	// old controller still asks for at least as much capacity as before.
-	slots := int64(demand.DesiredNodes) + int64(r.config.FreeSlots)
+	// v1 demand remains in one-slot workers for old controllers and APIs.
+	remaining := uint64(demand.DesiredNodes) + uint64(r.config.FreeSlots)
 	current, _ := r.partitionNodes(nodes, state, observed, now)
+	capacities := make([]int, 0, len(current))
 	for _, managed := range current {
-		// Only a fresh worker heartbeat proves additional slots. In particular,
-		// the controller's config cannot turn an old one-slot worker into N slots.
-		capacity := 1
-		if observation := observed[managed.ProviderID]; observation.Ready && !observation.ObservedAt.IsZero() {
-			capacity = max(1, observation.ReadyCapacity)
-		}
-		slots += int64(r.config.SlotsPerNode - capacity)
+		capacities = append(capacities, workerSlots(observed[managed.ProviderID]))
 	}
-	return int(min((slots+int64(r.config.SlotsPerNode)-1)/int64(r.config.SlotsPerNode), int64(r.config.MaxNodes)))
+	slices.SortFunc(capacities, func(a, b int) int { return b - a })
+	needed := uint64(0)
+	for _, capacity := range capacities {
+		if remaining <= 0 {
+			break
+		}
+		remaining -= min(remaining, uint64(capacity))
+		needed++
+	}
+	if remaining > 0 {
+		needed += (remaining-1)/uint64(r.config.SlotsPerNode) + 1
+	}
+	return int(min(needed, uint64(r.config.MaxNodes)))
+}
+
+func workerSlots(observation NodeObservation) int {
+	// Readiness reports total process capacity, not currently idle slots. Unknown
+	// or stale workers count as one, never as the controller's configured density.
+	if observation.Ready && !observation.ObservedAt.IsZero() {
+		return max(1, observation.ReadyCapacity)
+	}
+	return 1
 }
 
 func drainable(managed ManagedNode, observation NodeObservation, now time.Time, maxAge time.Duration) bool {

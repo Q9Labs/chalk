@@ -256,7 +256,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	}
 	providerConfig := digitalocean.RecorderFleetConfig{
 		Token: trim(raw.digitalOceanToken), BaseURL: trim(raw.digitalOceanURL), Environment: key.Environment,
-		Role: key.Role, OwnerTag: fleetConfig.OwnerTag, ProjectID: trim(raw.projectID),
+		Role: key.Role, SlotsPerNode: slotsPerNode, OwnerTag: fleetConfig.OwnerTag, ProjectID: trim(raw.projectID),
 		VPCUUID: trim(raw.vpcUUID), GPU: fleetConfig.Release.GPU, SSHKeyIDs: sshKeyIDs,
 	}
 	return commandConfig{

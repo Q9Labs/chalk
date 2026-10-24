@@ -64,7 +64,7 @@ func TestDiagnosticTagCannotHideManagedNode(t *testing.T) {
 	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
 	fixture.provider.nodes[node.ProviderID] = node
 	result := fixture.step(t, reconciler)
-	if result.Action != ActionBootstrapEnsured || fixture.bootstrap.ensureCalls != 1 {
+	if result.Action != ActionNone || fixture.bootstrap.ensureCalls != 1 {
 		t.Fatalf("managed node escaped lifecycle: result=%+v events=%v", result, fixture.events)
 	}
 }

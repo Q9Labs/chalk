@@ -25,7 +25,7 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 		t.Fatalf("ensure action/calls = %q/%d", result.Action, fixture.provider.ensureCalls)
 	}
 	result = fixture.step(t, reconciler)
-	if result.Action != ActionBootstrapEnsured || fixture.bootstrap.ensureCalls != 1 {
+	if result.Action != ActionNone || fixture.bootstrap.ensureCalls != 1 {
 		t.Fatalf("bootstrap action/calls = %q/%d", result.Action, fixture.bootstrap.ensureCalls)
 	}
 	if fixture.bootstrap.lastRequest.InventoryDigest == "" {
@@ -34,7 +34,7 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	node := fixture.provider.onlyNode(t)
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionNodeReady || !result.Projection.AdmissionOpen || result.Projection.ReadyCapacity != fixture.config.SlotsPerNode {
@@ -55,8 +55,11 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	}
 
 	fixture.runtime.observations[0].ActiveLeases = 0
-	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
-	fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(time.Nanosecond)
+	fixture.now = fixture.now.Add(time.Nanosecond)
+	fixture.config.Now = func() time.Time { return fixture.now }
+	reconciler = fixture.reconciler(t)
+	fixture.runtime.observations[0].ObservedAt = fixture.now
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
 		t.Fatalf("revoke result = %+v, calls %d", result, fixture.bootstrap.revokeCalls)
@@ -84,7 +87,7 @@ func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
 		fixture.step(t, reconciler)
 	}
 	node := fixture.provider.onlyNode(t)
-	fixture.runtime.observations = []NodeObservation{{Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true, ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now}}
+	fixture.runtime.observations = []NodeObservation{{Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true, ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}}
 	fixture.step(t, reconciler)
 	// Preparation demand becomes Recording demand, but the fleet target stays one.
 	fixture.demand.value = Demand{Revision: "recording-consumed-preparation", DesiredNodes: 1, ObservedAt: fixture.now}
@@ -96,8 +99,11 @@ func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
 	if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
 		t.Fatalf("expiry did not drain: %+v", result)
 	}
-	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
-	fixture.runtime.observations[0].LeasesObservedAt = fixture.now.Add(time.Nanosecond)
+	fixture.now = fixture.now.Add(time.Nanosecond)
+	fixture.config.Now = func() time.Time { return fixture.now }
+	reconciler = fixture.reconciler(t)
+	fixture.runtime.observations[0].ObservedAt = fixture.now
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now
 	fixture.runtime.observations[0].AdmissionOpen = false
 	fixture.runtime.observations[0].Ready = false
 	if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
@@ -231,7 +237,7 @@ func TestReconcilerFailsClosedOnRoleMismatch(t *testing.T) {
 	wrongIdentity.Role = workeridentity.RoleRender
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: wrongIdentity, Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 
 	result, err := reconciler.Reconcile(context.Background())
@@ -257,7 +263,7 @@ func TestReconcilerRejectsWorkerIdentityReplacementOnSameNode(t *testing.T) {
 	replacedIdentity.WorkerID = "66666666-6666-4666-8666-666666666666"
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: replacedIdentity, Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 
 	result, err := reconciler.Reconcile(context.Background())
@@ -285,6 +291,8 @@ func TestReconcilerQuarantinesForeignNodeWithoutMutation(t *testing.T) {
 
 func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 	fixture := newFleetFixture(t)
+	fixture.config.SlotsPerNode = 1
+	fixture.provider.config = fixture.config
 	fixture.config.MaxNodes = 1
 	fixture.demand.value.DesiredNodes = 2
 	fixture.demand.value.ScheduledPrewarms = 2
@@ -297,7 +305,7 @@ func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 	if result := fixture.step(t, reconciler); result.Action != ActionNodeEnsured {
 		t.Fatalf("cold over-cap ensure = %+v", result)
 	}
-	if result := fixture.step(t, reconciler); result.Action != ActionBootstrapEnsured {
+	if result := fixture.step(t, reconciler); result.Action != ActionNone {
 		t.Fatalf("cold over-cap bootstrap = %+v", result)
 	}
 	fixture.step(t, reconciler)
@@ -311,6 +319,8 @@ func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 
 func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
 	fixture := newFleetFixture(t)
+	fixture.config.SlotsPerNode = 1
+	fixture.provider.config = fixture.config
 	fixture.config.MaxNodes = 2
 	reconciler := fixture.reconciler(t)
 	fixture.step(t, reconciler)
@@ -319,7 +329,7 @@ func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
 	node := fixture.provider.onlyNode(t)
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 	fixture.step(t, reconciler)
 
@@ -334,7 +344,7 @@ func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
 	if result = fixture.step(t, reconciler); result.Action != ActionNodeEnsured {
 		t.Fatalf("warm over-cap ensure = %+v", result)
 	}
-	if result = fixture.step(t, reconciler); result.Action != ActionBootstrapEnsured {
+	if result = fixture.step(t, reconciler); result.Action != ActionCapacityPublished {
 		t.Fatalf("warm over-cap bootstrap = %+v", result)
 	}
 	fixture.step(t, reconciler)
@@ -514,7 +524,7 @@ func TestReconcilerScaleDownPrefersObservedIdleNode(t *testing.T) {
 				managed := ManagedNode{ProviderID: id, Name: node.Name, Phase: PhaseReady,
 					BootGeneration: node.BootGeneration, Identity: &identity, LastReadyAt: &fixture.now}
 				observation := NodeObservation{Identity: identity, Ready: true, AdmissionOpen: true,
-					ReadyCapacity: 1, ObservedAt: fixture.now}
+					ReadyCapacity: 1, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}
 				if index == 1 {
 					// A worker can claim before the controller records readiness.
 					managed.Phase, managed.LastReadyAt = PhaseBootstrapping, nil
@@ -587,7 +597,7 @@ func TestReconcilerPersistsBootstrapDiagnosticUntilNeverReadyNodeRevocation(t *t
 		t.Fatalf("adoption result = %+v", result)
 	}
 	result, err := reconciler.Reconcile(context.Background())
-	if !errors.Is(err, ErrBootstrapPending) || result.BootstrapDiagnostic == nil || *result.BootstrapDiagnostic != diagnostic {
+	if err != nil {
 		t.Fatalf("pending result/error = %+v/%v", result, err)
 	}
 	if stored := fixture.journal.state.Nodes[node.ProviderID].BootstrapDiagnostic; stored == nil || *stored != diagnostic {

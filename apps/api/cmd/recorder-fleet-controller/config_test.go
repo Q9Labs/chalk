@@ -193,3 +193,22 @@ func TestNightlyExamplesLoadActualControllerConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureFreeSlotConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		floor, slots, cap string
+		valid             bool
+	}{{"8", "4", "3", true}, {"8", "4", "1", false}, {"-1", "4", "3", false}, {"8", "0", "3", false}, {"8", "4", "30", true}} {
+		environment := validCommandEnvironment()
+		environment["CHALK_RECORDER_FLEET_FREE_SLOTS"] = tc.floor
+		environment["CHALK_RECORDER_FLEET_SLOTS_PER_NODE"] = tc.slots
+		environment["CHALK_RECORDER_FLEET_MAX_NODES"] = tc.cap
+		config, err := loadCommandConfig(nil, func(key string) string { return environment[key] })
+		if (err == nil) != tc.valid {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+		if tc.valid && config.Provider.SlotsPerNode != config.Fleet.SlotsPerNode {
+			t.Fatal("worker bootstrap density differs from controller")
+		}
+	}
+}
