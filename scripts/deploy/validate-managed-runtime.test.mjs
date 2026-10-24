@@ -90,7 +90,9 @@ test("the real runtime validator accepts rendered entry-ownership migration unit
     const manifestPath = join(directory, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     const validate = (rendered) =>
-      spawnSync("bash", [new URL("scripts/validate-runtime", managedRoot).pathname, "--env-root", directory, "--secret-root", join(directory, "secrets"), "--manifest", manifestPath, "--sync-proof", join(directory, "proof.json"), "--excluded-secrets", excluded, "--rendered-root", rendered], { encoding: "utf8" });
+      spawnSync("bash", [new URL("scripts/validate-runtime", managedRoot).pathname, "--env-root", directory, "--secret-root", join(directory, "secrets"), "--manifest", manifestPath, "--sync-proof", join(directory, "proof.json"), "--excluded-secrets", excluded, "--rendered-root", rendered], {
+        encoding: "utf8",
+      });
     for (const [name, protocol] of [
       ["expanded", { sync: 1, entry_writer: 1, entry_migrator: 1 }],
       ["enforced", { sync: 1, entry_writer: 1, entry_migrator: 1, entry_enforcement: true }],
