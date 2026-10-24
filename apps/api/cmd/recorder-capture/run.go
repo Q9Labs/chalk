@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,12 +22,16 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 )
 
-func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serverCA, serverName, keyFrameInterval string) error {
+func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serverCA, serverName, keyFrameInterval, captureSlots string) error {
 	if strings.TrimSpace(environment) == "" {
 		return errors.New("--environment or CHALK_RECORDER_ENVIRONMENT is required")
 	}
 	if strings.TrimSpace(controlPlaneURL) == "" {
 		return errors.New("--control-plane-url or CHALK_RECORDER_CONTROL_PLANE_URL is required")
+	}
+	slots, err := parseCaptureSlots(captureSlots)
+	if err != nil {
+		return err
 	}
 	interval, err := parseKeyFrameInterval(keyFrameInterval)
 	if err != nil {
@@ -58,7 +63,7 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	if err != nil {
 		return fmt.Errorf("create recorder capture factory: %w", err)
 	}
-	daemon, err := recorderworker.NewCaptureDaemon(control, factory, recorderworker.CaptureDaemonConfig{})
+	daemon, err := recorderworker.NewCaptureDaemon(control, factory, recorderworker.CaptureDaemonConfig{Slots: slots})
 	if err != nil {
 		return fmt.Errorf("create recorder capture daemon: %w", err)
 	}
@@ -226,4 +231,15 @@ func parseKeyFrameInterval(value string) (time.Duration, error) {
 		return 0, fmt.Errorf("--keyframe-interval or CHALK_RECORDER_KEYFRAME_INTERVAL must be 0 or a duration from 2s to 10m, got %q", value)
 	}
 	return interval, nil
+}
+
+func parseCaptureSlots(value string) (int, error) {
+	if value == "" {
+		return 1, nil
+	}
+	slots, err := strconv.Atoi(value)
+	if err != nil || slots < 1 {
+		return 0, errors.New("--slots or CHALK_RECORDER_CAPTURE_SLOTS must be a positive integer")
+	}
+	return slots, nil
 }

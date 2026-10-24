@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -450,4 +451,37 @@ type readinessRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (function readinessRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return function(request)
+}
+
+func TestControlPlaneClientReportsConfiguredCapacity(t *testing.T) {
+	for _, capacity := range []int{0, -1, 1, 4, 8, 12} {
+		t.Run(fmt.Sprint(capacity), func(t *testing.T) {
+			requests := 0
+			client, err := NewControlPlaneClient("https://control.example", &http.Client{Transport: readinessRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+				requests++
+				defer request.Body.Close()
+				var body readinessRequest
+				if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				if body.ReadyCapacity != capacity {
+					t.Fatalf("sent capacity %d, want %d", body.ReadyCapacity, capacity)
+				}
+				return readinessHTTPResponse(http.StatusOK, fmt.Sprintf(`{"role":"capture","admission_open":true,"ready_capacity":%d,"reason":"worker_ready","observed_at":"2026-09-06T20:00:00Z","updated_at":"2026-09-06T20:00:00Z"}`, capacity)), nil
+			})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			receipt, err := client.ReportReadiness(t.Context(), WorkerReadiness{AdmissionOpen: true, ReadyCapacity: capacity, Reason: ReadinessReasonReady})
+			if capacity <= 0 {
+				if !errors.Is(err, ErrInvalidWorkerReadiness) || requests != 0 {
+					t.Fatalf("invalid capacity: requests=%d err=%v", requests, err)
+				}
+				return
+			}
+			if err != nil || receipt.ReadyCapacity != capacity || requests != 1 {
+				t.Fatalf("receipt=%+v requests=%d err=%v", receipt, requests, err)
+			}
+		})
+	}
 }

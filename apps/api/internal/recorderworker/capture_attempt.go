@@ -494,7 +494,10 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	writer := newCaptureBundleWriter(a)
 	if !a.authority.HardDeadline.IsZero() {
 		deadline := a.config.After(a.authority.HardDeadline.Sub(a.config.Now().UTC()))
+		deadlineDone := make(chan struct{})
+		defer func() { cancel(nil); <-deadlineDone }()
 		go func() {
+			defer close(deadlineDone)
 			select {
 			case <-deadline:
 				cancel(recordercapture.ErrDeadlineExpired)
@@ -516,7 +519,20 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		}
 		writer.setOrigin(readyAt)
 	}
-	go a.planLoop(runCtx, planEvents)
+	planDone := make(chan struct{})
+	go func() {
+		defer close(planDone)
+		defer func() {
+			if recover() != nil {
+				sendCapturePlanEvent(runCtx, planEvents, capturePlanEvent{err: capturePanicError()})
+			}
+		}()
+		a.planLoop(runCtx, planEvents)
+	}()
+	defer func() {
+		cancel(nil)
+		<-planDone
+	}()
 	if len(snapshot.Tracks) > 0 {
 		var stopped bool
 		readers, plan, stopped, err = a.bindTracksWhileWatchingPlans(runCtx, writer, plan, snapshot, planEvents, nil, nil)
@@ -724,8 +740,14 @@ bindPlan:
 		result := make(chan captureTrackBindResult, 1)
 		expected := append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
 		go func() {
-			tracks, err := a.bindTracks(bindCtx, expected)
-			result <- captureTrackBindResult{tracks: tracks, err: err}
+			var bound captureTrackBindResult
+			defer func() {
+				if recover() != nil {
+					bound.err = capturePanicError()
+				}
+				result <- bound
+			}()
+			bound.tracks, bound.err = a.bindTracks(bindCtx, expected)
 		}()
 
 		for {
@@ -1133,6 +1155,11 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 	go func() {
 		defer close(done)
 		defer cancel()
+		defer func() {
+			if recover() != nil {
+				sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, err: capturePanicError()})
+			}
+		}()
 		lossFeedback := captureVideoLossFeedback{interval: keyFrameInterval}
 		var packetWindow capturePacketWindow
 		var replayWindow captureVideoReplayWindow
