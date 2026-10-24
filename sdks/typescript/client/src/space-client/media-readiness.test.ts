@@ -192,6 +192,39 @@ describe("media readiness", () => {
       client.dispose();
     }
   });
+  it.each(["camera", "microphone"] as const)("waits if recovery starts while preparing the first %s publication", async (source) => {
+    const fixture = createConvergenceScenario(source, {
+      media: {
+        prepareLocalTrack: () => {
+          fixture.platform.emitSync({ ...fixture.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+        },
+      },
+    });
+    const { client, platform, command, setEnabled } = fixture;
+    let settled = false;
+    try {
+      await client.join({ microphone: false, camera: false });
+      const result = setEnabled(true).then(
+        () => {
+          settled = true;
+          return "enabled";
+        },
+        (cause: unknown) => {
+          settled = true;
+          return cause;
+        },
+      );
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(command).not.toHaveBeenCalled();
+      expect(settled).toBe(false);
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+      expect(await result).toBe("enabled");
+      expect(command).toHaveBeenCalledExactlyOnceWith(true);
+    } finally {
+      client.dispose();
+    }
+  });
   it.each(["camera", "microphone"] as const)("keeps the first %s toggle pending until joining finishes", async (source) => {
     let finishStart = () => {};
     const starting = new Promise<void>((resolve) => {

@@ -599,7 +599,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return this.#serialize("microphone", this.#serialize("camera", publish));
   }
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
-    return this.#mediaAction(
+    const command = this.#mediaAction(
       enabled,
       foreign(async () => {
         // Revision check and transport invocation are one synchronous turn, owned by the source worker.
@@ -613,6 +613,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"), catch: (cause) => cause })),
       ),
     );
+    return enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports).pipe(Effect.andThen(command)) : command;
   }
   #reconcileIntents(): void {
     const live = this.#connection.getSnapshot().state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live";
