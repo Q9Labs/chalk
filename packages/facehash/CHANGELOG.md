@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.0
+
+- Advance to 5.2.0 with the coordinated Chalk SDK release.
+
 ## 5.1.0
 
 - Align the package version with the coordinated 5.1.0 SDK release. No API changes.
