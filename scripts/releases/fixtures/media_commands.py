@@ -50,8 +50,8 @@ def check_configuration(directory):
     if (directory / 'main.tf.json').exists():
         tree = json.loads((directory / 'main.tf.json').read_text())
         backend = tree['terraform']['backend']['s3']
-        if (backend['bucket'], backend['key'], backend['region']) != (config['dispatcher']['state_bucket'], config['dispatcher']['state_key'], 'example'):
-            raise SystemExit('backend does not point at the dispatcher state')
+        if backend != {'bucket': config['dispatcher']['state_bucket'], 'key': config['dispatcher']['state_key'], 'region': 'example', 'encrypt': True, 'use_lockfile': True}:
+            raise SystemExit('backend is not the encrypted, locked dispatcher state')
         if tree['provider'] != {'aws': {'region': 'example'}}:
             raise SystemExit('unexpected provider configuration')
         inputs = tree['module']['dispatcher']
