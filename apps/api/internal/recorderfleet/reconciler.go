@@ -46,7 +46,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 	var demand Demand
-	if waiter, ok := r.demand.(waitingDemandSource); ok && r.config.Key.Role == workeridentity.RoleCapture && len(state.Nodes) == 0 && state.PendingCreate == nil {
+	if waiter, ok := r.demand.(waitingDemandSource); ok && r.config.Key.Role == workeridentity.RoleCapture && r.config.FreeSlots == 0 && len(state.Nodes) == 0 && state.PendingCreate == nil {
 		demand, err = waiter.WaitForDemand(ctx, r.config.Key)
 	} else {
 		demand, err = r.demand.GetDemand(ctx, r.config.Key)
@@ -61,7 +61,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if demand.ObservedAt.After(now.Add(time.Second)) || now.Sub(demand.ObservedAt) > r.config.DemandMaxAge {
 		return r.failClosed(ctx, state, demand.Revision, now, ErrDemandStale)
 	}
-	targetNodes := min(demand.DesiredNodes, r.config.MaxNodes)
 
 	inventory, err := r.provider.ListNodes(ctx, r.config.Key)
 	if err != nil {
@@ -113,6 +112,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	if err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
 	}
+	targetNodes := r.targetNodes(demand, state, nodes, observed, now)
 	state, result, handled, err = r.advanceReadiness(ctx, state, nodes, observed, targetNodes, now)
 	if err != nil || handled {
 		result.Quarantined = quarantined
@@ -135,7 +135,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
 	}
 
-	candidate := r.drainCandidate(current, stale, targetNodes, observed)
+	candidate := r.drainCandidate(current, stale, targetNodes, observed, now)
 	if candidate != nil {
 		state, result, err = r.advanceDrain(ctx, state, *candidate, nodes[candidate.ProviderID], observed[candidate.ProviderID], now)
 		result.Quarantined = quarantined
@@ -264,6 +264,11 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 		state.Nodes[node.ProviderID] = ManagedNode{ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseAwaitingBootstrap, BootGeneration: node.BootGeneration}
 		state.PendingCreate = nil
 		state, err = r.save(ctx, state)
+		if err != nil {
+			return state, Result{}, true, err
+		}
+		nodes[node.ProviderID] = node
+		state, _, _, err = r.advanceReadiness(ctx, state, map[string]Node{node.ProviderID: node}, nil, 1, now)
 		return state, Result{Action: ActionNodeEnsured, ProviderNodeID: node.ProviderID}, true, err
 	}
 
@@ -394,7 +399,16 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		managed := state.Nodes[providerID]
 		node := nodes[providerID]
 		_, required := needed[providerID]
-		if managed.Phase == PhaseAwaitingBootstrap && required && node.Status == "active" && now.Sub(node.CreatedAt) <= r.config.StartupTimeout {
+		if observation, ok := observed[providerID]; ok && managed.Identity == nil && managed.PendingBootstrap != nil {
+			identity := observation.Identity
+			managed.Identity, managed.PendingBootstrap = &identity, nil
+			managed.Phase = PhaseBootstrapping
+			state.Nodes[providerID] = managed
+			var err error
+			state, err = r.save(ctx, state)
+			return state, Result{Action: ActionBootstrapEnsured, ProviderNodeID: providerID}, true, err
+		}
+		if managed.Phase == PhaseAwaitingBootstrap && required && (managed.PendingBootstrap == nil || node.Status == "active") && now.Sub(node.CreatedAt) <= r.config.StartupTimeout {
 			if managed.PendingBootstrap == nil {
 				request := BootstrapRequest{
 					Key: r.config.Key, ProviderID: node.ProviderID, NodeName: node.Name, Region: node.Region,
@@ -411,6 +425,9 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 			}
 			request := *managed.PendingBootstrap
 			identity, err := r.bootstrap.EnsureBootstrap(ctx, request)
+			if errors.Is(err, ErrInventoryNotReady) {
+				continue
+			}
 			if err != nil {
 				if diagnostic, ok := BootstrapDiagnosticFromError(err); ok || errors.Is(err, ErrBootstrapPending) {
 					if !ok {
@@ -430,7 +447,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 					if saveErr != nil {
 						return state, result, true, errors.Join(err, saveErr)
 					}
-					return state, result, true, err
+					continue
 				}
 				return state, Result{}, true, fmt.Errorf("ensure recorder node bootstrap: %w", err)
 			}
@@ -481,7 +498,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 
 func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed ManagedNode, node Node, observation NodeObservation, now time.Time) (Journal, Result, error) {
 	draining := managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting
-	if observation.ActiveLeases > 0 && (draining || managed.Identity == nil) {
+	if observation.ActiveLeases > 0 {
 		return state, Result{Action: ActionDrainWaiting, ProviderNodeID: node.ProviderID}, nil
 	}
 	registeredDrain := managed.Identity != nil && draining
@@ -591,7 +608,7 @@ func (r *Reconciler) failClosed(ctx context.Context, state Journal, demandRevisi
 
 func (r *Reconciler) projection(state Journal, nodes map[string]Node, observed map[string]NodeObservation, demand Demand, now time.Time) PoolProjection {
 	projection := PoolProjection{Key: r.config.Key, DemandRevision: demand.Revision, ObservedAt: now}
-	if demand.DesiredNodes == 0 {
+	if demand.DesiredNodes == 0 && r.config.FreeSlots == 0 {
 		projection.Reason = "no_demand"
 		return projection
 	}
@@ -639,9 +656,11 @@ func readyObservationExpired(managed ManagedNode, observation NodeObservation, n
 	return managed.Phase == PhaseReady && observation.ObservedAt.IsZero() && managed.LastReadyAt != nil && now.Sub(*managed.LastReadyAt) > maxAge
 }
 
-func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, observed map[string]NodeObservation) *ManagedNode {
-	if len(stale) > 0 {
-		return &stale[0]
+func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, observed map[string]NodeObservation, now time.Time) *ManagedNode {
+	for _, candidate := range stale {
+		if drainable(candidate, observed[candidate.ProviderID], now, r.config.ObservationMaxAge) {
+			return &candidate
+		}
 	}
 	if len(current) <= desired {
 		return nil
@@ -649,8 +668,8 @@ func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, o
 	slices.SortFunc(current, func(left, right ManagedNode) int {
 		leftObservation, leftObserved := observed[left.ProviderID]
 		rightObservation, rightObserved := observed[right.ProviderID]
-		leftIdle := leftObserved && leftObservation.ActiveLeases == 0
-		rightIdle := rightObserved && rightObservation.ActiveLeases == 0
+		leftIdle := leftObserved && drainable(left, leftObservation, now, r.config.ObservationMaxAge)
+		rightIdle := rightObserved && drainable(right, rightObservation, now, r.config.ObservationMaxAge)
 		if leftIdle != rightIdle {
 			if leftIdle {
 				return -1
@@ -666,7 +685,7 @@ func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, o
 		return 0
 	})
 	candidate := current[0]
-	if observation, ok := observed[candidate.ProviderID]; candidate.Identity != nil && (!ok || observation.ActiveLeases > 0) {
+	if observation, ok := observed[candidate.ProviderID]; candidate.Identity != nil && (!ok || !drainable(candidate, observation, now, r.config.ObservationMaxAge)) {
 		return nil
 	}
 	return &candidate

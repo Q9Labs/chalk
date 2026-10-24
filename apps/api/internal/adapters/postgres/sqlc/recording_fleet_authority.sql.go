@@ -31,7 +31,8 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.image_digest = excluded.image_digest
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
-  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+  -- An issued identity must use close-admission, a later lease read, and revoke.
+  and recording_fleet_nodes.state in ('requested', 'revoked')
 returning provider_id
 `
 

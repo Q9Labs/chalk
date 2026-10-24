@@ -80,8 +80,8 @@ resource "terraform_data" "runtime_capacity_contract" {
     }
 
     precondition {
-      condition     = var.max_nodes == 10
-      error_message = "capture runtime capacity contract must retain the ten-node maximum."
+      condition     = var.max_nodes >= 1 && floor(var.max_nodes) == var.max_nodes
+      error_message = "capture runtime capacity contract needs a positive integer cap."
     }
   }
 }

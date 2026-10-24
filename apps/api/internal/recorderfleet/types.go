@@ -168,6 +168,7 @@ type Config struct {
 	OwnerTag          string
 	MaxNodes          int
 	SlotsPerNode      int
+	FreeSlots         int
 	DemandMaxAge      time.Duration
 	ObservationMaxAge time.Duration
 	StartupTimeout    time.Duration
@@ -181,10 +182,10 @@ func (c Config) Validate() error {
 	if err := c.Key.Validate(); err != nil {
 		return err
 	}
-	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.MaxNodes > 21 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
+	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.FreeSlots < 0 || (int64(c.FreeSlots)+int64(c.SlotsPerNode)-1)/int64(c.SlotsPerNode) > int64(c.MaxNodes) || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
 		return ErrInvalidConfig
 	}
-	if c.Key.Role == workeridentity.RoleCapture && c.MaxNodes > 11 || c.Key.Role == workeridentity.RoleRender && c.MaxNodes > 10 {
+	if c.Key.Role == workeridentity.RoleRender && (c.MaxNodes > 10 || c.FreeSlots != 0) {
 		return ErrInvalidConfig
 	}
 	if c.Release.Archive.Key != "recorder/"+string(c.Key.Role)+"/"+c.Release.Archive.SHA256+".tar.gz" {
@@ -260,7 +261,7 @@ func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity 
 }
 
 func (observation NodeObservation) leasesFresh(now time.Time, maxAge time.Duration) bool {
-	return !observation.LeasesObservedAt.IsZero() && !observation.LeasesObservedAt.After(now.Add(time.Second)) && now.Sub(observation.LeasesObservedAt) <= maxAge
+	return !observation.LeasesObservedAt.IsZero() && !observation.LeasesObservedAt.After(now) && now.Sub(observation.LeasesObservedAt) <= maxAge
 }
 
 type PoolProjection struct {
