@@ -33,6 +33,7 @@ type publicInviteQuerier interface {
 	GetSpacePublicArrivalForCredential(context.Context, sqlc.GetSpacePublicArrivalForCredentialParams) (sqlc.SpacePublicArrival, error)
 	GetSpacePublicInvite(context.Context, sqlc.GetSpacePublicInviteParams) (sqlc.SpacePublicInvite, error)
 	GetSpacePublicInviteByHandle(context.Context, []byte) (sqlc.SpacePublicInvite, error)
+	GetSpacePublicInviteByCode(context.Context, string) (sqlc.SpacePublicInvite, error)
 	ListDueAutoSpaceLifecycles(context.Context, sqlc.ListDueAutoSpaceLifecyclesParams) ([]sqlc.AutoSpaceLifecycle, error)
 	ListPendingSpacePublicAdmissionRequests(context.Context, sqlc.ListPendingSpacePublicAdmissionRequestsParams) ([]sqlc.ListPendingSpacePublicAdmissionRequestsRow, error)
 	LockSpacePublicAdmissionRequest(context.Context, sqlc.LockSpacePublicAdmissionRequestParams) (sqlc.SpacePublicAdmissionRequest, error)
@@ -115,6 +116,9 @@ func (r PublicInviteRepository) CreateOrGetInvite(ctx context.Context, invite pu
 			result = mapPublicInvite(row)
 			return nil
 		}
+		if uniqueConstraintViolation(err, "space_public_invites_invite_code_idx") {
+			return publicinvites.ErrInviteCodeTaken
+		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("create public invite: %w", err)
 		}
@@ -153,6 +157,17 @@ func (r PublicInviteRepository) GetInviteByHandle(ctx context.Context, handle []
 	}
 	if err != nil {
 		return publicinvites.Invite{}, fmt.Errorf("get public invite by handle: %w", err)
+	}
+	return mapPublicInvite(row), nil
+}
+
+func (r PublicInviteRepository) GetInviteByCode(ctx context.Context, code string) (publicinvites.Invite, error) {
+	row, err := r.queries.GetSpacePublicInviteByCode(ctx, code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return publicinvites.Invite{}, publicinvites.ErrInviteNotFound
+	}
+	if err != nil {
+		return publicinvites.Invite{}, fmt.Errorf("get public invite by code: %w", err)
 	}
 	return mapPublicInvite(row), nil
 }
@@ -199,6 +214,9 @@ func (r PublicInviteRepository) RotateInvite(ctx context.Context, tenantID, spac
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return publicinvites.ErrInviteNotFound
+		}
+		if uniqueConstraintViolation(err, "space_public_invites_invite_code_idx") {
+			return publicinvites.ErrInviteCodeTaken
 		}
 		if err != nil {
 			return fmt.Errorf("rotate public invite: %w", err)

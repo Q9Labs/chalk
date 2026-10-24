@@ -34,7 +34,15 @@ type linkPort struct {
 	origin string
 }
 
-func (l linkPort) SpaceInviteURL(slug, token string) (string, error) {
+func (l linkPort) InviteURL(code string) (string, error) {
+	canonical, ok := publicinvites.ParseInviteCode(code)
+	if !ok {
+		return "", ErrInvalidLink
+	}
+	return l.origin + "/" + publicinvites.FormatInviteCode(canonical), nil
+}
+
+func (l linkPort) LegacyInviteURL(slug, token string) (string, error) {
 	if slug == "" || token == "" {
 		return "", ErrInvalidLink
 	}

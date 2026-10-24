@@ -209,11 +209,9 @@ func TestSpacePublicInviteAcceptsEverySpaceName(t *testing.T) {
 			if err != nil {
 				t.Fatalf("invite URL %q does not parse: %v", invite.CanonicalURL, err)
 			}
-			if link.Scheme+"://"+link.Host != spaceInviteTestOrigin || link.Path != "/space/"+created.Slug {
-				t.Fatalf("invite URL = %q, want %s/space/%s", invite.CanonicalURL, spaceInviteTestOrigin, created.Slug)
-			}
-			if !strings.HasPrefix(link.Fragment, "spaceInviteToken=cspi1.") {
-				t.Fatalf("invite URL fragment = %q, want a cspi1 token", link.Fragment)
+			code, ok := publicinvites.ParseInviteCode(strings.TrimPrefix(link.Path, "/"))
+			if link.Scheme+"://"+link.Host != spaceInviteTestOrigin || !ok || link.Path != "/"+publicinvites.FormatInviteCode(code) || link.Fragment != "" {
+				t.Fatalf("invite URL = %q, want a canonical short invite URL on %s", invite.CanonicalURL, spaceInviteTestOrigin)
 			}
 			for _, character := range invite.CanonicalURL {
 				if character > 0x7e {

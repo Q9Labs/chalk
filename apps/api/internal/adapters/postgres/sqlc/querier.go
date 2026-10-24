@@ -185,6 +185,7 @@ type Querier interface {
 	GetSpacePublicArrivalByIdempotency(ctx context.Context, arg GetSpacePublicArrivalByIdempotencyParams) (SpacePublicArrival, error)
 	GetSpacePublicArrivalForCredential(ctx context.Context, arg GetSpacePublicArrivalForCredentialParams) (SpacePublicArrival, error)
 	GetSpacePublicInvite(ctx context.Context, arg GetSpacePublicInviteParams) (SpacePublicInvite, error)
+	GetSpacePublicInviteByCode(ctx context.Context, inviteCode string) (SpacePublicInvite, error)
 	GetSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubjectParams) (GetSyncTokenSubjectRow, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)

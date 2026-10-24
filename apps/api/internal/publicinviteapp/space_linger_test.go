@@ -103,6 +103,8 @@ type publicCallFixture struct {
 	publicinvites.Access
 	publicinvites.Accounts
 	participant publicinvites.Arrival
+	shortCalls  int
+	legacyCalls int
 }
 
 func (*publicCallFixture) CreateOrGetInvite(_ context.Context, invite publicinvites.Invite) (publicinvites.Invite, error) {
@@ -132,14 +134,65 @@ func (*publicCallFixture) CreateAutoLifecycle(_ context.Context, lifecycle publi
 	return lifecycle, nil
 }
 
-func (*publicCallFixture) SpaceInviteURL(string, string) (string, error) {
-	return "https://example.test/call", nil
+func (f *publicCallFixture) InviteURL(string) (string, error) {
+	f.shortCalls++
+	return "https://example.test/abc-defg-hij", nil
+}
+
+func (f *publicCallFixture) LegacyInviteURL(string, string) (string, error) {
+	f.legacyCalls++
+	return "https://example.test/space/call#spaceInviteToken=cspi1.test", nil
 }
 
 type managedTenants struct{}
 
 func (managedTenants) GetTenant(context.Context, utilities.ID) (tenants.Tenant, error) {
 	return tenants.Tenant{}, nil
+}
+
+func TestCreatePublicSpaceUsesLegacyLinkOnlyWhenRequested(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		legacy      bool
+		wantLink    string
+		shortCalls  int
+		legacyCalls int
+	}{
+		{name: "short", wantLink: "https://example.test/abc-defg-hij", shortCalls: 1},
+		{name: "legacy native compatibility", legacy: true, wantLink: "https://example.test/space/call#spaceInviteToken=cspi1.test", legacyCalls: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tenantID, err := utilities.NewID()
+			if err != nil {
+				t.Fatal(err)
+			}
+			spacePort, err := publicinviteapp.NewSpacePort(spaces.NewService(&recordingSpaces{}), managedTenants{}, publicinviteapp.SpaceConfig{
+				ManagedTenantID: tenantID, DefaultMediaPlane: "cf_sfu",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			private := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+			signer, err := publicinvites.NewSigner(publicinvites.Keyring{CurrentKeyID: "test", Signer: private, Verifiers: map[string]ed25519.PublicKey{"test": private.Public().(ed25519.PublicKey)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fixture := &publicCallFixture{}
+			runtime, err := publicinvites.NewRuntime(publicinvites.NewService(fixture, signer), spacePort, fixture, fixture, fixture, fixture)
+			if err != nil {
+				t.Fatal(err)
+			}
+			created, err := runtime.CreatePublicSpace(context.Background(), publicinvites.CreatePublicSpaceInput{
+				DisplayName: "Ada", RequestKey: "public-link-format-test", LegacyInviteLink: test.legacy,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if created.InviteLink != test.wantLink || fixture.shortCalls != test.shortCalls || fixture.legacyCalls != test.legacyCalls {
+				t.Fatalf("created link = %q, short calls = %d, legacy calls = %d", created.InviteLink, fixture.shortCalls, fixture.legacyCalls)
+			}
+		})
+	}
 }
 
 // A Start-a-call host who leaves and taps Rejoin a few seconds later must land in

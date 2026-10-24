@@ -41,10 +41,11 @@ var (
 )
 
 const (
-	publicInviteTokenHeader = "X-Chalk-Arrival-Handle"
-	publicClientHeader      = "X-Chalk-Client"
-	publicGuestScheme       = "ChalkGuest"
-	publicGuestCookiePrefix = "__Host-chalk_space_guest_"
+	publicInviteTokenHeader  = "X-Chalk-Arrival-Handle"
+	publicClientHeader       = "X-Chalk-Client"
+	publicInviteFormatHeader = "X-Chalk-Invite-Format"
+	publicGuestScheme        = "ChalkGuest"
+	publicGuestCookiePrefix  = "__Host-chalk_space_guest_"
 )
 
 type PublicInviteService interface {
@@ -162,6 +163,7 @@ type publicInviteArrivalRequest struct {
 	ArrivalHandle     string
 	GuestCredential   string
 	Native            bool
+	LegacyInviteLink  bool
 	AccountID         utilities.ID
 	AccountAuthorized bool
 }
@@ -369,7 +371,7 @@ func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Han
 		if service == nil {
 			return publicSpaceCreatedResponse{}, apiErrorServiceUnavailable
 		}
-		created, err := service.CreatePublicSpace(ctx, publicinvites.CreatePublicSpaceInput{DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, Native: request.Native})
+		created, err := service.CreatePublicSpace(ctx, publicinvites.CreatePublicSpaceInput{DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, Native: request.Native, LegacyInviteLink: request.LegacyInviteLink})
 		if err != nil {
 			return publicSpaceCreatedResponse{}, err
 		}
@@ -545,7 +547,7 @@ func decodePublicSpaceCreateRequest(r *http.Request) (publicInviteArrivalRequest
 	return publicInviteArrivalRequest{Body: struct {
 		SpaceInviteToken string `json:"space_invite_token"`
 		DisplayName      string `json:"display_name"`
-	}{DisplayName: body.DisplayName}, RequestKey: requestKey, Native: isNativePublicRequest(r)}, nil
+	}{DisplayName: body.DisplayName}, RequestKey: requestKey, Native: isNativePublicRequest(r), LegacyInviteLink: isNativePublicRequest(r) && !strings.EqualFold(strings.TrimSpace(r.Header.Get(publicInviteFormatHeader)), "code")}, nil
 }
 
 func decodePublicInviteArrivalRequest(r *http.Request) (publicInviteArrivalRequest, error) {

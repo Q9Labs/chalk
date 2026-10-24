@@ -903,10 +903,19 @@ create table sync_whiteboard_elements (
 create index sync_whiteboard_elements_snapshot_idx
     on sync_whiteboard_elements(tenant_id, space_id, scene_id, element_index, element_id);
 
+create function space_public_invite_code(handle bytea) returns text
+language sql immutable strict parallel safe
+as $$
+    select string_agg(chr(97 + get_byte(digest, i) % 26), '' order by i)
+    from (select sha256('chalk/public-invite/code/v1'::bytea || handle) as digest) hashed,
+         generate_series(0, 9) as i
+$$;
+
 create table space_public_invites (
     tenant_id uuid not null,
     space_id uuid not null,
     handle bytea not null,
+    invite_code text not null generated always as (space_public_invite_code(handle)) stored,
     generation bigint not null default 1,
     state_epoch bigint not null default 1,
     enabled boolean not null default true,
@@ -931,6 +940,7 @@ create table space_public_invites (
     check (last_rotation_request_key is null or octet_length(last_rotation_request_key) between 16 and 128)
 );
 create index space_public_invites_handle_idx on space_public_invites(handle);
+create unique index space_public_invites_invite_code_idx on space_public_invites(invite_code);
 
 create table space_public_arrivals (
     arrival_handle uuid primary key,

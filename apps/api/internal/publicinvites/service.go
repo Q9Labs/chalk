@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Repository is the persistence boundary for public Spaces. Implementations
@@ -22,6 +24,7 @@ type Repository interface {
 	CreateOrGetInvite(context.Context, Invite) (Invite, error)
 	GetInvite(context.Context, utilities.ID, utilities.ID) (Invite, error)
 	GetInviteByHandle(context.Context, []byte) (Invite, error)
+	GetInviteByCode(context.Context, string) (Invite, error)
 	SetInviteEnabled(context.Context, utilities.ID, utilities.ID, bool, utilities.ID) (Invite, error)
 	RotateInvite(context.Context, utilities.ID, utilities.ID, []byte, utilities.ID, string) (Invite, error)
 
@@ -95,20 +98,18 @@ func (s Service) EnsureInvite(ctx context.Context, tenantID, spaceID, actorID ut
 	if !mode.valid() {
 		return Invite{}, ErrInvalidAdmissionMode
 	}
-	handle := make([]byte, HandleBytes)
-	if _, err := rand.Read(handle); err != nil {
-		return Invite{}, fmt.Errorf("generate public invite handle: %w", err)
-	}
-	created, err := s.repository.CreateOrGetInvite(ctx, Invite{
-		TenantID:      tenantID,
-		SpaceID:       spaceID,
-		Handle:        handle,
-		Generation:    1,
-		StateEpoch:    1,
-		Enabled:       true,
-		PublicRole:    PublicRoleCollaborator,
-		AdmissionMode: mode,
-		LastActorID:   actorID,
+	created, err := withFreshInviteHandle("generate public invite handle", func(handle []byte) (Invite, error) {
+		return s.repository.CreateOrGetInvite(ctx, Invite{
+			TenantID:      tenantID,
+			SpaceID:       spaceID,
+			Handle:        handle,
+			Generation:    1,
+			StateEpoch:    1,
+			Enabled:       true,
+			PublicRole:    PublicRoleCollaborator,
+			AdmissionMode: mode,
+			LastActorID:   actorID,
+		})
 	})
 	if err != nil {
 		return Invite{}, err
@@ -156,11 +157,9 @@ func (s Service) RotateInvite(ctx context.Context, tenantID, spaceID, actorID ut
 			return Invite{}, ErrInvalidRequestKey
 		}
 	}
-	handle := make([]byte, HandleBytes)
-	if _, err := rand.Read(handle); err != nil {
-		return Invite{}, fmt.Errorf("generate rotated public invite handle: %w", err)
-	}
-	invite, err := s.repository.RotateInvite(ctx, tenantID, spaceID, handle, actorID, requestKey)
+	invite, err := withFreshInviteHandle("generate rotated public invite handle", func(handle []byte) (Invite, error) {
+		return s.repository.RotateInvite(ctx, tenantID, spaceID, handle, actorID, requestKey)
+	})
 	if err != nil {
 		return Invite{}, err
 	}
@@ -185,6 +184,21 @@ func (s Service) IssueInviteToken(invite Invite) (string, error) {
 }
 
 func (s Service) ResolveInviteToken(ctx context.Context, raw string) (Invite, Token, error) {
+	if code, ok := ParseInviteCode(raw); ok {
+		trace.SpanFromContext(ctx).SetAttributes(attribute.String("chalk.public_invite.credential", "code"))
+		invite, err := s.repository.GetInviteByCode(ctx, code)
+		if errors.Is(err, ErrInviteNotFound) {
+			return Invite{}, Token{}, ErrInviteUnavailable
+		}
+		if err != nil {
+			return Invite{}, Token{}, err
+		}
+		if err := validateInvite(invite); err != nil || !invite.Enabled {
+			return Invite{}, Token{}, ErrInviteUnavailable
+		}
+		return invite, Token{Handle: invite.Handle, Generation: invite.Generation}, nil
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("chalk.public_invite.credential", "token"))
 	if s.signer == nil {
 		return Invite{}, Token{}, ErrInvalidKeyring
 	}
@@ -206,6 +220,50 @@ func (s Service) ResolveInviteToken(ctx context.Context, raw string) (Invite, To
 		return Invite{}, Token{}, ErrInviteUnavailable
 	}
 	return invite, token, nil
+}
+
+// withFreshInviteHandle retries the rare invite code collision with a new
+// handle, because the code is derived from the handle.
+func withFreshInviteHandle(generationError string, attempt func([]byte) (Invite, error)) (Invite, error) {
+	err := ErrInviteCodeTaken
+	for range 3 {
+		handle := make([]byte, HandleBytes)
+		if _, readErr := rand.Read(handle); readErr != nil {
+			return Invite{}, fmt.Errorf("%s: %w", generationError, readErr)
+		}
+		var invite Invite
+		invite, err = attempt(handle)
+		if !errors.Is(err, ErrInviteCodeTaken) {
+			return invite, err
+		}
+	}
+	return Invite{}, err
+}
+
+type inviteCredential struct {
+	code  string
+	token Token
+}
+
+func (s Service) parseInviteCredential(raw string) (inviteCredential, error) {
+	if code, ok := ParseInviteCode(raw); ok {
+		return inviteCredential{code: code}, nil
+	}
+	if s.signer == nil {
+		return inviteCredential{}, ErrInvalidKeyring
+	}
+	token, err := s.signer.Verify(raw)
+	if err != nil {
+		return inviteCredential{}, err
+	}
+	return inviteCredential{token: token}, nil
+}
+
+func (credential inviteCredential) matches(handle []byte, generation uint64) bool {
+	if credential.code != "" {
+		return InviteCode(handle) == credential.code
+	}
+	return credential.token.Generation == generation && bytes.Equal(credential.token.Handle, handle)
 }
 
 // CreateArrival records an Account or Guest arrival and returns a newly
@@ -785,11 +843,16 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	if err != nil {
 		return PublicSpaceCreated{}, err
 	}
-	token, err := r.service.IssueInviteToken(invite)
-	if err != nil {
-		return PublicSpaceCreated{}, err
+	var inviteLink string
+	if input.LegacyInviteLink {
+		token, tokenErr := r.service.IssueInviteToken(invite)
+		if tokenErr != nil {
+			return PublicSpaceCreated{}, tokenErr
+		}
+		inviteLink, err = r.links.LegacyInviteURL(space.Slug, token)
+	} else {
+		inviteLink, err = r.links.InviteURL(InviteCode(invite.Handle))
 	}
-	inviteLink, err := r.links.SpaceInviteURL(space.Slug, token)
 	if err != nil {
 		return PublicSpaceCreated{}, fmt.Errorf("build public Space invite link: %w", err)
 	}
@@ -893,10 +956,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			return PublicSpaceArrival{}, err
 		}
 	}
-	if r.service.signer == nil {
-		return PublicSpaceArrival{}, ErrInvalidKeyring
-	}
-	token, err := r.service.signer.Verify(strings.TrimSpace(input.Token))
+	credential, err := r.service.parseInviteCredential(strings.TrimSpace(input.Token))
 	if err != nil {
 		return PublicSpaceArrival{}, err
 	}
@@ -905,7 +965,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		if authErr != nil {
 			return PublicSpaceArrival{}, authErr
 		}
-		if arrival.InviteGeneration != token.Generation || !bytes.Equal(arrival.InviteHandle, token.Handle) {
+		if !credential.matches(arrival.InviteHandle, arrival.InviteGeneration) {
 			return PublicSpaceArrival{}, ErrInviteUnavailable
 		}
 		space, spaceErr := r.space.GetPublicSpace(ctx, arrival.TenantID, arrival.SpaceID)
@@ -966,7 +1026,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		}
 		return result, nil
 	}
-	invite, _, resolveErr := r.service.ResolveInviteToken(ctx, strings.TrimSpace(input.Token))
+	invite, token, resolveErr := r.service.ResolveInviteToken(ctx, strings.TrimSpace(input.Token))
 	if resolveErr != nil {
 		return PublicSpaceArrival{}, resolveErr
 	}
@@ -1396,10 +1456,6 @@ func (r Runtime) managedInvite(ctx context.Context, invite Invite) (ManagedInvit
 	if err := validateInvite(invite); err != nil {
 		return ManagedInvite{}, err
 	}
-	token, err := r.service.IssueInviteToken(invite)
-	if err != nil {
-		return ManagedInvite{}, err
-	}
 	space, err := r.space.GetPublicSpace(ctx, invite.TenantID, invite.SpaceID)
 	if err != nil {
 		return ManagedInvite{}, err
@@ -1410,7 +1466,7 @@ func (r Runtime) managedInvite(ctx context.Context, invite Invite) (ManagedInvit
 	if space.TenantID != invite.TenantID || space.SpaceID != invite.SpaceID {
 		return ManagedInvite{}, ErrInviteUnavailable
 	}
-	canonicalURL, err := r.links.SpaceInviteURL(space.Slug, token)
+	canonicalURL, err := r.links.InviteURL(InviteCode(invite.Handle))
 	if err != nil {
 		return ManagedInvite{}, err
 	}
