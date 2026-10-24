@@ -19,6 +19,9 @@ def reply(value):
 
 
 if command == 'aws':
+    environment = {**json.loads((root / 'aws-environment.json').read_text()), 'AWS_PAGER': '', 'AWS_CLI_AUTO_PROMPT': 'off'}
+    if {key: os.environ.get(key) for key in environment} != environment:
+        raise SystemExit('unexpected AWS environment')
     if 'get-parameter' in args:
         reply(dict(Parameter=dict(Value=json.dumps(config))))
     elif 'list-objects-v2' in args:
@@ -33,9 +36,8 @@ if command == 'aws':
     elif 'get-function-configuration' in args:
         expected = ['--region', 'example', 'lambda', 'get-function-configuration',
                     '--function-name', config['dispatcher']['function_name'], '--output', 'json']
-        environment = {**json.loads((root / 'aws-environment.json').read_text()), 'AWS_PAGER': '', 'AWS_CLI_AUTO_PROMPT': 'off'}
-        if args != expected or {key: os.environ.get(key) for key in environment} != environment:
-            raise SystemExit('unexpected Lambda verification command or environment')
+        if args != expected:
+            raise SystemExit('unexpected Lambda verification command')
         function = next(item['instances'][0]['attributes'] for item in state['resources'] if item['type'] == 'aws_lambda_function')
         counter = root / 'lambda-reads'
         reads = int(counter.read_text()) + 1 if counter.exists() else 1

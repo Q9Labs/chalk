@@ -91,6 +91,7 @@ class DispatcherBoundary(unittest.TestCase):
                 (root / 'state.json').write_text(json.dumps(initial))
                 (root / 'config.json').write_text(json.dumps(config))
                 aws_environment = dict.fromkeys(('AWS_DEFAULT_PROFILE', 'AWS_ENDPOINT_URL', 'AWS_ENDPOINT_URL_LAMBDA',
+                                                 'AWS_ENDPOINT_URL_S3', 'AWS_ENDPOINT_URL_SSM', 'AWS_ENDPOINT_URL_SCHEDULER',
                                                  'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'))
                 aws_environment['AWS_PROFILE'] = ''
                 (root / 'aws-environment.json').write_text(json.dumps(aws_environment))
