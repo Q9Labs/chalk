@@ -200,11 +200,19 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 					return r.shutdown(ctx, daemon, cancelRun, daemonResult)
 				}
 				cancelRun()
-				daemonErr := <-daemonResult
+				shutdownExpired := r.after(r.shutdownGrace)
+				closeErr := r.closeAdmission(ctx)
+				var daemonErr error
+				select {
+				case daemonErr = <-daemonResult:
+				case <-shutdownExpired:
+				case <-ctx.Done():
+				}
 				return errors.Join(
 					readinessFailure("refresh recorder worker readiness", err),
 					daemonErr,
-					r.closeAdmission(ctx),
+					ctx.Err(),
+					closeErr,
 				)
 			}
 			if !receipt.AdmissionOpen {
