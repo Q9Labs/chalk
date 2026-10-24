@@ -17,18 +17,19 @@ import (
 )
 
 const (
-	DefaultCaptureLease       = 30 * time.Second
-	DefaultHeartbeatInterval  = 10 * time.Second
-	DefaultAttemptShutdown    = 3 * defaultCaptureCloseTimeout
-	DefaultHandoffShutdown    = 16 * time.Second
-	DefaultRelinquishTimeout  = 3 * time.Second
-	DefaultNoWorkWait         = 2 * time.Second
-	DefaultClaimRetryWait     = time.Second
-	DefaultAttemptRetryDelay  = 30 * time.Second
-	DefaultCaptureCompletion  = 5 * time.Minute
-	DefaultCompletionRetry    = 2 * time.Minute
-	defaultCaptureFailureCode = "capture_attempt_failed"
-	completionFailureCode     = "capture_completion_failed"
+	DefaultCaptureLease             = 30 * time.Second
+	DefaultHeartbeatInterval        = 10 * time.Second
+	DefaultAttemptShutdown          = 3 * defaultCaptureCloseTimeout
+	DefaultHandoffShutdown          = 16 * time.Second
+	DefaultRelinquishTimeout        = 3 * time.Second
+	DefaultNoWorkWait               = 2 * time.Second
+	DefaultClaimRetryWait           = time.Second
+	DefaultAttemptRetryDelay        = 5 * time.Second
+	DefaultCaptureAttemptRetryDelay = 30 * time.Second
+	DefaultCaptureCompletion        = 5 * time.Minute
+	DefaultCompletionRetry          = 2 * time.Minute
+	defaultCaptureFailureCode       = "capture_attempt_failed"
+	completionFailureCode           = "capture_completion_failed"
 )
 
 var (
@@ -467,7 +468,7 @@ func (d *CaptureDaemon) reportCompletionFailure(ctx context.Context, lease recor
 	reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.config.RelinquishTimeout)
 	defer cancel()
 	_, reportErr := d.control.Fail(reportCtx, recordingpipeline.FailureInput{
-		LeaseInput: lease, AvailableAt: d.config.Now().UTC().Add(d.config.AttemptRetryDelay),
+		LeaseInput: lease, AvailableAt: d.config.Now().UTC().Add(DefaultAttemptRetryDelay),
 		ErrorCode: completionFailureCode, ErrorDetail: completionFailureDetail(cause),
 	})
 	if reportErr != nil {
@@ -532,7 +533,7 @@ func normalizeCaptureDaemonConfig(config CaptureDaemonConfig) CaptureDaemonConfi
 		config.ClaimRetryWait = DefaultClaimRetryWait
 	}
 	if config.AttemptRetryDelay == 0 {
-		config.AttemptRetryDelay = DefaultAttemptRetryDelay
+		config.AttemptRetryDelay = DefaultCaptureAttemptRetryDelay
 	}
 	if config.AttemptShutdown == 0 {
 		config.AttemptShutdown = DefaultAttemptShutdown

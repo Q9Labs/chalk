@@ -171,7 +171,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if errors.As(signalingErr, &providerFailure) && providerFailure.Failure.Code == "timeout" {
 						timeoutFailures++
 					}
-					availableAt := time.Now().Add(recorderworker.DefaultAttemptRetryDelay)
+					availableAt := time.Now().Add(recorderworker.DefaultCaptureAttemptRetryDelay)
 					failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: "capture_attempt_failed", ErrorDetail: signalingErr.Error()})
 					if err != nil {
 						t.Fatalf("fail attempt: %v", err)
@@ -183,7 +183,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if !failed.AvailableAt.Equal(availableAt.Truncate(time.Microsecond)) {
 						t.Fatalf("lost durable attempt backoff: %s", failed.AvailableAt)
 					}
-					backoff += recorderworker.DefaultAttemptRetryDelay
+					backoff += recorderworker.DefaultCaptureAttemptRetryDelay
 					// Advance only the durable availability clock, not the lease or
 					// fencing checks. This is not a wall-clock performance test.
 					execCleanupFixture(t, tx, `update recording_jobs set available_at=now() where id=$1`, job.ID.Bytes())
