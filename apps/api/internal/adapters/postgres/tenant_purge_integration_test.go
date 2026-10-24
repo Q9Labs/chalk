@@ -138,6 +138,14 @@ func TestTenantPurgeTransactionProtectsKeptRowsAndSharedUsers(t *testing.T) {
 	pool := purgeIntegrationPool(t)
 	f := createPurgeFixture(t, pool)
 	ctx := context.Background()
+	for _, sql := range []string{
+		`insert into automatic_transcript_tenant_policy_backup select tenant_id,transcription_ceiling,transcription_default_mode,provider_policy_version,source_window_seconds,updated_at from tenant_artifact_policies`,
+		`insert into automatic_transcript_space_policy_backup select id,tenant_id,transcription_policy,updated_at from spaces`,
+	} {
+		if _, err := pool.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
 	repo := NewTenantPurgeRepository(pool)
 	plan, err := repo.Snapshot(ctx, f.scope, true)
 	if err != nil {
@@ -152,6 +160,12 @@ func TestTenantPurgeTransactionProtectsKeptRowsAndSharedUsers(t *testing.T) {
 	}
 	if err := pool.QueryRow(ctx, `select count(*) from tenants`).Scan(&tenants); err != nil || tenants != 2 {
 		t.Fatalf("kept count: %d %v", tenants, err)
+	}
+	for _, table := range []string{"automatic_transcript_tenant_policy_backup", "automatic_transcript_space_policy_backup"} {
+		var erased, kept int
+		if err := pool.QueryRow(ctx, `select count(*) filter(where tenant_id=$1),count(*) filter(where tenant_id=$2) from `+table, f.erased, f.kept).Scan(&erased, &kept); err != nil || erased != 0 || kept == 0 {
+			t.Fatalf("%s erased=%d kept=%d error=%v", table, erased, kept, err)
+		}
 	}
 	var exists bool
 	if err := pool.QueryRow(ctx, `select exists(select 1 from users where id=$1)`, f.sharedUser).Scan(&exists); err != nil || !exists {
@@ -250,7 +264,7 @@ func TestTenantBackfillRaisesOnlyAndNeverChangesServiceSpaces(t *testing.T) {
 	if _, err := repo.ApplyBackfill(ctx, plan, fixtureReceipt(t, plan)); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []struct{ id, recording, transcript string }{{f.legacySpace, "automatic", "on_demand"}, {f.serviceSpace, "disabled", "disabled"}, {f.heldSpace, "manual", "automatic"}} {
+	for _, expected := range []struct{ id, recording, transcript string }{{f.legacySpace, "automatic", "automatic"}, {f.serviceSpace, "disabled", "disabled"}, {f.heldSpace, "manual", "automatic"}} {
 		var recording, transcript string
 		if err := pool.QueryRow(ctx, `select recording_policy,transcription_policy from spaces where id=$1`, expected.id).Scan(&recording, &transcript); err != nil || recording != expected.recording || transcript != expected.transcript {
 			t.Fatalf("held/raised Space: %s %s %v", recording, transcript, err)

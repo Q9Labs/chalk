@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -100,6 +101,11 @@ func newTranscriptionAllocationCleanupFixture(t *testing.T, expiredLease bool) (
 
 func newAllocationCleanupFixture(t *testing.T, expiredLease bool, jobKind string) (pgx.Tx, transcriptionAllocationCleanupFixture) {
 	t.Helper()
+	return newAllocationCleanupFixtureWithMode(t, expiredLease, jobKind, "on_demand")
+}
+
+func newAllocationCleanupFixtureWithMode(t *testing.T, expiredLease bool, jobKind, mode string) (pgx.Tx, transcriptionAllocationCleanupFixture) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("postgres integration")
 	}
@@ -163,7 +169,7 @@ func newAllocationCleanupFixture(t *testing.T, expiredLease bool, jobKind string
 	execCleanupFixture(t, transaction, `
 		insert into episodes (id, status, space_id, tenant_id, config_snapshot)
 		values ($1, 'active', $2, $3, $4::jsonb)`,
-		episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes(), `{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0,"artifact_policy":{"schema_version":"episode_config.v2","recording":{"mode":"manual","profile":"composite_720p_v1","retention_seconds":86400},"transcription":{"mode":"on_demand","retention_seconds":0,"source_window_seconds":3600,"provider_policy_version":"cleanup"}}}`)
+		episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes(), fmt.Sprintf(`{"roles":{"collaborator":["publishAudio","publishVideo","subscribe"]},"admission_policy":{"mode":"open"},"default_episode_duration_seconds":86400,"maximum_episode_duration_seconds":86400,"linger_window_seconds":0,"artifact_policy":{"schema_version":"episode_config.v2","recording":{"mode":"manual","profile":"composite_720p_v1","retention_seconds":86400},"transcription":{"mode":%q,"retention_seconds":0,"source_window_seconds":3600,"provider_policy_version":"cleanup"}}}`, mode))
 	execCleanupFixture(t, transaction, `
 		insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
 		values ($1, $2, $3, $4, 'completed', 'r2')`, recordingID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes())

@@ -638,8 +638,8 @@ func shortEraseSQL(catalog purgeCatalog, current tenantpurge.Plan, deleting bool
 	if !deleting {
 		b := shortSQL{}
 		tenants, spaces := backfillIDs(current.Scope, *current.Backfill)
-		b.add(`update public.tenant_artifact_policies set transcription_ceiling=case when transcription_ceiling='disabled' then 'on_demand' else transcription_ceiling end,transcription_default_mode=case when transcription_default_mode='disabled' then 'on_demand' else transcription_default_mode end,provider_policy_version=case when btrim(provider_policy_version)='' then 'chalk-on-demand-v1' else provider_policy_version end,source_window_seconds=case when source_window_seconds=0 then 86400 else source_window_seconds end,updated_at=now() where tenant_id=any(` + purgeArray(tenants) + `) and (transcription_ceiling='disabled' or transcription_default_mode='disabled')`)
-		b.add(`update public.spaces set recording_policy='automatic',transcription_policy='on_demand',updated_at=now() where id=any(` + purgeArray(spaces) + `) and recording_policy='disabled' and transcription_policy='disabled'`)
+		b.add(`update public.tenant_artifact_policies set transcription_ceiling=case when transcription_ceiling='disabled' or transcription_default_mode='disabled' then 'automatic' else transcription_ceiling end,transcription_default_mode=case when transcription_default_mode='disabled' then 'automatic' else transcription_default_mode end,provider_policy_version=case when btrim(provider_policy_version)='' then 'chalk-automatic-v1' else provider_policy_version end,source_window_seconds=case when source_window_seconds=0 then 86400 else source_window_seconds end,updated_at=now() where tenant_id=any(` + purgeArray(tenants) + `) and (transcription_ceiling='disabled' or transcription_default_mode='disabled')`)
+		b.add(`update public.spaces set recording_policy='automatic',transcription_policy='automatic',updated_at=now() where id=any(` + purgeArray(spaces) + `) and recording_policy='disabled' and transcription_policy='disabled'`)
 		return b, nil
 	}
 	erase := shortSQL{}
