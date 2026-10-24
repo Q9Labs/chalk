@@ -148,6 +148,8 @@ def plan(github, args):
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')
+    if cut:
+        github.wait_for_gate(target, push_only=not args.manual)
     if cut and not github.has_green_gate(target, push_only=not args.manual):
         require(not args.manual, f'latest master Gate for {target} is not successful')
         cut = False
@@ -194,6 +196,7 @@ def require_gate(github, args):
     # A called workflow sees its caller's event. Scheduled nightly plans its cut on the latest push Gate, so its child
     # applies the same rule; an unfinished 01:17 scheduled Gate must not fail a cut that the plan already accepted.
     push_only = os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
+    github.wait_for_gate(target, push_only=push_only)
     require(github.has_green_gate(target, push_only=push_only),
             f'{target} has no successful {"push " if push_only else ""}Gate run on master. Pull request Gate runs do not count: '
             'merge the change, wait for its master Gate to pass, then release that commit.')
