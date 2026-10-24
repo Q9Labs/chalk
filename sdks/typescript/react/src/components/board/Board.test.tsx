@@ -1610,13 +1610,13 @@ it.each([2, 500])("follows an idle leader with %i active views", async (count) =
   }, true);
 });
 
-it("keeps the dockable island available on an 820-point native tablet", async () => {
+it("keeps the dockable island available on a wide native tablet", async () => {
   vi.stubGlobal(
     "ResizeObserver",
     class {
       constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
       observe() {
-        this.onResize([{ contentRect: { width: 820, height: 900 } }]);
+        this.onResize([{ contentRect: { width: 1200, height: 900 } }]);
       }
       disconnect() {}
     },
@@ -1637,5 +1637,31 @@ it("keeps the dockable island available on an 820-point native tablet", async ()
     },
     true,
     { phone: false, presentation: "mobile" },
+  );
+});
+
+it.each(["mobile", "web"] as const)("compacts a narrow %s tablet board without losing secondary tools", async (presentation) => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() {
+        this.onResize([{ contentRect: { width: 560, height: 900 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  await withOpenBoard(
+    async (container) => {
+      expect(container.querySelector('.chalk-board-island[data-place="compact"]')).not.toBeNull();
+      await clickControl(container, "Drawing tools");
+      expect(container.querySelector('[role="toolbar"][data-place="expanded"]')).not.toBeNull();
+      for (const label of ["Select", "Hand", "Highlighter", "Laser pointer"]) {
+        await clickControl(container, label);
+        expect(container.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-pressed")).toBe("true");
+      }
+    },
+    true,
+    { phone: presentation === "mobile" ? false : undefined, presentation },
   );
 });

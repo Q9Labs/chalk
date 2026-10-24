@@ -324,7 +324,7 @@ export function Board({
   const [narrow, setNarrow] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const canDraw = primary && (board.collab?.canDraw ?? board.canDraw ?? true);
-  const compact = phoneOverride ?? (phone || narrow);
+  const compact = phone || narrow;
   const history = useEngineHistory(root, engine);
   // Once this person draws or places a note, the camera is theirs: the board never fits under their hand.
   const touched = useRef(false);
