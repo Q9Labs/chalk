@@ -113,47 +113,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 							values(gen_random_uuid(),$1,$2,$3,0,1,'fixture/committed-before-outage','application/octet-stream','chalk.bundle.v1',9,decode(repeat('ab',32),'hex'),0,1000,0,1000)`, identity.TenantID.Bytes(), identity.RecordingID.Bytes(), job.ID.Bytes())
 					}
 					envelope := job.Authority.Envelope
-					handle, err := capturesignaling.NewSignalingHandle(envelope.SignalingHandle)
-					if err != nil {
-						t.Fatal(err)
-					}
-					command := capturesignaling.Command{
-						SignalingHandle: handle,
-						Authority: capturesignaling.CommandAuthority{
-							TenantID: identity.TenantID, SpaceID: identity.SpaceID, EpisodeID: identity.EpisodeID, RecordingID: identity.RecordingID,
-							JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration,
-							CaptureEpoch: captureplane.CaptureEpoch(envelope.CaptureEpoch), EnvelopeDigest: job.Authority.EnvelopeDigest,
-						},
-						Lease:    capturesignaling.WorkerLease{Owner: *job.LeaseOwner, Token: *job.LeaseToken, ExpiresAt: *job.LeaseExpiresAt},
-						Identity: capturesignaling.CommandIdentity{Operation: captureplane.OperationCreateCaptureConnection, PlanRevision: 1, IdempotencyKey: "create"},
-						Input:    capturesignaling.CommandInput{CreateCaptureConnection: &captureplane.CreateCaptureConnectionInput{}},
-					}
-					created, err := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
-					if err != nil {
-						t.Fatalf("create: %v", err)
-					}
-					command.Identity.Operation = operation
-					command.Identity.IdempotencyKey = "recover"
-					connection := created.Result.CreateCaptureConnection.Connection.ConnectionReference
-					tracks := []captureplane.CaptureTrack{{OwnerReference: "publisher", TrackReference: "audio", ParticipantID: newCaptureRetryID(t), ParticipantGeneration: 1, Source: captureplane.TrackSourceMicrophone, Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}}
-					if operation == captureplane.OperationPullCaptureTracks {
-						command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{
-							Connection: connection, LocalDescription: &captureplane.Description{Type: "offer", SDP: "v=0\r\n"}, Tracks: tracks,
-						}}
-					} else {
-						command.Identity.Operation = captureplane.OperationPullCaptureTracks
-						command.Identity.IdempotencyKey = "initial-pull"
-						command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{Connection: connection, Tracks: tracks}}
-						pulled, err := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
-						if err != nil {
-							t.Fatalf("initial pull: %v", err)
-						}
-						command.Identity.Operation = operation
-						command.Identity.IdempotencyKey = "recover"
-						command.Input = capturesignaling.CommandInput{RenegotiateCaptureConnection: &captureplane.RenegotiateCaptureConnectionInput{
-							Connection: connection, NegotiationID: pulled.Result.PullCaptureTracks.Negotiation.ID, Description: captureplane.Description{Type: "answer", SDP: "v=0\r\n"},
-						}}
-					}
+					command := captureRetryMediaCommand(t, service, identity, job, operation)
 					_, signalingErr := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
 					lease := recordingpipeline.LeaseInput{JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, CaptureEpoch: envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest, LeaseToken: *job.LeaseToken, LeaseOwner: *job.LeaseOwner}
 					if signalingErr == nil {
@@ -273,4 +233,51 @@ func newCaptureRetryFixture(t *testing.T) (pgx.Tx, postgres.RecordingPipelineRep
 		t.Fatalf("reserve: %v", err)
 	}
 	return tx, repository, identity
+}
+
+func captureRetryMediaCommand(t *testing.T, service *capturesignaling.Service, identity captureplane.CaptureIdentity, job recordingpipeline.Job, operation captureplane.OperationKind) capturesignaling.Command {
+	t.Helper()
+	ctx := t.Context()
+	handle, err := capturesignaling.NewSignalingHandle(job.Authority.Envelope.SignalingHandle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := capturesignaling.Command{
+		SignalingHandle: handle,
+		Authority: capturesignaling.CommandAuthority{
+			TenantID: identity.TenantID, SpaceID: identity.SpaceID, EpisodeID: identity.EpisodeID, RecordingID: identity.RecordingID,
+			JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration,
+			CaptureEpoch: captureplane.CaptureEpoch(job.Authority.Envelope.CaptureEpoch), EnvelopeDigest: job.Authority.EnvelopeDigest,
+		},
+		Lease:    capturesignaling.WorkerLease{Owner: *job.LeaseOwner, Token: *job.LeaseToken, ExpiresAt: *job.LeaseExpiresAt},
+		Identity: capturesignaling.CommandIdentity{Operation: captureplane.OperationCreateCaptureConnection, PlanRevision: 1, IdempotencyKey: "create"},
+		Input:    capturesignaling.CommandInput{CreateCaptureConnection: &captureplane.CreateCaptureConnectionInput{}},
+	}
+	created, err := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	command.Identity.Operation = operation
+	command.Identity.IdempotencyKey = "recover"
+	connection := created.Result.CreateCaptureConnection.Connection.ConnectionReference
+	tracks := []captureplane.CaptureTrack{{OwnerReference: "publisher", TrackReference: "audio", ParticipantID: newCaptureRetryID(t), ParticipantGeneration: 1, Source: captureplane.TrackSourceMicrophone, Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}}
+	if operation == captureplane.OperationPullCaptureTracks {
+		command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{
+			Connection: connection, LocalDescription: &captureplane.Description{Type: "offer", SDP: "v=0\r\n"}, Tracks: tracks,
+		}}
+	} else {
+		command.Identity.Operation = captureplane.OperationPullCaptureTracks
+		command.Identity.IdempotencyKey = "initial-pull"
+		command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{Connection: connection, Tracks: tracks}}
+		pulled, err := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
+		if err != nil {
+			t.Fatalf("initial pull: %v", err)
+		}
+		command.Identity.Operation = operation
+		command.Identity.IdempotencyKey = "recover"
+		command.Input = capturesignaling.CommandInput{RenegotiateCaptureConnection: &captureplane.RenegotiateCaptureConnectionInput{
+			Connection: connection, NegotiationID: pulled.Result.PullCaptureTracks.Negotiation.ID, Description: captureplane.Description{Type: "answer", SDP: "v=0\r\n"},
+		}}
+	}
+	return command
 }
