@@ -9,6 +9,11 @@ export type MenuPlacement = {
   readonly side: "below" | "above";
 };
 
+/** Converts a native window measurement to the SDK portal's allocated frame. */
+export function normalizeMenuAnchor(trigger: Rect, frame: Rect): Rect {
+  return { ...trigger, x: trigger.x - frame.x, y: trigger.y - frame.y };
+}
+
 /** Gap between the trigger and the menu. */
 const GAP = 6;
 /** Distance kept from the safe area's edges. */
