@@ -6,8 +6,8 @@ def ready(sample):
 
 
 class ReleaseWatch:
-    def __init__(self, candidate):
-        self.candidate = candidate
+    def __init__(self, manifest):
+        self.manifest = manifest
         self.ssm_started_at = None
         self.stopped_at = None
         self.watch_started_at = None
@@ -28,12 +28,13 @@ class ReleaseWatch:
         services_ready = all(ready(snapshot.get(name, {})) for name in self.failures)
         revisions = snapshot.get("component_releases", {})
         containers = snapshot.get("containers", {})
-        candidate_live = all(
-            revisions.get(name, {}).get("source_revision") == self.candidate
-            and containers.get("chalk-" + name, {}).get("revision") == self.candidate
+        candidate_live = snapshot.get("release_id") == self.manifest["release_id"] and all(
+            revisions.get(name) == self.manifest["component_releases"][name]
+            and containers.get("chalk-" + name, {}).get("revision") == self.manifest["component_releases"][name]["source_revision"]
+            and containers.get("chalk-" + name, {}).get("image") == self.manifest["images"][name]
             for name in self.failures
         )
-        if self.phase == "swap" and candidate_live and services_ready:
+        if self.phase == "swap" and self.stopped_at is not None and self.stopped_at >= self.ssm_started_at and candidate_live and services_ready:
             self.watch_started_at = at
             self.failures = dict.fromkeys(self.failures, 0)
         hold, rollback = [], []
