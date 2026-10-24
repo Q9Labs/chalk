@@ -15,8 +15,8 @@ variable "desired_nodes" {
   type = number
 
   validation {
-    condition     = var.desired_nodes >= 0 && var.desired_nodes <= var.max_nodes && floor(var.desired_nodes) == var.desired_nodes
-    error_message = "capture desired_nodes must be an integer between zero and max_nodes."
+    condition     = var.desired_nodes >= 0 && floor(var.desired_nodes) == var.desired_nodes
+    error_message = "capture desired_nodes must be a nonnegative integer."
   }
 }
 

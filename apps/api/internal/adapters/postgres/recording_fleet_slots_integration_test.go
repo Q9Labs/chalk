@@ -24,9 +24,15 @@ func TestFleetRegisteredAtCreateFirstManagedClaimRequiresRow(t *testing.T) {
 		t.Run(string(role), func(t *testing.T) {
 			tx, fixture := newAllocationCleanupFixture(t, true, string(role))
 			defer func() { _ = tx.Rollback(context.Background()) }()
-			execCleanupFixture(t, tx, `update recording_jobs set state='pending', lease_owner=null, lease_token=null, lease_expires_at=null where id=$1`, fixture.jobID.Bytes())
+			claimJobID := fixture.jobID
 			if role == workeridentity.RoleCapture {
-				execCleanupFixture(t, tx, `delete from recording_job_attempt_authorities where job_id=$1`, fixture.jobID.Bytes())
+				var err error
+				claimJobID, err = utilities.NewID()
+				if err != nil {
+					t.Fatal(err)
+				}
+				execCleanupFixture(t, tx, `insert into recording_jobs (id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, available_at, attempt_limit)
+					select $2, tenant_id, episode_id, recording_id, kind, 'create-first-claim:' || $2::uuid::text, 1, 'pending', now(), 3 from recording_jobs where id=$1`, fixture.jobID.Bytes(), claimJobID.Bytes())
 				execCleanupFixture(t, tx, `update recording_pipelines set state='reserved', capture_completed_at=null where recording_id=$1`, fixture.recordingID.Bytes())
 			} else {
 				prepareFleetRenderClaim(t, tx, fixture.jobID)
@@ -101,7 +107,7 @@ func TestFleetRegisteredAtCreateFirstManagedClaimRequiresRow(t *testing.T) {
 			}
 			execCleanupFixture(t, tx, `rollback to savepoint missing_fleet_row`)
 			job, err := claim()
-			if err != nil || job.ID != fixture.jobID {
+			if err != nil || job.ID != claimJobID {
 				t.Fatalf("first claim from create-time row: job=%s error=%v", job.ID, err)
 			}
 		})
