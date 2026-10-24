@@ -2,6 +2,7 @@
 
 Copy for the Android and iOS listings. Check each claim against
 [tracker.yaml](../tracker.yaml) and the final native build before submission.
+The words match the app: a person starts a call and joins with a link.
 
 ## Pre-submission checklist
 
@@ -13,100 +14,83 @@ Copy for the Android and iOS listings. Check each claim against
 
 ## Title
 
-Chalk: Video Spaces & Chat
+Chalk Calls
 
-## Short description
+## Google Play short description
 
-Live video Spaces from an invite link: chat, reactions, and screen share.
+Start or join a low-latency video call from a link. Chat, react, share files.
 
 ## Google Play full description
 
-The Space goes live in two minutes and you're not at your desk. Tap the
-invite link: you're in.
+Chalk is a simple way to start or join a video call from your phone.
 
-Chalk is made for joining from your phone. Open a Space invite link to enter.
+Tap Start a call and share the link, or open a Chalk link to join right away. No account is needed.
 
-Join in seconds
+In a call you can:
 
-- Open an invite link, or let Chalk spot one on your clipboard and offer to
-  join.
-- The Entrance shows your camera and microphone before anyone sees you.
+- talk with clear, low-latency audio and video
+- switch between Spotlight and Grid, and pin the person you want to see
+- see who is talking from the ring around their tile
+- raise your hand or send a quick reaction
+- chat with everyone and share files
+- see the People list and who is muted
+- watch a screen or whiteboard someone else shares
+- pick your audio output and turn your phone sideways for a bigger view
 
-Everything a live Space needs
+Each person without a camera gets a friendly animated face, so a call never feels like a wall of initials. Chalk comes in Dark and Light and follows your phone's setting.
 
-- Live video and audio with a full Participant list.
-- Chat, emoji reactions, and hand raising.
-- Share your phone's screen with everyone.
-
-Run the Space
-
-- Admit or turn away visitors at the Entrance.
-- Mute Participants, request a mic or camera, stop a share.
-- Remove someone from the Space entirely.
-
-Built in the open
-
-- Chalk's engine is open source (MIT), shared between web and mobile.
-- No third-party analytics SDKs in the app.
-
-Next time someone sends a Chalk link, don't scramble for a laptop. Tap it.
+Chalk is open source (MIT), and one engine runs web, iOS and Android.
 
 ## Apple App Store subtitle
 
-Join a Space from a link
+Low-latency video calls
 
 ## Apple App Store keywords
 
-video,team,remote,work,screen,share,collaboration,classroom,webinar,online,huddle,group,live
+meeting,meet,team,remote,work,conference,huddle,group,online,chat,collaboration,live,link,invite
 
 ## Apple App Store promotional text
 
-Someone sent you a Chalk link? That's all you need. Tap it, check your
-camera at the Entrance, and join live: chat, reactions, and screen share
-included.
+Start a call in one tap and share the link. Anyone can join from a phone, with no account needed.
 
 ## Apple App Store description
 
-The Space goes live in two minutes and you're not at your desk. Tap the
-invite link: you're in.
+Chalk is a simple way to start or join a video call from your phone.
 
-Chalk is made for joining from your iPhone or iPad. Open a Space invite link
-to enter.
+Tap Start a call and share the link, or open a Chalk link to join right away. No account is needed.
 
-Join in seconds:
+In a call you can:
 
-- Open an invite link, or let Chalk spot one on your clipboard and offer to
-  join.
-- The Entrance shows your camera and microphone before anyone sees you.
+- talk with clear, low-latency audio and video
+- switch between Spotlight and Grid, and pin the person you want to see
+- see who is talking from the ring around their tile
+- raise your hand or send a quick reaction
+- chat with everyone and share files
+- see the People list and who is muted
+- watch a screen or whiteboard someone else shares
+- pick your audio output and turn your phone sideways for a bigger view
 
-Everything a live Space needs:
+Each person without a camera gets a friendly animated face, so a call never feels like a wall of initials. Chalk comes in Dark and Light and follows your phone's setting.
 
-- Live video and audio with a full Participant list.
-- Chat, emoji reactions, and hand raising.
-- Share your screen with ReplayKit.
+Chalk is open source (MIT), and one engine runs web, iOS and Android.
 
-Run the Space:
+## Icons and screenshots
 
-- Admit or turn away visitors at the Entrance.
-- Mute Participants, request a mic or camera, stop a share.
-- Remove someone from the Space entirely.
-
-Built in the open:
-
-- Chalk's engine is open source (MIT), shared between web and mobile.
-- No third-party analytics SDKs in the app.
-
-Next time someone sends a Chalk link, don't scramble for a laptop. Tap it.
+Both stores use the white chalk stick on a dark plate. The Play icon is
+`apps/web/public/brand/chalk/chalk-icon.svg` drawn at 512 px with square
+corners, because Play rounds them. Screenshots come from the current app with the demo call (Hasan,
+Nora Patel, Akash Rao, Sofia Lind, Malik Haddad, Priya Shah): Home, Grid,
+Spotlight, More, Chat and People.
 
 ## Google testing instructions
 
-Provide a test-Space invite URL. Reviewers can open the link or paste it in
-the app, grant camera and microphone at the Entrance, and join. Screen share
-uses Android media projection and prompts before capturing.
+Provide a test call invite URL. Reviewers can open the link or paste it in
+the app, grant camera and microphone, and join. Screen share uses Android media
+projection and prompts before capturing.
 
 ## Apple review notes
 
-Provide a test-Space invite URL and a second device as another Participant.
-Reviewers can open the link to join. Camera and microphone are used at the
-Entrance and while live. Screen sharing uses ReplayKit and is user-initiated;
-the app declares the audio and VoIP background modes for live media.
+Provide a test call invite URL and a second device as another participant.
+Reviewers can open the link to join. Camera and microphone are used while in a
+call. Screen sharing uses ReplayKit and is user-initiated; the app declares the
+audio and VoIP background modes for live media.
