@@ -1,6 +1,5 @@
 "use client";
 
-import { useId } from "react";
 import type React from "react";
 
 export type LogoVariant = "mark" | "wordmark";
@@ -12,19 +11,13 @@ export type LogoProps = {
   readonly variant?: LogoVariant;
 };
 
-const DEFAULT_COLOR = "#1A332B";
+const DEFAULT_COLOR = "#16181c";
 const DEFAULT_HEIGHT = 32;
 const DEFAULT_VARIANT: LogoVariant = "wordmark";
 const WORDMARK_VIEW_BOX = "0 0 200 80";
 const MARK_VIEW_BOX = "0 0 68 80";
 
-function gradientId(prefix: string, name: string): string {
-  return `${prefix}-${name}`;
-}
-
 export function Logo({ accessibilityLabel = "Chalk", color = DEFAULT_COLOR, height = DEFAULT_HEIGHT, variant = DEFAULT_VARIANT }: LogoProps): React.JSX.Element {
-  const generatedId = useId().replace(/[^a-zA-Z0-9_-]/gu, "");
-  const idPrefix = `chalk-logo-${generatedId}`;
   const isWordmark = variant === "wordmark";
   const viewBox = isWordmark ? WORDMARK_VIEW_BOX : MARK_VIEW_BOX;
   const width = isWordmark ? height * 2.5 : height * (68 / 80);
@@ -45,54 +38,15 @@ export function Logo({ accessibilityLabel = "Chalk", color = DEFAULT_COLOR, heig
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
     >
-      <defs>
-        <linearGradient id={gradientId(idPrefix, "green")} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#C5E5C0" />
-          <stop offset="100%" stopColor="#80B879" />
-        </linearGradient>
-        <linearGradient id={gradientId(idPrefix, "yellow")} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#FCEAB3" />
-          <stop offset="100%" stopColor="#D9B641" />
-        </linearGradient>
-        <linearGradient id={gradientId(idPrefix, "blue")} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#B2E0F0" />
-          <stop offset="100%" stopColor="#55AAC9" />
-        </linearGradient>
-        <linearGradient id={gradientId(idPrefix, "pink")} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#F8CACA" />
-          <stop offset="100%" stopColor="#D67B7B" />
-        </linearGradient>
-      </defs>
-
-      <g transform="translate(2, 2) scale(0.95)">
-        <g className="chalk-logo__stick chalk-logo__stick--green">
-          <g transform="rotate(-15 20 60)">
-            <path d="M9,20 L21,20 L22,63 A7,7 0 0 1 8,63 Z" fill={`url(#${gradientId(idPrefix, "green")})`} />
-            <ellipse cx="15" cy="20" rx="6" ry="2.5" fill="#D8ECD4" />
-          </g>
+      <svg x="0" y="6" width="68" height="68" viewBox="0 0 48 48">
+        <g transform="rotate(28 24 24)" fill="currentColor">
+          <path d="M18 8h12v28a6 6 0 0 1-12 0z" />
+          <path d="M18 8h12l-1.5 4.5h-9z" opacity="0.45" />
         </g>
-
-        <g className="chalk-logo__stick chalk-logo__stick--yellow">
-          <g transform="rotate(-8 32 55)">
-            <path d="M23,15 L35,15 L36,60 A7,7 0 0 1 22,60 Z" fill={`url(#${gradientId(idPrefix, "yellow")})`} />
-            <ellipse cx="29" cy="15" rx="6" ry="2.5" fill="#FEF3D1" />
-          </g>
-        </g>
-
-        <g className="chalk-logo__stick chalk-logo__stick--blue">
-          <g transform="rotate(12 60 30)">
-            <path d="M36,8 L48,8 L49,56 A7,7 0 0 1 35,56 Z" fill={`url(#${gradientId(idPrefix, "blue")})`} />
-            <ellipse cx="42" cy="8" rx="6" ry="2.5" fill="#D0EDF8" />
-          </g>
-        </g>
-
-        <g className="chalk-logo__stick chalk-logo__stick--pink">
-          <g transform="rotate(5 55 50)">
-            <path d="M49,70 L61,70 L62,29 A7,7 0 0 0 48,29 Z" fill={`url(#${gradientId(idPrefix, "pink")})`} />
-            <ellipse cx="55" cy="70" rx="6" ry="2.5" fill="#FBE4E4" />
-          </g>
-        </g>
-      </g>
+        <circle cx="10.5" cy="41.5" r="1.7" fill="currentColor" opacity="0.55" />
+        <circle cx="6.5" cy="37" r="1.2" fill="currentColor" opacity="0.4" />
+        <circle cx="4" cy="43.5" r="0.85" fill="currentColor" opacity="0.28" />
+      </svg>
 
       {isWordmark ? (
         <text className="chalk-logo__wordmark" x="90" y="52" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" fontSize="38" fontWeight="600" letterSpacing="-0.02em" fill="currentColor">
