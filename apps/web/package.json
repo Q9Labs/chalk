@@ -10,6 +10,7 @@
     "dev:vite": "vite dev --host 127.0.0.1",
     "build": "pnpm --filter @q9labsai/chalk-whiteboard run build && pnpm run sync:public && vite build && pnpm exec tsx scripts/prepare-pages-spa.mjs && pnpm run build:dashboard-functions",
     "sync:public": "pnpm exec tsx scripts/sync-public-assets.ts",
+    "brand:assets": "pnpm exec tsx scripts/brand-assets.ts",
     "preview": "vite preview",
     "test": "pnpm exec vitest run --config ./vitest.config.ts",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",

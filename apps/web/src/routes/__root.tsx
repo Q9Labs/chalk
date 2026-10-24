@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
+import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
 import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
 import appCss from "../styles.css?url";
@@ -18,9 +19,9 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "manifest", href: "/manifest.json" },
-      { rel: "icon", href: "/brand/chalk/chalk-icon.svg", type: "image/svg+xml" },
-      { rel: "icon", href: "/favicon.ico", sizes: "64x64" },
-      { rel: "apple-touch-icon", href: "/brand/chalk/apple-touch-icon.png" },
+      { rel: "icon", href: `${BRAND_DIR}/chalk-icon.svg`, type: "image/svg+xml" },
+      { rel: "icon", href: FAVICON_ICO, sizes: "16x16 32x32 48x48" },
+      { rel: "apple-touch-icon", href: `${BRAND_DIR}/apple-touch-icon.png` },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
