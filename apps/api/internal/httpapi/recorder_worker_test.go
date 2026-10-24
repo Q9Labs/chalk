@@ -203,7 +203,7 @@ func TestRecorderWorkerClaimUsesVerifiedRoleAndIdentityOwner(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if got.Kind != recordingpipeline.JobKindCapture || got.Owner != workerTestID || got.LeaseFor != recorderWorkerDefaultLease || got.LeaseToken == "" {
+	if !got.ManagedWorker || got.Kind != recordingpipeline.JobKindCapture || got.Owner != workerTestID || got.LeaseFor != recorderWorkerDefaultLease || got.LeaseToken == "" {
 		t.Fatalf("claim input = %#v", got)
 	}
 	var body recorderWorkerClaimResponse

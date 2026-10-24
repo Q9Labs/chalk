@@ -513,9 +513,9 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("lock recording worker admission: %w", err)
 		}
-		// Local and legacy owners have no fleet row; the managed HTTP verifier
-		// separately requires a registered identity before reaching this repository.
-		if err == nil && !authorized {
+		// Authentication can precede row loss. Managed claims must still have
+		// an admitted binding here, in the transaction that creates the lease.
+		if errors.Is(err, pgx.ErrNoRows) && input.ManagedWorker || err == nil && !authorized {
 			return recordingpipeline.ErrJobNotFound
 		}
 		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
