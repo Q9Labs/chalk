@@ -112,6 +112,13 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
     requests = Enum.sum(Enum.map(handlers, fn {_pid, requests, _info} -> length(requests) end))
 
     if requests >= count do
+      IO.inspect(
+        Enum.map(handlers, fn {_pid, requests, info} ->
+          %{requests: length(requests), queued: get_in(info, [:session, :queue_length])}
+        end),
+        label: "shared HTTP handlers during cleanup"
+      )
+
       :ok
     else
       Process.sleep(10)

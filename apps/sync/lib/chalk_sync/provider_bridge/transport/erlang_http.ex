@@ -6,6 +6,7 @@ defmodule ChalkSync.ProviderBridge.Transport.ErlangHTTP do
   def request(method, url, headers, body, options) when method in [:get, :post] do
     :inets.start()
     :ssl.start()
+    profile = Keyword.get(options, :profile, :default)
 
     request =
       case method do
@@ -22,17 +23,31 @@ defmodule ChalkSync.ProviderBridge.Transport.ErlangHTTP do
         connect_timeout: Keyword.fetch!(options, :connect_timeout)
       ] ++ ssl_options(url, Keyword.get(options, :ssl, []))
 
-    case :httpc.request(method, request, http_options, [{:body_format, :binary}]) do
-      {:ok, {{_version, status, _reason}, response_headers, response_body}} ->
-        {:ok, status, headers_to_binaries(response_headers), response_body}
+    with :ok <- ensure_profile(profile) do
+      case :httpc.request(method, request, http_options, [{:body_format, :binary}], profile) do
+        {:ok, {{_version, status, _reason}, response_headers, response_body}} ->
+          {:ok, status, headers_to_binaries(response_headers), response_body}
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   rescue
     _ -> {:error, :transport_error}
   catch
     :exit, reason -> {:error, reason}
+  end
+
+  defp ensure_profile(:default), do: :ok
+
+  # httpc queues keep-alive requests behind active requests to the same origin.
+  # The fixed readiness profile owns separate sessions from provider operations.
+  defp ensure_profile(profile) do
+    case :inets.start(:httpc, profile: profile) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp content_type(:post), do: ~c"application/json"
