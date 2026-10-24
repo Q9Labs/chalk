@@ -358,7 +358,14 @@ def verify_images(github, args):
     require(images, 'release has no container images')
     for component, image in images.items():
         match = re.fullmatch(r'([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?/([a-z0-9._/-]+)@(sha256:[0-9a-f]{64})', image)
-        require(match, f'{component}: expected a digest-addressed ECR image')
+        if not match:
+            require(component in ('redis', 'cloudflared') and re.fullmatch(r'docker.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}', image),
+                    f'{component}: expected a digest-addressed release image')
+            try:
+                subprocess.run(['docker', 'manifest', 'inspect', image], check=True, capture_output=True, timeout=60)
+            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                raise ValueError(f'{component}: public image check failed; refusing deployment') from error
+            continue
         registry, region, repository, checksum = match.groups()
         try:
             result = subprocess.run(['aws', 'ecr', 'describe-images', '--registry-id', registry,
@@ -371,11 +378,13 @@ def verify_images(github, args):
         if result.returncode:
             require('ImageNotFoundException' not in result.stderr,
                     f'{component}: held container image is missing from ECR; cut a new nightly')
-            raise ValueError(f'{component}: ECR image check failed; refusing deployment')
+            code = re.search(r'\(([A-Za-z][A-Za-z0-9]+)\)', result.stderr)
+            reason = code[1] if code else 'lookup error'
+            raise ValueError(f'{component}: ECR image check failed ({reason}); refusing deployment')
         details = json.loads(result.stdout).get('imageDetails', [])
         require(any(item['imageDigest'] == checksum for item in details),
                 f'{component}: held container image is missing from ECR; cut a new nightly')
-    print('All release container digests exist in ECR')
+    print('All release container digests are available')
 
 
 def main():

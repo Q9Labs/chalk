@@ -374,13 +374,17 @@ class ImagePreflightTests(unittest.TestCase):
         start = workflow.index('          if [[ "$MANAGED_ENVIRONMENT" == production ]]; then\n            python3 scripts/releases/release.py verify_images')
         end = workflow.index('          if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then', start)
         script = textwrap.dedent(workflow[start:end])
-        for mode in ('present', 'missing', 'denied'):
+        for mode in ('present', 'missing', 'denied', 'public-missing'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 manifest = root / 'held.json'
                 manifest.write_text(json.dumps({'images': {
                     name: '123456789012.dkr.ecr.eu-west-1.amazonaws.com/' + name + '@sha256:' + 'a' * 64
-                    for name in ('api', 'sync', 'recorder_control')}}))
+                    for name in ('api', 'sync', 'recorder_control')}, 'schema_version': 2}))
+                value = json.loads(manifest.read_text())
+                value['images'].update({name: 'docker.io/example/' + name + '@sha256:' + 'b' * 64
+                                        for name in ('redis', 'cloudflared')})
+                manifest.write_text(json.dumps(value))
                 manifest.with_suffix('.media.json').write_text('{}')
                 trace = root / 'trace'
                 aws = root / 'aws'
@@ -389,12 +393,15 @@ class ImagePreflightTests(unittest.TestCase):
                     repository = sys.argv[sys.argv.index('--repository-name') + 1]
                     with open(os.environ['TRACE'], 'a') as trace:
                         trace.write('describe:' + repository + '\\n')
-                    if repository == 'sync' and os.environ['MODE'] != 'present':
-                        print('ImageNotFoundException' if os.environ['MODE'] == 'missing' else 'AccessDeniedException', file=sys.stderr)
+                    if repository == 'sync' and os.environ['MODE'] in ('missing', 'denied'):
+                        print('ImageNotFoundException' if os.environ['MODE'] == 'missing' else 'An error occurred (AccessDeniedException) when calling DescribeImages', file=sys.stderr)
                         sys.exit(1)
                     print(json.dumps({'imageDetails': [{'imageDigest': 'sha256:' + 'a' * 64}]}))
                     """))
                 aws.chmod(0o755)
+                docker = root / 'docker'
+                docker.write_text('#!/bin/sh\necho public-image >> "$TRACE"\n[ "$MODE" != public-missing ]\n')
+                docker.chmod(0o755)
                 stubs = """
                     node() { echo "host:$*" >> "$TRACE"; }
                     python3() {
@@ -415,14 +422,19 @@ class ImagePreflightTests(unittest.TestCase):
                 events = trace.read_text().splitlines()
                 if mode == 'present':
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(events[:3], ['describe:api', 'describe:sync', 'describe:recorder_control'])
+                    self.assertEqual(events[:5], ['describe:api', 'describe:sync', 'describe:recorder_control',
+                                                  'public-image', 'public-image'])
                     self.assertIn('parameter:pin_archives', events)
                     self.assertEqual(sum(item.startswith('host:') for item in events), 2)
                 else:
                     self.assertNotEqual(result.returncode, 0)
-                    self.assertEqual(events, ['describe:api', 'describe:sync'])
-                    self.assertIn('sync:', result.stderr)
-                    self.assertIn('missing from ECR' if mode == 'missing' else 'check failed', result.stderr)
+                    if mode == 'public-missing':
+                        self.assertEqual(events, ['describe:api', 'describe:sync', 'describe:recorder_control', 'public-image'])
+                        self.assertIn('redis: public image check failed', result.stderr)
+                    else:
+                        self.assertEqual(events, ['describe:api', 'describe:sync'])
+                        self.assertIn('sync:', result.stderr)
+                        self.assertIn('missing from ECR' if mode == 'missing' else 'AccessDeniedException', result.stderr)
 
 
 class ArtifactTests(unittest.TestCase):
