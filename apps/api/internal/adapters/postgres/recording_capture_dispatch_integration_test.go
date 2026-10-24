@@ -21,8 +21,8 @@ import (
 // These cases preserve the judge's applied-then-500 and durable-stop probes.
 func TestRecordingCaptureDispatchSafetyPostgres(t *testing.T) {
 	for _, operation := range []captureplane.OperationKind{captureplane.OperationPullCaptureTracks, captureplane.OperationRenegotiateCaptureConnection} {
-		for _, scenario := range []string{"applied-500", "stop-during-500", "stop-during-safe-rejection", "deadline-during-safe-rejection"} {
-			if operation == captureplane.OperationRenegotiateCaptureConnection && strings.HasSuffix(scenario, "safe-rejection") {
+		for _, scenario := range []string{"applied-500", "stop-during-500", "stop-during-safe-rejection", "deadline-during-safe-rejection", "stop-after-safe-wait"} {
+			if operation == captureplane.OperationRenegotiateCaptureConnection && strings.Contains(scenario, "safe-") {
 				continue
 			}
 			t.Run(string(operation)+"/"+scenario, func(t *testing.T) {
@@ -42,14 +42,14 @@ func TestRecordingCaptureDispatchSafetyPostgres(t *testing.T) {
 						_, _ = fmt.Fprint(w, `{"requiresImmediateRenegotiation":true,"sessionDescription":{"type":"offer","sdp":"v=0\r\n"},"tracks":[{"sessionId":"publisher","trackName":"audio","mid":"0","location":"remote"}]}`)
 					default:
 						if calls.Add(1) == 1 {
-							if strings.HasPrefix(scenario, "stop-") {
+							if strings.HasPrefix(scenario, "stop-") && scenario != "stop-after-safe-wait" {
 								if _, err := repository.RequestStop(t.Context(), identity.TenantID, identity.EpisodeID, identity.RecordingID, newCaptureRetryID(t)); err != nil {
 									t.Errorf("durable stop: %v", err)
 								}
 							} else if strings.HasPrefix(scenario, "deadline-") {
 								execCleanupFixture(t, tx, `update recording_reservations set ends_at=clock_timestamp() where recording_id=$1`, identity.RecordingID.Bytes())
 							}
-							if strings.HasSuffix(scenario, "safe-rejection") {
+							if strings.Contains(scenario, "safe-") {
 								_, _ = fmt.Fprint(w, `{"tracks":[{"sessionId":"publisher","trackName":"audio","location":"remote","errorCode":"empty_track_error"}]}`)
 							} else {
 								w.WriteHeader(http.StatusInternalServerError)
@@ -77,7 +77,11 @@ func TestRecordingCaptureDispatchSafetyPostgres(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				service, err := capturesignaling.NewService(postgres.NewRecordingCaptureSignalingRepositoryWithTransactor(captureRetryTransaction{tx}, nil), captureRetryResolver{adapter}, capturesignaling.Options{})
+				options := capturesignaling.Options{}
+				if scenario == "stop-after-safe-wait" {
+					options.MaxWait = 100 * time.Millisecond
+				}
+				service, err := capturesignaling.NewService(postgres.NewRecordingCaptureSignalingRepositoryWithTransactor(captureRetryTransaction{tx}, nil), captureRetryResolver{adapter}, options)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -89,6 +93,17 @@ func TestRecordingCaptureDispatchSafetyPostgres(t *testing.T) {
 				_, err = service.Execute(t.Context(), capturesignaling.ExecuteRequest{Command: command})
 				if calls.Load() != 1 || err == nil {
 					t.Fatalf("media dispatches=%d error=%v; want one dispatch and failure, never same-session replay", calls.Load(), err)
+				}
+				if scenario == "applied-500" {
+					_, err = service.Execute(t.Context(), capturesignaling.ExecuteRequest{Command: command})
+					if calls.Load() != 1 || err == nil {
+						t.Fatalf("durable failure replay sent media: calls=%d error=%v", calls.Load(), err)
+					}
+				}
+				if scenario == "stop-after-safe-wait" {
+					if _, err := repository.RequestStop(t.Context(), identity.TenantID, identity.EpisodeID, identity.RecordingID, newCaptureRetryID(t)); err != nil {
+						t.Fatal(err)
+					}
 				}
 				if scenario != "applied-500" {
 					command.Identity.IdempotencyKey = "after-stop-or-deadline"

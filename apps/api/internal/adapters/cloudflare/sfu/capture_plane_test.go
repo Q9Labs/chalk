@@ -240,6 +240,7 @@ func TestCapturePlaneConformsToProviderNeutralPort(t *testing.T) {
 		{status: http.StatusOK, body: `{}`},
 		{status: http.StatusOK, body: captureObservedTracksProviderBody(t)},
 		{status: http.StatusOK, body: `{"tracks":[{"mid":"0"},{"mid":"1"}]}`},
+		{status: http.StatusOK, body: captureObservedTracksProviderBody(t)},
 		{status: http.StatusOK, body: `{"tracks":[{"mid":"0"},{"mid":"1"}]}`},
 	}}
 	adapter := newCaptureTestAdapter(t, client)
@@ -253,8 +254,8 @@ func TestCapturePlaneConformsToProviderNeutralPort(t *testing.T) {
 		Tracks:                   tracks,
 		RenegotiationDescription: captureplane.Description{Type: "answer", SDP: "v=0\r\n"},
 	})
-	if len(client.requests) != 6 {
-		t.Fatalf("provider request count = %d, want six first-attempt operations", len(client.requests))
+	if len(client.requests) != 7 {
+		t.Fatalf("provider request count = %d, want six operations plus retirement inspection", len(client.requests))
 	}
 }
 

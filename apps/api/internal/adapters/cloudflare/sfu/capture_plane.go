@@ -933,6 +933,7 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 			if !errors.As(err, &failure) || (failure.statusCode != http.StatusGone && failure.statusCode != http.StatusNotFound) {
 				return captureplane.CloseCaptureConnectionResult{}, captureProviderError(err)
 			}
+			closeTracks = nil
 		} else {
 			seen := make(map[string]bool, len(closeTracks))
 			for _, track := range closeTracks {
@@ -941,7 +942,7 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 			for _, track := range response.Tracks {
 				mid, err := captureplane.NewProviderReference(track.Mid)
 				if err != nil {
-					return captureplane.CloseCaptureConnectionResult{}, err
+					return captureplane.CloseCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract"}
 				}
 				if !seen[mid.String()] {
 					closeTracks = append(closeTracks, captureCloseTrack{Mid: mid.String()})
