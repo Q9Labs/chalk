@@ -58,10 +58,38 @@ def fixture_config():
                                 function_name='chalk-nightly-transcription-dispatcher', scheduler_name='chalk-nightly-transcription-reconcile', scheduler_group='chalk-nightly'))
 
 
+ALLOWED_CALLS = {
+    'aws --region example lambda get-function-configuration --function-name chalk-nightly-transcription-dispatcher --output json',
+    'aws --region example s3api get-object --bucket chalk-nightly-state-000000000000 --key transcription/terraform.tfstate <state>/state.json --output json',
+    'aws --region example s3api get-object --bucket example-artifacts --key transcription-dispatcher/example/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.zip --version-id immutable-version <work>/dispatcher.zip --output json',
+    'aws --region example s3api list-objects-v2 --bucket chalk-nightly-state-000000000000 --prefix transcription/terraform.tfstate --output json',
+    'aws --region example s3api put-object --bucket example-artifacts --key transcription-dispatcher/example-release/eaca4b30692888d0183a2b77143637676909413108ce72808d7bf7438679536a.zip --body <work>/dispatcher.zip --output json',
+    'aws --region example scheduler get-schedule --name chalk-nightly-transcription-reconcile --group-name chalk-nightly --output json',
+    'aws --region example ssm get-parameter --name /example/config --with-decryption --output json',
+    'tofu -chdir=<work> apply -input=false -no-color release.plan',
+    'tofu -chdir=<work> import -input=false module.dispatcher.aws_cloudwatch_log_group.dispatcher /aws/lambda/chalk-nightly-transcription-dispatcher',
+    'tofu -chdir=<work> import -input=false module.dispatcher.aws_iam_role.dispatcher chalk-nightly-transcription-dispatcher-execution',
+    'tofu -chdir=<work> import -input=false module.dispatcher.aws_iam_role.scheduler chalk-nightly-transcription-dispatcher-scheduler',
+    'tofu -chdir=<work> init -input=false -upgrade=false',
+    'tofu -chdir=<work> init -input=false -upgrade=false -backend-config=bucket=chalk-nightly-state-000000000000',
+    'tofu -chdir=<work> plan -input=false -no-color -out=release.plan',
+    'tofu -chdir=<work> plan -input=false -no-color -target=module.dispatcher.aws_cloudwatch_log_group.dispatcher -out=release.plan',
+    'tofu -chdir=<work> plan -input=false -no-color -target=module.dispatcher.aws_lambda_function.dispatcher -out=release.plan',
+    'tofu -chdir=<work> show -json release.plan',
+    'tofu -chdir=<work> state list',
+}
+TEMPORARY = re.compile(re.escape(tempfile.gettempdir()) + r'/chalk-(?:(dispatcher-release)|release-state)-\w+')
+
+
+def call_shape(call):
+    return TEMPORARY.sub(lambda match: '<work>' if match.group(1) else '<state>', ' '.join(call))
+
+
 class DispatcherBoundary(unittest.TestCase):
     def test_dispatcher_release_through_executables(self):
         cases = [(mode, '') for mode in ('no-op', 'changed-zip', 'binding', 'output-update', 'forbidden-update', 'bad-json', 'missing-state', 'partial-state')]
         cases += [(mode, fault) for mode in ('no-op', 'changed-zip') for fault in ('unhealthy', 'wrong-zip', 'stale-release')]
+        exercised = set()
         for mode, fault in cases:
             with self.subTest(mode=mode, final_fault=fault), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -117,6 +145,9 @@ class DispatcherBoundary(unittest.TestCase):
                         media.deploy_dispatcher(args)
                         self.assertTrue(json.loads(stdout.getvalue())['verified'])
                 calls = [json.loads(line) for line in (root / 'calls.jsonl').read_text().splitlines()]
+                shapes = {call_shape(call) for call in calls}
+                self.assertLessEqual(shapes, ALLOWED_CALLS)
+                exercised |= shapes
                 applies = [call for call in calls if call[0] == 'tofu' and call[2] == 'apply']
                 self.assertEqual(len(applies), 0 if mode in ('no-op', 'forbidden-update', 'bad-json') else
                                  1 if mode in ('missing-state', 'partial-state') else 3)
@@ -126,6 +157,7 @@ class DispatcherBoundary(unittest.TestCase):
                     self.assertEqual(sum('get-function-configuration' in call for call in calls), 1 if mode in ('missing-state', 'partial-state') else 2)
                     if not fault:
                         self.assertTrue(any('get-schedule' in call for call in calls))
+        self.assertEqual(exercised, ALLOWED_CALLS)
 
 
 if __name__ == '__main__':
