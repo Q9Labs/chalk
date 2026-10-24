@@ -385,9 +385,14 @@ func capturePlanTracks(publications []persistedCapturePlanPublication, participa
 			continue
 		}
 		participantID, err := utilities.ParseID(publication.ParticipantID)
-		generation, participantExists := participantGenerations[participantID]
-		if err != nil || !participantExists {
+		if err != nil {
 			return nil, fmt.Errorf("invalid capture publication identity: %w", captureplan.ErrInvalidTrack)
+		}
+		generation, participantExists := participantGenerations[participantID]
+		// Provider observations can precede admission or outlive departure.
+		// Only the current participant snapshot authorizes a capture track.
+		if !participantExists {
+			continue
 		}
 		reference, err := mediapublications.ParseReference(*publication.PublicationID)
 		if err != nil || !reference.HasMID || !reference.HasParticipantGeneration || reference.ParticipantGeneration != generation {
