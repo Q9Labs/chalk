@@ -649,12 +649,12 @@ class EnvelopeTests(unittest.TestCase):
     def test_pages_rollback_restores_exact_saved_identity_without_archives(self):
         os.environ.setdefault('GITHUB_OUTPUT', os.devnull)
         with patch.object(web, 'pages', return_value={'id': 'saved'}) as request:
-            with patch.object(web, 'current', return_value='saved'):
+            with patch.object(web, 'current', side_effect=['old', 'saved']):
                 web.rollback('chalk-web', 'saved')
             request.assert_called_once_with('chalk-web', '/deployments/saved/rollback', 'POST')
-        with patch.object(web, 'pages', return_value={'id': 'other'}):
-            with self.assertRaisesRegex(ValueError, 'did not restore'):
-                web.rollback('chalk-web', 'saved')
+        with patch.object(web, 'pages', return_value={'id': 'other'}), patch.object(web, 'current', return_value='old'):
+            with self.assertRaisesRegex(ValueError, 'returned a different deployment'):
+                web.rollback('example', 'saved')
 
     def test_previous_production_uses_deploy_result_and_manifest_not_nightly_archive(self):
         api = SimpleNamespace(repository='Q9Labs/chalk', deployments=lambda *args, **kwargs: [])

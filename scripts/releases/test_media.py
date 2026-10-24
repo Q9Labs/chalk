@@ -20,6 +20,53 @@ def members():
 
 
 class MediaIdentities(unittest.TestCase):
+    def test_dispatcher_skips_only_matching_no_op_applies(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        import contextlib
+        import io
+        value = members()
+        archive_bytes = b'example dispatcher zip'
+        value['dispatcher']['sha256'] = digest(archive_bytes)
+        config = {'dispatcher': {'function_name': 'example', 'scheduler_name': 'example', 'scheduler_group': 'example'}}
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, output = Path(directory) / 'manifest.json', Path(directory) / 'media.json'
+            manifest.write_text(json.dumps(dict(component_releases=dict(api=dict(release_id='example-release')))))
+            output.write_text(json.dumps(value))
+            args = SimpleNamespace(manifest=manifest, output=output, dry_run=False)
+            for changed_zip, actions, output_actions, expected in [(False, ['no-op'], ['no-op'], 0),
+                                                                 (True, ['no-op'], ['no-op'], 3),
+                                                                 (False, ['update'], ['no-op'], 3),
+                                                                 (False, ['no-op'], ['update'], 3)]:
+                with self.subTest(changed_zip=changed_zip, actions=actions, output_actions=output_actions):
+                    provider = Mock()
+                    inputs = dict(artifact_sha256='different' if changed_zip else value['dispatcher']['sha256'],
+                                  release_id='example-release', release_manifest_digest='sha256:' + digest(manifest.read_bytes()),
+                                  deepinfra_corpus_digest=value['dispatcher']['corpus_digest'], artifact_s3_bucket='example-artifacts',
+                                  artifact_s3_key='example.zip', artifact_s3_object_version='example-version')
+                    def aws(*arguments, **kwargs):
+                        if arguments[:2] == ('s3api', 'get-object'):
+                            Path(arguments[-1]).write_bytes(archive_bytes)
+                            return {}
+                        if arguments[:2] == ('lambda', 'get-function-configuration'):
+                            return {'Environment': {'Variables': {}}}
+                        if arguments[:2] == ('scheduler', 'get-schedule'):
+                            return {'State': 'ENABLED'}
+                        return {'VersionId': 'example-version'}
+                    provider.aws.side_effect = aws
+                    provider.command.return_value = json.dumps(dict(resource_changes=[dict(change=dict(actions=actions))],
+                                                                   output_changes=dict(identity=dict(actions=output_actions))))
+                    with patch.object(media, 'check_configuration'), patch.object(media, 'settings', return_value=(provider, config)), \
+                            patch.object(media, 'installed_dispatcher', return_value=True), \
+                            patch.object(media, 'dispatcher_root', side_effect=lambda *args: {'module': {'dispatcher': dict(inputs)}}), \
+                            patch.object(media, 'check_dispatcher_update') as check, patch.object(media, 'verify_dispatcher', return_value={}) as verify, \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        media.deploy_dispatcher(args)
+                    self.assertEqual(sum('apply' in call.args[0] for call in provider.command.call_args_list), expected)
+                    self.assertEqual(check.call_count, 3)
+                    verify.assert_called_once()
+                    self.assertEqual(sum(call.args[:2] == ('s3api', 'put-object') for call in provider.aws.call_args_list), int(changed_zip))
+
     def test_retained_runtime_keeps_current_archive_pins_for_later_rollback(self):
         from unittest.mock import Mock
         value = members()

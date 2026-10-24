@@ -77,8 +77,10 @@ def current(project):
 
 
 def rollback(project, deployment_id):
-    deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
-    require(deployment['id'] == deployment_id and current(project) == deployment_id, 'Pages rollback did not restore the saved deployment')
+    if current(project) != deployment_id:
+        deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
+        require(deployment['id'] == deployment_id, 'Pages rollback returned a different deployment')
+    require(current(project) == deployment_id, 'Pages rollback verification failed: saved deployment is not live')
     outputs({'pages_deployment_id': deployment_id})
 
 
