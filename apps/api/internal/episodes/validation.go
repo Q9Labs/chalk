@@ -103,7 +103,7 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	input.Role = role
 
 	if input.Identity != nil {
-		if !input.IdentityID.IsZero() || (input.Identity.Kind != "user" && input.Identity.Kind != "agent") || input.Identity.ExternalID == "" || len(input.Identity.ExternalID) > 512 || !utf8.ValidString(input.Identity.ExternalID) {
+		if !input.IdentityID.IsZero() || (input.Identity.Kind != "user" && input.Identity.Kind != "agent") || input.Identity.ExternalID == "" || utf8.RuneCountInString(input.Identity.ExternalID) > 512 || !utf8.ValidString(input.Identity.ExternalID) {
 			return ErrInvalidIntentPayload
 		}
 	}
