@@ -32,7 +32,19 @@ if command == 'aws':
         reply(dict(VersionId='example-version'))
     elif 'get-function-configuration' in args:
         function = next(item['instances'][0]['attributes'] for item in state['resources'] if item['type'] == 'aws_lambda_function')
-        reply(dict(State='Active', LastUpdateStatus='Successful', CodeSha256=function['source_code_hash'], Environment=dict(Variables=function['environment'][0]['variables'])))
+        counter = root / 'lambda-reads'
+        reads = int(counter.read_text()) + 1 if counter.exists() else 1
+        counter.write_text(str(reads))
+        response = dict(State='Active', LastUpdateStatus='Successful', CodeSha256=function['source_code_hash'], Environment=dict(Variables=function['environment'][0]['variables']))
+        if reads > 1:
+            fault = os.environ.get('MEDIA_FINAL_FAULT', '')
+            if fault == 'unhealthy':
+                response['LastUpdateStatus'] = 'Failed'
+            elif fault == 'wrong-zip':
+                response['CodeSha256'] = 'different-live-zip'
+            elif fault == 'stale-release':
+                response['Environment']['Variables']['CHALK_RELEASE_ID'] = 'example-previous'
+        reply(response)
     elif 'get-schedule' in args:
         reply(dict(State='ENABLED'))
     else:

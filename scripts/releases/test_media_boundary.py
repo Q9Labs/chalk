@@ -60,8 +60,10 @@ def fixture_config():
 
 class DispatcherBoundary(unittest.TestCase):
     def test_dispatcher_release_through_executables(self):
-        for mode in ('no-op', 'changed-zip', 'binding', 'output-update', 'forbidden-update', 'bad-json', 'missing-state', 'partial-state'):
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+        cases = [(mode, '') for mode in ('no-op', 'changed-zip', 'binding', 'output-update', 'forbidden-update', 'bad-json', 'missing-state', 'partial-state')]
+        cases += [(mode, fault) for mode in ('no-op', 'changed-zip') for fault in ('unhealthy', 'wrong-zip', 'stale-release')]
+        for mode, fault in cases:
+            with self.subTest(mode=mode, final_fault=fault), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 executable = '#!' + sys.executable + '\n' + (Path(__file__).parent / 'fixtures/media_commands.py').read_text()
                 for name in ('aws', 'tofu'):
@@ -92,8 +94,14 @@ class DispatcherBoundary(unittest.TestCase):
                                        manifest=manifest, output=output, dry_run=False)
                 stdout = io.StringIO()
                 with patch.dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'], AWS_PROFILE='',
-                                MEDIA_FIXTURE=directory, MEDIA_CASE=mode, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(stdout):
-                    if mode in ('forbidden-update', 'bad-json'):
+                                MEDIA_FIXTURE=directory, MEDIA_CASE=mode, MEDIA_FINAL_FAULT=fault, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(stdout):
+                    if fault:
+                        messages = {'unhealthy': 'dispatcher update is not healthy', 'wrong-zip': 'dispatcher ZIP digest changed',
+                                    'stale-release': 'dispatcher runtime release binding mismatch'}
+                        with self.assertRaisesRegex(ValueError, messages[fault]):
+                            media.deploy_dispatcher(args)
+                        self.assertEqual(stdout.getvalue(), '')
+                    elif mode in ('forbidden-update', 'bad-json'):
                         with self.assertRaisesRegex(ValueError, 'resource allowlist' if mode == 'forbidden-update' else 'Expecting value'):
                             media.deploy_dispatcher(args)
                         self.assertEqual(stdout.getvalue(), '')
@@ -107,8 +115,9 @@ class DispatcherBoundary(unittest.TestCase):
                 self.assertTrue(any('get-parameter' in call for call in calls))
                 self.assertTrue(any('show' in call for call in calls))
                 if mode not in ('forbidden-update', 'bad-json'):
-                    self.assertTrue(any('get-function-configuration' in call for call in calls))
-                    self.assertTrue(any('get-schedule' in call for call in calls))
+                    self.assertEqual(sum('get-function-configuration' in call for call in calls), 1 if mode in ('missing-state', 'partial-state') else 2)
+                    if not fault:
+                        self.assertTrue(any('get-schedule' in call for call in calls))
 
 
 if __name__ == '__main__':

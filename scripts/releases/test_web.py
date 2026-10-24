@@ -16,7 +16,7 @@ import web
 class PagesRollback(unittest.TestCase):
     def test_rollback_over_http(self):
         for case in ('restore', 'already-live', 'stale', 'http-error', 'invalid-json',
-                     'api-error', 'preview', 'failed', 'missing'):
+                     'api-error', 'preview', 'failed', 'missing', 'post-id-mismatch', 'non-loopback'):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
                 requests = []
                 live = 'saved' if case == 'already-live' else 'old'
@@ -41,7 +41,7 @@ class PagesRollback(unittest.TestCase):
                             live = 'saved'
                         self.send_response(200)
                         self.end_headers()
-                        self.wfile.write(json.dumps(dict(success=True, result=dict(id='saved'))).encode())
+                        self.wfile.write(json.dumps(dict(success=True, result=dict(id='other' if case == 'post-id-mismatch' else 'saved'))).encode())
 
                 server = ThreadingHTTPServer(('127.0.0.1', 0), PagesAPI)
                 thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -50,7 +50,8 @@ class PagesRollback(unittest.TestCase):
                 output.touch()
                 stdout = io.StringIO()
                 try:
-                    with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://127.0.0.1:{server.server_port}',
+                    host = '0.0.0.0' if case == 'non-loopback' else '127.0.0.1'
+                    with patch.dict(os.environ, CLOUDFLARE_API_BASE_URL=f'http://{host}:{server.server_port}', NO_PROXY='*', no_proxy='*',
                                     CLOUDFLARE_ACCOUNT_ID='example-account', CLOUDFLARE_API_TOKEN='example-token',
                                     GITHUB_OUTPUT=str(output)), contextlib.redirect_stdout(stdout):
                         if case in ('restore', 'already-live'):
@@ -62,6 +63,10 @@ class PagesRollback(unittest.TestCase):
                             cause = failure.exception.__cause__
                             if isinstance(cause, web.urllib.error.HTTPError):
                                 cause.close()
+                            if case == 'non-loopback':
+                                self.assertIn('override must use a loopback host', str(failure.exception))
+                            if case == 'post-id-mismatch':
+                                self.assertIn('returned a different deployment', str(failure.exception))
                             if case == 'stale':
                                 self.assertIn('saved deployment is not live', str(failure.exception))
                             self.assertEqual(output.read_text(), '')
@@ -72,7 +77,8 @@ class PagesRollback(unittest.TestCase):
                     thread.join(timeout=5)
                 methods = [method for method, _ in requests]
                 self.assertEqual(methods, ['GET', 'POST', 'GET'] if case in ('restore', 'stale') else
-                                 ['GET', 'GET'] if case == 'already-live' else ['GET'])
+                                 ['GET', 'GET'] if case == 'already-live' else
+                                 ['GET', 'POST'] if case == 'post-id-mismatch' else [] if case == 'non-loopback' else ['GET'])
                 prefix = '/accounts/example-account/pages/projects/example-project'
                 self.assertTrue(all(path == prefix if method == 'GET' else path == prefix + '/deployments/saved/rollback'
                                     for method, path in requests))

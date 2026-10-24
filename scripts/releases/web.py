@@ -13,7 +13,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from github_release import GitHub, outputs, require
 
@@ -59,6 +59,8 @@ def pages(project, route='', method='GET'):
     require(project, 'missing explicit Pages project')
     account = os.environ['CLOUDFLARE_ACCOUNT_ID']
     base_url = os.environ.get('CLOUDFLARE_API_BASE_URL', 'https://api.cloudflare.com/client/v4').rstrip('/')
+    require('CLOUDFLARE_API_BASE_URL' not in os.environ or urlsplit(base_url).hostname in ('127.0.0.1', '::1', 'localhost'),
+            'Pages API override must use a loopback host')
     url = f'{base_url}/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
     try:
