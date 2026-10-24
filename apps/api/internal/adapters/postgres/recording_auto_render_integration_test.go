@@ -115,7 +115,7 @@ func testCaptureCompletionRenderMode(t *testing.T, mode string) {
 		}
 		lease := recordingpipeline.LeaseInput{
 			JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration,
-			LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner,
+			LeaseToken: claimed.Authority.LeaseToken, LeaseOwner: claimed.Authority.LeaseOwner, LeaseFor: 5 * time.Minute,
 			CaptureEpoch: claimed.Authority.Envelope.CaptureEpoch, EnvelopeDigest: claimed.Authority.EnvelopeDigest,
 		}
 		traceID, err := trace.TraceIDFromHex("0123456789abcdef0123456789abcdef")

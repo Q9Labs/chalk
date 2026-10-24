@@ -24,7 +24,7 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 	for _, mode := range []string{"automatic", "on_demand"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := t.Context()
-			tx, fixture := newTranscriptionAllocationCleanupFixture(t, false)
+			tx, fixture := newAllocationCleanupFixtureWithMode(t, false, "transcription", mode)
 			defer tx.Rollback(context.Background())
 			prepareTranscriptionCaptureFacts(t, tx, fixture)
 			row, err := sqlc.New(tx).GetRecordingRenderInputByAttempt(ctx, sqlc.GetRecordingRenderInputByAttemptParams{
@@ -54,7 +54,6 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 			if mode == "on_demand" {
 				execCleanupFixture(t, tx, `update spaces set transcription_policy='on_demand' where id=$1`, authority.SpaceID.Bytes())
 			}
-			execCleanupFixture(t, tx, `update episodes e set config_snapshot=jsonb_set(e.config_snapshot,'{artifact_policy,transcription,mode}',to_jsonb(s.transcription_policy)) from spaces s where e.space_id=s.id and e.id=$1`, authority.EpisodeID.Bytes())
 			execCleanupFixture(t, tx, `update recordings set status='pending',completed_at=null where id=$1`, fixture.recordingID.Bytes())
 			execCleanupFixture(t, tx, `delete from recording_transcription_preparation_commits where transcription_job_id=$1`, fixture.jobID.Bytes())
 			execCleanupFixture(t, tx, `delete from recording_transcription_sources where recording_id=$1`, fixture.recordingID.Bytes())
