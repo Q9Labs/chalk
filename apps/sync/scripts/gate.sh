@@ -23,6 +23,7 @@ Checks:
   - mix compile --warnings-as-errors (test env, compiles test support too)
   - mix credo --strict
   - PostgreSQL-backed mix test with zero skipped cases
+  - Real API bridge readiness while Cloudflare cleanup is blocked
 EOF
 }
 
@@ -69,5 +70,6 @@ repository_root="$(cd ../.. && pwd)"
 test_timeout_seconds="${CHALK_SYNC_TEST_TIMEOUT_SECONDS:-1800}"
 run "Credo" "${repository_root}/scripts/gates/with-timeout.sh" 600 "Sync Credo" -- mix credo --strict
 run "Tests (zero skips)" "${repository_root}/scripts/gates/with-timeout.sh" "${test_timeout_seconds}" "Sync tests" -- scripts/test-strict --max-cases "${CHALK_SYNC_TEST_MAX_CASES:-10}"
+run "Provider bridge readiness" "${repository_root}/scripts/gates/with-timeout.sh" 300 "Provider bridge readiness" -- scripts/provider-bridge-readiness-test
 
 printf '\nSync server gate passed.\n'

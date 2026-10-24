@@ -855,11 +855,14 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 	request := captureCloseTracksRequest{Tracks: closeTracks, Force: true}
 	var response captureCloseTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/close", url.PathEscape(input.Connection.String()))
-	if err := a.request(ctx, http.MethodPut, path, request, &response, "close_tracks"); err != nil {
-		return captureplane.CloseCaptureTracksResult{}, captureProviderError(err)
+	requestErr := a.request(ctx, http.MethodPut, path, request, &response, "close_tracks")
+	if requestErr != nil && !captureCloseSessionGone(requestErr) {
+		return captureplane.CloseCaptureTracksResult{}, captureProviderError(requestErr)
 	}
-	if err := validateCaptureCloseResponse(response, closeTracks); err != nil {
-		return captureplane.CloseCaptureTracksResult{}, err
+	if requestErr == nil {
+		if err := validateCaptureCloseResponse(response, closeTracks); err != nil {
+			return captureplane.CloseCaptureTracksResult{}, err
+		}
 	}
 	negotiation, err := captureNegotiation(input.Metadata, input.Connection, captureplane.OperationCloseCaptureTracks, response.Description, response.RequiresImmediateRenegotiation)
 	if err != nil {
@@ -921,11 +924,14 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 		}
 		var closeResponse captureCloseTracksResponse
 		path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/close", url.PathEscape(input.Connection.String()))
-		if err := a.request(ctx, http.MethodPut, path, captureCloseTracksRequest{Tracks: closeTracks, Force: input.Force}, &closeResponse, "close_tracks"); err != nil {
-			return captureplane.CloseCaptureConnectionResult{}, captureProviderError(err)
+		requestErr := a.request(ctx, http.MethodPut, path, captureCloseTracksRequest{Tracks: closeTracks, Force: input.Force}, &closeResponse, "close_tracks")
+		if requestErr != nil && !captureCloseSessionGone(requestErr) {
+			return captureplane.CloseCaptureConnectionResult{}, captureProviderError(requestErr)
 		}
-		if err := validateCaptureCloseResponse(closeResponse, closeTracks); err != nil {
-			return captureplane.CloseCaptureConnectionResult{}, err
+		if requestErr == nil {
+			if err := validateCaptureCloseResponse(closeResponse, closeTracks); err != nil {
+				return captureplane.CloseCaptureConnectionResult{}, err
+			}
 		}
 		if closeResponse.Description != nil || closeResponse.RequiresImmediateRenegotiation {
 			return captureplane.CloseCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
@@ -939,3 +945,10 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 }
 
 var _ captureplane.CapturePlane = Adapter{}
+
+// An expired session cannot retain tracks or reconnect. Its forced cleanup is
+// complete, even though the provider cannot return individual track results.
+func captureCloseSessionGone(err error) bool {
+	var failure providerFailure
+	return errors.As(err, &failure) && failure.operation == "close_tracks" && failure.statusCode == http.StatusGone
+}
