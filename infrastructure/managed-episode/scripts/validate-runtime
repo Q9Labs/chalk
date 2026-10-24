@@ -431,6 +431,12 @@ if [[ -n "${rendered_root}" ]]; then
   grep -Fqx 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "${migration_unit}" || fail "migration Quadlet does not select the migration binary"
   migration_command="$(sed -n '/^Exec=/p' "${managed_root}/quadlet/chalk-api-migrate.container.in")"
   migration_command="${migration_command//__DATABASE_MIGRATION_TARGET__/${migration_target}}"
+  if [[ "$(jq -r '.protocol_compatibility.entry_migrator // 0' "${manifest}")" == 1 ]]; then
+    migration_command+=" --entry-writer-protocol $(jq -r '.protocol_compatibility.entry_writer // 0' "${manifest}")"
+    if [[ "$(jq -r '.protocol_compatibility.entry_enforcement // false' "${manifest}")" == true ]]; then
+      migration_command+=" --enforce-entry-ownership $(jq -r '.release_id' "${manifest}") --rollback-entry-writer-protocol 1"
+    fi
+  fi
   grep -Fqx "${migration_command}" "${migration_unit}" || fail "migration Quadlet target or bounded repairs differ from the release contract"
   grep -Fq 'Secret=chalk-managed-migrator-database-url,' "${migration_unit}" || fail "migration Quadlet does not mount the dedicated migrator credential"
   ! grep -Fq 'chalk-managed-migrator-database-url' "${rendered_root}/quadlet/chalk-api.container" || fail "API Quadlet exposes the dedicated migrator credential"
