@@ -18,6 +18,21 @@ type recorderCaptureSignalingServiceStub struct {
 	execute func(context.Context, capturesignaling.ExecuteRequest) (capturesignaling.Execution, error)
 }
 
+func TestRecorderCaptureSignalingPreservesStoppedOutcome(t *testing.T) {
+	workerID := mustRecorderWorkerID(t, workerTestID)
+	service := recorderCaptureSignalingServiceStub{execute: func(context.Context, capturesignaling.ExecuteRequest) (capturesignaling.Execution, error) {
+		return capturesignaling.Execution{}, capturesignaling.ErrMediaStopped
+	}}
+	router := NewRecorderWorkerRouterWithControls(recorderWorkerServiceStub{}, recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}}, RecorderWorkerControlServices{CaptureSignaling: service})
+	request := httptest.NewRequest(http.MethodPost, "/internal/v1/recorder/capture/create", strings.NewReader("{"+recorderCaptureSignalingTestAuthority()+"}"))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"recording.capture_media_stopped"`) {
+		t.Fatalf("stop response = %d %s", response.Code, response.Body.String())
+	}
+}
+
 func (s recorderCaptureSignalingServiceStub) Execute(ctx context.Context, request capturesignaling.ExecuteRequest) (capturesignaling.Execution, error) {
 	return s.execute(ctx, request)
 }

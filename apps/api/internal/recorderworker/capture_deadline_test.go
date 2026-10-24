@@ -150,7 +150,7 @@ func (s *captureDeadlineStorage) Commit(ctx context.Context, input CaptureBundle
 // Keep genuine failures distinct from a normal duration stop.
 func TestCaptureDeadlineDoesNotHideStorageFailure(t *testing.T) {
 	sentinel := errors.New("storage failed")
-	attempt := &PionCaptureAttempt{authority: recordercapture.AttemptAuthority{HardDeadline: time.Now().Add(-time.Second)}, peer: &captureTestPeer{}, config: CaptureAttemptConfig{}.normalized()}
+	attempt := &PionCaptureAttempt{authority: recordercapture.AttemptAuthority{HardDeadline: time.Now().Add(-time.Second)}, peer: &captureTestPeer{}, coordinator: &captureTestCoordinator{}, config: CaptureAttemptConfig{}.normalized()}
 	if err := attempt.finishFailure(sentinel, nil); !errors.Is(err, sentinel) {
 		t.Fatalf("failure = %v", err)
 	}

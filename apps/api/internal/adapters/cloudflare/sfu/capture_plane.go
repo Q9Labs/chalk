@@ -365,7 +365,7 @@ func captureProviderError(err error) error {
 	}
 	var failure providerFailure
 	if !errors.As(err, &failure) {
-		return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "adapter_error", Retryable: true}
+		return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "adapter_error", Retryable: false}
 	}
 	class := captureplane.ProviderFailureProtocol
 	retryable := false
@@ -382,9 +382,6 @@ func captureProviderError(err error) error {
 		failure.providerCode == "connection_not_found",
 		failure.providerCode == "track_not_found":
 		class = captureplane.ProviderFailureNotFound
-		// A newly published track may not be pullable yet. Only the whole
-		// request's 404 is safe to replay; per-track failures are not.
-		retryable = failure.operation == "add_tracks" && failure.stage == failureStageHTTPStatus && failure.statusCode == http.StatusNotFound
 	case failure.statusCode == http.StatusTooManyRequests || failure.providerCode == "rate_limited":
 		class = captureplane.ProviderFailureRateLimited
 		retryable = true
@@ -401,6 +398,11 @@ func captureProviderError(err error) error {
 	if failure.operation == "add_tracks" && failure.stage == failureStageTrack && failure.statusCode == http.StatusOK && !failure.retryableTrackAvailability {
 		// A successful HTTP request can have a mixed or unrelated per-track
 		// failure. Replaying it could duplicate subscriptions or negotiation.
+		retryable = false
+	}
+	if (failure.operation == "add_tracks" || failure.operation == "renegotiate") && class != captureplane.ProviderFailureNotFound {
+		// Transport and top-level errors do not promise an unchanged session.
+		// Only explicit missing-track rejections may replay in this epoch.
 		retryable = false
 	}
 	code := strings.TrimSpace(failure.providerCode)
@@ -917,11 +919,39 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 	if len(input.Tracks) > 0 && !input.Force {
 		return captureplane.CloseCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "force_required", Retryable: false}
 	}
-	if len(input.Tracks) > 0 {
-		closeTracks := make([]captureCloseTrack, 0, len(input.Tracks))
-		for _, track := range input.Tracks {
-			closeTracks = append(closeTracks, captureCloseTrack{Mid: track.MID.String()})
+	closeTracks := make([]captureCloseTrack, 0, len(input.Tracks))
+	for _, track := range input.Tracks {
+		closeTracks = append(closeTracks, captureCloseTrack{Mid: track.MID.String()})
+	}
+	if input.Force {
+		// A failed pull may have allocated tracks without returning their MIDs.
+		// Inspect this retired session and close observed allocations as well.
+		var response captureInspectResponse
+		path := fmt.Sprintf(providerConnectionsPath+"/%s", url.PathEscape(input.Connection.String()))
+		if err := a.request(ctx, http.MethodGet, path, nil, &response, "verify_connection"); err != nil {
+			var failure providerFailure
+			if !errors.As(err, &failure) || (failure.statusCode != http.StatusGone && failure.statusCode != http.StatusNotFound) {
+				return captureplane.CloseCaptureConnectionResult{}, captureProviderError(err)
+			}
+			closeTracks = nil
+		} else {
+			seen := make(map[string]bool, len(closeTracks))
+			for _, track := range closeTracks {
+				seen[track.Mid] = true
+			}
+			for _, track := range response.Tracks {
+				mid, err := captureplane.NewProviderReference(track.Mid)
+				if err != nil {
+					return captureplane.CloseCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract"}
+				}
+				if !seen[mid.String()] {
+					closeTracks = append(closeTracks, captureCloseTrack{Mid: mid.String()})
+					seen[mid.String()] = true
+				}
+			}
 		}
+	}
+	if len(closeTracks) > 0 {
 		var closeResponse captureCloseTracksResponse
 		path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/close", url.PathEscape(input.Connection.String()))
 		requestErr := a.request(ctx, http.MethodPut, path, captureCloseTracksRequest{Tracks: closeTracks, Force: input.Force}, &closeResponse, "close_tracks")

@@ -193,6 +193,7 @@ type Failure struct {
 // serialize ClaimCommand by SignalingHandle and must never return an old
 // in-flight command as a replay after its claim expires: return Ambiguous.
 type Port interface {
+	CheckDispatch(context.Context, Command) error
 	PrepareCommand(context.Context, PrepareRequest) (PrepareResult, error)
 	ClaimCommand(context.Context, ClaimRequest) (ClaimResult, error)
 	ReleaseCommand(context.Context, Release) error

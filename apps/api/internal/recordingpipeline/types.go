@@ -22,7 +22,7 @@ const (
 	MaximumInputBitrateBPS         = int64(4_000_000)
 	MaximumInputBitrateTotalBPS    = int64(MaximumEpisodes) * MaximumInputBitrateBPS
 	DefaultPayloadSchemaVersion    = 1
-	DefaultCaptureAttemptLimit     = 5
+	DefaultCaptureAttemptLimit     = 10
 	DefaultRenderAttemptLimit      = 3
 	CapturePrewarm                 = 5 * time.Minute
 	SupportedPolicySnapshotVersion = artifactpolicy.SnapshotSchemaVersion

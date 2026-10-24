@@ -476,7 +476,9 @@ select
     jobs.recording_id,
     authority.attempt_count,
     authority.fencing_generation,
-    authority.capture_epoch
+    authority.capture_epoch,
+    (pipelines.stop_requested_at is not null or reservations.ends_at <= clock_timestamp()
+     or (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz <= clock_timestamp())::boolean as media_stopped
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -519,6 +521,7 @@ type GetRecordingCaptureSignalingAuthorityRow struct {
 	AttemptCount      int32              `json:"attempt_count"`
 	FencingGeneration int64              `json:"fencing_generation"`
 	CaptureEpoch      int64              `json:"capture_epoch"`
+	MediaStopped      bool               `json:"media_stopped"`
 }
 
 func (q *Queries) GetRecordingCaptureSignalingAuthority(ctx context.Context, arg GetRecordingCaptureSignalingAuthorityParams) (GetRecordingCaptureSignalingAuthorityRow, error) {
@@ -546,6 +549,7 @@ func (q *Queries) GetRecordingCaptureSignalingAuthority(ctx context.Context, arg
 		&i.AttemptCount,
 		&i.FencingGeneration,
 		&i.CaptureEpoch,
+		&i.MediaStopped,
 	)
 	return i, err
 }
@@ -744,7 +748,9 @@ select
     jobs.recording_id,
     authority.attempt_count,
     authority.fencing_generation,
-    authority.capture_epoch
+    authority.capture_epoch,
+    (pipelines.stop_requested_at is not null or reservations.ends_at <= clock_timestamp()
+     or (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz <= clock_timestamp())::boolean as media_stopped
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -788,6 +794,7 @@ type LockRecordingCaptureSignalingAuthorityRow struct {
 	AttemptCount      int32              `json:"attempt_count"`
 	FencingGeneration int64              `json:"fencing_generation"`
 	CaptureEpoch      int64              `json:"capture_epoch"`
+	MediaStopped      bool               `json:"media_stopped"`
 }
 
 func (q *Queries) LockRecordingCaptureSignalingAuthority(ctx context.Context, arg LockRecordingCaptureSignalingAuthorityParams) (LockRecordingCaptureSignalingAuthorityRow, error) {
@@ -815,6 +822,7 @@ func (q *Queries) LockRecordingCaptureSignalingAuthority(ctx context.Context, ar
 		&i.AttemptCount,
 		&i.FencingGeneration,
 		&i.CaptureEpoch,
+		&i.MediaStopped,
 	)
 	return i, err
 }

@@ -125,6 +125,9 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			}
 		}
 
+		if err := s.port.CheckDispatch(ctx, command); err != nil {
+			return Execution{}, s.releaseBeforeDispatch(ctx, command, key, claim, normalizePortError(err))
+		}
 		result, providerErr := s.dispatch(ctx, plane, key.Operation, command.Input)
 		if providerErr != nil {
 			failure := providerFailure(providerErr)
@@ -134,11 +137,14 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 			if err := s.optionsNowBeforeLease(command.Lease); err != nil {
 				return Execution{}, ErrAmbiguousOutcome
 			}
-			if err := s.port.FailCommand(ctx, Failure{Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken, ProviderError: failure}); err != nil {
+			reportCtx, cancelReport := context.WithTimeout(context.WithoutCancel(ctx), preDispatchReleaseTimeout)
+			err := s.port.FailCommand(reportCtx, Failure{Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken, ProviderError: failure})
+			cancelReport()
+			if err != nil {
 				return Execution{}, ErrAmbiguousOutcome
 			}
-			if failure.Retryable && key.Operation == captureplane.OperationPullCaptureTracks && failure.Class == captureplane.ProviderFailureNotFound {
-				// Reclaim the same fenced pull after the port's durable backoff.
+			if retryCaptureCommand(key.Operation, failure) {
+				// Reclaim the same fenced command after the port's durable backoff.
 				continue
 			}
 			return Execution{}, ProviderFailureError{Failure: failure}
@@ -179,6 +185,13 @@ func (s *Service) Execute(ctx context.Context, request ExecuteRequest) (Executio
 		}
 		return Execution{Key: key, Result: result, ResultBytes: resultBytes}, nil
 	}
+}
+
+func retryCaptureCommand(operation captureplane.OperationKind, failure captureplane.ProviderError) bool {
+	if !failure.Retryable {
+		return false
+	}
+	return operation == captureplane.OperationPullCaptureTracks && failure.Class == captureplane.ProviderFailureNotFound
 }
 
 func validatePullResultAgainstInput(result captureplane.PullCaptureTracksResult, input captureplane.PullCaptureTracksInput) error {
@@ -228,6 +241,13 @@ func (s *Service) releaseBeforeDispatch(ctx context.Context, command Command, ke
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), preDispatchReleaseTimeout)
 	defer cancel()
+	if errors.Is(cause, ErrMediaStopped) || ctx.Err() != nil {
+		failure := captureplane.ProviderError{Class: captureplane.ProviderFailureNotFound, Code: "capture_dispatch_stopped", Retryable: false}
+		if err := s.port.FailCommand(cleanupCtx, Failure{Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken, ProviderError: failure}); err != nil {
+			return ErrAmbiguousOutcome
+		}
+		return cause
+	}
 	if err := s.port.ReleaseCommand(cleanupCtx, Release{
 		Key: key, Authority: command.Authority, Lease: command.Lease, ClaimToken: claim.ClaimToken,
 	}); err != nil {

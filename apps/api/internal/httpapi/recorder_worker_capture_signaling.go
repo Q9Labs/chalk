@@ -331,6 +331,8 @@ func writeRecorderCaptureSignalingError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusGatewayTimeout, "recording.capture_signaling_timeout", "Capture signaling timed out")
 	case errors.Is(err, capturesignaling.ErrAmbiguousOutcome):
 		writeError(w, http.StatusConflict, "recording.capture_outcome_ambiguous", "Capture signaling outcome is ambiguous")
+	case errors.Is(err, capturesignaling.ErrMediaStopped):
+		writeError(w, http.StatusConflict, "recording.capture_media_stopped", "Capture media stopped or reached its deadline")
 	case errors.Is(err, capturesignaling.ErrConflict), errors.Is(err, capturesignaling.ErrStaleAuthority),
 		errors.Is(err, capturesignaling.ErrStaleLease), errors.Is(err, capturesignaling.ErrStaleCaptureEpoch),
 		errors.Is(err, capturesignaling.ErrStalePlanRevision), errors.Is(err, capturesignaling.ErrStaleConnection),

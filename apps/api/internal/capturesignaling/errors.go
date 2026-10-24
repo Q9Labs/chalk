@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	ErrMediaStopped           = errors.New("capture signaling media stopped or deadline expired")
 	ErrInvalidInput           = errors.New("invalid capture signaling input")
 	ErrInvalidSignalingHandle = errors.New("invalid capture signaling handle")
 	ErrInvalidAuthority       = errors.New("invalid capture signaling authority")
