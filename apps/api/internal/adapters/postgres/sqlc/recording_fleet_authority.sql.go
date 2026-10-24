@@ -337,37 +337,39 @@ select
         )
           and job.state = 'leased'
           and job.lease_owner = node.worker_id::text
-          and job.lease_expires_at > $1::timestamptz
+          and job.lease_expires_at > clock_timestamp()
     ), 0)::integer as active_leases,
-    node.observed_at
+    -- Creation only anchors age for registered workers that never reported readiness.
+    coalesce(node.observed_at, node.created_at) as observed_at,
+    (node.state = 'revoked') as identity_revoked
 from recording_fleet_nodes node
-where node.environment = $2
-  and node.role = $3
-  and node.state in ('active', 'draining')
-  and node.observed_at is not null
+where node.environment = $1
+  and node.role = $2
+  and node.state in ('active', 'draining', 'revoked')
+  and node.worker_id is not null
 order by node.provider_id
 `
 
 type ListRecordingFleetNodeObservationsParams struct {
-	ObservedAt  pgtype.Timestamptz `json:"observed_at"`
-	Environment string             `json:"environment"`
-	Role        string             `json:"role"`
+	Environment string `json:"environment"`
+	Role        string `json:"role"`
 }
 
 type ListRecordingFleetNodeObservationsRow struct {
-	ProviderID     string             `json:"provider_id"`
-	WorkerID       pgtype.UUID        `json:"worker_id"`
-	Role           string             `json:"role"`
-	BootGeneration int64              `json:"boot_generation"`
-	Ready          bool               `json:"ready"`
-	AdmissionOpen  bool               `json:"admission_open"`
-	ReadyCapacity  int32              `json:"ready_capacity"`
-	ActiveLeases   int32              `json:"active_leases"`
-	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	ProviderID      string             `json:"provider_id"`
+	WorkerID        pgtype.UUID        `json:"worker_id"`
+	Role            string             `json:"role"`
+	BootGeneration  int64              `json:"boot_generation"`
+	Ready           bool               `json:"ready"`
+	AdmissionOpen   bool               `json:"admission_open"`
+	ReadyCapacity   int32              `json:"ready_capacity"`
+	ActiveLeases    int32              `json:"active_leases"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	IdentityRevoked bool               `json:"identity_revoked"`
 }
 
 func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg ListRecordingFleetNodeObservationsParams) ([]ListRecordingFleetNodeObservationsRow, error) {
-	rows, err := q.db.Query(ctx, listRecordingFleetNodeObservations, arg.ObservedAt, arg.Environment, arg.Role)
+	rows, err := q.db.Query(ctx, listRecordingFleetNodeObservations, arg.Environment, arg.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +387,7 @@ func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg Li
 			&i.ReadyCapacity,
 			&i.ActiveLeases,
 			&i.ObservedAt,
+			&i.IdentityRevoked,
 		); err != nil {
 			return nil, err
 		}

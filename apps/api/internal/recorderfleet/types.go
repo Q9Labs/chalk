@@ -242,6 +242,9 @@ type NodeObservation struct {
 	ReadyCapacity int          `json:"ready_capacity"`
 	ActiveLeases  int          `json:"active_leases"`
 	ObservedAt    time.Time    `json:"observed_at"`
+	// LeasesObservedAt dates the authority's job-lease read, not the worker heartbeat.
+	LeasesObservedAt time.Time `json:"leases_observed_at,omitzero"`
+	IdentityRevoked  bool      `json:"identity_revoked,omitzero"`
 }
 
 func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity int) error {
@@ -249,6 +252,10 @@ func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity 
 		return ErrRoleFence
 	}
 	return nil
+}
+
+func (observation NodeObservation) leasesFresh(now time.Time, maxAge time.Duration) bool {
+	return !observation.LeasesObservedAt.IsZero() && !observation.LeasesObservedAt.After(now.Add(time.Second)) && now.Sub(observation.LeasesObservedAt) <= maxAge
 }
 
 type PoolProjection struct {

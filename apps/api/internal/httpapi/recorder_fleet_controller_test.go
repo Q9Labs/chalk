@@ -29,7 +29,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	}
 	service := &recorderFleetControllerServiceStub{
 		demand:   recorderfleet.Demand{Revision: "demand-7", DesiredNodes: 1, ScheduledPrewarms: 1, ObservedAt: now},
-		nodes:    []recorderfleet.NodeObservation{{Identity: identity, Ready: true, AdmissionOpen: true, ReadyCapacity: 4, ObservedAt: now}},
+		nodes:    []recorderfleet.NodeObservation{{Identity: identity, Ready: true, AdmissionOpen: true, ReadyCapacity: 4, ObservedAt: now, LeasesObservedAt: now}},
 		identity: identity,
 	}
 	controllerID, _ := utilities.ParseID("66666666-6666-4666-8666-666666666666")
@@ -46,7 +46,7 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	if demand, err := client.GetDemand(t.Context(), key); err != nil || demand != service.demand {
 		t.Fatalf("demand/error = %+v/%v", demand, err)
 	}
-	if nodes, err := client.ObserveNodes(t.Context(), key); err != nil || len(nodes) != 1 || nodes[0].Identity != identity {
+	if nodes, err := client.ObserveNodes(t.Context(), key); err != nil || len(nodes) != 1 || nodes[0] != service.nodes[0] {
 		t.Fatalf("nodes/error = %+v/%v", nodes, err)
 	}
 	bootstrapRequest := recorderfleet.BootstrapRequest{
@@ -71,6 +71,77 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	}
 	if service.bootstrap != bootstrapRequest || service.abandoned != bootstrapRequest || service.closed != identity || service.revoked != identity || service.projection != projection {
 		t.Fatalf("service calls = %+v", service)
+	}
+}
+
+func TestRecorderFleetNodesOnlyExtendsResponseForOptedInControllers(t *testing.T) {
+	t.Parallel()
+	service := &recorderFleetControllerServiceStub{nodes: []recorderfleet.NodeObservation{{
+		Identity:   recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 3},
+		ObservedAt: time.Now().UTC(), LeasesObservedAt: time.Now().UTC(),
+	}}}
+	service.nodes = append(service.nodes, recorderfleet.NodeObservation{
+		Identity:   recorderfleet.NodeIdentity{ProviderID: "43", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 2},
+		ObservedAt: time.Now().UTC(), LeasesObservedAt: time.Now().UTC(), IdentityRevoked: true,
+	})
+	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
+	for _, capability := range []string{"legacy", "lease-read", "authority"} {
+		includeLeaseRead := capability != "legacy"
+		includeRevoked := capability == "authority"
+		request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
+		if includeLeaseRead {
+			request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+		}
+		if includeRevoked {
+			request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		var result recorderFleetNodesResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		wantNodes := 1
+		if includeRevoked {
+			wantNodes = 2
+		}
+		if (response.Header().Get("X-Chalk-Fleet-Lease-Authority") == "1") != includeRevoked || response.Code != http.StatusOK || len(result.Nodes) != wantNodes || strings.Contains(response.Body.String(), `"identity_revoked"`) != includeRevoked || strings.Contains(response.Body.String(), `"leases_observed_at"`) != includeLeaseRead {
+			t.Fatalf("include lease read=%v: status=%d body=%s", includeLeaseRead, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestRecorderFleetNodesFailsClosedForLegacyControllersWithLiveLeases(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	for _, heartbeat := range []time.Time{now.Add(2 * time.Second), now.Add(-5 * time.Hour), now} {
+		service := &recorderFleetControllerServiceStub{nodes: []recorderfleet.NodeObservation{{
+			Identity:     recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 3},
+			ActiveLeases: 1, ObservedAt: heartbeat, LeasesObservedAt: now,
+		}}}
+		router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
+		for _, capability := range []string{"legacy", "lease-read", "authority"} {
+			optedIn := capability == "authority"
+			request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
+			if capability != "legacy" {
+				request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
+			}
+			if optedIn {
+				request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if !optedIn {
+				if response.Code != http.StatusServiceUnavailable {
+					t.Fatalf("legacy controller could discard live lease: heartbeat=%s status=%d body=%s", heartbeat, response.Code, response.Body.String())
+				}
+				continue
+			}
+			var result recorderFleetNodesResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || (response.Header().Get("X-Chalk-Fleet-Lease-Authority") == "1") != optedIn || response.Code != http.StatusOK || len(result.Nodes) != 1 || result.Nodes[0] != service.nodes[0] {
+				t.Fatalf("new controller lost positive lease: status=%d response=%+v error=%v", response.Code, result, err)
+			}
+		}
 	}
 }
 

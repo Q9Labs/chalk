@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -145,6 +147,23 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 		}
 		if nodes == nil {
 			nodes = []recorderfleet.NodeObservation{}
+		}
+		leaseAuthority := request.Header.Get("X-Chalk-Fleet-Lease-Authority") == "1"
+		// Older controllers cannot preserve live counts under skew or decode revoked identities.
+		if !leaseAuthority {
+			nodes = slices.Clone(nodes)
+			for index := range nodes {
+				if nodes[index].ActiveLeases > 0 {
+					writeRecorderFleetError(w, request, logger, "observe_nodes", fmt.Errorf("%w: legacy controller cannot safely observe live leases", recorderfleet.ErrProviderUnavailable))
+					return
+				}
+				if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
+					nodes[index].LeasesObservedAt = time.Time{}
+				}
+			}
+			nodes = slices.DeleteFunc(nodes, func(node recorderfleet.NodeObservation) bool { return node.IdentityRevoked })
+		} else {
+			w.Header().Set("X-Chalk-Fleet-Lease-Authority", "1")
 		}
 		writeJSON(w, http.StatusOK, recorderFleetNodesResponse{
 			SchemaVersion: recorderfleet.NodesSchemaVersion, Environment: environment,
