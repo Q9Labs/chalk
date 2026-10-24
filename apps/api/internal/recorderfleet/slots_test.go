@@ -1,6 +1,7 @@
 package recorderfleet
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -222,7 +223,9 @@ func TestPendingBootstrapDoesNotBlockSibling(t *testing.T) {
 	f.bootstrap.ensureErr = ErrBootstrapPending
 	r := f.reconciler(t)
 	for range 8 {
-		f.step(t, r)
+		if _, err := r.Reconcile(t.Context()); err != nil && !errors.Is(err, ErrBootstrapPending) {
+			t.Fatal(err)
+		}
 	}
 	if len(f.provider.nodes) != 2 {
 		t.Fatalf("pending certificate blocked sibling create: %d nodes", len(f.provider.nodes))
@@ -231,5 +234,27 @@ func TestPendingBootstrapDoesNotBlockSibling(t *testing.T) {
 		if node.PendingBootstrap == nil {
 			t.Fatal("sibling was never registered")
 		}
+	}
+}
+
+func TestMixedDensityPromotesNewReadyWorker(t *testing.T) {
+	f := newFleetFixture(t)
+	f.config.FreeSlots = 4
+	f.demand.value = Demand{Revision: "floor", ObservedAt: f.now}
+	state, nodes, observed := slotNodes(f, 2, 1)
+	state.NextBootGeneration = 3
+	newWorker := state.Nodes["2"]
+	newWorker.Phase, newWorker.LastReadyAt = PhaseBootstrapping, nil
+	state.Nodes["2"] = newWorker
+	observation := observed["2"]
+	observation.ReadyCapacity = 4
+	observed["2"] = observation
+	f.journal.state, f.journal.found, f.provider.nodes = state, true, nodes
+	for _, observation := range observed {
+		f.runtime.observations = append(f.runtime.observations, observation)
+	}
+	result := f.step(t, f.reconciler(t))
+	if result.Action != ActionNodeReady || result.Projection.ReadyCapacity != 5 {
+		t.Fatalf("new worker capacity hidden: %+v", result)
 	}
 }

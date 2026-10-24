@@ -75,8 +75,8 @@ resource "terraform_data" "runtime_capacity_contract" {
 
   lifecycle {
     precondition {
-      condition     = var.desired_nodes == 0
-      error_message = "OpenTofu never mutates capture runtime capacity; external reconciliation owns desired nodes and prewarm."
+      condition     = var.desired_nodes >= 0 && var.desired_nodes <= var.max_nodes
+      error_message = "desired_nodes is planning metadata, not runtime ownership, and must fit max_nodes."
     }
 
     precondition {

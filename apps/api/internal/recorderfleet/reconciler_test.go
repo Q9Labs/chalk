@@ -536,6 +536,9 @@ func TestReconcilerScaleDownPrefersObservedIdleNode(t *testing.T) {
 				}
 			}
 			result := fixture.step(t, fixture.reconciler(t))
+			if result.Action == ActionNodeReady {
+				result = fixture.step(t, fixture.reconciler(t))
+			}
 			if result.Action != ActionAdmissionClosed || result.ProviderNodeID != "1001" {
 				t.Fatalf("scale-down chose busy newer node: %+v", result)
 			}
@@ -597,7 +600,7 @@ func TestReconcilerPersistsBootstrapDiagnosticUntilNeverReadyNodeRevocation(t *t
 		t.Fatalf("adoption result = %+v", result)
 	}
 	result, err := reconciler.Reconcile(context.Background())
-	if err != nil {
+	if !errors.Is(err, ErrBootstrapPending) || result.BootstrapDiagnostic == nil || *result.BootstrapDiagnostic != diagnostic {
 		t.Fatalf("pending result/error = %+v/%v", result, err)
 	}
 	if stored := fixture.journal.state.Nodes[node.ProviderID].BootstrapDiagnostic; stored == nil || *stored != diagnostic {

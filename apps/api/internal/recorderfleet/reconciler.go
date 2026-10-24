@@ -119,6 +119,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
 	}
 
+	pendingBootstrap := result
 	current, stale := r.partitionNodes(nodes, state, observed, now)
 	if targetNodes > len(current) && len(nodes) < r.config.MaxNodes {
 		generation := state.NextBootGeneration
@@ -142,8 +143,12 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.finish(ctx, state, nodes, observed, demand, now, result, err)
 	}
 
-	result = Result{Action: ActionNone, Projection: r.projection(state, nodes, observed, demand, now), Quarantined: quarantined}
-	return r.finish(ctx, state, nodes, observed, demand, now, result, nil)
+	result = Result{Action: ActionNone, Projection: r.projection(state, nodes, observed, demand, now), Quarantined: quarantined, ProviderNodeID: pendingBootstrap.ProviderNodeID, BootstrapDiagnostic: pendingBootstrap.BootstrapDiagnostic}
+	result, err = r.finish(ctx, state, nodes, observed, demand, now, result, nil)
+	if err == nil && pendingBootstrap.ProviderNodeID != "" {
+		err = ErrBootstrapPending
+	}
+	return result, err
 }
 
 func (r *Reconciler) load(ctx context.Context) (Journal, error) {
@@ -416,6 +421,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		needed[providerID] = struct{}{}
 	}
 	healthRefreshed := false
+	pendingResult := Result{}
 	for _, providerID := range sortedManagedNodeIDs(state.Nodes) {
 		managed := state.Nodes[providerID]
 		node := nodes[providerID]
@@ -447,6 +453,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 			request := *managed.PendingBootstrap
 			identity, err := r.bootstrap.EnsureBootstrap(ctx, request)
 			if errors.Is(err, ErrInventoryNotReady) {
+				pendingResult = Result{ProviderNodeID: providerID}
 				continue
 			}
 			if err != nil {
@@ -469,6 +476,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 					if saveErr != nil {
 						return state, result, true, errors.Join(err, saveErr)
 					}
+					pendingResult = result
 					continue
 				}
 				return state, Result{}, true, fmt.Errorf("ensure recorder node bootstrap: %w", err)
@@ -483,7 +491,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 			state, err = r.save(ctx, state)
 			return state, Result{Action: ActionBootstrapEnsured, ProviderNodeID: providerID}, true, err
 		}
-		if managed.Phase == PhaseBootstrapping && required {
+		if managed.Phase == PhaseBootstrapping {
 			observation, ok := observed[providerID]
 			if !ok || managed.Identity == nil || observation.Identity != *managed.Identity || !observation.Ready || !observation.AdmissionOpen || observation.ReadyCapacity <= 0 {
 				continue
@@ -495,7 +503,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 			state, err := r.save(ctx, state)
 			return state, Result{Action: ActionNodeReady, ProviderNodeID: providerID}, true, err
 		}
-		if managed.Phase == PhaseReady && required {
+		if managed.Phase == PhaseReady {
 			observation, ok := observed[providerID]
 			if !ok || !observation.Ready || !observation.AdmissionOpen || observation.ReadyCapacity <= 0 {
 				continue
@@ -515,7 +523,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 			return state, Result{}, true, err
 		}
 	}
-	return state, Result{}, false, nil
+	return state, pendingResult, false, nil
 }
 
 func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed ManagedNode, node Node, observation NodeObservation, now time.Time) (Journal, Result, error) {

@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"testing"
@@ -45,7 +46,7 @@ func TestFleetRegistersAtCreateAndRevokesStuckBootstrapWithPostgres(t *testing.T
 	step := func() recorderfleet.Result {
 		t.Helper()
 		result, err := r.Reconcile(t.Context())
-		if err != nil {
+		if err != nil && !errors.Is(err, recorderfleet.ErrBootstrapPending) {
 			t.Fatal(err)
 		}
 		return result
