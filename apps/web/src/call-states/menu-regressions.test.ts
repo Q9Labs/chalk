@@ -32,7 +32,7 @@ afterAll(async () => {
 });
 async function load(state: string) {
   errors.length = 0;
-  await page.goto(`${origin}/call-states.html?state=${state}${state.startsWith("shell-browser") ? "&browserMedia" : ""}`);
+  await page.goto(`${origin}/call-states.html?state=${state}${state.startsWith("shell-browser") ? "&browserMedia" : ""}`, { waitUntil: "commit" });
   await page.locator('[data-part="call-frame"]').waitFor();
 }
 
