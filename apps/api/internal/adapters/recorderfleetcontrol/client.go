@@ -83,6 +83,34 @@ func (c *Client) ObserveNodes(ctx context.Context, key recorderfleet.PoolKey) ([
 	return append([]recorderfleet.NodeObservation(nil), response.Nodes...), nil
 }
 
+func (c *Client) ObserveIdentity(ctx context.Context, identity recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error) {
+	if c == nil || !validPathSegment(identity.ProviderID) || identity.Role != c.key.Role || identity.BootGeneration == 0 {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+	}
+	workerID, err := utilities.ParseID(identity.WorkerID)
+	if err != nil || workerID.IsZero() {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+	}
+	body := commandRequest{SchemaVersion: recorderfleet.CommandSchemaVersion, Environment: c.key.Environment, Identity: identity}
+	var response struct {
+		SchemaVersion string `json:"schema_version"`
+		Environment   string `json:"environment"`
+		Observation   struct {
+			recorderfleet.NodeObservation
+			ActiveLeases *int `json:"active_leases"`
+		} `json:"observation"`
+	}
+	if err := c.doJSON(ctx, http.MethodPost, fleetPath+"/nodes/"+url.PathEscape(identity.ProviderID)+"/leases", nil, body, &response, http.StatusOK); err != nil {
+		return recorderfleet.NodeObservation{}, err
+	}
+	observation := response.Observation.NodeObservation
+	if response.SchemaVersion != recorderfleet.CommandSchemaVersion || response.Environment != c.key.Environment || observation.Identity != identity || observation.LeasesObservedAt.IsZero() || response.Observation.ActiveLeases == nil || *response.Observation.ActiveLeases < 0 {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+	}
+	observation.ActiveLeases = *response.Observation.ActiveLeases
+	return observation, nil
+}
+
 func (c *Client) EnsureBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error) {
 	if err := c.validateKey(request.Key); err != nil || !validPathSegment(request.ProviderID) || request.NodeName == "" || request.BootGeneration == 0 || request.InventoryDigest == "" {
 		return recorderfleet.NodeIdentity{}, recorderfleet.ErrRoleFence
@@ -163,6 +191,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
 		request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
 	}
+	if strings.HasSuffix(path, "/leases") {
+		request.Header.Set("X-Chalk-Fleet-Identity-Leases", "2")
+	}
 	if input != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -199,6 +230,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 	}
 	if path == fleetPath+"/nodes" && response.Header.Get("X-Chalk-Fleet-Lease-Authority") != "1" {
 		return fmt.Errorf("%w: database lease authority is required", recorderfleet.ErrProviderUnavailable)
+	}
+	if strings.HasSuffix(path, "/leases") && response.Header.Get("X-Chalk-Fleet-Identity-Leases") != "2" {
+		return fmt.Errorf("%w: transactionally fenced identity lease authority is required", recorderfleet.ErrProviderUnavailable)
 	}
 	if output == nil {
 		if len(bytes.TrimSpace(responseBody)) != 0 {

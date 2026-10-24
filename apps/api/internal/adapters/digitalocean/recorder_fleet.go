@@ -139,6 +139,26 @@ func (a *RecorderFleet) ListNodes(ctx context.Context, key recorderfleet.PoolKey
 	return nodes, nil
 }
 
+// NodeExists confirms absence only on an exact provider 404, never on a filtered list.
+func (a *RecorderFleet) NodeExists(ctx context.Context, key recorderfleet.PoolKey, providerID string) (bool, error) {
+	if err := a.validateKey(key); err != nil {
+		return false, err
+	}
+	id, err := strconv.ParseInt(providerID, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != providerID {
+		return false, recorderfleet.ErrInventoryDrift
+	}
+	var response retrieveDropletResponse
+	err = a.doJSON(ctx, http.MethodGet, "/v2/droplets/"+providerID, nil, nil, &response, http.StatusOK)
+	if errors.Is(err, errNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // InspectNode returns a fresh, exact provider view for bootstrap authorization.
 // The public address is accepted only when DigitalOcean reports one exclusive
 // public IPv4 address; bootstrap callers are bound to that address at the TCP

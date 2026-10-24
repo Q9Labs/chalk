@@ -420,6 +420,60 @@ func (q *Queries) LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRec
 	return authorized, err
 }
 
+const observeRecordingFleetIdentityLeases = `-- name: ObserveRecordingFleetIdentityLeases :one
+select (
+    select count(*) from recording_jobs job
+    where job.lease_owner = $1::uuid::text
+      and (job.kind = $2 or ($2 = 'render' and job.kind = 'transcription'))
+      and job.state = 'leased' and job.lease_expires_at > clock_timestamp()
+)::integer as active_leases,
+not exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = $3 and node.provider_id = $4
+) as identity_absent,
+exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = $3 and node.provider_id = $4 and node.state = 'revoked'
+) as identity_revoked
+where not exists (
+    select 1 from recording_fleet_nodes node
+    where ((node.environment = $3 and node.provider_id = $4)
+        or node.worker_id = $1)
+      and not coalesce((node.environment = $3 and node.role = $2
+        and node.provider_id = $4 and node.worker_id = $1
+        and node.boot_generation = $5 and node.state in ('active', 'draining', 'revoked')), false)
+)
+`
+
+type ObserveRecordingFleetIdentityLeasesParams struct {
+	WorkerID       pgtype.UUID `json:"worker_id"`
+	Role           string      `json:"role"`
+	Environment    string      `json:"environment"`
+	ProviderID     string      `json:"provider_id"`
+	BootGeneration int64       `json:"boot_generation"`
+}
+
+type ObserveRecordingFleetIdentityLeasesRow struct {
+	ActiveLeases    int32 `json:"active_leases"`
+	IdentityAbsent  bool  `json:"identity_absent"`
+	IdentityRevoked bool  `json:"identity_revoked"`
+}
+
+// Count by the fenced journal worker, not by a fleet-row join: a lost row
+// must not hide live work. Refuse any conflicting provider or worker binding.
+func (q *Queries) ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error) {
+	row := q.db.QueryRow(ctx, observeRecordingFleetIdentityLeases,
+		arg.WorkerID,
+		arg.Role,
+		arg.Environment,
+		arg.ProviderID,
+		arg.BootGeneration,
+	)
+	var i ObserveRecordingFleetIdentityLeasesRow
+	err := row.Scan(&i.ActiveLeases, &i.IdentityAbsent, &i.IdentityRevoked)
+	return i, err
+}
+
 const publishRecordingFleetPool = `-- name: PublishRecordingFleetPool :one
 insert into recording_pool_health (
     role, admission_open, ready_capacity, reason, observed_at, demand_revision
@@ -603,36 +657,46 @@ func (q *Queries) ReserveRecordingFleetBootstrap(ctx context.Context, arg Reserv
 }
 
 const revokeRecordingFleetNode = `-- name: RevokeRecordingFleetNode :one
-update recording_fleet_nodes
-set state = 'revoked', ready = false, admission_open = false,
-    ready_capacity = 0, revoked_at = coalesce(revoked_at, $1),
-    updated_at = now()
-where environment = $2
-  and role = $3
-  and provider_id = $4
-  and worker_id = $5
-  and boot_generation = $6
-  and state in ('active', 'draining', 'revoked')
+insert into recording_fleet_nodes (
+    environment, role, provider_id, worker_id, boot_generation, state, revoked_at,
+    node_name, region, release_id, image_digest, inventory_digest
+) values (
+    $1, $2, $3, $4,
+    $5, 'revoked', $6,
+    $3, 'unknown', 'revoked-identity',
+    'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    '0000000000000000000000000000000000000000000000000000000000000000'
+)
+on conflict (environment, provider_id) do update
+set state = 'revoked', ready = false, admission_open = false, ready_capacity = 0,
+    revoked_at = coalesce(recording_fleet_nodes.revoked_at, excluded.revoked_at), updated_at = now()
+where recording_fleet_nodes.role = excluded.role
+  and recording_fleet_nodes.worker_id = excluded.worker_id
+  and recording_fleet_nodes.boot_generation = excluded.boot_generation
+  and recording_fleet_nodes.state in ('active', 'draining', 'revoked')
 returning provider_id
 `
 
 type RevokeRecordingFleetNodeParams struct {
-	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
 	Environment    string             `json:"environment"`
 	Role           string             `json:"role"`
 	ProviderID     string             `json:"provider_id"`
 	WorkerID       pgtype.UUID        `json:"worker_id"`
 	BootGeneration int64              `json:"boot_generation"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
 }
 
+// A lost row still needs a durable fence against bootstrap replay. Metadata
+// unavailable after row loss uses explicit tombstone placeholders; it can never
+// authorize a worker or be activated as a bootstrap reservation.
 func (q *Queries) RevokeRecordingFleetNode(ctx context.Context, arg RevokeRecordingFleetNodeParams) (string, error) {
 	row := q.db.QueryRow(ctx, revokeRecordingFleetNode,
-		arg.RevokedAt,
 		arg.Environment,
 		arg.Role,
 		arg.ProviderID,
 		arg.WorkerID,
 		arg.BootGeneration,
+		arg.RevokedAt,
 	)
 	var provider_id string
 	err := row.Scan(&provider_id)

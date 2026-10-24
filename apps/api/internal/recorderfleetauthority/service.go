@@ -29,6 +29,7 @@ type WorkerObservation struct {
 }
 
 type Repository interface {
+	ObserveIdentity(context.Context, string, recorderfleet.NodeIdentity, time.Time) (recorderfleet.NodeObservation, error)
 	GetDemand(context.Context, recorderfleet.PoolKey, time.Time) (recorderfleet.Demand, error)
 	ObserveNodes(context.Context, recorderfleet.PoolKey, time.Time) ([]recorderfleet.NodeObservation, error)
 	ReserveBootstrap(context.Context, recorderfleet.BootstrapRequest) (BootstrapRecord, error)
@@ -116,6 +117,13 @@ func (s Service) AbandonBootstrap(ctx context.Context, request recorderfleet.Boo
 		return fmt.Errorf("abandon recorder fleet certificate authority: %w", err)
 	}
 	return nil
+}
+
+func (s Service) ObserveIdentity(ctx context.Context, identity recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error) {
+	if err := validateNodeIdentity(identity); err != nil {
+		return recorderfleet.NodeObservation{}, err
+	}
+	return s.repository.ObserveIdentity(ctx, s.environment, identity, s.now().UTC())
 }
 
 func (s Service) CloseAdmission(ctx context.Context, identity recorderfleet.NodeIdentity) error {

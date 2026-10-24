@@ -49,6 +49,9 @@ func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	if nodes, err := client.ObserveNodes(t.Context(), key); err != nil || len(nodes) != 1 || nodes[0] != service.nodes[0] {
 		t.Fatalf("nodes/error = %+v/%v", nodes, err)
 	}
+	if observation, err := client.ObserveIdentity(t.Context(), identity); err != nil || observation != service.nodes[0] {
+		t.Fatalf("identity lease wire roundtrip: %+v %v", observation, err)
+	}
 	bootstrapRequest := recorderfleet.BootstrapRequest{
 		Key: key, ProviderID: "42", NodeName: "node-42", Region: "sgp1", ReleaseID: "release-7",
 		ImageDigest: "sha256:" + strings.Repeat("a", 64), BootGeneration: 3, InventoryDigest: strings.Repeat("b", 64),
@@ -321,5 +324,45 @@ func TestBootstrapPendingContractAndUnavailableWarning(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func (s *recorderFleetControllerServiceStub) ObserveIdentity(_ context.Context, identity recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error) {
+	for _, observation := range s.nodes {
+		if observation.Identity == identity {
+			return observation, nil
+		}
+	}
+	return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+}
+
+func TestRecorderFleetIdentityLeasesRequireNegotiation(t *testing.T) {
+	service := &recorderFleetControllerServiceStub{nodes: []recorderfleet.NodeObservation{{Identity: recorderfleet.NodeIdentity{ProviderID: "42", WorkerID: "55555555-5555-4555-8555-555555555555", Role: workeridentity.RoleRender, BootGeneration: 3}, ObservedAt: time.Now(), LeasesObservedAt: time.Now()}}}
+	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{}, "nightly", nil)
+	for _, capability := range []string{"", "unknown", "1", "2"} {
+		t.Run("capability="+capability, func(t *testing.T) {
+			body, _ := json.Marshal(recorderFleetCommandRequest{SchemaVersion: recorderfleet.CommandSchemaVersion, Environment: "nightly", Identity: service.nodes[0].Identity})
+			request := httptest.NewRequest(http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/leases", bytes.NewReader(body))
+			request.Header.Set("X-Chalk-Fleet-Identity-Leases", capability)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if capability != "1" && capability != "2" {
+				if response.Code != http.StatusBadRequest || response.Header().Get("X-Chalk-Fleet-Identity-Leases") != "" {
+					t.Fatalf("unnegotiated lease proof: %d %s", response.Code, response.Body)
+				}
+				return
+			}
+			if response.Code != http.StatusOK || response.Header().Get("X-Chalk-Fleet-Identity-Leases") != capability {
+				t.Fatalf("negotiation failed: %d %s", response.Code, response.Body)
+			}
+		})
+	}
+	// The existing (#482) wire shape stays unchanged for an old controller.
+	request := httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/nodes?role=render", nil)
+	request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "identity_absent") {
+		t.Fatalf("old controller received a new field: %d %s", response.Code, response.Body)
 	}
 }

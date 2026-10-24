@@ -212,3 +212,7 @@ func postgresFleetUUID(t *testing.T, value string) pgtype.UUID {
 	}
 	return uuid(id)
 }
+
+func (s *recordingFleetAuthorityQueriesStub) ObserveRecordingFleetIdentityLeases(context.Context, sqlc.ObserveRecordingFleetIdentityLeasesParams) (sqlc.ObserveRecordingFleetIdentityLeasesRow, error) {
+	return sqlc.ObserveRecordingFleetIdentityLeasesRow{}, errors.New("unexpected identity lease observation")
+}

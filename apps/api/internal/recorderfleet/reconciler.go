@@ -84,7 +84,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 	}
 
 	state, result, handled, err := r.reconcileJournalInventory(ctx, state, nodes, demand, now)
-	if err != nil || handled {
+	if err != nil {
+		return r.failClosed(ctx, state, demand.Revision, r.config.Now().UTC(), err)
+	}
+	if handled {
 		result.Quarantined = quarantined
 		return r.finish(ctx, state, nodes, nil, demand, now, result, err)
 	}
@@ -94,6 +97,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) (Result, error) {
 		return r.failClosed(ctx, state, demand.Revision, now, fmt.Errorf("observe recorder fleet nodes: %w", err))
 	}
 	now = r.config.Now().UTC()
+	observations, err = r.observeMissingIdentities(ctx, state, observations)
+	if err != nil {
+		return r.failClosed(ctx, state, demand.Revision, now, err)
+	}
+	now = r.config.Now().UTC()
+	state, result, handled, err = r.reconcileAbsentObservations(ctx, state, nodes, observations, now)
+	if err != nil {
+		return r.failClosed(ctx, state, demand.Revision, now, err)
+	}
+	if handled {
+		return r.finish(ctx, state, nodes, nil, demand, now, result, nil)
+	}
 	observed, err := r.indexObservations(state, nodes, observations, now)
 	if err != nil {
 		return r.failClosed(ctx, state, demand.Revision, now, err)
@@ -204,14 +219,23 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 		if _, exists := nodes[providerID]; exists {
 			continue
 		}
+		exists, err := r.provider.NodeExists(ctx, r.config.Key, providerID)
+		if err != nil {
+			return state, Result{}, true, fmt.Errorf("confirm missing recorder node: %w", errors.Join(ErrProviderUnavailable, err))
+		}
+		if exists {
+			return state, Result{}, true, ErrInventoryDrift
+		}
 		if managed.Identity != nil && managed.Phase != PhaseIdentityRevoked && managed.Phase != PhaseDeleting {
-			if err := r.bootstrap.RevokeIdentity(ctx, *managed.Identity); err != nil {
-				return state, Result{}, true, fmt.Errorf("revoke missing recorder node identity: %w", err)
+			observation, err := r.observeIdentity(ctx, *managed.Identity)
+			if err != nil {
+				return state, Result{}, true, err
 			}
-			managed.Phase = PhaseIdentityRevoked
-			state.Nodes[providerID] = managed
-			state, err := r.save(ctx, state)
-			return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: providerID}, true, err
+			if observation.ActiveLeases > 0 || !observation.leasesFresh(r.config.Now().UTC(), r.config.ObservationMaxAge) {
+				return state, Result{}, true, ErrInventoryDrift
+			}
+			state, result, err := r.advanceDrain(ctx, state, managed, Node{ProviderID: providerID, Name: managed.Name}, observation, r.config.Now().UTC())
+			return state, result, true, err
 		}
 		if managed.PendingBootstrap != nil {
 			if err := r.bootstrap.AbandonBootstrap(ctx, *managed.PendingBootstrap); err != nil {
@@ -252,6 +276,66 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 		state.Nodes[providerID] = ManagedNode{ProviderID: providerID, Name: node.Name, Phase: PhaseAwaitingBootstrap, BootGeneration: node.BootGeneration}
 		state, err := r.save(ctx, state)
 		return state, Result{Action: ActionMissingNodeReconciled, ProviderNodeID: providerID}, true, err
+	}
+	return state, Result{}, false, nil
+}
+
+func (r *Reconciler) observeIdentity(ctx context.Context, identity NodeIdentity) (NodeObservation, error) {
+	authority, ok := r.runtime.(IdentityLeaseObserver)
+	if !ok {
+		return NodeObservation{}, ErrProviderUnavailable
+	}
+	observation, err := authority.ObserveIdentity(ctx, identity)
+	if err != nil {
+		return NodeObservation{}, fmt.Errorf("observe recorder identity leases: %w", err)
+	}
+	if observation.Identity != identity || observation.Validate(r.config.Key, Node{ProviderID: identity.ProviderID, BootGeneration: identity.BootGeneration}, r.config.SlotsPerNode) != nil {
+		return NodeObservation{}, ErrRoleFence
+	}
+	return observation, nil
+}
+
+func (r *Reconciler) observeMissingIdentities(ctx context.Context, state Journal, observations []NodeObservation) ([]NodeObservation, error) {
+	seen := make(map[string]bool, len(observations))
+	for _, observation := range observations {
+		seen[observation.Identity.ProviderID] = true
+	}
+	for _, id := range sortedManagedNodeIDs(state.Nodes) {
+		managed := state.Nodes[id]
+		if managed.Identity == nil || seen[id] {
+			continue
+		}
+		observation, err := r.observeIdentity(ctx, *managed.Identity)
+		if err != nil {
+			return nil, err
+		}
+		observations = append(observations, observation)
+	}
+	return observations, nil
+}
+
+func (r *Reconciler) reconcileAbsentObservations(ctx context.Context, state Journal, nodes map[string]Node, observations []NodeObservation, now time.Time) (Journal, Result, bool, error) {
+	for _, observation := range observations {
+		identity := observation.Identity
+		if _, exists := nodes[identity.ProviderID]; exists || observation.IdentityRevoked {
+			continue
+		}
+		if err := observation.Validate(r.config.Key, Node{ProviderID: identity.ProviderID, BootGeneration: identity.BootGeneration}, r.config.SlotsPerNode); err != nil {
+			return state, Result{}, false, err
+		}
+		exists, err := r.provider.NodeExists(ctx, r.config.Key, identity.ProviderID)
+		if err != nil {
+			return state, Result{}, false, fmt.Errorf("confirm absent recorder node: %w", errors.Join(ErrProviderUnavailable, err))
+		}
+		if exists || observation.ActiveLeases > 0 || !observation.leasesFresh(now, r.config.ObservationMaxAge) {
+			return state, Result{}, false, ErrInventoryDrift
+		}
+		// Fence claims before taking the later zero-lease sample, just as for
+		// a normal drain. The provider may be gone while a claim is in flight.
+		managed := ManagedNode{ProviderID: identity.ProviderID, Name: identity.ProviderID, Phase: PhaseBootstrapping, BootGeneration: identity.BootGeneration, Identity: &identity}
+		state.NextBootGeneration = max(state.NextBootGeneration, identity.BootGeneration+1)
+		state, result, err := r.advanceDrain(ctx, state, managed, Node{ProviderID: identity.ProviderID, Name: managed.Name}, observation, now)
+		return state, result, true, err
 	}
 	return state, Result{}, false, nil
 }
@@ -300,7 +384,7 @@ func (r *Reconciler) advanceReadiness(ctx context.Context, state Journal, nodes 
 		if managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting || !r.nodeMatchesCurrentRelease(nodes[providerID]) {
 			continue
 		}
-		if readyObservationExpired(managed, observed[providerID], now, r.config.ObservationMaxAge) {
+		if observed[providerID].IdentityAbsent || observed[providerID].IdentityRevoked || readyObservationExpired(managed, observed[providerID], now, r.config.ObservationMaxAge) {
 			continue
 		}
 		needed[providerID] = struct{}{}
@@ -448,7 +532,7 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 			state, err := r.save(ctx, state)
 			return state, Result{Action: ActionIdentityRevoked, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
 		}
-		if managed.Identity != nil {
+		if managed.Identity != nil && !observation.IdentityRevoked && !observation.IdentityAbsent {
 			if err := r.runtime.CloseAdmission(ctx, *managed.Identity); err != nil {
 				return state, Result{}, fmt.Errorf("close recorder node admission: %w", err)
 			}
@@ -534,7 +618,7 @@ func (r *Reconciler) partitionNodes(nodes map[string]Node, state Journal, observ
 	stale := make([]ManagedNode, 0)
 	for _, providerID := range sortedNodeIDs(nodes) {
 		managed := state.Nodes[providerID]
-		if managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting {
+		if managed.Phase == PhaseDraining || managed.Phase == PhaseIdentityRevoked || managed.Phase == PhaseDeleting || observed[providerID].IdentityAbsent || observed[providerID].IdentityRevoked {
 			stale = append(stale, managed)
 			continue
 		}

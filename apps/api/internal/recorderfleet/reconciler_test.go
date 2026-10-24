@@ -749,6 +749,11 @@ type fakeProvider struct {
 	events      *[]string
 }
 
+func (f *fakeProvider) NodeExists(_ context.Context, _ PoolKey, id string) (bool, error) {
+	_, exists := f.nodes[id]
+	return exists, nil
+}
+
 func (f *fakeProvider) ListNodes(context.Context, PoolKey) ([]Node, error) {
 	nodes := make([]Node, 0, len(f.nodes))
 	for _, node := range f.nodes {
@@ -860,6 +865,15 @@ type fakeRuntime struct {
 	closeCalls   int
 	published    []PoolProjection
 	events       *[]string
+}
+
+func (f *fakeRuntime) ObserveIdentity(_ context.Context, identity NodeIdentity) (NodeObservation, error) {
+	for _, observation := range f.observations {
+		if observation.Identity == identity {
+			return observation, nil
+		}
+	}
+	return NodeObservation{Identity: identity, ObservedAt: time.Unix(1, 0)}, nil
 }
 
 func (f *fakeRuntime) ObserveNodes(context.Context, PoolKey) ([]NodeObservation, error) {

@@ -275,6 +275,7 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			return
 		}
 		job, err := service.Claim(request.Context(), recordingpipeline.ClaimInput{
+			ManagedWorker:          true,
 			ClaimRequestID:         claimRequestID,
 			Kind:                   recorderWorkerJobKind(identity.Role),
 			SupportsCompletionOnly: body.SupportsCompletionOnly,

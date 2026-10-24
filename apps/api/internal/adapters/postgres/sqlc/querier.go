@@ -321,6 +321,9 @@ type Querier interface {
 	MarkTranscriptionTranscribing(ctx context.Context, arg MarkTranscriptionTranscribingParams) (Transcription, error)
 	MarkTranscriptionVerifying(ctx context.Context, arg MarkTranscriptionVerifyingParams) (Transcription, error)
 	MaterializeRecording(ctx context.Context, arg MaterializeRecordingParams) (Recording, error)
+	// Count by the fenced journal worker, not by a fleet-row join: a lost row
+	// must not hide live work. Refuse any conflicting provider or worker binding.
+	ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
@@ -362,6 +365,9 @@ type Querier interface {
 	RetryAutoSpaceLifecycle(ctx context.Context, arg RetryAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	RetryTranscriptionCleanupJob(ctx context.Context, arg RetryTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	RevokeActiveAPIKey(ctx context.Context, arg RevokeActiveAPIKeyParams) (pgtype.UUID, error)
+	// A lost row still needs a durable fence against bootstrap replay. Metadata
+	// unavailable after row loss uses explicit tombstone placeholders; it can never
+	// authorize a worker or be activated as a bootstrap reservation.
 	RevokeRecordingFleetNode(ctx context.Context, arg RevokeRecordingFleetNodeParams) (string, error)
 	RotateActiveAPIKey(ctx context.Context, arg RotateActiveAPIKeyParams) (RotateActiveAPIKeyRow, error)
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
