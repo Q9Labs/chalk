@@ -34,6 +34,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     {output, status} =
       System.cmd("go", ["test", "-c", "-o", probe, "./internal/adapters/postgres"],
         cd: Path.expand("../../../../api", __DIR__),
+        env: [{"GOTOOLCHAIN", System.get_env("CHALK_API_GOTOOLCHAIN", "go1.26.10+auto")}],
         stderr_to_stdout: true
       )
 
