@@ -51,7 +51,7 @@ func TestRecordingCaptureReconcileRetirementPostgres(t *testing.T) {
 					fmt.Fprint(w, `{"tracks":[{"mid":"1","sessionId":"owner-two","trackName":"track-two","location":"remote"}]}`)
 				case strings.HasSuffix(r.URL.Path, "/tracks/close"):
 					closes.Add(1)
-					if stopped {
+					if stopped && inspects.Load() == 0 {
 						if _, err := repository.RequestStop(t.Context(), identity.TenantID, identity.EpisodeID, identity.RecordingID, newCaptureRetryID(t)); err != nil {
 							t.Error(err)
 						}
