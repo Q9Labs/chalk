@@ -10,7 +10,7 @@ config :chalk_sync,
   max_synchronous_wal_lag_bytes: 0,
   port: 4100,
   # Sync requires the complete release migration set before it reports ready.
-  minimum_compatible_sync_migration: 20_261_023_190_002,
+  minimum_compatible_sync_migration: 20_261_023_190_003,
   provider_bridge: nil,
   retention_cleanup_interval_ms: 1_000,
   require_production_auth: false,

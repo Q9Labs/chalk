@@ -183,6 +183,9 @@ def builds_fresh_artifacts():
 
 
 def require_gate(github, args):
+    if os.environ.get('ENFORCE_ENTRY_OWNERSHIP') == 'true':
+        require(os.environ.get('RELEASE_MANAGED') == 'true' and not os.environ.get('MANIFEST_RUN_ID'),
+                'entry enforcement requires a fresh managed manifest, not reuse of an existing artifact')
     if not builds_fresh_artifacts():
         print('Release builds nothing new; it deploys earlier artifacts without a new Gate check')
         return

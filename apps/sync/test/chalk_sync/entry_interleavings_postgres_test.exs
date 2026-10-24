@@ -310,14 +310,10 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   end
 
   defp probe_leave(connection, current, state, actual, retries \\ 2) do
-    selector = Application.fetch_env!(:chalk_sync, :database_connections)
-
     result =
       try do
         Postgrex.transaction(connection, fn transaction ->
-          Application.put_env(:chalk_sync, :database_connections, fn _episode, _offset ->
-            transaction
-          end)
+          Process.put(:sync_test_transaction, transaction)
 
           {:ok, fresh} =
             Operation.new("interleaving_probe_leave_0001", :participant_leave, %{})
@@ -332,7 +328,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
           Postgrex.rollback(transaction, :probe_complete)
         end)
       after
-        Application.put_env(:chalk_sync, :database_connections, selector)
+        Process.delete(:sync_test_transaction)
       end
 
     case result do

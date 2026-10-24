@@ -21,9 +21,12 @@ import (
 const migrationTimeout = 15 * time.Minute
 
 type options struct {
-	databaseURLFile string
-	target          int64
-	allowMissing    []int64
+	databaseURLFile             string
+	target                      int64
+	allowMissing                []int64
+	entryWriterProtocol         int
+	rollbackEntryWriterProtocol int
+	enforceEntryOwnership       string
 }
 
 func main() {
@@ -46,6 +49,9 @@ func parseOptions(args []string) (options, error) {
 	flags := flag.NewFlagSet("chalk-migrate", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	databaseURLFile := flags.String("database-url-file", "", "file containing the dedicated migration database URL")
+	entryWriterProtocol := flags.Int("entry-writer-protocol", 0, "target Sync entry writer protocol (0 or 1)")
+	rollbackEntryWriterProtocol := flags.Int("rollback-entry-writer-protocol", 0, "retained rollback Sync entry writer protocol")
+	enforceEntryOwnership := flags.String("enforce-entry-ownership", "", "record entry enforcement for this release; requires an expanded rollback baseline")
 	targetText := flags.String("target", "", "migration version to apply")
 	allowMissing := []int64{}
 	allowMissingSet := map[int64]struct{}{}
@@ -83,7 +89,14 @@ func parseOptions(args []string) (options, error) {
 	if target > migrations.LatestVersion {
 		return options{}, fmt.Errorf("migration target %d is newer than this image's migration set", target)
 	}
-	return options{databaseURLFile: *databaseURLFile, target: target, allowMissing: allowMissing}, nil
+	if *entryWriterProtocol < 0 || *entryWriterProtocol > 1 || *rollbackEntryWriterProtocol < 0 || *rollbackEntryWriterProtocol > 1 {
+		return options{}, errors.New("entry writer protocol must be 0 or 1")
+	}
+	if *enforceEntryOwnership != "" && (*entryWriterProtocol != 1 || *rollbackEntryWriterProtocol != 1) {
+		return options{}, errors.New("entry enforcement requires expanded candidate and rollback Sync writers")
+	}
+	return options{entryWriterProtocol: *entryWriterProtocol, rollbackEntryWriterProtocol: *rollbackEntryWriterProtocol,
+		enforceEntryOwnership: *enforceEntryOwnership, databaseURLFile: *databaseURLFile, target: target, allowMissing: allowMissing}, nil
 }
 
 func parseMigrationVersion(value string) (int64, error) {
@@ -142,6 +155,29 @@ func migrate(ctx context.Context, options options) error {
 	}
 	if _, err := provider.UpTo(ctx, options.target); err != nil {
 		return fmt.Errorf("apply migrations through %d: %w", options.target, redactDatabaseURL(err, databaseURL))
+	}
+	return configureEntryOwnership(ctx, database, options)
+}
+
+func configureEntryOwnership(ctx context.Context, database *sql.DB, options options) error {
+	var exists bool
+	if err := database.QueryRowContext(ctx, "select to_regclass('sync_entry_rollout') is not null").Scan(&exists); err != nil {
+		return errors.New("inspect Sync entry rollout")
+	}
+	if !exists {
+		return nil
+	}
+	var enforced bool
+	if err := database.QueryRowContext(ctx, "select enforced from sync_entry_rollout where singleton").Scan(&enforced); err != nil {
+		return errors.New("read Sync entry rollout")
+	}
+	if enforced && options.entryWriterProtocol != 1 {
+		return errors.New("entry ownership is enforced: an expanded Sync rollback is required")
+	}
+	if options.enforceEntryOwnership != "" {
+		if _, err := database.ExecContext(ctx, "select enforce_sync_entry_ownership($1)", options.enforceEntryOwnership); err != nil {
+			return errors.New("entry enforcement refused: finish claimed Leaves before retrying")
+		}
 	}
 	return nil
 }

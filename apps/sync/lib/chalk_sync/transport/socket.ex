@@ -890,7 +890,13 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(false), do: "not_requested"
 
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, identity} <- Stateholder.admit_entry(identity, state.requested_entry_generation),
+    with {:ok, identity} <-
+           Stateholder.admit_socket_entry(identity, state.requested_entry_generation),
+         state = %{
+           state
+           | entry_confirmation:
+               state.entry_confirmation && identity.entry_ownership != :compatibility
+         },
          :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
          {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
@@ -905,7 +911,11 @@ defmodule ChalkSync.Transport.SocketV1 do
              self(),
              protocol_options
              |> Map.put(:entry_confirmation, state.entry_confirmation)
-             |> Map.put(:entry_generation, state.requested_entry_generation != :legacy)
+             |> Map.put(
+               :entry_generation,
+               state.requested_entry_generation != :legacy &&
+                 not is_nil(identity.entry_generation)
+             )
            ) do
       start_registered_recovery(
         state,

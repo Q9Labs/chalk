@@ -6,6 +6,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
+  alias ChalkSync.Stateholder.Postgres.Transaction
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.Transport.SocketWhiteboardV1
@@ -518,7 +519,12 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   end
 
   defp lifecycle(connection, statement, params) do
-    assert %Postgrex.Result{num_rows: 1} = Postgrex.query!(connection, statement, params)
+    assert {:ok, %Postgrex.Result{num_rows: 1}} =
+             Postgrex.transaction(connection, fn transaction ->
+               Transaction.configure(transaction)
+               Postgrex.query!(transaction, statement, params)
+             end)
+
     [tenant_id, space_id, episode_id | _participant] = params
 
     settle(%EpisodeKey{

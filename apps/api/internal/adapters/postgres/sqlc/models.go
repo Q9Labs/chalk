@@ -1099,6 +1099,13 @@ type SyncControlEvent struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
+type SyncEntryRollout struct {
+	Singleton  bool               `json:"singleton"`
+	Enforced   bool               `json:"enforced"`
+	EnforcedAt pgtype.Timestamptz `json:"enforced_at"`
+	ReleaseID  pgtype.Text        `json:"release_id"`
+}
+
 type SyncEpisodeControl struct {
 	TenantID                                         pgtype.UUID        `json:"tenant_id"`
 	SpaceID                                          pgtype.UUID        `json:"space_id"`

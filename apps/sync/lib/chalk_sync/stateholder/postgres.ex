@@ -204,11 +204,31 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def claim_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: ExternalOperationClaims.claim_operations(limit)
+    do: claim_operation_rows(&ExternalOperationClaims.claim_operations(&1, limit))
 
   @impl ChalkSync.Stateholder
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: ExternalOperationClaims.claim_local_operations(limit)
+    do: claim_operation_rows(&ExternalOperationClaims.claim_local_operations(&1, limit))
+
+  defp claim_operation_rows(claim) do
+    episode = %EpisodeKey{
+      tenant_id: "background",
+      space_id: "background",
+      episode_id: "background"
+    }
+
+    case Postgrex.transaction(Database.connection(episode), fn connection ->
+           Transaction.configure(connection)
+           claim.(connection)
+         end) do
+      {:ok, rows} -> {:ok, rows}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
+  end
 
   @impl ChalkSync.Stateholder
   def read_operation(%EpisodeKey{} = episode, external_operation_id)

@@ -62,6 +62,33 @@ defmodule ChalkSync.LegacyEntryPostgresTest do
     end
   end
 
+  test "expand release keeps hello admission compatible even when ownership is requested", %{
+    connection: connection,
+    port: port
+  } do
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    Postgrex.query!(
+      connection,
+      "update sync_entry_rollout set enforced=false,enforced_at=null,release_id=null",
+      []
+    )
+
+    try do
+      capture = JSON.decode!(File.read!(@hello_fixture)) |> hd()
+      capture = Map.put(capture, "path", "/v1/sync?entry_confirmation=1&entry_generation=new")
+      connect_published(port, capture, "hello", fixture.identity)
+      assert_generation(connection, fixture.identity, 0)
+    after
+      Postgrex.query!(
+        connection,
+        "update sync_entry_rollout set enforced=true,enforced_at=now(),release_id='test'",
+        []
+      )
+    end
+  end
+
   @tag :published_legacy_entry
   test "modern entry also allocates ownership for an owner created before seat storage", %{
     connection: connection

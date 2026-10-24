@@ -5,6 +5,14 @@ defmodule ChalkSync.Stateholder.Postgres.Transaction do
 
   def configure(connection) do
     Postgrex.query!(connection, SQL.transaction_settings(), [], timeout: 2_000)
+
+    Postgrex.query!(
+      connection,
+      "select enforced from sync_entry_rollout where singleton for share",
+      [],
+      timeout: 2_000
+    )
+
     %{rows: [[setting]]} = Postgrex.query!(connection, SQL.effective_synchronous_commit(), [])
 
     unless durable_synchronous_commit?(setting) do

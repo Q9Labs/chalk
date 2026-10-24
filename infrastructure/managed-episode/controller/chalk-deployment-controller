@@ -313,7 +313,13 @@ validate_manifest() {
     (.source_tree_state == "clean") and
     (.architectures == ["linux/arm64"] or .architectures == ["linux/amd64","linux/arm64"]) and
     (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
-    (.protocol_compatibility == {sync:1}) and
+    (.protocol_compatibility.sync == 1 and
+      ((.protocol_compatibility | keys) - ["sync","entry_writer","entry_migrator","entry_enforcement"] | length == 0) and
+      ((.protocol_compatibility.entry_writer // 1) == 1) and
+      ((.protocol_compatibility.entry_migrator // 1) == 1) and
+      ((.protocol_compatibility.entry_enforcement // false) | type == "boolean") and
+      (.protocol_compatibility.entry_enforcement != true or
+        (.protocol_compatibility.entry_writer == 1 and .protocol_compatibility.entry_migrator == 1))) and
     (if .schema_version == 2 then
       ((.affected_components == [] or .affected_components == ["api"] or .affected_components == ["sync"] or .affected_components == ["api","sync"]) and
        (.component_releases | type == "object" and (keys | sort) == ["api","sync"] and all(.[]; type == "object" and (keys | sort) == ["release_id","source_revision"] and (.release_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:@+=-]{0,127}$")) and (.source_revision | type == "string" and test("^[0-9a-f]{40}$")))) and
@@ -1025,7 +1031,23 @@ run_migrations() {
   migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "$manifest_path")" || fail "release migration target is invalid"
   [[ "$migration_target" =~ ^[0-9]{14}$ ]] || fail "release migration target is invalid"
   grep -Fqx 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "$migration_unit" || fail "release migration unit does not select the migration binary"
-  grep -Eq "^Exec=--database-url-file /run/chalk/migrate/database-url --target ${migration_target}( --allow-missing-version [0-9]{14})*$" "$migration_unit" || fail "release migration unit target does not match the manifest"
+  local entry_args="" writer baseline_manifest
+  if [[ "$(jq -r '.protocol_compatibility.entry_migrator // 0' "$manifest_path")" == 1 ]]; then
+    writer="$(jq -r '.protocol_compatibility.entry_writer // 0' "$manifest_path")"
+    entry_args=" --entry-writer-protocol $writer"
+    if [[ "$(jq -r '.protocol_compatibility.entry_enforcement // false' "$manifest_path")" == true ]]; then
+      [[ "$writer" == 1 ]] || fail "entry enforcement requires expanded Sync"
+      require_regular_file "$active_pointer"
+      baseline_manifest="$(jq -er '.release_root' "$active_pointer")/release-manifest.json"
+      jq -e '.protocol_compatibility.entry_writer == 1 and .protocol_compatibility.entry_migrator == 1' "$baseline_manifest" >/dev/null || fail "entry enforcement requires an expanded rollback baseline"
+      entry_args+=" --enforce-entry-ownership $(jq -er '.release_id' "$manifest_path") --rollback-entry-writer-protocol 1"
+    fi
+  fi
+  local migration_exec
+  migration_exec="$(grep '^Exec=' "$migration_unit")"
+  [[ "$migration_exec" == *"$entry_args" ]] || fail "release migration entry arguments do not match the manifest"
+  migration_exec="${migration_exec%"$entry_args"}"
+  grep -Eq "^Exec=--database-url-file /run/chalk/migrate/database-url --target ${migration_target}( --allow-missing-version [0-9]{14})*$" <<<"$migration_exec" || fail "release migration unit target does not match the manifest"
   grep -Fq "Secret=${MIGRATOR_SECRET_NAME}," "$migration_unit" || fail "release migration unit does not mount the dedicated credential"
 
   run_user_systemctl stop chalk-api-migrate.service >/dev/null 2>"${stage_root}/migration-stop.log" || true
@@ -1101,7 +1123,8 @@ validate_live_release_manifest() {
     .source_tree_state == "clean" and
     (.architectures | type == "array" and index($architecture) != null) and
     (.database_compatibility.engine == "postgresql" and .database_compatibility.major == 18 and (.database_compatibility.minimum_migration | type == "number" and . >= 20260713130000) and .database_compatibility.maximum_migration == null) and
-    .protocol_compatibility == {sync:1} and
+    .protocol_compatibility.sync == 1 and
+    ((.protocol_compatibility | keys) - ["sync","entry_writer","entry_migrator","entry_enforcement"] | length == 0) and
     (.runtime_artifacts | type == "object" and length > 0 and all(.[]; type == "string" and test("^[0-9a-f]{64}$"))) and
     (.images | type == "object" and (keys | sort) == ["api","cloudflared","redis","sync"] and all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$"))) and
     (if .schema_version == 2 then

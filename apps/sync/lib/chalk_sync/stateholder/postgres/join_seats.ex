@@ -13,8 +13,8 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
   # Episode authority is always acquired before Episode, participant, and seat.
   def admit_entry(connection, identity, requested) do
-    requested = if requested == :legacy, do: :new, else: requested
     Transaction.configure(connection)
+    {identity, requested} = socket_request(connection, identity, requested)
     Authority.lock_control(connection, identity.episode)
     policy = Authority.lock_episode(connection, identity.episode)
 
@@ -28,11 +28,66 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     if policy.status == "active" && participant &&
          participant.status in ["joining", "active", "leaving"] do
       ensure_seat(connection, identity, participant.status)
-      allocate_entry(connection, identity, requested)
+      reconcile_applied_join(connection, identity)
+
+      allocate_requested_entry(connection, identity, requested)
     else
       # Recovery distinguishes expired admission from cancellation and departure.
       identity
     end
+  end
+
+  defp socket_request(connection, identity, {:socket, requested}) do
+    [[enforced]] =
+      Postgrex.query!(connection, "select enforced from sync_entry_rollout where singleton", []).rows
+
+    mode = if enforced, do: :enforced, else: :compatibility
+    {%{identity | entry_ownership: mode}, requested}
+  end
+
+  defp socket_request(_connection, identity, requested),
+    do: {%{identity | entry_ownership: nil}, requested}
+
+  defp allocate_requested_entry(
+         _connection,
+         %{entry_ownership: :compatibility} = identity,
+         _requested
+       ),
+       do: %{identity | entry_generation: nil}
+
+  defp allocate_requested_entry(connection, identity, generation),
+    do: allocate_entry(connection, identity, normalize(generation))
+
+  defp normalize(:legacy), do: :new
+  defp normalize(generation), do: generation
+
+  # The old writer can have applied this join without updating its pending seat.
+  # Participant and applied intent are authoritative, including after lease expiry.
+  defp reconcile_applied_join(connection, identity) do
+    Postgrex.query!(
+      connection,
+      """
+      update participant_join_seats seat
+      set state='joined', generation=p.generation,
+        issued_entry_generation=case when seat.generation=p.generation then seat.issued_entry_generation else 0 end,
+        confirmed_entry_generation=case when seat.generation=p.generation then seat.confirmed_entry_generation else 0 end,
+        issued_entry_expires_at=clock_timestamp()+interval '120 seconds', updated_at=now()
+      from participants p join sync_lifecycle_intents intent
+        on intent.participant_id=p.id and intent.participant_generation=p.generation
+      where p.tenant_id=$1 and p.space_id=$2 and p.episode_id=$3 and p.id=$4 and p.generation=$5
+        and p.status in ('active','leaving') and ($6::uuid is null or intent.lifecycle_intent_id=$6)
+        and intent.intent_name='participant_joined' and intent.status='applied'
+        and seat.participant_id=p.id and seat.generation <= p.generation
+        and (seat.generation < p.generation or seat.state <> 'joined')
+      """,
+      Scope.participant(identity) ++
+        [
+          identity.participant_generation,
+          Scope.nullable_dump(identity.admission_lifecycle_intent_id)
+        ]
+    )
+
+    :ok
   end
 
   defp ensure_seat(connection, identity, status) do
@@ -254,13 +309,36 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       Postgrex.rollback(connection, {:error, :stale_participant_generation})
     end
 
-    cond do
-      intent.name != "participant_joined" -> :ok
-      intent.status == "pending" -> prepare_pending(connection, episode, intent, identity)
-      identity && intent.status == "superseded" -> reaped_seat(connection, episode, intent)
-      true -> :ok
-    end
+    prepare_join(connection, episode, intent, identity)
   end
+
+  defp prepare_join(
+         connection,
+         episode,
+         %{name: "participant_joined", status: "pending"} = intent,
+         identity
+       ),
+       do: prepare_pending(connection, episode, intent, identity)
+
+  defp prepare_join(
+         connection,
+         _episode,
+         %{name: "participant_joined", status: "applied"},
+         identity
+       )
+       when not is_nil(identity),
+       do: reconcile_applied_join(connection, identity)
+
+  defp prepare_join(
+         connection,
+         episode,
+         %{name: "participant_joined", status: "superseded"} = intent,
+         identity
+       )
+       when not is_nil(identity),
+       do: reaped_seat(connection, episode, intent)
+
+  defp prepare_join(_connection, _episode, _intent, _identity), do: :ok
 
   # The lifecycle consumer may already have expired this generation's lease.
   defp reaped_seat(connection, episode, intent) do

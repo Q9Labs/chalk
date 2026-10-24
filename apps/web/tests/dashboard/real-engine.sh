@@ -10,6 +10,8 @@ if [[ ! "$deadline_seconds" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 mkdir -p artifacts
+# This wrapper owns the isolated gate database. Exercise the enforced release.
+psql "$CHALK_DATABASE_URL" -v ON_ERROR_STOP=1 -qAtc "select enforce_sync_entry_ownership('dashboard-proof')" >/dev/null
 export CHALK_API_ENV=local
 # The suite drives one service principal far past the per-account production budget.
 if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then

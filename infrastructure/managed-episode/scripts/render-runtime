@@ -38,6 +38,16 @@ for image in "${api_image}" "${sync_image}" "${redis_image}" "${cloudflared_imag
 done
 [[ "${database_migration_target}" =~ ^[0-9]{14}$ ]] || { echo "manifest contains an invalid database migration target" >&2; exit 1; }
 
+entry_args=""
+if [[ "$(jq -r '.protocol_compatibility.entry_migrator // 0' "$manifest")" == 1 ]]; then
+  writer="$(jq -r '.protocol_compatibility.entry_writer // 0' "$manifest")"
+  entry_args=" --entry-writer-protocol $writer"
+  if [[ "$(jq -r '.protocol_compatibility.entry_enforcement // false' "$manifest")" == true ]]; then
+    [[ "$writer" == 1 ]] || { echo "entry enforcement requires expanded Sync" >&2; exit 1; }
+    entry_args+=" --enforce-entry-ownership $(jq -r '.release_id' "$manifest") --rollback-entry-writer-protocol 1"
+  fi
+fi
+
 mkdir -p "${output}/quadlet" "${output}/systemd"
 for template in "${managed_root}"/quadlet/*; do
   name="$(basename "${template}" .in)"
@@ -55,6 +65,9 @@ for template in "${managed_root}"/quadlet/*; do
     contents="${contents/PublishPort=127.0.0.1:18080:8080/${recorder_api_bindings}}"
   fi
   contents="${contents//__DATABASE_MIGRATION_TARGET__/${database_migration_target}}"
+  if [[ "$name" == chalk-api-migrate.container ]]; then
+    contents="$(sed "s|^Exec=.*|&$entry_args|" <<<"$contents")"
+  fi
   cap="$(jq -r --arg name "$name" '.memory_overrides[$name] // empty' <<<"$environment_policy")"
   if [[ -n "$cap" ]]; then
     contents="$(sed -E "s/--memory=[0-9]+[gm]/--memory=$cap/" <<<"$contents")"

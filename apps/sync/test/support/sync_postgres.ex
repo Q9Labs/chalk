@@ -13,6 +13,16 @@ defmodule ChalkSync.SyncPostgres do
 
     Enum.map(1..count, fn _index ->
       {:ok, connection} = Postgrex.start_link(options)
+      # Fixture writes use the new writer protocol. The archived production
+      # helper remains untouched and has no such setting.
+      Postgrex.query!(connection, "select set_config('chalk.entry_writer','1',false)", [])
+
+      Postgrex.query!(
+        connection,
+        "update sync_entry_rollout set enforced=true,enforced_at=now(),release_id='test' where singleton",
+        []
+      )
+
       connection
     end)
   end
@@ -24,7 +34,8 @@ defmodule ChalkSync.SyncPostgres do
       node_connections =
         if Process.get(:sync_test_node, :first) == :second, do: second, else: first
 
-      Enum.at(node_connections, rem(offset, length(node_connections)))
+      Process.get(:sync_test_transaction) ||
+        Enum.at(node_connections, rem(offset, length(node_connections)))
     end
   end
 
@@ -66,6 +77,7 @@ defmodule ChalkSync.SyncPostgres do
 
     {:ok, _result} =
       Postgrex.transaction(connection, fn transaction ->
+        Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
         insert_product_rows(transaction, episode, participants, policy)
         insert_control(transaction, episode, policy)
         state = insert_join_history(transaction, episode, participants, policy)
@@ -112,6 +124,7 @@ defmodule ChalkSync.SyncPostgres do
 
     {:ok, _result} =
       Postgrex.transaction(connection, fn transaction ->
+        Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
         insert_product_rows(transaction, episode, [], policy)
         insert_control(transaction, episode, policy)
 
@@ -209,6 +222,8 @@ defmodule ChalkSync.SyncPostgres do
 
     {:ok, _result} =
       Postgrex.transaction(connection, fn transaction ->
+        Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
+
         Postgrex.query!(
           transaction,
           """
@@ -325,6 +340,8 @@ defmodule ChalkSync.SyncPostgres do
 
     {:ok, _result} =
       Postgrex.transaction(connection, fn transaction ->
+        Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
+
         Postgrex.query!(
           transaction,
           """
@@ -370,6 +387,8 @@ defmodule ChalkSync.SyncPostgres do
 
     {:ok, _result} =
       Postgrex.transaction(connection, fn transaction ->
+        Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
+
         Postgrex.query!(
           transaction,
           """
@@ -410,6 +429,7 @@ defmodule ChalkSync.SyncPostgres do
   def seed_webhook_endpoint(%{episode: episode} = fixture, connection, event_types) do
     {:ok, endpoint_id} =
       Postgrex.transaction(connection, fn transaction ->
+        Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
         insert_webhook_endpoint(transaction, episode, event_types)
       end)
 
@@ -461,6 +481,8 @@ defmodule ChalkSync.SyncPostgres do
     tenant_id = uuid(episode.tenant_id)
 
     Postgrex.transaction(connection, fn transaction ->
+      Postgrex.query!(transaction, "select set_config('chalk.entry_writer','1',true)", [])
+
       Postgrex.query!(
         transaction,
         """

@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      enforce_entry_ownership:
+        description: Enable entry ownership after an expanded API/Sync release is the stable rollback baseline
+        required: false
+        default: false
+        type: boolean
       enable_recorder_control:
         description: Include recorder control and media on nightly; production also preserves an enabled baseline
         required: true
@@ -78,6 +83,10 @@ on:
         default: true
         type: boolean
       deploy_managed:
+        required: false
+        default: false
+        type: boolean
+      enforce_entry_ownership:
         required: false
         default: false
         type: boolean
@@ -169,6 +178,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MANIFEST_RUN_ID: ${{ inputs.manifest_run_id }}
+          ENFORCE_ENTRY_OWNERSHIP: ${{ inputs.enforce_entry_ownership }}
           RELEASE_MANAGED: ${{ inputs.release_managed }}
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
           DEPLOY_WEB: ${{ inputs.deploy_web }}
@@ -230,6 +240,7 @@ jobs:
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
           PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
           ENABLE_RECORDER_CONTROL: ${{ inputs.enable_recorder_control }}
+          ENFORCE_ENTRY_OWNERSHIP: ${{ inputs.enforce_entry_ownership }}
         run: |
           set -euo pipefail
           mkdir -p "$PLAN_ROOT"
@@ -278,7 +289,7 @@ jobs:
             echo "runtime-only classification must not request application images" >&2
             exit 1
           fi
-          if [[ "$DEPLOY_MANAGED" == "true" && "$classification" == none ]]; then
+          if [[ "$classification" == none && ( "$DEPLOY_MANAGED" == "true" || "${ENFORCE_ENTRY_OWNERSHIP:-false}" == true ) ]]; then
             should_publish=true
           else
             should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
@@ -588,6 +599,7 @@ jobs:
           IMAGE_ROOT: ${{ runner.temp }}/managed-images
           BUILD_JOB_RESULT: ${{ needs.build-managed-images.result }}
           BUILD_SET: ${{ needs.plan-managed.outputs.build_set }}
+          ENFORCE_ENTRY_OWNERSHIP: ${{ inputs.enforce_entry_ownership }}
         run: |
           set -euo pipefail
           mkdir -p "$IMAGE_ROOT"
@@ -616,6 +628,9 @@ jobs:
           fi
           if jq -e '.affected_components | index("sync") != null' "$plan" >/dev/null; then
             args+=(--sync-image "$(<"$IMAGE_ROOT/sync-image.txt")")
+          fi
+          if [[ "${ENFORCE_ENTRY_OWNERSHIP:-false}" == true ]]; then
+            args+=(--enforce-entry-ownership)
           fi
           infrastructure/managed-episode/scripts/generate-release-manifest "${args[@]}"
 

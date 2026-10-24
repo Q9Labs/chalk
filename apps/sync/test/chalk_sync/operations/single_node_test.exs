@@ -50,6 +50,20 @@ defmodule ChalkSync.Operations.SingleNodeTest do
              Probe.validate_database(%{observations | migration_version: 20_261_019_120_000})
   end
 
+  test "requires the rollout migration before readiness and accepts newer schemas", %{
+    observations: observations
+  } do
+    # The controller migrates the stopped runtime's database before starting Sync.
+    for version <- [20_261_023_153_001, 20_261_023_190_002] do
+      assert {:error, :incompatible_database_migration} =
+               Probe.validate_database(%{observations | migration_version: version})
+    end
+
+    for version <- [20_261_023_190_003, 20_261_023_190_004] do
+      assert :ok = Probe.validate_database(%{observations | migration_version: version})
+    end
+  end
+
   test "single-node mode retains primary durability checks", %{observations: observations} do
     for setting <- [:fsync, :full_page_writes, :data_checksums] do
       assert {:error, :unsafe_database_durability} =

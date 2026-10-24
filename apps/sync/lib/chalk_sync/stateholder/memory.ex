@@ -168,6 +168,12 @@ defmodule ChalkSync.Stateholder.Memory do
   end
 
   def handle_call({:admit_entry, identity, requested}, _from, state) do
+    requested =
+      case requested do
+        {:socket, generation} -> generation
+        generation -> generation
+      end
+
     key =
       {EpisodeKey.authority_key(identity.episode), identity.participant_id,
        identity.participant_generation}
