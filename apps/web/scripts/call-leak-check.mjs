@@ -1,5 +1,6 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { routeCallFixtureAssets } from "./call-fixture-routes.mjs";
+import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { summarizeHeap } from "./call-heap-summary.mjs";
 import { installLeakObservers } from "./call-leak-observers.mjs";
@@ -86,6 +87,40 @@ async function snapshot(cdp, directory, id) {
 }
 
 export const LEAK_JOURNEYS = ["idle", "leave", "panels", "people", "share", "board", "reconnect", "layout", "reactions"];
+
+export function leakShard(value) {
+  if (!/^[1-9]\d*\/[1-9]\d*$/u.test(value)) throw new Error("Invalid leak shard; expected i/n");
+  const [index, total] = value.split("/").map(Number);
+  if (index > total || total > LEAK_JOURNEYS.length) throw new Error("Leak shard must select at least one journey");
+  return { index, total, journeys: LEAK_JOURNEYS.filter((_, offset) => offset % total === index - 1), selfTest: index === 1 };
+}
+
+export function checkLeakShardReports(reports, total = 3) {
+  if (reports.length !== total) throw new Error(`Expected ${total} leak shard reports, got ${reports.length}`);
+  const seen = new Set();
+  for (const report of reports) {
+    const { index, total: reportedTotal } = report.leakShard ?? {};
+    if (reportedTotal !== total || seen.has(index)) throw new Error("Missing or duplicate leak shard");
+    const shard = leakShard(`${index}/${total}`);
+    seen.add(index);
+    if (report.errors?.length !== 0 || report.failures?.length !== 0 || report.leaks?.failures?.length !== 0) throw new Error(`Leak shard ${index} did not pass`);
+    const repeats = report.leakRepeats;
+    if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Missing leak repeat count");
+    const expected = shard.journeys.flatMap((journey) => Array.from({ length: repeats }, (_, repeat) => `${journey}/${repeat}`));
+    if (shard.selfTest) expected.push(`panels/${repeats}`);
+    const actual = report.leaks.results.map(({ journey, repeat }) => `${journey}/${repeat}`);
+    if (JSON.stringify(actual.toSorted()) !== JSON.stringify(expected.toSorted())) throw new Error(`Leak shard ${index} journey coverage mismatch`);
+    const tests = report.leaks.selfTest;
+    const injections = shard.selfTest ? ["resource-lifecycle", "listener", "detached", "none"] : [];
+    if (JSON.stringify(tests.map(({ injection }) => injection)) !== JSON.stringify(injections) || tests.some(({ detected }) => !detected)) throw new Error(`Leak shard ${index} self-test mismatch`);
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  if (process.argv[2] !== "--check-shards") throw new Error("Expected --check-shards followed by report paths");
+  checkLeakShardReports(await Promise.all(process.argv.slice(3).map(async (path) => JSON.parse(await readFile(path, "utf8")))));
+  console.log(`Leak shard coverage: all ${LEAK_JOURNEYS.length} journeys and self-tests passed`);
+}
 
 export async function checkLeaks({ browser, origin, budgets, directory, boardCss, selfTest = false, repeats = 1, journeys = LEAK_JOURNEYS }) {
   if (!journeys.length || journeys.some((journey) => !LEAK_JOURNEYS.includes(journey))) throw new Error("Unknown leak journey");

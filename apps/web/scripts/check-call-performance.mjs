@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { serveBuild } from "./call-performance-server.mjs";
 import { installVideoQualityObserver, videoCounterDelta } from "./call-video-quality.mjs";
-import { checkLeaks, LEAK_JOURNEYS } from "./call-leak-check.mjs";
+import { checkLeaks, LEAK_JOURNEYS, leakShard } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 
@@ -24,6 +24,7 @@ const { values } = parseArgs({
     smoke: { type: "boolean" },
     "leaks-only": { type: "boolean" },
     "timing-only": { type: "boolean" },
+    shard: { type: "string" },
     "leak-journey": { type: "string" },
     "leak-repeats": { type: "string", default: "1" },
     diagnostics: { type: "boolean" },
@@ -36,6 +37,8 @@ if (values.gate && (values.smoke || values["record-baseline"] || values["leak-jo
 if (values.gate && !values["leaks-only"] && !process.env.TESTBOX_SOURCE_COMMIT) values["bundle-only"] = true;
 if (values.gate && !values["bundle-only"]) values["self-test"] = true;
 if (values["leak-journey"] && !LEAK_JOURNEYS.includes(values["leak-journey"])) throw new Error("Unknown leak journey");
+if (values.shard && (!values["leaks-only"] || values["bundle-only"] || values["leak-journey"])) throw new Error("Shards require leaks-only without bundle-only or leak-journey");
+const shard = values.shard ? leakShard(values.shard) : undefined;
 const web = resolve(import.meta.dirname, "..");
 const root = resolve(web, "../..");
 const dist = resolve(web, ".call-performance");
@@ -71,6 +74,7 @@ const report = {
   recordedAt: new Date().toISOString(),
   machine: { platform: platform(), arch: arch(), cpu: cpus()[0].model, cores: cpus().length, load: loadavg() },
   mode: values["bundle-only"] ? "bundle-only" : values["leaks-only"] ? "leaks-only" : values["timing-only"] ? "timing-only" : "full",
+  ...(shard ? { leakShard: { index: shard.index, total: shard.total }, leakRepeats: Number(values["leak-repeats"]) } : {}),
   devices: budgets.devices,
   calibration: [],
   results: [],
@@ -146,9 +150,9 @@ try {
       budgets: budgets.leaks,
       directory: resolve(root, "artifacts/call-leaks"),
       boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
-      selfTest: values["self-test"],
+      selfTest: values["self-test"] && (!shard || shard.selfTest),
       repeats,
-      journeys: values["leak-journey"] ? [values["leak-journey"]] : undefined,
+      journeys: shard?.journeys ?? (values["leak-journey"] ? [values["leak-journey"]] : undefined),
     });
     report.failures.push(...report.leaks.failures);
   }
