@@ -9,18 +9,19 @@ import { MoreSheet } from "../dock/MoreSheet";
 import { haptics } from "../haptics/haptics";
 import { CallDetailsSheet } from "../header/CallDetailsSheet";
 import { Header } from "../header/Header";
-import { useCan, useConnection, useMedia } from "../hooks/space-hooks";
+import { useCan, useConnection, useMedia, useWhiteboard } from "../hooks/space-hooks";
 import { timings } from "../motion/motion";
 import { ToastStack, useToasts } from "../primitives/toast/ToastStack";
 import { ChatNotices } from "../sheets/people-chat/ChatNotices";
 import { PeopleChatSheet } from "../sheets/people-chat/PeopleChatSheet";
 import { playSound } from "../sounds/sounds";
 import { Stage } from "../stage/Stage";
+import { useStageView } from "../stage/stage-view";
+import { useLandscapeChrome } from "./use-landscape-chrome";
 import { CallOverlays } from "../status/CallOverlays";
 import { ArrivalScreen } from "../status/ChalkArrival";
 import { callScreen } from "../status/call-screen";
 import { useTheme } from "../theme/theme";
-import { durations } from "../theme/tokens";
 import { useCallEventToasts, type Permission } from "../toasts/CallEventToasts";
 import { useDevScenario } from "./dev-scenario";
 import { useDeviceLayout } from "./device-layout";
@@ -120,7 +121,17 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
     if (devScenario.menu === "leave") setLeaveMenuOpen(true);
   }, [devScenario]);
 
-  const chrome = useLandscapeChrome(layout.arrangement === "landscape" && sheet === null && !layered);
+  const sharedBoard = useWhiteboard().engine.presenting;
+  const boardVisible = useStageView().boardOpen ?? sharedBoard;
+  const chrome = useLandscapeChrome({ fades: layout.arrangement === "landscape" && sheet === null && !layered, boardVisible });
+  const chromeOpacity = useSharedValue(1);
+  useEffect(() => {
+    chromeOpacity.value = withTiming(chrome.hidden ? 0 : 1, timings.fade);
+  }, [chrome.hidden, chromeOpacity]);
+  const chromeStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: chromeOpacity.value };
+  });
   const forced = devScenario.callState;
   const screen = forced === "hold" ? { kind: "call" as const } : forced === "left" || forced === "ended" || forced === "failed" || forced === "removed" || forced === "exited" ? { kind: "status" as const, outcome: forced } : callScreen(connection, leftByChoice);
 
@@ -132,10 +143,10 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
           <Stage frame={regions.stage} onOpenPeople={() => setSheet("people")} />
         </LandscapeControlsContext.Provider>
         {chrome.hidden ? <Pressable accessibilityLabel="Show call controls" onPress={chrome.show} style={StyleSheet.absoluteFill} testID="frame.show-controls" /> : null}
-        <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chrome.style]}>
+        <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.header), chromeStyle]}>
           <Header arrangement={layout.arrangement} callName={callName} detailsOpen={sheet === "details"} onOpenDetails={() => setSheet("details")} ref={nameRef} />
         </Animated.View>
-        <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.dock), chrome.style]}>
+        <Animated.View pointerEvents={chrome.hidden ? "none" : "box-none"} style={[styles.region, frameStyle(regions.dock), chromeStyle]}>
           <Dock
             arrangement={layout.arrangement}
             cameraOn={cameraOn}
@@ -173,33 +184,6 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
       <ChatNotices chatVisible={sheet === "chat"} onOpenChat={() => setSheet("chat")} sheetOpen={sheet === "people" || sheet === "chat"} />
     </View>
   );
-}
-
-/** Phone landscape (L1): the controls fade after 4 s and come back on a tap. */
-function useLandscapeChrome(fades: boolean): { readonly hidden: boolean; readonly show: () => void; readonly style: ReturnType<typeof useAnimatedStyle> } {
-  const [hidden, setHidden] = useState(false);
-  const [shownAt, setShownAt] = useState(0);
-  const opacity = useSharedValue(1);
-  useEffect(() => {
-    opacity.value = withTiming(hidden ? 0 : 1, timings.fade);
-  }, [hidden, opacity]);
-  useEffect(() => {
-    if (!fades) {
-      setHidden(false);
-      return;
-    }
-    const timer = setTimeout(() => setHidden(true), durations.landscapeHide);
-    return () => clearTimeout(timer);
-  }, [fades, shownAt]);
-  const show = useCallback(() => {
-    setHidden(false);
-    setShownAt(Date.now());
-  }, []);
-  const style = useAnimatedStyle(() => {
-    "worklet";
-    return { opacity: opacity.value };
-  });
-  return { hidden, show, style };
 }
 
 function frameStyle(frame: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }) {

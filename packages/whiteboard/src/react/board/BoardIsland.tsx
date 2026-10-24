@@ -149,8 +149,7 @@ function Separator() {
   return <span className="chalk-board-separator" aria-hidden="true" />;
 }
 
-function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, compact, primaryToolsFirst, ...colors }: IslandProps & { readonly place: IslandPlace }) {
-  const phone = compact && primaryToolsFirst;
+function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, primaryToolsFirst, ...colors }: IslandProps & { readonly place: IslandPlace }) {
   const primaryTools = ["pen", "text", "note", "eraser"];
   const entries = TOOLS.flat();
   const shapes = <ShapesButton tool={tool} shape={shape} onTool={onTool} side={place === "top" ? "bottom" : "top"} />;
@@ -192,12 +191,12 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
           <BoardIcon name="redo" />
         </button>
       </Tip>
-      {phone ? (
+      {primaryToolsFirst ? (
         <>
           <Separator />
           {entries.filter((entry) => !primaryTools.includes(entry.tool)).map(button)}
         </>
-      ) : primaryToolsFirst ? null : (
+      ) : (
         <>
           <Separator />
           <ColorButton {...colors} />
