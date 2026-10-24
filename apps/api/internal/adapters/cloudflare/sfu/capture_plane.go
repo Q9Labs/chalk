@@ -403,6 +403,11 @@ func captureProviderError(err error) error {
 		// failure. Replaying it could duplicate subscriptions or negotiation.
 		retryable = false
 	}
+	if failure.stage == failureStageTransport && (failure.operation == "add_tracks" || failure.operation == "renegotiate") {
+		// The provider may have applied the command before its response was
+		// lost. Without provider-side idempotency, recover in a fresh epoch.
+		retryable = false
+	}
 	code := strings.TrimSpace(failure.providerCode)
 	if failure.stage == failureStageTrack && failure.trackCode != "" {
 		code = failure.trackCode

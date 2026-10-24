@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,19 +37,26 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 				ctx := t.Context()
 				tx, repository, identity := newCaptureRetryFixture(t)
 				var calls atomic.Int32
+				var connections atomic.Int32
+				var timedOut sync.Map
+				var replayedTransport atomic.Bool
 				server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					if strings.HasSuffix(r.URL.Path, "/sessions/new") {
-						_, _ = fmt.Fprint(w, `{"sessionId":"capture-connection","sessionDescription":{"type":"offer","sdp":"v=0\r\n"}}`)
+						_, _ = fmt.Fprintf(w, `{"sessionId":"capture-connection-%d"}`, connections.Add(1))
 						return
 					}
-					if operation == captureplane.OperationPullCaptureTracks && strings.HasSuffix(r.URL.Path, "/renegotiate") {
-						_, _ = fmt.Fprint(w, `{}`)
+					if operation == captureplane.OperationRenegotiateCaptureConnection && strings.HasSuffix(r.URL.Path, "/tracks/new") {
+						_, _ = fmt.Fprint(w, `{"requiresImmediateRenegotiation":true,"sessionDescription":{"type":"offer","sdp":"v=0\r\n"},"tracks":[{"sessionId":"publisher","trackName":"audio","mid":"0","location":"remote"}]}`)
 						return
+					}
+					if _, exists := timedOut.Load(r.URL.Path); exists {
+						replayedTransport.Store(true)
 					}
 					call := calls.Add(1)
 					if permanent || call <= 5 {
 						if call%2 == 1 {
+							timedOut.Store(r.URL.Path, true)
 							select {
 							case <-r.Context().Done():
 							case <-time.After(100 * time.Millisecond):
@@ -72,9 +80,11 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 				server.Listener = listener
 				server.Start()
 				t.Cleanup(server.Close)
+				providerClient := server.Client()
+				providerClient.Timeout = 20 * time.Millisecond
 				adapter, err := sfu.NewAdapterWithClient(config.CloudflareRealtimeConfig{
 					RealtimeAppID: "fixture-app", RealtimeAppSecret: "fixture-secret", RequestTimeout: 20 * time.Millisecond,
-				}, server.Client(), server.URL)
+				}, providerClient, server.URL)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -124,26 +134,23 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					command.Identity.Operation = operation
 					command.Identity.IdempotencyKey = "recover"
 					connection := created.Result.CreateCaptureConnection.Connection.ConnectionReference
+					tracks := []captureplane.CaptureTrack{{OwnerReference: "publisher", TrackReference: "audio", ParticipantID: newCaptureRetryID(t), ParticipantGeneration: 1, Source: captureplane.TrackSourceMicrophone, Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}}
 					if operation == captureplane.OperationPullCaptureTracks {
-						// Pull is legal only after the initial offer has its answer.
-						command.Input = capturesignaling.CommandInput{RenegotiateCaptureConnection: &captureplane.RenegotiateCaptureConnectionInput{
-							Connection: connection, NegotiationID: created.Result.CreateCaptureConnection.Negotiation.ID, Description: captureplane.Description{Type: "answer", SDP: "v=0\r\n"},
+						command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{
+							Connection: connection, LocalDescription: &captureplane.Description{Type: "offer", SDP: "v=0\r\n"}, Tracks: tracks,
 						}}
-						command.Identity.Operation = captureplane.OperationRenegotiateCaptureConnection
-						command.Identity.IdempotencyKey = "initial-answer"
-						// Initial negotiation is separate from the outage under test.
-						if _, err := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command}); err != nil {
-							t.Fatalf("initial negotiation: %v", err)
+					} else {
+						command.Identity.Operation = captureplane.OperationPullCaptureTracks
+						command.Identity.IdempotencyKey = "initial-pull"
+						command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{Connection: connection, Tracks: tracks}}
+						pulled, err := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
+						if err != nil {
+							t.Fatalf("initial pull: %v", err)
 						}
 						command.Identity.Operation = operation
 						command.Identity.IdempotencyKey = "recover"
-						command.Input = capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{
-							Connection: connection, LocalDescription: &captureplane.Description{Type: "offer", SDP: "v=0\r\n"},
-							Tracks: []captureplane.CaptureTrack{{OwnerReference: "publisher", TrackReference: "audio", ParticipantID: newCaptureRetryID(t), ParticipantGeneration: 1, Source: captureplane.TrackSourceMicrophone, Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}},
-						}}
-					} else {
 						command.Input = capturesignaling.CommandInput{RenegotiateCaptureConnection: &captureplane.RenegotiateCaptureConnectionInput{
-							Connection: connection, NegotiationID: created.Result.CreateCaptureConnection.Negotiation.ID, Description: captureplane.Description{Type: "answer", SDP: "v=0\r\n"},
+							Connection: connection, NegotiationID: pulled.Result.PullCaptureTracks.Negotiation.ID, Description: captureplane.Description{Type: "answer", SDP: "v=0\r\n"},
 						}}
 					}
 					_, signalingErr := service.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
@@ -177,6 +184,9 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					execCleanupFixture(t, tx, `update recording_jobs set available_at=now() where id=$1`, job.ID.Bytes())
 				}
 				t.Logf("state=%s attempts=%d provider_calls=%d scheduled_backoff=%s", state, attempts, calls.Load(), backoff)
+				if replayedTransport.Load() {
+					t.Fatal("replayed an ambiguous transport failure on the same provider connection")
+				}
 				var retained int
 				if err := tx.QueryRow(ctx, `select count(*) from recording_bundles where recording_id=$1 and object_key='fixture/committed-before-outage' and byte_size=9 and checksum=decode(repeat('ab',32),'hex')`, identity.RecordingID.Bytes()).Scan(&retained); err != nil || retained != 1 {
 					t.Fatalf("committed bundle lost across provider outage: retained=%d err=%v", retained, err)
@@ -185,7 +195,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if state != recordingpipeline.JobStateTerminalFailure || attempts != recordingpipeline.DefaultCaptureAttemptLimit || backoff < 4*time.Minute {
 						t.Fatalf("permanent outage did not exhaust a bounded multi-minute budget: state=%s attempts=%d backoff=%s", state, attempts, backoff)
 					}
-				} else if state != recordingpipeline.JobStateSucceeded {
+				} else if state != recordingpipeline.JobStateSucceeded || attempts != 4 || calls.Load() != 6 {
 					t.Fatalf("transient outage lost the recording before provider recovery: state=%s attempts=%d", state, attempts)
 				}
 			})
