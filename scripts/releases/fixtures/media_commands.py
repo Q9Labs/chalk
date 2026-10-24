@@ -33,7 +33,8 @@ if command == 'aws':
     elif 'get-function-configuration' in args:
         expected = ['--region', 'example', 'lambda', 'get-function-configuration',
                     '--function-name', config['dispatcher']['function_name'], '--output', 'json']
-        if args != expected or {key: os.environ.get(key) for key in ('AWS_PAGER', 'AWS_CLI_AUTO_PROMPT')} != {'AWS_PAGER': '', 'AWS_CLI_AUTO_PROMPT': 'off'}:
+        environment = {**json.loads((root / 'aws-environment.json').read_text()), 'AWS_PAGER': '', 'AWS_CLI_AUTO_PROMPT': 'off'}
+        if args != expected or {key: os.environ.get(key) for key in environment} != environment:
             raise SystemExit('unexpected Lambda verification command or environment')
         function = next(item['instances'][0]['attributes'] for item in state['resources'] if item['type'] == 'aws_lambda_function')
         counter = root / 'lambda-reads'

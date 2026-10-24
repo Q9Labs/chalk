@@ -90,11 +90,18 @@ class DispatcherBoundary(unittest.TestCase):
                     initial['resources'] = [item for item in state['resources'] if item['type'] == 'aws_iam_role']
                 (root / 'state.json').write_text(json.dumps(initial))
                 (root / 'config.json').write_text(json.dumps(config))
+                aws_environment = dict.fromkeys(('AWS_DEFAULT_PROFILE', 'AWS_ENDPOINT_URL', 'AWS_ENDPOINT_URL_LAMBDA',
+                                                 'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'))
+                aws_environment['AWS_PROFILE'] = ''
+                (root / 'aws-environment.json').write_text(json.dumps(aws_environment))
                 args = SimpleNamespace(region='example', config_parameter='/example/config', environment='nightly',
                                        manifest=manifest, output=output, dry_run=False)
                 stdout = io.StringIO()
                 with patch.dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'], AWS_PROFILE='',
                                 MEDIA_FIXTURE=directory, MEDIA_CASE=mode, MEDIA_FINAL_FAULT=fault, CHALK_MEDIA_ARTIFACT_BUCKET='example-artifacts'), contextlib.redirect_stdout(stdout):
+                    for key, value in aws_environment.items():
+                        if value is None:
+                            os.environ.pop(key, None)
                     if fault:
                         messages = {'unhealthy': 'dispatcher update is not healthy', 'wrong-zip': 'dispatcher ZIP digest changed',
                                     'stale-release': 'dispatcher runtime release binding mismatch'}
