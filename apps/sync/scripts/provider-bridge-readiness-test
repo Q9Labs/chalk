@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+fixture_directory="$(mktemp -d /tmp/chalk-bridge-readiness.XXXXXX)"
+cleanup() {
+  for name in bridge cert.pem key.pem; do
+    if [[ -f "${fixture_directory}/${name}" ]]; then rm "${fixture_directory}/${name}"; fi
+  done
+  rmdir "${fixture_directory}"
+}
+trap cleanup EXIT
+(cd ../api && go build -o "${fixture_directory}/bridge" ./internal/httpapi/testdata/bridge-readiness)
+CHALK_BRIDGE_TEST_DIRECTORY="${fixture_directory}" MIX_ENV=test mix test --no-start integration/provider_bridge_readiness_test.exs
