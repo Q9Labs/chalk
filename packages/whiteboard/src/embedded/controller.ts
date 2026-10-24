@@ -59,17 +59,12 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
       readonly sceneId: string;
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
     }
-  | ({
+  | (WhiteboardView & {
       readonly type: "view";
       readonly participantId: string;
       readonly displayName: string;
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly height: number;
-      readonly bring: boolean;
       readonly occurredAt: string;
-    } & ({ readonly originParticipantId: string; readonly originSequence: number; readonly originEpoch?: string } | { readonly originParticipantId?: never; readonly originSequence?: never }));
+    });
 
 export interface ChalkEmbeddedWhiteboardFileTransport {
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string }>;
@@ -933,6 +928,7 @@ function isWhiteboardView(value: unknown, bounds: { readonly maxCoordinate: numb
   if (typeof value.x !== "number" || !Number.isFinite(value.x) || Math.abs(value.x) > bounds.maxCoordinate || typeof value.y !== "number" || !Number.isFinite(value.y) || Math.abs(value.y) > bounds.maxCoordinate) return false;
   if (typeof value.width !== "number" || !Number.isFinite(value.width) || value.width <= 0 || value.width > bounds.maxExtent || typeof value.height !== "number" || !Number.isFinite(value.height) || value.height <= 0 || value.height > bounds.maxExtent || typeof value.bring !== "boolean")
     return false;
+  if ("lead" in value && typeof value.lead !== "boolean") return false;
   if (!("originParticipantId" in value) || value.originParticipantId === undefined) return !("originSequence" in value) && !("originEpoch" in value);
   return (
     typeof value.originParticipantId === "string" &&

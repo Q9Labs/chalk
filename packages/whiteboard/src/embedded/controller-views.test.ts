@@ -15,7 +15,7 @@ const board: ChalkEmbeddedBoardContext = {
   viewBounds: { maxCoordinate: 1_000_000, maxExtent: 2_000_000 },
   colors: { canvas: "black", surface: "black", raised: "black", popover: "black", hover: "gray", line: "gray", lineStrong: "gray", text: "white", textStrong: "white", textMuted: "gray", textSoft: "gray", dangerText: "red", focus: "white" },
 };
-const view = { x: 80, y: 100, width: 390, height: 500, bring: false, originParticipantId: "web", originSequence: 7, originEpoch: "connection-2" } as const;
+const view = { x: 80, y: 100, width: 390, height: 500, bring: false, ownerId: "owner", ownerSequence: 9, lead: false, originParticipantId: "web", originSequence: 7, originEpoch: "connection-2" } as const;
 
 function fixture(canClear = true) {
   let rendererListener = (_message: string) => {};

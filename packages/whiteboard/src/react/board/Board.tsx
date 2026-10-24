@@ -38,6 +38,8 @@ import { BoardCursors, rememberCursor, type RemoteCursor } from "./BoardCursors"
 import { BoardIcon } from "./BoardIcon";
 import { BoardIsland } from "./BoardIsland";
 import { BoardMenu } from "./BoardMenu";
+import type { WhoCanDraw } from "./board-draw-policy";
+import { WHITEBOARD_VIEW_PEOPLE_MAX } from "../../collab/view-limits";
 import { BoardStyles } from "./BoardStyles";
 import { useBoardToast, type BoardToast } from "./board-toasts";
 
@@ -49,6 +51,8 @@ export type BoardProps = {
   readonly sceneStatus: string;
   readonly ownParticipantId: string | null;
   readonly viewBounds: WhiteboardViewBounds;
+  readonly participantIds?: readonly string[];
+  readonly whoCanDraw?: WhoCanDraw;
   readonly renderCursorAvatar?: (name: string) => ReactNode;
   readonly onExport?: (image: Blob, action: "download" | "copy") => Promise<void>;
   /** False for the Grid tile: the live drawing with no controls. */
@@ -92,19 +96,20 @@ type CameraControl = {
   readonly cameraRef: MutableRefObject<Camera>;
   readonly viewportRef: MutableRefObject<Viewport>;
   readonly zoom: number;
-  readonly move: (target: Camera, animate: boolean) => void;
+  readonly move: (target: Camera, animate: boolean, source?: "follow") => void;
+  readonly fit: () => void;
 };
 
-/** Owns the camera: glides to a new view, and tells a move by hand from one the board made. */
-function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject<HTMLDivElement | null>, onManualMove: () => void, onMoved: () => void, onViewportReady: () => void): CameraControl {
+/** Camera motion leads by default; only applying a followed view preserves its origin. */
+function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject<HTMLDivElement | null>, onLeadingMove: () => void, onMoved: () => void, onViewportReady: () => void): CameraControl {
   const cameraRef = useRef<Camera>({ scrollX: 0, scrollY: 0, zoom: 1 });
   const viewportRef = useRef<Viewport>({ width: 1, height: 1 });
   const expected = useRef<Camera | null>(null);
   const glide = useRef(0);
   const [zoom, setZoom] = useState(1);
   const reduced = usePrefersReducedMotion();
-  const manual = useRef(onManualMove);
-  manual.current = onManualMove;
+  const leading = useRef(onLeadingMove);
+  leading.current = onLeadingMove;
   const moved = useRef(onMoved);
   moved.current = onMoved;
   const resized = useRef(onViewportReady);
@@ -129,6 +134,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
     return engine.api.onScrollChange((scrollX, scrollY, next) => {
       const camera = { scrollX, scrollY, zoom: next.value };
       if (camera.zoom !== clampZoom(camera.zoom)) {
+        leading.current();
         expected.current = { ...camera, zoom: clampZoom(camera.zoom) };
         setCamera(engine, expected.current);
         return;
@@ -137,7 +143,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
       if (expected.current && sameCamera(camera, expected.current)) return;
       expected.current = null;
       cancelAnimationFrame(glide.current);
-      manual.current();
+      leading.current();
       moved.current();
     });
   }, [engine, root]);
@@ -158,9 +164,16 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
   useEffect(() => () => cancelAnimationFrame(glide.current), []);
 
   const move = useCallback(
-    (target: Camera, animate: boolean) => {
+    (target: Camera, animate: boolean, source?: "follow") => {
       if (!engine) return;
+      if (source !== "follow") leading.current();
       cancelAnimationFrame(glide.current);
+      if (sameCamera(target, cameraRef.current)) {
+        expected.current = target;
+        // Refresh relay metadata without a camera write, even after an out-and-back update.
+        moved.current();
+        return;
+      }
       const set = (camera: Camera) => {
         expected.current = camera;
         setCamera(engine, camera);
@@ -173,17 +186,23 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
       const from = cameraRef.current;
       const started = performance.now();
       const step = (now: number) => {
-        const progress = Math.min(1, (now - started) / GLIDE_MS);
+        const progress = Math.max(0, Math.min(1, (now - started) / GLIDE_MS));
         set(mixCamera(from, target, 1 - (1 - progress) ** 3));
         if (progress < 1) glide.current = requestAnimationFrame(step);
-        else moved.current();
+        else {
+          if (source !== "follow") leading.current();
+          moved.current();
+        }
       };
       glide.current = requestAnimationFrame(step);
     },
     [engine, reduced],
   );
 
-  return useMemo(() => ({ cameraRef, viewportRef, zoom, move }), [move, zoom]);
+  const fit = useCallback(() => {
+    if (engine) fitContent(engine, false);
+  }, [engine]);
+  return useMemo(() => ({ cameraRef, viewportRef, zoom, move, fit }), [move, zoom, fit]);
 }
 
 /** Engine keys the board does not offer never reach the engine: no help, library, menus or theme switch. */
@@ -278,6 +297,8 @@ export function Board({
   sceneId,
   sceneStatus,
   ownParticipantId,
+  participantIds,
+  whoCanDraw,
   viewBounds,
   renderCursorAvatar,
   onExport,
@@ -307,7 +328,7 @@ export function Board({
   const history = useEngineHistory(root, engine);
   // Once this person draws or places a note, the camera is theirs: the board never fits under their hand.
   const touched = useRef(false);
-  const views = useRef(new Map<string, ChalkWhiteboardView>());
+  const views = useRef(new Map<string, ChalkWhiteboardView & { readonly participantId: string }>());
   const cursors = useRef(new Map<string, RemoteCursor>());
   const pen: PenChoice = useMemo(() => ({ color, width, surface, theme: colorScheme }), [color, width, surface, colorScheme]);
   const followingRef = useRef(following);
@@ -332,16 +353,33 @@ export function Board({
     toast({ message: `Stopped following ${nameOf(current)}` });
   }, [nameOf, onFollow, toast]);
 
-  const shareView = useRef<(bring: boolean) => Promise<boolean>>(async () => false);
+  const shareView = useRef<(bring: boolean, lead?: boolean) => Promise<boolean>>(async () => false);
   const viewSender = useRef(sendView);
   viewSender.current = sendView;
+  const selectedFollow = useRef<string | null>(following);
   const appliedVersions = useRef(new ViewVersions());
+  const previousRoster = useRef(new Set(participantIds ?? people.map((person) => person.id)));
+  useEffect(() => {
+    const next = new Set(participantIds ?? people.map((person) => person.id));
+    for (const id of previousRoster.current) {
+      if (next.has(id)) continue;
+      appliedVersions.current.forgetParticipant(id);
+      for (const [publisher, view] of views.current) {
+        if (publisher === id || view.originParticipantId === id) views.current.delete(publisher);
+      }
+      cursors.current.delete(id);
+    }
+    previousRoster.current = next;
+  }, [participantIds, people]);
   const viewsAvailable = sendView !== undefined;
   const reapplyView = useRef<() => void>(() => undefined);
   const camera = useCamera(
     engine,
     root,
-    stopFollowing,
+    () => {
+      stopFollowing();
+      shareView.current(false, true);
+    },
     () => shareView.current(false),
     () => reapplyView.current(),
   );
@@ -351,23 +389,37 @@ export function Board({
     if (!visible || !viewsAvailable || !engine) return;
     let last = 0;
     let pending: ReturnType<typeof setTimeout> | undefined;
+    let pendingLead = false;
     const send = async (bring: boolean) => {
+      const lead = pendingLead || bring;
+      pendingLead = false;
       const followedView = followingRef.current ? views.current.get(followingRef.current) : undefined;
+      const selected = followedView !== undefined && selectedFollow.current === followingRef.current;
       // Older view_v1 peers cannot mark a relay's origin, so never relay their inherited motion.
-      if (followedView && !followedView.originParticipantId && !bring) return true;
+      if (followedView && !followedView.originParticipantId && !followedView.ownerId && !bring) return true;
       // Relay the logical view, not the letterboxing added to fit my screen.
       const view = followedView ?? visibleView(camera.cameraRef.current, camera.viewportRef.current, viewBounds);
       last = performance.now();
-      const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring };
-      const outgoing: ChalkWhiteboardView = followedView?.originParticipantId ? { ...rectangle, originParticipantId: followedView.originParticipantId, originSequence: followedView.originSequence, ...(followedView.originEpoch ? { originEpoch: followedView.originEpoch } : {}) } : rectangle;
+      const rectangle = { x: view.x, y: view.y, width: view.width, height: view.height, bring, lead: lead || selected };
+      let outgoing: ChalkWhiteboardView = rectangle;
+      if (followedView && !lead) {
+        if (followedView.ownerId) {
+          outgoing = { ...rectangle, originParticipantId: followedView.participantId, originSequence: followedView.ownerSequence };
+        } else if (followedView.originParticipantId && followedView.originSequence !== undefined) {
+          outgoing = { ...rectangle, originParticipantId: followedView.originParticipantId, originSequence: followedView.originSequence, ...(followedView.originEpoch ? { originEpoch: followedView.originEpoch } : {}) };
+        }
+      }
       try {
-        return (await viewSender.current?.(outgoing)) ?? false;
+        const sent = (await viewSender.current?.(outgoing)) ?? false;
+        if (sent && selected) selectedFollow.current = null;
+        return sent;
       } catch (error) {
         console.warn("Board view dropped.", { operation: "sendView", error });
         return false;
       }
     };
-    shareView.current = (bring) => {
+    shareView.current = (bring, lead = false) => {
+      pendingLead ||= lead;
       if (bring) return send(true);
       clearTimeout(pending);
       pending = setTimeout(() => send(false), Math.max(0, VIEW_SEND_MS - (performance.now() - last)));
@@ -389,9 +441,9 @@ export function Board({
     (participantId: string, animate: boolean, selected = false) => {
       const view = views.current.get(participantId);
       if (!view || viewportRef.current.width <= 0 || viewportRef.current.height <= 0) return;
-      if (!selected && !appliedVersions.current.isNew(view)) return;
-      appliedVersions.current.remember(view);
-      move(cameraForView(view, viewportRef.current), animate);
+      if (!selected && !appliedVersions.current.isNew(view, participantId)) return;
+      appliedVersions.current.remember(view, participantId);
+      move(cameraForView(view, viewportRef.current), animate, "follow");
     },
     [move, viewportRef],
   );
@@ -403,17 +455,24 @@ export function Board({
   // Cursors and views arrive on the board's own event stream, next to the drawing.
   const subscribe = board.collab?.subscribe;
   const latestView = useRef<(event: ChalkWhiteboardView & { readonly participantId: string }) => void>(() => undefined);
+  useEffect(
+    () =>
+      subscribe?.((event) => {
+        if (event.type !== "snapshot") return;
+        views.current.clear();
+        appliedVersions.current.clear();
+      }),
+    [subscribe],
+  );
   latestView.current = (event) => {
     const previous = views.current.get(event.participantId);
-    if (!event.bring) {
-      if (event.originParticipantId === ownParticipantId && ownParticipantId) return;
-      if (!appliedVersions.current.isNew(event)) return;
-      if (event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originEpoch === previous.originEpoch && event.originSequence <= previous.originSequence) return;
-    }
+    if (!event.bring && (event.participantId === ownParticipantId || (!event.ownerId && event.originParticipantId === ownParticipantId))) return;
+    if (!event.bring && !appliedVersions.current.isNew(event, event.participantId)) return;
+    if (!event.ownerId && !event.bring && event.originParticipantId && previous?.originParticipantId === event.originParticipantId && event.originEpoch === previous.originEpoch && event.originSequence <= previous.originSequence) return;
     const newPeer = !previous;
     views.current.delete(event.participantId);
-    views.current.set(event.participantId, event.bring ? { x: event.x, y: event.y, width: event.width, height: event.height, bring: false } : event);
-    if (views.current.size > 256) {
+    views.current.set(event.participantId, { ...event, bring: false });
+    if (views.current.size > WHITEBOARD_VIEW_PEOPLE_MAX) {
       const oldest = views.current.keys().next().value;
       if (oldest !== undefined) views.current.delete(oldest);
     }
@@ -422,6 +481,7 @@ export function Board({
       shareView.current(false);
     }
     if (event.bring) {
+      appliedVersions.current.remember(event, event.participantId);
       followingRef.current = event.participantId;
       onFollow(event.participantId);
       toast({ message: `${nameOf(event.participantId)} brought everyone to this view` });
@@ -439,7 +499,11 @@ export function Board({
   }, [subscribe]);
 
   useEffect(() => {
-    if (following) goTo(following, true, true);
+    selectedFollow.current = following;
+    if (following) {
+      goTo(following, true, true);
+      shareView.current(false);
+    }
   }, [following, goTo]);
 
   // The engine: tools, styles, emptiness and note text.
@@ -460,7 +524,7 @@ export function Board({
     // The first drawing to arrive from others is fitted into view once, as the mockup opens the board.
     if (hasContent(engine)) {
       touched.current = true;
-      if (!followingRef.current) fitContent(engine, false);
+      if (!followingRef.current) camera.fit();
     }
     const offDown = engine.api.onPointerDown(() => {
       touched.current = true;
@@ -470,7 +534,10 @@ export function Board({
       setElementCount(count);
       if (!touched.current && count > 0) {
         touched.current = true;
-        if (!followingRef.current) requestAnimationFrame(() => fitContent(engine, false));
+        if (!followingRef.current)
+          requestAnimationFrame(() => {
+            if (!followingRef.current) camera.fit();
+          });
       }
       const editing = appState.editingTextElement !== null;
       if (!wasEditing && editing) beforeEditing = sceneSignature(engine);
@@ -484,7 +551,7 @@ export function Board({
       offDown();
       offChange();
     };
-  }, [engine]);
+  }, [engine, camera.fit]);
 
   useEffect(() => {
     const element = root.current;
@@ -658,6 +725,7 @@ export function Board({
               downloadLabel={downloadLabel}
               onDownload={() => void download()}
               onCopy={() => void copy()}
+              whoCanDraw={whoCanDraw}
               onBring={isHost && sendView ? bring : undefined}
               onClear={isHost ? () => void clear() : undefined}
               onClose={onClose}
