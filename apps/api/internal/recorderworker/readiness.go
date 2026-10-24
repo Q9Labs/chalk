@@ -154,7 +154,7 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 		r.capacity = capacity.ReadyCapacity()
 	}
 
-	receipt, err := r.publish(ctx, true)
+	receipt, err := r.publish(ctx, r.capacity > 0)
 	if err != nil {
 		if ctx.Err() != nil {
 			return errors.Join(ctx.Err(), r.closeAdmission(ctx))
@@ -191,7 +191,10 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 		case <-ctx.Done():
 			return r.shutdown(ctx, daemon, cancelRun, daemonResult)
 		case <-refresh:
-			receipt, err := r.publish(ctx, true)
+			if capacity, ok := daemon.(interface{ ReadyCapacity() int }); ok {
+				r.capacity = capacity.ReadyCapacity()
+			}
+			receipt, err := r.publish(ctx, r.capacity > 0)
 			if err != nil {
 				if ctx.Err() != nil {
 					return r.shutdown(ctx, daemon, cancelRun, daemonResult)

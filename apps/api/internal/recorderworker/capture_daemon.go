@@ -89,6 +89,7 @@ type CaptureDaemon struct {
 	factory  CaptureAttemptFactory
 	config   CaptureDaemonConfig
 	running  atomic.Bool
+	retired  atomic.Int32
 	draining atomic.Bool
 	drain    chan struct{}
 }
@@ -121,9 +122,14 @@ func (d *CaptureDaemon) Run(ctx context.Context) error {
 	if d.config.Slots == 1 {
 		return d.runLoop(ctx)
 	}
+	capacity := d.ReadyCapacity()
+	if capacity == 0 {
+		return errCaptureSlotRetired
+	}
 	var slots sync.WaitGroup
-	results := make(chan error, d.config.Slots)
-	for range d.config.Slots {
+	allRetired := make(chan struct{})
+	results := make(chan error, capacity)
+	for range capacity {
 		slots.Go(func() {
 			for ctx.Err() == nil && !d.draining.Load() {
 				err := captureOperation(func() error { return d.runLoop(ctx) })
@@ -133,9 +139,13 @@ func (d *CaptureDaemon) Run(ctx context.Context) error {
 				}
 				if errors.Is(err, errCaptureSlotRetired) {
 					slog.ErrorContext(ctx, "recorder capture slot retired after cleanup failure", "error", err)
+					if d.retired.Add(1) == int32(d.config.Slots) {
+						close(allRetired)
+					}
 					select {
 					case <-ctx.Done():
 					case <-d.drain:
+					case <-allRetired:
 					}
 					results <- err
 					return
@@ -164,11 +174,14 @@ func (d *CaptureDaemon) Run(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return errors.Join(ErrCaptureDaemonStopped, ctx.Err(), result)
 	}
-	return errors.Join(ErrWorkerDraining, result)
+	if d.draining.Load() {
+		return errors.Join(ErrWorkerDraining, result)
+	}
+	return result
 }
 
-// ReadyCapacity is total capacity, not the number of idle loops.
-func (d *CaptureDaemon) ReadyCapacity() int { return d.config.Slots }
+// ReadyCapacity includes busy slots, but never slots with failed cleanup.
+func (d *CaptureDaemon) ReadyCapacity() int { return d.config.Slots - int(d.retired.Load()) }
 
 func captureOperation(operation func() error) (err error) {
 	defer func() {
@@ -263,26 +276,26 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) (err er
 	defer cancelAttempt()
 	leaseExpiresAt := claim.LeaseExpiresAt.UTC()
 	result := make(chan error, 1)
-	var finishedRun *error
 	go func() {
+		// Cleanup recovery may observe completion again after the first result
+		// was consumed (for example, when relinquishing the lease panics).
+		defer close(result)
 		result <- captureOperation(func() error { return attempt.Run(attemptCtx) })
 	}()
 
 	defer func() {
 		if recover() != nil {
-			_, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, finishedRun, d.config.AttemptShutdown)
+			_, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
 			err = errors.Join(capturePanicError(), closeErr, shutdownErr)
 		}
 	}()
 	for {
 		select {
 		case runErr := <-result:
-			finishedRun = &runErr
 			return d.finishCaptureAttempt(ctx, attempt, cancelAttempt, result, runErr, lease, leaseExpiresAt)
 		case <-d.drain:
 			select {
 			case runErr := <-result:
-				finishedRun = &runErr
 				return d.finishCaptureAttempt(ctx, attempt, cancelAttempt, result, runErr, lease, leaseExpiresAt)
 			default:
 			}

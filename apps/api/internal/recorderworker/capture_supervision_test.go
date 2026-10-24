@@ -17,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
+	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -189,6 +190,7 @@ func testCaptureChildPanic(t *testing.T, boundary string) {
 		return c, nil
 	}
 	attempts := make([]*PionCaptureAttempt, 2)
+	storages := make([]*captureTestStorage, 2)
 	peers := make([]*capturePlanWatchPeer, 2)
 	tracks := make([]*capturePlanWatchTrack, 2)
 	for i := range 2 {
@@ -214,7 +216,8 @@ func testCaptureChildPanic(t *testing.T, boundary string) {
 		}
 		peers[i] = peer
 		coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{track.capture}}})
-		attempts[i] = capturePlanWatchAttempt(t, authority, &now, peer, coordinator, source, &captureTestStorage{key: bytesOf(byte(0x40 + i))}, &captureTestLifecycle{}, time.Now, 100*time.Millisecond, 100*time.Millisecond)
+		storages[i] = &captureTestStorage{key: bytesOf(byte(0x40 + i)), accessed: make(chan struct{})}
+		attempts[i] = capturePlanWatchAttempt(t, authority, &now, peer, coordinator, source, storages[i], &captureTestLifecycle{}, time.Now, 100*time.Millisecond, 100*time.Millisecond)
 	}
 	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(_ context.Context, c ClaimResult) (CaptureAttempt, error) {
 		return attempts[c.Envelope.CaptureEpoch-1], nil
@@ -225,12 +228,15 @@ func testCaptureChildPanic(t *testing.T, boundary string) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- daemon.Run(ctx) }()
+	stopped := false
 	defer func() {
 		cancel()
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Error("daemon did not stop")
+		if !stopped {
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Error("daemon did not stop")
+			}
 		}
 	}()
 	select {
@@ -260,6 +266,31 @@ func testCaptureChildPanic(t *testing.T, boundary string) {
 	case tracks[1].packets <- &rtp.Packet{Header: rtp.Header{Version: 2, SequenceNumber: 1, Timestamp: 960, SSRC: 1}, Payload: []byte{0xf8, 0xff, 0xfe}}:
 	case <-time.After(time.Second):
 		t.Fatal("sibling stopped reading")
+	}
+	select {
+	case <-storages[1].accessed:
+	case <-time.After(time.Second):
+		t.Fatal("sibling writer stopped")
+	}
+	cancel()
+	select {
+	case <-done:
+		stopped = true
+	case <-time.After(time.Second):
+		t.Fatal("sibling did not finish")
+	}
+	packets := 0
+	for _, upload := range storages[1].uploadHistory {
+		bundle, err := recordingbundle.Decrypt(storages[1].key, upload.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fragment := range bundle.Fragments {
+			packets += len(fragment.Packets)
+		}
+	}
+	if packets != 1 {
+		t.Fatalf("sibling persisted packets after panic = %d", packets)
 	}
 }
 
@@ -361,5 +392,120 @@ func TestCaptureClaimRetriesRetainSlot(t *testing.T) {
 		if calls != 2 {
 			t.Fatalf("claim %s calls=%d", id, calls)
 		}
+	}
+}
+
+func TestCaptureAllRetiredSlotsCloseReadiness(t *testing.T) {
+	claim := captureDaemonClaim(t, 7)
+	control := &multislotControl{claim: func(context.Context, utilities.ID, time.Duration) (ClaimResult, error) { return claim, nil }}
+	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(context.Context) error { return errors.New("media failure") }, close: func(context.Context) error { return errors.New("cleanup failed") }}, nil
+	}), supervisionConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reports := &readinessControlStub{reports: make(chan WorkerReadiness, 4)}
+	reporter, err := NewReadinessReporter(reports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- reporter.Run(ctx, daemon) }()
+	assertReadinessReport(t, reports.reports, true, 2, ReadinessReasonReady)
+	select {
+	case err := <-done:
+		if !errors.Is(err, errCaptureSlotRetired) || !errors.Is(err, ErrReadinessFailure) {
+			t.Fatalf("retirement error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("all slots retired but worker still advertises admission")
+	}
+	assertReadinessReport(t, reports.reports, false, 0, ReadinessReasonDraining)
+}
+
+func TestCaptureDrainSurvivesRelinquishPanic(t *testing.T) {
+	claim := captureDaemonClaim(t, 7)
+	started := make(chan struct{})
+	control := &captureControlStub{relinquish: func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		panic("relinquish failed")
+	}}
+	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		return &captureAttemptStub{run: func(ctx context.Context) error { close(started); <-ctx.Done(); return ctx.Err() }}, nil
+	}), supervisionConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- daemon.runClaim(t.Context(), claim) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("attempt did not start")
+	}
+	daemon.Drain()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("panic disappeared")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cleanup result was consumed twice")
+	}
+}
+
+func TestCaptureRetiredSlotReducesReadiness(t *testing.T) {
+	claim := captureDaemonClaim(t, 7)
+	var claims atomic.Int32
+	control := &multislotControl{claim: func(_ context.Context, id utilities.ID, lease time.Duration) (ClaimResult, error) {
+		c := claim
+		c.ClaimRequestID = id
+		c.Envelope.CaptureEpoch = int64(claims.Add(1))
+		c.LeaseExpiresAt = time.Now().Add(lease)
+		return c, nil
+	}}
+	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(_ context.Context, c ClaimResult) (CaptureAttempt, error) {
+		failed := c.Envelope.CaptureEpoch == 1
+		return &captureAttemptStub{run: func(ctx context.Context) error {
+			if failed {
+				return errors.New("media failure")
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		}, close: func(context.Context) error {
+			if failed {
+				return errors.New("cleanup failure")
+			}
+			return nil
+		}}, nil
+	}), supervisionConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reports := &readinessControlStub{reports: make(chan WorkerReadiness, 4)}
+	reporter, err := NewReadinessReporter(reports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ticks := make(chan time.Time, 1)
+	reporter.after = func(time.Duration) <-chan time.Time { return ticks }
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- reporter.Run(ctx, daemon) }()
+	defer func() { cancel(); <-done }()
+	assertReadinessReport(t, reports.reports, true, 2, ReadinessReasonReady)
+	deadline := time.After(time.Second)
+	for daemon.ReadyCapacity() != 1 {
+		select {
+		case <-deadline:
+			t.Fatal("slot was not retired")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	ticks <- time.Now()
+	assertReadinessReport(t, reports.reports, true, 1, ReadinessReasonReady)
+	if claims.Load() != 2 {
+		t.Fatalf("retired slot claimed again: %d", claims.Load())
 	}
 }
