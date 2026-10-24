@@ -177,6 +177,19 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     person = UUID.generate()
     stream = UUID.generate()
 
+    :ok =
+      :sys.install(
+        c.owner,
+        {fn
+           state, {:in, {:DOWN, _, :process, socket, :normal}}, _ ->
+             send(test, {:retiring, socket})
+             state
+
+           state, _, _ ->
+             state
+         end, nil}
+      )
+
     for n <- 1..501 do
       participant = if n == 1, do: person, else: UUID.generate()
 
@@ -191,6 +204,9 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
       assert_receive :joined
       send(socket, :leave)
       assert_receive {:DOWN, ^ref, :process, ^socket, :normal}
+      # Our monitor and the owner's monitor deliver independent DOWN messages.
+      # The state call follows the owner's handler only after it sees its DOWN.
+      assert_receive {:retiring, ^socket}, 1_000
       assert MapSet.size(:sys.get_state(c.owner).people) == 1
     end
 
