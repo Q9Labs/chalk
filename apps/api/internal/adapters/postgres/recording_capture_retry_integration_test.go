@@ -99,6 +99,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 				var state recordingpipeline.JobState
 				var backoff time.Duration
 				var attempts int
+				var timeoutFailures int
 				for attempts = 1; attempts <= recordingpipeline.DefaultCaptureAttemptLimit; attempts++ {
 					job, err := repository.Claim(ctx, recordingpipeline.ClaimInput{
 						ClaimRequestID: newCaptureRetryID(t), Kind: recordingpipeline.JobKindCapture,
@@ -166,6 +167,10 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if !errors.Is(signalingErr, capturesignaling.ErrProviderFailure) && !errors.Is(signalingErr, capturesignaling.ErrTimeout) {
 						t.Fatalf("unexpected signaling failure: %v", signalingErr)
 					}
+					var providerFailure capturesignaling.ProviderFailureError
+					if errors.As(signalingErr, &providerFailure) && providerFailure.Failure.Code == "timeout" {
+						timeoutFailures++
+					}
 					availableAt := time.Now().Add(recorderworker.DefaultAttemptRetryDelay)
 					failed, err := repository.Fail(ctx, recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: "capture_attempt_failed", ErrorDetail: signalingErr.Error()})
 					if err != nil {
@@ -183,7 +188,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					// fencing checks. This is not a wall-clock performance test.
 					execCleanupFixture(t, tx, `update recording_jobs set available_at=now() where id=$1`, job.ID.Bytes())
 				}
-				t.Logf("state=%s attempts=%d provider_calls=%d scheduled_backoff=%s", state, attempts, calls.Load(), backoff)
+				t.Logf("state=%s attempts=%d provider_calls=%d scheduled_backoff=%s transport_timeouts=%d", state, attempts, calls.Load(), backoff, timeoutFailures)
 				if replayedTransport.Load() {
 					t.Fatal("replayed an ambiguous transport failure on the same provider connection")
 				}
@@ -195,7 +200,7 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if state != recordingpipeline.JobStateTerminalFailure || attempts != recordingpipeline.DefaultCaptureAttemptLimit || backoff < 4*time.Minute {
 						t.Fatalf("permanent outage did not exhaust a bounded multi-minute budget: state=%s attempts=%d backoff=%s", state, attempts, backoff)
 					}
-				} else if state != recordingpipeline.JobStateSucceeded || attempts != 4 || calls.Load() != 6 {
+				} else if state != recordingpipeline.JobStateSucceeded || attempts != 4 || calls.Load() != 6 || timeoutFailures != 3 {
 					t.Fatalf("transient outage lost the recording before provider recovery: state=%s attempts=%d", state, attempts)
 				}
 			})
