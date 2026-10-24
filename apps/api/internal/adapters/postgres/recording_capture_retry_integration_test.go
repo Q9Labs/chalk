@@ -97,6 +97,10 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					if err != nil {
 						t.Fatalf("claim attempt %d: %v", attempts, err)
 					}
+					if attempts == 1 {
+						execCleanupFixture(t, tx, `insert into recording_bundles(id,tenant_id,recording_id,capture_job_id,sequence_number,fencing_generation,object_key,content_type,codec,byte_size,checksum,monotonic_start_millis,monotonic_end_millis,media_start_millis,media_end_millis)
+							values(gen_random_uuid(),$1,$2,$3,0,1,'fixture/committed-before-outage','application/octet-stream','chalk.bundle.v1',9,decode(repeat('ab',32),'hex'),0,1000,0,1000)`, identity.TenantID.Bytes(), identity.RecordingID.Bytes(), job.ID.Bytes())
+					}
 					envelope := job.Authority.Envelope
 					handle, err := capturesignaling.NewSignalingHandle(envelope.SignalingHandle)
 					if err != nil {
@@ -173,6 +177,10 @@ func TestRecordingCaptureProviderOutagePostgres(t *testing.T) {
 					execCleanupFixture(t, tx, `update recording_jobs set available_at=now() where id=$1`, job.ID.Bytes())
 				}
 				t.Logf("state=%s attempts=%d provider_calls=%d scheduled_backoff=%s", state, attempts, calls.Load(), backoff)
+				var retained int
+				if err := tx.QueryRow(ctx, `select count(*) from recording_bundles where recording_id=$1 and object_key='fixture/committed-before-outage' and byte_size=9 and checksum=decode(repeat('ab',32),'hex')`, identity.RecordingID.Bytes()).Scan(&retained); err != nil || retained != 1 {
+					t.Fatalf("committed bundle lost across provider outage: retained=%d err=%v", retained, err)
+				}
 				if permanent {
 					if state != recordingpipeline.JobStateTerminalFailure || attempts != recordingpipeline.DefaultCaptureAttemptLimit || backoff < 4*time.Minute {
 						t.Fatalf("permanent outage did not exhaust a bounded multi-minute budget: state=%s attempts=%d backoff=%s", state, attempts, backoff)
