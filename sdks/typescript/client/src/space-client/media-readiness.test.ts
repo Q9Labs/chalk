@@ -5,7 +5,12 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("media readiness", () => {
-  it.each(["camera", "microphone"] as const)("does not block initial startup when %s is enabled while access is loading", async (source) => {
+  it.each([
+    { source: "camera", repeated: false },
+    { source: "microphone", repeated: false },
+    { source: "camera", repeated: true },
+    { source: "microphone", repeated: true },
+  ] as const)("does not block $source startup with repeated=$repeated while access loads", async ({ source, repeated }) => {
     const platform = createCoreTestPlatform();
     const track = Object.assign(mediaTrack(), { kind: source === "camera" ? "video" : "audio" });
     let finishAccess = () => {};
@@ -35,10 +40,14 @@ describe("media readiness", () => {
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("joining"));
       const enabled = (source === "camera" ? client.media.setCameraEnabled(true) : client.media.setMicrophoneEnabled(true)).catch((cause: unknown) => cause);
       await vi.waitFor(() => expect(client.getSnapshot().media.local[source].state).toBe("requesting"));
+      const enabledAgain = repeated ? (source === "camera" ? client.media.setCameraEnabled(true) : client.media.setMicrophoneEnabled(true)).catch((cause: unknown) => cause) : Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(command).not.toHaveBeenCalled();
       finishAccess();
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
       expect(await joining).toBeUndefined();
       expect(await enabled).toBeUndefined();
+      expect(await enabledAgain).toBeUndefined();
       expect(command).toHaveBeenCalledExactlyOnceWith(true);
     } finally {
       finishAccess();

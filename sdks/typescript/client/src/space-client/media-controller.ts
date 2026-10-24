@@ -368,13 +368,23 @@ class MediaControllerRuntime implements MediaControllerEffects {
               ),
             )
           : Effect.void;
-      return this.#pending(source, ready.pipe(Effect.andThen(this.#serialize(source, this.#work(source))))).pipe(
-        Effect.andThen(
-          Effect.suspend(() => {
-            if (enabled && (source === "screen" || this.#sources[source].desired.enabled) && this.#store.getSnapshot().connection.status !== "live") return this.#mediaAction(true, Effect.void);
-            const result = this.#sources[source].result;
-            return result.revision === desired.revision && result.status === "failed" ? Effect.fail(result.cause) : Effect.void;
-          }),
+      return this.#pending(
+        source,
+        ready.pipe(
+          Effect.andThen(
+            Effect.suspend(() => {
+              if (this.#sources[source].desired.revision !== desired.revision) return Effect.void;
+              return this.#serialize(source, this.#work(source)).pipe(
+                Effect.andThen(
+                  Effect.suspend(() => {
+                    if (enabled && (source === "screen" || this.#sources[source].desired.enabled) && this.#store.getSnapshot().connection.status !== "live") return this.#mediaAction(true, Effect.void);
+                    const result = this.#sources[source].result;
+                    return result.revision === desired.revision && result.status === "failed" ? Effect.fail(result.cause) : Effect.void;
+                  }),
+                ),
+              );
+            }),
+          ),
         ),
       );
     }).pipe(Effect.mapError(normalizeMediaError));
