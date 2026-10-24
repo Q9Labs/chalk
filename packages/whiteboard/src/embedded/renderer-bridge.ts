@@ -81,6 +81,14 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request<void>("request_snapshot", {});
   }
 
+  setDrawPolicy(policy: import("../react/board/board-draw-policy").WhoCanDraw["policy"]): Promise<void> {
+    return this.#request("set_draw_policy", { policy });
+  }
+
+  setDrawPermission(participantId: string, canDraw: boolean): Promise<void> {
+    return this.#request("set_draw_permission", { participantId, canDraw });
+  }
+
   clear(): Promise<WhiteboardCommit> {
     return this.#request<WhiteboardCommit>("clear", {});
   }
@@ -89,7 +97,7 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request("file_read", { fileId });
   }
 
-  #request<T>(type: "view" | "user_export" | "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>, timeoutMs: number | null = 20_000): Promise<T> {
+  #request<T>(type: "set_draw_policy" | "set_draw_permission" | "view" | "user_export" | "local_update" | "request_snapshot" | "clear" | "file_write" | "file_read", payload: Record<string, unknown>, timeoutMs: number | null = 20_000): Promise<T> {
     const requestId = this.#context.nextMessageId();
     return new Promise<T>((resolve, reject) => {
       const timer =

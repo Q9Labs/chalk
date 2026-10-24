@@ -61,6 +61,8 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   const toasts = useToasts();
   useEffect(() => ownNativeBoardSession(client, () => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t open the board. Try again from More." })), [client, toasts]);
   const structure = useSpaceSelector(selectStructure, shallowEqual);
+  const selectViewsAvailable = useCallback(() => client.whiteboard.transport()?.supportsViews === true, [client]);
+  const viewsAvailable = useSpaceSelector(selectViewsAvailable);
   const view = useStageView();
   const { arrangement } = useDeviceLayout();
   const { shareAspect } = useDevScenario();
@@ -95,14 +97,14 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
 
   const followTile = useCallback(
     (id: string) => {
-      if (!boardVisible || id === structure.selfId) {
+      if (!boardVisible || !viewsAvailable || id === structure.selfId) {
         setSheet({ id, open: true });
         return;
       }
       view.showContent();
       view.setFollowing(view.following === id ? null : id);
     },
-    [boardVisible, structure.selfId, view],
+    [boardVisible, viewsAvailable, structure.selfId, view],
   );
   const openTile = useCallback((id: string) => setSheet({ id, open: true }), []);
   const closeTile = useCallback(() => setSheet((current) => ({ ...current, open: false })), []);

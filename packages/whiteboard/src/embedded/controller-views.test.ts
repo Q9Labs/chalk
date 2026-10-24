@@ -23,6 +23,8 @@ function fixture(canClear = true) {
   let sequence = 0;
   const posted: string[] = [];
   const sendView = vi.fn((_view: typeof view | { bring: boolean }) => true);
+  const setDrawPolicy = vi.fn(async () => {});
+  const setDrawPermission = vi.fn(async () => {});
   const onFollow = vi.fn();
   const onCloseBoard = vi.fn();
   const onError = vi.fn();
@@ -44,6 +46,8 @@ function fixture(canClear = true) {
       submitUpdate: async () => ({ operationId: "operation", sceneId: "scene", revision: "1" }),
       sendCursor: () => {},
       sendView,
+      setDrawPolicy,
+      setDrawPermission,
       requestSnapshot: async () => {},
       clear: async () => ({ operationId: "operation", sceneId: "scene", revision: "2" }),
       files: { getDownloadUrl: async () => ({ downloadUrl: "https://example.test/image" }) },
@@ -59,7 +63,7 @@ function fixture(canClear = true) {
   controller.start();
   const deliver = (message: ChalkEmbeddedWhiteboardRendererMessage) => rendererListener(encodeEmbeddedWhiteboardMessage(message, { journeyId: "mixed-call", rendererGeneration: "renderer", nextMessageId: () => `renderer-${++sequence}` }));
   deliver({ type: "ready", payload: { excalidrawVersion: "0.18.1", supportedBridgeVersions: [1] } });
-  return { controller, deliver, emit: (event: ChalkEmbeddedWhiteboardTransportEvent) => transportListener(event), posted, sendView, onFollow, onCloseBoard, onError };
+  return { controller, deliver, emit: (event: ChalkEmbeddedWhiteboardTransportEvent) => transportListener(event), posted, sendView, setDrawPolicy, setDrawPermission, onFollow, onCloseBoard, onError };
 }
 
 it("forwards web views with relay identity and reconnect epoch intact, without echoing", () => {
@@ -120,6 +124,36 @@ it("reports Stop following and Close board to the native stage", async () => {
     f.deliver({ type: "close_board", payload: {} });
     await vi.waitFor(() => expect(f.onCloseBoard).toHaveBeenCalledOnce());
     expect(f.onFollow.mock.calls).toEqual([["web"], [null]]);
+  } finally {
+    f.controller.stop();
+  }
+});
+
+it("acknowledges host drawing-policy and picked-person changes", async () => {
+  const f = fixture();
+  try {
+    f.deliver({ type: "set_draw_policy", payload: { requestId: "policy", policy: "picked" } });
+    f.deliver({ type: "set_draw_permission", payload: { requestId: "pick", participantId: "web", canDraw: true } });
+    await vi.waitFor(() => expect(f.setDrawPermission).toHaveBeenCalledWith("web", true));
+    expect(f.setDrawPolicy).toHaveBeenCalledWith("picked");
+    await vi.waitFor(() =>
+      expect(f.posted.map((raw) => decodeEmbeddedWhiteboardHostMessage(raw))).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "operation_result", payload: expect.objectContaining({ requestId: "policy", ok: true }) }), expect.objectContaining({ type: "operation_result", payload: expect.objectContaining({ requestId: "pick", ok: true }) })]),
+      ),
+    );
+  } finally {
+    f.controller.stop();
+  }
+});
+
+it("rejects guest changes to drawing permissions", async () => {
+  const f = fixture(false);
+  try {
+    f.deliver({ type: "set_draw_policy", payload: { requestId: "policy", policy: "hosts" } });
+    f.deliver({ type: "set_draw_permission", payload: { requestId: "pick", participantId: "web", canDraw: true } });
+    await vi.waitFor(() => expect(f.posted.map((raw) => decodeEmbeddedWhiteboardHostMessage(raw)).filter((message) => message.type === "operation_result" && !message.payload.ok)).toHaveLength(2));
+    expect(f.setDrawPolicy).not.toHaveBeenCalled();
+    expect(f.setDrawPermission).not.toHaveBeenCalled();
   } finally {
     f.controller.stop();
   }

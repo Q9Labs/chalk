@@ -10,6 +10,7 @@ import { useDevScenario } from "../frame/dev-scenario";
 import { useMeasuredRef } from "../frame/measurement";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import type { Frame } from "../motion/MovingFrame";
+import { useToasts } from "../primitives/toast/ToastStack";
 import { NameTag } from "../primitives/NameTag";
 import { useTheme } from "../theme/theme";
 import { radii } from "../theme/tokens";
@@ -64,6 +65,8 @@ const selectBoard = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.stat
 const selectRoster = (snapshot: SpaceSnapshot) => snapshot.participants.roster;
 const selectSelfId = (snapshot: SpaceSnapshot) => snapshot.self.participantId;
 const selectConnection = (snapshot: SpaceSnapshot) => snapshot.connection.status;
+const selectAccess = (snapshot: SpaceSnapshot) => snapshot.whiteboard.access;
+const selectCanManage = (snapshot: SpaceSnapshot) => snapshot.self.can("manageWhiteboard");
 const selectSceneId = (snapshot: SpaceSnapshot) => snapshot.whiteboard.engine.sceneId;
 
 /** The shared board uses the same renderer, tools and view protocol as web. */
@@ -79,6 +82,9 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
   const selfId = useSpaceSelector(selectSelfId);
   const connectionStatus = useSpaceSelector(selectConnection);
   const sceneId = useSpaceSelector(selectSceneId);
+  const access = useSpaceSelector(selectAccess);
+  const canManage = useSpaceSelector(selectCanManage);
+  const toasts = useToasts();
   const transport = useMemo(() => client.whiteboard.transport(), [client, status]);
   const [capabilities, setCapabilities] = useState({ canDraw: false, canClear: false, viewsAvailable: false });
   useEffect(() => transport?.subscribeSummary?.((summary) => setCapabilities({ canDraw: summary.canDraw, canClear: summary.canClear, viewsAvailable: transport.supportsViews === true })), [transport]);
@@ -95,14 +101,27 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
       sceneStatus: status,
       connectionStatus,
       viewsAvailable: capabilities.viewsAvailable,
+      ...(canManage && access.policy !== null && transport?.setDrawPolicy
+        ? {
+            whoCanDraw: {
+              policy: access.policy,
+              people: roster
+                .filter((person) => person.participantId !== selfId && !person.capabilities.includes("manageWhiteboard"))
+                .map((person) => ({ id: person.participantId, name: person.displayName, picked: access.permissions.some((permission) => permission.participantId === person.participantId && permission.canDraw) })),
+            },
+          }
+        : {}),
       colors,
     }),
-    [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, colors],
+    [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, canManage, access, transport, colors],
   );
   const onClose = useCallback(() => {
-    view.setBoardOpen(false);
-    view.setFollowing(null);
-  }, [view.setBoardOpen, view.setFollowing]);
+    void (async () => {
+      if (canManage) await transport?.setPresentation?.(false);
+      view.setBoardOpen(false);
+      view.setFollowing(null);
+    })().catch(() => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t close the board. Try again." }));
+  }, [canManage, transport, toasts, view.setBoardOpen, view.setFollowing]);
   const journeyId = useRef(`board-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`).current;
 
   return (

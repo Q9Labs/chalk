@@ -63,6 +63,8 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
     [participantId],
   );
   const person = useSpaceSelector(select, shallowEqual);
+  const selectViewsAvailable = useCallback(() => client.whiteboard.transport()?.supportsViews === true, [client]);
+  const viewsAvailable = useSpaceSelector(selectViewsAvailable);
   const id = participantId ?? "";
   const failed = useCallback((message: string) => () => toasts.show({ kind: "error", dismissible: true, message }), [toasts]);
   const run = (action: () => void) => () => {
@@ -79,7 +81,7 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
         </ChalkText>
       </View>
       <SheetGroup>
-        {(view.boardOpen ?? person.boardOpen) && !person.isSelf ? (
+        {(view.boardOpen ?? person.boardOpen) && viewsAvailable && !person.isSelf ? (
           <SheetRow
             icon="pin"
             label={view.following === participantId ? "Stop following" : "Follow"}

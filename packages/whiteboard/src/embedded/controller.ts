@@ -79,6 +79,8 @@ export interface ChalkEmbeddedWhiteboardTransport {
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<WhiteboardCommit>;
   readonly sendView?: (view: WhiteboardView) => boolean;
+  readonly setDrawPolicy?: (policy: "everyone" | "hosts" | "picked") => Promise<void>;
+  readonly setDrawPermission?: (participantId: string, canDraw: boolean) => Promise<void>;
   readonly files: ChalkEmbeddedWhiteboardFileTransport;
 }
 
@@ -235,6 +237,29 @@ export class ChalkWhiteboardController {
         const payload = message.payload;
         if (typeof payload !== "object" || payload === null || !("participantId" in payload) || (payload.participantId !== null && typeof payload.participantId !== "string")) throw new Error("whiteboard follow target is invalid");
         this.options.onFollow?.(payload.participantId);
+        return;
+      }
+      case "set_draw_policy": {
+        const payload = requireRecord(message.payload, ["requestId", "policy"]);
+        const requestId = requireString(payload.requestId, "request ID");
+        const policy = payload.policy;
+        if (policy !== "everyone" && policy !== "hosts" && policy !== "picked") throw new Error("whiteboard draw policy is invalid");
+        await this.#operation(requestId, async () => {
+          if (!this.#canClear || !this.options.transport.setDrawPolicy) throw new Error("whiteboard policy changes are unavailable");
+          await this.options.transport.setDrawPolicy(policy);
+        });
+        return;
+      }
+      case "set_draw_permission": {
+        const payload = requireRecord(message.payload, ["requestId", "participantId", "canDraw"]);
+        const requestId = requireString(payload.requestId, "request ID");
+        const participantId = requireString(payload.participantId, "participant ID");
+        const canDraw = payload.canDraw;
+        if (typeof canDraw !== "boolean") throw new Error("whiteboard draw permission is invalid");
+        await this.#operation(requestId, async () => {
+          if (!this.#canClear || !this.options.transport.setDrawPermission) throw new Error("whiteboard permission changes are unavailable");
+          await this.options.transport.setDrawPermission(participantId, canDraw);
+        });
         return;
       }
       case "close_board":

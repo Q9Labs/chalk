@@ -142,6 +142,19 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
           sceneId={boardContext.sceneId}
           sceneStatus={boardContext.sceneStatus}
           people={boardContext.people}
+          whoCanDraw={
+            boardContext.whoCanDraw
+              ? {
+                  ...boardContext.whoCanDraw,
+                  onPolicy: (policy) => {
+                    void bridge.setDrawPolicy(policy).catch(() => publishNotice({ type: "error", message: "Could not change who can draw. Try again." }));
+                  },
+                  onPick: (id, picked) => {
+                    void bridge.setDrawPermission(id, picked).catch(() => publishNotice({ type: "error", message: "Could not change who can draw. Try again." }));
+                  },
+                }
+              : undefined
+          }
           ownParticipantId={boardContext.ownParticipantId}
           viewBounds={boardContext.viewBounds}
           renderCursorAvatar={(name) => (

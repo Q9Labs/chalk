@@ -1,3 +1,4 @@
+import type { WhoCanDraw } from "../react/board/board-draw-policy";
 import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
 import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
 
@@ -29,6 +30,7 @@ export type ChalkEmbeddedBoardContext = {
   readonly sceneStatus: string;
   readonly connectionStatus: string;
   readonly viewsAvailable: boolean;
+  readonly whoCanDraw?: Pick<WhoCanDraw, "policy" | "people">;
   readonly colors: {
     readonly canvas: string;
     readonly surface: string;
@@ -136,6 +138,8 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
   | { readonly type: "view"; readonly payload: WhiteboardView & { readonly requestId: string } }
   | { readonly type: "notice"; readonly payload: ChalkEmbeddedBoardNotice | null }
   | { readonly type: "follow"; readonly payload: { readonly participantId: string | null } }
+  | { readonly type: "set_draw_policy"; readonly payload: { readonly requestId: string; readonly policy: WhoCanDraw["policy"] } }
+  | { readonly type: "set_draw_permission"; readonly payload: { readonly requestId: string; readonly participantId: string; readonly canDraw: boolean } }
   | { readonly type: "close_board"; readonly payload: {} }
   | { readonly type: "camera"; readonly payload: { readonly scrollX: number; readonly scrollY: number; readonly zoom: number } }
   | { readonly type: "request_snapshot"; readonly payload: { readonly requestId: string } }
@@ -244,7 +248,26 @@ const hostMessageTypes = new Set<ChalkEmbeddedWhiteboardHostMessage["type"]>([
   "prepare_close",
 ]);
 
-const rendererMessageTypes = new Set<ChalkEmbeddedWhiteboardRendererMessage["type"]>(["notice", "view", "follow", "close_board", "ready", "local_update", "cursor", "camera", "request_snapshot", "clear", "file_read", "file_write", "user_export", "metric", "error", "close_ready"]);
+const rendererMessageTypes = new Set<ChalkEmbeddedWhiteboardRendererMessage["type"]>([
+  "set_draw_policy",
+  "set_draw_permission",
+  "notice",
+  "view",
+  "follow",
+  "close_board",
+  "ready",
+  "local_update",
+  "cursor",
+  "camera",
+  "request_snapshot",
+  "clear",
+  "file_read",
+  "file_write",
+  "user_export",
+  "metric",
+  "error",
+  "close_ready",
+]);
 
 function decodeEnvelope(value: string, expectedGeneration: string | undefined, allowedTypes: ReadonlySet<string>): ChalkEmbeddedWhiteboardBridgeEnvelope<{ type: string; payload: unknown }> {
   if (encodedBytes(value) > CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES) throw new Error("embedded whiteboard message exceeds the bridge limit");
