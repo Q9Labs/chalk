@@ -269,3 +269,40 @@ func recoveryStep(t *testing.T, f *fleetFixture, r *Reconciler) Result {
 	}
 	return result
 }
+
+func TestRecoveryMissingRowDoesNotBlockSiblingDrain(t *testing.T) {
+	for _, role := range []workeridentity.Role{workeridentity.RoleCapture, workeridentity.RoleRender} {
+		t.Run(string(role), func(t *testing.T) {
+			f, provider, runtime, bootstrap := recoveryFixture(t, role)
+			f.demand.value = Demand{Revision: "drain", ObservedAt: f.now}
+			f.journal.found = true
+			f.journal.state = NewJournal()
+			f.journal.state.NextBootGeneration = 3
+			started := f.now.Add(-time.Second)
+			for i, id := range []string{"a-missing-row", "z-sibling"} {
+				node := f.provider.nodeFor(f.ensureRequest(uint64(i+1)), id)
+				f.provider.nodes[id] = node
+				identity := bootstrap.identity(node)
+				identity.Role = role
+				if i == 1 {
+					identity.WorkerID = "66666666-6666-4666-8666-666666666666"
+				}
+				f.journal.state.Nodes[id] = ManagedNode{ProviderID: id, Name: node.Name, Phase: PhaseDraining, BootGeneration: node.BootGeneration, Identity: &identity, DrainStartedAt: &started}
+				observation := NodeObservation{Identity: identity, ObservedAt: f.now, LeasesObservedAt: f.now}
+				if i == 0 {
+					runtime.identityObservation = &observation
+					runtime.missing = true
+				} else {
+					runtime.observations = append(runtime.observations, observation)
+				}
+			}
+			r := recoveryReconciler(t, f, provider, runtime, bootstrap)
+			for range 7 {
+				recoveryStep(t, f, r)
+			}
+			if bootstrap.revokeCalls != 2 || provider.deleteCalls != 2 || len(f.journal.state.Nodes) != 0 {
+				t.Fatalf("missing row blocked sibling drain: revokes=%d deletes=%d journal=%+v", bootstrap.revokeCalls, provider.deleteCalls, f.journal.state)
+			}
+		})
+	}
+}
