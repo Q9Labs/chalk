@@ -40,10 +40,13 @@ func TestAutomaticTranscriptMigrationRestoresPolicies(t *testing.T) {
 	}
 	for _, mode := range []string{"disabled", "on_demand", "automatic"} {
 		tenantID, spaceID := mustTenantPolicyTestID(t), mustTenantPolicyTestID(t)
+		episodeID, recordingID := mustTenantPolicyTestID(t), mustTenantPolicyTestID(t)
 		exec(`insert into tenants(id,name) values($1,'migration proof')`, tenantID.Bytes())
 		exec(`insert into tenant_artifact_policies(tenant_id,transcription_ceiling,transcription_default_mode,provider_policy_version,source_window_seconds)
 		values($1,$2,$2,case when $2='disabled' then '' else 'custom-version' end,case when $2='disabled' then 0 else 12345 end)`, tenantID.Bytes(), mode)
 		exec(`insert into spaces(id,tenant_id,name,slug,media_plane,transcription_policy) values($1,$2,'migration proof',$1::uuid::text,'cf_sfu',$3)`, spaceID.Bytes(), tenantID.Bytes(), mode)
+		exec(`insert into episodes(id,tenant_id,space_id,status,config_snapshot,started_at,ended_at) values($1,$2,$3,'ended',$4::jsonb,now(),now())`, episodeID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), transcriptPolicySnapshot(mode, false))
+		exec(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,completed_at) values($1,$2,$3,$4,'completed','r2',now())`, recordingID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes())
 	}
 	// Whole-row comparisons also guard timestamps, retention, and recording policy.
 	exec(`create temporary table original_tenant_policies on commit drop as select * from tenant_artifact_policies`)

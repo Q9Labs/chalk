@@ -167,9 +167,9 @@ relational purge is not replayed: its deleted identities are now absent.
 Use `--operation backfill --backfill /private/backfill.json` to inventory and
 export a separate backed-up plan. The spec contains `service_tenant_ids` and
 explicit `spaces: [{id, tenant_id}]`. Service Spaces are rejected. Only selected
-Spaces still at disabled/disabled become automatic/on-demand. Deliberate and
+Spaces still at disabled/disabled become automatic/automatic. Deliberate and
 automatic settings are not discovered or lowered. Kept Tenant policies raise
-disabled ceilings/defaults to on-demand, retaining automatic values and custom
+disabled defaults to automatic and raise the ceiling to match, retaining custom
 retentions; the required provider version/source window are repaired only when
 empty/zero. Frozen Episode policies are untouched. Apply with its own plan,
 backup receipt and result file; it is one guarded transaction.
