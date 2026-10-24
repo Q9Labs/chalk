@@ -92,7 +92,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
     IO.puts("cleanup readiness: #{status} #{body}")
     assert status == 200
     assert 204 = control(info["control_url"] <> "/release")
-    for task <- tasks, do: assert({:ok, {:satisfied, _}} = Task.await(task, 35_000))
+    for task <- tasks, do: assert({:ok, :satisfied} = Task.await(task, 35_000))
 
     Port.close(bridge)
     for _ <- 1..3, do: Readiness.probe_now()
@@ -131,8 +131,19 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
   end
 
   defp ready_response do
-    conn = ChalkSync.Transport.Router.call(Plug.Test.conn(:get, "/readyz"), [])
-    {conn.status, conn.resp_body}
+    {_, listener, _, _} =
+      Enum.find(Supervisor.which_children(ChalkSync.Supervisor), fn {id, _, _, _} ->
+        id == Bandit
+      end)
+
+    {:ok, {_, port}} = ThousandIsland.listener_info(listener)
+
+    {:ok, {{_, status, _}, _, body}} =
+      :httpc.request(:get, {~c"http://127.0.0.1:#{port}/readyz", []}, [timeout: 1_000],
+        body_format: :binary
+      )
+
+    {status, body}
   end
 
   defp control(url) do
