@@ -2,10 +2,11 @@ package config
 
 import (
 	"fmt"
-	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 const RecordingAdmissionCap = "CHALK_RECORDING_ADMISSION_CAP"

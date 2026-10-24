@@ -149,7 +149,7 @@ func TestRecordingParticipantMigrationPostgres(t *testing.T) {
 		}
 	}
 	// A temporary copy tests the real migration without changing the shared schema.
-	exec(`create temporary table recording_capacity (id smallint primary key check(id=1),reserved_episodes integer not null default 0 check(reserved_episodes between 0 and 20),reserved_participants integer not null default 0 check(reserved_participants between 0 and 100),reserved_input_bitrate_bps bigint not null default 0 check(reserved_input_bitrate_bps>=0),updated_at timestamptz not null default now())`)
+	exec(`create temporary table recording_capacity (id smallint primary key check(id=1),reserved_episodes integer not null default 0 check(reserved_episodes between 0 and 20),reserved_participants integer not null default 0 constraint recording_capacity_reserved_participants_check1 check(reserved_participants between 0 and 100),reserved_input_bitrate_bps bigint not null default 0 check(reserved_input_bitrate_bps>=0),updated_at timestamptz not null default now())`)
 	exec(`insert into recording_capacity(id) values(1)`)
 	migration, err := migrations.Files.ReadFile("20261025000000_recording_admission_participants.sql")
 	if err != nil {

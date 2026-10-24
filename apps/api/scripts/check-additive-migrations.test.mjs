@@ -106,7 +106,7 @@ test("CLI uses merge base, ignores old migrations, and fails on a missing base",
 
 test("only the exact participant CHECK widening is exempt", (t) => {
   const repo = repository(t);
-  const widening = "ALTER TABLE recording_capacity DROP CONSTRAINT recording_capacity_reserved_participants_check; ALTER TABLE recording_capacity ADD CONSTRAINT recording_capacity_reserved_participants_check CHECK (reserved_participants BETWEEN 0 AND 200);";
+  const widening = "ALTER TABLE recording_capacity DROP CONSTRAINT recording_capacity_reserved_participants_check1; ALTER TABLE recording_capacity ADD CONSTRAINT recording_capacity_reserved_participants_check1 CHECK (reserved_participants BETWEEN 0 AND 200);";
   for (const [sql, status] of [
     [widening, 0],
     [widening + " DROP TABLE spaces;", 1],
