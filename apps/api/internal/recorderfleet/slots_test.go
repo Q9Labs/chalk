@@ -38,6 +38,7 @@ func TestCapturePhysicalFloorsAndLegacyDemand(t *testing.T) {
 		{"free slots", Demand{DesiredNodes: 3, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 2, PhysicalNodeFloor: 3}}, 12, 10, 4},
 		{"cap", Demand{DesiredNodes: 3, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 2, PhysicalNodeFloor: 3}}, 0, 2, 2},
 		{"old API forces one slot", Demand{DesiredNodes: 3}, 0, 10, 3},
+		{"prewarm slots", Demand{DesiredNodes: 9, CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 9}}, 0, 10, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFleetFixture(t)

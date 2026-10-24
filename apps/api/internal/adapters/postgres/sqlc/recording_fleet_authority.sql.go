@@ -294,7 +294,7 @@ select
     held_starts,
     queued_jobs,
 	(slot_demand + prepared_nodes)::integer as slot_demand,
-	(physical_node_floor + prepared_nodes)::integer as physical_node_floor,
+	physical_node_floor,
     $2::timestamptz as observed_at
 from target
 `
