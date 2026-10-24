@@ -14,8 +14,8 @@ config = json.loads((root / 'config.json').read_text())
 state = json.loads((root / 'state.json').read_text())
 
 
-SERVICE_OF = {'get-parameter': 'ssm', 'list-objects-v2': 's3api', 'get-object': 's3api', 'put-object': 's3api',
-              'get-function-configuration': 'lambda', 'get-schedule': 'scheduler'}
+OPERATIONS = {('ssm', 'get-parameter'), ('s3api', 'list-objects-v2'), ('s3api', 'get-object'), ('s3api', 'put-object'),
+              ('lambda', 'get-function-configuration'), ('scheduler', 'get-schedule')}
 
 
 def reply(value):
@@ -26,21 +26,22 @@ if command == 'aws':
     environment = {**json.loads((root / 'aws-environment.json').read_text()), 'AWS_PAGER': '', 'AWS_CLI_AUTO_PROMPT': 'off'}
     if {key: os.environ.get(key) for key in environment} != environment:
         raise SystemExit('unexpected AWS environment')
-    operation = next((name for name in SERVICE_OF if name in args), None)
-    if operation is None or args[args.index(operation) - 1] != SERVICE_OF[operation]:
-        raise SystemExit('unexpected AWS service')
-    if 'get-parameter' in args:
+    words = args[2:] if args[:1] == ['--profile'] else args
+    if words[:1] != ['--region'] or tuple(words[2:4]) not in OPERATIONS:
+        raise SystemExit('unexpected AWS command')
+    operation = words[3]
+    if operation == 'get-parameter':
         reply(dict(Parameter=dict(Value=json.dumps(config))))
-    elif 'list-objects-v2' in args:
+    elif operation == 'list-objects-v2':
         reply(dict(Contents=[] if os.environ['MEDIA_CASE'] == 'missing-state' and not (root / 'applied').exists()
                    else [dict(Key=config['dispatcher']['state_key'])]))
-    elif 'get-object' in args:
+    elif operation == 'get-object':
         destination = Path(args[-3])
         destination.write_text(json.dumps(state)) if args[args.index('--key') + 1] == config['dispatcher']['state_key'] else destination.write_bytes(b'ZIP')
         reply({})
-    elif 'put-object' in args:
+    elif operation == 'put-object':
         reply(dict(VersionId='example-version'))
-    elif 'get-function-configuration' in args:
+    elif operation == 'get-function-configuration':
         expected = ['--region', 'example', 'lambda', 'get-function-configuration',
                     '--function-name', config['dispatcher']['function_name'], '--output', 'json']
         if args != expected:
@@ -59,7 +60,7 @@ if command == 'aws':
             elif fault == 'stale-release':
                 response['Environment']['Variables']['CHALK_RELEASE_ID'] = 'example-previous'
         reply(response)
-    elif 'get-schedule' in args:
+    elif operation == 'get-schedule':
         reply(dict(State='ENABLED'))
     else:
         raise SystemExit('unexpected AWS operation')
