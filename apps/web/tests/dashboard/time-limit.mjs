@@ -170,11 +170,7 @@ try {
     await anonymousGuest.goto(anonymous.url());
     await anonymousGuest.getByLabel("Your name").fill("Anonymous Deadline Guest");
     await anonymousGuest.getByRole("button", { name: "Join call", exact: true }).click();
-    const publicGuestJoined = anonymousGuest.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
-    const admitPublicGuest = anonymous.getByRole("button", { name: "Admit Anonymous Deadline Guest", exact: true });
-    await Promise.race([publicGuestJoined, admitPublicGuest.waitFor({ timeout: 45000 })]);
-    if (await admitPublicGuest.isVisible()) await admitPublicGuest.click();
-    await publicGuestJoined;
+    await anonymousGuest.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
     const [publicSpace, publicTenant, publicEpisode, publicCreated] = sql(`select s.id,s.tenant_id,e.id,e.created_at from spaces s join episodes e on e.space_id=s.id where s.tenant_id='${managedTenant}' and e.status='active'`).split("|");
     assert(publicEpisode, "anonymous call must have an active real Episode");
     const publicDeadline = new Date(Math.ceil(Date.parse(publicCreated) / 1000) * 1000 + 60000).toISOString();
