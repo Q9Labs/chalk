@@ -393,7 +393,7 @@ type JoinedSpaceAccess = {
   readonly inviteLink?: string;
   readonly spaceName?: string;
 };
-type SpaceEntryAccess = Pick<PreparedPublicSpace, "credential" | "getAccess" | "subscribe" | "reportCredential" | "reportCredentialExpiresAt"> & {
+type SpaceEntryAccess = Pick<PreparedPublicSpace, "arrival" | "credential" | "getAccess" | "subscribe" | "reportCredential" | "reportCredentialExpiresAt"> & {
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly finish: (options?: SpaceAccessCleanupOptions) => Promise<void>;

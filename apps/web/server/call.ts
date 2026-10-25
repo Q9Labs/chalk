@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { z } from "zod";
 import type { Episode } from "@q9labsai/chalk-client/effect";
-import { EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
+import { DateTimeStringSchema, EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, listedRecording, live, run } from "./engine";
 import { callDTO, episodeDTO, transcriptDTO } from "./dto";
@@ -73,7 +73,7 @@ export async function callMutation(engine: Engine, action: Exclude<CallAction, {
       const episodeParams = { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(action.episodeId) };
       const episode = await run(engine.api.episodes.getEpisode({ params: episodeParams }));
       const deadline = new Date(Math.min(Date.parse(action.deadline), Date.parse(episodeDeadlineCeiling(episode)))).toISOString();
-      await run(engine.api.episodes.setEpisodeDeadline({ params: episodeParams, headers, payload: { deadline_at: deadline } }));
+      await run(engine.api.episodes.setEpisodeDeadline({ params: episodeParams, headers, payload: { deadline_at: Schema.decodeUnknownSync(DateTimeStringSchema)(deadline) } }));
       return { ok: true };
     }
     case "end-for-everyone": {

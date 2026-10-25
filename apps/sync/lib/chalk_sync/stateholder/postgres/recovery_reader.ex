@@ -45,9 +45,9 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     with {:ok, control} <- read_control(connection, Scope.episode(identity.episode)),
          {:ok, status} <- read_episode_status(connection, Scope.episode(identity.episode)),
          {:ok, state} <- Control.validate_fold(identity.episode, control) do
-      case validate_recovery_identity(connection, identity, status) do
-        :ok ->
-          recovery =
+      result =
+        case validate_recovery_identity(connection, identity, status) do
+          :ok ->
             build_recovery(
               connection,
               identity.episode,
@@ -57,15 +57,20 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
               identity.protocol_version
             )
 
-          if status == "ended" and is_integer(recovery.replay_cursor),
-            do: %{recovery | mode: :replay},
-            else: recovery
+          {:terminal, reason} ->
+            terminal_recovery(state, reason)
 
-        {:terminal, reason} ->
-          terminal_recovery(state, reason)
+          {:error, reason} ->
+            {:error, reason}
+        end
 
-        {:error, reason} ->
-          {:error, reason}
+      case result do
+        %Recovery{replay_cursor: revision} = recovery
+        when status == "ended" and is_integer(revision) ->
+          %{recovery | mode: :replay}
+
+        other ->
+          other
       end
     else
       {:error, reason} -> {:error, reason}
