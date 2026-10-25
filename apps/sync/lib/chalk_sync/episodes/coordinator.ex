@@ -107,7 +107,8 @@ defmodule ChalkSync.Episodes.Coordinator do
   end
 
   @spec pop(pid(), pid()) ::
-          {:ok, binary(), false | :recovery_complete | {:terminal, pos_integer(), String.t()}}
+          {:ok, binary(),
+           false | :recovery_complete | :terminal_welcome | {:terminal, pos_integer(), String.t()}}
           | :empty
           | {:error, atom()}
   def pop(coordinator, socket \\ self()) do
@@ -909,7 +910,7 @@ defmodule ChalkSync.Episodes.Coordinator do
          %{recovery: %{queued_kind: :terminal_welcome}} = _subscriber,
          entry
        ) do
-    {:reply, {:ok, entry.encoded, true}, remove_socket(state, socket)}
+    {:reply, {:ok, entry.encoded, :terminal_welcome}, remove_socket(state, socket)}
   end
 
   defp popped_recovery_entry(

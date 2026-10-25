@@ -1175,7 +1175,9 @@ describe("V1SyncClient", () => {
       socket.receive({ type: "event", stream: "control", name: "participant_left", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { participant_id: peerId, reason: "left" }, external_operation_id: commandIds[1] });
       await snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
       expect(client.getSnapshot().connection.phase).toBe("connecting");
-    } finally { client.stop(); }
+    } finally {
+      client.stop();
+    }
   });
   it("announces new and removed remote publications once per projection event", async () => {
     const { client, socket, mediaPlane } = await liveClient();

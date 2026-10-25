@@ -239,6 +239,12 @@ type ParticipantPresenceLease struct {
 	ParticipantID         pgtype.UUID        `json:"participant_id"`
 	ParticipantGeneration int64              `json:"participant_generation"`
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+	EntryGeneration       int64              `json:"entry_generation"`
+}
+
+type ParticipantPresenceRuntime struct {
+	Singleton    bool               `json:"singleton"`
+	RecoverAfter pgtype.Timestamptz `json:"recover_after"`
 }
 
 type PasswordReset struct {

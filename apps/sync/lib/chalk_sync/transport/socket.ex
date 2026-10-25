@@ -749,6 +749,11 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp pop_outbound(%{coordinator: coordinator} = state) do
     case Coordinator.pop(coordinator, self()) do
+      {:ok, encoded, :terminal_welcome} ->
+        {:stop, :normal, {1000, "participant inactive"},
+         {:text, encode_with_context(state, encoded)},
+         %{state | terminal: %{close_code: 1000, reason: :terminal_recovery}}}
+
       {:ok, encoded, :recovery_complete} ->
         next = state |> Map.put(:phase, :live) |> start_heartbeat() |> start_entry_deadline()
         send(self(), :collaboration_drain)
