@@ -125,34 +125,16 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   end
 
   # A lease that ran out before entry is a timeout, not a departure or rejection.
-  defp expired_entry(connection, %Identity{admission_lifecycle_intent_id: nil} = identity),
-    do: departure_recovery(connection, identity)
+  defp expired_entry(_connection, %Identity{admission_lifecycle_intent_id: nil}),
+    do: {:terminal, :participant_inactive}
 
   defp expired_entry(connection, identity) do
     params = Scope.participant(identity) ++ [Scope.uuid(identity.admission_lifecycle_intent_id)]
 
     case Postgrex.query!(connection, SQL.read_admission_intent(), params).rows do
       [["superseded", "expired", _valid]] -> {:error, :entry_expired}
-      _ -> departure_recovery(connection, identity)
+      _ -> {:terminal, :participant_inactive}
     end
-  end
-
-  defp departure_recovery(connection, identity) do
-    [[expired]] =
-      Postgrex.query!(
-        connection,
-        """
-        select exists (
-          select 1 from sync_external_operations
-          where tenant_id=$1 and space_id=$2 and episode_id=$3 and target_participant_id=$4
-            and target_participant_generation=$5 and operation_name='participant_leave'
-            and status='applied' and payload @> '{"presenceExpired":true}'::jsonb
-        )
-        """,
-        Scope.participant(identity) ++ [identity.participant_generation]
-      ).rows
-
-    {:terminal, if(expired, do: :presence_expired, else: :participant_inactive)}
   end
 
   defp read_control(connection, params) do

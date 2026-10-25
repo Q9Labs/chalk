@@ -33,8 +33,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
       admitted = allocate_requested_entry(connection, identity, requested)
 
-      if not is_nil(admitted.entry_ownership),
-        do: Presence.renew(connection, admitted)
+      Presence.renew(connection, admitted)
 
       admitted
     else

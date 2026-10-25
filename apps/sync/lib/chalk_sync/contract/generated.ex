@@ -546,12 +546,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "manageMembers",
     "clearSpaceContent"
   ]
-  @terminal_reasons [
-    "episode_ended",
-    "participant_inactive",
-    "stale_participant_generation",
-    "presence_expired"
-  ]
+  @terminal_reasons ["episode_ended", "participant_inactive", "stale_participant_generation"]
   @rejection_reasons [
     "episode_ended",
     "participant_inactive",

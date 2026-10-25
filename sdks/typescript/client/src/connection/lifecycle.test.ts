@@ -7,53 +7,6 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
 describe("ConnectionLifecycle Episode snapshot", () => {
-  it("automatically rejoins an active Episode with fresh admission after presence expiry", async () => {
-    const original = createCoreTestPlatform();
-    const returned = createCoreTestPlatform("participant-2");
-    const states: string[] = [];
-    let joins = 0;
-    const access = vi.fn(async () => {
-      const grant = opaqueAccessGrant(++joins);
-      return parseParsedAccessGrant({ ...grant, subject: { ...grant.subject, participant_id: joins === 1 ? "participant-1" : "participant-2" } });
-    });
-    const layer = admissionLayer({
-      access,
-      dependencies: {
-        ...original.dependencies,
-        createSyncClient: (input) => (joins === 1 ? original : returned).dependencies.createSyncClient(input),
-        createMediaClient: (input) => (joins === 1 ? original : returned).dependencies.createMediaClient(input),
-      },
-    });
-    await exerciseAdmission(layer, (lifecycle) =>
-      Effect.gen(function* () {
-        const unsubscribe = lifecycle.subscribe(() => states.push(lifecycle.getSnapshot().state));
-        try {
-          yield* lifecycle.join();
-          original.emitSync({ ...original.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "presence_expired" } });
-          yield* Effect.promise(() =>
-            vi.waitFor(() => {
-              expect(access).toHaveBeenCalledTimes(2);
-              expect(lifecycle.getSnapshot().state).toBe("live");
-            }),
-          );
-          expect(returned.sync.getSnapshot().participantId).toBe("participant-2");
-          expect(states).toContain("reconnecting");
-          expect(states).not.toContain("left");
-          expect(states).not.toContain("failed");
-        } finally {
-          unsubscribe();
-        }
-      }),
-    );
-  });
-  it.each(["episode_ended", "participant_removed", "participant_inactive"])("does not rejoin after %s", async (reason) => {
-    const fixture = recoveryFixture();
-    await fixture.run(async (lifecycle) => {
-      fixture.failSync(reason);
-      await vi.waitFor(() => expect(lifecycle.getSnapshot().state).toBe("left"));
-      expect(fixture.access).toHaveBeenCalledTimes(1);
-    });
-  });
   it.each(["startup", "live"] as const)("surfaces a failed digest recovery during %s without replacing the Sync client", async (phase) => {
     const fixture = recoveryFixture();
     const createSync = vi.spyOn(fixture.dependencies, "createSyncClient");

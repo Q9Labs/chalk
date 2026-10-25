@@ -95,16 +95,31 @@ control lock, execute provider effects outside the transaction, and finalize
 durable facts only after confirmation. Opening or losing a socket never directly
 creates a durable join or leave.
 
-A v1 socket establishes a shared Postgres presence lease at entry. The existing
-20-second heartbeat check renews it while the client responds. After two minutes
-without renewal, the API deadline scheduler reserves the normal participant Leave
-operation. Provider confirmation marks the participant left, and the existing
-empty-Episode linger then applies. Two minutes matches the entry window and
-allows several heartbeat intervals for a mobile network switch. Reconnects on
-any Sync node renew under the same Episode authority lock as expiry; expiry
-rechecks after that lock. Participants with no lease remain on the legacy path,
-so migration does not evict existing calls. Apply the additive migration before
-upgrading API and Sync. Runtime rollback leaves the lease table in place.
+A v1 socket renews one shared Postgres **Episode** lease at entry and on each
+client ping (published SDKs ping every 20 seconds). Any current participant's
+connection on any Sync node keeps the room live. After 120 seconds without a
+renewal, the existing empty-room linger starts; after the customer's linger,
+the ordinary Episode-end operation stops media and recording. Presence never
+issues Leave, changes attendance or removes an individual's media. A return
+before Episode end renews the room lease and cancels this empty window, with
+no SDK upgrade, new participant or new terminal reason. After end, clients
+receive the existing `episode_ended` recovery.
+
+Presence-based expiry pauses while no lease-aware Sync runtime is connected to
+Postgres. Each Sync startup or database reconnect establishes a session witness
+and a fresh 120-second recovery floor before serving traffic. The scheduler
+locks that floor and rechecks the room lease under the Episode lock before
+reserving the existing idempotent end operation. Explicit all-left linger keeps
+its existing behavior even without Sync. Rooms with no lease use Episode
+creation plus grace, bounded by the same startup floor.
+
+Apply the additive migration before API and Sync, and replace the whole Sync
+fleet before relying on abandonment cleanup: older **servers** do not renew
+room leases. Production Promote/Sync restarts replace the one Sync container;
+published **clients** need no change. Runtime rollback can leave these tables
+in place. Trade-off: if everyone is cut off from Sync for grace plus linger
+while the service is otherwise available, the Episode ends, even if media still
+flows. Previously such an Episode could run until the customer's closure.
 
 ## Protocol v1
 

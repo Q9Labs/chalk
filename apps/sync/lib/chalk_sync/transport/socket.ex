@@ -104,16 +104,14 @@ defmodule ChalkSync.Transport.SocketV1 do
   def handle_info(:heartbeat_check, %{phase: :live} = state) do
     missed = state.missed_heartbeats + 1
 
-    cond do
-      missed >= @missed_heartbeat_limit ->
-        cancel_timer(state.heartbeat_timer)
-        stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
-
-      Stateholder.renew_presence(state.identity) == :ok ->
-        {:ok, state |> Map.put(:missed_heartbeats, missed) |> schedule_heartbeat()}
-
-      true ->
-        stop(state, 1012, "presence recovery required", :dependency_unavailable)
+    if missed >= @missed_heartbeat_limit do
+      cancel_timer(state.heartbeat_timer)
+      stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
+    else
+      {:ok,
+       state
+       |> Map.put(:missed_heartbeats, missed)
+       |> schedule_heartbeat()}
     end
   end
 
@@ -577,6 +575,13 @@ defmodule ChalkSync.Transport.SocketV1 do
             ],
        do: protocol_error(:collaboration_not_negotiated, state)
 
+  defp handle_frame(:ping, %{phase: :live} = state) do
+    case Stateholder.renew_presence(state.identity) do
+      :ok -> {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
+      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
+    end
+  end
+
   defp handle_frame(:ping, state),
     do: {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
 
@@ -909,7 +914,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
-             Map.get(hello, :collaboration),
+             if(recovery.mode == :terminal, do: nil, else: Map.get(hello, :collaboration)),
              state.observability
            ),
          {:ok, coordinator} <-

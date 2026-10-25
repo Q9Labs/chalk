@@ -25,7 +25,7 @@ defmodule ChalkSync.Stateholder.Postgres.PresenceRuntime do
       Postgrex.transaction(connection, fn transaction ->
         Postgrex.query!(
           transaction,
-          "update participant_presence_runtime set recover_after=clock_timestamp()+interval '120 seconds' where singleton",
+          "update sync_presence_runtime set recover_after=clock_timestamp()+interval '120 seconds' where singleton",
           []
         )
 

@@ -352,12 +352,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     end
   end
 
-  defp departure_reason(%{name: :remove_participant}), do: "removed"
-  defp departure_reason(_external), do: "left"
-
   defp local_operation_outcome(%{name: name} = external, state)
        when name in [:participant_leave, :remove_participant] do
-    reason = departure_reason(external)
+    reason = if name == :participant_leave, do: "left", else: "removed"
 
     case Reducer.decide_external(state, :participant_leave, %{
            "participant_id" => external.target_participant_id,
@@ -528,7 +525,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   defp expected_external_fact(external, state, name, payload)
        when external.name in [:remove_participant, :participant_leave] do
-    reason = departure_reason(external)
+    reason = if external.name == :remove_participant, do: "removed", else: "left"
 
     case Reducer.decide_external(state, :participant_leave, %{
            "participant_id" => external.target_participant_id,

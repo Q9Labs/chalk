@@ -4690,52 +4690,19 @@ create table automatic_transcript_space_policy_backup (
     updated_at timestamptz not null
 );
 
-create table participant_presence_leases (
+create table episode_presence_leases (
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
-    participant_id uuid primary key,
-    participant_generation bigint not null check (participant_generation > 0),
     expires_at timestamptz not null,
-    foreign key (tenant_id, space_id, episode_id, participant_id)
-        references participants(tenant_id, space_id, episode_id, id) on delete cascade
+    primary key (tenant_id, space_id, episode_id),
+    foreign key (tenant_id, space_id, episode_id)
+        references episodes(tenant_id, space_id, id) on delete cascade
 );
 
-create index participant_presence_leases_expiry_idx on participant_presence_leases(expires_at);
-
--- Do not retain expired lease hints for historical attendance rows.
--- +goose StatementBegin
-create function clear_terminal_participant_presence() returns trigger language plpgsql as $$
-begin
-    delete from participant_presence_leases
-    where participant_id = new.id;
-    return new;
-end;
-$$;
--- +goose StatementEnd
-
-create trigger clear_terminal_participant_presence
-    after update of status on participants
-    for each row when (new.status = 'left')
-    execute function clear_terminal_participant_presence();
-
-alter table participant_presence_leases
-    add column entry_generation bigint not null default 0 check (entry_generation >= 0);
-
-create table participant_presence_runtime (
+create table sync_presence_runtime (
     singleton boolean primary key default true check (singleton),
     recover_after timestamptz not null
 );
-insert into participant_presence_runtime(singleton, recover_after)
+insert into sync_presence_runtime(singleton, recover_after)
 values (true, clock_timestamp() + interval '120 seconds');
-
-create function clear_unfenced_participant_presence() returns trigger language plpgsql as $$
-begin
-    delete from participant_presence_leases;
-    return new;
-end;
-$$;
-create trigger clear_unfenced_participant_presence
-    after update of enforced on sync_entry_rollout
-    for each row when (old.enforced and not new.enforced)
-    execute function clear_unfenced_participant_presence();

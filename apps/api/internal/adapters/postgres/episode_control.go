@@ -125,12 +125,21 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			}
 			count++
 		}
-		empty, err := queries.ClaimEmptyEpisodeLingers(ctx, batch-int32(count))
+		presenceFloor, err := queries.LockPresenceRecoveryFloor(ctx)
+		if err != nil {
+			return fmt.Errorf("lock presence recovery floor: %w", err)
+		}
+		empty, err := queries.ClaimEmptyEpisodeLingers(ctx, sqlc.ClaimEmptyEpisodeLingersParams{
+			PresenceRecoverAfter: presenceFloor, BatchSize: batch - int32(count),
+		})
 		if err != nil {
 			return fmt.Errorf("claim empty episode lingers: %w", err)
 		}
 		for _, row := range empty {
-			window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams(row))
+			window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
+				TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
+				PresenceRecoverAfter: presenceFloor,
+			})
 			if err != nil {
 				return fmt.Errorf("recheck empty episode linger: %w", err)
 			}
@@ -142,7 +151,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 				SpaceID:   utilities.IDFromBytes(row.SpaceID.Bytes),
 				EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
 			}
-			request, err := episodes.NewLingerRequest(input.TenantID, input.SpaceID, input.EpisodeID, timestamp(window.LastDepartureAt))
+			request, err := episodes.NewLingerRequest(input.TenantID, input.SpaceID, input.EpisodeID, timestamp(window.EmptySince))
 			if err != nil {
 				return err
 			}
@@ -177,16 +186,6 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			outcome.record()
 		}
 	}
-	if err != nil {
-		return count, err
-	}
-	err = r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		expired, err := enqueueExpiredParticipantPresence(ctx, queries, tx, batch-int32(count))
-		if err == nil {
-			count += expired
-		}
-		return err
-	})
 	return count, err
 }
 

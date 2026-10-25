@@ -1167,18 +1167,6 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
-  it("recovers a self Leave to learn whether it was an automatic presence expiry", async () => {
-    const { client, socket, state } = await liveClient({}, stateWithPeer("observer"), peerId);
-    try {
-      const next = { ...state, revision: 2, stateDigest: "0".repeat(64), participants: state.participants.filter((participant) => participant.participantId !== peerId) };
-      const digest = await computeV1StateDigest(next);
-      socket.receive({ type: "event", stream: "control", name: "participant_left", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { participant_id: peerId, reason: "left" }, external_operation_id: commandIds[1] });
-      await snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
-      expect(client.getSnapshot().connection.phase).toBe("connecting");
-    } finally {
-      client.stop();
-    }
-  });
   it("announces new and removed remote publications once per projection event", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const before = mediaPlane.changed;
@@ -1297,7 +1285,6 @@ describe("V1SyncClient", () => {
   it.each([
     { operation: "end_episode" as const, reason: "episode_ended" as const },
     { operation: "participant_leave" as const, reason: "participant_inactive" as const },
-    { operation: "participant_leave" as const, reason: "presence_expired" as const },
   ])("settles $operation from the authoritative $reason terminal recovery head", async ({ operation, reason }) => {
     const clock = new TestClock();
     const sockets: TestSocket[] = [];

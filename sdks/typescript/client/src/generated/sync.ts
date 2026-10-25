@@ -751,7 +751,7 @@ export const CapabilitySchema = Schema.Union([
   Schema.Literal("clearSpaceContent"),
 ]);
 export const RoleSchema = boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value === value.trim() ? undefined : { path: [], issue: "role names must not have surrounding whitespace" })));
-export const TerminalRecoveryReasonSchema = Schema.Union([Schema.Literal("episode_ended"), Schema.Literal("participant_inactive"), Schema.Literal("stale_participant_generation"), Schema.Literal("presence_expired")]);
+export const TerminalRecoveryReasonSchema = Schema.Union([Schema.Literal("episode_ended"), Schema.Literal("participant_inactive"), Schema.Literal("stale_participant_generation")]);
 export const RejectionReasonSchema = Schema.Union([
   Schema.Literal("episode_ended"),
   Schema.Literal("participant_inactive"),

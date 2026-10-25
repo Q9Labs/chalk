@@ -232,21 +232,6 @@ type ParticipantMediaRefresh struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
-type ParticipantPresenceLease struct {
-	TenantID              pgtype.UUID        `json:"tenant_id"`
-	SpaceID               pgtype.UUID        `json:"space_id"`
-	EpisodeID             pgtype.UUID        `json:"episode_id"`
-	ParticipantID         pgtype.UUID        `json:"participant_id"`
-	ParticipantGeneration int64              `json:"participant_generation"`
-	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
-	EntryGeneration       int64              `json:"entry_generation"`
-}
-
-type ParticipantPresenceRuntime struct {
-	Singleton    bool               `json:"singleton"`
-	RecoverAfter pgtype.Timestamptz `json:"recover_after"`
-}
-
 type PasswordReset struct {
 	AccountID pgtype.UUID        `json:"account_id"`
 	TokenHash string             `json:"token_hash"`

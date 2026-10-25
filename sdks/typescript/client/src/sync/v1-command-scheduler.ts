@@ -197,7 +197,7 @@ export class V1CommandScheduler {
     if (frame.reason === "episode_ended") {
       satisfiedOperations.add("end_episode");
       satisfiedOperations.add("participant_leave");
-    } else if (frame.reason === "participant_inactive" || frame.reason === "presence_expired") {
+    } else if (frame.reason === "participant_inactive") {
       satisfiedOperations.add("participant_leave");
     }
     for (const [commandId, deferred] of this.#commands) {

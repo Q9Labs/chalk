@@ -16,10 +16,6 @@ defmodule ChalkSync.Stateholder.Recovery do
           events: [map()],
           replay_cursor: non_neg_integer() | nil,
           terminal_reason:
-            :episode_ended
-            | :participant_inactive
-            | :stale_participant_generation
-            | :presence_expired
-            | nil
+            :episode_ended | :participant_inactive | :stale_participant_generation | nil
         }
 end

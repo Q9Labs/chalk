@@ -12,7 +12,7 @@ acceleration only.
 - Preserve the tenant-and-Episode authority key and semantic Stateholder
   transaction boundary.
 - Durable lifecycle comes only from API intents. Socket loss is volatile
-  presence; only API expiry of the shared presence lease requests a durable Leave.
+  presence; only grace plus empty-room linger can request an ordinary Episode end.
 - Protocol v1 and its generated contract are the production surface.
 - Keep every frame, queue, task set, replay, diagnostic buffer, and retained
   database set explicitly bounded.
@@ -20,20 +20,14 @@ acceleration only.
   app's basic gate whenever Sync files or shared gate inputs change. Run
   `scripts/gate.sh` directly for Credo and the full test suite.
 
-### Dropped-participant compatibility
+### Abandoned-Episode compatibility
 
-Presence expiry owns one participant generation and one issued/confirmed entry.
-A later entry, including an older Sync writer's entry, cannot be evicted by a
-previous lease. Disabling entry ownership invalidates all existing leases;
-expiry also pauses while enforcement is off. Re-enabling it does not reuse
-those discarded leases. Compatibility-mode entries and entries served only by
-old Sync have no renewable presence lease and do not receive automatic dropped
-cleanup.
-Use lease-aware Sync for the whole fleet before relying on empty-room cleanup.
-Each lease-aware Sync startup or database-session recovery grants all current
-participants 120 seconds to reconnect; expiry pauses while no such node is live.
-The updated TypeScript SDK automatically requests fresh normal admission after
-`presence_expired` recovery while the Episode is active. Older SDKs and recovery
-through old Sync do not support that automatic long-drop rejoin. Shared
-`participant_left` events keep their existing `left`/`removed` reasons, so older
-observers can still read them. Upgrade the SDK with Sync for long-drop recovery.
+Presence never marks a participant left or changes attendance or media. Any live
+participant connection renews the one shared Episode lease. After 120 seconds
+without renewal, the existing customer linger can end the Episode through its
+normal operation and recording cleanup. Reconnect before end cancels this
+window, on published SDKs as well as head; after end use `episode_ended`.
+Each Sync startup/database recovery grants a fresh 120-second grace before
+serving traffic; inference pauses without a live Sync session witness. Replace
+the whole server fleet with lease-aware Sync before relying on cleanup. No SDK
+upgrade is needed. See README.md for deployment order and the Sync-cutoff trade-off.

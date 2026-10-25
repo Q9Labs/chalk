@@ -2,10 +2,11 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
-  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.ExternalSyncNode
   alias ChalkSync.Live.MediaPlaneTestAdapter
+  alias ChalkSync.RecordingPlaneTestAdapter
+  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.Stateholder.Postgres.PresenceRuntime
   alias ChalkSync.SyncPostgres
@@ -16,7 +17,8 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
   if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
-  @moduletag timeout: 120_000
+  @moduletag timeout: 240_000
+  @sync_app Path.expand("../../..", __DIR__)
 
   setup_all do
     previous = Application.get_env(:chalk_sync, :database_connections)
@@ -24,56 +26,66 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     connections = SyncPostgres.start_connections(@database_url)
     Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
     Application.put_env(:chalk_sync, :stateholder, Postgres)
-    probe = Path.join(System.tmp_dir!(), "chalk-presence-probe-#{UUID.generate()}")
+
+    probe =
+      System.get_env("CHALK_PRESENCE_MASTER_PROBE") ||
+        Path.join(System.tmp_dir!(), "chalk-presence-probe-#{UUID.generate()}")
 
     on_exit(fn ->
-      File.rm(probe)
+      unless System.get_env("CHALK_PRESENCE_MASTER_PROBE"), do: File.rm(probe)
       Application.put_env(:chalk_sync, :stateholder, stateholder)
       restore_env(:database_connections, previous)
       Enum.each(connections, &TestProcess.stop/1)
     end)
 
-    {output, status} =
-      System.cmd("go", ["test", "-c", "-o", probe, "./internal/adapters/postgres"],
-        cd: Path.expand("../../../../api", __DIR__),
-        env: [{"GOTOOLCHAIN", System.get_env("CHALK_API_GOTOOLCHAIN", "go1.26.10+auto")}],
-        stderr_to_stdout: true
-      )
+    unless System.get_env("CHALK_PRESENCE_MASTER_PROBE") do
+      {output, status} =
+        System.cmd("go", ["test", "-c", "-o", probe, "./internal/adapters/postgres"],
+          cd: Path.expand("../../../../api", __DIR__),
+          env: [{"GOTOOLCHAIN", System.get_env("CHALK_API_GOTOOLCHAIN", "go1.26.10+auto")}],
+          stderr_to_stdout: true
+        )
 
-    assert status == 0, output
-    old_root = Path.join(System.tmp_dir!(), "chalk-pre-presence-#{UUID.generate()}")
-    File.mkdir_p!(old_root)
-    on_exit(fn -> File.rm_rf!(old_root) end)
-    archive = File.read!(Path.expand("../../fixtures/pre-presence/source.tar.gz", __DIR__))
-
-    assert Base.encode16(:crypto.hash(:sha256, archive), case: :lower) ==
-             "d7ba6b2df9c5193d0675f0c96b4612f2c5c1a6172e0fe6dd733491c8fd44bc36"
-
-    :ok =
-      :erl_tar.extract({:binary, archive}, [:compressed, {:cwd, String.to_charlist(old_root)}])
-
-    old_app = Path.join(old_root, "apps/sync")
-
-    for args <- [["deps.get", "--check-locked"], ["compile"]] do
-      {output, code} =
-        System.cmd("mix", args, cd: old_app, env: [{"MIX_ENV", "test"}], stderr_to_stdout: true)
-
-      assert code == 0, output
+      assert status == 0, output
     end
 
-    {:ok, connection: hd(connections), probe: probe, old_app: old_app}
+    {:ok, connection: hd(connections), probe: probe}
   end
 
   setup %{connection: connection} do
     start_supervised!({PresenceRuntime, url: @database_url})
     allow_expiry(connection)
-    fixture = SyncPostgres.seed_episode(connection, 1, %{"linger_window_seconds" => 300})
+
+    policy = %{
+      "linger_window_seconds" => 300,
+      "artifact_policy" => %{
+        "schema_version" => "episode_config.v2",
+        "recording" => %{
+          "mode" => "manual",
+          "profile" => "composite_720p_v1",
+          "retention_seconds" => 2_592_000
+        },
+        "transcription" => %{
+          "mode" => "disabled",
+          "retention_seconds" => 0,
+          "source_window_seconds" => 0
+        }
+      }
+    }
+
+    fixture = SyncPostgres.seed_episode(connection, 2, policy)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
-    media_plane =
+    media =
       start_supervised!(%{
         id: MediaPlaneTestAdapter,
-        start: {MediaPlaneTestAdapter, :start_link, [[outcomes: %{}]]}
+        start: {MediaPlaneTestAdapter, :start_link, [[]]}
+      })
+
+    recording =
+      start_supervised!(%{
+        id: RecordingPlaneTestAdapter,
+        start: {RecordingPlaneTestAdapter, :start_link, [[]]}
       })
 
     {:ok, consumer} =
@@ -81,405 +93,282 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
         poll_interval_ms: 10,
         page_size: 8,
         max_backoff_ms: 100,
-        media_plane: {MediaPlaneTestAdapter, media_plane}
+        media_plane: {MediaPlaneTestAdapter, media},
+        recording_plane: {RecordingPlaneTestAdapter, recording}
       )
 
     Process.unlink(consumer)
     on_exit(fn -> TestProcess.stop(consumer) end)
-
-    {:ok, fixture: fixture, identity: hd(fixture.identities), media_plane: media_plane}
+    {:ok, fixture: fixture, identity: hd(fixture.identities), media: media, recording: recording}
   end
 
-  test "a dropped socket leaves after grace and the empty Episode ends after linger", ctx do
-    client = connect(ctx.port, ctx.identity)
-    Client.close_tcp(client)
-    expire(ctx)
-    assert probe(ctx, "tick") == 1
-    assert eventually(fn -> status(ctx) == "left" end)
-    assert probe(ctx, "tick") == 0
-    assert episode_status(ctx) == "active"
-
-    Postgrex.query!(
-      ctx.connection,
-      "update participants set left_at=clock_timestamp()-interval '301 seconds' where id=$1",
-      [UUID.dump!(ctx.identity.participant_id)]
-    )
-
-    assert probe(ctx, "tick") == 1
-    assert eventually(fn -> episode_status(ctx) == "ended" end)
-    assert probe(ctx, "tick") == 0
-  end
-
-  test "a return on another Sync node renews shared presence before grace expires", ctx do
-    client = connect(ctx.port, ctx.identity)
-    Client.close_tcp(client)
-
-    Postgrex.query!(
-      ctx.connection,
-      "update participant_presence_leases set expires_at=clock_timestamp()+interval '90 seconds' where participant_id=$1",
-      [UUID.dump!(ctx.identity.participant_id)]
-    )
-
-    node = external_node(Path.expand("../../..", __DIR__))
+  test "everyone drops: grace plus linger ends the Episode through normal capture stop", ctx do
+    # The baseline runs the identical wire handshake against unmodified master Sync.
+    node = if app = System.get_env("CHALK_PRESENCE_MASTER_SYNC_APP"), do: external_node(app)
 
     try do
-      assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
-      returned = connect(ready["port"], ctx.identity)
-      on_exit(fn -> Client.close_tcp(returned) end)
+      port = if node, do: ready_port(node), else: ctx.port
+      client = connect(port, ctx.identity)
+      recording_id = UUID.generate()
 
-      assert [[true]] =
-               Postgrex.query!(
-                 ctx.connection,
-                 "select expires_at > clock_timestamp()+interval '110 seconds' from participant_presence_leases where participant_id=$1",
-                 [UUID.dump!(ctx.identity.participant_id)]
-               ).rows
+      operation =
+        Operation.new("abandoned_recording_start", :start_recording, %{
+          "recordingId" => recording_id
+        })
 
-      assert probe(ctx, "tick") == 0
-      assert status(ctx) == "active"
-    after
-      ExternalSyncNode.stop(node)
-    end
-  end
-
-  test "a return after grace uses normal admission and old cleanup cannot evict it", ctx do
-    client = connect(ctx.port, ctx.identity)
-    Client.close_tcp(client)
-    expire(ctx)
-    assert probe(ctx, "tick") == 1
-    assert eventually(fn -> status(ctx) == "left" end)
-    {welcome, expired} = hello(ctx.port, ctx.identity)
-    assert welcome["mode"] == "terminal"
-    assert welcome["reason"] == "presence_expired"
-    Client.close_tcp(expired)
-    admission = probe(ctx, "rejoin")
-
-    identity = %{
-      ctx.identity
-      | participant_id: admission["participant_id"],
-        participant_generation: admission["generation"],
-        admission_lifecycle_intent_id: admission["intent_id"]
-    }
-
-    returned = connect(ctx.port, identity)
-    on_exit(fn -> Client.close_tcp(returned) end)
-    assert status(%{ctx | identity: identity}) == "active"
-    assert probe(ctx, "tick") == 0
-    assert episode_status(ctx) == "active"
-    assert status(ctx) == "left"
-  end
-
-  test "healthy client heartbeats renew the lease without another entry", ctx do
-    client = connect(ctx.port, ctx.identity)
-
-    Postgrex.query!(
-      ctx.connection,
-      "update participant_presence_leases set expires_at=clock_timestamp()+interval '90 seconds' where participant_id=$1",
-      [UUID.dump!(ctx.identity.participant_id)]
-    )
-
-    client =
-      Enum.reduce(1..21, client, fn _index, socket ->
-        socket = Client.send_json(socket, %{"type" => "ping"})
-        Process.sleep(1_000)
-        socket
-      end)
-
-    Client.close_tcp(client)
-
-    assert [[true]] =
-             Postgrex.query!(
-               ctx.connection,
-               "select expires_at > clock_timestamp()+interval '110 seconds' from participant_presence_leases where participant_id=$1",
-               [UUID.dump!(ctx.identity.participant_id)]
-             ).rows
-
-    assert probe(ctx, "tick") == 0
-    assert status(ctx) == "active"
-  end
-
-  test "a failed provider removal leaves a retryable presence window", ctx do
-    MediaPlaneTestAdapter.put_outcome(
-      ctx.media_plane,
-      :remove_participant,
-      {:terminal_failure, :provider_unavailable}
-    )
-
-    client = connect(ctx.port, ctx.identity)
-    Client.close_tcp(client)
-    expire(ctx)
-    assert probe(ctx, "tick") == 1
-    assert eventually(fn -> status(ctx) == "active" end)
-    MediaPlaneTestAdapter.put_outcome(ctx.media_plane, :remove_participant, :confirmed)
-    expire(ctx)
-    assert probe(ctx, "tick") == 1
-    assert eventually(fn -> status(ctx) == "left" end)
-  end
-
-  test "a healthy return from new Sync to old Sync cannot be evicted by its prior lease", ctx do
-    first = connect(ctx.port, ctx.identity)
-    Client.close_tcp(first)
-    node = external_node(ctx.old_app)
-
-    try do
-      assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
-      client = connect(ready["port"], ctx.identity)
-      client = Client.send_json(client, %{"type" => "ping"})
-      client = await_pong(client)
-      expire(ctx)
-      assert probe(ctx, "tick") == 0
-      assert status(ctx) == "active"
-      client = Client.send_json(client, %{"type" => "ping"})
-      client = await_pong(client)
+      assert {:ok, _} = Postgres.begin_operation(ctx.identity, operation)
+      assert eventually(fn -> recording_status(ctx, recording_id) == "recording" end)
       Client.close_tcp(client)
+      before = attendance(ctx)
+      # Inert metadata lets master reach the behavioral assertion, not a missing-table error.
+      ensure_lease(ctx)
+      allow_expiry(ctx.connection)
+      expire(ctx, 1)
+      assert tick(ctx) == 0
+      assert attendance(ctx) == before
+      assert episode_status(ctx) == "active"
+      assert_no_leave(ctx)
+      expire(ctx, 301)
+      assert tick(ctx) == 1
+      assert eventually(fn -> episode_status(ctx) == "ended" end)
+      assert eventually(fn -> recording_status(ctx, recording_id) == "stopped" end)
+
+      assert Enum.any?(RecordingPlaneTestAdapter.calls(ctx.recording), fn
+               {:stop_recording, _, [_, ^recording_id]} -> true
+               _ -> false
+             end)
+
+      assert tick(ctx) == 0
+      assert_no_leave(ctx)
     after
-      ExternalSyncNode.stop(node)
+      if node, do: ExternalSyncNode.stop(node)
     end
   end
 
-  test "compatibility rollout cannot expire a lease left by an earlier fenced entry", ctx do
+  test "one drop changes no attendance, media, or Episode while another client pings", ctx do
+    dropped = connect(ctx.port, ctx.identity)
+    healthy = connect(ctx.port, Enum.at(ctx.fixture.identities, 1))
+    Client.close_tcp(dropped)
+    before = attendance(ctx)
+    calls = MediaPlaneTestAdapter.calls(ctx.media)
+    expire(ctx, 301)
+    healthy = ping(healthy)
+    assert lease_fresh?(ctx)
+    assert tick(ctx) == 0
+    assert attendance(ctx) == before
+    assert MediaPlaneTestAdapter.calls(ctx.media) == calls
+    assert episode_status(ctx) == "active"
+    assert_no_leave(ctx)
+    Client.close_tcp(healthy)
+  end
+
+  test "an abandoned unconfirmed replacement cannot strand the Episode", ctx do
     first = connect(ctx.port, ctx.identity)
     Client.close_tcp(first)
-    expire(ctx)
+
+    {welcome, replacement} =
+      hello(ctx.port, ctx.identity, "/v1/sync?entry_generation=new&entry_confirmation=1")
+
+    replacement = recover(replacement, welcome)
+    Client.close_tcp(replacement)
 
     Postgrex.query!(
       ctx.connection,
-      "update sync_entry_rollout set enforced=false, enforced_at=null, release_id=null where singleton",
-      []
+      "update participant_join_seats set issued_entry_expires_at=clock_timestamp()-interval '1 second' where participant_id=$1",
+      [UUID.dump!(ctx.identity.participant_id)]
     )
 
-    on_exit(fn ->
+    [[issued, confirmed]] =
       Postgrex.query!(
         ctx.connection,
-        "update sync_entry_rollout set enforced=true, enforced_at=clock_timestamp(), release_id='test' where singleton",
-        []
-      )
-    end)
+        "select issued_entry_generation,confirmed_entry_generation from participant_join_seats where participant_id=$1",
+        [UUID.dump!(ctx.identity.participant_id)]
+      ).rows
 
-    returned = connect(ctx.port, ctx.identity)
-    on_exit(fn -> Client.close_tcp(returned) end)
-    assert probe(ctx, "tick") == 0
-    assert status(ctx) == "active"
-
-    Postgrex.query!(
-      ctx.connection,
-      "update sync_entry_rollout set enforced=true, enforced_at=clock_timestamp(), release_id='test' where singleton",
-      []
-    )
-
-    assert probe(ctx, "tick") == 0
-    assert status(ctx) == "active"
-    returned = returned |> Client.send_json(%{"type" => "ping"}) |> await_pong()
-    Client.close_tcp(returned)
+    assert issued > confirmed
+    before = attendance(ctx)
+    expire(ctx, 301)
+    assert tick(ctx) == 1
+    assert eventually(fn -> episode_status(ctx) == "ended" end)
+    assert_no_leave(ctx)
+    # Only the existing Episode-end finalizer may now change participants.
+    assert Enum.all?(before, fn [_, _, status | _] -> status == "active" end)
   end
 
-  test "judge: two API instances and repeated expiry reserve one Leave", ctx do
+  test "a live connection on another Sync node cancels the empty window", ctx do
     client = connect(ctx.port, ctx.identity)
     Client.close_tcp(client)
-    expire(ctx)
-
-    counts =
-      1..2 |> Task.async_stream(fn _ -> probe(ctx, "tick") end) |> Enum.map(fn {:ok, n} -> n end)
-
-    assert Enum.sum(counts) == 1
-    assert eventually(fn -> status(ctx) == "left" end)
-    assert probe(ctx, "tick") == 0
-
-    assert [[1]] =
-             Postgrex.query!(
-               ctx.connection,
-               "select count(*) from sync_external_operations where target_participant_id=$1 and operation_name='participant_leave'",
-               [UUID.dump!(ctx.identity.participant_id)]
-             ).rows
-  end
-
-  test "judge: one dropped participant cannot end a still-occupied Episode", ctx do
-    fixture = SyncPostgres.seed_episode(ctx.connection, 2, %{"linger_window_seconds" => 0})
-    on_exit(fn -> SyncPostgres.cleanup(ctx.connection, fixture.episode) end)
-    [first, second] = fixture.identities
-    ctx = %{ctx | fixture: fixture, identity: first}
-    dropped = connect(ctx.port, first)
-    kept = connect(ctx.port, second)
-    on_exit(fn -> Client.close_tcp(kept) end)
-    Client.close_tcp(dropped)
-    expire(ctx)
-    assert probe(ctx, "tick") == 1
-    assert eventually(fn -> status(ctx) == "left" end)
-    assert probe(ctx, "tick") == 0
-    assert episode_status(ctx) == "active"
-
-    assert [["active"]] =
-             Postgrex.query!(ctx.connection, "select status from participants where id=$1", [
-               UUID.dump!(second.participant_id)
-             ]).rows
-
-    assert [[0]] =
-             Postgrex.query!(
-               ctx.connection,
-               "select count(*) from sync_external_operations where episode_id=$1 and operation_name in ('stop_recording','end_episode','tenant_end_episode')",
-               [UUID.dump!(fixture.episode.episode_id)]
-             ).rows
-  end
-
-  test "judge: a renewal blocked by Postgres closes the live socket instead of silent expiry",
-       ctx do
-    client = connect(ctx.port, ctx.identity)
-    coordinator = Coordinator.whereis(ctx.identity.episode)
-    [socket] = :sys.get_state(coordinator).sockets |> Map.keys()
-    [lock_connection] = SyncPostgres.start_connections(@database_url, 1)
-    Process.unlink(lock_connection)
-    on_exit(fn -> TestProcess.stop(lock_connection) end)
-    Postgrex.query!(lock_connection, "begin", [])
-
-    Postgrex.query!(
-      lock_connection,
-      "lock table participant_presence_leases in access exclusive mode",
-      []
-    )
+    node = external_node(@sync_app)
 
     try do
-      send(socket, :heartbeat_check)
-
-      assert {:closed, 1012, "presence recovery required", _client} =
-               judge_recv_until(client, fn frame -> match?({:closed, _, _, _}, frame) end)
-    after
-      Postgrex.query!(lock_connection, "rollback", [])
-    end
-
-    assert probe(ctx, "tick") == 0
-    assert status(ctx) == "active"
-  end
-
-  test "judge: old Sync with new API and no prior lease stays active", ctx do
-    node = external_node(ctx.old_app)
-
-    try do
-      client =
-        connect(
-          ExternalSyncNode.await_ready(node, 30_000) |> elem(1) |> Map.fetch!("port"),
-          ctx.identity
-        )
-
-      on_exit(fn -> Client.close_tcp(client) end)
-
-      assert [[0]] =
-               Postgrex.query!(
-                 ctx.connection,
-                 "select count(*) from participant_presence_leases where participant_id=$1",
-                 [UUID.dump!(ctx.identity.participant_id)]
-               ).rows
-
-      assert probe(ctx, "tick") == 0
-      assert status(ctx) == "active"
+      port = ready_port(node)
+      allow_expiry(ctx.connection)
+      expire(ctx, 301)
+      returned = connect(port, ctx.identity)
+      returned = ping(returned)
+      assert lease_fresh?(ctx)
+      assert tick(ctx) == 0
+      assert episode_status(ctx) == "active"
+      assert_no_leave(ctx)
+      Client.close_tcp(returned)
     after
       ExternalSyncNode.stop(node)
     end
   end
 
-  for shutdown <- [:stop, :kill] do
-    @tag shutdown: shutdown
-    test "#{shutdown} of Sync gives existing participants fresh grace after any downtime", ctx do
-      stop_supervised!(PresenceRuntime)
-      node = external_node(Path.expand("../../..", __DIR__))
-      assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
-      first = connect(ready["port"], ctx.identity)
-      apply(ExternalSyncNode, ctx.shutdown, [node])
-      Client.close_tcp(first)
+  for version <-
+        if(System.get_env("CHALK_PRESENCE_PUBLISHED_ROOT"),
+          do: ["head", "4.1.14", "5.0.0", "5.1.0", "5.2.0"],
+          else: ["head"]
+        ) do
+    @tag sdk: version
+    test "real SDK #{version} returns after grace and receives the existing ended reason", ctx do
+      marker = Path.join(System.tmp_dir!(), "chalk-sdk-return-#{UUID.generate()}")
 
-      # Simulate a downtime longer than any configured grace, with the API
-      # scheduler restarting independently (the probe is a fresh API process).
-      expire(ctx)
-      allow_expiry(ctx.connection)
-      assert probe(ctx, "tick") == 0
-      assert status(ctx) == "active"
+      on_exit(fn ->
+        for suffix <- [".ready", ".expired", ".recovered", ".ended"],
+            do: File.rm(marker <> suffix)
+      end)
 
-      replacement = external_node(Path.expand("../../..", __DIR__))
+      script = Path.expand("../../fixtures/published-reconnect-probe.mjs", __DIR__)
 
-      try do
-        assert {:ok, ready} = ExternalSyncNode.await_ready(replacement, 30_000)
+      task =
+        Task.async(fn ->
+          System.cmd(
+            "pnpm",
+            ["exec", "tsx", script, ctx.sdk, to_string(ctx.port), token(ctx.identity), marker],
+            cd: Path.expand("../../../../..", __DIR__),
+            stderr_to_stdout: true
+          )
+        end)
 
-        assert [[true]] =
-                 Postgrex.query!(
-                   ctx.connection,
-                   "select recover_after > clock_timestamp()+interval '110 seconds' from participant_presence_runtime",
-                   []
-                 ).rows
+      assert eventually(fn -> File.exists?(marker <> ".ready") end, 1000)
+      before = attendance(ctx)
+      expire(ctx, 1)
+      assert tick(ctx) == 0
+      assert attendance(ctx) == before
+      assert_no_leave(ctx)
+      File.write!(marker <> ".expired", "return")
+      assert eventually(fn -> File.exists?(marker <> ".recovered") end, 1000)
+      assert lease_fresh?(ctx)
+      assert attendance(ctx) == before
+      assert tick(ctx) == 0
+      expire(ctx, 301)
+      assert tick(ctx) == 1
+      assert eventually(fn -> episode_status(ctx) == "ended" end)
+      File.write!(marker <> ".ended", "return")
+      {output, code} = Task.await(task, 35_000)
+      IO.puts(output)
+      assert code == 0, output
+      assert_no_leave(ctx)
+    end
+  end
 
-        assert probe(ctx, "tick") == 0
-        assert status(ctx) == "active"
-        returned = connect(ready["port"], ctx.identity)
-        assert status(ctx) == "active"
+  # Long outages are an explicit acceptance run, not eight extra minutes in every CI run.
+  if System.get_env("CHALK_SYNC_RESTART_PROOF") do
+    for mode <- [:whole_runtime, :sync_only],
+        seconds <- [2, 125],
+        order <- [:api_first, :sync_first] do
+      @tag restart_proof: true
+      @tag outage_seconds: seconds, startup_order: order, outage_mode: mode
+      test "#{mode} #{seconds}s outage, #{order}: reconnect gets a fresh grace", ctx do
+        stop_supervised(PresenceRuntime)
+        node = external_node(@sync_app)
+        port = ready_port(node)
+        client = connect(port, ctx.identity)
+        Client.close_tcp(client)
+        before = attendance(ctx)
+        ExternalSyncNode.kill(node)
+        expire(ctx, 301)
         allow_expiry(ctx.connection)
-        assert probe(ctx, "tick") == 0
-        Client.close_tcp(returned)
-        expire(ctx)
-        # The replacement's production consumer can claim this Leave without a
-        # media adapter. Provider completion is covered by the drop/linger test.
-        assert probe(ctx, "tick") == 1
-      after
-        ExternalSyncNode.stop(replacement)
+        assert eventually(fn -> not witness?(ctx) end)
+        if ctx.outage_mode == :sync_only, do: assert(tick(ctx) == 0)
+        Process.sleep(ctx.outage_seconds * 1000)
+        if ctx.startup_order == :api_first, do: assert(tick(ctx) == 0)
+        # A new supervised child starts a real application/runtime and its startup barrier.
+        node = external_node(@sync_app)
+
+        try do
+          port = ready_port(node)
+
+          assert [[true]] =
+                   Postgrex.query!(
+                     ctx.connection,
+                     "select recover_after > clock_timestamp()+interval '110 seconds' from sync_presence_runtime",
+                     []
+                   ).rows
+
+          assert tick(ctx) == 0
+          returned = connect(port, ctx.identity)
+          returned = ping(returned)
+          allow_expiry(ctx.connection)
+          assert lease_fresh?(ctx)
+          assert tick(ctx) == 0
+          assert attendance(ctx) == before
+          assert episode_status(ctx) == "active"
+          assert_no_leave(ctx)
+          Client.close_tcp(returned)
+
+          IO.puts(
+            "RESTART_PROOF mode=#{ctx.outage_mode} seconds=#{ctx.outage_seconds} order=#{ctx.startup_order} recovered=same_identity"
+          )
+        after
+          ExternalSyncNode.stop(node)
+        end
       end
     end
   end
 
-  defp allow_expiry(connection) do
-    Postgrex.query!(
-      connection,
-      "update participant_presence_runtime set recover_after=clock_timestamp()-interval '1 hour' where singleton",
-      []
-    )
-  end
-
-  defp judge_recv_until(client, predicate, remaining \\ 16)
-
-  defp judge_recv_until(_client, _predicate, 0),
-    do: flunk("expected wire frame not received within 16 frames")
-
-  defp judge_recv_until(client, predicate, remaining) do
-    frame = Client.recv(client, 8_000)
-
-    if predicate.(frame) do
-      frame
-    else
-      case frame do
-        {:json, _payload, next} -> judge_recv_until(next, predicate, remaining - 1)
-        other -> flunk("unexpected wire result #{inspect(other)}")
-      end
-    end
-  end
-
-  defp await_pong(client) do
-    case Client.recv(client) do
-      {:json, %{"type" => "pong"}, client} -> client
-      {:json, %{"type" => "projection_snapshot"}, client} -> await_pong(client)
-      other -> flunk("expected pong, got #{inspect(other)}")
-    end
+  defp ready_port(node) do
+    assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
+    ready["port"]
   end
 
   defp external_node(app) do
-    # Do not hand a soon-to-start server a port from the outbound client range.
-    # Other test sockets can claim an ephemeral port before the child binds it.
     port = 20_000 + rem(System.unique_integer([:positive, :monotonic]), 10_000)
     {:ok, listener} = :gen_tcp.listen(port, [:binary, active: false])
-    {:ok, {_address, port}} = :inet.sockname(listener)
     :ok = :gen_tcp.close(listener)
 
     start_supervised!(
       {ExternalSyncNode,
-       app_dir: app, database_url: @database_url, port: port, node_id: "presence-#{port}"}
+       app_dir: app, database_url: @database_url, port: port, node_id: "presence-#{port}"},
+      id: {:sync_node, port}
     )
   end
 
   defp connect(port, identity) do
     {welcome, client} = hello(port, identity)
+    assert welcome["mode"] != "terminal"
+    recover(client, welcome)
+  end
+
+  defp recover(client, welcome) do
     client = Client.acknowledge_recovery(client, welcome)
-    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+
+    {:json, %{"type" => "recovery_complete"}, client} =
+      recv_until(client, &match?({:json, %{"type" => "recovery_complete"}, _}, &1))
+
     client
   end
 
-  defp hello(port, identity) do
-    {:ok, client} = Client.connect(port, "/v1/sync")
+  defp hello(port, identity, path \\ "/v1/sync") do
+    {:ok, client} = Client.connect(port, path)
 
-    token =
+    client =
+      Client.send_json(client, %{
+        "type" => "hello",
+        "protocol" => 1,
+        "token" => token(identity),
+        "streams" =>
+          Map.new(["control", "media", "presence", "requests"], &{&1, %{"cursor" => nil}})
+      })
+
+    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
+    {welcome, client}
+  end
+
+  defp token(identity),
+    do:
       DevTokenVerifier.token(%{
         "tenant_id" => identity.episode.tenant_id,
         "space_id" => identity.episode.space_id,
@@ -493,40 +382,74 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
         "expires_at" => 4_102_444_800
       })
 
-    client =
-      Client.send_json(client, %{
-        "type" => "hello",
-        "protocol" => 1,
-        "token" => token,
-        "streams" => %{
-          "control" => %{"cursor" => nil},
-          "media" => %{"cursor" => nil},
-          "presence" => %{"cursor" => nil},
-          "requests" => %{"cursor" => nil}
-        }
-      })
+  defp ping(client) do
+    client = Client.send_json(client, %{"type" => "ping"})
 
-    assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
-    {welcome, client}
+    {:json, %{"type" => "pong"}, next} =
+      recv_until(client, &match?({:json, %{"type" => "pong"}, _}, &1))
+
+    next
   end
 
-  defp expire(ctx) do
-    assert %{num_rows: 1} =
-             Postgrex.query!(
-               ctx.connection,
-               "update participant_presence_leases set expires_at=clock_timestamp()-interval '1 second' where participant_id=$1",
-               [UUID.dump!(ctx.identity.participant_id)]
-             )
+  defp recv_until(client, predicate, remaining \\ 32)
+  defp recv_until(_client, _predicate, 0), do: flunk("expected wire frame not received")
+
+  defp recv_until(client, predicate, remaining) do
+    frame = Client.recv(client, 8_000)
+
+    if predicate.(frame), do: frame, else: case(frame) do
+      {:json, _, next} -> recv_until(next, predicate, remaining - 1)
+      other -> flunk("unexpected wire result #{inspect(other)}")
+    end
   end
 
-  defp status(ctx) do
-    [[status]] =
-      Postgrex.query!(ctx.connection, "select status from participants where id=$1", [
-        UUID.dump!(ctx.identity.participant_id)
-      ]).rows
+  defp ensure_lease(ctx),
+    do:
+      Postgrex.query!(
+        ctx.connection,
+        "insert into episode_presence_leases (tenant_id,space_id,episode_id,expires_at) values ($1,$2,$3,clock_timestamp()) on conflict do nothing",
+        scope(ctx)
+      )
 
-    status
-  end
+  defp expire(ctx, seconds),
+    do:
+      Postgrex.query!(
+        ctx.connection,
+        "update episode_presence_leases set expires_at=clock_timestamp()-make_interval(secs=>$4) where tenant_id=$1 and space_id=$2 and episode_id=$3",
+        scope(ctx) ++ [seconds]
+      )
+
+  defp lease_fresh?(ctx),
+    do:
+      Postgrex.query!(
+        ctx.connection,
+        "select expires_at > clock_timestamp()+interval '110 seconds' from episode_presence_leases where tenant_id=$1 and space_id=$2 and episode_id=$3",
+        scope(ctx)
+      ).rows == [[true]]
+
+  defp allow_expiry(connection),
+    do:
+      Postgrex.query!(
+        connection,
+        "update sync_presence_runtime set recover_after=clock_timestamp()-interval '1 hour' where singleton",
+        []
+      )
+
+  defp witness?(ctx),
+    do:
+      Postgrex.query!(
+        ctx.connection,
+        "select exists(select 1 from pg_locks where locktype='advisory' and classid=1128811595 and objid=1 and objsubid=2 and granted)",
+        []
+      ).rows == [[true]]
+
+  defp attendance(ctx),
+    do:
+      Postgrex.query!(
+        ctx.connection,
+        "select id,generation,status,joined_at,left_at,last_left_reason from participants where tenant_id=$1 and space_id=$2 and episode_id=$3 order by id",
+        scope(ctx)
+      ).rows
 
   defp episode_status(ctx) do
     [[status]] =
@@ -537,25 +460,58 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     status
   end
 
-  defp probe(ctx, action) do
-    {output, status} =
-      System.cmd(ctx.probe, ["-test.run=^TestDroppedPresenceLifecycleProbe$", "-test.v"],
-        env: [
-          {"CHALK_PRESENCE_PROBE_ACTION", action},
-          {"CHALK_PRESENCE_TENANT", ctx.fixture.episode.tenant_id},
-          {"CHALK_PRESENCE_SPACE", ctx.fixture.episode.space_id},
-          {"CHALK_PRESENCE_EPISODE", ctx.fixture.episode.episode_id}
+  defp recording_status(ctx, id) do
+    case Postgrex.query!(
+           ctx.connection,
+           "select status from sync_recordings where episode_id=$1 and recording_id=$2",
+           [UUID.dump!(ctx.fixture.episode.episode_id), UUID.dump!(id)]
+         ).rows do
+      [[status]] -> status
+      [] -> nil
+    end
+  end
+
+  defp assert_no_leave(ctx) do
+    assert [[0]] =
+             Postgrex.query!(
+               ctx.connection,
+               "select count(*) from sync_external_operations where tenant_id=$1 and space_id=$2 and episode_id=$3 and operation_name in ('leave','participant_leave','remove_participant')",
+               scope(ctx)
+             ).rows
+
+    assert [[0]] =
+             Postgrex.query!(
+               ctx.connection,
+               "select count(*) from sync_control_events where tenant_id=$1 and space_id=$2 and episode_id=$3 and event_name='participant_left'",
+               scope(ctx)
+             ).rows
+  end
+
+  defp scope(ctx),
+    do:
+      Enum.map(
+        [
+          ctx.fixture.episode.tenant_id,
+          ctx.fixture.episode.space_id,
+          ctx.fixture.episode.episode_id
         ],
+        &UUID.dump!/1
+      )
+
+  defp tick(ctx) do
+    {output, code} =
+      System.cmd(ctx.probe, ["-test.run=^TestDroppedPresenceLifecycleProbe$", "-test.v"],
+        env: [{"CHALK_PRESENCE_PROBE_ACTION", "tick"}],
         stderr_to_stdout: true
       )
 
-    assert status == 0, output
+    assert code == 0, output
     line = output |> String.split("\n") |> Enum.find(&String.starts_with?(&1, "PRESENCE_PROBE="))
     assert is_binary(line), output
-    line |> String.replace_prefix("PRESENCE_PROBE=", "") |> JSON.decode!()
+    line |> String.replace_prefix("PRESENCE_PROBE=", "") |> String.to_integer()
   end
 
-  defp eventually(check, attempts \\ 100)
+  defp eventually(check, attempts \\ 200)
   defp eventually(check, 0), do: check.()
 
   defp eventually(check, attempts) do

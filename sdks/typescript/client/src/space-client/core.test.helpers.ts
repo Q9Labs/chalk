@@ -13,7 +13,7 @@ export type CoreTestPlatform = SpaceClientPlatform & {
   readonly emitMediaPause: (pause: V1MediaPause) => void;
   readonly emitSync: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void;
 };
-export function createCoreTestPlatform(participantId = "participant-1"): CoreTestPlatform {
+export function createCoreTestPlatform(): CoreTestPlatform {
   let mediaSnapshot: CoreTestMediaSnapshot = {
     connection: { phase: "idle", peerConnectionState: null, iceConnectionState: null },
     cursor: null,
@@ -56,7 +56,7 @@ export function createCoreTestPlatform(participantId = "participant-1"): CoreTes
   const pauseListeners = new Set<(pause: V1MediaPause) => void>();
   const sync: ConnectionSyncClient = {
     start: async () => {
-      syncSnapshot = { ...syncSnapshot, connection: { phase: "live" }, participantId, participantGeneration: 1 };
+      syncSnapshot = { ...syncSnapshot, connection: { phase: "live" }, participantId: "participant-1", participantGeneration: 1 };
       for (const listener of syncListeners) listener(syncSnapshot);
     },
     confirmEntered: async () => undefined,
