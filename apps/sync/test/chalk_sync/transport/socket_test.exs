@@ -176,6 +176,66 @@ defmodule ChalkSync.Transport.SocketV1Test do
     end)
   end
 
+  test "published up-to-date acknowledgements are optional and exactly fenced", %{port: port} do
+    for {timing, invalid} <- [
+          {:before_complete, "recovery_id"},
+          {:after_complete, "revision"},
+          {:after_complete, "state_digest"}
+        ] do
+      host = identity()
+      seed_participants(host, [host])
+      first = connect_live(port, host)
+      {:ok, recovery} = Memory.recover(host.episode, nil)
+
+      cursor = %{
+        "revision" => recovery.head.revision,
+        "state_schema_version" => recovery.head.state_schema_version,
+        "state_digest" => Base.encode16(recovery.head.digest, case: :lower)
+      }
+
+      Client.close_tcp(first)
+      {:ok, returned} = Client.connect(port, "/v1/sync")
+
+      returned =
+        Client.send_json(
+          returned,
+          put_in(hello(host, %{}), ["streams", "control", "cursor"], cursor)
+        )
+
+      assert {:json, %{"mode" => "up_to_date"} = welcome, returned} = Client.recv(returned)
+
+      ack = %{
+        "type" => "recovery_ack",
+        "recovery_id" => welcome["recovery_id"],
+        "revision" => cursor["revision"],
+        "state_digest" => cursor["state_digest"]
+      }
+
+      returned =
+        if timing == :before_complete, do: Client.send_json(returned, ack), else: returned
+
+      returned =
+        Enum.reduce(1..3, returned, fn _, client ->
+          assert {:json, _, next} = Client.recv(client)
+          next
+        end)
+
+      returned = if timing == :after_complete, do: Client.send_json(returned, ack), else: returned
+      returned = Client.send_json(returned, %{"type" => "ping"})
+      assert {:json, %{"type" => "pong"}, returned} = Client.recv(returned)
+
+      wrong =
+        case invalid do
+          "recovery_id" -> ChalkSync.UUID.generate()
+          "revision" -> cursor["revision"] + 1
+          "state_digest" -> String.duplicate("0", 64)
+        end
+
+      returned = Client.send_json(returned, Map.put(ack, invalid, wrong))
+      assert {:closed, 1012, _, _} = Client.recv(returned)
+    end
+  end
+
   defp hello(identity, correlation) do
     token =
       DevTokenVerifier.token(%{
