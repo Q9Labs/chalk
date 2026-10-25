@@ -10,7 +10,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// This test also runs unchanged against origin/master as the serial oracle.
 func TestCaptureSerialReadinessParity(t *testing.T) {
 	for _, stop := range []string{"claim", "heartbeat", "drain", "shutdown"} {
 		t.Run(stop, func(t *testing.T) {

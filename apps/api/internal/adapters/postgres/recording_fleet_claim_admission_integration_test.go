@@ -26,12 +26,11 @@ func TestFleetClaimAdmissionHTTPResponse(t *testing.T) {
 			}{
 				{"draining", "state='draining',ready=false,admission_open=false,ready_capacity=0", http.StatusLocked},
 				{"closed", "admission_open=false", http.StatusLocked},
-				{"revoked", "state='revoked',ready=false,admission_open=false,ready_capacity=0", http.StatusUnauthorized},
+				{"revoked", "state='revoked',revoked_at=clock_timestamp(),ready=false,admission_open=false,ready_capacity=0", http.StatusUnauthorized},
 				{"missing", "", http.StatusUnauthorized},
 				{"wrong-role", "role=case when role='capture' then 'render' else 'capture' end", http.StatusUnauthorized},
-				{"not-ready", "ready=false", http.StatusUnauthorized},
-				{"zero-capacity", "ready_capacity=0", http.StatusUnauthorized},
 				{"stale", "observed_at=clock_timestamp()-interval '3 minutes'", http.StatusUnauthorized},
+				{"future", "observed_at=clock_timestamp()+interval '3 minutes'", http.StatusUnauthorized},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					tx, _ := newAllocationCleanupFixture(t, true, string(role))

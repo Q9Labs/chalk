@@ -132,6 +132,10 @@ func TestRecordingFleetAuthorityRepositorySeparatesDrainFromClaimAuthorization(t
 	if err := repository.AuthorizeWorkerClaim(t.Context(), "nightly", identity); !errors.Is(err, recorderfleet.ErrAdmissionClosed) {
 		t.Fatalf("claim authorization error = %v", err)
 	}
+	queries.admissionClosed = false
+	if err := repository.AuthorizeWorkerClaim(t.Context(), "nightly", identity); !errors.Is(err, recorderfleet.ErrNodeNotFound) || errors.Is(err, recorderfleet.ErrAdmissionClosed) {
+		t.Fatalf("non-admission claim refusal must remain an authentication failure: %v", err)
+	}
 }
 
 type recordingFleetAuthorityQueriesStub struct {
