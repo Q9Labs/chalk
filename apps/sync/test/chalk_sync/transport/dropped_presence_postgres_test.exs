@@ -46,15 +46,18 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     fixture = SyncPostgres.seed_episode(connection, 1, %{"linger_window_seconds" => 300})
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
-    {:ok, media_plane} = MediaPlaneTestAdapter.start_link(outcomes: %{})
+    media_plane = start_supervised!({MediaPlaneTestAdapter, outcomes: %{}})
 
-    start_supervised!(
-      {ExternalOperationConsumer,
-       poll_interval_ms: 10,
-       page_size: 8,
-       max_backoff_ms: 100,
-       media_plane: {MediaPlaneTestAdapter, media_plane}}
-    )
+    {:ok, consumer} =
+      ExternalOperationConsumer.start_link(
+        poll_interval_ms: 10,
+        page_size: 8,
+        max_backoff_ms: 100,
+        media_plane: {MediaPlaneTestAdapter, media_plane}
+      )
+
+    Process.unlink(consumer)
+    on_exit(fn -> TestProcess.stop(consumer) end)
 
     {:ok, fixture: fixture, identity: hd(fixture.identities), media_plane: media_plane}
   end
