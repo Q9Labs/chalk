@@ -457,7 +457,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
          %{
            "space_id" => episode.space_id,
            "participant_count" => 10,
-           "max_duration_seconds" => min(7_200, max_duration_seconds),
+           "max_duration_seconds" =>
+             min(Recording.maximum_duration_seconds(), max_duration_seconds),
            "input_bitrate_bps" => 4_000_000,
            "policy_snapshot_version" => artifact_policy["schema_version"]
          }}

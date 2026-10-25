@@ -11,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 func TestCaptureDeadlinePreservesFlowingMedia(t *testing.T) {
@@ -25,7 +26,7 @@ func TestCaptureDeadlinePreservesFlowingMedia(t *testing.T) {
 
 func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage bool) {
 	origin := time.Now().UTC()
-	deadline := origin.Add(3 * time.Minute)
+	deadline := origin.Add(recordingpipeline.MaximumRecordingDuration)
 	clock := &capturePlanWatchClock{now: origin}
 	initial := captureTestPlanAtEpoch(t, 2, 1, origin)
 	pulled := capturePlanWatchPulledTrack(t, "0", "deadline")
@@ -46,6 +47,10 @@ func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage b
 		func(ctx context.Context) (captureplan.Plan, error) {
 			select {
 			case <-storage.committed:
+				clock.Set(origin.Add(2*time.Hour + 15*time.Minute))
+				if !failStorage {
+					return running, nil
+				}
 				clock.Set(deadline.Add(time.Second)) // delayed plan arrival must not extend the source
 				if timer {
 					clock.Set(deadline.Add(-time.Second)) // timer expiry survives backward wall-clock movement
@@ -57,6 +62,16 @@ func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage b
 			case <-ctx.Done():
 				return captureplan.Plan{}, ctx.Err()
 			}
+		},
+		func(ctx context.Context) (captureplan.Plan, error) {
+			clock.Set(deadline.Add(time.Second))
+			if timer {
+				clock.Set(deadline.Add(-time.Second))
+				tick <- deadline
+				<-ctx.Done()
+				return captureplan.Plan{}, ctx.Err()
+			}
+			return stopped, nil
 		},
 	}}
 	failure := errors.New("independent storage failure")
@@ -102,7 +117,7 @@ func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage b
 		}
 	}
 	last := storage.manifests[len(storage.manifests)-1]
-	if packets == 0 || last.MediaRange.EndMilliseconds != 180000 || last.CloseReason != recordingbundle.CloseReasonMaxDuration {
+	if packets == 0 || last.MediaRange.EndMilliseconds != (4*time.Hour).Milliseconds() || last.CloseReason != recordingbundle.CloseReasonMaxDuration {
 		t.Fatalf("packets=%d tail=%+v", packets, last)
 	}
 }

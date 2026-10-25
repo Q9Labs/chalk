@@ -68,7 +68,11 @@ function check(sql) {
   // This exact replacement only loosens the existing participant CHECK. No other
   // statement or constraint can enter through this exception.
   const widensRecordingParticipants = sqlUp === "ALTER TABLE RECORDING_CAPACITY DROP CONSTRAINT RECORDING_CAPACITY_RESERVED_PARTICIPANTS_CHECK1 ; ALTER TABLE RECORDING_CAPACITY ADD CONSTRAINT RECORDING_CAPACITY_RESERVED_PARTICIPANTS_CHECK1 CHECK ( RESERVED_PARTICIPANTS BETWEEN 0 AND 2 0 0 ) ;";
-  if (destructive && !approved && !widensRecordingParticipants) {
+  // This exact atomic replacement only widens duration CHECKs; all other facts stay enforced.
+  const recordingDurationWidening =
+    "alter table recording_reservations drop constraint recording_reservations_max_duration_seconds_check;\nalter table recording_reservations add constraint recording_reservations_max_duration_seconds_check check (max_duration_seconds between 1 and 14400);\nalter table recording_render_allocations drop constraint recording_render_allocations_purpose_facts_check;\nalter table recording_render_allocations add constraint recording_render_allocations_purpose_facts_check check (\n        (purpose = 'recording_video' and (state = 'reserved' or (expected_content_type = 'video/mp4' and expected_byte_size <= 34359738368 and expected_duration_millis between 1 and 14400000)))\n        or (purpose = 'transcription_manifest' and (state = 'reserved' or (expected_content_type = 'application/json' and expected_byte_size <= 1048576 and expected_duration_millis is null)))\n        or (purpose = 'transcription_audio' and (state = 'reserved' or (expected_content_type = 'audio/flac' and expected_byte_size <= 524288000 and expected_duration_millis between 1 and 900000)))\n);\n";
+  const widensRecordingDuration = sqlUp === [...tokens(recordingDurationWidening)].join(" ").toUpperCase() && sql.includes(recordingDurationWidening.trim());
+  if (destructive && !approved && !widensRecordingParticipants && !widensRecordingDuration) {
     return `${destructive[0]} in Up needs -- chalk:removed-in #<PR> naming the merged pull request that stopped using the object`;
   }
 }

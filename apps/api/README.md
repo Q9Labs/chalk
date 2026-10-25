@@ -133,7 +133,7 @@ still apply to the managed public Tenant.
 
 Daily recording minutes are an admission check, not a mid-recording stop. An
 admitted recording may exceed the remaining daily allowance, up to the existing
-two-hour per-recording maximum. A recording begun before midnight is charged to
+four-hour per-recording maximum. A recording begun before midnight is charged to
 its start day, not split across days. Concurrent recording admission includes
 reserved/prewarmed recordings so delayed workers cannot overbook a Tenant.
 

@@ -119,3 +119,21 @@ test("only the exact participant CHECK widening is exempt", (t) => {
     assert.equal(result.status, status, result.stdout + result.stderr);
   }
 });
+
+test("only the exact recording duration CHECK widening is exempt", (t) => {
+  const repo = repository(t);
+  const widening =
+    "alter table recording_reservations drop constraint recording_reservations_max_duration_seconds_check;\nalter table recording_reservations add constraint recording_reservations_max_duration_seconds_check check (max_duration_seconds between 1 and 14400);\nalter table recording_render_allocations drop constraint recording_render_allocations_purpose_facts_check;\nalter table recording_render_allocations add constraint recording_render_allocations_purpose_facts_check check (\n        (purpose = 'recording_video' and (state = 'reserved' or (expected_content_type = 'video/mp4' and expected_byte_size <= 34359738368 and expected_duration_millis between 1 and 14400000)))\n        or (purpose = 'transcription_manifest' and (state = 'reserved' or (expected_content_type = 'application/json' and expected_byte_size <= 1048576 and expected_duration_millis is null)))\n        or (purpose = 'transcription_audio' and (state = 'reserved' or (expected_content_type = 'audio/flac' and expected_byte_size <= 524288000 and expected_duration_millis between 1 and 900000)))\n);\n";
+  for (const [sql, status] of [
+    [widening, 0],
+    [widening + " DROP TABLE spaces;", 1],
+    [widening.replace("14400", "14401"), 1],
+    [widening.replace("900000", "1800000"), 1],
+    [widening.replace("video/mp4", "text/plain"), 1],
+  ]) {
+    repo.write("002_new.sql", `-- +goose Up\n${sql}\n`);
+    repo.git("add", ".");
+    const result = repo.run();
+    assert.equal(result.status, status, result.stdout + result.stderr);
+  }
+});
