@@ -283,7 +283,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, 10 - base_nodes))::integer as prepared_nodes,
+    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($3::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )
@@ -300,8 +300,9 @@ from target
 `
 
 type GetRecordingFleetDemandParams struct {
-	Role       string             `json:"role"`
-	ObservedAt pgtype.Timestamptz `json:"observed_at"`
+	Role         string             `json:"role"`
+	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
+	RecordingCap int32              `json:"recording_cap"`
 }
 
 type GetRecordingFleetDemandRow struct {
@@ -316,7 +317,7 @@ type GetRecordingFleetDemandRow struct {
 }
 
 func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingFleetDemandParams) (GetRecordingFleetDemandRow, error) {
-	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt)
+	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt, arg.RecordingCap)
 	var i GetRecordingFleetDemandRow
 	err := row.Scan(
 		&i.Revision,

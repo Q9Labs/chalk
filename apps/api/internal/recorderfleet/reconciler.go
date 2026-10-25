@@ -738,12 +738,18 @@ func (r *Reconciler) drainCandidate(current, stale []ManagedNode, desired int, o
 	for _, managed := range current {
 		capacity += workerSlots(observed[managed.ProviderID])
 	}
+	// v2 demand reports slot demand separately; DesiredNodes carries the
+	// physical node floor, which the target count already enforces.
+	slotDemand := demand.DesiredNodes
+	if demand.CaptureCapacity != nil {
+		slotDemand = demand.CaptureCapacity.SlotDemand
+	}
 	for _, candidate := range current {
 		observation := observed[candidate.ProviderID]
 		if !drainable(candidate, observation, now, r.config.ObservationMaxAge) {
 			continue
 		}
-		if r.config.Key.Role == workeridentity.RoleCapture && uint64(capacity-workerSlots(observation)) < uint64(demand.DesiredNodes)+uint64(r.config.FreeSlots) {
+		if r.config.Key.Role == workeridentity.RoleCapture && uint64(capacity-workerSlots(observation)) < uint64(slotDemand)+uint64(r.config.FreeSlots) {
 			continue
 		}
 		return &candidate

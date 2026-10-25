@@ -230,7 +230,7 @@ func run() error {
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
-	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries).WithTenantLimits(cfg.TenantLimits)
+	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries).WithTenantLimits(cfg.TenantLimits).WithAdmissionLimits(cfg.RecordingAdmission)
 	recordingPipelineRepository = recordingPipelineRepository.WithTranscriptionEnabled(cfg.Capabilities.Transcription)
 	recordingPipelineRepository = recordingPipelineRepository.WithRecordingBundleV2Enabled(cfg.RecordingBundleV2Enabled)
 	if cfg.Capabilities.Recording {
@@ -390,8 +390,8 @@ func run() error {
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
-		recordingEntrance = postgres.NewRecordingPreparationRepository(pool)
-		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool), spaceService)
+		recordingEntrance = postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission)
+		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission), spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)

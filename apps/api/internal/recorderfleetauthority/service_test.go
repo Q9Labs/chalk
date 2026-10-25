@@ -111,6 +111,36 @@ func TestBoundWorkerVerifierAllowsDrainCompletionButRejectsClaimsAndRevocation(t
 	}
 }
 
+func TestRecordWorkerObservationFencesOversizedCapacity(t *testing.T) {
+	t.Parallel()
+	repository := &authorityRepositoryStub{}
+	service, err := NewService("nightly", repository, &bootstrapAuthorityStub{})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	workerID, _ := utilities.ParseID("55555555-5555-4555-8555-555555555555")
+	observation := WorkerObservation{
+		Identity:      workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture},
+		Ready:         true,
+		AdmissionOpen: true,
+		ReadyCapacity: 101,
+		ObservedAt:    time.Now().UTC(),
+	}
+	if _, err := service.RecordWorkerObservation(t.Context(), observation); !errors.Is(err, recorderfleet.ErrRoleFence) {
+		t.Fatalf("oversized capacity error = %v", err)
+	}
+	if len(repository.workerObservations) != 0 {
+		t.Fatalf("oversized capacity reached repository: %+v", repository.workerObservations)
+	}
+	observation.ReadyCapacity = 100
+	if _, err := service.RecordWorkerObservation(t.Context(), observation); err != nil {
+		t.Fatalf("boundary capacity error = %v", err)
+	}
+	if len(repository.workerObservations) != 1 {
+		t.Fatalf("boundary capacity records = %d", len(repository.workerObservations))
+	}
+}
+
 func testBootstrapRequest() recorderfleet.BootstrapRequest {
 	return recorderfleet.BootstrapRequest{
 		Key:        recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture},
@@ -128,14 +158,15 @@ func testNodeIdentity() recorderfleet.NodeIdentity {
 }
 
 type authorityRepositoryStub struct {
-	record       BootstrapRecord
-	reserved     recorderfleet.BootstrapRequest
-	activated    recorderfleet.NodeIdentity
-	revokeCalls  int
-	authorizeErr error
-	abandoned    recorderfleet.BootstrapRequest
-	abandonCalls int
-	abandonErr   error
+	record             BootstrapRecord
+	reserved           recorderfleet.BootstrapRequest
+	activated          recorderfleet.NodeIdentity
+	revokeCalls        int
+	authorizeErr       error
+	abandoned          recorderfleet.BootstrapRequest
+	abandonCalls       int
+	abandonErr         error
+	workerObservations []WorkerObservation
 }
 
 func (r *authorityRepositoryStub) AbandonBootstrap(_ context.Context, request recorderfleet.BootstrapRequest, _ time.Time) error {
@@ -178,7 +209,8 @@ func (r *authorityRepositoryStub) PublishPool(context.Context, recorderfleet.Poo
 	return nil
 }
 
-func (r *authorityRepositoryStub) RecordWorkerObservation(context.Context, string, WorkerObservation) (recorderfleet.NodeObservation, error) {
+func (r *authorityRepositoryStub) RecordWorkerObservation(_ context.Context, _ string, observation WorkerObservation) (recorderfleet.NodeObservation, error) {
+	r.workerObservations = append(r.workerObservations, observation)
 	return recorderfleet.NodeObservation{}, nil
 }
 
