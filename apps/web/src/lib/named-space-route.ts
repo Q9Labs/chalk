@@ -1,10 +1,4 @@
-import { parseInviteCode } from "@q9labsai/chalk-client";
-
-export function spaceInviteToken(): string | undefined {
-  if (!globalThis.location) return undefined;
-  const value = new URLSearchParams(globalThis.location.hash.slice(1)).get("spaceInviteToken")?.trim();
-  return value || undefined;
-}
+import { parseInviteCode } from "@q9labsai/chalk-client/invites";
 
 export function canonicalSpaceInviteLink(slug: string, credential: string): string {
   const value = credential.trim();

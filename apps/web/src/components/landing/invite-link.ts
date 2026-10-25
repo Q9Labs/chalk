@@ -1,4 +1,4 @@
-import { parseInviteCode } from "@q9labsai/chalk-client";
+import { parseInviteCode } from "@q9labsai/chalk-client/invites";
 
 const SPACE_PATH = /^\/space\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const CHALK_HOSTS = new Set(["chalkmeet.com", "www.chalkmeet.com"]);
