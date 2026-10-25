@@ -128,6 +128,7 @@ func testClaimClosurePreservesLiveRecording(t *testing.T, refresh bool) {
 
 type liveAdmissionControl struct {
 	*multislotControl
+	heartbeats   chan struct{}
 	relinquishes atomic.Int32
 	completes    atomic.Int32
 }
