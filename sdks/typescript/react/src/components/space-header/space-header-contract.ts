@@ -27,6 +27,7 @@ export interface SpaceHeaderProps {
   colorScheme?: "light" | "dark";
   onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   duration?: number;
+  timeLeft?: number | null;
   isRecording?: boolean;
   isTranscribing?: boolean;
   layout?: "grid" | "focus";

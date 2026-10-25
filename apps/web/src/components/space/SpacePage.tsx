@@ -37,6 +37,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const { mode } = useTheme();
   const [terminal, setTerminal] = useState<{
     readonly phase: ExitPhase;
+    readonly endReason?: string;
+    readonly hostCanExtend?: boolean;
     readonly tenantId: string | undefined;
     readonly callName: string | undefined;
     readonly failure: ClientFailure | null | undefined;
@@ -271,6 +273,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
         <main className="relative h-full">
           <StatusSurface
             phase={terminal.phase}
+            episodeEndReason={terminal.endReason}
+            endAction={!terminal.hostCanExtend ? { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") } : undefined}
             callName={terminal.callName}
             errorCode={terminal.failure?.code}
             sync={terminal.failure?.sync}
@@ -288,6 +292,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               start(entranceSettings ?? defaultJoinOptions);
             }}
             onHome={() => {
+              if (terminal.phase === "episode-ended") {
+                void terminal.cleanup().catch(() => undefined);
+                globalThis.location.assign("/");
+                return;
+              }
               void terminal
                 .cleanup()
                 .then(() => globalThis.location.assign("/"))
@@ -315,6 +324,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             setReportOpen(true);
           }}
           credential={spaceAccess.prepared.credential}
+          hostCanExtend={(spaceAccess.prepared.arrival.space?.maximum_episode_duration_seconds ?? 3600) > 3600}
           displayName={settings.displayName}
           defaults={{ microphone: settings.microphone, camera: settings.camera }}
           getAccess={spaceAccess.prepared.getAccess}
@@ -322,8 +332,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           onFinish={finish}
           spaceName={spaceAccess.spaceName}
           inviteLink={spaceAccess.inviteLink}
-          onTerminal={(phase, cleanup, failure, reportProblem, reportExpiresAt) => {
-            setTerminal({ phase, cleanup, failure, tenantId: spaceAccess.prepared.reloadMarker().tenantId, callName: spaceAccess.spaceName, reportProblem, reportExpiresAt });
+          onTerminal={(phase, cleanup, failure, reportProblem, reportExpiresAt, endReason) => {
+            setTerminal({ phase, cleanup, failure, endReason, hostCanExtend: (spaceAccess.prepared.arrival.space?.maximum_episode_duration_seconds ?? 3600) > 3600, tenantId: spaceAccess.prepared.reloadMarker().tenantId, callName: spaceAccess.spaceName, reportProblem, reportExpiresAt });
             void cleanup().catch(() => setError({ message: "Couldn’t leave the call. Try Home again.", retryable: true }));
           }}
         />
@@ -467,6 +477,7 @@ function LocalSpace({
   onOpenReportProblem,
   reloadMarker,
   credential,
+  hostCanExtend,
   displayName,
   defaults,
   getAccess,
@@ -483,6 +494,7 @@ function LocalSpace({
   readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
   readonly credential: PublicSpaceCredential;
+  readonly hostCanExtend: boolean;
   readonly displayName: string;
   readonly defaults: {
     readonly microphone: boolean;
@@ -493,7 +505,7 @@ function LocalSpace({
   readonly inviteLink?: string;
   readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName?: string;
-  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, failure?: ClientFailure | null, reportProblem?: ReportProblem, reportExpiresAt?: number) => void;
+  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, failure?: ClientFailure | null, reportProblem?: ReportProblem, reportExpiresAt?: number, endReason?: string) => void;
 }) {
   const { mode, setPreference } = useTheme();
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
@@ -516,9 +528,9 @@ function LocalSpace({
         /* Storage may be disabled. */
       }
       const terminalProof = reportCredential();
-      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }), reportCredentialExpiresAt());
+      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }), reportCredentialExpiresAt(), client.getSnapshot().connection.episodeEndReason);
     },
-    [onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt],
+    [client, onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt],
   );
   useEffect(() => {
     if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
@@ -563,6 +575,11 @@ function LocalSpace({
     <main className="h-full min-h-0 w-full overflow-hidden">
       {homeError ? <p role="alert">{homeError}</p> : null}
       <Chalk
+        timeLimit={{
+          message: hostCanExtend ? "The host can extend this call." : "Sign up free for calls up to 24 hours.",
+          action: hostCanExtend ? undefined : { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") },
+          endAction: hostCanExtend ? undefined : { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") },
+        }}
         theme={{ colorScheme: mode }}
         onColorSchemeChange={setPreference}
         client={client}

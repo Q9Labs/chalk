@@ -13654,6 +13654,9 @@
               "admission_mode": {
                 "type": "string"
               },
+              "maximum_episode_duration_seconds": {
+                "type": "integer"
+              },
               "name": {
                 "type": "string"
               },
@@ -13691,6 +13694,9 @@
             "properties": {
               "admission_mode": {
                 "type": "string"
+              },
+              "maximum_episode_duration_seconds": {
+                "type": "integer"
               },
               "name": {
                 "type": "string"

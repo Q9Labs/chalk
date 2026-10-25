@@ -513,6 +513,11 @@ export class V1SyncClient implements V1CollaborationClient {
       case "ack":
         this.#requireLive();
         await this.#commandScheduler.acknowledge(frame);
+        if (frame.outcome === "rejected" && frame.reason === "episode_ended") {
+          this.#phase = { phase: "terminal", terminalReason: "episode_ended" };
+          this.#emit();
+          this.#socket?.close(1000, "episode ended");
+        }
         return;
       case "retryable_error":
         this.#requireLive();

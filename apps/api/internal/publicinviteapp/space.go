@@ -117,12 +117,13 @@ func mapSpace(space spaces.Space) (publicinvites.PublicSpace, error) {
 		return publicinvites.PublicSpace{}, err
 	}
 	return publicinvites.PublicSpace{
-		TenantID:      space.TenantID,
-		SpaceID:       space.ID,
-		Name:          space.Name,
-		Slug:          space.Slug,
-		Archived:      space.ArchivedAt != nil,
-		AdmissionMode: publicinvites.AdmissionMode(policy.Mode),
+		TenantID:                      space.TenantID,
+		SpaceID:                       space.ID,
+		Name:                          space.Name,
+		Slug:                          space.Slug,
+		Archived:                      space.ArchivedAt != nil,
+		AdmissionMode:                 publicinvites.AdmissionMode(policy.Mode),
+		MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds,
 	}, nil
 }
 

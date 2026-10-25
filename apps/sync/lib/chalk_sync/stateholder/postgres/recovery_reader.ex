@@ -47,14 +47,19 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
          {:ok, state} <- Control.validate_fold(identity.episode, control) do
       case validate_recovery_identity(connection, identity, status) do
         :ok ->
-          build_recovery(
-            connection,
-            identity.episode,
-            state,
-            status,
-            cursor,
-            identity.protocol_version
-          )
+          recovery =
+            build_recovery(
+              connection,
+              identity.episode,
+              state,
+              status,
+              cursor,
+              identity.protocol_version
+            )
+
+          if status == "ended" and is_integer(recovery.replay_cursor),
+            do: %{recovery | mode: :replay},
+            else: recovery
 
         {:terminal, reason} ->
           terminal_recovery(state, reason)
@@ -80,23 +85,34 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     end
   end
 
+  defp validate_recovery_identity(connection, identity, "ended") do
+    case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
+      [[generation, "left", "episode_ended"]]
+      when generation == identity.participant_generation ->
+        :ok
+
+      _ ->
+        {:terminal, :episode_ended}
+    end
+  end
+
   defp validate_recovery_identity(_connection, _identity, status) when status != "active",
     do: {:terminal, :episode_ended}
 
   defp validate_recovery_identity(connection, identity, _status) do
     case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
-      [[generation, _status]] when generation != identity.participant_generation ->
+      [[generation, _status, _reason]] when generation != identity.participant_generation ->
         {:error, :stale_participant_generation}
 
-      [[_generation, status]] when status in ["active", "joining"] ->
+      [[_generation, status, _reason]] when status in ["active", "joining"] ->
         validate_admission_intent(connection, identity, status)
 
-      [[_generation, "leaving"]] ->
+      [[_generation, "leaving", _reason]] ->
         if JoinSeats.awaiting_entry?(connection, identity),
           do: validate_admission_intent(connection, identity, "leaving"),
           else: expired_entry(connection, identity)
 
-      [[_generation, _status]] ->
+      [[_generation, _status, _reason]] ->
         expired_entry(connection, identity)
 
       [] ->

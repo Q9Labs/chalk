@@ -1235,6 +1235,20 @@ describe("V1SyncClient", () => {
     await expect(promise).resolves.toMatchObject({ outcome: "committed" });
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
   });
+  it("leaves the live call on an episode_ended rejection even when the end event is lost", async () => {
+    const { client, socket } = await liveClient();
+    try {
+      const command = client.setHandRaised(true, { commandId: commandIds[0] });
+      const rejected = expect(command).rejects.toMatchObject({ message: "episode_ended" });
+      await settle();
+      socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "rejected", reason: "episode_ended" });
+      await rejected;
+      await settle();
+      expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "episode_ended" });
+    } finally {
+      client.stop();
+    }
+  });
   it("does not poll remote publications after the Episode has ended", async () => {
     const { client, socket, state, mediaPlane } = await liveClient();
     try {

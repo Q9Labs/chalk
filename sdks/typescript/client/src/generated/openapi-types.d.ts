@@ -1625,6 +1625,7 @@ export interface components {
       retry_after?: number;
       space?: {
         admission_mode: string;
+        maximum_episode_duration_seconds?: number;
         name: string;
         slug: string;
       } | null;
@@ -1637,6 +1638,7 @@ export interface components {
       lifecycle_until: components["schemas"]["DateTimeString"];
       space: {
         admission_mode: string;
+        maximum_episode_duration_seconds?: number;
         name: string;
         slug: string;
       };

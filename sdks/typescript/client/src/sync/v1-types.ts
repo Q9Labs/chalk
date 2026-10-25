@@ -62,6 +62,7 @@ export type V1ControlState = {
   readonly stateSchemaVersion: number;
   readonly stateDigest: string;
   readonly status: "active" | "ended";
+  readonly endReason?: Extract<SyncV1ServerFrame, { readonly type: "event"; readonly name: "episode_ended" }>["payload"]["reason"];
   readonly admissionPolicy: V1AdmissionPolicy;
   readonly deadlineAtMs: number;
   readonly deadlineGeneration: number;

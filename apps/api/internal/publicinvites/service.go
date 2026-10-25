@@ -1486,7 +1486,7 @@ func (r Runtime) arrivalResult(space PublicSpace, arrival Arrival) PublicSpaceAr
 }
 
 func publicSpacePresentation(space PublicSpace) PublicSpacePresentation {
-	return PublicSpacePresentation{Name: space.Name, Slug: space.Slug, AdmissionMode: space.AdmissionMode}
+	return PublicSpacePresentation{Name: space.Name, Slug: space.Slug, AdmissionMode: space.AdmissionMode, MaximumEpisodeDurationSeconds: space.MaximumEpisodeDurationSeconds}
 }
 
 func validateAccessGrant(grant PublicAccessGrant, arrival Arrival) error {

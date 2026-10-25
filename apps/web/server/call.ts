@@ -1,4 +1,6 @@
 import { Schema } from "effect";
+import { z } from "zod";
+import type { Episode } from "@q9labsai/chalk-client/effect";
 import { EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, listedRecording, live, run } from "./engine";
@@ -67,6 +69,13 @@ export async function callMutation(engine: Engine, action: Exclude<CallAction, {
   switch (action.action) {
     case "rotate-link":
       return { inviteUrl: (await run(engine.api.spaces.rotateSpacePublicInvite({ params, headers }))).canonical_url };
+    case "extend-call": {
+      const episodeParams = { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(action.episodeId) };
+      const episode = await run(engine.api.episodes.getEpisode({ params: episodeParams }));
+      const deadline = new Date(Math.min(Date.parse(action.deadline), Date.parse(episodeDeadlineCeiling(episode)))).toISOString();
+      await run(engine.api.episodes.setEpisodeDeadline({ params: episodeParams, headers, payload: { deadline_at: deadline } }));
+      return { ok: true };
+    }
     case "end-for-everyone": {
       await run(engine.api.episodes.endEpisode({ params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(action.episodeId) }, headers }));
       return { ok: true };
@@ -78,4 +87,10 @@ export async function callMutation(engine: Engine, action: Exclude<CallAction, {
       await run(engine.api.spaces.denySpacePublicAdmissionRequest({ params: { ...params, request_handle: action.requestHandle }, headers }));
       return { ok: true };
   }
+}
+
+const deadlineConfig = z.object({ maximum_episode_duration_seconds: z.number().int().positive() });
+export function episodeDeadlineCeiling(episode: Episode): string {
+  const config = deadlineConfig.parse(episode.config_snapshot);
+  return new Date(Date.parse(episode.created_at) + Math.min(config.maximum_episode_duration_seconds, 86400) * 1000).toISOString();
 }

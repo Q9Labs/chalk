@@ -29,9 +29,72 @@ try {
   const sql = (query) => execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-Atc", query], { encoding: "utf8" }).trim();
   const episodeId = sql(`select id from episodes where space_id='${spaceId}' and status='active'`);
   const createdAt = sql(`select created_at from episodes where id='${episodeId}'`);
-  const deadline = new Date(new Date(createdAt).getTime() + 60000).toISOString();
+  const deadline = new Date(Math.ceil(new Date(createdAt).getTime() / 1000) * 1000 + 60000).toISOString();
+  if (process.env.TIME_LIMIT_EXPECT_FIXED === "1") {
+    const headers = { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}`, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() };
+    const updateDeadline = async (value) => {
+      const response = await fetch(`${apiOrigin}/v1/tenants/${tenantId}/spaces/${spaceId}/episodes/${episodeId}/deadline`, { method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ deadline_at: value }) });
+      assert.equal(response.status, 202, await response.text());
+      for (let attempt = 0; attempt < 100 && Math.abs(Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)) - Date.parse(value)) > 1; attempt++) await delay(100);
+      assert(Math.abs(Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)) - Date.parse(value)) <= 1);
+    };
+    const tenMinutes = new Date(Date.now() + 599000).toISOString();
+    await updateDeadline(tenMinutes);
+    await page.locator('[data-part="toast"]').filter({ hasText: "10 minutes left" }).waitFor();
+    const request = page.waitForRequest((request) => request.url().endsWith("/dashboard-api/call") && request.postDataJSON()?.action === "extend-call");
+    await page.getByRole("button", { name: "Add 30 min", exact: true }).click();
+    const body = (await request).postDataJSON();
+    for (let attempt = 0; attempt < 100 && Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)) < Date.parse(tenMinutes) + 1800000; attempt++) await delay(100);
+    const extended = sql(`select deadline_at from episodes where id='${episodeId}'`);
+    assert.equal(Date.parse(extended), Date.parse(tenMinutes) + 1800000);
+    await page.waitForFunction(() => !document.querySelector('[data-part="call-timer"]')?.textContent.includes("left"));
+    const replay = await context.request.post(`${origin}/dashboard-api/call`, { data: body });
+    assert.equal(replay.status(), 200, await replay.text());
+    await delay(1000);
+    assert.equal(sql(`select deadline_at from episodes where id='${episodeId}'`), extended, "retry must not add another 30 minutes");
+    console.log("PASS Add 30 min through dashboard server; deadline moved exactly 30 min; replay did not extend twice");
+    await updateDeadline(new Date(Date.now() + 299000).toISOString());
+    await page.locator('[data-part="toast"]').filter({ hasText: "5 minutes left" }).waitFor();
+    console.log("PASS deadline change re-armed the warning");
+    const ceiling = new Date(new Date(createdAt).getTime() + 86400000).toISOString();
+    const clamped = await context.request.post(`${origin}/dashboard-api/call`, { data: { action: "extend-call", spaceId, episodeId, deadline: new Date(Date.parse(ceiling) + 1800000).toISOString(), idempotencyKey: crypto.randomUUID() } });
+    assert.equal(clamped.status(), 200, await clamped.text());
+    for (let attempt = 0; attempt < 100 && Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)) < Date.parse(ceiling); attempt++) await delay(100);
+    assert.equal(Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)), Date.parse(ceiling));
+    await page.clock.install();
+    await page.clock.setSystemTime(new Date(Date.parse(ceiling) - 599000));
+    await page.locator('[data-part="toast"]').filter({ hasText: "last extension" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Add 30 min", exact: true }).count(), 0);
+    await page.clock.setSystemTime(new Date());
+    console.log("PASS extension clamped at the 24 h ceiling and action hidden");
+    const admission = await context.request.post(`${origin}/dashboard-api/call`, { data: { action: "set-admission", spaceId, admission: "anyone" } });
+    assert.equal(admission.status(), 200, await admission.text());
+    const call = await (await context.request.get(`${origin}/dashboard-api/call?spaceId=${spaceId}`)).json();
+    const guestContext = await fixture.browser.newContext();
+    const guest = await guestContext.newPage();
+    const invite = new URL(call.inviteUrl);
+    await guest.goto(`${origin}${invite.pathname}${invite.search}${invite.hash}`);
+    await guest.getByLabel("Your name").fill("Deadline Guest");
+    await guest.getByRole("button", { name: "Join call", exact: true }).click();
+    const guestJoined = guest.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+    const admit = page.getByRole("button", { name: "Admit Deadline Guest", exact: true });
+    await Promise.race([guestJoined, admit.waitFor({ timeout: 45000 })]);
+    if (await admit.isVisible()) await admit.click();
+    await guestJoined;
+    await updateDeadline(new Date(Date.now() + 299000).toISOString());
+    await guest.locator('[data-part="toast"]').filter({ hasText: "The host can extend this call." }).waitFor();
+    assert.equal(await guest.getByRole("button", { name: "Sign up free", exact: true }).count(), 0);
+    fixture.deadlineGuest = guest;
+    const signup = await fixture.browser.newPage();
+    await signup.goto(`${origin}/dashboard/sign-in`);
+    await signup.getByRole("heading", { name: "Sign in to Chalk", exact: true }).waitFor();
+    await signup.getByText("New here? Signing in creates your account.", { exact: true }).waitFor();
+    await signup.close();
+    console.log("PASS signed-in host guest warning and real signup route");
+  }
   const response = await fetch(`${apiOrigin}/v1/tenants/${tenantId}/spaces/${spaceId}/episodes/${episodeId}/deadline`, {
-    method: "POST", headers: { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}`, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+    method: "POST",
+    headers: { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}`, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
     body: JSON.stringify({ deadline_at: deadline }),
   });
   assert.equal(response.status, 202, await response.text());
@@ -39,11 +102,21 @@ try {
   await page.screenshot({ path: resolve(repository, "artifacts/time-limit-before.png") });
   await delay(Math.max(0, Date.parse(deadline) - Date.now()) + 15000);
   console.log("episode:", sql(`select status||':'||coalesce(end_reason,'') from episodes where id='${episodeId}'`));
-  console.log("received:", JSON.stringify(frames.filter((frame) => JSON.stringify(frame).includes("episode_ended") || JSON.stringify(frame).includes("deadline") || frame.type === "operation_rejected")));
+  console.log("received:", JSON.stringify(frames.filter((frame) => (frame.type === "event" && (frame.name === "episode_ended" || frame.name === "deadline_changed")) || (frame.type === "welcome" && frame.mode === "terminal"))));
   await page.screenshot({ path: resolve(repository, "artifacts/time-limit-after.png") });
   const ended = await page.getByText("The call reached its time limit", { exact: true }).isVisible();
   console.log("time-limit end page:", ended, "generic end:", await page.getByText("The call ended", { exact: true }).isVisible());
-  if (process.env.TIME_LIMIT_EXPECT_FIXED === "1") assert(ended, "deadline must show the usable time-limit end page");
+  if (process.env.TIME_LIMIT_EXPECT_FIXED === "1") {
+    assert(ended, "deadline must show the usable time-limit end page");
+    await holder.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor();
+    await fixture.deadlineGuest.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor();
+    assert.equal(await fixture.deadlineGuest.getByRole("button", { name: "Sign up free", exact: true }).count(), 0);
+    assert.equal(await fixture.deadlineGuest.getByRole("button", { name: "Start a new call", exact: true }).count(), 0);
+    await page.getByRole("button", { name: "Start a new call", exact: true }).waitFor();
+    await fixture.deadlineGuest.getByRole("button", { name: "Home", exact: true }).click();
+    await fixture.deadlineGuest.waitForURL(`${origin}/`);
+    console.log("PASS all participants reached the reason-specific end page; guest Home works");
+  }
 } finally {
   await cleanup();
 }

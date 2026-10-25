@@ -103,7 +103,7 @@ export class SpaceClientCore {
       this.#store.updateConnection(snapshot);
       const newlyEnded = snapshot.episodeEnded && !this.#episodeEnded;
       this.#episodeEnded = snapshot.episodeEnded ?? false;
-      if (newlyEnded) this.#emit("episodeEnded", { episode });
+      if (newlyEnded) this.#emit("episodeEnded", { episode, reason: snapshot.episodeEndReason });
     });
   }
   getSnapshot = (): SpaceSnapshot => this.#store.getSnapshot();

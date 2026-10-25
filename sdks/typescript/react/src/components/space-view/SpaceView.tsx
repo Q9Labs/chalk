@@ -5,6 +5,7 @@ import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
+import { callCountdown } from "./countdown";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
@@ -58,6 +59,7 @@ export interface SpaceViewWhiteboard {
 }
 
 export interface SpaceViewProps {
+  readonly timeLimit?: { readonly message: string; readonly action?: { readonly label: string; readonly onClick: () => void } };
   readonly colorScheme?: "light" | "dark";
   readonly onColorSchemeChange?: (colorScheme: "light" | "dark") => void;
   readonly spaceName: string;
@@ -92,6 +94,7 @@ export interface SpaceViewProps {
 }
 
 export function SpaceView({
+  timeLimit,
   colorScheme = "dark",
   onColorSchemeChange,
   spaceName,
@@ -141,6 +144,25 @@ export function SpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
+  const deadline = connection.episode?.deadline;
+  const [now, setNow] = useState(Date.now);
+  const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
+  const [limitWarning, setLimitWarning] = useState<{ id: string; minutes: number } | null>(null);
+  const countdown = callCountdown(deadline, now);
+  useEffect(() => {
+    if (!deadline) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [deadline]);
+  useEffect(() => {
+    const previous = previousCountdown.current;
+    const next = callCountdown(deadline, now, previous?.deadline === deadline ? previous.seconds : undefined);
+    previousCountdown.current = { deadline, seconds: next.seconds };
+    if (previous?.deadline !== deadline) setLimitWarning(null);
+    if (next.warning !== null) setLimitWarning({ id: `time-limit-${deadline}-${next.warning}`, minutes: next.warning });
+  }, [deadline, now]);
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -238,14 +260,17 @@ export function SpaceView({
     setCommandError(null);
     onDismissCommandError?.();
   };
+  const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: "warning", duration: 10000, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
   const toasts = [
+    ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
   ];
   const dismissToast = (id: string) => {
-    if (id === "space-command-error") dismissCommandError();
+    if (id.startsWith("time-limit-")) setLimitWarning(null);
+    else if (id === "space-command-error") dismissCommandError();
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
     else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
     else callToasts.dismiss(id);
@@ -288,6 +313,7 @@ export function SpaceView({
               },
             },
             duration: episodeDuration,
+            timeLeft: countdown.seconds,
             isRecording: recording.current?.status === "recording",
             layout,
             onLayoutChange: updateLayout,

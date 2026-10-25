@@ -93,9 +93,10 @@ type publicAdmissionRequestPageResponse struct {
 }
 
 type publicSpacePresentationResponse struct {
-	Name          string `json:"name"`
-	Slug          string `json:"slug"`
-	AdmissionMode string `json:"admission_mode"`
+	MaximumEpisodeDurationSeconds int32  `json:"maximum_episode_duration_seconds,omitempty"`
+	Name                          string `json:"name"`
+	Slug                          string `json:"slug"`
+	AdmissionMode                 string `json:"admission_mode"`
 }
 
 type publicSpaceCreatedResponse struct {
@@ -921,7 +922,7 @@ func newPublicAdmissionRequestPageResponse(page publicinvites.AdmissionRequestPa
 }
 
 func newPublicSpacePresentationResponse(presentation publicinvites.PublicSpacePresentation) publicSpacePresentationResponse {
-	return publicSpacePresentationResponse{Name: presentation.Name, Slug: presentation.Slug, AdmissionMode: string(presentation.AdmissionMode)}
+	return publicSpacePresentationResponse{Name: presentation.Name, Slug: presentation.Slug, AdmissionMode: string(presentation.AdmissionMode), MaximumEpisodeDurationSeconds: presentation.MaximumEpisodeDurationSeconds}
 }
 
 func newPublicSpaceCreatedResponse(created publicinvites.PublicSpaceCreated) publicSpaceCreatedResponse {
