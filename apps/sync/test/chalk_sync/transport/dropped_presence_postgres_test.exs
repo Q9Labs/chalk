@@ -227,15 +227,23 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
       client = connect(ready["port"], ctx.identity)
       client = Client.send_json(client, %{"type" => "ping"})
-      assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+      client = await_pong(client)
       expire(ctx)
       assert probe(ctx, "tick") == 0
       assert status(ctx) == "active"
       client = Client.send_json(client, %{"type" => "ping"})
-      assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+      client = await_pong(client)
       Client.close_tcp(client)
     after
       ExternalSyncNode.stop(node)
+    end
+  end
+
+  defp await_pong(client) do
+    case Client.recv(client) do
+      {:json, %{"type" => "pong"}, client} -> client
+      {:json, %{"type" => "projection_snapshot"}, client} -> await_pong(client)
+      other -> flunk("expected pong, got #{inspect(other)}")
     end
   end
 
