@@ -5,6 +5,7 @@
       "@/*": ["./src/*"],
       "@q9labsai/chalk-assets": ["../../packages/assets/src/index.ts"],
       "@q9labsai/chalk-client": ["../../sdks/typescript/client/src/index.ts"],
+      "@q9labsai/chalk-client/invites": ["../../sdks/typescript/client/src/public-invites/index.ts"],
       "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],
       "@q9labsai/chalk-react": ["../../sdks/typescript/react/src/index.ts"],
       "@q9labsai/chalk-react/preview": ["../../sdks/typescript/react/src/test-support/index.ts"],
