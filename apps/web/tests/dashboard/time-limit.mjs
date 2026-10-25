@@ -157,7 +157,7 @@ try {
     const managedTenant = process.env.CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID;
     assert.match(managedTenant, /^[0-9a-f-]{36}$/);
     sql(
-      `insert into tenants (id,name,default_media_plane,media_plane_provider_config,storage_provider_config,cors_allowed_origins) select '${managedTenant}','Anonymous runtime proof',default_media_plane,media_plane_provider_config,storage_provider_config,cors_allowed_origins from tenants where id='${tenantId}' on conflict (id) do nothing`,
+      `insert into tenants (id,name,created_by_service_id,default_media_plane,media_plane_provider_config,storage_provider_config,cors_allowed_origins) select '${managedTenant}','Anonymous runtime proof',created_by_service_id,default_media_plane,media_plane_provider_config,storage_provider_config,cors_allowed_origins from tenants where id='${tenantId}' on conflict (id) do nothing`,
     );
     sql(`insert into tenant_artifact_policies (tenant_id) values ('${managedTenant}') on conflict (tenant_id) do nothing`);
     const anonymousContext = await fixture.browser.newContext();
