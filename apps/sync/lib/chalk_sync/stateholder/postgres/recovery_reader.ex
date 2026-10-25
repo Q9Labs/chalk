@@ -45,22 +45,32 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     with {:ok, control} <- read_control(connection, Scope.episode(identity.episode)),
          {:ok, status} <- read_episode_status(connection, Scope.episode(identity.episode)),
          {:ok, state} <- Control.validate_fold(identity.episode, control) do
-      case validate_recovery_identity(connection, identity, status) do
-        :ok ->
-          build_recovery(
-            connection,
-            identity.episode,
-            state,
-            status,
-            cursor,
-            identity.protocol_version
-          )
+      result =
+        case validate_recovery_identity(connection, identity, status) do
+          :ok ->
+            build_recovery(
+              connection,
+              identity.episode,
+              state,
+              status,
+              cursor,
+              identity.protocol_version
+            )
 
-        {:terminal, reason} ->
-          terminal_recovery(state, reason)
+          {:terminal, reason} ->
+            terminal_recovery(state, reason)
 
-        {:error, reason} ->
-          {:error, reason}
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      case result do
+        %Recovery{replay_cursor: revision} = recovery
+        when status == "ended" and is_integer(revision) ->
+          %{recovery | mode: :replay, terminal_reason: :episode_ended}
+
+        other ->
+          other
       end
     else
       {:error, reason} -> {:error, reason}
@@ -80,23 +90,37 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     end
   end
 
+  defp validate_recovery_identity(connection, identity, "ended") do
+    case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
+      [[generation, "left", "episode_ended", joined_at]]
+      when generation == identity.participant_generation and not is_nil(joined_at) ->
+        if validate_admission_intent(connection, identity, "active") == :ok,
+          do: :ok,
+          else: {:terminal, :episode_ended}
+
+      _ ->
+        {:terminal, :episode_ended}
+    end
+  end
+
   defp validate_recovery_identity(_connection, _identity, status) when status != "active",
     do: {:terminal, :episode_ended}
 
   defp validate_recovery_identity(connection, identity, _status) do
     case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
-      [[generation, _status]] when generation != identity.participant_generation ->
+      [[generation, _status, _reason, _joined_at]]
+      when generation != identity.participant_generation ->
         {:error, :stale_participant_generation}
 
-      [[_generation, status]] when status in ["active", "joining"] ->
+      [[_generation, status, _reason, _joined_at]] when status in ["active", "joining"] ->
         validate_admission_intent(connection, identity, status)
 
-      [[_generation, "leaving"]] ->
+      [[_generation, "leaving", _reason, _joined_at]] ->
         if JoinSeats.awaiting_entry?(connection, identity),
           do: validate_admission_intent(connection, identity, "leaving"),
           else: expired_entry(connection, identity)
 
-      [[_generation, _status]] ->
+      [[_generation, _status, _reason, _joined_at]] ->
         expired_entry(connection, identity)
 
       [] ->

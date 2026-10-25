@@ -43,6 +43,7 @@ export const callAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
   z.strictObject({ action: z.literal("set-admission"), spaceId: id, admission }),
   z.strictObject({ action: z.literal("rotate-link"), spaceId: id, idempotencyKey }),
+  z.strictObject({ action: z.literal("extend-call"), spaceId: id, episodeId: id, deadline: z.iso.datetime(), idempotencyKey }),
   z.strictObject({ action: z.literal("end-for-everyone"), spaceId: id, episodeId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("approve-knock"), spaceId: id, requestHandle: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), idempotencyKey }),
   z.strictObject({ action: z.literal("deny-knock"), spaceId: id, requestHandle: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), idempotencyKey }),
@@ -157,7 +158,7 @@ export type SecretDTO = { id: string; secret: string };
 export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; headers: Readonly<Record<string, readonly string[]>> };
 export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };
 
-export type OwnerAccessDTO = { access: AccessGrant };
+export type OwnerAccessDTO = { access: AccessGrant; deadlineCeiling?: string };
 
 export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<EpisodeDTO, "id" | "status"> | null; knocks: CallPageDTO["knocks"] };
 /** `first` is the first page, sent when a call Home doesn't list is among the five newest. */

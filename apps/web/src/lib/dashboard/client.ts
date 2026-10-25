@@ -55,6 +55,7 @@ type Results = {
   join: OwnerAccessDTO;
   "refresh-access": OwnerAccessDTO;
   "rotate-link": { inviteUrl: string };
+  "extend-call": Ok;
   "end-for-everyone": Ok;
   "approve-knock": Ok;
   "deny-knock": Ok;

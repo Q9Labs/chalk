@@ -56,6 +56,7 @@ export class SpaceStore {
       episode: snapshot.episode,
       lastError: sameError(current.lastError, error) ? current.lastError : error,
       episodeEnded: snapshot.episodeEnded ?? false,
+      episodeEndReason: snapshot.episodeEndReason,
       removedByHost: snapshot.removedByHost ?? false,
     };
     if (sameConnection(current, next)) return;
@@ -120,7 +121,9 @@ function connectionStatus(snapshot: ConnectionLifecycleSnapshot): ConnectionSlic
 }
 
 function sameConnection(left: ConnectionSlice, right: ConnectionSlice): boolean {
-  return left.status === right.status && left.syncHealth === right.syncHealth && sameEpisode(left.episode, right.episode) && left.lastError === right.lastError && left.episodeEnded === right.episodeEnded && left.removedByHost === right.removedByHost;
+  return (
+    left.status === right.status && left.syncHealth === right.syncHealth && sameEpisode(left.episode, right.episode) && left.lastError === right.lastError && left.episodeEnded === right.episodeEnded && left.episodeEndReason === right.episodeEndReason && left.removedByHost === right.removedByHost
+  );
 }
 
 function sameEpisode(left: ConnectionSlice["episode"], right: ConnectionSlice["episode"]): boolean {

@@ -659,6 +659,7 @@ export const PublicSpaceArrivalSchema = Schema.Struct({
     Schema.NullOr(
       Schema.Struct({
         admission_mode: Schema.String,
+        maximum_episode_duration_seconds: Schema.optional(Schema.Number),
         name: Schema.String,
         slug: Schema.String,
       }),
@@ -675,6 +676,7 @@ export const PublicSpaceCreatedSchema = Schema.Struct({
   lifecycle_until: DateTimeStringSchema,
   space: Schema.Struct({
     admission_mode: Schema.String,
+    maximum_episode_duration_seconds: Schema.optional(Schema.Number),
     name: Schema.String,
     slug: Schema.String,
   }),

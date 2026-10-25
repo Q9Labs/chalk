@@ -284,12 +284,13 @@ type DecideAdmissionRequestInput struct {
 }
 
 type PublicSpace struct {
-	TenantID      utilities.ID
-	SpaceID       utilities.ID
-	Name          string
-	Slug          string
-	AdmissionMode AdmissionMode
-	Archived      bool
+	MaximumEpisodeDurationSeconds int32
+	TenantID                      utilities.ID
+	SpaceID                       utilities.ID
+	Name                          string
+	Slug                          string
+	AdmissionMode                 AdmissionMode
+	Archived                      bool
 }
 
 type ManagedInvite struct {
@@ -342,9 +343,10 @@ type PublicSpaceCreated struct {
 }
 
 type PublicSpacePresentation struct {
-	Name          string
-	Slug          string
-	AdmissionMode AdmissionMode
+	MaximumEpisodeDurationSeconds int32
+	Name                          string
+	Slug                          string
+	AdmissionMode                 AdmissionMode
 }
 
 type PublicSpaceArrival struct {

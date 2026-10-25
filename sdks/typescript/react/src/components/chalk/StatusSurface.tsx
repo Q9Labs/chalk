@@ -9,6 +9,8 @@ export interface StatusSurfaceProps {
   readonly phase: StatusSurfacePhase;
   readonly callName?: string;
   readonly reason?: string;
+  readonly episodeEndReason?: string;
+  readonly endAction?: { readonly label: string; readonly onClick: () => void };
   readonly errorCode?: ErrorCode;
   readonly sync?: ClientFailure["sync"];
   readonly theme?: ChalkTheme;
@@ -34,11 +36,11 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
 };
 
 /** All terminal call states share the same quiet page and host-owned navigation. */
-export function StatusSurface({ phase, callName = "the call", reason, errorCode, sync, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
+export function StatusSurface({ phase, callName = "the call", reason, episodeEndReason, endAction, errorCode, sync, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
-    "episode-ended": { title: "The call ended", detail: "" },
+    "episode-ended": episodeEndReason === "maximum_duration" ? { title: "The call reached its time limit", detail: "This call has ended for everyone." } : { title: "The call ended", detail: "" },
     failed: { title: `Couldn’t connect to ${callName}`, detail: (errorCode && FAILURE_DETAILS[errorCode]) ?? DEFAULT_FAILURE_DETAIL },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
     full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },
@@ -68,6 +70,7 @@ export function StatusSurface({ phase, callName = "the call", reason, errorCode,
         </p>
       ) : null}
       <div data-part="status-actions" className="mt-5 flex gap-7">
+        {phase === "episode-ended" && episodeEndReason === "maximum_duration" && endAction ? <StatusAction icon={<StatusIcon retry />} label={endAction.label} onClick={endAction.onClick} /> : null}
         {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
         {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
       </div>

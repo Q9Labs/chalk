@@ -97,6 +97,7 @@ export type ConnectionSlice = {
   readonly lastError: ClientFailure | null;
   /** The Episode ended while this person was in it. */
   readonly episodeEnded: boolean;
+  readonly episodeEndReason?: import("../sync/v1-types").V1ControlState["endReason"];
   /** The server removed this person from the call; a person's own leave never sets this. */
   readonly removedByHost: boolean;
 };
@@ -289,6 +290,7 @@ export type ClientEventMap = {
   };
   readonly episodeEnded: {
     readonly episode: EpisodeSummary | null;
+    readonly reason?: ConnectionSlice["episodeEndReason"];
   };
   readonly screenShareStarted: {
     readonly participantId: string;

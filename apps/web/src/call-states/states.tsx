@@ -1,3 +1,4 @@
+import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
@@ -38,6 +39,14 @@ const openChat: Action = { click: "Chat" };
 const openLayout: Action = { click: "Layout: Spotlight" };
 
 export const CALL_STATES: readonly CallState[] = [
+  { id: "time-limit-amber", title: "Ten minutes left", render: () => <TimeLimitFixture /> },
+  { id: "time-limit-red", title: "One minute left", render: () => <TimeLimitFixture seconds={60} /> },
+  { id: "time-limit-anonymous", title: "Anonymous time warning", render: () => <TimeLimitFixture role="anonymous" /> },
+  { id: "time-limit-guest", title: "Guest time warning", render: () => <TimeLimitFixture role="guest" /> },
+  { id: "time-limit-owner-ended", title: "Owner time limit", render: () => <TimeLimitFixture ended /> },
+  { id: "time-limit-anonymous-ended", title: "Anonymous time limit", render: () => <TimeLimitFixture role="anonymous" ended /> },
+  { id: "time-limit-guest-ended", title: "Guest time limit", render: () => <TimeLimitFixture role="guest" ended /> },
+
   { id: "offline-notice", title: "Expired offline actions join the shared notices", render: () => <OfflineNoticeFixture /> },
   { id: "notice-band", title: "SDK notices fit the call's available band", render: () => <NoticeBandFixture /> },
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },

@@ -2,7 +2,7 @@ import { readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeRelo
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { z } from "zod";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
@@ -42,6 +42,7 @@ function ownerAccess(spaceId: string, userId: string) {
   const episodeStorageKey = `${joinStorageKey}:episode`;
   let joined = false;
   let current: OwnerAccessDTO["access"] | undefined;
+  let deadlineCeiling: string | undefined;
   const listeners = new Set<() => void>();
   let recovery: ReturnType<typeof readOwnerReload> | undefined;
   let restoring: Promise<void> | undefined;
@@ -85,7 +86,7 @@ function ownerAccess(spaceId: string, userId: string) {
       restoring = undefined;
       throw error;
     }));
-    const { access } =
+    const { access, deadlineCeiling: ceiling } =
       reason === "join"
         ? // A Leave can commit while its acknowledgement is lost; its seat then refuses the retained key.
           await join().catch((error: unknown) => {
@@ -96,6 +97,7 @@ function ownerAccess(spaceId: string, userId: string) {
         : // Without the current token the server replaces the media connection.
           await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
+    deadlineCeiling = ceiling;
     try {
       window.sessionStorage.setItem(joinStorageKey, joinKey);
       window.sessionStorage.setItem(episodeStorageKey, access.subject.episode_id);
@@ -138,6 +140,7 @@ function ownerAccess(spaceId: string, userId: string) {
       };
     },
     reportAccess: () => current,
+    deadlineCeiling: () => deadlineCeiling,
     reportCredential: () => current?.media.token,
   };
 }
@@ -151,6 +154,14 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const apiBaseURL = publicAPIBaseURL();
   const owner = useMemo(() => ownerAccess(spaceId, profile?.id ?? ""), [spaceId, profile?.id]);
   const [client, setClient] = useState<SpaceClient | null>(null);
+  const startKey = useRef(intentKey());
+  const startingCall = useRef(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  useEffect(() => {
+    startKey.current = intentKey();
+    startingCall.current = false;
+    setStartError(null);
+  }, [spaceId]);
   useEffect(() => {
     const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });
     const pagehide = (event: PageTransitionEvent) => {
@@ -197,10 +208,27 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     );
   return (
     <div style={{ position: "absolute", inset: 0 }}>
+      {startError ? (
+        <p role="alert" className="absolute inset-x-6 bottom-6 z-[80] text-center">
+          {startError}
+        </p>
+      ) : null}
       <OwnerCallSurface
         client={client}
         owner={owner}
         baseURL={apiBaseURL}
+        onStartNewCall={() => {
+          if (startingCall.current) return;
+          startingCall.current = true;
+          owner.clearReload();
+          setStartError("Starting a new call…");
+          void act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current })
+            .then(({ call }) => navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } }))
+            .catch(() => setStartError("Couldn’t start a new call. Try again."))
+            .finally(() => {
+              startingCall.current = false;
+            });
+        }}
         inviteLink={state.data.inviteUrl}
         spaceName={state.data.call.name}
         displayName={profile.name}
@@ -220,11 +248,62 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   );
 }
 
-function OwnerCallSurface({ client, owner, baseURL, ...props }: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string }) {
+function OwnerCallSurface({
+  client,
+  owner,
+  baseURL,
+  onStartNewCall,
+  ...props
+}: Omit<React.ComponentProps<typeof Chalk>, "client" | "space" | "getAccess"> & { readonly client: SpaceClient; readonly owner: ReturnType<typeof ownerAccess>; readonly baseURL: string; readonly onStartNewCall: () => void }) {
   const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
+  const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
+  const [extension, setExtension] = useState<"idle" | "pending" | "failed">("idle");
+  const intent = useRef<{ deadline: string; key: string } | null>(null);
+  const inFlight = useRef(false);
+  const deadline = connection.episode?.deadline;
+  const ceiling = owner.deadlineCeiling();
+  const atCeiling = !!(deadline && ceiling && Date.parse(deadline) >= Date.parse(ceiling));
+  useEffect(() => {
+    setExtension("idle");
+    intent.current = null;
+    inFlight.current = false;
+  }, [deadline]);
+  useEffect(() => {
+    if (extension !== "pending") return;
+    const timer = window.setTimeout(() => {
+      inFlight.current = false;
+      setExtension("failed");
+    }, 30000);
+    return () => window.clearTimeout(timer);
+  }, [extension]);
+  const extend = async () => {
+    if (inFlight.current || !deadline || !ceiling || !access || atCeiling) return;
+    inFlight.current = true;
+    const request = intent.current ?? { deadline: new Date(Math.min(Date.parse(deadline) + 1800000, Date.parse(ceiling))).toISOString(), key: intentKey() };
+    intent.current = request;
+    setExtension("pending");
+    try {
+      await act("call", { action: "extend-call", spaceId: access.subject.space_id, episodeId: access.subject.episode_id, deadline: request.deadline, idempotencyKey: request.key });
+    } catch {
+      setExtension("failed");
+      inFlight.current = false;
+    }
+  };
   const tenantId = access?.subject.tenant_id;
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
   const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection }), [baseURL, tenantId, owner, client]);
-  return <Chalk {...props} client={client} onReportProblem={reportsAvailable ? onReportProblem : undefined} reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined} />;
+  return (
+    <Chalk
+      {...props}
+      client={client}
+      timeLimit={{
+        message: atCeiling ? "This is the last extension. Calls can last up to 24 hours." : extension === "pending" ? "Adding time…" : extension === "failed" ? "Couldn’t add time. Try again." : "Need more time?",
+        action: deadline && ceiling && !atCeiling && extension !== "pending" ? { label: "Add 30 min", onClick: () => void extend() } : undefined,
+        endAction: { label: "Start a new call", onClick: onStartNewCall },
+      }}
+      onReportProblem={reportsAvailable ? onReportProblem : undefined}
+      reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
+    />
+  );
 }

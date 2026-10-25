@@ -8,8 +8,8 @@ export { publicAPIBaseURL, resumePublicSpace } from "../lib/chalk-access";
 export function createLocalSpaceClient() {
   return createCallStateClient(liveSnapshot({ self: { camera: false, microphone: false }, others: [{ id: "guest", name: "Guest", camera: false, microphone: false }] }));
 }
+const arrival = { state: "admitted", arrival_handle: "fixture-arrival", space: { admission_mode: "open", slug: "design-lab", name: "Test call", maximum_episode_duration_seconds: 3600 } } as const;
 export function createPublicInviteClient(): PublicInviteClient {
-  const arrival = { state: "admitted", arrival_handle: "fixture-arrival", space: { admission_mode: "open", slug: "design-lab", name: "Test call" } };
   const unexpected = async (): Promise<never> => {
     throw new Error("The invited journey must not request network credentials or create a call");
   };
@@ -22,9 +22,10 @@ export function createPublicInviteClient(): PublicInviteClient {
     leaveSpacePublicInviteArrival: async () => undefined,
   };
 }
-export function createPreparedPublicSpace(): Omit<PreparedPublicSpace, "arrival" | "connectionAccess"> {
+export function createPreparedPublicSpace(): Omit<PreparedPublicSpace, "connectionAccess"> {
   const reportExpiresAt = Date.now() + 300_000;
   return {
+    arrival,
     credential: { apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", space: "design-lab" },
     getAccess: async () => {
       throw new Error("The preview client must not request network credentials");

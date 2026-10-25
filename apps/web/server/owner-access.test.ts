@@ -42,7 +42,22 @@ it.each([false, true])("recovers a superseded owner grant once (recovery also su
     createChalkEffectClient({
       baseUrl: env.CHALK_API_ORIGIN,
       fetch: async (input, init) => {
-        payloads.push(await new Request(input, init).json());
+        const request = new Request(input, init);
+        if (request.method === "GET")
+          return Response.json({
+            id: episodeId,
+            tenant_id: tenantId,
+            space_id: spaceId,
+            status: "active",
+            config_snapshot: { maximum_episode_duration_seconds: 86400 },
+            metadata: {},
+            created_at: "2026-10-22T14:00:00Z",
+            started_at: "2026-10-22T14:00:00Z",
+            updated_at: "2026-10-22T14:00:00Z",
+            deadline_at: "2026-10-22T15:00:00Z",
+            deadline_generation: 1,
+          });
+        payloads.push(await request.json());
         const failed = payloads.length === 1 || recoveryFails;
         return Response.json(failed ? { error: { code: "participant.connection_superseded", message: "Superseded" } } : access, { status: failed ? 409 : 201 });
       },
@@ -50,7 +65,7 @@ it.each([false, true])("recovers a superseded owner grant once (recovery also su
   );
   const result = ownerAccess(request, env, { api, tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN }, identity, { action: "refresh-access", spaceId, currentMediaToken: "lost-response-old-token" });
   if (recoveryFails) await expect(result).rejects.toMatchObject({ status: 409 });
-  else expect(await (await result).json()).toEqual({ access });
+  else expect(await (await result).json()).toEqual({ access, deadlineCeiling: "2026-10-23T14:00:00.000Z" });
   expect(payloads).toEqual([
     { participant_generation: 1, replace_media_connection: false, current_media_token: "lost-response-old-token" },
     { participant_generation: 1, replace_media_connection: true },

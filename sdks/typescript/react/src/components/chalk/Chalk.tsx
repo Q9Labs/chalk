@@ -11,7 +11,7 @@ import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../t
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
 import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
-import { SpaceView } from "../space-view/SpaceView";
+import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
 import { CallDialog } from "../space-header/CallDetails";
@@ -76,6 +76,10 @@ export type ChalkProps = SpaceIntegration &
     readonly onRejoin?: () => void;
     /** Home on the pages shown after the call. Without it the page has no Home action. */
     readonly onHome?: () => void;
+    /** App-owned warning copy and actions for a call's duration limit. */
+    readonly timeLimit?: SpaceViewProps["timeLimit"] & {
+      readonly endAction?: { readonly label: string; readonly onClick: () => void };
+    };
     /** Host-provided terminal reason when the transport cannot distinguish it. */
     readonly terminalState?: "removed" | "full" | "elsewhere";
   };
@@ -157,7 +161,7 @@ function SpaceExperience(
   const previousClient = useRef(client);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [retryPending, setRetryPending] = useState(false);
-  const [episodeEnded, setEpisodeEnded] = useState(false);
+  const [episodeEnded, setEpisodeEnded] = useState(connection.episodeEnded);
   const [handledTerminal, setHandledTerminal] = useState<ChalkProps["terminalState"]>(undefined);
   useEffect(() => setHandledTerminal(undefined), [props.terminalState]);
   const spaceName = props.spaceName ?? props.space ?? "Space";
@@ -216,14 +220,17 @@ function SpaceExperience(
   if (connection.status === "idle")
     return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={joinError ?? `Joining ${spaceName}…`} action={joinError ? { label: "Try again", onClick: retryAutomaticJoin, disabled: retryPending } : undefined} />;
   if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
-  if (connection.status === "failed" && connection.lastError?.code === "episode.ended") return <StatusSurface phase="episode-ended" callName={callName} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} />;
+  if (connection.status === "failed" && connection.lastError?.code === "episode.ended")
+    return <StatusSurface phase="episode-ended" callName={callName} episodeEndReason={connection.episodeEndReason} endAction={props.timeLimit?.endAction} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} />;
   if (connection.status === "failed") {
     return <StatusSurface phase="failed" callName={callName} errorCode={connection.lastError?.code} sync={connection.lastError?.sync} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
   }
   if (connection.status === "leaving" || connection.status === "left")
     return (
       <StatusSurface
-        phase={episodeEnded ? "episode-ended" : "left"}
+        phase={episodeEnded || connection.episodeEnded ? "episode-ended" : "left"}
+        episodeEndReason={connection.episodeEndReason}
+        endAction={props.timeLimit?.endAction}
         callName={callName}
         theme={statusTheme}
         onReportProblem={connection.status === "leaving" ? undefined : props.onOpenReport}
@@ -301,6 +308,7 @@ function SpaceSurface(
       : undefined;
   return (
     <SpaceView
+      timeLimit={props.timeLimit}
       colorScheme={props.resolvedColorScheme}
       shareUrl={props.shareUrl}
       onReportProblem={props.onReportProblem}

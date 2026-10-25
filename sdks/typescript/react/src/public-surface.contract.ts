@@ -63,6 +63,7 @@ type ExpectedChalkProps =
   | "onLayoutChange"
   | "onRejoin"
   | "onHome"
+  | "timeLimit"
   | "terminalState"
   | "inviteLink"
   | "onJoined"

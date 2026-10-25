@@ -107,6 +107,7 @@ type Model = {
     camera: boolean;
   };
   episodeEndConfirmed: boolean;
+  episodeEndReason: EpisodeControl["endReason"];
   removedByHost: boolean;
   activeScope: Scope.Closeable | null;
   syncBindingCleanup: (() => void) | null;
@@ -196,6 +197,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         initialMediaIntent: null,
         intent: { microphone: options.initialMicrophoneEnabled ?? true, camera: options.initialCameraEnabled ?? true },
         episodeEndConfirmed: false,
+        episodeEndReason: undefined,
         removedByHost: false,
         activeScope: null,
         syncBindingCleanup: null,
@@ -449,6 +451,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.epoch += 1;
           model.failure = null;
           model.episodeEndConfirmed = false;
+          model.episodeEndReason = undefined;
           model.removedByHost = false;
           yield* transition("joining");
           const span = diagnostics.startSpan({ step: "join", state: model.state, epoch: model.epoch });
@@ -882,7 +885,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const ended = episodeEnded(snapshot);
           const removed = snapshot.connection.terminalReason === "participant_removed";
           if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
-            if (ended) model.episodeEndConfirmed = true;
+            if (ended) {
+              model.episodeEndConfirmed = true;
+              model.episodeEndReason = snapshot.control?.endReason;
+            }
             if (removed) model.removedByHost = true;
             yield* finishTerminalSnapshot();
             return true;
@@ -1089,6 +1095,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     connection: Object.freeze({ syncHealth: model.syncSnapshot?.connection.health, sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
     episodeEnded: model.episodeEndConfirmed,
+    episodeEndReason: model.episodeEndReason,
     removedByHost: model.removedByHost,
   });
 }

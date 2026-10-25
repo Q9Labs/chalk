@@ -38,7 +38,7 @@ CHALK_SYNC_TOKEN_PRIVATE_KEY="$(node --input-type=module -e 'import {generateKey
 export CHALK_SYNC_TOKEN_PRIVATE_KEY
 export CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID=00000000-0000-4000-8000-000000000001
 export CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=cf_sfu
-export CHALK_PUBLIC_INVITE_WEB_ORIGIN=http://127.0.0.1:${dashboard_api_port}
+export CHALK_PUBLIC_INVITE_WEB_ORIGIN=http://127.0.0.1:${dashboard_web_port}
 export CHALK_PUBLIC_INVITE_KEY_ID=dashboard-proof
 export CHALK_PUBLIC_INVITE_PRIVATE_KEY="$CHALK_SYNC_TOKEN_PRIVATE_KEY"
 CHALK_PUBLIC_INVITE_VERIFICATION_KEYS="$(node --input-type=module -e 'process.stdout.write(JSON.stringify({"dashboard-proof":Buffer.from(process.env.CHALK_SYNC_TOKEN_PRIVATE_KEY,"base64url").subarray(32).toString("base64url")}))')"

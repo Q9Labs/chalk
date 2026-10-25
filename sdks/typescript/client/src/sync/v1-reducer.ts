@@ -167,7 +167,7 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
     case "episode_started":
       return state;
     case "episode_ended":
-      return { ...state, status: "ended", participants: [], admissionRequests: [], recording: null };
+      return { ...state, status: "ended", endReason: event.payload.reason, participants: [], admissionRequests: [], recording: null };
     case "hand_raised":
     case "hand_lowered":
       return updateParticipant(state, event.payload.participant_id, (participant) => ({ ...participant, handRaised: event.name === "hand_raised" }));

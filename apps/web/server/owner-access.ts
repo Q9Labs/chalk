@@ -3,6 +3,7 @@ import { EpisodeIdSchema, ParticipantIdSchema, SpaceIdSchema } from "@q9labsai/c
 import { z } from "zod";
 import type { Engine } from "./engine";
 import { live, run } from "./engine";
+import { episodeDeadlineCeiling } from "./call";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
 import { readCookie, seal, unseal, writeCookie } from "./cookies";
@@ -46,7 +47,8 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
           ),
         ),
     );
-    return json({ access } satisfies OwnerAccessDTO);
+    const episode = await run(engine.api.episodes.getEpisode({ params: { ...params, episode_id: grantParams.episode_id } }));
+    return json({ access, deadlineCeiling: episodeDeadlineCeiling(episode) } satisfies OwnerAccessDTO);
   }
   await run(engine.api.spaces.prepareSpaceEntrance({ params }));
   const current = (await live(engine, [action.spaceId]))[0]?.episode;
@@ -68,7 +70,8 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
     }),
   );
   if (!result.access) throw new DashboardError(409, "admission_pending");
-  const response = json({ access: result.access } satisfies OwnerAccessDTO);
+  const episode = await run(engine.api.episodes.getEpisode({ params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) } }));
+  const response = json({ access: result.access, deadlineCeiling: episodeDeadlineCeiling(episode) } satisfies OwnerAccessDTO);
   writeCookie(
     response,
     env,
