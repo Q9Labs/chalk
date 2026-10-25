@@ -114,7 +114,11 @@ CASE_COMMANDS = {
     ('changed-zip', 'fail-apply'): START + ' plan-log show apply',
     ('missing-state', 'fail-import'): FIRST_INSTALL.removesuffix(' import-scheduler-role import-log'),
     ('no-op', 'edit-after-init'): INSTALLED + ' lambda init plan-log',
+    ('no-op', 'extra-module'): INSTALLED + ' lambda init plan-log',
+    ('no-op', 'extra-override'): INSTALLED + ' lambda init plan-log',
     ('missing-state', 'edit-after-init'): FIRST_INSTALL.removesuffix(' import-scheduler-role import-log'),
+    ('missing-state', 'extra-auto-vars'): FIRST_INSTALL.removesuffix(' import-scheduler-role import-log'),
+    ('changed-zip', 'corrupt-lock'): START + ' plan-log show apply',
 }
 for mode in ('no-op', 'changed-zip'):
     for fault in ('unhealthy', 'wrong-zip', 'stale-release'):
@@ -126,8 +130,12 @@ REJECTIONS = {'unhealthy': 'dispatcher update is not healthy', 'wrong-zip': 'dis
               'stale-release': 'dispatcher runtime release binding mismatch', 'disabled-scheduler': 'dispatcher scheduler is not enabled',
               'production': 'production dispatcher must already be provisioned', 'unversioned-upload': 'dispatcher destination bucket is not versioned', 'field': 'dispatcher plan changes more than code',
               'resource': 'dispatcher update exceeds resource allowlist', 'replace': 'dispatcher update must not create, replace or delete resources'}
-LATE_REJECTIONS = {'no-op': 'module inputs do not describe the installed dispatcher and the requested release',
-                   'missing-state': 'variable values do not describe the requested release'}
+EXTRA_FILE = 'the directory holds configuration or variable files that the release does not write'
+LATE_REJECTIONS = {('no-op', 'edit-after-init'): 'module inputs do not describe the installed dispatcher and the requested release',
+                   ('missing-state', 'edit-after-init'): 'variable values do not describe the requested release',
+                   ('no-op', 'extra-module'): 'the root declares modules other than the dispatcher',
+                   ('no-op', 'extra-override'): EXTRA_FILE, ('missing-state', 'extra-auto-vars'): EXTRA_FILE,
+                   ('changed-zip', 'corrupt-lock'): 'provider lock file is not the checked-in lock file'}
 ZIP_DIGEST = media.digest(b'ZIP')
 
 
@@ -135,7 +143,7 @@ def rejection(mode, fault):
     """Return the error that ends a case, or None when the release must succeed."""
     if mode == 'bad-json':
         return 'Expecting value'
-    if fault.startswith('fail-') or fault == 'edit-after-init':
+    if fault.startswith('fail-') or (mode, fault) in LATE_REJECTIONS:
         return 'tofu operation failed'
     if mode == 'missing-state' and fault == 'plan-final-replace':
         return 'first-install dispatcher plan must not destroy or replace resources'
@@ -220,8 +228,8 @@ class DispatcherBoundary(unittest.TestCase):
                         with self.assertRaisesRegex((ValueError, RuntimeError), message):
                             media.deploy_dispatcher(args)
                         self.assertEqual(stdout.getvalue(), '')
-                        if fault == 'edit-after-init':
-                            self.assertEqual((root / 'rejected.txt').read_text(), LATE_REJECTIONS[mode])
+                        if (mode, fault) in LATE_REJECTIONS:
+                            self.assertEqual((root / 'rejected.txt').read_text(), LATE_REJECTIONS[mode, fault])
                     else:
                         media.deploy_dispatcher(args)
                         self.assertEqual(json.loads(stdout.getvalue()), released(mode))

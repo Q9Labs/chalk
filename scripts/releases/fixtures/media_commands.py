@@ -48,25 +48,38 @@ def declared(path):
     return {name for name, body in blocks if 'default' not in body}, {name for name, _ in blocks}
 
 
+def reject(message):
+    """End the command with a message the test can read back."""
+    (root / 'rejected.txt').write_text(message)
+    raise SystemExit(message)
+
+
 def same(actual, expected, message):
-    """Compare as JSON text, so the number 1 is not the boolean true. A rejection leaves its message for the test to read."""
+    """Compare as JSON text, so the number 1 is not the boolean true."""
     if json.dumps(actual, sort_keys=True) != json.dumps(expected, sort_keys=True):
-        (root / 'rejected.txt').write_text(message)
-        raise SystemExit(message)
+        reject(message)
 
 
-def rewrite_after_init(directory):
-    """Change one generated value the way a late write by the release script would, once `init` has accepted the configuration."""
+def write_late(directory):
+    """Make the injected late write once `init` has accepted the configuration, the way a release script that wrote again would."""
     main = directory / 'main.tf.json'
-    if main.exists():
+    variables = directory / 'terraform.tfvars.json'
+    if fault == 'extra-override':
+        (directory / 'override.tf.json').write_text(json.dumps(dict(module=dict(dispatcher=dict(handler='index.other')))))
+    elif fault == 'extra-auto-vars':
+        (directory / 'release.auto.tfvars.json').write_text(json.dumps(dict(release_id='example-previous')))
+    elif fault == 'extra-module':
+        tree = json.loads(main.read_text())
+        tree['module']['shadow'] = tree['module']['dispatcher']
+        main.write_text(json.dumps(tree))
+    elif main.exists():
         tree = json.loads(main.read_text())
         tree['module']['dispatcher']['handler'] = 'index.other'
         main.write_text(json.dumps(tree))
-        return
-    variables = directory / 'terraform.tfvars.json'
-    values = json.loads(variables.read_text())
-    values['release_id'] = 'example-previous'
-    variables.write_text(json.dumps(values))
+    else:
+        values = json.loads(variables.read_text())
+        values['release_id'] = 'example-previous'
+        variables.write_text(json.dumps(values))
 
 
 def selected_object():
@@ -79,18 +92,28 @@ def selected_object():
     return dict(artifact_s3_bucket=function['s3_bucket'], artifact_s3_key=function['s3_key'], artifact_s3_object_version=function['s3_object_version']), function['source_code_hash']
 
 
+def check_lock(directory):
+    """Reject a dependency lock file that is not the checked-in one; `tofu apply` reads it too."""
+    if (directory / '.terraform.lock.hcl').read_bytes() != (Path(paths['root']) / '.terraform.lock.hcl').read_bytes():
+        reject('provider lock file is not the checked-in lock file')
+
+
 def check_configuration(directory):
     """Reject the configuration directory the way `tofu init` and `tofu validate` would."""
     nightly, module = Path(paths['root']), Path(paths['module'])
-    if (directory / '.terraform.lock.hcl').read_bytes() != (nightly / '.terraform.lock.hcl').read_bytes():
-        raise SystemExit('provider lock file is not the checked-in lock file')
+    loaded = sorted(path.name for path in directory.iterdir() if path.name.endswith(('.tf', '.tf.json', '.tofu', '.tofu.json', '.tfvars', '.tfvars.json')))
+    same(loaded, ['main.tf.json'] if (directory / 'main.tf.json').exists() else ['main.tf', 'terraform.tfvars.json', 'variables.tf'],
+         'the directory holds configuration or variable files that the release does not write')
+    check_lock(directory)
     binding = json.loads((root / 'binding.json').read_text())
     chosen, object_hash = selected_object()
     release = dict(release_id=binding['release_id'], release_manifest_digest=binding['manifest_digest'], deepinfra_corpus_digest=binding['corpus'],
                    artifact_sha256=binding['zip_digest'], artifact_sha256_base64=object_hash, scheduler_state='ENABLED')
     if (directory / 'main.tf.json').exists():
         tree = json.loads((directory / 'main.tf.json').read_text())
-        inputs = tree.pop('module')['dispatcher']
+        modules = tree.pop('module')
+        same(sorted(modules), ['dispatcher'], 'the root declares modules other than the dispatcher')
+        inputs = modules['dispatcher']
         same(tree, dict(terraform=dict(required_providers=dict(aws=dict(source='hashicorp/aws', version='~> 5.0')),
                                        backend=dict(s3=dict(bucket=config['dispatcher']['state_bucket'], key=config['dispatcher']['state_key'],
                                                             region='example', encrypt=True, use_lockfile=True))),
@@ -236,8 +259,8 @@ else:
     if operation in ('init', 'plan', 'import'):
         check_configuration(directory)
     if operation == 'init':
-        if fault == 'edit-after-init':
-            rewrite_after_init(directory)
+        if fault in ('edit-after-init', 'extra-module', 'extra-override', 'extra-auto-vars'):
+            write_late(directory)
     elif operation == 'plan':
         target = next((word.removeprefix('-target=') for word in args if word.startswith('-target=')), None)
         saved = directory / next(word.removeprefix('-out=') for word in args if word.startswith('-out='))
@@ -249,9 +272,12 @@ else:
         (root / 'shown.json').write_text(json.dumps(shown))
         plan = json.loads(saved.read_text())['plan']
         print(plan if isinstance(plan, str) else json.dumps(plan))
+        if fault == 'corrupt-lock':
+            (directory / '.terraform.lock.hcl').write_text('provider {')
     elif operation == 'state':
         print('\n'.join('module.dispatcher.' + item['type'] + '.' + item['name'] for item in state['resources']))
     elif operation == 'apply':
+        check_lock(directory)
         saved = directory / args[-1]
         shown = json.loads((root / 'shown.json').read_text()) if (root / 'shown.json').exists() else {}
         if shown.get(args[-1]) != hashlib.sha256(saved.read_bytes()).hexdigest():
