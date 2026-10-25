@@ -670,16 +670,6 @@ where
     and status = 'active'
 returning *;
 
--- name: LockPresenceRecoveryFloor :one
--- No live lease-aware Sync means no inference from missing connections.
--- The shared row lock serializes the scheduler with Sync's startup barrier.
-select (case when exists (
-    select 1 from pg_locks where locktype='advisory' and classid=1128811595
-        and objid=1 and objsubid=2 and mode='ShareLock' and granted
-        and database=(select oid from pg_database where datname=current_database())
-) then recover_after end)::timestamptz as recover_after
-from sync_presence_runtime where singleton for share;
-
 -- name: ClaimEmptyEpisodeLingers :many
 select episodes.tenant_id, episodes.space_id, episodes.id as episode_id
 from episodes

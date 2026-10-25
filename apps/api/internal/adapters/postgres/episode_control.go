@@ -125,7 +125,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			}
 			count++
 		}
-		presenceFloor, err := queries.LockPresenceRecoveryFloor(ctx)
+		presenceFloor, err := lockPresenceRecoveryFloor(ctx, tx)
 		if err != nil {
 			return fmt.Errorf("lock presence recovery floor: %w", err)
 		}
@@ -187,6 +187,19 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 		}
 	}
 	return count, err
+}
+
+// The shared row lock serializes deadline claims with Sync startup. sqlc does
+// not model pg_locks; the dedicated Sync session holds advisory (1128811595, 1).
+func lockPresenceRecoveryFloor(ctx context.Context, tx pgx.Tx) (pgtype.Timestamptz, error) {
+	var floor pgtype.Timestamptz
+	err := tx.QueryRow(ctx, `select (case when exists (
+    select 1 from pg_locks where locktype='advisory' and classid=1128811595
+        and objid=1 and objsubid=2 and mode='ShareLock' and granted
+        and database=(select oid from pg_database where datname=current_database())
+) then recover_after end)::timestamptz as recover_after
+from sync_presence_runtime where singleton for share;`).Scan(&floor)
+	return floor, err
 }
 
 func lockTenantExternalOperation(ctx context.Context, queries *sqlc.Queries, tenantID, spaceID, episodeID utilities.ID, operationName string, request episodes.Request) (sqlc.SyncExternalOperation, error) {
