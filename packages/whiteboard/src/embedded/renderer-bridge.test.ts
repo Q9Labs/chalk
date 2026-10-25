@@ -92,6 +92,51 @@ describe("ChalkEmbeddedWhiteboardRendererBridge", () => {
     await expect(request).resolves.toBeUndefined();
     bridge.dispose();
   });
+
+  it("waits for a person to finish the native share sheet", async () => {
+    vi.useFakeTimers();
+    const bridge = new ChalkEmbeddedWhiteboardRendererBridge();
+    bridge.start();
+    try {
+      const request = bridge.exportImage({ format: "png", mimeType: "image/png", dataURL: "data:image/png;base64,YQ==", action: "download" });
+      const settled = vi.fn();
+      void request.then(settled, settled);
+      const postMessage = vi.mocked(window.ReactNativeWebView!.postMessage);
+      const outbound = decodeEmbeddedWhiteboardRendererMessage(String(postMessage.mock.calls.at(-1)?.[0]), rendererGeneration);
+      if (outbound.type !== "user_export") throw new Error("expected user_export");
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(settled).not.toHaveBeenCalled();
+      window.dispatchEvent(new MessageEvent("message", { data: hostMessage({ type: "operation_result", payload: { requestId: outbound.payload.requestId, ok: true } }, "host-share-result") }));
+      await expect(request).resolves.toBeUndefined();
+    } finally {
+      bridge.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels a pending native share when the renderer closes", async () => {
+    const bridge = new ChalkEmbeddedWhiteboardRendererBridge();
+    bridge.start();
+    const request = bridge.exportImage({ format: "png", mimeType: "image/png", dataURL: "data:image/png;base64,YQ==", action: "download" });
+    bridge.dispose();
+    await expect(request).rejects.toThrow("renderer bridge closed");
+  });
+
+  it("keeps a deadline for native clipboard requests", async () => {
+    vi.useFakeTimers();
+    const bridge = new ChalkEmbeddedWhiteboardRendererBridge();
+    bridge.start();
+    try {
+      const request = bridge.exportImage({ format: "png", mimeType: "image/png", dataURL: "data:image/png;base64,YQ==", action: "copy" });
+      const failed = expect(request).rejects.toThrow("user_export timed out");
+      await vi.advanceTimersByTimeAsync(20_000);
+      await failed;
+    } finally {
+      bridge.dispose();
+      vi.useRealTimers();
+    }
+  });
 });
 
 function hostMessage(message: ChalkEmbeddedWhiteboardHostMessage, messageId: string): string {

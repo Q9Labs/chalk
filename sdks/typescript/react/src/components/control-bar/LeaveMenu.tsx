@@ -1,4 +1,4 @@
-import { Menu } from "@base-ui/react/menu";
+import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
 import type React from "react";
 import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 

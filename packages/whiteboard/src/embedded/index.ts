@@ -11,6 +11,8 @@ export {
   encodeEmbeddedWhiteboardMessage,
 } from "./protocol";
 export type {
+  ChalkEmbeddedBoardContext,
+  ChalkEmbeddedBoardNotice,
   ChalkEmbeddedWhiteboardBridgeEnvelope,
   ChalkEmbeddedWhiteboardHostEnvelope,
   ChalkEmbeddedWhiteboardHostMessage,

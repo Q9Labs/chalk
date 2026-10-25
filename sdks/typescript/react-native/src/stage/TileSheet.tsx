@@ -21,6 +21,7 @@ export type TileSheetProps = {
 };
 
 type SheetModel = {
+  readonly boardOpen: boolean;
   readonly name: string;
   readonly isSelf: boolean;
   readonly cameraOn: boolean;
@@ -31,11 +32,11 @@ type SheetModel = {
   readonly canRemove: boolean;
 };
 
-const closed: SheetModel = { name: "", isSelf: false, cameraOn: false, back: false, otherCamera: null, muted: false, canMute: false, canRemove: false };
+const closed: SheetModel = { boardOpen: false, name: "", isSelf: false, cameraOn: false, back: false, otherCamera: null, muted: false, canMute: false, canRemove: false };
 
 /**
  * The phone's tile sheet (`#tsheet` with `tileSheetHTML`): pin, your camera and mirror, and the
- * host's mute and remove for someone else. Board following waits for board editing.
+ * host's mute and remove for someone else. Follow is available while the board is open.
  */
 export function TileSheet({ participantId, open, onClose }: TileSheetProps): React.JSX.Element {
   const client = useSpaceClient();
@@ -48,6 +49,7 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
         const person = snapshot.participants.roster.find((participant) => participant.participantId === participantId);
         const isSelf = snapshot.self.participantId === participantId;
         return {
+          boardOpen: snapshot.whiteboard.engine.presenting,
           name: person?.displayName ?? snapshot.self.displayName ?? "",
           isSelf,
           cameraOn: isSelf && snapshot.media.local.camera.state === "enabled",
@@ -61,6 +63,8 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
     [participantId],
   );
   const person = useSpaceSelector(select, shallowEqual);
+  const selectViewsAvailable = useCallback(() => client.whiteboard.transport()?.supportsViews === true, [client]);
+  const viewsAvailable = useSpaceSelector(selectViewsAvailable);
   const id = participantId ?? "";
   const failed = useCallback((message: string) => () => toasts.show({ kind: "error", dismissible: true, message }), [toasts]);
   const run = (action: () => void) => () => {
@@ -77,6 +81,17 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
         </ChalkText>
       </View>
       <SheetGroup>
+        {(view.boardOpen ?? person.boardOpen) && viewsAvailable && !person.isSelf ? (
+          <SheetRow
+            icon="pin"
+            label={view.following === participantId ? "Stop following" : "Follow"}
+            onPress={run(() => {
+              view.showContent();
+              view.setFollowing(view.following === participantId ? null : id);
+            })}
+            testID="tile-sheet.follow"
+          />
+        ) : null}
         <SheetRow icon="pin" label={view.pinned === participantId ? "Unpin" : "Pin"} onPress={run(() => view.togglePin(id))} testID="tile-sheet.pin" />
         {person.cameraOn && person.otherCamera !== null ? (
           <SheetRow

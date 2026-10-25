@@ -5,10 +5,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { Board, type BoardProps } from "./Board";
-import * as CursorModule from "./BoardCursors";
+import * as CursorModule from "../../../../../../packages/whiteboard/src/react/board/BoardCursors";
 import { SpaceStage } from "../stage/SpaceStage";
-import * as BoardMenuModule from "./BoardMenu";
-import { BoardToastContext } from "./board-toasts";
+import * as BoardMenuModule from "../../../../../../packages/whiteboard/src/react/board/BoardMenu";
+import { BoardToastContext } from "../../../../../../packages/whiteboard/src/react/board/board-toasts";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { ChalkWhiteboardV1Client, type ChalkWhiteboardV1ClientOptions, type Capability, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
@@ -815,6 +815,8 @@ it("preserves redo and disabled Undo when text editing makes no scene change", a
 });
 
 beforeEach(async () => {
+  vi.stubGlobal("localStorage", window.localStorage);
+  window.localStorage.clear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -879,9 +881,25 @@ it.each(["load", "error"])("waits for the engine stylesheet and surfaces its %s 
 });
 
 async function withOpenBoard(
-  check: (container: HTMLElement, engine: TestEngine, peer: ReturnType<typeof createPeer>, toast: ReturnType<typeof vi.fn>, render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null) => Promise<void>) => Promise<void>,
+  check: (
+    container: HTMLElement,
+    engine: TestEngine,
+    peer: ReturnType<typeof createPeer>,
+    toast: ReturnType<typeof vi.fn>,
+    render: (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people" | "presentation" | "landscapeControlsVisible">> | null) => Promise<void>,
+  ) => Promise<void>,
   primary = true,
-  options: { capabilities?: readonly Capability[]; canDraw?: boolean; sendView?: (view: ChalkWhiteboardView) => boolean; onFollow?: BoardProps["onFollow"]; onClient?: (client: ReturnType<typeof createPreviewClient>) => void } = {},
+  options: {
+    capabilities?: readonly Capability[];
+    canDraw?: boolean;
+    phone?: boolean;
+    presentation?: BoardProps["presentation"];
+    landscapeControlsVisible?: BoardProps["landscapeControlsVisible"];
+    sendView?: (view: ChalkWhiteboardView) => boolean;
+    onFollow?: BoardProps["onFollow"];
+    onClose?: BoardProps["onClose"];
+    onClient?: (client: ReturnType<typeof createPreviewClient>) => void;
+  } = {},
 ) {
   const client = createPreviewClient(createSnapshot(options.capabilities ?? ["drawWhiteboard", "manageWhiteboard"]));
   options.onClient?.(client);
@@ -891,13 +909,17 @@ async function withOpenBoard(
   document.body.append(container);
   const root = createRoot(container);
   const toast = vi.fn();
-  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">>) {
+  function OpenBoard(props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people" | "presentation" | "landscapeControlsVisible">>) {
     const [following, setFollowing] = useState<string | null>("remote");
     return (
       <Board
         board={board}
         primary={primary}
         visible
+        phone={options.phone}
+        presentation={options.presentation}
+        landscapeControlsVisible={options.landscapeControlsVisible}
+        onClose={options.onClose}
         colorScheme="dark"
         people={[]}
         following={following}
@@ -910,7 +932,7 @@ async function withOpenBoard(
       />
     );
   }
-  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people">> | null = {}) => {
+  const render = async (props: Partial<Pick<BoardProps, "primary" | "visible" | "following" | "people" | "presentation" | "landscapeControlsVisible">> | null = {}) => {
     await act(async () =>
       root.render(
         props === null ? null : (
@@ -972,6 +994,20 @@ it("keeps following when a Bring animation's first frame predates its start", as
     },
     true,
     { onFollow },
+  );
+});
+
+it("separates guest mobile export and Close board actions once", async () => {
+  await withOpenBoard(
+    async (container) => {
+      await clickControl(container, "Board menu");
+      const menu = container.querySelector('[role="menu"]');
+      expect(menu?.textContent).toContain("Close board");
+      const roles = [...(menu?.querySelectorAll('[role="separator"], [role="menuitem"]') ?? [])].map((item) => item.getAttribute("role"));
+      expect(roles.join("|")).not.toContain("separator|separator");
+    },
+    true,
+    { phone: true, presentation: "mobile", capabilities: ["drawWhiteboard"], onClose: () => undefined },
   );
 });
 
@@ -1580,4 +1616,86 @@ it.each([2, 500])("follows an idle leader with %i active views", async (count) =
     await act(async () => vi.advanceTimersByTimeAsync(2200));
     expect(engine.camera().x).toBeCloseTo(-432, 2);
   }, true);
+});
+
+it("keeps the dockable island available on a wide native tablet", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() {
+        this.onResize([{ contentRect: { width: 1200, height: 900 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  await withOpenBoard(
+    async (container) => {
+      expect(container.querySelector('.chalk-board-island[data-place="bottom"]')).not.toBeNull();
+      const island = container.querySelector('[role="toolbar"][aria-label="Drawing tools"]');
+      expect([...island!.querySelectorAll("button")].map((button) => button.getAttribute("aria-label"))).toEqual(["Pen", "Shapes", "Text", "Sticky note", "Eraser", "Colour: Ink", "Undo", "Redo", "Select", "Hand", "Highlighter", "Laser pointer"]);
+      await clickControl(container, "Board menu");
+      const positions = container.querySelector('[aria-label="Tool island"]');
+      expect([...(positions?.querySelectorAll('[role="menuitemradio"]') ?? [])].map((item) => item.textContent?.replace("✓", ""))).toEqual(["Top", "Bottom", "Left"]);
+      expect(positions?.querySelector(".chalk-board-tile-preview")).toBeNull();
+      const left = [...container.querySelectorAll<HTMLElement>(".chalk-board-tile")].find((item) => item.textContent === "Left");
+      expect(left).toBeDefined();
+      await act(async () => left?.click());
+      expect(container.querySelector('.chalk-board-island[data-place="left"]')).not.toBeNull();
+    },
+    true,
+    { phone: false, presentation: "mobile" },
+  );
+});
+
+it("keeps wide native tablet tools above landscape call controls", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() {
+        this.onResize([{ contentRect: { width: 1200, height: 900 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  await withOpenBoard(
+    async (container, _engine, _peer, _toast, render) => {
+      const island = container.querySelector<HTMLElement>('.chalk-board-island[data-place="bottom"]');
+      expect(island).not.toBeNull();
+      expect(getComputedStyle(island!).bottom).toBe("76px");
+      await render({ landscapeControlsVisible: false });
+      expect(getComputedStyle(island!).bottom).toBe("12px");
+      await render({ presentation: "web", landscapeControlsVisible: true });
+      expect(getComputedStyle(island!).bottom).toBe("12px");
+    },
+    true,
+    { phone: false, presentation: "mobile", landscapeControlsVisible: true },
+  );
+});
+
+it.each(["mobile", "web"] as const)("compacts a narrow %s tablet board without losing secondary tools", async (presentation) => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly onResize: (entries: readonly { contentRect: { width: number; height: number } }[]) => void) {}
+      observe() {
+        this.onResize([{ contentRect: { width: 560, height: 900 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  await withOpenBoard(
+    async (container) => {
+      expect(container.querySelector('.chalk-board-island[data-place="compact"]')).not.toBeNull();
+      await clickControl(container, "Drawing tools");
+      expect(container.querySelector('[role="toolbar"][data-place="expanded"]')).not.toBeNull();
+      for (const label of ["Select", "Hand", "Highlighter", "Laser pointer"]) {
+        await clickControl(container, label);
+        expect(container.querySelector(`[aria-label="${label}"]`)?.getAttribute("aria-pressed")).toBe("true");
+      }
+    },
+    true,
+    { phone: presentation === "mobile" ? false : undefined, presentation },
+  );
 });

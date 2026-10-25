@@ -1,12 +1,17 @@
-import { ChalkWhiteboardController, type ChalkEmbeddedWhiteboardTransport, type ChalkEmbeddedWhiteboardViewport } from "@q9labsai/chalk-whiteboard/embedded";
+import { ChalkWhiteboardController, type ChalkEmbeddedWhiteboardTransport, type ChalkEmbeddedBoardContext, type ChalkEmbeddedWhiteboardViewport } from "@q9labsai/chalk-whiteboard/embedded";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { exportBoardImage } from "../whiteboard/export-board-image";
+import { useToasts } from "../primitives/toast/ToastStack";
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
 
 import { isEmbeddedWhiteboardNavigationAllowed, rendererURLWithContext, resolveEmbeddedWhiteboardRendererURL } from "../whiteboard/embedded-whiteboard-assets";
 import { createEmbeddedWhiteboardViewport } from "../whiteboard/embedded-whiteboard-viewport";
 
 export interface EmbeddedWhiteboardProps {
+  readonly board: ChalkEmbeddedBoardContext;
+  readonly onFollow?: (participantId: string | null) => void;
+  readonly onCloseBoard?: () => void;
   readonly transport: ChalkEmbeddedWhiteboardTransport;
   readonly journeyId: string;
   readonly traceparent?: string;
@@ -20,7 +25,7 @@ export interface EmbeddedWhiteboardProps {
   readonly testID?: string;
   readonly onMetric?: (metric: { readonly name: string; readonly value: number; readonly attributes?: Readonly<Record<string, string | number | boolean>> }) => void;
   readonly onError?: (error: { readonly code: string; readonly message: string; readonly recoverable: boolean }) => void;
-  readonly onUserExport?: (value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string }) => void;
+  readonly onUserExport?: (value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string; readonly action?: "download" | "copy" }) => void | Promise<void>;
 }
 
 export const embeddedWhiteboardWebViewSecurityPolicy = Object.freeze({
@@ -28,7 +33,7 @@ export const embeddedWhiteboardWebViewSecurityPolicy = Object.freeze({
   allowFileAccessFromFileURLs: false,
   allowUniversalAccessFromFileURLs: false,
   cacheEnabled: false,
-  domStorageEnabled: false,
+  domStorageEnabled: true,
   javaScriptCanOpenWindowsAutomatically: false,
   javaScriptEnabled: true,
   mixedContentMode: "never" as const,
@@ -37,11 +42,41 @@ export const embeddedWhiteboardWebViewSecurityPolicy = Object.freeze({
   thirdPartyCookiesEnabled: false,
 });
 
-export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracestate, canDraw, canClear, theme: themeOverride, localParticipantColor, rendererURL: rendererURLOverride, style, testID, onMetric, onError, onUserExport }: EmbeddedWhiteboardProps): React.JSX.Element {
+export function EmbeddedWhiteboard({
+  board,
+  onFollow,
+  onCloseBoard,
+  transport,
+  journeyId,
+  traceparent,
+  tracestate,
+  canDraw,
+  canClear,
+  theme: themeOverride,
+  localParticipantColor,
+  rendererURL: rendererURLOverride,
+  style,
+  testID,
+  onMetric,
+  onError,
+  onUserExport,
+}: EmbeddedWhiteboardProps): React.JSX.Element {
+  const toasts = useToasts();
+  const noticesRef = useRef(new Map<string, number>());
+  const clearNotices = useCallback(() => {
+    noticesRef.current.forEach((id) => toasts.dismiss(id));
+    noticesRef.current.clear();
+  }, [toasts]);
   const theme = themeOverride ?? "light";
   const webViewRef = useRef<WebView>(null);
   const controllerRef = useRef<ChalkWhiteboardController | null>(null);
   const listenersRef = useRef(new Set<(message: string) => void>());
+  const boardRef = useRef(board);
+  boardRef.current = board;
+  const onFollowRef = useRef(onFollow);
+  onFollowRef.current = onFollow;
+  const onCloseBoardRef = useRef(onCloseBoard);
+  onCloseBoardRef.current = onCloseBoard;
   const onMetricRef = useRef(onMetric);
   const onErrorRef = useRef(onError);
   const onUserExportRef = useRef(onUserExport);
@@ -71,7 +106,13 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
   );
   const handleControllerError = useCallback((error: { readonly code: string; readonly message: string; readonly recoverable: boolean }) => onErrorRef.current?.(error), []);
   const handleControllerMetric = useCallback((metric: { readonly name: string; readonly value: number; readonly attributes?: Readonly<Record<string, string | number | boolean>> }) => onMetricRef.current?.(metric), []);
-  const handleControllerUserExport = useCallback((value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string }) => onUserExportRef.current?.(value), []);
+  const handleControllerUserExport = useCallback(async (value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string; readonly action?: "download" | "copy" }) => {
+    if (onUserExportRef.current) {
+      await onUserExportRef.current(value);
+      return;
+    }
+    await exportBoardImage(value);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -99,6 +140,43 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
       journeyId,
       ...(traceparent ? { traceparent } : {}),
       ...(tracestate ? { tracestate } : {}),
+      board: boardRef.current,
+      manageSceneSubscription: false,
+      onNotice: (notice) => {
+        if (!notice) {
+          clearNotices();
+          return;
+        }
+        const toastId = toasts.show({
+          kind: notice.kind,
+          message: notice.message,
+          dismissible: notice.kind === "error",
+          ...(notice.actionLabel
+            ? {
+                actions: [
+                  {
+                    label: notice.actionLabel,
+                    onPress: () => {
+                      controller.performNoticeAction(notice.id);
+                      const id = noticesRef.current.get(notice.id);
+                      if (id !== undefined) toasts.dismiss(id);
+                    },
+                  },
+                ],
+              }
+            : {}),
+        });
+        noticesRef.current.set(notice.id, toastId);
+        if (noticesRef.current.size > 8) {
+          const oldest = noticesRef.current.entries().next().value;
+          if (oldest) {
+            toasts.dismiss(oldest[1]);
+            noticesRef.current.delete(oldest[0]);
+          }
+        }
+      },
+      onFollow: (id) => onFollowRef.current?.(id),
+      onCloseBoard: () => onCloseBoardRef.current?.(),
       canDraw,
       canClear,
       theme,
@@ -114,8 +192,13 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
     return () => {
       if (controllerRef.current === controller) controllerRef.current = null;
       controller.stop();
+      clearNotices();
     };
-  }, [handleControllerError, handleControllerMetric, handleControllerUserExport, journeyId, localParticipantColor, rendererPort, theme, traceparent, tracestate, transport]);
+  }, [clearNotices, toasts, handleControllerError, handleControllerMetric, handleControllerUserExport, journeyId, localParticipantColor, rendererPort, theme, traceparent, tracestate, transport]);
+
+  useEffect(() => {
+    controllerRef.current?.setBoard(board);
+  }, [board]);
 
   useEffect(() => {
     controllerRef.current?.setCapabilities({ canDraw, canClear });
@@ -136,6 +219,7 @@ export function EmbeddedWhiteboard({ transport, journeyId, traceparent, tracesta
   };
   const allowNavigation = (request: WebViewNavigation): boolean => Boolean(rendererURL && isEmbeddedWhiteboardNavigationAllowed(request.url, rendererURL));
   const reloadRenderer = (): void => {
+    clearNotices();
     controllerRef.current?.rendererReloaded();
     setRendererGeneration(createRendererGeneration());
   };

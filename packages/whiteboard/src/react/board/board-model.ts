@@ -1,4 +1,5 @@
-import { ChalkWhiteboardViewBounds, type ChalkWhiteboardDrawPolicy, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
+import type { WhiteboardView as ChalkWhiteboardView, WhiteboardViewBounds } from "../../collab/view";
+import type { WhoCanDraw } from "./board-draw-policy";
 
 /** design.md, "The board": every colour, size and key the board's own controls use. */
 export type BoardSurface = "chalkboard" | "paper" | "dots";
@@ -21,7 +22,7 @@ export const ISLAND_PLACES: readonly { readonly id: IslandPlace; readonly label:
   { id: "top", label: "Top" },
 ];
 
-export const DRAW_POLICIES: readonly { readonly id: ChalkWhiteboardDrawPolicy; readonly label: string }[] = [
+export const DRAW_POLICIES: readonly { readonly id: WhoCanDraw["policy"]; readonly label: string }[] = [
   { id: "everyone", label: "Everyone" },
   { id: "hosts", label: "Only hosts" },
   { id: "picked", label: "Picked people" },
@@ -126,8 +127,8 @@ export type Camera = { readonly scrollX: number; readonly scrollY: number; reado
 export type Viewport = { readonly width: number; readonly height: number };
 
 /** The part of the board this camera shows, in board coordinates. */
-export function visibleView(camera: Camera, viewport: Viewport): Omit<ChalkWhiteboardView, "bring"> {
-  const { maxCoordinate, maxExtent } = ChalkWhiteboardViewBounds;
+export function visibleView(camera: Camera, viewport: Viewport, bounds: WhiteboardViewBounds): Omit<ChalkWhiteboardView, "bring"> {
+  const { maxCoordinate, maxExtent } = bounds;
   return {
     x: Math.max(-maxCoordinate, Math.min(maxCoordinate, -camera.scrollX)),
     y: Math.max(-maxCoordinate, Math.min(maxCoordinate, -camera.scrollY)),

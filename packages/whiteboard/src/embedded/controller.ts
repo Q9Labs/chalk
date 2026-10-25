@@ -1,3 +1,5 @@
+import type { WhiteboardView } from "../collab/view";
+import type { ChalkEmbeddedBoardContext, ChalkEmbeddedBoardNotice } from "./protocol";
 import type { WhiteboardCommit, WhiteboardJsonValue, WhiteboardWireElement } from "../collab/wire";
 import { chalkEmbeddedWhiteboardSupportedElementTypes } from "./manifest";
 import {
@@ -57,17 +59,12 @@ export type ChalkEmbeddedWhiteboardTransportEvent =
       readonly sceneId: string;
       readonly reason: "scene_changed" | "cursor_expired" | "gap";
     }
-  | ({
+  | (WhiteboardView & {
       readonly type: "view";
       readonly participantId: string;
       readonly displayName: string;
-      readonly x: number;
-      readonly y: number;
-      readonly width: number;
-      readonly height: number;
-      readonly bring: boolean;
       readonly occurredAt: string;
-    } & ({ readonly originParticipantId: string; readonly originSequence: number } | { readonly originParticipantId?: never; readonly originSequence?: never }));
+    });
 
 export interface ChalkEmbeddedWhiteboardFileTransport {
   readonly getDownloadUrl: (fileId: string) => Promise<{ readonly downloadUrl: string }>;
@@ -81,6 +78,9 @@ export interface ChalkEmbeddedWhiteboardTransport {
   readonly sendCursor: (input: { readonly x: number; readonly y: number }) => void;
   readonly requestSnapshot: () => Promise<void>;
   readonly clear: () => Promise<WhiteboardCommit>;
+  readonly sendView?: (view: WhiteboardView) => boolean;
+  readonly setDrawPolicy?: (policy: "everyone" | "hosts" | "picked") => Promise<void>;
+  readonly setDrawPermission?: (participantId: string, canDraw: boolean) => Promise<void>;
   readonly files: ChalkEmbeddedWhiteboardFileTransport;
 }
 
@@ -104,7 +104,12 @@ export interface ChalkEmbeddedWhiteboardControllerOptions {
   readonly onMetric?: (metric: { readonly name: string; readonly value: number; readonly attributes?: Readonly<Record<string, string | number | boolean>> }) => void;
   readonly onError?: (error: { readonly code: string; readonly message: string; readonly recoverable: boolean }) => void;
   readonly onCompatibilityChange?: (state: { readonly compatible: boolean; readonly message: string | null }) => void;
-  readonly onUserExport?: (value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string }) => void;
+  readonly onUserExport?: (value: { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string; readonly action?: "download" | "copy" }) => void | Promise<void>;
+  readonly manageSceneSubscription?: boolean;
+  readonly board?: ChalkEmbeddedBoardContext;
+  readonly onNotice?: (notice: ChalkEmbeddedBoardNotice | null) => void;
+  readonly onFollow?: (participantId: string | null) => void;
+  readonly onCloseBoard?: () => void;
   readonly onCloseReady?: (reason: string) => void;
 }
 
@@ -113,6 +118,7 @@ export class ChalkWhiteboardController {
   readonly #nextMessageId: () => string;
   #canDraw: boolean;
   #canClear: boolean;
+  #board: ChalkEmbeddedBoardContext | undefined;
   #viewport: ChalkEmbeddedWhiteboardViewport | null = null;
   #rendererGeneration: string | null = null;
   #sceneId: string | null = null;
@@ -156,7 +162,7 @@ export class ChalkWhiteboardController {
     this.#documentCompatible = true;
     this.#rendererMessageIds.clear();
     this.#abortFileTransfers();
-    if (this.#transportStarted) this.options.transport.stopSceneSubscription();
+    if (this.#transportStarted && this.options.manageSceneSubscription !== false) this.options.transport.stopSceneSubscription();
     this.#transportStarted = false;
   }
 
@@ -164,6 +170,15 @@ export class ChalkWhiteboardController {
     this.#canDraw = value.canDraw;
     this.#canClear = value.canClear;
     this.#sendEffectiveCapabilities();
+  }
+
+  performNoticeAction(id: string): void {
+    this.#send({ type: "notice_action", payload: { id } });
+  }
+
+  setBoard(board: ChalkEmbeddedBoardContext): void {
+    this.#board = board;
+    this.#send({ type: "set_board", payload: board });
   }
 
   setViewport(viewport: ChalkEmbeddedWhiteboardViewport): void {
@@ -195,6 +210,60 @@ export class ChalkWhiteboardController {
     switch (message.type) {
       case "ready":
         await this.#ready(message);
+        return;
+      case "view": {
+        const payload = message.payload;
+        const requestId = requireString(payload.requestId, "request ID");
+        await this.#operation(requestId, async () => {
+          const board = this.#board ?? this.options.board;
+          if (!board?.viewsAvailable || !isWhiteboardView(payload, board.viewBounds)) throw new Error("whiteboard view is invalid");
+          if (payload.bring && !this.#effectiveCanClear()) throw new Error("whiteboard presentation is not permitted");
+          const { requestId: _requestId, ...view } = payload;
+          if (!this.options.transport.sendView?.(view)) throw new Error("whiteboard view could not be sent");
+        });
+        return;
+      }
+      case "notice": {
+        if (message.payload === null) {
+          this.options.onNotice?.(null);
+          return;
+        }
+        const notice = requireRecord(message.payload, ["id", "message", "kind"], ["actionLabel"]);
+        if (notice.kind !== "info" && notice.kind !== "error") throw new Error("Board notice kind is invalid");
+        this.options.onNotice?.({ id: requireString(notice.id, "notice ID"), message: requireString(notice.message, "notice message", 1024), kind: notice.kind, ...(typeof notice.actionLabel === "string" ? { actionLabel: requireString(notice.actionLabel, "notice action", 64) } : {}) });
+        return;
+      }
+      case "follow": {
+        const payload = message.payload;
+        if (typeof payload !== "object" || payload === null || !("participantId" in payload) || (payload.participantId !== null && typeof payload.participantId !== "string")) throw new Error("whiteboard follow target is invalid");
+        this.options.onFollow?.(payload.participantId);
+        return;
+      }
+      case "set_draw_policy": {
+        const payload = requireRecord(message.payload, ["requestId", "policy"]);
+        const requestId = requireString(payload.requestId, "request ID");
+        const policy = payload.policy;
+        if (policy !== "everyone" && policy !== "hosts" && policy !== "picked") throw new Error("whiteboard draw policy is invalid");
+        await this.#operation(requestId, async () => {
+          if (!this.#canClear || !this.options.transport.setDrawPolicy) throw new Error("whiteboard policy changes are unavailable");
+          await this.options.transport.setDrawPolicy(policy);
+        });
+        return;
+      }
+      case "set_draw_permission": {
+        const payload = requireRecord(message.payload, ["requestId", "participantId", "canDraw"]);
+        const requestId = requireString(payload.requestId, "request ID");
+        const participantId = requireString(payload.participantId, "participant ID");
+        const canDraw = payload.canDraw;
+        if (typeof canDraw !== "boolean") throw new Error("whiteboard draw permission is invalid");
+        await this.#operation(requestId, async () => {
+          if (!this.#canClear || !this.options.transport.setDrawPermission) throw new Error("whiteboard permission changes are unavailable");
+          await this.options.transport.setDrawPermission(participantId, canDraw);
+        });
+        return;
+      }
+      case "close_board":
+        this.options.onCloseBoard?.();
         return;
       case "local_update":
         await this.#localUpdate(message);
@@ -236,9 +305,14 @@ export class ChalkWhiteboardController {
       case "error":
         this.options.onError?.(requireRendererError(message.payload));
         return;
-      case "user_export":
-        this.options.onUserExport?.(requireUserExport(message.payload));
+      case "user_export": {
+        const payload = requireUserExport(message.payload);
+        await this.#operation(payload.requestId, async () => {
+          if (!this.options.onUserExport) throw new Error("Board export is unavailable");
+          await this.options.onUserExport(payload);
+        });
         return;
+      }
       case "close_ready":
         this.options.onCloseReady?.(requireCloseReady(message.payload).reason);
     }
@@ -260,12 +334,13 @@ export class ChalkWhiteboardController {
         canDraw: this.#effectiveCanDraw(),
         canClear: this.#effectiveCanClear(),
         theme: this.options.theme ?? "light",
+        ...((this.#board ?? this.options.board) ? { board: this.#board ?? this.options.board } : {}),
         ...(this.options.localParticipantColor ? { localParticipantColor: this.options.localParticipantColor } : {}),
       },
     });
     if (this.#viewport) this.#send({ type: "set_viewport", payload: this.#viewport });
 
-    if (!this.#transportStarted) {
+    if (!this.#transportStarted && this.options.manageSceneSubscription !== false) {
       await this.options.transport.startSceneSubscription();
       this.#transportStarted = true;
     } else {
@@ -386,9 +461,15 @@ export class ChalkWhiteboardController {
       case "cursor":
         this.#send({ type: "apply_cursor", payload: event });
         return;
-      case "view":
-        // The mobile board does not follow views yet.
+      case "view": {
+        if (event.bring) {
+          const board = this.#board ?? this.options.board;
+          if (board) this.#board = { ...board, following: event.participantId };
+          this.options.onFollow?.(event.participantId);
+        }
+        this.#send({ type: "apply_view", payload: event });
         return;
+      }
       case "reset_required":
         this.#sceneGeneration = null;
         this.#send({ type: "reset_required", payload: event });
@@ -598,12 +679,13 @@ function requireRendererError(value: unknown) {
   };
 }
 
-function requireUserExport(value: unknown): { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string } {
-  const record = requireRecord(value, ["requestId", "format", "mimeType", "dataURL"]);
+function requireUserExport(value: unknown): { readonly requestId: string; readonly format: "png" | "svg"; readonly mimeType: string; readonly dataURL: string; readonly action?: "download" | "copy" } {
+  const record = requireRecord(value, ["requestId", "format", "mimeType", "dataURL"], ["action"]);
   if (record.format !== "png" && record.format !== "svg") throw new Error("embedded whiteboard export is invalid");
   return {
     requestId: requireString(record.requestId, "request ID"),
     format: record.format,
+    ...(record.action === "copy" || record.action === "download" ? { action: record.action } : {}),
     mimeType: normalizeMimeType(requireString(record.mimeType, "MIME type")),
     dataURL: requireString(record.dataURL, "export data", CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES - 1_024),
   };
@@ -870,4 +952,23 @@ function recordMessageId(messageIds: Set<string>, messageId: string): boolean {
     if (oldest) messageIds.delete(oldest);
   }
   return true;
+}
+
+function isWhiteboardView(value: unknown, bounds: { readonly maxCoordinate: number; readonly maxExtent: number }): value is WhiteboardView {
+  if (typeof value !== "object" || value === null || !("x" in value) || !("y" in value) || !("width" in value) || !("height" in value) || !("bring" in value)) return false;
+  if (typeof value.x !== "number" || !Number.isFinite(value.x) || Math.abs(value.x) > bounds.maxCoordinate || typeof value.y !== "number" || !Number.isFinite(value.y) || Math.abs(value.y) > bounds.maxCoordinate) return false;
+  if (typeof value.width !== "number" || !Number.isFinite(value.width) || value.width <= 0 || value.width > bounds.maxExtent || typeof value.height !== "number" || !Number.isFinite(value.height) || value.height <= 0 || value.height > bounds.maxExtent || typeof value.bring !== "boolean")
+    return false;
+  if ("lead" in value && typeof value.lead !== "boolean") return false;
+  if (!("originParticipantId" in value) || value.originParticipantId === undefined) return !("originSequence" in value) && !("originEpoch" in value);
+  return (
+    typeof value.originParticipantId === "string" &&
+    value.originParticipantId.length > 0 &&
+    value.originParticipantId.length <= 256 &&
+    "originSequence" in value &&
+    typeof value.originSequence === "number" &&
+    Number.isSafeInteger(value.originSequence) &&
+    value.originSequence > 0 &&
+    (!("originEpoch" in value) || (typeof value.originEpoch === "string" && value.originEpoch.length > 0 && value.originEpoch.length <= 128))
+  );
 }

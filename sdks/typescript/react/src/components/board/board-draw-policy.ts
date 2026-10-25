@@ -1,7 +1,7 @@
 import type { ChalkWhiteboardDrawPolicy } from "@q9labsai/chalk-client";
 import { useCallback, useMemo } from "react";
 import { useCan, useParticipants, useSelf, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
-import type { BoardToast } from "./board-toasts";
+import type { BoardToast } from "@q9labsai/chalk-whiteboard/react";
 
 export type WhoCanDraw = {
   readonly policy: ChalkWhiteboardDrawPolicy;

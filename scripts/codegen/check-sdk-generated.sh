@@ -60,7 +60,7 @@ diff -u sdks/typescript/client/src/generated/schemas.ts "$tmpdir/schemas.ts"
 diff -u sdks/typescript/client/src/generated/http-api.ts "$tmpdir/http-api.ts"
 diff -u sdks/typescript/client/src/generated/sync.ts "$tmpdir/sync.ts"
 diff -u sdks/typescript/client/src/generated/whiteboard-v1.ts "$tmpdir/whiteboard-v1.ts"
-diff -u sdks/typescript/react/src/internal/whiteboard-view-limits.ts "$tmpdir/whiteboard-view-limits.ts"
+diff -u packages/whiteboard/src/collab/view-limits.ts "$tmpdir/whiteboard-view-limits.ts"
 diff -u sdks/typescript/client/src/generated/openapi-types.d.ts "$tmpdir/openapi-types.d.ts"
 
 diff -u apps/sync/lib/chalk_sync/contract/generated.ex "$tmpdir/generated.ex"

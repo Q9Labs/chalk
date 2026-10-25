@@ -24,6 +24,8 @@ export type ParticipantTileProps = {
   readonly height: number;
   /** The small tile floating over the other person when two are in the call. */
   readonly float: boolean;
+  readonly following?: boolean;
+  readonly onOptions?: (id: string) => void;
   readonly pinned: boolean;
   /** Your own front-camera video is mirrored while this is on. */
   readonly mirror: boolean;
@@ -66,7 +68,7 @@ function selectTile(id: string) {
  * and the speaking ring. It subscribes to that person alone, so nobody else's change re-renders
  * it, and the stage keeps it mounted across every move so the video view keeps its surface.
  */
-export const ParticipantTile = memo(function ParticipantTile({ id, width, height, float, pinned, mirror, onOpen }: ParticipantTileProps): React.JSX.Element {
+export const ParticipantTile = memo(function ParticipantTile({ id, width, height, float, pinned, following = false, mirror, onOpen, onOptions }: ParticipantTileProps): React.JSX.Element {
   const select = useMemo(() => selectTile(id), [id]);
   const tile = useSpaceSelector(select, shallowEqual);
   const slot = useDevScenario().videoSlots?.[id];
@@ -85,14 +87,14 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
   const label = `Options for ${tile.name}${tile.isSelf ? " (you)" : ""}${pinned ? ", pinned" : ""}${state}`;
 
   return (
-    <TileShell cameraOn={video !== null} level={level} speaking={tile.speaking} testID={`tile.${id}`}>
+    <TileShell selected={following} cameraOn={video !== null} level={level} speaking={tile.speaking} testID={`tile.${id}`}>
       {video ?? (
         <View style={styles.center}>
           <FaceAvatar level={level} lookAround name={tile.name} size={tileAvatarSize(width, height - nameTagZone)} style="bold" />
         </View>
       )}
-      <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
-      <NameTag handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
+      <Pressable accessibilityHint="Opens a sheet" accessibilityLabel={label} accessibilityRole="button" onPress={() => onOpen(id)} onLongPress={() => onOptions?.(id)} ref={hitRef} style={StyleSheet.absoluteFill} testID={`tile.${id}.open`} />
+      <NameTag following={following} handRaised={tile.handRaised} muted={tile.muted} name={name} pinned={pinned} testID={`tile.${id}.name`} you={you} />
       {tile.isSelf && video !== null ? <FlipCameraButton back={tile.back} float={float} testID={`tile.${id}.flip`} /> : null}
     </TileShell>
   );

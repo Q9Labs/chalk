@@ -175,6 +175,7 @@
       "sdks/typescript/react/src/components/composite/ChatPanel.tsx",
       "sdks/typescript/react/src/components/composite/MessageBubble.tsx",
       "sdks/typescript/react/src/hooks/features/useTranscripts.ts",
+      "packages/whiteboard/src/react/board/**",
       "packages/whiteboard/scripts/build-embedded.mjs",
       "packages/whiteboard/src/collab/engine.ts",
       "packages/whiteboard/src/collab/files.ts",
