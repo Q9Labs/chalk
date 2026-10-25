@@ -684,10 +684,10 @@ importers:
         specifier: 0.18.1
         version: 0.18.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.1.0
+        specifier: workspace:^5.2.0
         version: link:../../sdks/typescript/client
       '@q9labsai/facehash':
-        specifier: workspace:^5.1.0
+        specifier: workspace:^5.2.0
         version: link:../facehash
       mathjax:
         specifier: 4.1.3
