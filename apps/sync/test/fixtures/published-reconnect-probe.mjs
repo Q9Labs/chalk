@@ -5,10 +5,10 @@ import { pathToFileURL } from 'node:url';
 
 const [version, port, token, marker] = process.argv.slice(2);
 const sdk = version === 'head'
-  ? await import('../../../../../sdks/typescript/client/src/sync/v1-client.ts')
+  ? await import('../../../../sdks/typescript/client/src/sync/v1-client.ts')
   : await import(pathToFileURL(`${process.env.CHALK_PRESENCE_PUBLISHED_ROOT}/${version}/package/dist/sync/index.js`).href);
 const { createBrowserWebSocketFactory } = version === 'head'
-  ? await import('../../../../../sdks/typescript/client/src/sync/browser.ts') : sdk;
+  ? await import('../../../../sdks/typescript/client/src/sync/browser.ts') : sdk;
 let listener;
 let connections = 0;
 const welcomes = [];
