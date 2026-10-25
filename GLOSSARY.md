@@ -54,7 +54,8 @@ Tenant access until that storage rename wave lands.
 The durable place where collaboration happens. Its canonical product name is Space.
 
 - Identity: Chalk-minted id plus a slug unique per tenant. Join links target
-  the slug and nothing else.
+  the Space and never an Episode: member links use the slug, and public invite
+  links use the Space's invite code.
 - Owns: Roles, Capabilities, admission policy, membership, the canonical chat
   stream and whiteboard scene, the recurring schedule (rrule).
 - Lifecycle: created once, lives indefinitely, dormant between Episodes. A
@@ -62,6 +63,16 @@ The durable place where collaboration happens. Its canonical product name is Spa
 - Relations: has at most one live Episode at any time. Parallel tracks are
   separate Spaces, never parallel Episodes.
 - Space is the durable resource; a call or meeting describes activity inside it.
+
+### Invite code
+
+The short code in a Space's public invite link, such as
+`chalkmeet.com/abc-defg-hij`: ten lowercase letters shown in groups of three,
+four and three. Chalk derives it from the public invite's current handle, so
+rotating the invite replaces the code and disabling the invite stops it
+working. An invite code opens a Space's public invite, never an Episode. Older
+`/space/{slug}#spaceInviteToken=cspi1...` links keep working until their
+invite rotates.
 
 ### Episode
 

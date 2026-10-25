@@ -963,6 +963,7 @@ type SpacePublicInvite struct {
 	TenantID               pgtype.UUID        `json:"tenant_id"`
 	SpaceID                pgtype.UUID        `json:"space_id"`
 	Handle                 []byte             `json:"handle"`
+	InviteCode             string             `json:"invite_code"`
 	Generation             int64              `json:"generation"`
 	StateEpoch             int64              `json:"state_epoch"`
 	Enabled                bool               `json:"enabled"`

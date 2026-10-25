@@ -160,7 +160,14 @@ const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const callDTO = ({ lastActiveAt: _last, recentPeople: _people, ...call }) => call;
 const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: null, lastActiveAt: call.lastActiveAt ?? null, recentPeople: call.recentPeople ?? [] });
 const episodeDTO = ({ people: _people, kept: _kept, ...episode }) => episode;
-const inviteURL = (call) => `https://chalkmeet.com/space/${call.slug}#invite=fx${call.id.slice(-6)}`;
+const inviteCode = (call) => {
+  const letters = call.id
+    .replaceAll("-", "")
+    .slice(-10)
+    .replace(/[0-9a-f]/g, (digit) => String.fromCharCode(97 + Number.parseInt(digit, 16)));
+  return `${letters.slice(0, 3)}-${letters.slice(3, 7)}-${letters.slice(7)}`;
+};
+const inviteURL = (call) => `https://chalkmeet.com/${inviteCode(call)}`;
 const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
 function recordingScenario() {
   if (!state.recordingScenario) return {};

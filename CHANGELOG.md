@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### short-invite-links
+
+Public Space invite links are now short, Google Meet–style links such as
+`https://chalkmeet.com/abc-defg-hij`. The API accepts the invite code anywhere it
+accepted a `cspi1` invite token, and existing long links keep working. React
+Native requests receive short links only when they send
+`X-Chalk-Invite-Format: code`, so shipped native builds keep their long links.
+The React Native SDK adds `parseChalkInviteLink`, which reads short links, bare
+codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
+`parseInviteCode`.
+
 ## 5.2.0
 
 - Advance the seven coordinated Chalk SDK packages to 5.2.0. `@q9labsai/recording-presentation` remains at 0.1.1.

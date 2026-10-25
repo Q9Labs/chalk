@@ -1,14 +1,18 @@
+import { parseInviteCode } from "@q9labsai/chalk-client";
+
 export function spaceInviteToken(): string | undefined {
   if (!globalThis.location) return undefined;
   const value = new URLSearchParams(globalThis.location.hash.slice(1)).get("spaceInviteToken")?.trim();
   return value || undefined;
 }
 
-export function canonicalSpaceInviteLink(slug: string, inviteLink: string): string {
-  const value = inviteLink.trim();
+export function canonicalSpaceInviteLink(slug: string, credential: string): string {
+  const value = credential.trim();
   if (!value) throw new Error("The Space invite link was empty.");
 
   const origin = globalThis.location?.origin ?? "https://chalkmeet.com";
+  const code = parseInviteCode(value);
+  if (code) return new URL(`/${code}`, origin).toString();
   try {
     const url = new URL(value, origin);
     if (url.origin !== origin) throw new Error("The Space invite link used an unexpected origin.");
@@ -34,6 +38,8 @@ export function verifiedSpaceInviteLink(slug: string, inviteLink: string): strin
     throw new Error("The Space invite link was invalid.");
   }
   if (url.origin !== origin) throw new Error("The Space invite link used an unexpected origin.");
+  const code = parseInviteCode(url.pathname.slice(1));
+  if (code && url.pathname === `/${code}` && !url.search && !url.hash) return value;
   if (url.pathname !== `/space/${encodeURIComponent(slug)}`) throw new Error("The Space invite link did not match the verified Space.");
 
   const token = new URLSearchParams(url.hash.slice(1)).get("spaceInviteToken")?.trim();

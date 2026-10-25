@@ -106,6 +106,10 @@ type inviteBudgetAccess struct{ publicinvites.Access }
 type inviteBudgetAccounts struct{ publicinvites.Accounts }
 type inviteBudgetLinks struct{}
 
-func (inviteBudgetLinks) SpaceInviteURL(string, string) (string, error) {
+func (inviteBudgetLinks) InviteURL(string) (string, error) {
+	return "https://example.test/call", nil
+}
+
+func (inviteBudgetLinks) LegacyInviteURL(string, string) (string, error) {
 	return "https://example.test/call", nil
 }

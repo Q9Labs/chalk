@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
-import { createGuestAccessGetter } from "./spaces";
+import { createGuestAccessGetter, parseSpaceLink } from "./spaces";
 
 vi.mock("expo-secure-store", () => ({}));
 afterEach(() => vi.unstubAllGlobals());
@@ -11,6 +11,16 @@ const credential = {
   slug: "media-recovery",
   spaceInviteToken: "invite-token",
 };
+
+it("uses an invite code as the route key when a short link has no slug", () => {
+  expect(parseSpaceLink("https://chalkmeet.com/abc-defg-hij")).toEqual({
+    kind: "space",
+    space: "abc-defg-hij",
+    spaceInviteToken: "abc-defg-hij",
+    inviteLink: "https://chalkmeet.com/abc-defg-hij",
+    source: "space-link",
+  });
+});
 
 it.each(["refresh", "retry"] as const)("forwards replacement and cancellation during %s through the real public client", async (reason) => {
   const original = accessGrant("old-connection");

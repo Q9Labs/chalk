@@ -21,7 +21,7 @@ function CallPanel() {
       <div className="lp-h" aria-hidden="true">
         <div>
           <b>Q9 team</b>
-          <span className="mono">chalkmeet.com/space/q9-team</span>
+          <span className="mono">chalkmeet.com/abc-defg-hij</span>
         </div>
         <span className="btn pri sm">Join call</span>
       </div>

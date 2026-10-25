@@ -16,6 +16,11 @@ const requests = [];
 const engineReads = [];
 const engineRequests = [];
 const unsupportedBodies = [];
+const inviteCredential = (raw) => {
+  const invite = new URL(raw);
+  const code = invite.pathname.slice(1);
+  return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
+};
 let rateLimitPath;
 const engine = createServer(async (request, response) => {
   requests.push(request.url);
@@ -363,7 +368,7 @@ try {
     assert.equal(knockingCall.status, 200);
     const knockingSpace = (await knockingCall.json()).call.id;
     const invitation = await ada.request(`/dashboard-api/call?spaceId=${knockingSpace}`);
-    const inviteToken = new URLSearchParams(new URL((await invitation.json()).inviteUrl).hash.slice(1)).get("spaceInviteToken");
+    const inviteToken = inviteCredential((await invitation.json()).inviteUrl);
     {
       const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
         method: "POST",

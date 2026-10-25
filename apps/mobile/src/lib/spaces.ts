@@ -1,6 +1,6 @@
 import type { AccessGrant, GetAccess, PublicSpaceArrival } from "@q9labsai/chalk-client";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
-import { parseSpaceInviteLink as parseNativeSpaceInviteLink } from "@q9labsai/chalk-react-native/invites";
+import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
 import * as SecureStore from "expo-secure-store";
 
 const ARRIVAL_KEY_PREFIX = "chalk_mobile_public_arrival_v1.";
@@ -41,11 +41,11 @@ export type SpaceOperationObserver = (operation: SpaceOperation, state: SpaceOpe
 
 export function parseSpaceLink(input: string): SpaceRoute | null {
   const inviteLink = input.trim();
-  const invite = parseNativeSpaceInviteLink(inviteLink);
+  const invite = parseChalkInviteLink(inviteLink);
   if (!invite) return null;
   return {
     kind: "space",
-    space: invite.slug,
+    space: invite.slug ?? invite.spaceInviteToken,
     spaceInviteToken: invite.spaceInviteToken,
     inviteLink,
     source: "space-link",
@@ -60,14 +60,14 @@ export async function createPublicSpaceRoute({ apiBaseURL, displayName, onOperat
     const invite = parseSpaceLink(created.invite_link);
     if (!invite) throw new Error("Chalk returned an invalid call link.");
 
-    const arrival = storedArrival(created.arrival, { slug: invite.space, spaceInviteToken: invite.spaceInviteToken }, created.guest_credential);
+    const arrival = storedArrival(created.arrival, { slug: created.space.slug, spaceInviteToken: invite.spaceInviteToken }, created.guest_credential);
     await persistArrival(arrival);
     const access = requiredAccess(created.arrival);
     const spaceName = callName(created.space.name, invite);
     onOperation?.("create", "succeeded");
     return {
       arrival: { access, credential: arrival, defaults: { camera: true, microphone: true }, displayName, spaceName },
-      route: { ...invite, source: "created-space", spaceName },
+      route: { ...invite, space: created.space.slug, source: "created-space", spaceName },
     };
   } catch (cause) {
     onOperation?.("create", "failed");
@@ -233,14 +233,14 @@ export async function retireSpaceArrival({ apiBaseURL, credential }: { readonly 
 }
 
 function publicClient(apiBaseURL: string, guestCredential?: string) {
-  return createChalkPublicClient({ baseUrl: apiBaseURL, guestCredential, runtime: "react-native" });
+  return createChalkPublicClient({ baseUrl: apiBaseURL, guestCredential, headers: { "X-Chalk-Invite-Format": "code" }, runtime: "react-native" });
 }
 
 function storedArrival(value: PublicSpaceArrival, route: SpaceInvite, guestCredential?: string): StoredSpaceArrival {
   const arrivalHandle = value.arrival_handle?.trim();
   const credential = guestCredential?.trim() ?? value.guest_credential?.trim();
   if (!arrivalHandle || !credential) throw new Error("Chalk did not return a Guest arrival credential.");
-  return { arrivalHandle, guestCredential: credential, slug: route.slug, spaceInviteToken: route.spaceInviteToken };
+  return { arrivalHandle, guestCredential: credential, slug: value.space?.slug?.trim() || route.slug, spaceInviteToken: route.spaceInviteToken };
 }
 
 function requiredAccess(value: PublicSpaceArrival): AccessGrant {

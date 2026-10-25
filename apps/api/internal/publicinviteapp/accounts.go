@@ -18,7 +18,7 @@ type tenantAuthorizer interface {
 var ErrAccountsPortUnavailable = errors.New("public Accounts adapter unavailable")
 
 // NewAccountsPort adapts the existing Tenant authorization policy to the
-// public-invites account port. The Runtime calls this only after cspi1 has
+// public-invites account port. The Runtime calls this only after an invite credential has
 // resolved the target Tenant, so the account never selects the Tenant.
 func NewAccountsPort(authorizer tenantAuthorizer) (publicinvites.Accounts, error) {
 	if authorizer == nil {

@@ -30,6 +30,9 @@
 /space*
   X-Robots-Tag: noindex, nofollow, noarchive
 
+/:a-:b-:c
+  X-Robots-Tag: noindex, nofollow, noarchive
+
 /*
   Cache-Control: public, max-age=0, s-maxage=0, must-revalidate
 

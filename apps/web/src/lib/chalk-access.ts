@@ -130,10 +130,10 @@ function publicSpaceSlug(arrival: PublicSpaceArrival): string {
   if (!slug) throw new Error("This Space is unavailable.");
   return slug;
 }
-export async function resumePublicSpace(client: PublicInviteClient, marker: ReloadRejoinMarker): Promise<PreparedPublicSpace> {
+export async function resumePublicSpace(client: PublicInviteClient, marker: ReloadRejoinMarker, expectedSlug?: string): Promise<PreparedPublicSpace> {
   if (!marker.arrivalHandle) throw new Error("This Space is unavailable.");
   const arrival = await client.getSpacePublicInviteArrival(marker.arrivalHandle);
-  if (arrival.state !== "admitted" || arrival.space?.slug !== marker.space) throw new Error("This Space is unavailable.");
+  if (arrival.state !== "admitted" || (expectedSlug !== undefined && arrival.space?.slug !== expectedSlug)) throw new Error("This Space is unavailable.");
   const access = await resumeReloadRejoin(marker, () => client.refreshSpacePublicInviteAccess(marker.arrivalHandle ?? "", marker.mediaProof, { replaceMediaConnection: true }));
   return createPreparedPublicSpace(client, { ...arrival, access });
 }

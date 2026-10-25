@@ -2,6 +2,12 @@ import { strict as assert } from "node:assert";
 import { createRequire } from "node:module";
 import { setTimeout as delay } from "node:timers/promises";
 
+const inviteCredential = (raw) => {
+  const invite = new URL(raw);
+  const code = invite.pathname.slice(1);
+  return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
+};
+
 // Run with DASHBOARD_REFRESH_COST=1 through real-engine.sh. Every dashboard
 // success comes from the real Pages worker, HTTP API and PostgreSQL repositories.
 export async function refreshCost({ client, session, post, origin, engineReads, engineRequests, tenantId, sql }) {
@@ -99,7 +105,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     // Measure the faster shared poll with a real pending admission, no second loop.
     measuringNavigation = false;
     await homePage.goto("about:blank");
-    const inviteToken = new URLSearchParams(new URL(initial.inviteUrl).hash.slice(1)).get("spaceInviteToken");
+    const inviteToken = inviteCredential(initial.inviteUrl);
     const arrival = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/public/space-invite-arrivals`, {
       method: "POST",
       headers: { Authorization: "Bearer fixture-dashboard-service-token-not-a-secret", "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },

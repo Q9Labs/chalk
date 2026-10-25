@@ -18,6 +18,7 @@ var (
 	ErrInvalidAccountID         = errors.New("invalid public invite account id")
 	ErrInvalidInvite            = errors.New("invalid public invite")
 	ErrInviteNotFound           = errors.New("public invite not found")
+	ErrInviteCodeTaken          = errors.New("public invite code taken")
 	ErrInviteUnavailable        = errors.New("public invite unavailable")
 	ErrInvalidPublicRole        = errors.New("invalid public invite role")
 	ErrInvalidAdmissionMode     = errors.New("invalid public invite admission mode")
@@ -302,7 +303,8 @@ type Space interface {
 }
 
 type Links interface {
-	SpaceInviteURL(string, string) (string, error)
+	InviteURL(string) (string, error)
+	LegacyInviteURL(string, string) (string, error)
 }
 
 type Access interface {
@@ -419,6 +421,8 @@ type CreatePublicSpaceInput struct {
 	DisplayName string
 	RequestKey  string
 	Native      bool
+	// LegacyInviteLink supports shipped native builds that predate invite codes.
+	LegacyInviteLink bool
 }
 
 type PublicInviteArrivalInput struct {

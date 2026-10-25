@@ -1,4 +1,5 @@
 export { createChalkPublicClient, createChalkPublicInviteClient } from "./client.js";
+export { parseInviteCode } from "./code.js";
 export type {
   ArriveBySpacePublicInviteInput,
   ChalkPublicClient,

@@ -217,21 +217,26 @@ supplied through the runtime secret boundary.
 
 ## Public Space invites
 
-Public Space links use a dedicated `cspi1` Ed25519 keyring. Hosted environments
-must configure all of these values:
+Public Space links use ten-letter invite codes and canonical
+`/{abc-defg-hij}` URLs. Legacy `cspi1` Ed25519 links remain valid. Hosted
+environments must configure all of these values:
 
 - `CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID` identifies the Tenant that owns Spaces
   created from the public Open a Space flow.
 - `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` selects the media plane for those
   auto-created Spaces.
 - `CHALK_PUBLIC_INVITE_WEB_ORIGIN` is the HTTPS origin used to build canonical
-  `/space/{slug}#spaceInviteToken=...` links.
+  `/{abc-defg-hij}` links.
 - `CHALK_PUBLIC_INVITE_KEY_ID` and `CHALK_PUBLIC_INVITE_PRIVATE_KEY` select the
   current signing key. The private key is an unpadded base64url Ed25519 private
   key and must stay inside the runtime secret boundary.
 - `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` is a non-empty JSON object that maps
   key IDs to unpadded base64url Ed25519 public keys. It must include the public
   key for the current signing key.
+
+Native requests identified by `X-Chalk-Client: react-native` receive a legacy
+link unless they also send `X-Chalk-Invite-Format: code`. This keeps shipped
+native builds compatible while the current mobile app opts into invite codes.
 
 `CHALK_PUBLIC_INVITE_AUTO_LIFECYCLE_SECONDS` controls how long an auto-created
 Space may remain active before Chalk ends its live Episode and archives it. It

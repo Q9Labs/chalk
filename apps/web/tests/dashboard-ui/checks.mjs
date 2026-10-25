@@ -62,7 +62,7 @@ try {
     await tab.getByRole("button", { name: "Copy link", exact: true }).first().click();
     await tab.getByRole("button", { name: "Copied", exact: true }).waitFor();
     const link = await tab.evaluate(() => navigator.clipboard.readText());
-    check("Home copies one invite despite unrelated Call history failures", (await reads()).length === 1 && link.startsWith("https://chalkmeet.com/space/"));
+    check("Home copies one invite despite unrelated Call history failures", (await reads()).length === 1 && /^https:\/\/chalkmeet\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(link));
     await context.close();
   }
   for (const value of ["0", "1000", "-1", "1.5", "NaN", "Infinity", "", "1001", "2000000000"]) {
@@ -324,7 +324,7 @@ try {
     await tab.waitForTimeout(900);
     const [create] = await posted("create-call");
     check("Start a call sends no name", Boolean(create) && !("name" in create.body), JSON.stringify(create?.body ?? null));
-    check("the new call's link shows in the ready dialog", (await tab.getByRole("dialog").locator(".linkbox").textContent())?.includes("chalkmeet.com/space/call-") === true);
+    check("the new call's link shows in the ready dialog", /chalkmeet\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/.test((await tab.getByRole("dialog").locator(".linkbox").textContent()) ?? ""));
     const roboto = await tab.evaluate(() => [...document.querySelectorAll("link[rel=stylesheet]")].some((link) => link.href.includes("Roboto")));
     check("Roboto is not loaded off the sign-in page", !roboto);
     await context.close();
