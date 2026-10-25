@@ -90,10 +90,11 @@ it("rejects a modified tenant cache and renews an expired one", async () => {
 
 describe("engine failure diagnostics through the real SDK decoder", () => {
   it.each([
-    { code: "api_key.invalid_expiry", expected: "api_key_invalid_expiry" },
-    { code: "request.invalid", expected: "invalid_request" },
-  ])("keeps key validation $code terminal instead of asking the person to retry", async ({ code, expected }) => {
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    { code: "api_key.invalid_expiry", expected: { status: 400, code: "api_key_invalid_expiry" } },
+    { code: "request.invalid", expected: { status: 400, code: "invalid_request" } },
+    { code: privateDetail, expected: { status: 502, code: "engine_unavailable" } },
+  ])("maps only known key validation codes without exposing response contents: $code", async ({ code, expected }) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const api = await Effect.runPromise(
       createChalkEffectClient({
         baseUrl: "https://engine.example.test",
@@ -108,7 +109,9 @@ describe("engine failure diagnostics through the real SDK decoder", () => {
           payload: { name: "Test", scopes: ["spaces:read"], expires_at: Schema.decodeUnknownSync(DateTimeStringSchema)("2027-10-25T23:59:00Z") },
         }),
       ),
-    ).rejects.toMatchObject({ status: 400, code: expected });
+    ).rejects.toMatchObject(expected);
+    if (code === "api_key.invalid_expiry") expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ engine_status: 400, engine_code: code, sdk_error_tag: "HttpClientError" });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);
   });
   it.each([
     { code: "participant.not_active", expected: { status: 409, code: "participant_not_active" } },

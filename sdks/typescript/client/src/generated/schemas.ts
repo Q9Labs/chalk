@@ -2746,25 +2746,6 @@ export const ApiKeyInactiveErrorSchema = ApiKeyInactiveErrorWireSchema.pipe(
   }),
 );
 
-export class ApiKeyInvalidExpiryError extends Schema.TaggedErrorClass<ApiKeyInvalidExpiryError>()("ApiKeyInvalidExpiryError", {
-  error: Schema.Struct({
-    code: Schema.Literal("api_key.invalid_expiry"),
-    message: Schema.String,
-  }),
-}) {}
-export const ApiKeyInvalidExpiryErrorWireSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.Literal("api_key.invalid_expiry"),
-    message: Schema.String,
-  }),
-});
-export const ApiKeyInvalidExpiryErrorSchema = ApiKeyInvalidExpiryErrorWireSchema.pipe(
-  Schema.decodeTo(ApiKeyInvalidExpiryError, {
-    decode: SchemaGetter.transform((wire) => ({ _tag: "ApiKeyInvalidExpiryError", ...wire })),
-    encode: SchemaGetter.transform((error) => ({ error: error.error })),
-  }),
-);
-
 export class ApiKeyInvalidIdError extends Schema.TaggedErrorClass<ApiKeyInvalidIdError>()("ApiKeyInvalidIdError", {
   error: Schema.Struct({
     code: Schema.Literal("api_key.invalid_id"),
@@ -4961,7 +4942,6 @@ export type CloseCloudflareSFUTracksError = typeof CloseCloudflareSFUTracksError
 export const CreateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
-  ApiKeyInvalidExpiryErrorSchema,
   ApiKeySecretNotReplayableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
@@ -5759,7 +5739,6 @@ export const RotateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   ApiKeyInactiveErrorSchema,
-  ApiKeyInvalidExpiryErrorSchema,
   ApiKeyInvalidIdErrorSchema,
   ApiKeyNotFoundErrorSchema,
   ApiKeySecretNotReplayableErrorSchema,
