@@ -160,6 +160,7 @@ type recordingPipelineTransactor interface {
 }
 
 type RecordingPipelineRepository struct {
+	admissionLimits          recordingpipeline.AdmissionLimits
 	tenantLimits             tenantlimits.Config
 	queries                  recordingPipelineQuerier
 	transactor               recordingPipelineTransactor
@@ -272,7 +273,9 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 	} else {
 		availableAt = time.Unix(0, 0).UTC()
 	}
+	limits := r.admissionLimits.WithDefaults()
 	params := sqlc.CreateRecordingReservationParams{
+		RecordingCap: int32(limits.RecordingCap), ParticipantCap: int32(limits.ParticipantCap), BitrateCapBps: limits.BitrateCapBPS(),
 		EpisodeCount:          1,
 		ParticipantCount:      int32(input.ParticipantCount),
 		InputBitrateBps:       input.InputBitrateBPS,
@@ -513,9 +516,9 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("lock recording worker admission: %w", err)
 		}
-		// Local and legacy owners have no fleet row; the managed HTTP verifier
-		// separately requires a registered identity before reaching this repository.
-		if err == nil && !authorized {
+		// Authentication can precede row loss. Managed claims must still have
+		// an admitted binding here, in the transaction that creates the lease.
+		if errors.Is(err, pgx.ErrNoRows) && input.ManagedWorker || err == nil && !authorized {
 			return recordingpipeline.ErrJobNotFound
 		}
 		row, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
@@ -1572,5 +1575,10 @@ func captureBundleSchemaVersion(enabled bool, previous *recordingpipeline.Record
 
 func (r RecordingPipelineRepository) WithTenantLimits(limits tenantlimits.Config) RecordingPipelineRepository {
 	r.tenantLimits = limits
+	return r
+}
+
+func (r RecordingPipelineRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingPipelineRepository {
+	r.admissionLimits = limits.WithDefaults()
 	return r
 }

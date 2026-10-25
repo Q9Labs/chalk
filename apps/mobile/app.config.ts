@@ -22,7 +22,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       owner: "q9labs",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "3.0.3",
+      version: "3.0.4",
       // The call turns to landscape; Home stays usable in either.
       orientation: "default",
       icon: "./assets/icon.png",
@@ -41,20 +41,20 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         jsEngine: "jsc",
         supportsTablet: true,
         bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "36",
+        buildNumber: "37",
         associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
         entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
-          NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a Space.",
-          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a Space.",
+          NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a call.",
+          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a call.",
           RTCAppScreenSharingExtension: "ai.q9labs.chalk.mobile.screenshare",
           UIBackgroundModes: ["audio", "voip"],
         },
       },
       android: {
         package: "ai.q9labs.chalk.mobile",
-        versionCode: 37,
+        versionCode: 38,
         adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
         intentFilters: [
           {

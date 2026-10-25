@@ -79,7 +79,7 @@ test("OSV discovery enforces the tooling exception for every discovered format",
       git(["add", "pnpm-lock.yaml", "osv-scanner.toml", ".gitignore"]);
       git(["-c", "user.name=OSV regression", "-c", "user.email=osv-regression@example.invalid", "commit", "-qm", "Fixture baseline"]);
       if (name.startsWith("uncommitted")) writeFileSync(path.join(root, file), content);
-      const result = spawnSync("bash", ["osv-scanner.sh"], { cwd: root, encoding: "utf8", env: { ...process.env, TMPDIR: path.join(temporary, "scratch-alias"), GATE_VULN_BASE_REF: "HEAD" }, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
+      const result = spawnSync("bash", ["osv-scanner.sh"], { cwd: root, encoding: "utf8", env: { ...process.env, TMPDIR: path.join(temporary, "scratch-alias"), GATE_VULN_BASE_REF: "HEAD", GATE_OSV_BASE_COMMIT: "" }, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
       assert.equal(result.status, file ? 1 : 0, `${result.error ?? ""}\n${result.stdout}\n${result.stderr}`);
       if (name === "uncommitted root lockfile edit") assert.match(result.stderr, /Zod exception rejects importer:\./);
       else if (file) assert.match(result.stderr, /Zod exception rejects OSV finding GHSA-mrhx-c7xc-m3w5/);

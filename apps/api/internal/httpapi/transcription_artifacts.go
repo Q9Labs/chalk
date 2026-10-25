@@ -217,7 +217,7 @@ func transcriptArtifactDownloadEndpoint(service TranscriptArtifactService, downl
 		if err != nil {
 			return transcriptDownloadResponse{}, err
 		}
-		return transcriptDownloadResponse{Method: signed.Method, URL: signed.URL, SignedAt: utilities.FormatTimestamp(signed.SignedAt), ExpiresAt: utilities.FormatTimestamp(signed.ExpiresAt), SignedHeaders: signed.SignedHeader}, nil
+		return transcriptDownloadResponse{Method: signed.Method, URL: signed.URL, SignedAt: utilities.FormatTimestamp(signed.SignedAt), ExpiresAt: utilities.FormatTimestamp(signed.ExpiresAt), SignedHeaders: cloneSignedHeaders(signed)}, nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), transcriptIDParameter()).RequestBody("CreateTranscriptDownloadURLRequest", createTranscriptDownloadBody{}).Responds(http.StatusOK, "TranscriptDownloadURL", transcriptDownloadResponse{}).Errors(transcriptReadErrors(apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorInvalidURLExpiration)...).MapErrors(transcriptArtifactAPIError)
 }
 
@@ -247,7 +247,7 @@ func decodeCreateTranscriptDownloadRequest(r *http.Request) (createTranscriptDow
 }
 
 func newTranscriptArtifactResponse(value transcripts.Transcript) transcriptArtifactResponse {
-	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: value.Languages, Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, SourceExpiresAt: optionalTimestampString(value.SourceExpiresAt), Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
+	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: append([]string{}, value.Languages...), Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, SourceExpiresAt: optionalTimestampString(value.SourceExpiresAt), Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
 }
 
 func decodeChecksum(value string) ([]byte, error) {

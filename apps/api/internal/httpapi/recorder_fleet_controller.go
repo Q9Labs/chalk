@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 )
 
 type RecorderFleetControllerService interface {
+	ObserveIdentity(context.Context, recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error)
 	GetDemand(context.Context, recorderfleet.PoolKey) (recorderfleet.Demand, error)
 	ObserveNodes(context.Context, recorderfleet.PoolKey) ([]recorderfleet.NodeObservation, error)
 	EnsureBootstrap(context.Context, recorderfleet.BootstrapRequest) (recorderfleet.NodeIdentity, error)
@@ -41,6 +44,7 @@ func NewRecorderFleetControllerRouter(service RecorderFleetControllerService, ve
 		router.Use(func(next http.Handler) http.Handler { return requireRecorderFleetController(verifier, next) })
 		router.Get("/demand", recorderFleetDemandHandler(service, environment, logger))
 		router.Get("/nodes", recorderFleetNodesHandler(service, environment, logger))
+		router.Post("/nodes/{providerID}/leases", recorderFleetIdentityLeasesHandler(service, environment, logger))
 		router.Post("/nodes/{providerID}/bootstrap", recorderFleetBootstrapHandler(service, environment, logger))
 		router.Post("/nodes/{providerID}/bootstrap/abandon", recorderFleetBootstrapAbandonHandler(service, environment, logger))
 		router.Post("/nodes/{providerID}/admission/close", recorderFleetCommandHandler(service, environment, false, logger))
@@ -102,8 +106,14 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 				return
 			}
 		}
+		schema := recorderfleet.DemandSchemaVersion
+		if request.Header.Get("X-Chalk-Fleet-Slot-Demand") == "1" && key.Role == workeridentity.RoleCapture && demand.CaptureCapacity != nil {
+			schema = recorderfleet.SlotDemandSchemaVersion
+		} else {
+			demand.CaptureCapacity = nil
+		}
 		writeJSON(w, http.StatusOK, recorderFleetDemandResponse{
-			SchemaVersion: recorderfleet.DemandSchemaVersion, Environment: environment,
+			SchemaVersion: schema, Environment: environment,
 			Role: key.Role, Demand: demand,
 		})
 	}
@@ -146,6 +156,23 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 		if nodes == nil {
 			nodes = []recorderfleet.NodeObservation{}
 		}
+		leaseAuthority := request.Header.Get("X-Chalk-Fleet-Lease-Authority") == "1"
+		// Older controllers cannot preserve live counts under skew or decode revoked identities.
+		if !leaseAuthority {
+			nodes = slices.Clone(nodes)
+			for index := range nodes {
+				if nodes[index].ActiveLeases > 0 {
+					writeRecorderFleetError(w, request, logger, "observe_nodes", fmt.Errorf("%w: legacy controller cannot safely observe live leases", recorderfleet.ErrProviderUnavailable))
+					return
+				}
+				if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
+					nodes[index].LeasesObservedAt = time.Time{}
+				}
+			}
+			nodes = slices.DeleteFunc(nodes, func(node recorderfleet.NodeObservation) bool { return node.IdentityRevoked })
+		} else {
+			w.Header().Set("X-Chalk-Fleet-Lease-Authority", "1")
+		}
 		writeJSON(w, http.StatusOK, recorderFleetNodesResponse{
 			SchemaVersion: recorderfleet.NodesSchemaVersion, Environment: environment,
 			Role: key.Role, Nodes: nodes,
@@ -173,6 +200,32 @@ func recorderFleetBootstrapHandler(service RecorderFleetControllerService, envir
 			SchemaVersion: recorderfleet.BootstrapSchemaVersion, Environment: environment,
 			Role: body.Key.Role, Identity: identity,
 		})
+	}
+}
+
+func recorderFleetIdentityLeasesHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		body, ok := decodeRecorderWorkerBody[recorderFleetCommandRequest](w, request)
+		if !ok {
+			return
+		}
+		// Version 2 also promises that managed claims require a fleet row.
+		capability := request.Header.Get("X-Chalk-Fleet-Identity-Leases")
+		if body.SchemaVersion != recorderfleet.CommandSchemaVersion || body.Environment != environment || body.Identity.ProviderID != chi.URLParam(request, "providerID") || (capability != "1" && capability != "2") {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder identity lease request")
+			return
+		}
+		observation, err := service.ObserveIdentity(request.Context(), body.Identity)
+		if err != nil {
+			writeRecorderFleetError(w, request, logger, "observe_identity_leases", err)
+			return
+		}
+		w.Header().Set("X-Chalk-Fleet-Identity-Leases", capability)
+		writeJSON(w, http.StatusOK, struct {
+			SchemaVersion string                        `json:"schema_version"`
+			Environment   string                        `json:"environment"`
+			Observation   recorderfleet.NodeObservation `json:"observation"`
+		}{recorderfleet.CommandSchemaVersion, environment, observation})
 	}
 }
 

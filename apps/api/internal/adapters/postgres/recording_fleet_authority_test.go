@@ -124,13 +124,17 @@ func TestRecordingFleetAuthorityRepositorySeparatesDrainFromClaimAuthorization(t
 	t.Parallel()
 	workerID, _ := utilities.ParseID("55555555-5555-4555-8555-555555555555")
 	identity := workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}
-	queries := &recordingFleetAuthorityQueriesStub{authorizeWorker: true, authorizeClaim: false}
+	queries := &recordingFleetAuthorityQueriesStub{authorizeWorker: true, authorizeClaim: false, admissionClosed: true}
 	repository := NewRecordingFleetAuthorityRepository(queries)
 	if err := repository.AuthorizeWorker(t.Context(), "nightly", identity); err != nil {
 		t.Fatalf("existing work authorization: %v", err)
 	}
 	if err := repository.AuthorizeWorkerClaim(t.Context(), "nightly", identity); !errors.Is(err, recorderfleet.ErrAdmissionClosed) {
 		t.Fatalf("claim authorization error = %v", err)
+	}
+	queries.admissionClosed = false
+	if err := repository.AuthorizeWorkerClaim(t.Context(), "nightly", identity); !errors.Is(err, recorderfleet.ErrNodeNotFound) || errors.Is(err, recorderfleet.ErrAdmissionClosed) {
+		t.Fatalf("non-admission claim refusal must remain an authentication failure: %v", err)
 	}
 }
 
@@ -146,6 +150,7 @@ type recordingFleetAuthorityQueriesStub struct {
 	activateErr       error
 	authorizeWorker   bool
 	authorizeClaim    bool
+	admissionClosed   bool
 }
 
 func (s *recordingFleetAuthorityQueriesStub) AbandonRecordingFleetBootstrap(_ context.Context, arg sqlc.AbandonRecordingFleetBootstrapParams) (string, error) {
@@ -161,8 +166,8 @@ func (s *recordingFleetAuthorityQueriesStub) AuthorizeRecordingFleetWorker(conte
 	return s.authorizeWorker, nil
 }
 
-func (s *recordingFleetAuthorityQueriesStub) AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (bool, error) {
-	return s.authorizeClaim, nil
+func (s *recordingFleetAuthorityQueriesStub) AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (sqlc.AuthorizeRecordingFleetWorkerClaimRow, error) {
+	return sqlc.AuthorizeRecordingFleetWorkerClaimRow{Authorized: s.authorizeClaim, AdmissionClosed: s.admissionClosed}, nil
 }
 
 func (s *recordingFleetAuthorityQueriesStub) CloseRecordingFleetNodeAdmission(context.Context, sqlc.CloseRecordingFleetNodeAdmissionParams) (string, error) {
@@ -211,4 +216,8 @@ func postgresFleetUUID(t *testing.T, value string) pgtype.UUID {
 		t.Fatalf("parse id: %v", err)
 	}
 	return uuid(id)
+}
+
+func (s *recordingFleetAuthorityQueriesStub) ObserveRecordingFleetIdentityLeases(context.Context, sqlc.ObserveRecordingFleetIdentityLeasesParams) (sqlc.ObserveRecordingFleetIdentityLeasesRow, error) {
+	return sqlc.ObserveRecordingFleetIdentityLeasesRow{}, errors.New("unexpected identity lease observation")
 }

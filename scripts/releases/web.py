@@ -13,11 +13,16 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from github_release import GitHub, outputs, require
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, url):
+        return None
 
 
 def public_config(target, sha):
@@ -58,10 +63,14 @@ def build(target, sha, output, source_root):
 def pages(project, route='', method='GET'):
     require(project, 'missing explicit Pages project')
     account = os.environ['CLOUDFLARE_ACCOUNT_ID']
-    url = f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
+    base_url = os.environ.get('CLOUDFLARE_API_BASE_URL', 'https://api.cloudflare.com/client/v4').rstrip('/')
+    require('CLOUDFLARE_API_BASE_URL' not in os.environ or urlsplit(base_url).hostname in ('127.0.0.1', '::1', 'localhost'),
+            'Pages API override must use a loopback host')
+    url = f'{base_url}/accounts/{account}/pages/projects/{quote(project, safe="")}{route}'
     request = urllib.request.Request(url, method=method, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
+    open_url = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open if 'CLOUDFLARE_API_BASE_URL' in os.environ else urllib.request.urlopen
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with open_url(request, timeout=60) as response:
             result = json.load(response)
     except urllib.error.HTTPError as error:
         raise ValueError(f'Pages API {method} {route or "/"} returned {error.code}: {error.read(500).decode(errors="replace")}') from error
@@ -77,8 +86,10 @@ def current(project):
 
 
 def rollback(project, deployment_id):
-    deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
-    require(deployment['id'] == deployment_id and current(project) == deployment_id, 'Pages rollback did not restore the saved deployment')
+    if current(project) != deployment_id:
+        deployment = pages(project, f'/deployments/{quote(deployment_id, safe="")}/rollback', 'POST')
+        require(deployment['id'] == deployment_id, 'Pages rollback returned a different deployment')
+    require(current(project) == deployment_id, 'Pages rollback verification failed: saved deployment is not live')
     outputs({'pages_deployment_id': deployment_id})
 
 

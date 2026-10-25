@@ -6,6 +6,10 @@ inputs:
     description: Space-separated Playwright browser names, for example "chromium firefox webkit".
     required: true
 
+  verify-engine:
+    description: Also verify the web engine after the final shared browser cache restore.
+    default: "false"
+
 runs:
   using: composite
   steps:
@@ -69,6 +73,19 @@ runs:
         done
 
         du -sh "${HOME}/.cache/ms-playwright"
+
+    - name: Verify Playwright cache executables
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+        VERIFY_ENGINE: ${{ inputs.verify-engine }}
+      run: |
+        set -euo pipefail
+        read -ra browsers <<< "${BROWSERS}"
+        node scripts/ensure-playwright-browsers.mjs sdk "${browsers[@]}"
+        if [[ "${VERIFY_ENGINE}" == true ]]; then
+          node scripts/ensure-playwright-browsers.mjs engine chromium
+        fi
 
     # Like the other caches, only runs outside pull requests save, so pull requests do not evict each other's entries.
     - name: Save Playwright cache

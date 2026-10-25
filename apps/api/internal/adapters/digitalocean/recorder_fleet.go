@@ -33,6 +33,7 @@ const (
 var recorderInstaller []byte
 
 type RecorderFleetConfig struct {
+	SlotsPerNode   int
 	RequestBudget  *RequestBudget
 	PresignArchive func(context.Context, recorderfleet.ArchiveSpec) (string, error)
 	Token          string
@@ -48,6 +49,7 @@ type RecorderFleetConfig struct {
 }
 
 type RecorderFleet struct {
+	slotsPerNode   int
 	budget         *RequestBudget
 	rateLimitMu    sync.Mutex
 	rateLimit      RateLimitSnapshot
@@ -65,13 +67,16 @@ type RecorderFleet struct {
 }
 
 func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
+	if config.SlotsPerNode == 0 {
+		config.SlotsPerNode = 1
+	}
 	if config.BaseURL == "" {
 		config.BaseURL = defaultBaseURL
 	}
 	baseURL, err := url.Parse(config.BaseURL)
 	key := recorderfleet.PoolKey{Environment: config.Environment, Role: config.Role}
 	roleGPUValid := config.Role == workeridentity.RoleRender || config.Role == workeridentity.RoleCapture && !config.GPU
-	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" || strings.TrimSpace(config.Token) == "" || len(config.Token) > 4096 || key.Validate() != nil || !validDigitalOceanTag(config.OwnerTag) || !roleGPUValid || !validOptionalIdentifier(config.ProjectID) || !validOptionalIdentifier(config.VPCUUID) || !validSSHKeyIDs(config.SSHKeyIDs) {
+	if config.SlotsPerNode < 1 || config.SlotsPerNode > 100 || err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" || strings.TrimSpace(config.Token) == "" || len(config.Token) > 4096 || key.Validate() != nil || !validDigitalOceanTag(config.OwnerTag) || !roleGPUValid || !validOptionalIdentifier(config.ProjectID) || !validOptionalIdentifier(config.VPCUUID) || !validSSHKeyIDs(config.SSHKeyIDs) {
 		return nil, recorderfleet.ErrInvalidConfig
 	}
 	if config.HTTPClient == nil {
@@ -82,6 +87,7 @@ func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
 	}
 	return &RecorderFleet{
 		budget:         config.RequestBudget,
+		slotsPerNode:   config.SlotsPerNode,
 		presignArchive: config.PresignArchive, baseURL: baseURL, client: config.HTTPClient, environment: config.Environment,
 		gpu: config.GPU, ownerTag: config.OwnerTag, projectID: config.ProjectID,
 		role: config.Role, token: config.Token, vpcUUID: config.VPCUUID, sshKeyIDs: append([]int64(nil), config.SSHKeyIDs...),
@@ -137,6 +143,26 @@ func (a *RecorderFleet) ListNodes(ctx context.Context, key recorderfleet.PoolKey
 	}
 	slices.SortFunc(nodes, func(left, right recorderfleet.Node) int { return strings.Compare(left.ProviderID, right.ProviderID) })
 	return nodes, nil
+}
+
+// NodeExists confirms absence only on an exact provider 404, never on a filtered list.
+func (a *RecorderFleet) NodeExists(ctx context.Context, key recorderfleet.PoolKey, providerID string) (bool, error) {
+	if err := a.validateKey(key); err != nil {
+		return false, err
+	}
+	id, err := strconv.ParseInt(providerID, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != providerID {
+		return false, recorderfleet.ErrInventoryDrift
+	}
+	var response retrieveDropletResponse
+	err = a.doJSON(ctx, http.MethodGet, "/v2/droplets/"+providerID, nil, nil, &response, http.StatusOK)
+	if errors.Is(err, errNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // InspectNode returns a fresh, exact provider view for bootstrap authorization.
@@ -218,7 +244,7 @@ func (a *RecorderFleet) EnsureNode(ctx context.Context, request recorderfleet.En
 	if err != nil {
 		return recorderfleet.Node{}, fmt.Errorf("%w: recorder archive signing failed", recorderfleet.ErrProviderUnavailable)
 	}
-	userData, err := renderRecorderCloudInit(request, archiveURL)
+	userData, err := renderRecorderCloudInit(request, archiveURL, a.slotsPerNode)
 	if err != nil {
 		return recorderfleet.Node{}, err
 	}
@@ -472,9 +498,12 @@ func (a *RecorderFleet) sendJSON(ctx context.Context, method, path string, query
 	return nil
 }
 
-func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest, archiveURL string) (string, error) {
+func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest, archiveURL string, slotsPerNode int) (string, error) {
 	if err := request.Validate(); err != nil {
 		return "", err
+	}
+	if slotsPerNode < 1 || slotsPerNode > 100 {
+		return "", recorderfleet.ErrInvalidConfig
 	}
 	parsed, err := url.Parse(archiveURL)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
@@ -493,6 +522,10 @@ func renderRecorderCloudInit(request recorderfleet.EnsureNodeRequest, archiveURL
 	}
 	installFiles := "  - path: /run/chalk-recorder-install.py\n    permissions: \"0500\"\n    owner: root:root\n    encoding: b64\n    content: " + base64.StdEncoding.EncodeToString(recorderInstaller) + "\n" +
 		"  - path: /etc/chalk-recorder/archive.json\n    permissions: \"0400\"\n    owner: root:root\n    encoding: b64\n    content: " + base64.StdEncoding.EncodeToString(archiveConfig) + "\n"
+	if request.Key.Role == workeridentity.RoleCapture {
+		installFiles += "  - path: /etc/chalk-recorder/capture-slots.env\n    permissions: \"0444\"\n    owner: root:root\n    content: CHALK_RECORDER_CAPTURE_SLOTS=" + strconv.Itoa(slotsPerNode) + "\n" +
+			"  - path: /etc/systemd/system/chalk-recorder-capture.service.d/slots.conf\n    permissions: \"0444\"\n    owner: root:root\n    content: |\n      [Service]\n      EnvironmentFile=/etc/chalk-recorder/capture-slots.env\n"
+	}
 	workerUnit := "chalk-recorder-" + string(request.Key.Role) + ".service"
 	values := []string{
 		"CHALK_RECORDER_ENVIRONMENT=" + quoteEnv(request.Key.Environment),

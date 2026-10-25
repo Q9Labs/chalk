@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.2.0
+
+### follow-view-owner
+
+Converge Follow views on one Episode owner, recover from its canonical snapshot,
+and preserve real camera moves during recovery and tab switches. Zoom controls
+and keyboard moves now consistently leave Follow and lead the person's view.
+
+Keep all 500 active people's views using internal schema-generated limits in the client and React caches. The client's public bounds, event unions and decoded-frame unions are unchanged. The client now exports `ChalkWhiteboardViewVersions`, which the React SDK uses to order view moves, and whiteboard view events now carry `ownerId`, `ownerSequence` and `originEpoch`, so both releases are minor.
+
 ## 5.1.0
 
 - Add headless mode for hosts that draw their own board controls: `WhiteboardCanvas` accepts `headless`, `inkColor` and `onEngineReady`, and the React entry exports `WhiteboardEngineHandle` (clear, clear with undo, place math), `CANONICAL_INK`, and `observeEngineHistory` with `EngineHistoryState`.

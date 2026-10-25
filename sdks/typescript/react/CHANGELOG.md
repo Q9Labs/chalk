@@ -1,5 +1,107 @@
 # Changelog
 
+## 5.2.0
+
+### board-draw-policy
+
+Add a call-wide drawing policy for the board: everyone, only hosts, or picked people.
+Hosts set it with `setDrawPolicy` on the whiteboard transport and pick people with the
+existing `setDrawPermission`. Sync computes each person's permission and sends it with
+the policy over the new `draw_policy_v1` extension, so the summary and
+`useWhiteboard().access` now carry `canDraw`, `drawPolicy` and the host's per-person
+choices. The React board follows that permission instead of the role capability, and
+hosts get a "Who can draw" section with a person picker in the board menu.
+
+The whiteboard client now steps its hello down only when Sync can't decode it (close
+1009). A rejected token or a late hello (close 1008) is retried at the same level up to
+four times, so a brief token problem no longer hides the drawing policy for the rest of
+the connection. On a Sync without the drawing policy, a host's waiting policy change is
+refused as `unavailable`, and also reported on the summary, instead of being replayed.
+
+### board-frame-clock
+
+Keep Follow active when Bring everyone moves to a wider board view, without a brief zoom overshoot at the start of the animation.
+
+### board-stage-motion
+
+Keep the live whiteboard free of stage translation and scaling animations so
+switching between a participant and the board preserves the full canvas and
+accurate drawing coordinates. Other stage tiles keep their existing motion.
+
+### brand-single-chalk-mark
+
+Replace the retired colourful four-stick logo with the monochrome single chalk stick and dust in the distributed SVG assets and React Logo variants. Preserve existing asset filenames and component props. The React Logo now takes its default colour from the surrounding text colour.
+
+### follow-view-owner
+
+Converge Follow views on one Episode owner, recover from its canonical snapshot,
+and preserve real camera moves during recovery and tab switches. Zoom controls
+and keyboard moves now consistently leave Follow and lead the person's view.
+
+Keep all 500 active people's views using internal schema-generated limits in the client and React caches. The client's public bounds, event unions and decoded-frame unions are unchanged. The client now exports `ChalkWhiteboardViewVersions`, which the React SDK uses to order view moves, and whiteboard view events now carry `ownerId`, `ownerSequence` and `originEpoch`, so both releases are minor.
+
+### phone-board-notices-next-release
+
+Float faces over a phone board, and keep call notices off the call's controls.
+On a phone, an open board now fills the stage and up to three faces float at
+its right edge, with short name tags. Notices sit between the header and the
+controls under them. A call shorter than 620px, such as a landscape phone or a
+short embedded call, puts every notice in a notice button in the header, which
+lists each one whole and announces it once to screen readers; a taller call
+shows the newest three and puts older ones in the button. A notice in the
+button starts its timer only once it shows. The header stays visible while
+the button holds notices. Long names, links and error tokens wrap inside
+their notice, and a long call name shortens to make room for the timer and
+the notice button. A screen share beside a short board always keeps its own
+tile when there is no explicit cap. A capped strip or floating column counts
+shared content and its overflow button against that cap; folded shares stay
+readable in the shared-content overflow. One text-only announcer handles
+notice speech independently of its stage or header presentation.
+
+New optional props: `ToastStackProps.onFold` reports the ids of the notices
+the stage has no room for, `ChalkToastProps.announce` lets a host that already
+announced a notice keep its toast quiet, and `SpaceHeaderProps.notices` places
+a control before the people button.
+
+### problem-reporting
+
+Add the problem-report API contract and reusable report dialog, with opt-in diagnostics,
+editable delivery failures and bounded Unicode input. Call details and failed or ended
+call screens can expose reporting when an integration supplies a delivery callback.
+Use `reportUnavailableReason` to show expired access inside an editable report.
+Live report drafts survive call termination. Integrations with their own terminal
+screens can use `onOpenReportProblem` to keep one app-owned dialog across those screens.
+Give `ReportProblemDialog` a `focusScope` containing the current call or terminal screen,
+so closing it returns focus to its usable opener, or to a visible current control
+when the opener has disappeared. Hidden, inert and disabled targets are skipped.
+
+### recording-auto-render
+
+Expose recording expiry reasons through additive failure fields while preserving the existing export status enum.
+
+Add the Tenant recording_render_mode setting, defaulting to on_demand, with opt-in automatic MP4 rendering.
+
+### safe-media-command-guidance
+
+Show safe, source-aware guidance for media command failures across call controls,
+keyboard shortcuts, screen sharing, and media request dialogs. Preserve the
+existing onCommandError MediaSource argument and provide extended media context
+in an optional third argument. Keep disable-failure wording neutral and explain
+unsupported speaker selection without suggesting a retry. Preserve start/stop
+intent in failure guidance and retries; show terminal guidance for withdrawn
+media requests and other non-recoverable failures.
+
+Distinguish device selection, speaker tests, and incoming requests in media error
+guidance. Cover every client failure code with an operation-aware policy and only
+offer retry when the exact failed media command can be replayed.
+
+Preserve request context in the integrated Chalk dialog and show safe terminal
+guidance without retry for unknown runtime failure codes.
+
+### sync-connect-diagnostics
+
+Report Sync connection failures with the existing `connection.sync_hello_timeout` code without adding values to the public `ErrorCode` union. Add the current attempt's safe diagnostics to client errors, telemetry, and the call failure reference: opening/hello stage, close code and bounded reason, whether the socket opened, and elapsed time. Earlier attempts remain in the diagnostic history. Browsers do not expose DNS, TCP, or TLS progress. Unrecognized peer reasons are redacted. This is a compatible patch for the next client and React releases; released 5.1.0 files are unchanged.
+
 ## 5.1.0
 
 - Add optional `CallLimbo.className` for the message card, so a host can size the card around a form.

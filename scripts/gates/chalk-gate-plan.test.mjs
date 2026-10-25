@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { LEAK_JOURNEYS, leakShard, checkLeakShardReports } from "../../apps/web/scripts/call-leak-check.mjs";
 import { classify } from "@q9labsai/gates";
 import gateConfig from "../../gate.config.ts";
 import { ciJobs, createGatePlan, discoverWorkspaces, emptyScopeResult, GatePlanningError, gatePlanOptions, laneEnvironment, laneGroup, laneGroupLanes, laneResult, resolveGateTarget } from "./chalk-gate-plan.mjs";
@@ -183,10 +184,10 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
   assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "call-performance", "call-leaks", "build"] });
-  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
-  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
-  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
 });
 
 test("deployment tree changes run the gates that read them, not a full gate", () => {
@@ -229,31 +230,31 @@ test("the Gate workflow falls back to every root lane group", () => {
 test("the Gate workflow narrows only on a job selection that succeeded", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
   const narrowing = workflow.split("\n").filter((line) => /needs\.changes\.outputs\.(root_groups|full)\b/u.test(line));
-  assert.equal(narrowing.length, 5);
-  for (const line of narrowing) assert.match(line, /needs\.changes\.result == 'success'|"\$\{\{ needs\.changes\.result \}\}" == "success"/u, line.trim());
+  assert.equal(narrowing.length, 8);
+  for (const line of narrowing) assert.match(line, /needs\.changes\.result [!=]= 'success'|"\$\{\{ needs\.changes\.result \}\}" == "success"/u, line.trim());
 });
 
 test("browser CI groups each run only their own selected lane", () => {
   const plan = createGatePlan(["apps/web/src/components/space/SpacePage.tsx"]);
-  for (const group of ["browser-tests", "call-performance", "call-leaks"]) {
+  for (const group of ["browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3"]) {
     assert.deepEqual(
       laneGroupLanes(plan.tasks, group)
         .filter((lane) => lane.selected)
         .map((lane) => lane.id),
-      [group],
+      [group.startsWith("call-leaks-") ? "call-leaks" : group],
     );
   }
-  assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "call-performance", "call-leaks", "build"]);
+  assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
 });
 
 test("every lane runs in exactly one CI lane group", () => {
   const lanes = gateConfig.lanes;
-  const groups = ["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
+  const groups = ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
   assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
   assert.equal(laneGroup("publint"), "build");
   assert.equal(laneGroup("browser-tests"), "browser-tests");
   assert.equal(laneGroup("call-performance"), "call-performance");
-  assert.equal(laneGroup("call-leaks"), "call-leaks");
+  assert.equal(laneGroup("call-leaks"), "call-leaks-1");
   assert.equal(laneGroup("a-new-lane"), "checks");
   assert.equal(laneGroupLanes(lanes, undefined), lanes);
   assert.throws(
@@ -271,4 +272,70 @@ test("CI installs the same scanner versions that the gate scripts fall back to",
 
 test("gitleaks loads its default rules, because a config without them has no rules at all", () => {
   assert.match(readFileSync(new URL("../../.gitleaks.toml", import.meta.url), "utf8"), /^\[extend\]\nuseDefault = true$/mu);
+});
+
+test("leak shards cover all journeys exactly once, including uneven splits", () => {
+  for (const total of [3, 4]) {
+    const shards = Array.from({ length: total }, (_, offset) => leakShard(`${offset + 1}/${total}`));
+    assert.deepEqual(shards.flatMap(({ journeys }) => journeys).toSorted(), LEAK_JOURNEYS.toSorted());
+    assert.equal(shards.filter(({ selfTest }) => selfTest).length, 1);
+  }
+  for (const value of ["0/3", "4/3", "1/10", "1/0", "1.5/3", "1/3junk"]) assert.throws(() => leakShard(value));
+});
+
+test("leak shard reports fail closed on missing shards, journeys and self-tests", () => {
+  const reports = Array.from({ length: 3 }, (_, offset) => {
+    const { index, total, journeys, selfTest } = leakShard(`${offset + 1}/3`);
+    return {
+      leakShard: { index, total },
+      leakRepeats: 1,
+      errors: [],
+      failures: [],
+      leaks: {
+        results: [...journeys.map((journey) => ({ journey, repeat: 0 })), ...(selfTest ? [{ journey: "panels", repeat: 1 }] : [])],
+        failures: [],
+        selfTest: (selfTest ? ["resource-lifecycle", "listener", "detached", "none"] : []).map((injection) => ({ injection, detected: true })),
+      },
+    };
+  });
+  assert.doesNotThrow(() => checkLeakShardReports(reports));
+  assert.throws(() => checkLeakShardReports(reports.slice(0, 2)), /Expected 3 leak shard reports, got 2/u);
+  const missingJourney = structuredClone(reports);
+  missingJourney[1].leaks.results.pop();
+  assert.throws(() => checkLeakShardReports(missingJourney), /journey coverage mismatch/u);
+  assert.throws(() => checkLeakShardReports([reports[0], reports[0], reports[2]]), /duplicate leak shard/u);
+  const extraSelfTest = structuredClone(reports);
+  extraSelfTest[1].leaks.selfTest = reports[0].leaks.selfTest;
+  assert.throws(() => checkLeakShardReports(extraSelfTest), /self-test mismatch/u);
+});
+
+test("each leak CI group selects the shared lane with its own shard and report", () => {
+  const previous = process.env.GATE_LANE_GROUP;
+  try {
+    for (let index = 1; index <= 3; index++) {
+      const group = `call-leaks-${index}`;
+      process.env.GATE_LANE_GROUP = group;
+      const task = createGatePlan([], { full: true }).tasks.find(({ id }) => id === "call-leaks");
+      assert.deepEqual(task.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--leaks-only", "--out", `artifacts/${group}.json`, "--shard", `${index}/3`]);
+      const lanes = execFileSync("node", ["--input-type=module", "-e", 'import config from "./gate.config.ts"; console.log(JSON.stringify(config.lanes.map(({ id }) => id)))'], { encoding: "utf8", env: { ...process.env, GATE_LANE_GROUP: group } });
+      assert.deepEqual(JSON.parse(lanes), ["call-leaks"]);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.GATE_LANE_GROUP;
+    else process.env.GATE_LANE_GROUP = previous;
+  }
+});
+
+test("leak coverage validates any planned shard and rejects partial plans", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
+  const guard = "needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')";
+  for (const step of ["Download leak shard reports", "Require complete leak journey coverage"]) {
+    assert.equal(workflow.split(`- name: ${step}\n`)[1]?.split("\n")[0].trim(), `if: ${guard}`);
+  }
+  const script = /node --input-type=module <<'JS'\n([\s\S]*?)          JS/u.exec(workflow)?.[1];
+  assert.ok(script, "workflow must validate the planned shard set");
+  const validate = (groups) => execFileSync("node", ["--input-type=module", "-e", script], { env: { ...process.env, LEAK_GROUPS: JSON.stringify(groups) }, stdio: "pipe" });
+  for (const shard of ["call-leaks-2", "call-leaks-3"]) assert.throws(() => validate(["checks", shard]), /Incomplete leak shard plan/u);
+  assert.doesNotThrow(() => validate(["checks", "call-leaks-1", "call-leaks-2", "call-leaks-3"]));
+  assert.doesNotThrow(() => validate(["checks"]));
 });

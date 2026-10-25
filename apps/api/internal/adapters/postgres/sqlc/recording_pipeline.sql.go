@@ -814,37 +814,37 @@ with existing as (
     where recording_capacity.id = 1
       -- Storage retains the prior bound so grandfathered reservations can drain;
       -- these predicates are the launch policy for new admission.
-      and locked_capacity.reserved_episodes + $3::integer <= 10
-      and locked_capacity.reserved_participants + $4::integer <= 100
-      and locked_capacity.reserved_input_bitrate_bps + $5::bigint <= 40000000
+      and locked_capacity.reserved_episodes + $3::integer <= coalesce(nullif($6::integer, 0), 10)
+      and locked_capacity.reserved_participants + $4::integer <= coalesce(nullif($7::integer, 0), 100)
+      and locked_capacity.reserved_input_bitrate_bps + $5::bigint <= coalesce(nullif($8::bigint, 0), 40000000)
       and exists (
           select 1 from episodes
           where episodes.tenant_id = $1
-            and episodes.space_id = $6
-            and episodes.id = $7
+            and episodes.space_id = $9
+            and episodes.id = $10
       )
       and (
           not exists (
               select 1 from recordings
-              where recordings.id = $8
+              where recordings.id = $11
           )
           or exists (
               select 1 from recordings
-              where recordings.id = $8
+              where recordings.id = $11
                 and recordings.tenant_id = $1
-                and recordings.space_id = $6
-                and recordings.episode_id = $7
+                and recordings.space_id = $9
+                and recordings.episode_id = $10
                 and recordings.status in ('pending', 'processing')
           )
       )
     returning recording_capacity.id
 ), materialized_recording as (
     insert into recordings (id, tenant_id, space_id, episode_id, status, storage_provider)
-    select $8, $1, $6, $7, 'pending', 'r2'
+    select $11, $1, $9, $10, 'pending', 'r2'
     from capacity_update
     join episodes on episodes.tenant_id = $1
-        and episodes.space_id = $6
-        and episodes.id = $7
+        and episodes.space_id = $9
+        and episodes.id = $10
     where not exists (select 1 from existing)
     on conflict (id) do update
     set updated_at = recordings.updated_at
@@ -859,10 +859,10 @@ with existing as (
     union all
     select recordings.id, recordings.tenant_id, recordings.space_id, recordings.episode_id
     from recordings
-    where recordings.id = $8
+    where recordings.id = $11
       and recordings.tenant_id = $1
-      and recordings.space_id = $6
-      and recordings.episode_id = $7
+      and recordings.space_id = $9
+      and recordings.episode_id = $10
       and recordings.status in ('pending', 'processing')
       and not exists (select 1 from existing)
       and not exists (select 1 from materialized_recording)
@@ -873,9 +873,9 @@ with existing as (
         starts_at, ends_at
     )
     select
-        $9, recording.tenant_id, recording.space_id, recording.episode_id, recording.id,
-        $2, $10, $11, $4, $12,
-        $5, 'reserved', $13, $14
+        $12, recording.tenant_id, recording.space_id, recording.episode_id, recording.id,
+        $2, $13, $14, $4, $15,
+        $5, 'reserved', $16, $17
     from capacity_update join recording on true
     where not exists (select 1 from existing)
     returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
@@ -901,16 +901,16 @@ with existing as (
         payload_schema_version, state, priority, available_at, attempt_limit
     )
     select
-        $15, tenant_id, episode_id, recording_id, 'capture',
-        'capture:' || recording_id::text, $16, 'pending',
-        $17, $18, $19
+        $18, tenant_id, episode_id, recording_id, 'capture',
+        'capture:' || recording_id::text, $19, 'pending',
+        $20, $21, $22
     from reservation
 ), replay as (
     select id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
         policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
         starts_at, ends_at, updated_at, created_at
     from existing
-    where request_fingerprint = $10
+    where request_fingerprint = $13
 )
 select reservation.id, reservation.tenant_id, reservation.space_id, reservation.episode_id,
     reservation.recording_id, reservation.idempotency_key, reservation.policy_snapshot_version, reservation.participant_count,
@@ -933,6 +933,9 @@ type CreateRecordingReservationParams struct {
 	EpisodeCount          int32              `json:"episode_count"`
 	ParticipantCount      int32              `json:"participant_count"`
 	InputBitrateBps       int64              `json:"input_bitrate_bps"`
+	RecordingCap          int32              `json:"recording_cap"`
+	ParticipantCap        int32              `json:"participant_cap"`
+	BitrateCapBps         int64              `json:"bitrate_cap_bps"`
 	SpaceID               pgtype.UUID        `json:"space_id"`
 	EpisodeID             pgtype.UUID        `json:"episode_id"`
 	RecordingID           pgtype.UUID        `json:"recording_id"`
@@ -975,6 +978,9 @@ func (q *Queries) CreateRecordingReservation(ctx context.Context, arg CreateReco
 		arg.EpisodeCount,
 		arg.ParticipantCount,
 		arg.InputBitrateBps,
+		arg.RecordingCap,
+		arg.ParticipantCap,
+		arg.BitrateCapBps,
 		arg.SpaceID,
 		arg.EpisodeID,
 		arg.RecordingID,

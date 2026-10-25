@@ -26,7 +26,7 @@ export async function proveToastLayering(browser, baseURL, { screenshotDirectory
 async function proveViewport(page, baseURL, { screenshotDirectory, label, noticeBottom, width, height, place }) {
   const url = new URL(baseURL);
   url.searchParams.set("fixture", "toast-layering");
-  await page.goto(url.href);
+  await page.goto(url.href, { waitUntil: "commit" });
   if (noticeBottom !== undefined) await page.addStyleTag({ content: `.chalk-toasts { bottom: ${noticeBottom}px; }` });
   const error = "setCameraEnabled belongs to an inactive connection";
   // One text-only announcer handles speech in both placements; visual notices own interactions.

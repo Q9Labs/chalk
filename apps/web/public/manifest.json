@@ -9,7 +9,7 @@
   "icons": [
     {
       "src": "/favicon.ico",
-      "sizes": "64x64",
+      "sizes": "16x16 32x32 48x48",
       "type": "image/x-icon"
     },
     {
@@ -39,8 +39,8 @@
   ],
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#030303",
-  "theme_color": "#030303",
+  "background_color": "#0b0c0e",
+  "theme_color": "#0b0c0e",
   "categories": ["business", "productivity", "communication"],
   "shortcuts": [
     {

@@ -351,6 +351,16 @@ if jq -e '.images | has("recorder_control")' "$manifest" >/dev/null; then
     openssl verify -purpose sslserver -verify_hostname "$control_server_name" -CAfile "${secret_root}/recorder/issuer-server-ca" "${secret_root}/recorder/issuer-server-cert" >/dev/null || fail "issuer certificate SAN mismatch"
   fi
 fi
+# Only an explicit admission cap opts into the cross-service capacity invariant.
+if [[ "$api_available" == true ]] && grep -q '^CHALK_RECORDING_ADMISSION_CAP=' "$api_env"; then
+  recording_cap="$(env_value "$api_env" CHALK_RECORDING_ADMISSION_CAP)" || fail "CHALK_RECORDING_ADMISSION_CAP must occur once and be non-empty"
+  [[ "$recording_cap" =~ ^([1-9]|1[0-9]|20)$ ]] || fail "CHALK_RECORDING_ADMISSION_CAP must be between 1 and 20"
+  capture_env="${env_root}/recorder-capture.env"
+  capture_nodes="$(env_value "$capture_env" CHALK_RECORDER_FLEET_MAX_NODES)" || fail "explicit Recording cap needs Capture MAX_NODES"
+  capture_slots="$(env_value "$capture_env" CHALK_RECORDER_FLEET_SLOTS_PER_NODE)" || fail "explicit Recording cap needs Capture SLOTS_PER_NODE"
+  [[ "$capture_nodes" =~ ^[1-9][0-9]{0,8}$ && "$capture_slots" =~ ^([1-9]|[1-9][0-9]|100)$ ]] || fail "Capture MAX_NODES and SLOTS_PER_NODE must be bounded positive integers"
+  ((recording_cap <= capture_nodes * capture_slots)) || fail "CHALK_RECORDING_ADMISSION_CAP exceeds Capture MAX_NODES x SLOTS_PER_NODE"
+fi
 manifest_schema_version="$(jq -er '.schema_version' "${manifest}")" || fail "release manifest schema version is missing"
 case "${manifest_schema_version}" in
   1)
@@ -431,6 +441,12 @@ if [[ -n "${rendered_root}" ]]; then
   grep -Fqx 'PodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate' "${migration_unit}" || fail "migration Quadlet does not select the migration binary"
   migration_command="$(sed -n '/^Exec=/p' "${managed_root}/quadlet/chalk-api-migrate.container.in")"
   migration_command="${migration_command//__DATABASE_MIGRATION_TARGET__/${migration_target}}"
+  if [[ "$(jq -r '.protocol_compatibility.entry_migrator // 0' "${manifest}")" == 1 ]]; then
+    migration_command+=" --entry-writer-protocol $(jq -r '.protocol_compatibility.entry_writer // 0' "${manifest}")"
+    if [[ "$(jq -r '.protocol_compatibility.entry_enforcement // false' "${manifest}")" == true ]]; then
+      migration_command+=" --enforce-entry-ownership $(jq -r '.release_id' "${manifest}") --rollback-entry-writer-protocol 1"
+    fi
+  fi
   grep -Fqx "${migration_command}" "${migration_unit}" || fail "migration Quadlet target or bounded repairs differ from the release contract"
   grep -Fq 'Secret=chalk-managed-migrator-database-url,' "${migration_unit}" || fail "migration Quadlet does not mount the dedicated migrator credential"
   ! grep -Fq 'chalk-managed-migrator-database-url' "${rendered_root}/quadlet/chalk-api.container" || fail "API Quadlet exposes the dedicated migrator credential"

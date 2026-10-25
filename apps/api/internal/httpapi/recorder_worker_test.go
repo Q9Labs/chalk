@@ -203,7 +203,7 @@ func TestRecorderWorkerClaimUsesVerifiedRoleAndIdentityOwner(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if got.Kind != recordingpipeline.JobKindCapture || got.Owner != workerTestID || got.LeaseFor != recorderWorkerDefaultLease || got.LeaseToken == "" {
+	if !got.ManagedWorker || got.Kind != recordingpipeline.JobKindCapture || got.Owner != workerTestID || got.LeaseFor != recorderWorkerDefaultLease || got.LeaseToken == "" {
 		t.Fatalf("claim input = %#v", got)
 	}
 	var body recorderWorkerClaimResponse
@@ -248,6 +248,87 @@ func TestRecorderWorkerCapturePlanWaitUsesImmutableAuthorityAndVerifiedOwner(t *
 	decoded := decodeRecorderWorkerJSON(t, response)
 	if decoded["fingerprint"] == "" || decoded["plan"] == nil {
 		t.Fatalf("capture plan response = %#v", decoded)
+	}
+}
+
+func TestRecorderWorkerCapturePlanWaitErrorResponsesAndLogs(t *testing.T) {
+	cases := []struct {
+		name   string
+		cause  error
+		status int
+		code   string
+	}{
+		{"no change", captureplan.ErrWaitTimeout, http.StatusNoContent, ""},
+		{"cancelled", context.Canceled, http.StatusOK, ""},
+		{"deadline", fmt.Errorf("reconcile: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, "request.timeout"},
+		{"invalid request", captureplan.ErrInvalidWaitInput, http.StatusBadRequest, "request.invalid"},
+		{"stale authority", captureplan.ErrPlanAuthorityMismatch, http.StatusConflict, "lease.stale"},
+		{"stale revision", captureplan.ErrStalePlan, http.StatusConflict, "lease.stale"},
+		{"expired lease", captureplan.ErrLeaseExpired, http.StatusConflict, "lease.stale"},
+		{"unavailable", captureplan.ErrRepositoryUnavailable, http.StatusServiceUnavailable, "service.unavailable"},
+		{"invalid plan", fmt.Errorf("build capture plan: %w", captureplan.ErrInvalidTrack), http.StatusInternalServerError, "internal.error"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			plans := recorderCapturePlanServiceStub{wait: func(context.Context, captureplan.WaitInput) (captureplan.Plan, error) {
+				return captureplan.Plan{}, test.cause
+			}}
+			router := NewRecorderWorkerRouterWithControls(recorderWorkerServiceStub{}, recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{
+				WorkerID: mustRecorderWorkerID(t, workerTestID), Role: workeridentity.RoleCapture,
+			}}, RecorderWorkerControlServices{CapturePlans: plans, Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
+			body, err := json.Marshal(recorderWorkerCapturePlanWaitBody{
+				PlanHandle: workerTestClaim, TenantID: workerTestTenant, SpaceID: workerTestTenant,
+				EpisodeID: workerTestEpisode, RecordingID: workerTestRecord, JobID: workerTestJob,
+				AttemptCount: 1, FencingGeneration: 2, CaptureEpoch: 1, EnvelopeDigest: workerTestDigest,
+				LeaseToken: "private-lease-token", LeaseExpiresAt: time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano),
+				AfterRevision: 7, WaitMilliseconds: 1000,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/plans/wait", string(body)))
+			if response.Code != test.status {
+				t.Fatalf("status = %d, want %d; body = %s", response.Code, test.status, response.Body.String())
+			}
+			if test.code == "" {
+				if response.Body.Len() != 0 {
+					t.Fatalf("expected empty response, got %s", response.Body.String())
+				}
+			} else {
+				var result struct{ Error APIError }
+				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.Error.Code != test.code {
+					t.Fatalf("error response = %s, decode error = %v", response.Body.String(), err)
+				}
+			}
+			if test.status < http.StatusInternalServerError {
+				if logs.Len() != 0 {
+					t.Fatalf("expected condition produced failure log: %s", logs.String())
+				}
+				return
+			}
+			var entry map[string]any
+			if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+				t.Fatalf("decode failure log: %v; log = %s", err, logs.String())
+			}
+			for key, expected := range map[string]any{
+				"event": "http.failure", "operation": "capture_plan.wait", "error": test.cause.Error(), "code": test.code,
+				"tenant_id": workerTestTenant, "space_id": workerTestTenant, "episode_id": workerTestEpisode,
+				"recording_id": workerTestRecord, "job_id": workerTestJob, "plan_handle": workerTestClaim,
+				"worker_id": workerTestID, "capture_epoch": float64(1), "after_revision": float64(7),
+			} {
+				if entry[key] != expected {
+					t.Errorf("log %s = %v, want %v", key, entry[key], expected)
+				}
+			}
+			if strings.Contains(logs.String(), "private-lease-token") || strings.Contains(logs.String(), workerTestDigest) {
+				t.Fatal("failure log contains private request authority")
+			}
+			if test.status == http.StatusInternalServerError && response.Body.String() != "{\"error\":{\"code\":\"internal.error\",\"message\":\"Capture plan operation failed\"}}\n" {
+				t.Fatalf("unexpected internal error body: %q", response.Body.String())
+			}
+		})
 	}
 }
 
@@ -492,6 +573,47 @@ func TestPrivateWorkerRouterPersistsFleetNodeObservation(t *testing.T) {
 	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":4,"reason":"ready","resources":`+string(resources)+`}`))
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid resources status = %d", response.Code)
+	}
+}
+
+func TestRecorderWorkerPoolHealthRejectsOversizedCapacity(t *testing.T) {
+	workerID := mustRecorderWorkerID(t, workerTestID)
+	fleetCalls := 0
+	legacyCalls := 0
+	handler := NewRecorderWorkerRouterWithControls(recorderWorkerServiceStub{
+		health: func(_ context.Context, input recordingpipeline.PoolHealth) (recordingpipeline.PoolHealth, error) {
+			legacyCalls++
+			return input, nil
+		},
+	}, recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}}, RecorderWorkerControlServices{
+		FleetAuthority: recorderFleetWorkerServiceStub{record: func(_ context.Context, observation recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error) {
+			fleetCalls++
+			return recorderfleet.NodeObservation{
+				Identity: recorderfleet.NodeIdentity{ProviderID: "provider-7", WorkerID: observation.Identity.WorkerID.String(), Role: observation.Identity.Role, BootGeneration: 7},
+				Ready:    observation.Ready, AdmissionOpen: observation.AdmissionOpen,
+				ReadyCapacity: observation.ReadyCapacity, ObservedAt: observation.ObservedAt,
+			}, nil
+		}},
+	})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":101,"reason":"ready"}`))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("oversized capacity status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if fleetCalls != 0 || legacyCalls != 0 {
+		t.Fatalf("oversized capacity reached fleet=%d legacy=%d", fleetCalls, legacyCalls)
+	}
+	decoded := decodeRecorderWorkerJSON(t, response)
+	apiErr, _ := decoded["error"].(map[string]any)
+	if apiErr["code"] != "request.invalid" || apiErr["message"] != "Recorder ready capacity must be between 0 and 100" {
+		t.Fatalf("oversized capacity error = %#v", decoded["error"])
+	}
+
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/pool-health", `{"admission_open":true,"ready_capacity":100,"reason":"ready"}`))
+	if response.Code != http.StatusOK || fleetCalls != 1 || legacyCalls != 0 {
+		t.Fatalf("boundary capacity status=%d fleet=%d legacy=%d body=%s", response.Code, fleetCalls, legacyCalls, response.Body.String())
 	}
 }
 

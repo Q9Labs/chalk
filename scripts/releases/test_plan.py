@@ -60,6 +60,96 @@ class ReleasePlan(unittest.TestCase):
                         self.assertRaisesRegex(ValueError, 'no successful Gate run on master'):
                     release.require_gate(api, None)
 
+    def gate_call(self, api, caller):
+        if caller != 'entry':
+            return self.cut(api, 8, manual=caller == 'manual')['should_cut']
+        with patch.dict(os.environ, TARGET_SHA=SHA, MANIFEST_RUN_ID='', RELEASE_MANAGED='true',
+                        GITHUB_EVENT_NAME='workflow_dispatch'):
+            release.require_gate(api, None)
+        return 'true'
+
+    def test_inflight_gate_turns_green_before_release_continues(self):
+        for caller in ('scheduled', 'manual', 'entry'):
+            for status in ('queued', 'in_progress'):
+                with self.subTest(caller=caller, status=status):
+                    api = MemoryGitHub()
+                    api.gates[0].update(status=status, conclusion=None)
+
+                    def finish(seconds):
+                        api.gates[0].update(status='completed', conclusion='success')
+
+                    with patch('github_release.backoff_sleep', side_effect=finish) as sleep:
+                        self.assertEqual(self.gate_call(api, caller), 'true')
+                    sleep.assert_called_once()
+
+    def test_inflight_gate_failure_or_cancellation_still_refuses(self):
+        for caller in ('scheduled', 'manual', 'entry'):
+            for conclusion in ('failure', 'cancelled', 'timed_out', 'neutral', 'skipped', 'action_required'):
+                with self.subTest(caller=caller, conclusion=conclusion):
+                    api = MemoryGitHub()
+                    api.gates[0].update(status='in_progress', conclusion=None)
+
+                    def finish(seconds):
+                        api.gates[0].update(status='completed', conclusion=conclusion)
+
+                    with patch('github_release.backoff_sleep', side_effect=finish):
+                        if caller == 'scheduled':
+                            self.assertEqual(self.gate_call(api, caller), 'false')
+                        else:
+                            with self.assertRaisesRegex(ValueError, 'not successful|no successful'):
+                                self.gate_call(api, caller)
+                    self.assertEqual(api.items, [])
+
+    def test_inflight_gate_wait_is_bounded(self):
+        for caller in ('scheduled', 'manual', 'entry'):
+            with self.subTest(caller=caller):
+                api = MemoryGitHub()
+                api.gates[0].update(status='in_progress', conclusion=None)
+                elapsed = [0]
+
+                def advance(seconds):
+                    elapsed[0] += seconds
+
+                with patch('github_release.monotonic', side_effect=lambda: elapsed[0]), \
+                        patch('github_release.backoff_sleep', side_effect=advance), \
+                        self.assertRaisesRegex(ValueError, f'timed out after 20 minutes.*{SHA}.*refused'):
+                    self.gate_call(api, caller)
+                self.assertEqual(elapsed[0], 20 * 60)
+                self.assertEqual(api.items, [])
+
+    def test_missing_or_untrusted_gate_does_not_wait_or_release(self):
+        for caller in ('scheduled', 'manual', 'entry'):
+            for change in (None, dict(head_sha='b' * 40), dict(event='pull_request'), dict(head_branch='other')):
+                with self.subTest(caller=caller, change=change):
+                    api = MemoryGitHub()
+                    if change is None:
+                        api.gates = []
+                    else:
+                        api.gates[0].update(status='in_progress', conclusion=None, **change)
+                    with patch('github_release.backoff_sleep') as sleep:
+                        if caller == 'scheduled':
+                            self.assertEqual(self.gate_call(api, caller), 'false')
+                        else:
+                            with self.assertRaisesRegex(ValueError, 'not successful|no successful'):
+                                self.gate_call(api, caller)
+                    sleep.assert_not_called()
+                    self.assertEqual(api.items, [])
+
+    def test_master_moving_while_waiting_still_defers_cut(self):
+        for manual in (False, True):
+            with self.subTest(manual=manual):
+                api = MemoryGitHub()
+                api.gates[0].update(status='in_progress', conclusion=None)
+
+                def finish(seconds):
+                    api.gates[0].update(status='completed', conclusion='success')
+                    api.tip = 'b' * 40
+
+                with patch('github_release.backoff_sleep', side_effect=finish):
+                    self.assertEqual(self.cut(api, 8, manual=manual)['should_cut'], 'false')
+                self.assertEqual(api.items, [])
+                self.assertEqual(api.dispatches, int(manual))
+
     def test_green_tip_is_retried_after_cooldown_without_a_new_push(self):
         api = MemoryGitHub()
         api.tip = 'b' * 40

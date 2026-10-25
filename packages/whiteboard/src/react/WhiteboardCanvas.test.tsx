@@ -1,36 +1,106 @@
-// @vitest-environment happy-dom
-// @vitest-environment-options {"settings":{"disableCSSFileLoading":true,"handleDisabledFileLoadingAsSuccess":true}}
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 
-import { afterEach, expect, it, vi } from "vitest";
-import { createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { WhiteboardCanvas, preloadWhiteboardStylesheet } from "./WhiteboardCanvas";
+import type { WhiteboardCollaborationEvent } from "../collab/engine";
+import { WhiteboardCanvas, type WhiteboardCollaborationOptions } from "./index";
 
-vi.mock("@excalidraw/excalidraw", () => ({ Excalidraw: () => createElement("canvas", { "data-engine": "true" }) }));
+type FakeApi = ReturnType<typeof createApi>;
 
-let root: Root | undefined;
-afterEach(() => {
-  root?.unmount();
-  root = undefined;
-  document.head.innerHTML = "";
-  document.body.innerHTML = "";
+const fake = vi.hoisted(() => ({ editors: [] as { readonly api: FakeApi; mounted: boolean }[] }));
+
+function createApi() {
+  const appState = { isLoading: false, viewBackgroundColor: "transparent", scrollX: 0, scrollY: 0, zoom: { value: 1 }, editingTextElement: null, newElement: null, resizingElement: null };
+  return {
+    getAppState: () => appState,
+    getSceneElements: () => [],
+    getSceneElementsIncludingDeleted: () => [],
+    getFiles: () => ({}),
+    addFiles: vi.fn(),
+    updateScene: vi.fn(),
+    history: { clear: vi.fn() },
+    onPointerUp: () => () => undefined,
+  };
+}
+
+// Excalidraw cannot draw in a DOM runner. The stand-in keeps the one behaviour under test: like the real
+// editor, it hands over its API from its class constructor, while React is still rendering. Strict Mode
+// wraps only the editor, so React builds it twice and keeps one, as it does in a Strict Mode app.
+vi.mock("@excalidraw/excalidraw", async () => {
+  const { Component, createElement, StrictMode } = await import("react");
+  class Editor extends Component<{ readonly excalidrawAPI: (api: FakeApi) => void }> {
+    readonly editor = { api: createApi(), mounted: false };
+    constructor(props: { readonly excalidrawAPI: (api: FakeApi) => void }) {
+      super(props);
+      fake.editors.push(this.editor);
+      props.excalidrawAPI(this.editor.api);
+    }
+    override componentDidMount() {
+      this.editor.mounted = true;
+    }
+    override render() {
+      return null;
+    }
+  }
+  return {
+    CaptureUpdateAction: { NEVER: "NEVER", IMMEDIATELY: "IMMEDIATELY" },
+    MIME_TYPES: { binary: "application/octet-stream" },
+    isInvisiblySmallElement: () => false,
+    newElementWith: <T extends object>(element: T, update: Partial<T>) => ({ ...element, ...update }),
+    reconcileElements: (_local: readonly object[], remote: readonly object[]) => [...remote],
+    restoreElements: (elements: readonly object[]) => [...elements],
+    Excalidraw: (props: { readonly excalidrawAPI: (api: FakeApi) => void }) => createElement(StrictMode, null, createElement(Editor, props)),
+  };
 });
 
-it.each(["static", "dynamic"])("opens when the %s stylesheet loaded before the canvas mounted", async (path) => {
-  if (path === "static") document.head.innerHTML = '<link id="chalk-excalidraw-styles" rel="stylesheet" href="./index.css">';
-  else preloadWhiteboardStylesheet("./index.css");
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
 
-  const link = document.querySelector("link");
-  if (!link) throw new Error("Missing board stylesheet");
-  // The DOM emulator does not fetch stylesheets; expose the browser's completed sheet state.
-  vi.spyOn(link, "sheet", "get").mockReturnValue(new CSSStyleSheet());
+afterEach(() => {
+  fake.editors.length = 0;
+});
+
+it("collaborates on the editor React keeps when Strict Mode builds it twice", async () => {
+  const listeners = new Set<(event: WhiteboardCollaborationEvent) => void>();
+  const loadErrors: Error[] = [];
+  const collab: WhiteboardCollaborationOptions = {
+    canDraw: false,
+    submitUpdate: async (input) => ({ operationId: "operation", sceneId: input.sceneId, revision: "2" }),
+    sendCursor: () => undefined,
+    requestSnapshot: async () => undefined,
+    clear: async () => ({ operationId: "clear", sceneId: "scene", revision: "2" }),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
   const container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
-  root.render(createElement(WhiteboardCanvas, { excalidrawCssPath: "./index.css", isVisible: true }));
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<WhiteboardCanvas collab={collab} onLoadError={(error) => loadErrors.push(error)} />));
+    await act(() =>
+      vi.waitFor(() => {
+        expect(loadErrors).toEqual([]);
+        expect(listeners.size).toBe(1);
+      }),
+    );
 
-  await expect.poll(() => container.querySelector("[data-engine]")).not.toBeNull();
-  expect(container.querySelector('[role="alert"]')).toBeNull();
-  await expect.poll(() => container.textContent).not.toContain("Loading whiteboard");
-  expect(document.querySelectorAll("link")).toHaveLength(1);
+    // Strict Mode built a second editor and threw one away. Only the kept one may receive the board.
+    expect(fake.editors).toHaveLength(2);
+    const kept = fake.editors.filter((editor) => editor.mounted);
+    expect(kept).toHaveLength(1);
+    act(() => {
+      for (const listener of listeners) listener({ type: "snapshot", sceneId: "scene", revision: "1", elements: [] });
+    });
+    for (const editor of fake.editors) {
+      if (editor.mounted) expect(editor.api.updateScene).toHaveBeenCalledWith(expect.objectContaining({ elements: [] }));
+      else expect(editor.api.updateScene).not.toHaveBeenCalled();
+    }
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
 });

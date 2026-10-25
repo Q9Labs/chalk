@@ -97,6 +97,10 @@ func (d *RenderDaemon) Run(ctx context.Context) error {
 		}
 		claim, err := d.claimJob(ctx, claimRequestID)
 		if err != nil {
+			if errors.Is(err, ErrWorkerDraining) {
+				d.Drain()
+				return ErrWorkerDraining
+			}
 			if errors.Is(err, ErrNoWork) {
 				if waitErr := d.config.Wait(ctx, d.config.NoWorkWait); waitErr != nil {
 					return errors.Join(ErrRenderDaemonStopped, waitErr)

@@ -1,6 +1,8 @@
 package postgres
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,6 +14,44 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func TestBuildRecordingCapturePlanWaitsForPublicationOwnerAdmission(t *testing.T) {
+	source, input, deadline := capturePlanSourceFixture(t)
+	admittedID := "77777777-7777-4777-8777-777777777777"
+	joiningID := "88888888-8888-4888-8888-888888888888"
+	reference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher","m":"0","t":"microphone","g":7}`))
+	joiningReference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"joining-publisher","m":"0","t":"microphone","g":1}`))
+	publications, err := json.Marshal([]persistedCapturePlanPublication{
+		{ParticipantID: admittedID, Source: "microphone", Enabled: true, PublicationID: &reference},
+		{ParticipantID: joiningID, Source: "microphone", Enabled: true, PublicationID: &joiningReference},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source.ProviderPublications = publications
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("publication before admission interrupted capture: %v", err)
+	}
+	if len(plan.Tracks()) != 1 || plan.Tracks()[0].ParticipantID.String() != admittedID {
+		t.Fatalf("capture must retain only the admitted publisher: %#v", plan.Tracks())
+	}
+
+	source.EpisodeControlRevision++
+	source.EpisodeFoldedState = []byte(`{"control_revision":5,"status":"active","participants":[{"participant_id":"` + admittedID + `","display_name":"Admitted","admission_revision":4},{"participant_id":"` + joiningID + `","display_name":"Joining","admission_revision":5}]}`)
+	source.EpisodeParticipants = []byte(`[{"participant_id":"` + admittedID + `","generation":7,"status":"active"},{"participant_id":"` + joiningID + `","generation":1,"status":"active"}]`)
+	admittedPlan, err := buildRecordingCapturePlan(source, input, 2, deadline.Add(-time.Minute))
+	if err != nil || len(admittedPlan.Tracks()) != 2 {
+		t.Fatalf("admission must include the already observed publication: tracks=%#v error=%v", admittedPlan.Tracks(), err)
+	}
+	if admittedPlan.FingerprintHex() == plan.FingerprintHex() {
+		t.Fatal("admission must change the desired capture plan")
+	}
+	source.ProviderPublications = []byte(`[{"participant_id":"` + admittedID + `","source":"microphone","enabled":true,"publication_id":"invalid"}]`)
+	if _, err := buildRecordingCapturePlan(source, input, 3, deadline.Add(-time.Minute)); !errors.Is(err, captureplan.ErrInvalidTrack) {
+		t.Fatalf("invalid admitted publication must still fail: %v", err)
+	}
+}
 
 func TestBuildRecordingCapturePlanUsesFoldedIdentityAndDurableGeneration(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)

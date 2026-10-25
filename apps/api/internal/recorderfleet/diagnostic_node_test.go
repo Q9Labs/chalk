@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -53,6 +54,9 @@ func TestDiagnosticTagDoesNotBypassInventoryFences(t *testing.T) {
 	if !errors.Is(err, ErrInventoryDrift) || !slices.Equal(result.Quarantined, []string{node.ProviderID}) {
 		t.Fatalf("foreign diagnostic node escaped inventory fences: result=%+v error=%v", result, err)
 	}
+	if result.Projection.Reason != "inventory_drift" || !strings.Contains(err.Error(), "quarantined_inventory") || !strings.Contains(err.Error(), node.ProviderID) {
+		t.Fatalf("drift diagnostic lost check, node, or reason: result=%+v error=%v", result, err)
+	}
 }
 
 func TestDiagnosticTagCannotHideManagedNode(t *testing.T) {
@@ -64,7 +68,7 @@ func TestDiagnosticTagCannotHideManagedNode(t *testing.T) {
 	node.Tags = append(node.Tags, "chalk-recorder-diagnostic")
 	fixture.provider.nodes[node.ProviderID] = node
 	result := fixture.step(t, reconciler)
-	if result.Action != ActionBootstrapEnsured || fixture.bootstrap.ensureCalls != 1 {
+	if result.Action != ActionNone || fixture.bootstrap.ensureCalls != 1 {
 		t.Fatalf("managed node escaped lifecycle: result=%+v events=%v", result, fixture.events)
 	}
 }

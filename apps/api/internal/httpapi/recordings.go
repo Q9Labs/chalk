@@ -285,7 +285,7 @@ func createRecordingDownloadURLEndpoint(service RecordingService, exports Record
 			URL:          url.URL,
 			SignedAt:     utilities.FormatTimestamp(url.SignedAt),
 			ExpiresAt:    utilities.FormatTimestamp(url.ExpiresAt),
-			SignedHeader: url.SignedHeader,
+			SignedHeader: cloneSignedHeaders(url),
 		}, nil
 	}).
 		Auth(APIAuthSessionOrBearer).
