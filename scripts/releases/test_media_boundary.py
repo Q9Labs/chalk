@@ -107,6 +107,7 @@ CASE_COMMANDS = {
     ('scheduler-repair', ''): INSTALLED + ' lambda init plan-log show plan-lambda show plan show apply state lambda schedule',
     ('no-op', 'disabled-scheduler'): INSTALLED + ' lambda init plan-log show plan-lambda show plan show state lambda schedule',
     ('missing-state', 'production'): 'config list artifact list',
+    ('changed-zip', 'production-installed'): START + ' plan-log show apply plan-lambda show apply plan show apply state lambda schedule',
     ('missing-state', 'plan-final-replace'): FIRST_INSTALL + ' plan show',
     ('changed-zip', 'unversioned-upload'): INSTALLED + ' upload',
     ('no-op', 'fail-init'): INSTALLED + ' lambda init',
@@ -181,7 +182,8 @@ class DispatcherBoundary(unittest.TestCase):
                     path.write_text(executable)
                     path.chmod(0o700)
                 config = fixture_config()
-                if fault == 'production':
+                production = fault in ('production', 'production-installed')
+                if production:
                     config['runtime']['parameter_prefix'] = config['runtime']['parameter_prefix'].replace('nightly', 'production')
                     config['bootstrap_ca_parameter'] = config['bootstrap_ca_parameter'].replace('nightly', 'production')
                 manifest = root / 'manifest.json'
@@ -213,7 +215,7 @@ class DispatcherBoundary(unittest.TestCase):
                 (root / 'binding.json').write_text(json.dumps(dict(release_id='example-release', manifest_digest='sha256:' + media.digest(manifest.read_bytes()),
                                                                    corpus=value['dispatcher']['corpus_digest'], zip_digest=ZIP_DIGEST)))
                 (root / 'paths.json').write_text(json.dumps(dict(module=str(media.MODULE), root=str(media.ROOT / 'infrastructure/nightly/transcription'))))
-                args = SimpleNamespace(region='example', config_parameter='/example/config', environment='production' if fault == 'production' else 'nightly',
+                args = SimpleNamespace(region='example', config_parameter='/example/config', environment='production' if production else 'nightly',
                                        manifest=manifest, output=output, dry_run=False)
                 stdout = io.StringIO()
                 with patch.dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'], AWS_PROFILE='',
