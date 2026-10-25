@@ -79,11 +79,13 @@ func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage b
 		storage.commitErr = failure
 	}
 	lifecycle := &captureTestLifecycle{}
-	attempt := capturePlanWatchAttempt(t, initial.Authority(), &origin, peer, coordinator, plans, &storage.captureTestStorage, lifecycle, clock.Now, time.Second, time.Second)
+	// Jumping the clock leaves a four-hour checkpoint tail to close at once.
+	// Keep the production close budget instead of the short-fixture timeout.
+	attempt := capturePlanWatchAttempt(t, initial.Authority(), &origin, peer, coordinator, plans, &storage.captureTestStorage, lifecycle, clock.Now, time.Second, defaultCaptureCloseTimeout)
 	attempt.bundles = storage
 	attempt.authority.HardDeadline = deadline
 	attempt.config.After = func(time.Duration) <-chan time.Time { return tick }
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*defaultCaptureCloseTimeout)
 	defer cancel()
 	err := attempt.Run(ctx)
 	if failStorage {
