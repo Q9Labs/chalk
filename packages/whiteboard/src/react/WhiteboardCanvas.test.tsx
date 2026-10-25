@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 
 import type { WhiteboardCollaborationEvent } from "../collab/engine";
-import { WhiteboardCanvas, type WhiteboardCollaborationOptions } from "./index";
+import { WhiteboardCanvas, type WhiteboardCollaborationOptions } from "./WhiteboardCanvas";
 
 type FakeApi = ReturnType<typeof createApi>;
 
