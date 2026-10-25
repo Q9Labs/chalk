@@ -7,6 +7,9 @@ const origin = "https://chalkmeet.com";
 describe("callPathFromLink", () => {
   it.each([
     ["abc-defg-hij", "/abc-defg-hij"],
+    [" APPLE Tiger.lamp-river ", "/apple-tiger-lamp-river"],
+    ["https://chalkmeet.com/APPLE.TIGER.LAMP.RIVER", "/apple-tiger-lamp-river"],
+    ["https://chalkmeet.com/APPLE%20TIGER%20LAMP%20RIVER", "/apple-tiger-lamp-river"],
     ["ABCDEFGHIJ", "/abc-defg-hij"],
     ["https://chalkmeet.com/ABC-DEFG-HIJ", "/abc-defg-hij"],
     ["/abc-defg-hij", "/abc-defg-hij"],

@@ -1,6 +1,6 @@
 export type ThemePreference = "light" | "dark";
 export type ThemeMode = ThemePreference;
-const INVITE_CODE_PATH_PATTERN = /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
+const INVITE_CODE_PATH_PATTERN = /^\/[a-z]+(?:-[a-z]+){2,3}$/;
 const THEME_COOKIE_NAME = "chalk_theme";
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const THEME_COOKIE_PATTERN = /(?:^|;\s*)chalk_theme=([^;]*)/;
@@ -20,4 +20,4 @@ export function applyThemeMode(root: HTMLElement, mode: ThemeMode): void {
   root.style.colorScheme = mode;
 }
 /** Runs in head before first paint; keep aligned with resolveThemeMode. */
-export const THEME_BOOTSTRAP_SCRIPT = `(function(){var m=document.cookie.match(${THEME_COOKIE_PATTERN});var p=m&&m[1]==="light"?"light":"dark";var path=location.pathname;var mode=path==="/space"||path.indexOf("/space/")===0||/^\\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(path)?p:"light";var root=document.documentElement;root.classList.toggle("dark",mode==="dark");root.setAttribute("data-chalk-theme",mode);root.style.colorScheme=mode;})();`;
+export const THEME_BOOTSTRAP_SCRIPT = `(function(){var m=document.cookie.match(${THEME_COOKIE_PATTERN});var p=m&&m[1]==="light"?"light":"dark";var path=location.pathname;var mode=path==="/space"||path.indexOf("/space/")===0||${INVITE_CODE_PATH_PATTERN}.test(path)?p:"light";var root=document.documentElement;root.classList.toggle("dark",mode==="dark");root.setAttribute("data-chalk-theme",mode);root.style.colorScheme=mode;})();`;

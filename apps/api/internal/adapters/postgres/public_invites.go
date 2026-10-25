@@ -116,7 +116,7 @@ func (r PublicInviteRepository) CreateOrGetInvite(ctx context.Context, invite pu
 			result = mapPublicInvite(row)
 			return nil
 		}
-		if uniqueConstraintViolation(err, "space_public_invites_invite_code_idx") {
+		if uniqueConstraintViolation(err, "space_public_invites_invite_code_idx") || uniqueConstraintViolation(err, "space_public_invites_invite_words_idx") {
 			return publicinvites.ErrInviteCodeTaken
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -215,7 +215,7 @@ func (r PublicInviteRepository) RotateInvite(ctx context.Context, tenantID, spac
 		if errors.Is(err, pgx.ErrNoRows) {
 			return publicinvites.ErrInviteNotFound
 		}
-		if uniqueConstraintViolation(err, "space_public_invites_invite_code_idx") {
+		if uniqueConstraintViolation(err, "space_public_invites_invite_code_idx") || uniqueConstraintViolation(err, "space_public_invites_invite_words_idx") {
 			return publicinvites.ErrInviteCodeTaken
 		}
 		if err != nil {

@@ -1,4 +1,4 @@
-import { parseInviteCode } from "@q9labsai/chalk-client";
+import { parseInviteCode } from "@q9labsai/chalk-client/invites";
 
 const SPACE_PATH = /^\/space\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const CHALK_HOSTS = new Set(["chalkmeet.com", "www.chalkmeet.com"]);
@@ -23,7 +23,12 @@ export function callPathFromLink(value: string, origin: string): string | undefi
 
   if (url.host !== new URL(origin).host && !CHALK_HOSTS.has(url.host)) return undefined;
   if (url.search || url.username || url.password) return undefined;
-  const code = parseInviteCode(url.pathname.slice(1));
+  let code: string | undefined;
+  try {
+    code = parseInviteCode(decodeURIComponent(url.pathname.slice(1)));
+  } catch {
+    return undefined;
+  }
   if (code) return `/${code}`;
   if (!SPACE_PATH.test(url.pathname)) return undefined;
   return url.pathname + url.hash;

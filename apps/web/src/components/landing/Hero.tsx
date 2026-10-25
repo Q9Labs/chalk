@@ -4,16 +4,16 @@ import { CopyButton } from "../site/CopyButton";
 import { Icon } from "../site/Icon";
 import { START_CALL_HREF } from "../site/links";
 import { CallPreview } from "./CallPreview";
-import { callPathFromLink } from "./invite-link";
 
 const INSTALL = "pnpm add @q9labsai/chalk-react";
 
 function JoinForm() {
   const [invalid, setInvalid] = useState(false);
 
-  function join(event: FormEvent<HTMLFormElement>) {
+  async function join(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = new FormData(event.currentTarget).get("link");
+    const { callPathFromLink } = await import("./invite-link");
     const path = typeof value === "string" ? callPathFromLink(value, window.location.origin) : undefined;
     if (!path) {
       setInvalid(true);
@@ -36,7 +36,7 @@ function JoinForm() {
       {invalid ? (
         <p className="err" id="hero-join-error" role="alert">
           <Icon name="alert" />
-          That isn’t a Chalk link or code. A call link looks like chalkmeet.com/abc-defg-hij.
+          That isn’t a Chalk link or code. A call link looks like chalkmeet.com/snap-noodle-groom-koala.
         </p>
       ) : null}
     </div>
