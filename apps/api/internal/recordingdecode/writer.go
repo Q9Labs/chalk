@@ -218,7 +218,7 @@ func validateRequest(ctx context.Context, request Request) error {
 	if ctx == nil || strings.TrimSpace(request.RecordingID) == "" || strings.TrimSpace(request.EpisodeID) == "" ||
 		strings.TrimSpace(request.TenantID) == "" || strings.TrimSpace(request.Environment) == "" ||
 		strings.TrimSpace(request.OriginAuthorityID) == "" || request.CaptureEpoch <= 0 ||
-		request.DurationMS < 0 || request.DurationMS > 2*60*60*1_000 ||
+		request.DurationMS < 0 || request.DurationMS > recordingpipeline.MaximumRecordingDuration.Milliseconds() ||
 		strings.TrimSpace(request.OutputDirectory) == "" || len(request.DataKeys) == 0 || len(request.Bundles) > MaximumBundleFiles {
 		return ErrInvalidRequest
 	}

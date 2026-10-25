@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pion/rtp/codecs"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 )
 
@@ -25,6 +28,34 @@ func TestWriteRejectsRecordingWithNoVideoOrAudio(t *testing.T) {
 	}
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatalf("empty Export published output: %v", err)
+	}
+}
+
+func TestWriteDecodesRecordingPastTwoHours(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	// Real VP8 media on a long Recording clock; the silent mix uses a sparse WAV.
+	duration := (3 * time.Hour).Milliseconds()
+	packets := packetizeVP8(generateVP8Frames(t, t.TempDir()))
+	request := policyBundleRequest(t, [][]recordingbundle.RTPPacket{packets}, duration)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	result, err := Write(ctx, request)
+	if err != nil {
+		t.Fatalf("decode a three-hour Recording: %v", err)
+	}
+	if result.Index.Clock.DurationMS != duration || result.Index.Mix.EndMS != duration || len(result.Index.Sources) != 1 || result.Index.Sources[0].Codec != "vp8" {
+		t.Fatalf("long Recording lost its clock or video: %+v", result.Index)
+	}
+	if _, err := os.Stat(filepath.Join(request.OutputDirectory, result.Index.Sources[0].Path)); err != nil {
+		t.Fatalf("decoded video was not published: %v", err)
+	}
+	request.DurationMS = recordingpipeline.MaximumRecordingDuration.Milliseconds() + 1
+	request.Presentation.Clock.DurationMillis = request.DurationMS
+	request.OutputDirectory += "-too-long"
+	if _, err := Write(ctx, request); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("decode beyond the recording maximum = %v, want invalid request", err)
 	}
 }
 

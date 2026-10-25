@@ -171,6 +171,11 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 		t.Fatalf("new ready operation after Sync advanced error = %v, want authority mismatch", err)
 	}
 	t.Run("reservation deadline authorizes stopped without a Participant stop", func(t *testing.T) {
+		// The API must refuse an unsolicited stop after the old two-hour ceiling.
+		if _, err := transaction.Exec(ctx, `update recording_reservations set max_duration_seconds = 14400, starts_at = now() - interval '2 hours 15 minutes', ends_at = now() + interval '1 hour 45 minutes' where id = $1`, reservationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+
 		deadlineTx, err := transaction.Begin(ctx)
 		if err != nil {
 			t.Fatal(err)

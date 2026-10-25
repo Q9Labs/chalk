@@ -5,6 +5,8 @@ import { exactKeys, integerField as validatedIntegerField, literalField, objectV
 
 const FRAME_RENDER_REQUEST_VERSION = "recording-frame-render-request.v1";
 
+const MAXIMUM_RECORDING_DURATION_MS = 4 * 60 * 60 * 1_000;
+
 const MAXIMUM_REQUEST_BYTES = 64 << 10;
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -36,7 +38,7 @@ export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 
   const width = requestIntegerField(request, "width", 2, 3_840);
   const height = requestIntegerField(request, "height", 2, 2_160);
   const fps = requestIntegerField(request, "fps", 1, 60);
-  const durationMs = requestIntegerField(request, "duration_ms", 1, 7_200_000);
+  const durationMs = requestIntegerField(request, "duration_ms", 1, MAXIMUM_RECORDING_DURATION_MS);
   if (width % 2 !== 0 || height % 2 !== 0) throw new TypeError("frame render dimensions must be even");
   return {
     schemaVersion: FRAME_RENDER_REQUEST_VERSION,

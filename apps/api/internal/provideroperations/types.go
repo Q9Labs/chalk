@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -296,7 +297,7 @@ func (input OperationInput) Canonicalize() (CanonicalOperation, error) {
 
 func (reservation RecordingReservation) Validate() error {
 	if reservation.SpaceID.IsZero() || reservation.ParticipantCount < 1 || reservation.ParticipantCount > 10 ||
-		reservation.MaxDurationSeconds < 1 || reservation.MaxDurationSeconds > 7200 ||
+		reservation.MaxDurationSeconds < 1 || reservation.MaxDurationSeconds > int(recordingpipeline.MaximumRecordingDuration/time.Second) ||
 		reservation.InputBitrateBPS < 1 || reservation.InputBitrateBPS > 4_000_000 ||
 		reservation.PolicySnapshotVersion != artifactpolicy.SnapshotSchemaVersion {
 		return ErrInvalidRecordingReservation

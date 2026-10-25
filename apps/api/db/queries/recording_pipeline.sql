@@ -214,7 +214,7 @@ set max_duration_seconds = sqlc.arg(max_duration_seconds),
 where tenant_id = sqlc.arg(tenant_id)
   and id = sqlc.arg(id)
   and state = 'reserved'
-  and sqlc.arg(max_duration_seconds)::integer between max_duration_seconds and 7200
+  and sqlc.arg(max_duration_seconds)::integer between max_duration_seconds and 14400
 returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
     policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
     starts_at, ends_at, updated_at, created_at;

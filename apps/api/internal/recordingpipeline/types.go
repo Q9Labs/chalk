@@ -14,7 +14,7 @@ const (
 	MaximumParticipants        = 100
 	MinimumEpisodeParticipants = 1
 	MaximumEpisodeParticipants = 10
-	MaximumRecordingDuration   = 2 * time.Hour
+	MaximumRecordingDuration   = 4 * time.Hour
 	// The c-2/two-page render profile took about 5.9 times media duration
 	// on the qualified fixture. Keep an absolute budget across retries,
 	// staging, and encoding for a maximum-length Recording.
@@ -36,7 +36,7 @@ var (
 	ErrInvalidReservationID         = errors.New("invalid recording reservation id")
 	ErrInvalidJobID                 = errors.New("invalid recording job id")
 	ErrInvalidParticipantCount      = errors.New("recording participant count must be between one and ten")
-	ErrInvalidDuration              = errors.New("recording duration must be greater than zero and at most two hours")
+	ErrInvalidDuration              = errors.New("recording duration must be greater than zero and at most four hours")
 	ErrInvalidInputBitrate          = errors.New("recording input bitrate must be greater than zero and at most four Mbps")
 	ErrExtensionUnavailable         = errors.New("recording reservation extension is fail-closed until render capacity is qualified")
 	ErrReservationConflict          = errors.New("recording reservation idempotency conflict")

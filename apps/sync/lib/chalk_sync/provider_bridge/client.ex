@@ -9,6 +9,7 @@ defmodule ChalkSync.ProviderBridge.Client do
 
   alias ChalkSync.ProviderBridge.Codec
   alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.Stateholder.Postgres.Recording
   alias ChalkSync.UUID
 
   @default_request_bytes 16 * 1024
@@ -328,7 +329,7 @@ defmodule ChalkSync.ProviderBridge.Client do
              Map.fetch!(reservation, "participant_count") in 1..10,
          true <-
            is_integer(Map.fetch!(reservation, "max_duration_seconds")) and
-             Map.fetch!(reservation, "max_duration_seconds") in 1..7200,
+             Map.fetch!(reservation, "max_duration_seconds") in 1..Recording.maximum_duration_seconds(),
          true <-
            is_integer(Map.fetch!(reservation, "input_bitrate_bps")) and
              Map.fetch!(reservation, "input_bitrate_bps") in 1..4_000_000,

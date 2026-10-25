@@ -35,7 +35,12 @@ describe("frame render request boundary", () => {
     });
   });
 
+  it.each([2 * 60 * 60 * 1_000 + 1, 4 * 60 * 60 * 1_000])("accepts a long recording (%i ms)", (duration_ms) => {
+    expect(parseFrameRenderRequestV1({ ...validRequest(), duration_ms }).durationMs).toBe(duration_ms);
+  });
+
   it.each([
+    ["a recording past four hours", { ...validRequest(), duration_ms: 4 * 60 * 60 * 1_000 + 1 }],
     ["an unknown field", { ...validRequest(), output_path: "/private/tmp/recording-1/output" }],
     ["a relative workspace", { ...validRequest(), workspace_directory: "recording-1" }],
     ["an odd frame dimension", { ...validRequest(), width: 1_279 }],
