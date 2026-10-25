@@ -98,8 +98,8 @@ func testClaimClosurePreservesLiveRecording(t *testing.T, refresh bool) {
 	}
 	select {
 	case <-control.heartbeats:
-	case <-ctx.Done():
-		t.Fatal("held work stopped heartbeating")
+	case <-time.After(200 * time.Millisecond):
+		t.Error("held work stopped heartbeating")
 	}
 	select {
 	case <-interrupted:
