@@ -1,4 +1,3 @@
-import { parseInviteCode } from "@q9labsai/chalk-client";
 import { createFileRoute, useLocation, useMatch } from "@tanstack/react-router";
 import { useCallback, useEffect } from "react";
 
@@ -23,6 +22,7 @@ function SpaceRoute() {
   const navigate = Route.useNavigate();
   const navigatePublicSpace = useCallback(
     async (canonicalSlug: string, inviteLink: string) => {
+      const { parseInviteCode } = await import("@q9labsai/chalk-client/invites");
       const inviteURL = new URL(inviteLink);
       const code = parseInviteCode(inviteURL.pathname.slice(1));
       if (code) {

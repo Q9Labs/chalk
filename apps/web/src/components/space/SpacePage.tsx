@@ -6,7 +6,6 @@ import { Chalk, CallLimbo, ChalkButton, StatusSurface, ReportProblemDialog } fro
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type PublicSpaceCredential, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
-import { canonicalSpaceInviteLink, spaceInviteToken, verifiedSpaceInviteLink } from "../../lib/named-space-route";
 import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
@@ -401,7 +400,14 @@ type PublicPreparation = {
   readonly spaceName?: string;
   readonly prepared?: SpaceEntryAccess;
 };
+function spaceInviteToken(): string | undefined {
+  if (!globalThis.location) return undefined;
+  const value = new URLSearchParams(globalThis.location.hash.slice(1)).get("spaceInviteToken")?.trim();
+  return value || undefined;
+}
+
 async function arrive(client: PublicInviteClient, displayName: string, slug: string | undefined, inviteToken: string | undefined): Promise<PublicPreparation> {
+  const { canonicalSpaceInviteLink, verifiedSpaceInviteLink } = await import("../../lib/named-space-route");
   if (inviteToken) {
     const arrival = await client.arriveBySpacePublicInvite(inviteToken, displayName);
     const verifiedSlug = arrival.space?.slug ?? slug;

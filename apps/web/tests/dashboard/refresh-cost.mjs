@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const inviteCredential = (raw) => {
   const invite = new URL(raw);
   const code = invite.pathname.slice(1);
-  return /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
+  return /^[a-z]+(?:-[a-z]+){2,3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
 };
 
 // Run with DASHBOARD_REFRESH_COST=1 through real-engine.sh. Every dashboard

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -57,13 +58,33 @@ func TestPublicInviteCodesMatchGoAndResolveAfterRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertStoredInviteCode(t, ctx, pool, repository, rotated)
+	for _, old := range []string{publicinvites.InviteCode(invite.Handle), publicinvites.InviteWordCode(invite.Handle)} {
+		if _, _, err := service.ResolveInviteToken(ctx, old); !errors.Is(err, publicinvites.ErrInviteUnavailable) {
+			t.Fatalf("old credential still resolves: %v", err)
+		}
+	}
+	if _, err := service.SetInviteEnabled(ctx, tenantID, spaceID, false, utilities.ID{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{publicinvites.InviteCode(rotated.Handle), publicinvites.InviteWordCode(rotated.Handle)} {
+		if _, _, err := service.ResolveInviteToken(ctx, code); !errors.Is(err, publicinvites.ErrInviteUnavailable) {
+			t.Fatalf("disabled credential resolves: %v", err)
+		}
+	}
 }
 
 func assertStoredInviteCode(t *testing.T, ctx context.Context, pool *pgxpool.Pool, repository PublicInviteRepository, invite publicinvites.Invite) {
 	t.Helper()
-	var stored string
-	if err := pool.QueryRow(ctx, `select invite_code from space_public_invites where tenant_id = $1 and space_id = $2`, uuid(invite.TenantID), uuid(invite.SpaceID)).Scan(&stored); err != nil {
+	var stored, words string
+	if err := pool.QueryRow(ctx, `select invite_code, invite_words from space_public_invites where tenant_id = $1 and space_id = $2`, uuid(invite.TenantID), uuid(invite.SpaceID)).Scan(&stored, &words); err != nil {
 		t.Fatal(err)
+	}
+	if want := publicinvites.InviteWordCode(invite.Handle); words != want {
+		t.Fatalf("stored words = %q, want %q", words, want)
+	}
+	wordInvite, err := repository.GetInviteByCode(ctx, words)
+	if err != nil || string(wordInvite.Handle) != string(invite.Handle) {
+		t.Fatalf("word lookup: %v", err)
 	}
 	want := publicinvites.InviteCode(invite.Handle)
 	if stored != want {

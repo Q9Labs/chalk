@@ -22,3 +22,14 @@ func TestInviteURLs(t *testing.T) {
 		t.Fatalf("LegacyInviteURL() = %q", legacy)
 	}
 }
+
+func TestWordInviteURL(t *testing.T) {
+	links, err := NewLinkPort("https://chalkmeet.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := links.InviteURL("APPLE Tiger.lamp-river")
+	if err != nil || link != "https://chalkmeet.com/apple-tiger-lamp-river" {
+		t.Fatalf("word link = %q, %v", link, err)
+	}
+}

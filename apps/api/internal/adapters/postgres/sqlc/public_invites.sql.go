@@ -228,7 +228,7 @@ values (
     $6, $7
 )
 on conflict (tenant_id, space_id) do nothing
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key
 `
@@ -259,6 +259,7 @@ func (q *Queries) CreateSpacePublicInvite(ctx context.Context, arg CreateSpacePu
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -631,7 +632,7 @@ func (q *Queries) GetSpacePublicArrivalForCredential(ctx context.Context, arg Ge
 }
 
 const getSpacePublicInvite = `-- name: GetSpacePublicInvite :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -651,6 +652,7 @@ func (q *Queries) GetSpacePublicInvite(ctx context.Context, arg GetSpacePublicIn
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -667,11 +669,11 @@ func (q *Queries) GetSpacePublicInvite(ctx context.Context, arg GetSpacePublicIn
 }
 
 const getSpacePublicInviteByCode = `-- name: GetSpacePublicInviteByCode :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
-where invite_code = $1
+where invite_code = $1 or invite_words = $1
 `
 
 func (q *Queries) GetSpacePublicInviteByCode(ctx context.Context, inviteCode string) (SpacePublicInvite, error) {
@@ -682,6 +684,7 @@ func (q *Queries) GetSpacePublicInviteByCode(ctx context.Context, inviteCode str
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -698,7 +701,7 @@ func (q *Queries) GetSpacePublicInviteByCode(ctx context.Context, inviteCode str
 }
 
 const getSpacePublicInviteByHandle = `-- name: GetSpacePublicInviteByHandle :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -713,6 +716,7 @@ func (q *Queries) GetSpacePublicInviteByHandle(ctx context.Context, handle []byt
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1117,7 +1121,7 @@ func (q *Queries) LockSpacePublicArrivalByIdempotency(ctx context.Context, arg L
 }
 
 const lockSpacePublicInvite = `-- name: LockSpacePublicInvite :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -1138,6 +1142,7 @@ func (q *Queries) LockSpacePublicInvite(ctx context.Context, arg LockSpacePublic
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1154,7 +1159,7 @@ func (q *Queries) LockSpacePublicInvite(ctx context.Context, arg LockSpacePublic
 }
 
 const lockSpacePublicInviteByHandle = `-- name: LockSpacePublicInviteByHandle :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -1170,6 +1175,7 @@ func (q *Queries) LockSpacePublicInviteByHandle(ctx context.Context, handle []by
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1379,7 +1385,7 @@ set handle = $1,
     last_actor_id = $2,
     last_rotation_request_key = $3
 where tenant_id = $4 and space_id = $5
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key
 `
@@ -1406,6 +1412,7 @@ func (q *Queries) RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePu
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1552,7 +1559,7 @@ set enabled = $1,
     updated_at = case when enabled is not distinct from $1::boolean then updated_at else now() end,
     last_actor_id = case when enabled is not distinct from $1::boolean then last_actor_id else $2 end
 where tenant_id = $3 and space_id = $4
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key
 `
@@ -1577,6 +1584,7 @@ func (q *Queries) UpdateSpacePublicInviteEnabled(ctx context.Context, arg Update
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
