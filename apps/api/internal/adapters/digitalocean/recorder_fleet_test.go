@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +28,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 	defer server.Close()
 	request := recorderFleetEnsureRequest()
 	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
-	data, err := renderRecorderCloudInit(request, "https://example.invalid/archive")
+	data, err := renderRecorderCloudInit(request, "https://example.invalid/archive", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +39,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 		t.Fatal("bootstrap ran before trust configuration")
 	}
 	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString([]byte("not a certificate"))
-	if _, err := renderRecorderCloudInit(request, "https://example.invalid/archive"); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
+	if _, err := renderRecorderCloudInit(request, "https://example.invalid/archive", 1); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 		t.Fatalf("malformed trust accepted: %v", err)
 	}
 }
@@ -45,7 +47,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnInstallOrBootstrapFailure(t *testing.T) {
 	for _, failureCommand := range []string{"/usr/bin/python3", "/usr/local/sbin/chalk-recorder-bootstrap"} {
 		t.Run(failureCommand, func(t *testing.T) {
-			data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive")
+			data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive", 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -473,5 +475,56 @@ report_failure(dict(release_id='selected-release', manifest_digest='sha256:'+'a'
 		}
 	default:
 		t.Fatal("archive failure was not retained")
+	}
+}
+
+func TestRecorderFleetNodeExistsRequiresExact404(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusNotFound, http.StatusForbidden, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/v2/droplets/42" || r.URL.RawQuery != "" {
+					t.Fatalf("not an exact GET: %s", r.URL)
+				}
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"droplet":{"id":42,"tags":["wrong-owner"]}}`))
+			}))
+			defer server.Close()
+			fleet, err := NewRecorderFleet(RecorderFleetConfig{Token: "test-token", BaseURL: server.URL, HTTPClient: server.Client(), Environment: "nightly", Role: workeridentity.RoleCapture, OwnerTag: "chalk-recorder-owned"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			exists, err := fleet.NodeExists(t.Context(), recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}, "42")
+			switch status {
+			case http.StatusNotFound:
+				if err != nil || exists {
+					t.Fatalf("404 = %t %v", exists, err)
+				}
+			case http.StatusOK:
+				if err != nil || !exists {
+					t.Fatalf("200 with wrong tags must not prove absence: %t %v", exists, err)
+				}
+			default:
+				if err == nil {
+					t.Fatalf("provider %d proved absence", status)
+				}
+			}
+		})
+	}
+}
+
+func TestCaptureCloudInitSetsQualifiedSlots(t *testing.T) {
+	for _, slots := range []int{1, 4} {
+		data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive", slots)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(data, "CHALK_RECORDER_CAPTURE_SLOTS="+strconv.Itoa(slots)) || !strings.Contains(data, "EnvironmentFile=/etc/chalk-recorder/capture-slots.env") {
+			t.Fatalf("worker did not receive %d slots", slots)
+		}
+	}
+	for _, slots := range []int{0, -1} {
+		if _, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive", slots); err == nil {
+			t.Fatalf("accepted %d slots", slots)
+		}
 	}
 }

@@ -31,7 +31,8 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.image_digest = excluded.image_digest
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
-  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+  -- An issued identity must use close-admission, a later lease read, and revoke.
+  and recording_fleet_nodes.state in ('requested', 'revoked')
 returning provider_id
 `
 
@@ -158,18 +159,26 @@ func (q *Queries) AuthorizeRecordingFleetWorker(ctx context.Context, arg Authori
 }
 
 const authorizeRecordingFleetWorkerClaim = `-- name: AuthorizeRecordingFleetWorkerClaim :one
-select exists (
-    select 1 from recording_fleet_nodes
+with worker as (
+    select state, ready, admission_open, ready_capacity, observed_at
+    from recording_fleet_nodes
     where environment = $1
       and role = $2
       and worker_id = $3
-      and state = 'active'
+      and state in ('active', 'draining')
+)
+select exists (
+    select 1 from worker
+    where state = 'active'
       and ready
       and admission_open
       and ready_capacity > 0
       and observed_at > clock_timestamp() - interval '2 minutes'
       and observed_at <= clock_timestamp()
-) as authorized
+) as authorized,
+exists (
+    select 1 from worker where state = 'draining' or not admission_open
+) as admission_closed
 `
 
 type AuthorizeRecordingFleetWorkerClaimParams struct {
@@ -178,11 +187,16 @@ type AuthorizeRecordingFleetWorkerClaimParams struct {
 	WorkerID    pgtype.UUID `json:"worker_id"`
 }
 
-func (q *Queries) AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (bool, error) {
+type AuthorizeRecordingFleetWorkerClaimRow struct {
+	Authorized      bool `json:"authorized"`
+	AdmissionClosed bool `json:"admission_closed"`
+}
+
+func (q *Queries) AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error) {
 	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorkerClaim, arg.Environment, arg.Role, arg.WorkerID)
-	var authorized bool
-	err := row.Scan(&authorized)
-	return authorized, err
+	var i AuthorizeRecordingFleetWorkerClaimRow
+	err := row.Scan(&i.Authorized, &i.AdmissionClosed)
+	return i, err
 }
 
 const closeRecordingFleetNodeAdmission = `-- name: CloseRecordingFleetNodeAdmission :one
@@ -236,7 +250,7 @@ with reservation_demand as (
 job_demand as (
     select
         count(*) filter (where state in ('pending', 'retryable_failure'))::integer as queued_jobs,
-        count(*) filter (where state = 'leased' and lease_expires_at > $2::timestamptz)::integer as leased_jobs,
+        count(*) filter (where state = 'leased' and lease_expires_at > clock_timestamp())::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
     where (
@@ -265,6 +279,11 @@ facts as (
         case when $1::text = 'capture' then reservation_demand.held_starts else 0 end::integer as held_starts,
         job_demand.queued_jobs,
         job_demand.leased_jobs,
+		greatest(reservation_demand.episode_count, job_demand.queued_jobs + job_demand.leased_jobs)::integer as slot_demand,
+		greatest(
+		    ((reservation_demand.participant_count + 39) / 40)::integer,
+		    ((reservation_demand.input_bitrate_bps + 15999999) / 16000000)::integer
+		)::integer as physical_node_floor,
         case
             when $1::text = 'capture' then greatest(
                 reservation_demand.episode_count,
@@ -277,7 +296,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, 10 - base_nodes))::integer as prepared_nodes,
+    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($3::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )
@@ -287,13 +306,16 @@ select
     (scheduled_prewarms + prepared_nodes)::integer as scheduled_prewarms,
     held_starts,
     queued_jobs,
+	(slot_demand + prepared_nodes)::integer as slot_demand,
+	physical_node_floor,
     $2::timestamptz as observed_at
 from target
 `
 
 type GetRecordingFleetDemandParams struct {
-	Role       string             `json:"role"`
-	ObservedAt pgtype.Timestamptz `json:"observed_at"`
+	Role         string             `json:"role"`
+	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
+	RecordingCap int32              `json:"recording_cap"`
 }
 
 type GetRecordingFleetDemandRow struct {
@@ -302,11 +324,13 @@ type GetRecordingFleetDemandRow struct {
 	ScheduledPrewarms int32              `json:"scheduled_prewarms"`
 	HeldStarts        int32              `json:"held_starts"`
 	QueuedJobs        int32              `json:"queued_jobs"`
+	SlotDemand        int32              `json:"slot_demand"`
+	PhysicalNodeFloor int32              `json:"physical_node_floor"`
 	ObservedAt        pgtype.Timestamptz `json:"observed_at"`
 }
 
 func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingFleetDemandParams) (GetRecordingFleetDemandRow, error) {
-	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt)
+	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt, arg.RecordingCap)
 	var i GetRecordingFleetDemandRow
 	err := row.Scan(
 		&i.Revision,
@@ -314,6 +338,8 @@ func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingF
 		&i.ScheduledPrewarms,
 		&i.HeldStarts,
 		&i.QueuedJobs,
+		&i.SlotDemand,
+		&i.PhysicalNodeFloor,
 		&i.ObservedAt,
 	)
 	return i, err
@@ -337,37 +363,39 @@ select
         )
           and job.state = 'leased'
           and job.lease_owner = node.worker_id::text
-          and job.lease_expires_at > $1::timestamptz
+          and job.lease_expires_at > clock_timestamp()
     ), 0)::integer as active_leases,
-    node.observed_at
+    -- Creation only anchors age for registered workers that never reported readiness.
+    coalesce(node.observed_at, node.created_at) as observed_at,
+    (node.state = 'revoked') as identity_revoked
 from recording_fleet_nodes node
-where node.environment = $2
-  and node.role = $3
-  and node.state in ('active', 'draining')
-  and node.observed_at is not null
+where node.environment = $1
+  and node.role = $2
+  and node.state in ('active', 'draining', 'revoked')
+  and node.worker_id is not null
 order by node.provider_id
 `
 
 type ListRecordingFleetNodeObservationsParams struct {
-	ObservedAt  pgtype.Timestamptz `json:"observed_at"`
-	Environment string             `json:"environment"`
-	Role        string             `json:"role"`
+	Environment string `json:"environment"`
+	Role        string `json:"role"`
 }
 
 type ListRecordingFleetNodeObservationsRow struct {
-	ProviderID     string             `json:"provider_id"`
-	WorkerID       pgtype.UUID        `json:"worker_id"`
-	Role           string             `json:"role"`
-	BootGeneration int64              `json:"boot_generation"`
-	Ready          bool               `json:"ready"`
-	AdmissionOpen  bool               `json:"admission_open"`
-	ReadyCapacity  int32              `json:"ready_capacity"`
-	ActiveLeases   int32              `json:"active_leases"`
-	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	ProviderID      string             `json:"provider_id"`
+	WorkerID        pgtype.UUID        `json:"worker_id"`
+	Role            string             `json:"role"`
+	BootGeneration  int64              `json:"boot_generation"`
+	Ready           bool               `json:"ready"`
+	AdmissionOpen   bool               `json:"admission_open"`
+	ReadyCapacity   int32              `json:"ready_capacity"`
+	ActiveLeases    int32              `json:"active_leases"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	IdentityRevoked bool               `json:"identity_revoked"`
 }
 
 func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg ListRecordingFleetNodeObservationsParams) ([]ListRecordingFleetNodeObservationsRow, error) {
-	rows, err := q.db.Query(ctx, listRecordingFleetNodeObservations, arg.ObservedAt, arg.Environment, arg.Role)
+	rows, err := q.db.Query(ctx, listRecordingFleetNodeObservations, arg.Environment, arg.Role)
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +413,7 @@ func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg Li
 			&i.ReadyCapacity,
 			&i.ActiveLeases,
 			&i.ObservedAt,
+			&i.IdentityRevoked,
 		); err != nil {
 			return nil, err
 		}
@@ -415,6 +444,60 @@ func (q *Queries) LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRec
 	var authorized bool
 	err := row.Scan(&authorized)
 	return authorized, err
+}
+
+const observeRecordingFleetIdentityLeases = `-- name: ObserveRecordingFleetIdentityLeases :one
+select (
+    select count(*) from recording_jobs job
+    where job.lease_owner = $1::uuid::text
+      and (job.kind = $2 or ($2 = 'render' and job.kind = 'transcription'))
+      and job.state = 'leased' and job.lease_expires_at > clock_timestamp()
+)::integer as active_leases,
+not exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = $3 and node.provider_id = $4
+) as identity_absent,
+exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = $3 and node.provider_id = $4 and node.state = 'revoked'
+) as identity_revoked
+where not exists (
+    select 1 from recording_fleet_nodes node
+    where ((node.environment = $3 and node.provider_id = $4)
+        or node.worker_id = $1)
+      and not coalesce((node.environment = $3 and node.role = $2
+        and node.provider_id = $4 and node.worker_id = $1
+        and node.boot_generation = $5 and node.state in ('active', 'draining', 'revoked')), false)
+)
+`
+
+type ObserveRecordingFleetIdentityLeasesParams struct {
+	WorkerID       pgtype.UUID `json:"worker_id"`
+	Role           string      `json:"role"`
+	Environment    string      `json:"environment"`
+	ProviderID     string      `json:"provider_id"`
+	BootGeneration int64       `json:"boot_generation"`
+}
+
+type ObserveRecordingFleetIdentityLeasesRow struct {
+	ActiveLeases    int32 `json:"active_leases"`
+	IdentityAbsent  bool  `json:"identity_absent"`
+	IdentityRevoked bool  `json:"identity_revoked"`
+}
+
+// Count by the fenced journal worker, not by a fleet-row join: a lost row
+// must not hide live work. Refuse any conflicting provider or worker binding.
+func (q *Queries) ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error) {
+	row := q.db.QueryRow(ctx, observeRecordingFleetIdentityLeases,
+		arg.WorkerID,
+		arg.Role,
+		arg.Environment,
+		arg.ProviderID,
+		arg.BootGeneration,
+	)
+	var i ObserveRecordingFleetIdentityLeasesRow
+	err := row.Scan(&i.ActiveLeases, &i.IdentityAbsent, &i.IdentityRevoked)
+	return i, err
 }
 
 const publishRecordingFleetPool = `-- name: PublishRecordingFleetPool :one
@@ -600,36 +683,46 @@ func (q *Queries) ReserveRecordingFleetBootstrap(ctx context.Context, arg Reserv
 }
 
 const revokeRecordingFleetNode = `-- name: RevokeRecordingFleetNode :one
-update recording_fleet_nodes
-set state = 'revoked', ready = false, admission_open = false,
-    ready_capacity = 0, revoked_at = coalesce(revoked_at, $1),
-    updated_at = now()
-where environment = $2
-  and role = $3
-  and provider_id = $4
-  and worker_id = $5
-  and boot_generation = $6
-  and state in ('active', 'draining', 'revoked')
+insert into recording_fleet_nodes (
+    environment, role, provider_id, worker_id, boot_generation, state, revoked_at,
+    node_name, region, release_id, image_digest, inventory_digest
+) values (
+    $1, $2, $3, $4,
+    $5, 'revoked', $6,
+    $3, 'unknown', 'revoked-identity',
+    'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    '0000000000000000000000000000000000000000000000000000000000000000'
+)
+on conflict (environment, provider_id) do update
+set state = 'revoked', ready = false, admission_open = false, ready_capacity = 0,
+    revoked_at = coalesce(recording_fleet_nodes.revoked_at, excluded.revoked_at), updated_at = now()
+where recording_fleet_nodes.role = excluded.role
+  and recording_fleet_nodes.worker_id = excluded.worker_id
+  and recording_fleet_nodes.boot_generation = excluded.boot_generation
+  and recording_fleet_nodes.state in ('active', 'draining', 'revoked')
 returning provider_id
 `
 
 type RevokeRecordingFleetNodeParams struct {
-	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
 	Environment    string             `json:"environment"`
 	Role           string             `json:"role"`
 	ProviderID     string             `json:"provider_id"`
 	WorkerID       pgtype.UUID        `json:"worker_id"`
 	BootGeneration int64              `json:"boot_generation"`
+	RevokedAt      pgtype.Timestamptz `json:"revoked_at"`
 }
 
+// A lost row still needs a durable fence against bootstrap replay. Metadata
+// unavailable after row loss uses explicit tombstone placeholders; it can never
+// authorize a worker or be activated as a bootstrap reservation.
 func (q *Queries) RevokeRecordingFleetNode(ctx context.Context, arg RevokeRecordingFleetNodeParams) (string, error) {
 	row := q.db.QueryRow(ctx, revokeRecordingFleetNode,
-		arg.RevokedAt,
 		arg.Environment,
 		arg.Role,
 		arg.ProviderID,
 		arg.WorkerID,
 		arg.BootGeneration,
+		arg.RevokedAt,
 	)
 	var provider_id string
 	err := row.Scan(&provider_id)

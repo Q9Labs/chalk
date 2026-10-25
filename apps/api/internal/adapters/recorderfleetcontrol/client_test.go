@@ -34,6 +34,9 @@ func TestClientUsesVersionedRoleFencedContracts(t *testing.T) {
 			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_demand.v1","environment":"nightly","role":"capture","revision":"demand-7","desired_nodes":1,"scheduled_prewarms":1,"held_starts":0,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`), nil
 		case 2:
 			assertRequest(t, request, http.MethodGet, "/internal/v1/recorder/fleet/nodes", "role=capture", false)
+			if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" || request.Header.Get("X-Chalk-Fleet-Lease-Authority") != "1" {
+				t.Fatal("client did not opt in to lease-read timestamps")
+			}
 			return jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_nodes.v1","environment":"nightly","role":"capture","nodes":[{"identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"capture","boot_generation":3},"ready":true,"admission_open":true,"ready_capacity":4,"active_leases":0,"observed_at":"2026-09-06T12:00:00Z"}]}`), nil
 		case 3:
 			assertRequest(t, request, http.MethodPost, "/internal/v1/recorder/fleet/nodes/42/bootstrap", "", true)
@@ -208,10 +211,29 @@ func assertSchema(t *testing.T, request *http.Request, want string) {
 	}
 }
 
+func TestClientRejectsUnacknowledgedLeaseAuthority(t *testing.T) {
+	t.Parallel()
+	for _, leaseRead := range []string{"", `,"leases_observed_at":"2026-09-06T12:00:00Z"`} {
+		key := recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleRender}
+		httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response := jsonResponse(http.StatusOK, `{"schema_version":"recorder_fleet_nodes.v1","environment":"nightly","role":"render","nodes":[{"identity":{"provider_id":"42","worker_id":"55555555-5555-4555-8555-555555555555","role":"render","boot_generation":3},"ready":false,"admission_open":false,"ready_capacity":0,"active_leases":0,"observed_at":"2026-09-06T12:00:00Z"`+leaseRead+`}]}`)
+			response.Header.Del("X-Chalk-Fleet-Lease-Authority")
+			return response, nil
+		})}
+		client, err := New(Config{BaseURL: "https://control.example", HTTPClient: httpClient, Key: key})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if nodes, err := client.ObserveNodes(t.Context(), key); !errors.Is(err, recorderfleet.ErrProviderUnavailable) || nodes != nil {
+			t.Fatalf("old API zero became authoritative: nodes=%+v error=%v", nodes, err)
+		}
+	}
+}
+
 func jsonResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
-		Header:     make(http.Header),
+		Header:     http.Header{"X-Chalk-Fleet-Lease-Authority": {"1"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }

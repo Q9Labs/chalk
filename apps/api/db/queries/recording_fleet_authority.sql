@@ -15,7 +15,7 @@ with reservation_demand as (
 job_demand as (
     select
         count(*) filter (where state in ('pending', 'retryable_failure'))::integer as queued_jobs,
-        count(*) filter (where state = 'leased' and lease_expires_at > sqlc.arg(observed_at)::timestamptz)::integer as leased_jobs,
+        count(*) filter (where state = 'leased' and lease_expires_at > clock_timestamp())::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
     where (
@@ -44,6 +44,11 @@ facts as (
         case when sqlc.arg(role)::text = 'capture' then reservation_demand.held_starts else 0 end::integer as held_starts,
         job_demand.queued_jobs,
         job_demand.leased_jobs,
+		greatest(reservation_demand.episode_count, job_demand.queued_jobs + job_demand.leased_jobs)::integer as slot_demand,
+		greatest(
+		    ((reservation_demand.participant_count + 39) / 40)::integer,
+		    ((reservation_demand.input_bitrate_bps + 15999999) / 16000000)::integer
+		)::integer as physical_node_floor,
         case
             when sqlc.arg(role)::text = 'capture' then greatest(
                 reservation_demand.episode_count,
@@ -56,7 +61,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.*, least(preparation_demand.count, greatest(0, 10 - base_nodes))::integer as prepared_nodes,
+    select facts.*, least(preparation_demand.count, greatest(0, coalesce(nullif(sqlc.arg(recording_cap)::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )
@@ -66,6 +71,8 @@ select
     (scheduled_prewarms + prepared_nodes)::integer as scheduled_prewarms,
     held_starts,
     queued_jobs,
+	(slot_demand + prepared_nodes)::integer as slot_demand,
+	physical_node_floor,
     sqlc.arg(observed_at)::timestamptz as observed_at
 from target;
 
@@ -124,7 +131,8 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.image_digest = excluded.image_digest
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
-  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+  -- An issued identity must use close-admission, a later lease read, and revoke.
+  and recording_fleet_nodes.state in ('requested', 'revoked')
 returning provider_id;
 
 -- name: ListRecordingFleetNodeObservations :many
@@ -145,15 +153,43 @@ select
         )
           and job.state = 'leased'
           and job.lease_owner = node.worker_id::text
-          and job.lease_expires_at > sqlc.arg(observed_at)::timestamptz
+          and job.lease_expires_at > clock_timestamp()
     ), 0)::integer as active_leases,
-    node.observed_at
+    -- Creation only anchors age for registered workers that never reported readiness.
+    coalesce(node.observed_at, node.created_at) as observed_at,
+    (node.state = 'revoked') as identity_revoked
 from recording_fleet_nodes node
 where node.environment = sqlc.arg(environment)
   and node.role = sqlc.arg(role)
-  and node.state in ('active', 'draining')
-  and node.observed_at is not null
+  and node.state in ('active', 'draining', 'revoked')
+  and node.worker_id is not null
 order by node.provider_id;
+
+-- name: ObserveRecordingFleetIdentityLeases :one
+-- Count by the fenced journal worker, not by a fleet-row join: a lost row
+-- must not hide live work. Refuse any conflicting provider or worker binding.
+select (
+    select count(*) from recording_jobs job
+    where job.lease_owner = sqlc.arg(worker_id)::uuid::text
+      and (job.kind = sqlc.arg(role) or (sqlc.arg(role) = 'render' and job.kind = 'transcription'))
+      and job.state = 'leased' and job.lease_expires_at > clock_timestamp()
+)::integer as active_leases,
+not exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = sqlc.arg(environment) and node.provider_id = sqlc.arg(provider_id)
+) as identity_absent,
+exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = sqlc.arg(environment) and node.provider_id = sqlc.arg(provider_id) and node.state = 'revoked'
+) as identity_revoked
+where not exists (
+    select 1 from recording_fleet_nodes node
+    where ((node.environment = sqlc.arg(environment) and node.provider_id = sqlc.arg(provider_id))
+        or node.worker_id = sqlc.arg(worker_id))
+      and not coalesce((node.environment = sqlc.arg(environment) and node.role = sqlc.arg(role)
+        and node.provider_id = sqlc.arg(provider_id) and node.worker_id = sqlc.arg(worker_id)
+        and node.boot_generation = sqlc.arg(boot_generation) and node.state in ('active', 'draining', 'revoked')), false)
+);
 
 -- name: CloseRecordingFleetNodeAdmission :one
 update recording_fleet_nodes
@@ -168,16 +204,26 @@ where environment = sqlc.arg(environment)
 returning provider_id;
 
 -- name: RevokeRecordingFleetNode :one
-update recording_fleet_nodes
-set state = 'revoked', ready = false, admission_open = false,
-    ready_capacity = 0, revoked_at = coalesce(revoked_at, sqlc.arg(revoked_at)),
-    updated_at = now()
-where environment = sqlc.arg(environment)
-  and role = sqlc.arg(role)
-  and provider_id = sqlc.arg(provider_id)
-  and worker_id = sqlc.arg(worker_id)
-  and boot_generation = sqlc.arg(boot_generation)
-  and state in ('active', 'draining', 'revoked')
+-- A lost row still needs a durable fence against bootstrap replay. Metadata
+-- unavailable after row loss uses explicit tombstone placeholders; it can never
+-- authorize a worker or be activated as a bootstrap reservation.
+insert into recording_fleet_nodes (
+    environment, role, provider_id, worker_id, boot_generation, state, revoked_at,
+    node_name, region, release_id, image_digest, inventory_digest
+) values (
+    sqlc.arg(environment), sqlc.arg(role), sqlc.arg(provider_id), sqlc.arg(worker_id),
+    sqlc.arg(boot_generation), 'revoked', sqlc.arg(revoked_at),
+    sqlc.arg(provider_id), 'unknown', 'revoked-identity',
+    'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    '0000000000000000000000000000000000000000000000000000000000000000'
+)
+on conflict (environment, provider_id) do update
+set state = 'revoked', ready = false, admission_open = false, ready_capacity = 0,
+    revoked_at = coalesce(recording_fleet_nodes.revoked_at, excluded.revoked_at), updated_at = now()
+where recording_fleet_nodes.role = excluded.role
+  and recording_fleet_nodes.worker_id = excluded.worker_id
+  and recording_fleet_nodes.boot_generation = excluded.boot_generation
+  and recording_fleet_nodes.state in ('active', 'draining', 'revoked')
 returning provider_id;
 
 -- name: RecordRecordingFleetWorkerObservation :one
@@ -208,18 +254,26 @@ select exists (
 ) as authorized;
 
 -- name: AuthorizeRecordingFleetWorkerClaim :one
-select exists (
-    select 1 from recording_fleet_nodes
+with worker as (
+    select state, ready, admission_open, ready_capacity, observed_at
+    from recording_fleet_nodes
     where environment = sqlc.arg(environment)
       and role = sqlc.arg(role)
       and worker_id = sqlc.arg(worker_id)
-      and state = 'active'
+      and state in ('active', 'draining')
+)
+select exists (
+    select 1 from worker
+    where state = 'active'
       and ready
       and admission_open
       and ready_capacity > 0
       and observed_at > clock_timestamp() - interval '2 minutes'
       and observed_at <= clock_timestamp()
-) as authorized;
+) as authorized,
+exists (
+    select 1 from worker where state = 'draining' or not admission_open
+) as admission_closed;
 
 -- name: LockRecordingFleetWorkerClaim :one
 select coalesce((role = sqlc.arg(role) and state = 'active' and ready and admission_open

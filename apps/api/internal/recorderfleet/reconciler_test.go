@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 		t.Fatalf("ensure action/calls = %q/%d", result.Action, fixture.provider.ensureCalls)
 	}
 	result = fixture.step(t, reconciler)
-	if result.Action != ActionBootstrapEnsured || fixture.bootstrap.ensureCalls != 1 {
+	if result.Action != ActionNone || fixture.bootstrap.ensureCalls != 1 {
 		t.Fatalf("bootstrap action/calls = %q/%d", result.Action, fixture.bootstrap.ensureCalls)
 	}
 	if fixture.bootstrap.lastRequest.InventoryDigest == "" {
@@ -34,7 +35,7 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	node := fixture.provider.onlyNode(t)
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionNodeReady || !result.Projection.AdmissionOpen || result.Projection.ReadyCapacity != fixture.config.SlotsPerNode {
@@ -55,7 +56,11 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	}
 
 	fixture.runtime.observations[0].ActiveLeases = 0
-	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
+	fixture.now = fixture.now.Add(time.Nanosecond)
+	fixture.config.Now = func() time.Time { return fixture.now }
+	reconciler = fixture.reconciler(t)
+	fixture.runtime.observations[0].ObservedAt = fixture.now
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
 		t.Fatalf("revoke result = %+v, calls %d", result, fixture.bootstrap.revokeCalls)
@@ -83,7 +88,7 @@ func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
 		fixture.step(t, reconciler)
 	}
 	node := fixture.provider.onlyNode(t)
-	fixture.runtime.observations = []NodeObservation{{Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true, ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now}}
+	fixture.runtime.observations = []NodeObservation{{Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true, ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}}
 	fixture.step(t, reconciler)
 	// Preparation demand becomes Recording demand, but the fleet target stays one.
 	fixture.demand.value = Demand{Revision: "recording-consumed-preparation", DesiredNodes: 1, ObservedAt: fixture.now}
@@ -95,7 +100,11 @@ func TestEntrancePreparationConsumptionReusesWarmNode(t *testing.T) {
 	if result := fixture.step(t, reconciler); result.Action != ActionAdmissionClosed {
 		t.Fatalf("expiry did not drain: %+v", result)
 	}
-	fixture.runtime.observations[0].ObservedAt = fixture.now.Add(time.Nanosecond)
+	fixture.now = fixture.now.Add(time.Nanosecond)
+	fixture.config.Now = func() time.Time { return fixture.now }
+	reconciler = fixture.reconciler(t)
+	fixture.runtime.observations[0].ObservedAt = fixture.now
+	fixture.runtime.observations[0].LeasesObservedAt = fixture.now
 	fixture.runtime.observations[0].AdmissionOpen = false
 	fixture.runtime.observations[0].Ready = false
 	if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
@@ -229,7 +238,7 @@ func TestReconcilerFailsClosedOnRoleMismatch(t *testing.T) {
 	wrongIdentity.Role = workeridentity.RoleRender
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: wrongIdentity, Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 
 	result, err := reconciler.Reconcile(context.Background())
@@ -255,7 +264,7 @@ func TestReconcilerRejectsWorkerIdentityReplacementOnSameNode(t *testing.T) {
 	replacedIdentity.WorkerID = "66666666-6666-4666-8666-666666666666"
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: replacedIdentity, Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 
 	result, err := reconciler.Reconcile(context.Background())
@@ -281,8 +290,60 @@ func TestReconcilerQuarantinesForeignNodeWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestReconcilerQuarantineDiagnosticIsBounded(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		count       int
+		malformedID string
+	}{
+		{name: "one", count: 1},
+		{name: "thousand", count: 1000},
+		{name: "ten_thousand", count: 10000},
+		{name: "malformed_long_id", count: 1, malformedID: strings.Repeat("\x00", 10000)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newFleetFixture(t)
+			fixture.config.MaxNodes = 1
+			for i := range test.count {
+				id := fmt.Sprint(100000000 + i)
+				if test.malformedID != "" {
+					id = test.malformedID
+				}
+				node := fixture.provider.nodeFor(fixture.ensureRequest(uint64(i+1)), id)
+				node.Tags = slices.DeleteFunc(node.Tags, func(tag string) bool { return tag == fixture.config.OwnerTag })
+				if test.malformedID == "" {
+					if err := node.Validate(); err != nil {
+						t.Fatalf("invalid fixture node: %v", err)
+					}
+				}
+				fixture.provider.nodes[id] = node
+			}
+			result, err := fixture.reconciler(t).Reconcile(t.Context())
+			if !errors.Is(err, ErrInventoryDrift) || result.Projection.Reason != "inventory_drift" || result.Projection.AdmissionOpen {
+				t.Fatalf("drift semantics changed: result=%+v err=%v", result, err)
+			}
+			message := err.Error()
+			if len(message) > 2048 {
+				t.Fatalf("quarantine diagnostic exceeds 2 KiB: %d bytes", len(message))
+			}
+			if !strings.Contains(message, "quarantined_inventory") || !strings.Contains(message, fmt.Sprintf("total=%d", test.count)) {
+				t.Fatalf("missing check or total: %s", message)
+			}
+			if test.malformedID == "" && !strings.Contains(message, "100000000") {
+				t.Fatalf("missing sampled provider ID: %s", message)
+			}
+			if len(result.Quarantined) != test.count || fixture.provider.ensureCalls != 0 || fixture.provider.deleteCalls != 0 || fixture.bootstrap.ensureCalls != 0 {
+				t.Fatal("quarantine inventory or no-mutation behavior changed")
+			}
+			t.Logf("quarantined=%d diagnostic_bytes=%d", test.count, len(message))
+		})
+	}
+}
+
 func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 	fixture := newFleetFixture(t)
+	fixture.config.SlotsPerNode = 1
+	fixture.provider.config = fixture.config
 	fixture.config.MaxNodes = 1
 	fixture.demand.value.DesiredNodes = 2
 	fixture.demand.value.ScheduledPrewarms = 2
@@ -295,7 +356,7 @@ func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 	if result := fixture.step(t, reconciler); result.Action != ActionNodeEnsured {
 		t.Fatalf("cold over-cap ensure = %+v", result)
 	}
-	if result := fixture.step(t, reconciler); result.Action != ActionBootstrapEnsured {
+	if result := fixture.step(t, reconciler); result.Action != ActionNone {
 		t.Fatalf("cold over-cap bootstrap = %+v", result)
 	}
 	fixture.step(t, reconciler)
@@ -309,6 +370,8 @@ func TestReconcilerSaturatesColdDemandAtConfiguredCap(t *testing.T) {
 
 func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
 	fixture := newFleetFixture(t)
+	fixture.config.SlotsPerNode = 1
+	fixture.provider.config = fixture.config
 	fixture.config.MaxNodes = 2
 	reconciler := fixture.reconciler(t)
 	fixture.step(t, reconciler)
@@ -317,7 +380,7 @@ func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
 	node := fixture.provider.onlyNode(t)
 	fixture.runtime.observations = []NodeObservation{{
 		Identity: fixture.bootstrap.identity(node), Ready: true, AdmissionOpen: true,
-		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now,
+		ReadyCapacity: fixture.config.SlotsPerNode, ObservedAt: fixture.now, LeasesObservedAt: fixture.now,
 	}}
 	fixture.step(t, reconciler)
 
@@ -332,7 +395,7 @@ func TestReconcilerSaturatesWarmDemandAtConfiguredCap(t *testing.T) {
 	if result = fixture.step(t, reconciler); result.Action != ActionNodeEnsured {
 		t.Fatalf("warm over-cap ensure = %+v", result)
 	}
-	if result = fixture.step(t, reconciler); result.Action != ActionBootstrapEnsured {
+	if result = fixture.step(t, reconciler); result.Action != ActionCapacityPublished {
 		t.Fatalf("warm over-cap bootstrap = %+v", result)
 	}
 	fixture.step(t, reconciler)
@@ -439,7 +502,7 @@ func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
 						t.Fatalf("unsafe drain = %+v, revoke/delete = %d/%d", result, fixture.bootstrap.revokeCalls, fixture.provider.deleteCalls)
 					}
 				}
-				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now}}
+				fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}}
 				if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked {
 					t.Fatalf("lease ended: %+v", result)
 				}
@@ -451,7 +514,7 @@ func TestReconcilerDrainingIdentityWaitsForLeaseEvidence(t *testing.T) {
 	}
 }
 
-func TestReconcilerDrainTimeoutOnlyRevokesWithoutLiveLease(t *testing.T) {
+func TestReconcilerDrainTimeoutStillRequiresLeaseEvidence(t *testing.T) {
 	for _, activeLeases := range []int{0, 1} {
 		t.Run(fmt.Sprintf("active leases=%d", activeLeases), func(t *testing.T) {
 			fixture := newFleetFixture(t)
@@ -478,8 +541,12 @@ func TestReconcilerDrainTimeoutOnlyRevokesWithoutLiveLease(t *testing.T) {
 				}
 				return
 			}
+			if result := fixture.step(t, reconciler); result.Action != ActionDrainWaiting || fixture.bootstrap.revokeCalls != 0 || fixture.provider.deleteCalls != 0 {
+				t.Fatalf("timeout without evidence = %+v", result)
+			}
+			fixture.runtime.observations = []NodeObservation{{Identity: identity, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}}
 			if result := fixture.step(t, reconciler); result.Action != ActionIdentityRevoked || fixture.bootstrap.revokeCalls != 1 {
-				t.Fatalf("timeout revoke = %+v", result)
+				t.Fatalf("timeout with authoritative zero = %+v", result)
 			}
 			if result := fixture.step(t, reconciler); result.Action != ActionNodeDeleted || fixture.provider.deleteCalls != 1 {
 				t.Fatalf("timeout deletion = %+v", result)
@@ -508,7 +575,7 @@ func TestReconcilerScaleDownPrefersObservedIdleNode(t *testing.T) {
 				managed := ManagedNode{ProviderID: id, Name: node.Name, Phase: PhaseReady,
 					BootGeneration: node.BootGeneration, Identity: &identity, LastReadyAt: &fixture.now}
 				observation := NodeObservation{Identity: identity, Ready: true, AdmissionOpen: true,
-					ReadyCapacity: 1, ObservedAt: fixture.now}
+					ReadyCapacity: 1, ObservedAt: fixture.now, LeasesObservedAt: fixture.now}
 				if index == 1 {
 					// A worker can claim before the controller records readiness.
 					managed.Phase, managed.LastReadyAt = PhaseBootstrapping, nil
@@ -520,6 +587,9 @@ func TestReconcilerScaleDownPrefersObservedIdleNode(t *testing.T) {
 				}
 			}
 			result := fixture.step(t, fixture.reconciler(t))
+			if result.Action == ActionNodeReady {
+				result = fixture.step(t, fixture.reconciler(t))
+			}
 			if result.Action != ActionAdmissionClosed || result.ProviderNodeID != "1001" {
 				t.Fatalf("scale-down chose busy newer node: %+v", result)
 			}
@@ -743,6 +813,11 @@ type fakeProvider struct {
 	events      *[]string
 }
 
+func (f *fakeProvider) NodeExists(_ context.Context, _ PoolKey, id string) (bool, error) {
+	_, exists := f.nodes[id]
+	return exists, nil
+}
+
 func (f *fakeProvider) ListNodes(context.Context, PoolKey) ([]Node, error) {
 	nodes := make([]Node, 0, len(f.nodes))
 	for _, node := range f.nodes {
@@ -849,14 +924,24 @@ func (f *fakeBootstrap) identity(node Node) NodeIdentity {
 }
 
 type fakeRuntime struct {
+	observeErr   error
 	observations []NodeObservation
 	closeCalls   int
 	published    []PoolProjection
 	events       *[]string
 }
 
+func (f *fakeRuntime) ObserveIdentity(_ context.Context, identity NodeIdentity) (NodeObservation, error) {
+	for _, observation := range f.observations {
+		if observation.Identity == identity {
+			return observation, nil
+		}
+	}
+	return NodeObservation{Identity: identity, ObservedAt: time.Unix(1, 0)}, nil
+}
+
 func (f *fakeRuntime) ObserveNodes(context.Context, PoolKey) ([]NodeObservation, error) {
-	return append([]NodeObservation(nil), f.observations...), nil
+	return append([]NodeObservation(nil), f.observations...), f.observeErr
 }
 
 func (f *fakeRuntime) CloseAdmission(_ context.Context, identity NodeIdentity) error {

@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -36,6 +39,7 @@ var (
 	ErrInvalidCaptureDaemon   = errors.New("invalid recorder capture daemon")
 	ErrCaptureDaemonStopped   = errors.New("recorder capture daemon stopped")
 	ErrCaptureAttemptShutdown = errors.New("recorder capture attempt did not shut down within its bound")
+	errCaptureSlotRetired     = errors.New("recorder capture slot cleanup failed")
 	ErrCaptureHandoffWindow   = errors.New("recorder capture lease has insufficient handoff time")
 )
 
@@ -63,7 +67,10 @@ type CaptureAttemptFactory interface {
 	NewCaptureAttempt(context.Context, ClaimResult) (CaptureAttempt, error)
 }
 
+// CaptureDaemonConfig controls the process-wide slot limit. Ports supplied to
+// NewCaptureDaemon must support concurrent calls when Slots exceeds one.
 type CaptureDaemonConfig struct {
+	Slots             int
 	Lease             time.Duration
 	HeartbeatInterval time.Duration
 	NoWorkWait        time.Duration
@@ -79,11 +86,15 @@ type CaptureDaemonConfig struct {
 }
 
 type CaptureDaemon struct {
-	control  CaptureControlPlane
-	factory  CaptureAttemptFactory
-	config   CaptureDaemonConfig
-	draining atomic.Bool
-	drain    chan struct{}
+	control         CaptureControlPlane
+	factory         CaptureAttemptFactory
+	config          CaptureDaemonConfig
+	running         atomic.Bool
+	retired         atomic.Int32
+	draining        atomic.Bool
+	drain           chan struct{}
+	admissionClosed atomic.Bool
+	admissionStop   chan struct{}
 }
 
 func NewCaptureDaemon(control CaptureControlPlane, factory CaptureAttemptFactory, config CaptureDaemonConfig) (*CaptureDaemon, error) {
@@ -91,7 +102,7 @@ func NewCaptureDaemon(control CaptureControlPlane, factory CaptureAttemptFactory
 		return nil, ErrInvalidCaptureDaemon
 	}
 	config = normalizeCaptureDaemonConfig(config)
-	if config.Lease <= 0 || config.HeartbeatInterval <= 0 || config.HeartbeatInterval >= config.Lease || config.NoWorkWait <= 0 || config.ClaimRetryWait <= 0 || config.AttemptRetryDelay < 0 || config.AttemptShutdown <= 0 || config.HandoffShutdown <= 0 || config.RelinquishTimeout <= 0 || config.CompletionTimeout <= 0 || config.Wait == nil || config.After == nil || config.Now == nil ||
+	if config.Slots < 1 || config.Lease <= 0 || config.HeartbeatInterval <= 0 || config.HeartbeatInterval >= config.Lease || config.NoWorkWait <= 0 || config.ClaimRetryWait <= 0 || config.AttemptRetryDelay < 0 || config.AttemptShutdown <= 0 || config.HandoffShutdown <= 0 || config.RelinquishTimeout <= 0 || config.CompletionTimeout <= 0 || config.Wait == nil || config.After == nil || config.Now == nil ||
 		config.RelinquishTimeout >= ReadinessShutdownGrace {
 		return nil, ErrInvalidCaptureDaemon
 	}
@@ -100,28 +111,138 @@ func NewCaptureDaemon(control CaptureControlPlane, factory CaptureAttemptFactory
 		config.HandoffShutdown >= ReadinessShutdownGrace-config.RelinquishTimeout {
 		return nil, ErrInvalidCaptureDaemon
 	}
-	return &CaptureDaemon{control: control, factory: factory, config: config, drain: make(chan struct{})}, nil
+	return &CaptureDaemon{control: control, factory: factory, config: config, drain: make(chan struct{}), admissionStop: make(chan struct{})}, nil
 }
 
 func (d *CaptureDaemon) Run(ctx context.Context) error {
 	if d == nil || d.control == nil || d.factory == nil {
 		return ErrInvalidCaptureDaemon
 	}
+	if !d.running.CompareAndSwap(false, true) {
+		return ErrInvalidCaptureDaemon
+	}
+	defer d.running.Store(false)
+	if d.admissionClosed.Load() {
+		return ErrWorkerDraining
+	}
+	claimCtx, cancelClaims := context.WithCancel(ctx)
+	defer cancelClaims()
+	go func() {
+		select {
+		case <-d.admissionStop:
+			cancelClaims()
+		case <-claimCtx.Done():
+		}
+	}()
+	if d.config.Slots == 1 {
+		return d.runLoop(ctx, claimCtx)
+	}
+	capacity := d.ReadyCapacity()
+	if capacity == 0 {
+		return errCaptureSlotRetired
+	}
+	var slots sync.WaitGroup
+	allRetired := make(chan struct{})
+	results := make(chan error, capacity)
+	for range capacity {
+		slots.Go(func() {
+			for ctx.Err() == nil && !d.admissionClosed.Load() {
+				err := captureOperation(func() error { return d.runLoop(ctx, claimCtx) })
+				if ctx.Err() != nil || d.admissionClosed.Load() {
+					results <- err
+					return
+				}
+				if errors.Is(err, errCaptureSlotRetired) {
+					slog.ErrorContext(ctx, "recorder capture slot retired after cleanup failure", "error", err)
+					if d.retired.Add(1) == int32(d.config.Slots) {
+						close(allRetired)
+					}
+					select {
+					case <-ctx.Done():
+					case <-d.admissionStop:
+					case <-allRetired:
+					}
+					results <- err
+					return
+				}
+				slog.ErrorContext(ctx, "recorder capture slot restarting", "error", err)
+				// Retain the slot until any lost claim or last renewed lease expires.
+				timer := time.NewTimer(d.config.Lease)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-d.admissionStop:
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+			}
+		})
+	}
+	slots.Wait()
+	close(results)
+	var result error
+	for err := range results {
+		result = errors.Join(result, err)
+	}
+	if ctx.Err() != nil {
+		return errors.Join(ErrCaptureDaemonStopped, ctx.Err(), result)
+	}
+	if d.admissionClosed.Load() {
+		return errors.Join(ErrWorkerDraining, result)
+	}
+	return result
+}
+
+// ReadyCapacity includes busy slots, but never slots with failed cleanup.
+func (d *CaptureDaemon) ReadyCapacity() int {
+	if d.admissionClosed.Load() {
+		return 0
+	}
+	return d.config.Slots - int(d.retired.Load())
+}
+
+func captureOperation(operation func() error) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = capturePanicError()
+		}
+	}()
+	return operation()
+}
+
+// Keep the source location without logging arbitrary panic values, which may
+// contain credentials or media. Bound the stack so recovery cannot flood logs.
+func capturePanicError() error {
+	stack := debug.Stack()
+	slog.Error("recorder capture operation panicked", "stack", string(stack[:min(len(stack), 16*1024)]))
+	return errors.New("recorder capture operation panicked")
+}
+
+func (d *CaptureDaemon) runLoop(ctx, claimCtx context.Context) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(ErrCaptureDaemonStopped, err)
 		}
-		if d.draining.Load() {
+		if d.admissionClosed.Load() {
 			return ErrWorkerDraining
 		}
 		claimRequestID, err := utilities.NewID()
 		if err != nil {
 			return fmt.Errorf("create recorder claim request id: %w", err)
 		}
-		claim, err := d.claimJob(ctx, claimRequestID)
+		claim, err := d.claimJob(claimCtx, claimRequestID)
 		if err != nil {
+			if errors.Is(err, ErrWorkerDraining) || d.admissionClosed.Load() {
+				d.CloseAdmission()
+				return ErrWorkerDraining
+			}
 			if errors.Is(err, ErrNoWork) {
-				if waitErr := d.config.Wait(ctx, d.config.NoWorkWait); waitErr != nil {
+				if waitErr := d.config.Wait(claimCtx, d.config.NoWorkWait); waitErr != nil {
+					if d.admissionClosed.Load() {
+						return ErrWorkerDraining
+					}
 					return errors.Join(ErrCaptureDaemonStopped, waitErr)
 				}
 				continue
@@ -137,7 +258,7 @@ func (d *CaptureDaemon) Run(ctx context.Context) error {
 
 func (d *CaptureDaemon) claimJob(ctx context.Context, claimRequestID utilities.ID) (ClaimResult, error) {
 	for {
-		if d.draining.Load() {
+		if d.admissionClosed.Load() {
 			return ClaimResult{}, ErrWorkerDraining
 		}
 		claim, err := d.control.ClaimJob(ctx, claimRequestID, d.config.Lease)
@@ -150,16 +271,24 @@ func (d *CaptureDaemon) claimJob(ctx context.Context, claimRequestID utilities.I
 	}
 }
 
+// CloseAdmission stops claim and restart loops without interrupting held work.
+func (d *CaptureDaemon) CloseAdmission() {
+	if d != nil && d.admissionClosed.CompareAndSwap(false, true) {
+		close(d.admissionStop)
+	}
+}
+
 // Drain closes admission and hands an active capture back through its current
 // fence so another worker can continue with fresh attempt authority.
 func (d *CaptureDaemon) Drain() {
+	d.CloseAdmission()
 	if d != nil && d.draining.CompareAndSwap(false, true) {
 		close(d.drain)
 	}
 }
 
-func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
-	ctx, err := captureAttemptContext(ctx, claim)
+func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) (err error) {
+	ctx, err = captureAttemptContext(ctx, claim)
 	if err != nil {
 		return err
 	}
@@ -183,9 +312,18 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
 	leaseExpiresAt := claim.LeaseExpiresAt.UTC()
 	result := make(chan error, 1)
 	go func() {
-		result <- attempt.Run(attemptCtx)
+		// Cleanup recovery may observe completion again after the first result
+		// was consumed (for example, when relinquishing the lease panics).
+		defer close(result)
+		result <- captureOperation(func() error { return attempt.Run(attemptCtx) })
 	}()
 
+	defer func() {
+		if recover() != nil {
+			_, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
+			err = errors.Join(capturePanicError(), closeErr, shutdownErr)
+		}
+	}()
 	for {
 		select {
 		case runErr := <-result:
@@ -205,16 +343,16 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
 				if ctx.Err() != nil {
 					return d.interruptCaptureAttempt(ctx, attempt, cancelAttempt, result, lease, leaseExpiresAt, errors.Join(ErrCaptureDaemonStopped, ctx.Err()))
 				}
-				runErr, closeErr, shutdownErr := shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
+				runErr, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
 				return fmt.Errorf("renew recorder capture lease: %w", errors.Join(heartbeatErr, runErr, closeErr, shutdownErr))
 			}
 			renewed, renewErr := renewedCaptureLease(lease, job, d.config.Lease, d.config.Now().UTC())
 			if renewErr != nil {
-				runErr, closeErr, shutdownErr := shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
+				runErr, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
 				return errors.Join(renewErr, runErr, closeErr, shutdownErr)
 			}
 			if renewErr = attempt.RenewLease(capturesignaling.WorkerLease{Owner: renewed.LeaseOwner, Token: renewed.LeaseToken, ExpiresAt: job.LeaseExpiresAt.UTC()}); renewErr != nil {
-				runErr, closeErr, shutdownErr := shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
+				runErr, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.AttemptShutdown)
 				return fmt.Errorf("apply recorder capture lease: %w", errors.Join(renewErr, runErr, closeErr, shutdownErr))
 			}
 			lease = renewed
@@ -224,10 +362,14 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
 }
 
 func (d *CaptureDaemon) finishCaptureAttempt(ctx context.Context, attempt CaptureAttempt, cancelAttempt context.CancelFunc, result <-chan error, runErr error, lease recordingpipeline.LeaseInput, leaseExpiresAt time.Time) error {
-	runErr, closeErr, shutdownErr := shutdownCaptureAttempt(cancelAttempt, attempt, result, &runErr, d.config.AttemptShutdown)
+	runErr, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, &runErr, d.config.AttemptShutdown)
 	attemptErr := errors.Join(runErr, closeErr, shutdownErr)
 	if attemptErr != nil {
-		return d.reportAttemptFailure(ctx, lease, attemptErr)
+		reportErr := d.reportAttemptFailure(ctx, lease, attemptErr)
+		if d.config.Slots > 1 {
+			return errors.Join(reportErr, shutdownErr)
+		}
+		return reportErr
 	}
 	if err := d.completeCapture(ctx, lease, leaseExpiresAt, false); err != nil {
 		return d.reportCompletionFailure(ctx, lease, err)
@@ -241,7 +383,7 @@ func (d *CaptureDaemon) interruptCaptureAttempt(ctx context.Context, attempt Cap
 	// that live window; an unexpectedly late wakeup takes the safe lease-expiry
 	// fallback instead of releasing authority while cleanup may still be active.
 	handoffFitsLease := d.config.Now().UTC().Add(d.config.HandoffShutdown + d.config.RelinquishTimeout).Before(leaseExpiresAt)
-	runErr, closeErr, shutdownErr := shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.HandoffShutdown)
+	runErr, closeErr, shutdownErr := d.shutdownCaptureAttempt(cancelAttempt, attempt, result, nil, d.config.HandoffShutdown)
 	if shutdownErr != nil {
 		return errors.Join(stopErr, runErr, closeErr, shutdownErr)
 	}
@@ -300,7 +442,7 @@ func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipe
 	// authority while it runs, without starting another media attempt.
 	go func() {
 		for {
-			_, err := d.control.Complete(ctx, lease)
+			err := captureOperation(func() error { _, err := d.control.Complete(ctx, lease); return err })
 			if err == nil || !errors.Is(err, ErrControlPlaneRetryable) {
 				result <- err
 				return
@@ -357,31 +499,46 @@ func (d *CaptureDaemon) heartbeat(ctx context.Context, lease recordingpipeline.L
 	}
 }
 
-func shutdownCaptureAttempt(cancel context.CancelFunc, attempt CaptureAttempt, result <-chan error, knownRunErr *error, timeout time.Duration) (error, error, error) {
+func (d *CaptureDaemon) shutdownCaptureAttempt(cancel context.CancelFunc, attempt CaptureAttempt, result <-chan error, knownRunErr *error, timeout time.Duration) (error, error, error) {
 	cancel()
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), timeout)
 	defer cancelShutdown()
-	var runErr error
+	var runErr, shutdownErr error
 	if knownRunErr == nil {
 		select {
 		case runErr = <-result:
 		case <-shutdownCtx.Done():
-			return nil, nil, ErrCaptureAttemptShutdown
+			if d.config.Slots == 1 {
+				return nil, nil, ErrCaptureAttemptShutdown
+			}
+			// A lease fence cannot stop local media work. Keep this slot occupied
+			// until Run exits, even when it ignores its cancellation deadline.
+			shutdownErr = ErrCaptureAttemptShutdown
+			runErr = <-result
 		}
 	} else {
 		runErr = *knownRunErr
 	}
 	closeResult := make(chan error, 1)
-	go func() { closeResult <- attempt.Close(shutdownCtx) }()
+	go func() { closeResult <- captureOperation(func() error { return attempt.Close(shutdownCtx) }) }()
+	var closeErr error
 	select {
-	case closeErr := <-closeResult:
-		if closeErr != nil {
-			return runErr, closeErr, ErrCaptureAttemptShutdown
-		}
-		return runErr, nil, nil
+	case closeErr = <-closeResult:
 	case <-shutdownCtx.Done():
-		return runErr, nil, ErrCaptureAttemptShutdown
+		if d.config.Slots == 1 {
+			return runErr, nil, ErrCaptureAttemptShutdown
+		}
+		shutdownErr = ErrCaptureAttemptShutdown
+		closeErr = <-closeResult
 	}
+	if closeErr != nil {
+		shutdownErr = ErrCaptureAttemptShutdown
+		if d.config.Slots > 1 {
+			// A failed or panicking Close cannot prove that resources were freed.
+			shutdownErr = errors.Join(shutdownErr, errCaptureSlotRetired)
+		}
+	}
+	return runErr, closeErr, shutdownErr
 }
 
 func captureAttemptContext(ctx context.Context, claim ClaimResult) (context.Context, error) {
@@ -520,6 +677,9 @@ func boundedFailureDetail(err error) string {
 }
 
 func normalizeCaptureDaemonConfig(config CaptureDaemonConfig) CaptureDaemonConfig {
+	if config.Slots == 0 {
+		config.Slots = 1
+	}
 	if config.Lease == 0 {
 		config.Lease = DefaultCaptureLease
 	}

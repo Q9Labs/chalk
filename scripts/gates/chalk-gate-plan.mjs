@@ -366,6 +366,7 @@ export function createGatePlan(files, options = {}) {
       "apps/mobile/scripts/run-ios.test.mjs",
       "scripts/gates/with-postgres.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
+      "scripts/gates/gate-policy.test.mjs",
       "scripts/gates/codeql-languages.test.mjs",
       "apps/sync/scripts/reliability_harness.test.mjs",
       "scripts/gates/call-performance-metrics.test.mjs",
@@ -411,7 +412,8 @@ export function createGatePlan(files, options = {}) {
       "--gate",
       "--leaks-only",
       "--out",
-      "artifacts/call-leaks.json",
+      process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? `artifacts/${process.env.GATE_LANE_GROUP}.json` : "artifacts/call-leaks.json",
+      ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
@@ -504,7 +506,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], "call-performance": ["call-performance"], "call-leaks": ["call-leaks"], build: ["build", "publint", "attw"] };
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], "call-performance": ["call-performance"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";
@@ -513,13 +515,13 @@ export function laneGroup(laneId) {
 export function laneGroupLanes(lanes, group) {
   if (group === undefined) return lanes;
   if (group !== "checks" && !Object.hasOwn(rootLaneGroups, group)) throw new GatePlanningError("invalid-lane-group", `Unknown lane group: ${group}`);
-  return lanes.filter((lane) => laneGroup(lane.id) === group);
+  return lanes.filter((lane) => (group === "checks" ? laneGroup(lane.id) === group : rootLaneGroups[group].includes(lane.id)));
 }
 
 // The checks group always runs; the other root groups and the service gates run only when the plan selects them.
 export function ciJobs(files, options = {}) {
   const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", ...options });
-  const groups = Object.keys(rootLaneGroups).filter((group) => plan.full || plan.tasks.some((task) => task.selected && laneGroup(task.id) === group));
+  const groups = Object.keys(rootLaneGroups).filter((group) => plan.full || plan.tasks.some((task) => task.selected && rootLaneGroups[group].includes(task.id)));
   return { api: plan.services.api, sync: plan.services.sync, rootGroups: ["checks", ...groups] };
 }
 

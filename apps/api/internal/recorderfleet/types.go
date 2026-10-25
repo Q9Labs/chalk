@@ -18,11 +18,14 @@ import (
 )
 
 const (
+	// MaxWorkerSlots bounds the slot capacity a worker may report.
+	MaxWorkerSlots = 100
 	// DiagnosticTag marks separately owned boot probes, never live capacity.
 	DiagnosticTag                    = "chalk-recorder-diagnostic"
 	JournalSchemaVersion             = "recorder_fleet_journal.v2"
 	LegacyJournalSchemaVersion       = "recorder_fleet_journal.v1"
 	DemandSchemaVersion              = "recorder_fleet_demand.v1"
+	SlotDemandSchemaVersion          = "recorder_fleet_demand.v2"
 	NodesSchemaVersion               = "recorder_fleet_nodes.v1"
 	BootstrapSchemaVersion           = "recorder_fleet_bootstrap.v1"
 	BootstrapAbandonSchemaVersion    = "recorder_fleet_bootstrap_abandon.v1"
@@ -97,15 +100,24 @@ func (key PoolKey) Validate() error {
 }
 
 type Demand struct {
-	Revision          string    `json:"revision"`
-	DesiredNodes      int       `json:"desired_nodes"`
-	ScheduledPrewarms int       `json:"scheduled_prewarms"`
-	HeldStarts        int       `json:"held_starts"`
-	QueuedJobs        int       `json:"queued_jobs"`
-	ObservedAt        time.Time `json:"observed_at"`
+	Revision          string                 `json:"revision"`
+	DesiredNodes      int                    `json:"desired_nodes"`
+	ScheduledPrewarms int                    `json:"scheduled_prewarms"`
+	HeldStarts        int                    `json:"held_starts"`
+	QueuedJobs        int                    `json:"queued_jobs"`
+	ObservedAt        time.Time              `json:"observed_at"`
+	CaptureCapacity   *CaptureCapacityDemand `json:"capture_capacity,omitempty"`
+}
+
+type CaptureCapacityDemand struct {
+	SlotDemand        int `json:"slot_demand"`
+	PhysicalNodeFloor int `json:"physical_node_floor"`
 }
 
 func (d Demand) Validate() error {
+	if d.CaptureCapacity != nil && (d.CaptureCapacity.SlotDemand < 0 || d.CaptureCapacity.PhysicalNodeFloor < 0 || d.DesiredNodes < max(d.CaptureCapacity.SlotDemand, d.CaptureCapacity.PhysicalNodeFloor)) {
+		return ErrInvalidDemand
+	}
 	if strings.TrimSpace(d.Revision) == "" || len(d.Revision) > 128 || d.DesiredNodes < 0 || d.ScheduledPrewarms < 0 || d.HeldStarts < 0 || d.QueuedJobs < 0 || d.ObservedAt.IsZero() {
 		return ErrInvalidDemand
 	}
@@ -168,6 +180,7 @@ type Config struct {
 	OwnerTag          string
 	MaxNodes          int
 	SlotsPerNode      int
+	FreeSlots         int
 	DemandMaxAge      time.Duration
 	ObservationMaxAge time.Duration
 	StartupTimeout    time.Duration
@@ -181,10 +194,10 @@ func (c Config) Validate() error {
 	if err := c.Key.Validate(); err != nil {
 		return err
 	}
-	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.MaxNodes > 21 || c.SlotsPerNode <= 0 || c.SlotsPerNode > 100 || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
+	if !validTag(c.OwnerTag) || c.MaxNodes <= 0 || c.SlotsPerNode <= 0 || c.SlotsPerNode > MaxWorkerSlots || c.FreeSlots < 0 || c.FreeSlots > 0 && (c.FreeSlots-1)/c.SlotsPerNode >= c.MaxNodes || c.DemandMaxAge <= 0 || c.ObservationMaxAge <= 0 || c.StartupTimeout <= 0 || c.StartupTimeout > 7*24*time.Hour-5*time.Minute || c.DrainTimeout <= 0 || c.HealthRefresh <= 0 || c.HealthRefresh > c.ObservationMaxAge {
 		return ErrInvalidConfig
 	}
-	if c.Key.Role == workeridentity.RoleCapture && c.MaxNodes > 11 || c.Key.Role == workeridentity.RoleRender && c.MaxNodes > 10 {
+	if c.Key.Role == workeridentity.RoleRender && (c.MaxNodes > 10 || c.FreeSlots != 0) {
 		return ErrInvalidConfig
 	}
 	if c.Release.Archive.Key != "recorder/"+string(c.Key.Role)+"/"+c.Release.Archive.SHA256+".tar.gz" {
@@ -208,11 +221,11 @@ type Node struct {
 
 func (n Node) Validate() error {
 	if strings.TrimSpace(n.ProviderID) == "" || len(n.ProviderID) > 128 || strings.TrimSpace(n.Name) == "" || len(n.Name) > 255 || !validNodeStatus(n.Status) || !validSlug(n.Region, 32) || !validToken(n.Size, 64) || n.ImageID <= 0 || n.BootGeneration == 0 || n.CreatedAt.IsZero() {
-		return ErrInventoryDrift
+		return fmt.Errorf("%w: invalid_node provider_id=%q", ErrInventoryDrift, n.ProviderID)
 	}
 	for _, tag := range n.Tags {
 		if !validTag(tag) {
-			return ErrInventoryDrift
+			return fmt.Errorf("%w: invalid_node_tag provider_id=%q", ErrInventoryDrift, n.ProviderID)
 		}
 	}
 	return nil
@@ -242,13 +255,25 @@ type NodeObservation struct {
 	ReadyCapacity int          `json:"ready_capacity"`
 	ActiveLeases  int          `json:"active_leases"`
 	ObservedAt    time.Time    `json:"observed_at"`
+	// LeasesObservedAt dates the authority's job-lease read, not the worker heartbeat.
+	LeasesObservedAt time.Time `json:"leases_observed_at,omitzero"`
+	IdentityRevoked  bool      `json:"identity_revoked,omitzero"`
+	IdentityAbsent   bool      `json:"identity_absent,omitzero"`
 }
 
-func (observation NodeObservation) Validate(key PoolKey, node Node, maxCapacity int) error {
-	if err := observation.Identity.Validate(key, node); err != nil || observation.ReadyCapacity < 0 || observation.ReadyCapacity > maxCapacity || observation.ActiveLeases < 0 || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen {
+func (observation NodeObservation) Validate(key PoolKey, node Node) error {
+	// A lease-only authority read cannot assert a worker heartbeat or readiness.
+	if observation.ObservedAt.IsZero() && (observation.LeasesObservedAt.IsZero() || observation.Ready || observation.AdmissionOpen || observation.ReadyCapacity != 0) {
+		return ErrRoleFence
+	}
+	if err := observation.Identity.Validate(key, node); err != nil || observation.ReadyCapacity < 0 || observation.ReadyCapacity > MaxWorkerSlots || observation.ActiveLeases < 0 || !observation.Ready && observation.AdmissionOpen {
 		return ErrRoleFence
 	}
 	return nil
+}
+
+func (observation NodeObservation) leasesFresh(now time.Time, maxAge time.Duration) bool {
+	return !observation.LeasesObservedAt.IsZero() && !observation.LeasesObservedAt.After(now) && now.Sub(observation.LeasesObservedAt) <= maxAge
 }
 
 type PoolProjection struct {
@@ -324,6 +349,7 @@ type DemandSource interface {
 }
 
 type Provider interface {
+	NodeExists(context.Context, PoolKey, string) (bool, error)
 	ListNodes(context.Context, PoolKey) ([]Node, error)
 	EnsureNode(context.Context, EnsureNodeRequest) (Node, error)
 	DeleteNode(context.Context, DeleteNodeRequest) error
@@ -336,6 +362,12 @@ type BootstrapAuthority interface {
 	EnsureBootstrap(context.Context, BootstrapRequest) (NodeIdentity, error)
 	AbandonBootstrap(context.Context, BootstrapRequest) error
 	RevokeIdentity(context.Context, NodeIdentity) error
+}
+
+// IdentityLeaseObserver reads database-live leases even when the fleet row is lost.
+// Unsupported authorities must return an error, never an implicit zero.
+type IdentityLeaseObserver interface {
+	ObserveIdentity(context.Context, NodeIdentity) (NodeObservation, error)
 }
 
 type RuntimeControl interface {

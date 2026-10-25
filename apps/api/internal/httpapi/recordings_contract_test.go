@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -308,10 +310,59 @@ func TestRecordingDownloadURLUsesBoundedLifetimeAndExplicitAttachment(t *testing
 				}
 				return
 			}
+			var body struct {
+				SignedHeaders map[string][]string `json:"signed_headers"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.SignedHeaders == nil {
+				t.Fatal("signed_headers must be an object, got null or missing")
+			}
 			if downloads.input.Key != storageKey || downloads.input.ExpiresIn != 5*time.Minute || downloads.input.ContentDisposition != test.contentDisposition {
 				t.Fatalf("download signer input=%+v", downloads.input)
 			}
 		})
+	}
+}
+
+func TestRecordingDownloadURLHostOnlySignedHeadersContract(t *testing.T) {
+	id := mustRecordingContractID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be030")
+	key := recordings.TenantStorageKeyPrefix(id) + "exports/test.mp4"
+	store, err := r2.NewStore(config.R2Config{Bucket: "test", Endpoint: "https://storage.example.test", AccessKeyID: "test", SecretAccessKey: "test", RequestTimeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := store.CreateDownloadURL(context.Background(), objectstorage.CreateDownloadURLInput{Key: key, ExpiresIn: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(signed.SignedHeader) != 0 {
+		t.Fatal("expected Host-only signing to need no client headers")
+	}
+	service := recordingExportHTTPRecordingStub{recording: recordings.Recording{ID: id, TenantID: id, Status: recordings.StatusCompleted, StorageProvider: recordings.StorageProviderR2, StorageKey: &key}}
+	exports := &recordingExportHTTPStub{state: recordingpipeline.ArtifactState{ExportStatus: recordingpipeline.ExportStatusReady}}
+	router := chi.NewRouter()
+	createRecordingDownloadURLEndpoint(service, exports, store, &preparationAuthorizer{}).Mount(router, RateLimitOptions{})
+	request := httptest.NewRequest(http.MethodPost, "/tenants/"+id.String()+"/recordings/"+id.String()+"/download-url", strings.NewReader(`{"expires_in_seconds":60}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(authentication.ContextWithPrincipal(request.Context(), authentication.Principal{Kind: authentication.PrincipalSystem}))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d", response.Code)
+	}
+	var body struct {
+		SignedHeaders map[string][]string `json:"signed_headers"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.SignedHeaders == nil {
+		t.Fatal("signed_headers must be an object, got null or missing")
+	}
+	if len(body.SignedHeaders) != 0 {
+		t.Fatal("expected an empty client header object")
 	}
 }
 

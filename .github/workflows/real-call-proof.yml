@@ -70,7 +70,6 @@ jobs:
       - name: Install proof dependencies
         run: |
           pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
-          pnpm --filter @q9labsai/chalk-client exec playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick espeak fonts-dejavu-core age
           # Ubuntu ships ImageMagick 6, without the ImageMagick 7 entry point.
@@ -83,6 +82,9 @@ jobs:
           exec convert "$@"
           SH
           sudo chmod +x /usr/local/bin/magick
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
       - name: Validate evidence recipient
         env:
           EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}

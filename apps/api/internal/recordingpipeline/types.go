@@ -328,6 +328,8 @@ type Artifact struct {
 }
 
 type ClaimInput struct {
+	// ManagedWorker is set by the authenticated HTTP boundary, never the request body.
+	ManagedWorker          bool
 	ClaimRequestID         utilities.ID
 	Kind                   JobKind
 	SupportsCompletionOnly bool

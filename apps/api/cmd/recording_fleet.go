@@ -33,7 +33,7 @@ func newRecorderFleetComponents(cfg config.Config, queries sqlc.Querier, base ht
 		}
 		issuer = configured
 	}
-	service, err := recorderfleetauthority.NewService(cfg.Observability.Environment, postgres.NewRecordingFleetAuthorityRepository(queries), issuer)
+	service, err := recorderfleetauthority.NewService(cfg.Observability.Environment, postgres.NewRecordingFleetAuthorityRepository(queries).WithAdmissionLimits(cfg.RecordingAdmission), issuer)
 	if err != nil {
 		return recorderFleetComponents{}, fmt.Errorf("configure recorder fleet authority: %w", err)
 	}

@@ -44,9 +44,9 @@ create index tenants_created_at_id_idx on tenants(created_at desc, id desc);
 
 create table tenant_artifact_policies (
     tenant_id uuid primary key references tenants(id) on delete cascade,
-    transcription_ceiling text not null default 'on_demand',
-    transcription_default_mode text not null default 'on_demand',
-    provider_policy_version text not null default 'chalk-on-demand-v1',
+    transcription_ceiling text not null default 'automatic',
+    transcription_default_mode text not null default 'automatic',
+    provider_policy_version text not null default 'chalk-automatic-v1',
     recording_retention_seconds bigint not null default 2592000,
     transcript_retention_seconds bigint not null default 0,
     source_window_seconds bigint not null default 86400,
@@ -225,7 +225,7 @@ create table spaces (
         check (jsonb_typeof(admission_policy) = 'object' and admission_policy ->> 'mode' in ('open', 'knock', 'members_only')),
     recording_policy text not null default 'automatic'
         check (recording_policy in ('disabled', 'manual', 'automatic')),
-    transcription_policy text not null default 'on_demand'
+    transcription_policy text not null default 'automatic'
         check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
@@ -2444,7 +2444,7 @@ create index transcription_cleanup_jobs_claim_idx on transcription_cleanup_jobs(
 create table recording_capacity (
     id smallint primary key check (id = 1),
     reserved_episodes integer not null default 0 check (reserved_episodes between 0 and 20),
-    reserved_participants integer not null default 0 check (reserved_participants between 0 and 100),
+    reserved_participants integer not null default 0 constraint recording_capacity_reserved_participants_check1 check (reserved_participants between 0 and 200),
     reserved_input_bitrate_bps bigint not null default 0 check (reserved_input_bitrate_bps >= 0),
     updated_at timestamptz not null default now()
 );
@@ -4673,3 +4673,19 @@ begin
 end;
 $$;
 -- +goose StatementEnd
+
+create table automatic_transcript_tenant_policy_backup (
+    tenant_id uuid primary key,
+    transcription_ceiling text not null,
+    transcription_default_mode text not null,
+    provider_policy_version text not null,
+    source_window_seconds bigint not null,
+    updated_at timestamptz not null
+);
+
+create table automatic_transcript_space_policy_backup (
+    space_id uuid primary key,
+    tenant_id uuid not null,
+    transcription_policy text not null,
+    updated_at timestamptz not null
+);

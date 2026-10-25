@@ -45,6 +45,7 @@ type rawCommandConfig struct {
 	ownerTag          string
 	maxNodes          string
 	slotsPerNode      string
+	freeSlots         string
 	demandMaxAge      string
 	observationMaxAge string
 	startupTimeout    string
@@ -90,6 +91,7 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		ownerTag:          getenv("CHALK_RECORDER_FLEET_OWNER_TAG"),
 		maxNodes:          getenv("CHALK_RECORDER_FLEET_MAX_NODES"),
 		slotsPerNode:      getenv("CHALK_RECORDER_FLEET_SLOTS_PER_NODE"),
+		freeSlots:         envOrDefault(getenv, "CHALK_RECORDER_FLEET_FREE_SLOTS", "0"),
 		demandMaxAge:      envOrDefault(getenv, "CHALK_RECORDER_FLEET_DEMAND_MAX_AGE", "30s"),
 		observationMaxAge: envOrDefault(getenv, "CHALK_RECORDER_FLEET_OBSERVATION_MAX_AGE", "30s"),
 		startupTimeout:    envOrDefault(getenv, "CHALK_RECORDER_FLEET_STARTUP_TIMEOUT", "10m"),
@@ -130,6 +132,7 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 	flags.StringVar(&raw.journalPath, "journal-path", raw.journalPath, "single-leader durable journal path")
 	flags.StringVar(&raw.ownerTag, "owner-tag", raw.ownerTag, "immutable controller ownership tag")
 	flags.StringVar(&raw.maxNodes, "max-nodes", raw.maxNodes, "hard node cap for this pool")
+	flags.StringVar(&raw.freeSlots, "free-slots", raw.freeSlots, "Capture free-slot floor")
 	flags.StringVar(&raw.slotsPerNode, "slots-per-node", raw.slotsPerNode, "qualified ready capacity per node")
 	flags.StringVar(&raw.demandMaxAge, "demand-max-age", raw.demandMaxAge, "maximum demand observation age")
 	flags.StringVar(&raw.observationMaxAge, "observation-max-age", raw.observationMaxAge, "maximum node observation age")
@@ -169,6 +172,10 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	slotsPerNode, err := parseRequiredInt("slots-per-node", raw.slotsPerNode)
 	if err != nil {
 		return commandConfig{}, err
+	}
+	freeSlots, err := strconv.Atoi(trim(raw.freeSlots))
+	if err != nil || freeSlots < 0 {
+		return commandConfig{}, fmt.Errorf("%w: free-slots", recorderfleet.ErrInvalidConfig)
 	}
 	imageID, err := strconv.ParseInt(trim(raw.imageID), 10, 64)
 	if err != nil || imageID <= 0 {
@@ -221,7 +228,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	}
 
 	fleetConfig := recorderfleet.Config{
-		Key: key, OwnerTag: trim(raw.ownerTag), MaxNodes: maxNodes, SlotsPerNode: slotsPerNode,
+		Key: key, OwnerTag: trim(raw.ownerTag), MaxNodes: maxNodes, SlotsPerNode: slotsPerNode, FreeSlots: freeSlots,
 		DemandMaxAge: demandMaxAge, ObservationMaxAge: observationMaxAge,
 		StartupTimeout: startupTimeout, DrainTimeout: drainTimeout, HealthRefresh: healthRefresh,
 		Release: recorderfleet.ReleaseSpec{
@@ -249,7 +256,7 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 	}
 	providerConfig := digitalocean.RecorderFleetConfig{
 		Token: trim(raw.digitalOceanToken), BaseURL: trim(raw.digitalOceanURL), Environment: key.Environment,
-		Role: key.Role, OwnerTag: fleetConfig.OwnerTag, ProjectID: trim(raw.projectID),
+		Role: key.Role, SlotsPerNode: slotsPerNode, OwnerTag: fleetConfig.OwnerTag, ProjectID: trim(raw.projectID),
 		VPCUUID: trim(raw.vpcUUID), GPU: fleetConfig.Release.GPU, SSHKeyIDs: sshKeyIDs,
 	}
 	return commandConfig{

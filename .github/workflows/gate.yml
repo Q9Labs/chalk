@@ -67,14 +67,16 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
-    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"call-performance":27,"call-leaks":57}')[matrix.group] || 30 }}
+    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"call-performance":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "call-performance", "call-leaks", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      # Compare pushes with the exact previous tip, including non-ancestor force pushes.
+      GATE_OSV_BASE_COMMIT: ${{ github.event_name == 'push' && github.event.before || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
       VITEST_MAX_WORKERS: "2"
     steps:
@@ -130,7 +132,7 @@ jobs:
 
       # Browser tests, call bundle budgets and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: contains(fromJSON('["browser-tests", "call-performance", "call-leaks"]'), matrix.group)
+        if: contains(fromJSON('["browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
         timeout-minutes: 12
         uses: ./.github/actions/setup-playwright
         with:
@@ -162,6 +164,14 @@ jobs:
             pnpm exec bash scripts/gates/commit.sh --full
           fi
 
+      - name: Save leak shard report
+        if: always() && startsWith(matrix.group, 'call-leaks-')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ matrix.group }}
+          path: artifacts/${{ matrix.group }}.json
+          if-no-files-found: error
+
       - name: Save Metro cache
         if: matrix.group == 'build' && github.event_name == 'push'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -185,6 +195,33 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+
+      - name: Download leak shard reports
+        if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
+        uses: actions/download-artifact@v4
+        with:
+          pattern: call-leaks-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Require complete leak journey coverage
+        if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
+        env:
+          LEAK_GROUPS: ${{ needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["call-leaks-1", "call-leaks-2", "call-leaks-3"]' }}
+        run: |
+          node --input-type=module <<'JS'
+          const shards = JSON.parse(process.env.LEAK_GROUPS).filter((group) => group.startsWith("call-leaks-"));
+          if (shards.length && JSON.stringify(shards.sort()) !== JSON.stringify(["call-leaks-1", "call-leaks-2", "call-leaks-3"])) throw new Error("Incomplete leak shard plan");
+          JS
+          node apps/web/scripts/call-leak-check.mjs --check-shards artifacts/call-leaks-{1,2,3}.json
+
       - name: Require every root lane group to pass
         run: |
           echo "Select gate jobs: ${{ needs.changes.result }}; root lane groups: ${{ needs.root-lanes.result }}"

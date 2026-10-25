@@ -7,6 +7,7 @@ module "capture" {
 
   environment        = var.environment
   desired_nodes      = local.desired_capture_nodes
+  max_nodes          = var.capture_max_nodes
   node_size          = var.capture_node_size
   region             = var.capture_region
   image_id           = var.capture_image_id

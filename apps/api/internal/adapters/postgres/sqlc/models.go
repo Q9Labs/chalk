@@ -89,6 +89,22 @@ type AutoSpaceLifecycle struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AutomaticTranscriptSpacePolicyBackup struct {
+	SpaceID             pgtype.UUID        `json:"space_id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	TranscriptionPolicy string             `json:"transcription_policy"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AutomaticTranscriptTenantPolicyBackup struct {
+	TenantID                 pgtype.UUID        `json:"tenant_id"`
+	TranscriptionCeiling     string             `json:"transcription_ceiling"`
+	TranscriptionDefaultMode string             `json:"transcription_default_mode"`
+	ProviderPolicyVersion    string             `json:"provider_policy_version"`
+	SourceWindowSeconds      int64              `json:"source_window_seconds"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Episode struct {
 	ID                 pgtype.UUID        `json:"id"`
 	Status             string             `json:"status"`

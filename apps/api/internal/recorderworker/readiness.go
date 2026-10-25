@@ -29,9 +29,8 @@ var (
 	ErrWorkerDraining         = errors.New("recorder worker is draining")
 )
 
-// WorkerReadiness describes this process's qualified serial processing slot.
-// It is capacity, not a claim-time idle counter: each daemon itself permits
-// only one active claim and the fleet controller accounts for active leases.
+// WorkerReadiness describes total process capacity, not a claim-time idle counter.
+// The daemon bounds claims and the fleet controller accounts for active leases.
 type WorkerReadiness struct {
 	AdmissionOpen bool
 	ReadyCapacity int
@@ -107,7 +106,7 @@ func (c *ControlPlaneClient) ReportReadiness(ctx context.Context, readiness Work
 
 func validateWorkerReadiness(readiness WorkerReadiness) error {
 	if readiness.Reason == "" || strings.TrimSpace(readiness.Reason) != readiness.Reason || len(readiness.Reason) > maximumReadinessReasonSize ||
-		readiness.AdmissionOpen && readiness.ReadyCapacity != SerialWorkerReadyCapacity ||
+		readiness.AdmissionOpen && readiness.ReadyCapacity <= 0 ||
 		!readiness.AdmissionOpen && readiness.ReadyCapacity != 0 ||
 		readiness.Resources != nil && !readiness.Resources.Valid(time.Now().UTC()) {
 		return ErrInvalidWorkerReadiness
@@ -132,6 +131,7 @@ type ReadinessReporter struct {
 	refreshInterval time.Duration
 	requestTimeout  time.Duration
 	shutdownGrace   time.Duration
+	capacity        int
 	after           func(time.Duration) <-chan time.Time
 }
 
@@ -149,7 +149,12 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 	if r == nil || r.control == nil || r.after == nil || r.refreshInterval <= 0 || r.requestTimeout <= 0 || r.shutdownGrace < r.requestTimeout || daemon == nil {
 		return ErrInvalidWorkerReadiness
 	}
-	receipt, err := r.publish(ctx, true)
+	r.capacity = SerialWorkerReadyCapacity
+	if capacity, ok := daemon.(interface{ ReadyCapacity() int }); ok {
+		r.capacity = capacity.ReadyCapacity()
+	}
+
+	receipt, err := r.publish(ctx, r.capacity > 0)
 	if err != nil {
 		if ctx.Err() != nil {
 			return errors.Join(ctx.Err(), r.closeAdmission(ctx))
@@ -176,7 +181,7 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 			if ctx.Err() != nil {
 				return errors.Join(ctx.Err(), unexpectedDaemonError(daemonErr, authorityDraining), closeErr)
 			}
-			if authorityDraining && expectedDaemonDrainError(daemonErr) {
+			if (authorityDraining || errors.Is(daemonErr, ErrWorkerDraining)) && expectedDaemonDrainError(daemonErr) {
 				return closeErr
 			}
 			if daemonErr == nil {
@@ -184,23 +189,25 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 			}
 			return errors.Join(readinessFailure("run recorder worker daemon", daemonErr), closeErr)
 		case <-ctx.Done():
-			return r.shutdown(ctx, daemon, cancelRun, daemonResult)
+			return r.shutdown(ctx, daemon, cancelRun, daemonResult, nil)
 		case <-refresh:
-			receipt, err := r.publish(ctx, true)
+			if capacity, ok := daemon.(interface{ ReadyCapacity() int }); ok {
+				r.capacity = capacity.ReadyCapacity()
+			}
+			receipt, err := r.publish(ctx, r.capacity > 0)
 			if err != nil {
-				if ctx.Err() != nil {
-					return r.shutdown(ctx, daemon, cancelRun, daemonResult)
+				var failure error
+				if ctx.Err() == nil || !errors.Is(err, ctx.Err()) {
+					failure = readinessFailure("refresh recorder worker readiness", err)
 				}
-				cancelRun()
-				daemonErr := <-daemonResult
-				return errors.Join(
-					readinessFailure("refresh recorder worker readiness", err),
-					daemonErr,
-					r.closeAdmission(ctx),
-				)
+				return r.shutdown(ctx, daemon, cancelRun, daemonResult, failure)
 			}
 			if !receipt.AdmissionOpen {
-				daemon.Drain()
+				if graceful, ok := daemon.(interface{ CloseAdmission() }); ok {
+					graceful.CloseAdmission()
+				} else {
+					daemon.Drain()
+				}
 				authorityDraining = true
 				refresh = nil
 				continue
@@ -210,16 +217,20 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 	}
 }
 
-func (r *ReadinessReporter) shutdown(ctx context.Context, daemon DrainableWorkerDaemon, cancelRun context.CancelFunc, daemonResult <-chan error) error {
+func (r *ReadinessReporter) shutdown(ctx context.Context, daemon DrainableWorkerDaemon, cancelRun context.CancelFunc, daemonResult <-chan error, failure error) error {
 	daemon.Drain()
 	shutdownExpired := r.after(r.shutdownGrace)
+	if failure != nil {
+		cancelRun()
+	}
 	closeErr := r.closeAdmission(ctx)
+	// Parent cancellation cannot shorten or restart this shutdown budget.
 	select {
 	case daemonErr := <-daemonResult:
-		return errors.Join(ctx.Err(), unexpectedDaemonError(daemonErr, true), closeErr)
+		return errors.Join(failure, ctx.Err(), unexpectedDaemonError(daemonErr, true), closeErr)
 	case <-shutdownExpired:
 		cancelRun()
-		return errors.Join(ctx.Err(), closeErr)
+		return errors.Join(failure, ctx.Err(), closeErr)
 	}
 }
 
@@ -270,7 +281,7 @@ func (r *ReadinessReporter) publish(ctx context.Context, ready bool) (WorkerRead
 	readiness := WorkerReadiness{Reason: ReadinessReasonDraining}
 	if ready {
 		readiness = WorkerReadiness{
-			AdmissionOpen: true, ReadyCapacity: SerialWorkerReadyCapacity, Reason: ReadinessReasonReady,
+			AdmissionOpen: true, ReadyCapacity: r.capacity, Reason: ReadinessReasonReady,
 		}
 	}
 	if sample, err := sampleProcessResources(); err == nil && sample.Valid(time.Now().UTC()) {

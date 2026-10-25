@@ -29,6 +29,7 @@ type WorkerObservation struct {
 }
 
 type Repository interface {
+	ObserveIdentity(context.Context, string, recorderfleet.NodeIdentity, time.Time) (recorderfleet.NodeObservation, error)
 	GetDemand(context.Context, recorderfleet.PoolKey, time.Time) (recorderfleet.Demand, error)
 	ObserveNodes(context.Context, recorderfleet.PoolKey, time.Time) ([]recorderfleet.NodeObservation, error)
 	ReserveBootstrap(context.Context, recorderfleet.BootstrapRequest) (BootstrapRecord, error)
@@ -118,6 +119,13 @@ func (s Service) AbandonBootstrap(ctx context.Context, request recorderfleet.Boo
 	return nil
 }
 
+func (s Service) ObserveIdentity(ctx context.Context, identity recorderfleet.NodeIdentity) (recorderfleet.NodeObservation, error) {
+	if err := validateNodeIdentity(identity); err != nil {
+		return recorderfleet.NodeObservation{}, err
+	}
+	return s.repository.ObserveIdentity(ctx, s.environment, identity, s.now().UTC())
+}
+
 func (s Service) CloseAdmission(ctx context.Context, identity recorderfleet.NodeIdentity) error {
 	if err := validateNodeIdentity(identity); err != nil {
 		return err
@@ -146,7 +154,7 @@ func (s Service) PublishPool(ctx context.Context, projection recorderfleet.PoolP
 }
 
 func (s Service) RecordWorkerObservation(ctx context.Context, observation WorkerObservation) (recorderfleet.NodeObservation, error) {
-	if observation.Identity.WorkerID.IsZero() || !validRole(observation.Identity.Role) || observation.ReadyCapacity < 0 || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen || observation.Resources != nil && !observation.Resources.Valid(s.now().UTC()) {
+	if observation.Identity.WorkerID.IsZero() || !validRole(observation.Identity.Role) || observation.ReadyCapacity < 0 || observation.ReadyCapacity > recorderfleet.MaxWorkerSlots || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen || observation.Resources != nil && !observation.Resources.Valid(s.now().UTC()) {
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
 	}
 	return s.repository.RecordWorkerObservation(ctx, s.environment, observation)
@@ -233,6 +241,9 @@ func (v *BoundWorkerVerifier) Verify(request *http.Request) (workeridentity.Iden
 		authorize = v.authorizer.AuthorizeWorkerClaim
 	}
 	if err := authorize(request.Context(), identity); err != nil {
+		if errors.Is(err, recorderfleet.ErrAdmissionClosed) {
+			return workeridentity.Identity{}, err
+		}
 		return workeridentity.Identity{}, errors.Join(workeridentity.ErrUnverifiedPeer, err)
 	}
 	return identity, nil

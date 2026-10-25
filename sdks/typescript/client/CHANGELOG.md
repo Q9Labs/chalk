@@ -1,5 +1,130 @@
 # Changelog
 
+## 5.2.0
+
+### board-draw-policy
+
+Add a call-wide drawing policy for the board: everyone, only hosts, or picked people.
+Hosts set it with `setDrawPolicy` on the whiteboard transport and pick people with the
+existing `setDrawPermission`. Sync computes each person's permission and sends it with
+the policy over the new `draw_policy_v1` extension, so the summary and
+`useWhiteboard().access` now carry `canDraw`, `drawPolicy` and the host's per-person
+choices. The React board follows that permission instead of the role capability, and
+hosts get a "Who can draw" section with a person picker in the board menu.
+
+The whiteboard client now steps its hello down only when Sync can't decode it (close
+1009). A rejected token or a late hello (close 1008) is retried at the same level up to
+four times, so a brief token problem no longer hides the drawing policy for the rest of
+the connection. On a Sync without the drawing policy, a host's waiting policy change is
+refused as `unavailable`, and also reported on the summary, instead of being replayed.
+
+### confirmed-call-entry
+
+Count a person in a call only after they have fully entered it. The built-in
+browser and React Native Sync clients ask Sync for entry confirmation on the Sync
+URL (`entry_confirmation=1`). When Sync's `welcome` grants it, the client sends
+`entered` once Sync is live and media has started, so a failed connection no
+longer leaves a ghost participant or an attendance record. Against an older Sync,
+the client sends the previous hello and Sync confirms entry at hello as before.
+
+`confirmEntered()` on a custom `createSyncClient` implementation is optional.
+Implementing it, and building `V1SyncClient` with `entryConfirmation: true`, adds
+the confirmed entry above. Without it, the client never asks for entry
+confirmation and Sync confirms the entry at hello, as in 5.0.x. `V1SyncClient`
+asks only when it is built with `entryConfirmation: true`.
+
+When entry fails, the client cancels the pending admission through the new
+`cancelEpisodeParticipantJoin` endpoint (`POST .../participants/:participant_id/cancel-join`),
+and a retry keeps the same person. If Sync reports `entry timeout` because the
+pending seat expired before entry, the connection fails as a retryable
+`sync_start_failed` instead of rejected access, and the client does not reconnect
+the expired seat with the same grant.
+
+The admission contract declares the 409 `participant.not_active` response when
+a retried admission names a participant that has already left. The public
+`AdmitEpisodeParticipantError` union stays compatible with 5.1.0; this response
+uses the existing `HttpClientError` channel, with its code in the response body.
+The dashboard reads that code and retries once with a fresh join key.
+
+Sync assigns each entry a participant-local generation and returns it in
+`welcome`. The client resumes that generation through the `entry_generation`
+WebSocket query, even after refreshing its credential. Confirmation advances
+ownership only forward and voids older pending Leaves. Acceptance and completion
+both fence a Leave against the confirmed generation, so reattaching the same
+seat cannot let the previous mount remove it. Previous Sync ignores this query.
+Legacy sockets receive a server generation internally without changing their
+welcome frame, and still confirm at hello. Participants created before seat
+storage acquire it on their first live hello. When recovery replaces the Sync
+client, it confirms the replacement entry before reporting recovery complete.
+Completed startup also survives reconnecting from an older Sync to an upgraded
+one. Recovery can finish while a previous entry's Leave is pending, and an
+uncertain confirmation reply checks that entry's generation before acknowledging it.
+A claimed Leave blocks later entry
+admission until its provider work settles. An entry admitted before that claim
+defers the older provider work until confirmation or its two-minute startup
+lease expires, preventing old cleanup from closing the new entry's media.
+
+Rollout: apply the database migrations first, then upgrade Sync, then the API and
+this client. This client also works with an older Sync, and published 5.0.x
+clients keep hello confirmation with the new Sync.
+
+### follow-view-owner
+
+Converge Follow views on one Episode owner, recover from its canonical snapshot,
+and preserve real camera moves during recovery and tab switches. Zoom controls
+and keyboard moves now consistently leave Follow and lead the person's view.
+
+Keep all 500 active people's views using internal schema-generated limits in the client and React caches. The client's public bounds, event unions and decoded-frame unions are unchanged. The client now exports `ChalkWhiteboardViewVersions`, which the React SDK uses to order view moves, and whiteboard view events now carry `ownerId`, `ownerSequence` and `originEpoch`, so both releases are minor.
+
+### honest-chat-file-errors
+
+Report chat attachment network and browser access failures without blaming storage.
+Keep token acquisition failures separate with a diagnostic stage while preserving
+the published error codes and original cause. Preserve recoverable access and
+connection failures through SpaceClient, including signed storage uploads. Show
+the storage-unavailable message only when a readable 503 response confirms
+`chat.storage_unavailable`.
+
+### problem-reporting
+
+Add the problem-report API contract and reusable report dialog, with opt-in diagnostics,
+editable delivery failures and bounded Unicode input. Call details and failed or ended
+call screens can expose reporting when an integration supplies a delivery callback.
+Use `reportUnavailableReason` to show expired access inside an editable report.
+Live report drafts survive call termination. Integrations with their own terminal
+screens can use `onOpenReportProblem` to keep one app-owned dialog across those screens.
+Give `ReportProblemDialog` a `focusScope` containing the current call or terminal screen,
+so closing it returns focus to its usable opener, or to a visible current control
+when the opener has disappeared. Hidden, inert and disabled targets are skipped.
+
+### recording-auto-render
+
+Expose recording expiry reasons through additive failure fields while preserving the existing export status enum.
+
+Add the Tenant recording_render_mode setting, defaulting to on_demand, with opt-in automatic MP4 rendering.
+
+### recording-transcription-expiry
+
+Recordings now report when their transcription source expires, as
+`transcription_preparation.expires_at`. A transcript can be requested only
+while `transcription_preparation.status` is `ready` and this time is ahead. It
+is never later than `source.expires_at`, and it can be much earlier, because a
+Space's transcription source window is often shorter than its video retention. The field is
+absent when transcription is disabled or no transcription source exists yet.
+
+### space-activity-read
+
+Add `spaces.listSpaceActivity` (`GET /v1/tenants/{tenant_id}/space-activity`) and
+its generated schemas and types. One read returns, for up to 300 Spaces, whether each
+is archived, the live Episode with its full participant count and first five Participants, the latest
+Episode with its status and start and end times, and up to five Participants who
+most recently joined that Episode. It needs `episodes:read`; an unknown or other
+Tenant's Space returns `404` for the whole batch. Existing operations are unchanged.
+
+### sync-connect-diagnostics
+
+Report Sync connection failures with the existing `connection.sync_hello_timeout` code without adding values to the public `ErrorCode` union. Add the current attempt's safe diagnostics to client errors, telemetry, and the call failure reference: opening/hello stage, close code and bounded reason, whether the socket opened, and elapsed time. Earlier attempts remain in the diagnostic history. Browsers do not expose DNS, TCP, or TLS progress. Unrecognized peer reasons are redacted. This is a compatible patch for the next client and React releases; released 5.1.0 files are unchanged.
+
 ## 5.1.0
 
 - Add shared board views: `ChalkWhiteboardView`, `ChalkWhiteboardViewBounds`, and the whiteboard client's `supportsViews` and `sendView()`, so participants can follow a person's board view or bring everyone to theirs. The board stream also carries a `view` event.

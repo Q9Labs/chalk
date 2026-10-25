@@ -301,6 +301,7 @@ def deploy_dispatcher(args):
     provider, config = settings(args)
     manifest = json.loads(args.manifest.read_text())
     archive = validate_members(json.loads(args.output.read_text()))['dispatcher']
+    matches = dispatcher_matches(provider, config, archive)
     with tempfile.TemporaryDirectory(prefix='chalk-dispatcher-release-') as temp:
         directory = Path(temp)
         zip_path = directory / 'dispatcher.zip'
@@ -324,6 +325,11 @@ def deploy_dispatcher(args):
         bucket = os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'] if not installed else root['module']['dispatcher']['artifact_s3_bucket']
         if args.dry_run:
             bucket, key, version = archive['bucket'], archive['key'], archive['version_id']
+        elif (matches and root['module']['dispatcher']['release_id'] == release
+              and root['module']['dispatcher'].get('release_manifest_digest') == 'sha256:' + digest(args.manifest.read_bytes())
+              and root['module']['dispatcher']['deepinfra_corpus_digest'] == archive['corpus_digest']):
+            key = root['module']['dispatcher']['artifact_s3_key']
+            version = root['module']['dispatcher']['artifact_s3_object_version']
         else:
             uploaded = provider.aws('s3api', 'put-object', '--bucket', bucket, '--key', key, '--body', zip_path)
             version = uploaded.get('VersionId')
@@ -347,6 +353,11 @@ def deploy_dispatcher(args):
         (directory / '.terraform.lock.hcl').write_bytes((ROOT / 'infrastructure/nightly/transcription/.terraform.lock.hcl').read_bytes())
         def tofu(*values):
             return provider.command(['tofu', '-chdir=' + str(directory), *values], timeout=900)
+        def apply(plan):
+            changes = [*plan.get('resource_changes', []), *plan.get('output_changes', {}).values()]
+            if matches and all(item.get('change', item)['actions'] == ['no-op'] for item in changes):
+                return
+            tofu('apply', '-input=false', '-no-color', 'release.plan')
         backend = ['-backend-config=bucket=' + config['dispatcher']['state_bucket']] if not installed else []
         tofu('init', '-input=false', '-upgrade=false', *backend)
         if args.dry_run:
@@ -373,7 +384,7 @@ def deploy_dispatcher(args):
                 tofu('plan', '-input=false', '-no-color', '-target=module.dispatcher.' + target, '-out=release.plan')
                 plan = json.loads(tofu('show', '-json', 'release.plan'))
                 check_dispatcher_update(plan, release, archive, key, version, inputs['release_manifest_digest'], inputs['config_digest'])
-                tofu('apply', '-input=false', '-no-color', 'release.plan')
+                apply(plan)
         tofu('plan', '-input=false', '-no-color', '-out=release.plan')
         plan = json.loads(tofu('show', '-json', 'release.plan'))
         if installed:
@@ -381,7 +392,7 @@ def deploy_dispatcher(args):
         else:
             for item in plan.get('resource_changes', []):
                 require('delete' not in item['change']['actions'], 'first-install dispatcher plan must not destroy or replace resources')
-        tofu('apply', '-input=false', '-no-color', 'release.plan')
+        apply(plan)
         proof = verify_dispatcher(provider, config['dispatcher'], release)
         schedule = provider.aws('scheduler', 'get-schedule', '--name', config['dispatcher']['scheduler_name'], '--group-name', config['dispatcher']['scheduler_group'])
         require(schedule['State'] == 'ENABLED', 'dispatcher scheduler is not enabled')

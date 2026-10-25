@@ -9,7 +9,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from time import sleep as backoff_sleep
+from time import monotonic, sleep as backoff_sleep
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -155,6 +155,8 @@ class GitHub:
                 if task in ('nightly-cut', 'production-release'):
                     status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
                     item['latest_status'] = status[0]['state'] if status else 'pending'
+                    if task == 'nightly-cut' and item['latest_status'] in ('pending', 'queued', 'in_progress'):
+                        continue
                     if task == 'production-release' and item['latest_status'] != 'success':
                         continue
                 return [item]
@@ -172,12 +174,27 @@ class GitHub:
         self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-attempt', 'auto_merge': False,
                      'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
 
-    def has_green_gate(self, sha, *, push_only=False):
+    def latest_gate(self, sha, *, push_only=False):
         runs = self.pages(f'actions/workflows/gate.yml/runs?head_sha={sha}&branch=master', 'workflow_runs')
         runs = [run for run in runs if run['head_sha'] == sha and run['head_branch'] == 'master'
                 and run['event'] in (('push',) if push_only else ('push', 'schedule', 'workflow_dispatch'))]
-        latest = max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
+        return max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
+
+    def has_green_gate(self, sha, *, push_only=False):
+        latest = self.latest_gate(sha, push_only=push_only)
         return bool(latest and latest['conclusion'] == 'success')
+
+    def wait_for_gate(self, sha, *, push_only=False):
+        # 13 minutes to run plus up to 5 queued, with 2 minutes of margin.
+        deadline = monotonic() + 20 * 60
+        while True:
+            latest = self.latest_gate(sha, push_only=push_only)
+            if not latest or latest.get('status') not in ('queued', 'in_progress', 'waiting', 'pending', 'requested'):
+                return
+            remaining = deadline - monotonic()
+            require(remaining > 0, f'timed out after 20 minutes waiting for master Gate for {sha}; release refused')
+            print(f'Release: waiting for master Gate for {sha} ({latest["status"]})', flush=True)
+            backoff_sleep(min(30, remaining))
 
     def artifact(self, run_id, artifact_id, filename, expected=None):
         require(str(run_id).isdigit() and str(artifact_id).isdigit(), 'invalid artifact reference')

@@ -14,15 +14,17 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 type recordingFleetAuthorityQuerier interface {
+	ObserveRecordingFleetIdentityLeases(context.Context, sqlc.ObserveRecordingFleetIdentityLeasesParams) (sqlc.ObserveRecordingFleetIdentityLeasesRow, error)
 	AbandonRecordingFleetBootstrap(context.Context, sqlc.AbandonRecordingFleetBootstrapParams) (string, error)
 	ActivateRecordingFleetBootstrap(context.Context, sqlc.ActivateRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error)
 	AuthorizeRecordingFleetWorker(context.Context, sqlc.AuthorizeRecordingFleetWorkerParams) (bool, error)
-	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (bool, error)
+	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (sqlc.AuthorizeRecordingFleetWorkerClaimRow, error)
 	CloseRecordingFleetNodeAdmission(context.Context, sqlc.CloseRecordingFleetNodeAdmissionParams) (string, error)
 	GetRecordingFleetDemand(context.Context, sqlc.GetRecordingFleetDemandParams) (sqlc.GetRecordingFleetDemandRow, error)
 	ListRecordingFleetNodeObservations(context.Context, sqlc.ListRecordingFleetNodeObservationsParams) ([]sqlc.ListRecordingFleetNodeObservationsRow, error)
@@ -59,7 +61,8 @@ func (r RecordingFleetAuthorityRepository) AbandonBootstrap(ctx context.Context,
 }
 
 type RecordingFleetAuthorityRepository struct {
-	queries recordingFleetAuthorityQuerier
+	admissionLimits recordingpipeline.AdmissionLimits
+	queries         recordingFleetAuthorityQuerier
 }
 
 func NewRecordingFleetAuthorityRepository(queries recordingFleetAuthorityQuerier) RecordingFleetAuthorityRepository {
@@ -71,7 +74,7 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 		return recorderfleet.Demand{}, recorderfleet.ErrProviderUnavailable
 	}
 	row, err := r.queries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{
-		Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
+		RecordingCap: int32(r.admissionLimits.WithDefaults().RecordingCap), Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
 	})
 	if err != nil {
 		return recorderfleet.Demand{}, fmt.Errorf("read recording fleet demand: %w", err)
@@ -79,10 +82,14 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 	if row.Revision == "" || !row.ObservedAt.Valid {
 		return recorderfleet.Demand{}, recorderfleet.ErrInventoryDrift
 	}
-	return recorderfleet.Demand{
+	demand := recorderfleet.Demand{
 		Revision: row.Revision, DesiredNodes: int(row.DesiredNodes), ScheduledPrewarms: int(row.ScheduledPrewarms),
 		HeldStarts: int(row.HeldStarts), QueuedJobs: int(row.QueuedJobs), ObservedAt: row.ObservedAt.Time,
-	}, nil
+	}
+	if key.Role == workeridentity.RoleCapture {
+		demand.CaptureCapacity = &recorderfleet.CaptureCapacityDemand{SlotDemand: int(row.SlotDemand), PhysicalNodeFloor: int(row.PhysicalNodeFloor)}
+	}
+	return demand, nil
 }
 
 func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key recorderfleet.PoolKey, observedAt time.Time) ([]recorderfleet.NodeObservation, error) {
@@ -90,7 +97,7 @@ func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key
 		return nil, recorderfleet.ErrProviderUnavailable
 	}
 	rows, err := r.queries.ListRecordingFleetNodeObservations(ctx, sqlc.ListRecordingFleetNodeObservationsParams{
-		ObservedAt: timestamptzValue(observedAt), Environment: key.Environment, Role: string(key.Role),
+		Environment: key.Environment, Role: string(key.Role),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list recording fleet observations: %w", err)
@@ -104,9 +111,34 @@ func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key
 		observations = append(observations, recorderfleet.NodeObservation{
 			Identity: identity, Ready: row.Ready, AdmissionOpen: row.AdmissionOpen,
 			ReadyCapacity: int(row.ReadyCapacity), ActiveLeases: int(row.ActiveLeases), ObservedAt: row.ObservedAt.Time,
+			// Request freshness is separate from the database clock used for lease expiry.
+			LeasesObservedAt: observedAt, IdentityRevoked: row.IdentityRevoked,
 		})
 	}
 	return observations, nil
+}
+
+func (r RecordingFleetAuthorityRepository) ObserveIdentity(ctx context.Context, environment string, identity recorderfleet.NodeIdentity, observedAt time.Time) (recorderfleet.NodeObservation, error) {
+	workerID, generation, err := recordingFleetMutationIdentity(identity)
+	if err != nil {
+		return recorderfleet.NodeObservation{}, err
+	}
+	if r.queries == nil {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrProviderUnavailable
+	}
+	row, err := r.queries.ObserveRecordingFleetIdentityLeases(ctx, sqlc.ObserveRecordingFleetIdentityLeasesParams{
+		Environment: environment, Role: string(identity.Role), ProviderID: identity.ProviderID, WorkerID: workerID, BootGeneration: generation,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
+	}
+	if err != nil {
+		return recorderfleet.NodeObservation{}, fmt.Errorf("observe recorder identity leases: %w", err)
+	}
+	if row.ActiveLeases < 0 {
+		return recorderfleet.NodeObservation{}, recorderfleet.ErrInventoryDrift
+	}
+	return recorderfleet.NodeObservation{Identity: identity, ActiveLeases: int(row.ActiveLeases), LeasesObservedAt: observedAt, IdentityAbsent: row.IdentityAbsent, IdentityRevoked: row.IdentityRevoked}, nil
 }
 
 func (r RecordingFleetAuthorityRepository) ReserveBootstrap(ctx context.Context, request recorderfleet.BootstrapRequest) (recorderfleetauthority.BootstrapRecord, error) {
@@ -188,6 +220,9 @@ func (r RecordingFleetAuthorityRepository) MarkRevoked(ctx context.Context, envi
 		RevokedAt: timestamptzValue(revokedAt), Environment: environment, Role: string(identity.Role),
 		ProviderID: identity.ProviderID, WorkerID: workerID, BootGeneration: bootGeneration,
 	})
+	if isUniqueViolation(err) {
+		return recorderfleet.ErrRoleFence
+	}
 	return recordingFleetNodeMutationError("revoke recording fleet node", err)
 }
 
@@ -270,14 +305,17 @@ func (r RecordingFleetAuthorityRepository) AuthorizeWorkerClaim(ctx context.Cont
 	if r.queries == nil {
 		return recorderfleet.ErrProviderUnavailable
 	}
-	authorized, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
+	claim, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
 		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID),
 	})
 	if err != nil {
 		return fmt.Errorf("authorize recording fleet worker claim: %w", err)
 	}
-	if !authorized {
+	if claim.AdmissionClosed {
 		return recorderfleet.ErrAdmissionClosed
+	}
+	if !claim.Authorized {
+		return recorderfleet.ErrNodeNotFound
 	}
 	return nil
 }
@@ -351,3 +389,8 @@ func isUniqueViolation(err error) bool {
 }
 
 var _ recorderfleetauthority.Repository = RecordingFleetAuthorityRepository{}
+
+func (r RecordingFleetAuthorityRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingFleetAuthorityRepository {
+	r.admissionLimits = limits.WithDefaults()
+	return r
+}

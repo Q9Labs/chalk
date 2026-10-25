@@ -483,7 +483,10 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 
 	if !a.authority.HardDeadline.IsZero() {
 		deadline := a.config.After(a.authority.HardDeadline.Sub(a.config.Now().UTC()))
+		deadlineDone := make(chan struct{})
+		defer func() { cancel(nil); <-deadlineDone }()
 		go func() {
+			defer close(deadlineDone)
 			select {
 			case <-deadline:
 				cancel(recordercapture.ErrDeadlineExpired)
@@ -496,6 +499,25 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		return finish(err, nil)
 	}
 	planEvents := make(chan capturePlanEvent, 1)
+	var planDone chan struct{}
+	defer func() {
+		cancel(nil)
+		if planDone != nil {
+			<-planDone
+		}
+	}()
+	startPlanLoop := func(revision captureplane.PlanRevision) {
+		planDone = make(chan struct{})
+		go func() {
+			defer close(planDone)
+			defer func() {
+				if recover() != nil {
+					sendCapturePlanEvent(runCtx, planEvents, capturePlanEvent{err: capturePanicError()})
+				}
+			}()
+			a.planLoop(runCtx, planEvents, revision)
+		}()
+	}
 	var snapshot recordercapture.Snapshot
 	emptyBootstrap := len(plan.Tracks()) == 0
 	if emptyBootstrap {
@@ -503,7 +525,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		// polling can advance no-RTP checkpoints.
 		snapshot, err = a.coordinator.Bootstrap(runCtx, plan)
 	} else {
-		go a.planLoop(runCtx, planEvents, plan.Revision())
+		startPlanLoop(plan.Revision())
 		snapshot, plan, err = a.bootstrapWhileWatchingPlans(runCtx, plan, planEvents)
 	}
 	if err != nil {
@@ -522,7 +544,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		writer.setOrigin(readyAt)
 	}
 	if emptyBootstrap {
-		go a.planLoop(runCtx, planEvents, plan.Revision())
+		startPlanLoop(plan.Revision())
 	}
 	if len(snapshot.Tracks) > 0 {
 		var stopped bool
@@ -779,8 +801,14 @@ bindPlan:
 		result := make(chan captureTrackBindResult, 1)
 		expected := append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
 		go func() {
-			tracks, err := a.bindTracks(bindCtx, expected)
-			result <- captureTrackBindResult{tracks: tracks, err: err}
+			var bound captureTrackBindResult
+			defer func() {
+				if recover() != nil {
+					bound.err = capturePanicError()
+				}
+				result <- bound
+			}()
+			bound.tracks, bound.err = a.bindTracks(bindCtx, expected)
 		}()
 
 		for {
@@ -1185,6 +1213,11 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 	go func() {
 		defer close(done)
 		defer cancel()
+		defer func() {
+			if recover() != nil {
+				sendCaptureRuntimeEvent(readerCtx, events, captureRuntimeEvent{mid: mid, track: track, err: capturePanicError()})
+			}
+		}()
 		lossFeedback := captureVideoLossFeedback{interval: keyFrameInterval}
 		var packetWindow capturePacketWindow
 		var replayWindow captureVideoReplayWindow
