@@ -15,7 +15,7 @@ try {
     const server = socket.connectToServer();
     socket.onMessage((message) => {
       const frame = JSON.parse(String(message));
-      if (rejectCommand && frame.type === "command") {
+      if (rejectCommand && frame.type === "command" && frame.name === "set_hand_raised") {
         rejectCommand = false;
         socket.send(JSON.stringify({ type: "ack", command_id: frame.command_id, delivery: "original", outcome: "rejected", reason: "episode_ended" }));
       } else server.send(message);
