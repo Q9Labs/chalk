@@ -1,12 +1,24 @@
 import { readFileSync } from "node:fs";
 import { createExpoConfig } from "../../app.config";
 import { afterEach, expect, it, vi } from "vitest";
-import { openBrowserAsync } from "expo-web-browser";
+import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
+import { Platform } from "react-native";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
 import { createGuestAccessGetter, parseSpaceLink, routeMobileLink } from "./spaces";
 
 vi.mock("expo-secure-store", () => ({}));
-vi.mock("expo-web-browser", () => ({ openBrowserAsync: vi.fn() }));
+vi.mock("react-native", () => ({
+  Platform: {
+    get OS() {
+      return "android";
+    },
+  },
+}));
+vi.mock("expo-web-browser", () => ({
+  openBrowserAsync: vi.fn(),
+  getCustomTabsSupportingBrowsersAsync: vi.fn(async () => ({ defaultBrowserPackage: "test.browser", browserPackages: ["test.browser"], servicePackages: [] })),
+}));
+afterEach(() => vi.restoreAllMocks());
 afterEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
@@ -30,8 +42,9 @@ it("uses an invite code as the route key when a short link has no slug", () => {
 it.each(["chalkmeet.com", "chalk.q9labs.ai"])("routes short and existing Space links on %s without opening a browser", async (host) => {
   for (const path of ["/abc-defg-hij", "/space/example#spaceInviteToken=cspi1.key.payload.signature"]) {
     const link = `https://${host}${path}`;
-    expect(await routeMobileLink(link)).toEqual(parseSpaceLink(link));
-    expect(await routeMobileLink(link)).not.toBeNull();
+    const route = await routeMobileLink(link);
+    expect(route).toEqual(parseSpaceLink(link));
+    expect(route).not.toBeNull();
   }
   expect(openBrowserAsync).not.toHaveBeenCalled();
 });
@@ -40,7 +53,7 @@ it.each(["chalkmeet.com", "chalk.q9labs.ai"])("opens unparsed %s links in a brow
   for (const path of ["/future/call", "/space/", "/abc-1234-hij", "/abc-defg-hij?future=1", "/privacy"]) {
     const link = `https://${host}${path}`;
     expect(await routeMobileLink(link)).toBeNull();
-    expect(openBrowserAsync).toHaveBeenLastCalledWith(link);
+    expect(openBrowserAsync).toHaveBeenLastCalledWith(link, { browserPackage: "test.browser" });
   }
 });
 
@@ -52,6 +65,19 @@ it.each([null, "not a URL", "chalk://unknown", "https://example.test/future", "h
 it("propagates browser failures to the link handler's error reporter", async () => {
   vi.mocked(openBrowserAsync).mockRejectedValueOnce(new Error("Browser unavailable"));
   await expect(routeMobileLink("https://chalkmeet.com/future")).rejects.toThrow("Browser unavailable");
+});
+
+it("uses Safari's browser view for unparsed iOS links", async () => {
+  vi.spyOn(Platform, "OS", "get").mockReturnValue("ios");
+  await routeMobileLink("https://chalkmeet.com/future");
+  expect(openBrowserAsync).toHaveBeenCalledWith("https://chalkmeet.com/future");
+  expect(getCustomTabsSupportingBrowsersAsync).not.toHaveBeenCalled();
+});
+
+it("does not send an Android fallback back to the app when no browser is found", async () => {
+  vi.mocked(getCustomTabsSupportingBrowsersAsync).mockResolvedValueOnce({ browserPackages: [], servicePackages: [] });
+  await expect(routeMobileLink("https://chalkmeet.com/future")).rejects.toThrow("No browser is available");
+  expect(openBrowserAsync).not.toHaveBeenCalled();
 });
 
 it("associates only the short-link path shape and preserves the existing Space filter", () => {
