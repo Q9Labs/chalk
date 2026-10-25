@@ -67,9 +67,9 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             action: "VIEW",
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
-            // Simple glob works below Android 12 too: each dot matches exactly one character.
-            // The invite parser checks the letters; unknown links fall back to the browser.
-            data: PUBLIC_WEB_HOSTS.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-..." })),
+            // Keep the simple short-code rule on the same data element: Android below API 31
+            // ignores the advanced four-word rule without claiming every URL on these hosts.
+            data: PUBLIC_WEB_HOSTS.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-...", pathAdvancedPattern: "/[a-z]+-[a-z]+-[a-z]+-[a-z]+" })),
           },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],

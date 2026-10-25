@@ -51,8 +51,8 @@
       </intent-filter>
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>
-        <data android:scheme="https" android:host="chalkmeet.com" android:pathPattern="/...-....-..."/>
-        <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPattern="/...-....-..."/>
+        <data android:scheme="https" android:host="chalkmeet.com" android:pathPattern="/...-....-..." android:pathAdvancedPattern="/[a-z]+-[a-z]+-[a-z]+-[a-z]+"/>
+        <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPattern="/...-....-..." android:pathAdvancedPattern="/[a-z]+-[a-z]+-[a-z]+-[a-z]+"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
