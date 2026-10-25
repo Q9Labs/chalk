@@ -61,6 +61,23 @@ func NewRecordingCaptureSignalingRepositoryWithPool(pool *pgxpool.Pool) Recordin
 	return RecordingCaptureSignalingRepository{transactor: pool, now: time.Now}
 }
 
+func (r RecordingCaptureSignalingRepository) CheckDispatch(ctx context.Context, command capturesignaling.Command) error {
+	_, err := withRecordingCaptureSignalingTransaction(ctx, r, func(queries recordingCaptureSignalingQuerier) (struct{}, error) {
+		row, err := authorizeRecordingCaptureSignaling(ctx, queries, command.SignalingHandle, command.Authority, command.Lease)
+		if err != nil {
+			return struct{}{}, err
+		}
+		switch command.Identity.Operation {
+		case captureplane.OperationCreateCaptureConnection, captureplane.OperationPullCaptureTracks, captureplane.OperationRenegotiateCaptureConnection:
+			if row.MediaStopped {
+				return struct{}{}, capturesignaling.ErrMediaStopped
+			}
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
+
 func (r RecordingCaptureSignalingRepository) PrepareCommand(ctx context.Context, request capturesignaling.PrepareRequest) (capturesignaling.PrepareResult, error) {
 	return withRecordingCaptureSignalingTransaction(ctx, r, func(queries recordingCaptureSignalingQuerier) (capturesignaling.PrepareResult, error) {
 		if _, err := lockRecordingCaptureSignalingAuthority(ctx, queries, request.Key.SignalingHandle, request.Authority, request.Lease); err != nil {
@@ -231,7 +248,15 @@ func (r RecordingCaptureSignalingRepository) ClaimCommand(ctx context.Context, r
 			return capturesignaling.ClaimResult{}, fmt.Errorf("read first recording capture command: %w", err)
 		}
 		if first.ID != command.ID {
-			return capturesignaling.ClaimResult{CurrentProjection: projection}, nil
+			// Retiring a quiescent session must not wait behind an abandoned
+			// media command. The active-command fence above still blocks I/O.
+			closingMedia := request.Key.Operation == captureplane.OperationCloseCaptureConnection &&
+				(first.OperationKind == captureplane.OperationCreateCaptureConnection.String() ||
+					first.OperationKind == captureplane.OperationPullCaptureTracks.String() ||
+					first.OperationKind == captureplane.OperationRenegotiateCaptureConnection.String())
+			if !closingMedia {
+				return capturesignaling.ClaimResult{CurrentProjection: projection}, nil
+			}
 		}
 		executionID, err := utilities.NewID()
 		if err != nil {
@@ -470,6 +495,7 @@ func lockRecordingCaptureSignalingAuthority(
 }
 
 type recordingCaptureSignalingAuthority struct {
+	MediaStopped      bool
 	EnvelopeBytes     []byte
 	EnvelopeDigest    []byte
 	LeaseExpiresAt    pgtype.Timestamptz
@@ -486,7 +512,7 @@ type recordingCaptureSignalingAuthority struct {
 
 func mapRecordingCaptureSignalingAuthority(row sqlc.GetRecordingCaptureSignalingAuthorityRow) recordingCaptureSignalingAuthority {
 	return recordingCaptureSignalingAuthority{
-		EnvelopeBytes: row.EnvelopeBytes, EnvelopeDigest: row.EnvelopeDigest,
+		EnvelopeBytes: row.EnvelopeBytes, EnvelopeDigest: row.EnvelopeDigest, MediaStopped: row.MediaStopped,
 		LeaseExpiresAt: row.LeaseExpiresAt, CheckedAt: row.CheckedAt,
 		JobID: row.JobID, TenantID: row.TenantID, SpaceID: row.SpaceID,
 		EpisodeID: row.EpisodeID, RecordingID: row.RecordingID,
@@ -496,7 +522,7 @@ func mapRecordingCaptureSignalingAuthority(row sqlc.GetRecordingCaptureSignaling
 
 func mapLockedRecordingCaptureSignalingAuthority(row sqlc.LockRecordingCaptureSignalingAuthorityRow) recordingCaptureSignalingAuthority {
 	return recordingCaptureSignalingAuthority{
-		EnvelopeBytes: row.EnvelopeBytes, EnvelopeDigest: row.EnvelopeDigest,
+		EnvelopeBytes: row.EnvelopeBytes, EnvelopeDigest: row.EnvelopeDigest, MediaStopped: row.MediaStopped,
 		LeaseExpiresAt: row.LeaseExpiresAt, CheckedAt: row.CheckedAt,
 		JobID: row.JobID, TenantID: row.TenantID, SpaceID: row.SpaceID,
 		EpisodeID: row.EpisodeID, RecordingID: row.RecordingID,

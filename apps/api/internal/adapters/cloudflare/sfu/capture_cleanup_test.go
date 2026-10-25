@@ -20,7 +20,11 @@ func TestCaptureCleanupExpiredSessionAndProviderFailure(t *testing.T) {
 				var calls atomic.Int32
 				vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					calls.Add(1)
-					if r.Method != http.MethodPut || r.URL.Path != "/apps/test-app/sessions/closed-session/tracks/close" {
+					wantMethod, wantPath := http.MethodPut, "/apps/test-app/sessions/closed-session/tracks/close"
+					if operation == "connection" {
+						wantMethod, wantPath = http.MethodGet, "/apps/test-app/sessions/closed-session"
+					}
+					if r.Method != wantMethod || r.URL.Path != wantPath {
 						t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 					}
 					w.WriteHeader(status)
