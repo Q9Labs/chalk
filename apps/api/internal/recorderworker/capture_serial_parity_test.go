@@ -68,7 +68,7 @@ func TestCaptureSerialReadinessParity(t *testing.T) {
 						t.Fatalf("failure=%v", err)
 					}
 				case "drain":
-					if !errors.Is(err, ErrWorkerDraining) {
+					if err != nil {
 						t.Fatalf("drain=%v", err)
 					}
 				case "shutdown":

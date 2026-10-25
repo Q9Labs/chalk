@@ -254,18 +254,26 @@ select exists (
 ) as authorized;
 
 -- name: AuthorizeRecordingFleetWorkerClaim :one
-select exists (
-    select 1 from recording_fleet_nodes
+with worker as (
+    select state, ready, admission_open, ready_capacity, observed_at
+    from recording_fleet_nodes
     where environment = sqlc.arg(environment)
       and role = sqlc.arg(role)
       and worker_id = sqlc.arg(worker_id)
-      and state = 'active'
+      and state in ('active', 'draining')
+)
+select exists (
+    select 1 from worker
+    where state = 'active'
       and ready
       and admission_open
       and ready_capacity > 0
       and observed_at > clock_timestamp() - interval '2 minutes'
       and observed_at <= clock_timestamp()
-) as authorized;
+) as authorized,
+exists (
+    select 1 from worker where state = 'draining' or not admission_open
+) as admission_closed;
 
 -- name: LockRecordingFleetWorkerClaim :one
 select coalesce((role = sqlc.arg(role) and state = 'active' and ready and admission_open

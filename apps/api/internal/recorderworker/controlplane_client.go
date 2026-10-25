@@ -335,6 +335,9 @@ func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.
 		payload.SupportsCompletionOnly = false
 		body, status, err = c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/claim", payload, ControlPlaneResponseLimit)
 	}
+	if errors.As(err, &httpErr) && httpErr.Status == http.StatusLocked && httpErr.Code == "worker.admission_closed" {
+		return ClaimResult{}, ErrWorkerDraining
+	}
 	if err != nil {
 		return ClaimResult{}, err
 	}

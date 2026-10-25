@@ -181,7 +181,7 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 			if ctx.Err() != nil {
 				return errors.Join(ctx.Err(), unexpectedDaemonError(daemonErr, authorityDraining), closeErr)
 			}
-			if authorityDraining && expectedDaemonDrainError(daemonErr) {
+			if (authorityDraining || errors.Is(daemonErr, ErrWorkerDraining)) && expectedDaemonDrainError(daemonErr) {
 				return closeErr
 			}
 			if daemonErr == nil {
