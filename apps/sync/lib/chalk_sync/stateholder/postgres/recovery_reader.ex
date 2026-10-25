@@ -87,9 +87,11 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
 
   defp validate_recovery_identity(connection, identity, "ended") do
     case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
-      [[generation, "left", "episode_ended"]]
-      when generation == identity.participant_generation ->
-        :ok
+      [[generation, "left", "episode_ended", joined_at]]
+      when generation == identity.participant_generation and not is_nil(joined_at) ->
+        if validate_admission_intent(connection, identity, "active") == :ok,
+          do: :ok,
+          else: {:terminal, :episode_ended}
 
       _ ->
         {:terminal, :episode_ended}
@@ -101,18 +103,19 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
 
   defp validate_recovery_identity(connection, identity, _status) do
     case Postgrex.query!(connection, SQL.read_participant_status(), Scope.participant(identity)).rows do
-      [[generation, _status, _reason]] when generation != identity.participant_generation ->
+      [[generation, _status, _reason, _joined_at]]
+      when generation != identity.participant_generation ->
         {:error, :stale_participant_generation}
 
-      [[_generation, status, _reason]] when status in ["active", "joining"] ->
+      [[_generation, status, _reason, _joined_at]] when status in ["active", "joining"] ->
         validate_admission_intent(connection, identity, status)
 
-      [[_generation, "leaving", _reason]] ->
+      [[_generation, "leaving", _reason, _joined_at]] ->
         if JoinSeats.awaiting_entry?(connection, identity),
           do: validate_admission_intent(connection, identity, "leaving"),
           else: expired_entry(connection, identity)
 
-      [[_generation, _status, _reason]] ->
+      [[_generation, _status, _reason, _joined_at]] ->
         expired_entry(connection, identity)
 
       [] ->

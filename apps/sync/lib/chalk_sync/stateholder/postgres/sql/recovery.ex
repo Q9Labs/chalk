@@ -24,7 +24,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Recovery do
 
   def read_participant_status do
     """
-    select generation, status, last_left_reason
+    select generation, status, last_left_reason, joined_at
     from participants
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
     """

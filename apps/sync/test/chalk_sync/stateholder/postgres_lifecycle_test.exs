@@ -35,6 +35,57 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     end
   end
 
+  for joined <- [true, false] do
+    @joined joined
+    test "final replay requires an admitted participant (joined=#{joined})", %{
+      connections: connections
+    } do
+      connection = hd(connections)
+
+      fixture =
+        if @joined,
+          do: SyncPostgres.seed_episode(connection),
+          else: SyncPostgres.seed_pending_join(connection)
+
+      identity = if @joined, do: hd(fixture.identities), else: fixture.identity
+      on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+      assert {:ok, before} = Postgres.recover(identity, nil)
+
+      cursor = %{
+        revision: before.head.revision,
+        digest: before.head.digest,
+        state_schema_version: before.head.state_schema_version
+      }
+
+      {:ok, operation} = Operation.new("replay_episode_end", :tenant_end_episode, %{})
+
+      assert {:ok, %{external_operation_id: operation_id}} =
+               Postgres.begin_internal_operation(fixture.episode, operation)
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(
+                 fixture.episode,
+                 operation_id,
+                 {:applied, :episode_ended, %{"reason" => "tenant_recovery"}}
+               )
+
+      assert {:ok, recovery} = Postgres.recover(identity, cursor)
+      assert recovery.mode == if(@joined, do: :replay, else: :terminal)
+
+      if @joined do
+        Postgrex.query!(connection, "update participants set last_left_reason = 'left' where id = $1", [UUID.dump!(identity.participant_id)])
+        assert {:ok, %{mode: :terminal}} = Postgres.recover(identity, cursor)
+      end
+
+
+      assert {:ok, %{mode: :terminal}} =
+               Postgres.recover(
+                 %{identity | participant_generation: identity.participant_generation + 1},
+                 cursor
+               )
+    end
+  end
+
   for archived <- [false, true],
       endpoint_state <- [:enabled, :deleted, :disabled, :unsubscribed, :absent] do
     @archived archived
