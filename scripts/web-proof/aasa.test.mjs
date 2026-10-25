@@ -19,6 +19,7 @@ function opensApp(pathname) {
 
 test("associates short codes without widening existing Space links", () => {
   assert.equal(opensApp("/abc-defg-hij"), true);
+  assert.equal(opensApp("/apple-tiger-lamp-river"), true);
   assert.equal(opensApp("/zzz-zzzz-zzz"), true);
   assert.equal(opensApp("/space/example"), true);
   for (const path of ["/abcd-efg-hij", "/abc-defg-hi", "/abc-defg-hijk", "/abc-defg-hij/", "/abc-defg-hij/extra", "/space"]) {
@@ -43,5 +44,21 @@ test("keeps all existing web routes, docs and public files in the browser", () =
     // These are the two deliberately associated call routes, not browser pages.
     if (route === "/$code" || route.startsWith("/space/")) continue;
     assert.equal(opensApp(route), false, route);
+  }
+});
+
+test("excludes web paths that the loose four-word wildcard would otherwise claim", () => {
+  for (const path of [
+    "/.well-known/apple-app-site-association",
+    "/brand/chalk/chalk-icon-maskable-192.png",
+    "/brand/chalk/chalk-icon-maskable-512.png",
+    "/brand/chalk/nightly/chalk-icon-maskable-192.png",
+    "/brand/chalk/nightly/chalk-icon-maskable-512.png",
+    "/images/social/chalk-og-nightly-20261024.png",
+    "/docs/a-b-c-d",
+    "/dashboard/call/a-b-c-d",
+  ]) {
+    assert.match(path, /^\/.+-.*-.*-.+$/u);
+    assert.equal(opensApp(path), false, path);
   }
 });
