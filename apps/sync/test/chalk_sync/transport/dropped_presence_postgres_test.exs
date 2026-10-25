@@ -351,15 +351,31 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   end
 
   defp external_node(app) do
-    port = 20_000 + rem(System.unique_integer([:positive, :monotonic]), 10_000)
-    {:ok, listener} = :gen_tcp.listen(port, [:binary, active: false])
-    :ok = :gen_tcp.close(listener)
+    port = available_node_port(8)
+    node_id = "presence-#{UUID.generate()}"
 
     start_supervised!(
-      {ExternalSyncNode,
-       app_dir: app, database_url: @database_url, port: port, node_id: "presence-#{port}"},
-      id: {:sync_node, port}
+      {ExternalSyncNode, app_dir: app, database_url: @database_url, port: port, node_id: node_id},
+      id: {:sync_node, node_id}
     )
+  end
+
+  # Separate BEAMs have independent unique-integer counters. Avoid both their
+  # deterministic collisions and the OS's outbound ephemeral-port range.
+  defp available_node_port(attempts) do
+    port = 19_999 + :rand.uniform(10_000)
+
+    case :gen_tcp.listen(port, [:binary, active: false]) do
+      {:ok, listener} ->
+        :ok = :gen_tcp.close(listener)
+        port
+
+      {:error, :eaddrinuse} when attempts > 1 ->
+        available_node_port(attempts - 1)
+
+      error ->
+        flunk("cannot allocate a Sync test port: #{inspect(error)}")
+    end
   end
 
   defp connect(port, identity) do
