@@ -113,7 +113,7 @@ export async function runMediaProof(input, options = {}) {
 }
 
 function hasSpaceInviteToken(url) {
-  if (/^\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/.test(url.pathname)) return true;
+  if (/^\/[a-z]+(?:-[a-z]+){2,3}$/.test(url.pathname)) return true;
   if (!url.hash.startsWith("#")) return false;
   const token = new URLSearchParams(url.hash.slice(1)).get("spaceInviteToken");
   return typeof token === "string" && token.startsWith("cspi1");
