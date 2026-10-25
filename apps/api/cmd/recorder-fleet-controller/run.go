@@ -27,7 +27,7 @@ func buildReconciler(config commandConfig, logger *slog.Logger) (reconcileRunner
 		return nil, err
 	}
 	control, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{
-		BaseURL: config.ControlPlaneURL, HTTPClient: controlHTTP, Key: config.Fleet.Key,
+		BaseURL: config.ControlPlaneURL, HTTPClient: controlHTTP, Key: config.Fleet.Key, Logger: logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create recorder fleet control client: %w", err)
