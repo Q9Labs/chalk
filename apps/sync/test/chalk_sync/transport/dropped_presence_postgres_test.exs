@@ -244,7 +244,8 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
 
       assert eventually(fn -> File.exists?(marker <> ".ready") end, 1000)
       before = attendance(ctx)
-      expire(ctx, 1)
+      # A three-minute drop: 120 seconds of grace, then 60 seconds of linger.
+      expire(ctx, 60)
       assert tick(ctx) == 0
       assert attendance(ctx) == before
       assert_no_leave(ctx)
@@ -397,9 +398,13 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   defp recv_until(client, predicate, remaining) do
     frame = Client.recv(client, 8_000)
 
-    if predicate.(frame), do: frame, else: case(frame) do
-      {:json, _, next} -> recv_until(next, predicate, remaining - 1)
-      other -> flunk("unexpected wire result #{inspect(other)}")
+    if predicate.(frame) do
+      frame
+    else
+      case frame do
+        {:json, _, next} -> recv_until(next, predicate, remaining - 1)
+        other -> flunk("unexpected wire result #{inspect(other)}")
+      end
     end
   end
 
