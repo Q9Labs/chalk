@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -286,6 +287,56 @@ func TestReconcilerQuarantinesForeignNodeWithoutMutation(t *testing.T) {
 	}
 	if fixture.provider.ensureCalls != 0 || fixture.provider.deleteCalls != 0 || fixture.bootstrap.ensureCalls != 0 {
 		t.Fatalf("foreign node was mutated: ensure/delete/bootstrap = %d/%d/%d", fixture.provider.ensureCalls, fixture.provider.deleteCalls, fixture.bootstrap.ensureCalls)
+	}
+}
+
+func TestReconcilerQuarantineDiagnosticIsBounded(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		count       int
+		malformedID string
+	}{
+		{name: "one", count: 1},
+		{name: "thousand", count: 1000},
+		{name: "ten_thousand", count: 10000},
+		{name: "malformed_long_id", count: 1, malformedID: strings.Repeat("\x00", 10000)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newFleetFixture(t)
+			fixture.config.MaxNodes = 1
+			for i := range test.count {
+				id := fmt.Sprint(100000000 + i)
+				if test.malformedID != "" {
+					id = test.malformedID
+				}
+				node := fixture.provider.nodeFor(fixture.ensureRequest(uint64(i+1)), id)
+				node.Tags = slices.DeleteFunc(node.Tags, func(tag string) bool { return tag == fixture.config.OwnerTag })
+				if test.malformedID == "" {
+					if err := node.Validate(); err != nil {
+						t.Fatalf("invalid fixture node: %v", err)
+					}
+				}
+				fixture.provider.nodes[id] = node
+			}
+			result, err := fixture.reconciler(t).Reconcile(t.Context())
+			if !errors.Is(err, ErrInventoryDrift) || result.Projection.Reason != "inventory_drift" || result.Projection.AdmissionOpen {
+				t.Fatalf("drift semantics changed: result=%+v err=%v", result, err)
+			}
+			message := err.Error()
+			if len(message) > 2048 {
+				t.Fatalf("quarantine diagnostic exceeds 2 KiB: %d bytes", len(message))
+			}
+			if !strings.Contains(message, "quarantined_inventory") || !strings.Contains(message, fmt.Sprintf("total=%d", test.count)) {
+				t.Fatalf("missing check or total: %s", message)
+			}
+			if test.malformedID == "" && !strings.Contains(message, "100000000") {
+				t.Fatalf("missing sampled provider ID: %s", message)
+			}
+			if len(result.Quarantined) != test.count || fixture.provider.ensureCalls != 0 || fixture.provider.deleteCalls != 0 || fixture.bootstrap.ensureCalls != 0 {
+				t.Fatal("quarantine inventory or no-mutation behavior changed")
+			}
+			t.Logf("quarantined=%d diagnostic_bytes=%d", test.count, len(message))
+		})
 	}
 }
 

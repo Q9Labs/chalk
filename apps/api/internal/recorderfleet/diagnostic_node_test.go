@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -52,6 +53,9 @@ func TestDiagnosticTagDoesNotBypassInventoryFences(t *testing.T) {
 	result, err := fixture.reconciler(t).Reconcile(context.Background())
 	if !errors.Is(err, ErrInventoryDrift) || !slices.Equal(result.Quarantined, []string{node.ProviderID}) {
 		t.Fatalf("foreign diagnostic node escaped inventory fences: result=%+v error=%v", result, err)
+	}
+	if result.Projection.Reason != "inventory_drift" || !strings.Contains(err.Error(), "quarantined_inventory") || !strings.Contains(err.Error(), node.ProviderID) {
+		t.Fatalf("drift diagnostic lost check, node, or reason: result=%+v error=%v", result, err)
 	}
 }
 

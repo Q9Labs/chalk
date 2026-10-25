@@ -66,6 +66,12 @@ test("the real runtime validator binds telemetry to the selected environment", a
     const args = [new URL("scripts/validate-runtime", managedRoot).pathname, "--env-root", directory, "--secret-root", join(directory, "secrets"), "--manifest", join(directory, "manifest.json"), "--sync-proof", join(directory, "proof.json"), "--excluded-secrets", excluded];
     const production = spawnSync("bash", args, { encoding: "utf8" });
     assert.equal(production.status, 0, production.stderr);
+    const productionAPIPath = join(directory, "api.env");
+    const productionAPI = await readFile(productionAPIPath, "utf8");
+    await writeFile(join(directory, "recorder-capture.env"), "CHALK_RECORDER_FLEET_MAX_NODES=10\nCHALK_RECORDER_FLEET_SLOTS_PER_NODE=1\n", { mode: 0o600 });
+    await writeFile(productionAPIPath, productionAPI + "\nCHALK_RECORDING_ADMISSION_CAP=1\n");
+    const below = spawnSync("bash", args, { encoding: "utf8" });
+    assert.equal(below.status, 0, below.stderr);
     await runtimeFixture(directory, "nightly");
     // Recording controls are covered separately; these fixtures exercise API/Sync.
     const apiPath = join(directory, "api.env");
