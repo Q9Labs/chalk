@@ -1,8 +1,26 @@
+import { readFileSync } from "node:fs";
+import { createExpoConfig } from "../../app.config";
 import { afterEach, expect, it, vi } from "vitest";
+import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
+import { Platform } from "react-native";
+import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
-import { createGuestAccessGetter, parseSpaceLink } from "./spaces";
+import { createGuestAccessGetter, parseSpaceLink, routeMobileLink } from "./spaces";
 
 vi.mock("expo-secure-store", () => ({}));
+vi.mock("react-native", () => ({
+  Platform: {
+    get OS() {
+      return "android";
+    },
+  },
+}));
+vi.mock("expo-web-browser", () => ({
+  openBrowserAsync: vi.fn(),
+  getCustomTabsSupportingBrowsersAsync: vi.fn(async () => ({ defaultBrowserPackage: "test.browser", browserPackages: ["test.browser"], servicePackages: [] })),
+}));
+afterEach(() => vi.restoreAllMocks());
+afterEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 const credential = {
@@ -20,6 +38,102 @@ it("uses an invite code as the route key when a short link has no slug", () => {
     inviteLink: "https://chalkmeet.com/abc-defg-hij",
     source: "space-link",
   });
+});
+
+it.each(["chalkmeet.com", "chalk.q9labs.ai"])("routes four-word, short and existing Space links on %s without opening a browser", async (host) => {
+  for (const path of ["/apple-tiger-lamp-river", "/abc-defg-hij", "/space/example#spaceInviteToken=cspi1.key.payload.signature"]) {
+    const link = `https://${host}${path}`;
+    const route = await routeMobileLink(link);
+    expect(route).toEqual(parseSpaceLink(link));
+    expect(route).not.toBeNull();
+  }
+  expect(openBrowserAsync).not.toHaveBeenCalled();
+});
+
+it.each(["chalkmeet.com", "chalk.q9labs.ai"])("opens unparsed %s links in a browser, including future shapes", async (host) => {
+  for (const path of ["/future/call", "/space/", "/abc-1234-hij", "/abc-defg-hij?future=1", "/apple-tiger-lamp-river-fox", "/notaword-zzzz-yyyy-xxxx", "/privacy", "/brand/chalk/chalk-icon-maskable-192.png"]) {
+    const link = `https://${host}${path}`;
+    expect(await routeMobileLink(link)).toBeNull();
+    expect(openBrowserAsync).toHaveBeenLastCalledWith(link, { browserPackage: "test.browser" });
+  }
+});
+
+it.each([null, "not a URL", "chalk://unknown", "https://example.test/future", "https://chalkmeet.com.example.test/future"])("does not open unrelated or malformed input %s", async (input) => {
+  expect(await routeMobileLink(input)).toBeNull();
+  expect(openBrowserAsync).not.toHaveBeenCalled();
+});
+
+it("propagates browser failures to the link handler's error reporter", async () => {
+  vi.mocked(openBrowserAsync).mockRejectedValueOnce(new Error("Browser unavailable"));
+  await expect(routeMobileLink("https://chalkmeet.com/future")).rejects.toThrow("Browser unavailable");
+});
+
+it("uses Safari's browser view for unparsed iOS links", async () => {
+  vi.spyOn(Platform, "OS", "get").mockReturnValue("ios");
+  await routeMobileLink("https://chalkmeet.com/future");
+  expect(openBrowserAsync).toHaveBeenCalledWith("https://chalkmeet.com/future");
+  expect(getCustomTabsSupportingBrowsersAsync).not.toHaveBeenCalled();
+});
+
+it("does not send an Android fallback back to the app when no browser is found", async () => {
+  vi.mocked(getCustomTabsSupportingBrowsersAsync).mockResolvedValueOnce({ browserPackages: [], servicePackages: [] });
+  await expect(routeMobileLink("https://chalkmeet.com/future")).rejects.toThrow("No browser is available");
+  expect(openBrowserAsync).not.toHaveBeenCalled();
+});
+
+it("associates both call-link shapes and preserves the existing Space filter", () => {
+  const filters = createExpoConfig().expo.android.intentFilters;
+  const spaceFilter = filters[0];
+  const codeFilter = filters[1];
+  expect(spaceFilter?.autoVerify).toBe(true);
+  expect(spaceFilter?.data).toEqual(["chalkmeet.com", "chalk.q9labs.ai"].map((host) => ({ scheme: "https", host, pathPrefix: "/space" })));
+  expect(codeFilter?.autoVerify).toBe(true);
+  expect(codeFilter?.category).toEqual(["BROWSABLE", "DEFAULT"]);
+  expect(codeFilter?.data).toEqual(["chalkmeet.com", "chalk.q9labs.ai"].map((host) => ({ scheme: "https", host, pathPattern: "/...-....-...", pathAdvancedPattern: "/[a-z]+-[a-z]+-[a-z]+-[a-z]+" })));
+  const manifest = readFileSync(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  for (const host of ["chalkmeet.com", "chalk.q9labs.ai"]) {
+    expect(manifest).toContain(`android:host="${host}" android:pathPattern="/...-....-..." android:pathAdvancedPattern="/[a-z]+-[a-z]+-[a-z]+-[a-z]+"`);
+    expect(manifest).toContain(`android:host="${host}" android:pathPrefix="/space"`);
+  }
+  // Android's simple glob: dots consume exactly one character, and the whole path must match.
+  const codePattern = codeFilter?.data.find((data) => "pathPattern" in data)?.pathPattern;
+  const codePath = new RegExp(`^${codePattern}$`, "u");
+  expect(codePath.test("/abc-defg-hij")).toBe(true);
+  for (const path of ["/", "/dashboard", "/dashboard/sign-in", "/dashboard/developer", "/docs", "/docs/chat", "/privacy", "/privacy/previous", "/privacy-policy", "/terms", "/space/example", "/abc-defg-hi", "/abcd-efg-hij", "/abc-defg-hij/"]) {
+    expect(codePath.test(path), path).toBe(false);
+  }
+});
+
+it("parses both public call-link forms and rejects a non-call asset through the public parser", () => {
+  expect(parseChalkInviteLink("https://chalkmeet.com/apple-tiger-lamp-river")).toEqual({ spaceInviteToken: "apple-tiger-lamp-river" });
+  expect(parseChalkInviteLink("https://chalkmeet.com/abc-defg-hij")).toEqual({ spaceInviteToken: "abc-defg-hij" });
+  expect(parseChalkInviteLink("https://chalkmeet.com/brand/chalk/chalk-icon-maskable-192.png")).toBeNull();
+});
+
+it("matches only four lowercase root segments with the advanced Android pattern", () => {
+  const data = createExpoConfig().expo.android.intentFilters[1]?.data.find((data) => "pathAdvancedPattern" in data);
+  const pattern = data && "pathAdvancedPattern" in data ? data.pathAdvancedPattern : undefined;
+  expect(pattern).toBe("/[a-z]+-[a-z]+-[a-z]+-[a-z]+");
+  const matches = new RegExp(`^${pattern}$`, "u");
+  expect(matches.test("/apple-tiger-lamp-river")).toBe(true);
+  for (const path of [
+    "/.well-known/apple-app-site-association",
+    "/brand/chalk/chalk-icon-maskable-192.png",
+    "/brand/chalk/chalk-icon-maskable-512.png",
+    "/brand/chalk/nightly/chalk-icon-maskable-192.png",
+    "/brand/chalk/nightly/chalk-icon-maskable-512.png",
+    "/images/social/chalk-og-nightly-20261024.png",
+    "/docs/a-b-c-d",
+    "/dashboard/call/a-b-c-d",
+    "/apple-tiger-lamp",
+    "/apple-tiger-lamp-river-fox",
+    "/apple--lamp-river",
+    "/apple-tiger-lamp-river/",
+    "/Apple-tiger-lamp-river",
+    "/apple-tiger-lamp-123",
+  ]) {
+    expect(matches.test(path), path).toBe(false);
+  }
 });
 
 it.each(["refresh", "retry"] as const)("forwards replacement and cancellation during %s through the real public client", async (reason) => {

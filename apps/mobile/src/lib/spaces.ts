@@ -2,6 +2,8 @@ import type { AccessGrant, GetAccess, PublicSpaceArrival } from "@q9labsai/chalk
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
 import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
 import * as SecureStore from "expo-secure-store";
+import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
+import { Platform } from "react-native";
 
 const ARRIVAL_KEY_PREFIX = "chalk_mobile_public_arrival_v1.";
 const ARRIVAL_INDEX_PREFIX = "chalk_mobile_public_arrival_index_v1.";
@@ -50,6 +52,31 @@ export function parseSpaceLink(input: string): SpaceRoute | null {
     inviteLink,
     source: "space-link",
   };
+}
+
+export async function routeMobileLink(input: string | null): Promise<SpaceRoute | null> {
+  if (!input) return null;
+  const route = parseSpaceLink(input);
+  if (route) return route;
+
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+  if ((url.protocol === "https:" || url.protocol === "http:") && (url.hostname === "chalkmeet.com" || url.hostname === "chalk.q9labs.ai")) {
+    // Linking.openURL would send an associated URL straight back to this app.
+    if (Platform.OS === "android") {
+      const browsers = await getCustomTabsSupportingBrowsersAsync();
+      const browserPackage = browsers.defaultBrowserPackage ?? browsers.preferredBrowserPackage ?? browsers.browserPackages[0];
+      if (!browserPackage) throw new Error("No browser is available to open this Chalk link.");
+      await openBrowserAsync(url.href, { browserPackage });
+    } else {
+      await openBrowserAsync(url.href);
+    }
+  }
+  return null;
 }
 
 export async function createPublicSpaceRoute({ apiBaseURL, displayName, onOperation }: { readonly apiBaseURL: string; readonly displayName: string; readonly onOperation?: SpaceOperationObserver }): Promise<{ readonly arrival: MobileSpaceArrival; readonly route: SpaceRoute }> {
