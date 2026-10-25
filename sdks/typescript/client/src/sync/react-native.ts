@@ -61,7 +61,9 @@ export type ReactNativeLifecycleEnvironment = {
 export function createReactNativeSyncLifecycle(environment: ReactNativeLifecycleEnvironment): SyncLifecycle {
   return {
     subscribe(listener) {
-      const appState = environment.appState.addEventListener("change", (state) => listener(state === "active" ? "active" : "inactive"));
+      const appState = environment.appState.addEventListener("change", (state) => {
+        if (state !== "inactive") listener(state === "active" ? "active" : "inactive");
+      });
       const network = environment.networkInfo?.addEventListener((state) => listener(isNetworkOnline(state) ? "online" : "offline"));
       listener(environment.appState.currentState === "active" ? "active" : "inactive");
 

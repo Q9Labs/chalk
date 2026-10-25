@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createReactNativeWebSocketFactory } from "./react-native";
+import { createReactNativeSyncLifecycle, createReactNativeWebSocketFactory } from "./react-native";
 import type { ReactNativeWebSocket, ReactNativeWebSocketCloseEvent } from "./react-native";
 
 class NativeSocket implements ReactNativeWebSocket {
@@ -24,6 +24,34 @@ class BrowserSocket extends EventTarget {
   close() {}
 }
 afterEach(() => vi.unstubAllGlobals());
+
+describe("React Native Sync lifecycle", () => {
+  it("keeps transport availability through an iOS permission prompt", () => {
+    let change = (_state: string) => {};
+    const remove = vi.fn();
+    const listener = vi.fn();
+    const unsubscribe = createReactNativeSyncLifecycle({
+      appState: {
+        currentState: "active",
+        addEventListener: (_type, next) => {
+          change = next;
+          return { remove };
+        },
+      },
+    }).subscribe(listener);
+    change("inactive");
+    expect(listener.mock.calls).toEqual([["active"]]);
+    change("active");
+    change("inactive");
+    change("background");
+    change("inactive");
+    expect(listener.mock.calls).toEqual([["active"], ["active"], ["inactive"]]);
+    change("active");
+    expect(listener).toHaveBeenLastCalledWith("active");
+    unsubscribe();
+    expect(remove).toHaveBeenCalledOnce();
+  });
+});
 
 describe("React Native Sync close events", () => {
   it("forwards the native close code and reason", () => {

@@ -47,7 +47,7 @@ describe("independent r7 ordering", () => {
     }
   });
 
-  it.each(sources.flatMap((source) => ["leave", "recover"].map((interruption) => ({ source, interruption }))))("does not revive $source capture after $interruption; allows a fresh action", async ({ source, interruption }) => {
+  it.each(sources.flatMap((source) => ["leave", "recover"].map((interruption) => ({ source, interruption }))))("does not revive $source capture after cancellation during $interruption; allows a fresh action", async ({ source, interruption }) => {
     const platform = createCoreTestPlatform();
     const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video", stop: vi.fn() });
     const gate = barrier();
@@ -64,8 +64,9 @@ describe("independent r7 ordering", () => {
       await vi.waitFor(() => expect(capture).toHaveBeenCalledOnce());
       if (interruption === "leave") await client.leave();
       else await enterRecovery({ platform, client });
+      const stopping = interruption === "recover" ? setEnabled(false) : Promise.resolve();
       gate.release();
-      await on;
+      await Promise.all([on, stopping]);
       await drain();
       expect(command).not.toHaveBeenCalledWith(true);
       if (interruption === "leave") {
