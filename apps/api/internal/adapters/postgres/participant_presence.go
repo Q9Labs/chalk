@@ -22,7 +22,7 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
   from participant_presence_leases lease
   join participants p on p.id=lease.participant_id and p.generation=lease.participant_generation
   join episodes e on e.id=lease.episode_id
-  where lease.expires_at <= clock_timestamp() and p.status='active' and e.status='active'
+  where lease.expires_at <= now() and p.status='active' and e.status='active'
   order by lease.expires_at, lease.participant_id limit $1`, batch)
 	if err != nil {
 		return 0, fmt.Errorf("discover expired participant presence: %w", err)

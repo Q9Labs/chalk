@@ -46,9 +46,6 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     fixture = SyncPostgres.seed_episode(connection, 1, %{"linger_window_seconds" => 300})
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
-    Postgrex.query!(connection,
-      "update episodes set config_snapshot=jsonb_set(config_snapshot,'{linger_window_seconds}','300') where id=$1",
-      [UUID.dump!(fixture.episode.episode_id)])
     {:ok, media_plane} = MediaPlaneTestAdapter.start_link(outcomes: %{})
 
     start_supervised!(
@@ -59,7 +56,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
        media_plane: {MediaPlaneTestAdapter, media_plane}}
     )
 
-    {:ok, fixture: fixture, identity: hd(fixture.identities)}
+    {:ok, fixture: fixture, identity: hd(fixture.identities), media_plane: media_plane}
   end
 
   test "a dropped socket leaves after grace and the empty Episode ends after linger", ctx do
@@ -141,6 +138,53 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     assert probe(ctx, "tick") == 0
     assert episode_status(ctx) == "active"
     assert status(ctx) == "left"
+  end
+
+  test "healthy client heartbeats renew the lease without another entry", ctx do
+    client = connect(ctx.port, ctx.identity)
+
+    Postgrex.query!(
+      ctx.connection,
+      "update participant_presence_leases set expires_at=clock_timestamp()+interval '90 seconds' where participant_id=$1",
+      [UUID.dump!(ctx.identity.participant_id)]
+    )
+
+    client =
+      Enum.reduce(1..21, client, fn _index, socket ->
+        socket = Client.send_json(socket, %{"type" => "ping"})
+        Process.sleep(1_000)
+        socket
+      end)
+
+    Client.close_tcp(client)
+
+    assert [[true]] =
+             Postgrex.query!(
+               ctx.connection,
+               "select expires_at > clock_timestamp()+interval '110 seconds' from participant_presence_leases where participant_id=$1",
+               [UUID.dump!(ctx.identity.participant_id)]
+             ).rows
+
+    assert probe(ctx, "tick") == 0
+    assert status(ctx) == "active"
+  end
+
+  test "a failed provider removal leaves a retryable presence window", ctx do
+    MediaPlaneTestAdapter.put_outcome(
+      ctx.media_plane,
+      :remove_participant,
+      {:terminal_failure, :provider_unavailable}
+    )
+
+    client = connect(ctx.port, ctx.identity)
+    Client.close_tcp(client)
+    expire(ctx)
+    assert probe(ctx, "tick") == 1
+    assert eventually(fn -> status(ctx) == "active" end)
+    MediaPlaneTestAdapter.put_outcome(ctx.media_plane, :remove_participant, :confirmed)
+    expire(ctx)
+    assert probe(ctx, "tick") == 1
+    assert eventually(fn -> status(ctx) == "left" end)
   end
 
   defp connect(port, identity) do
