@@ -209,7 +209,6 @@ cold
 colony
 comfy
 comic
-comma
 compass
 concert
 condor
@@ -971,6 +970,7 @@ valley
 value
 velvet
 venue
+verify
 verse
 vest
 video
