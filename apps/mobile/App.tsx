@@ -14,7 +14,7 @@ import { useRecentCalls, type RecentCall, type RecentCalls } from "./src/home/re
 import { JoiningScreen, type ArrivedCall, type JoinTarget } from "./src/join/JoiningScreen";
 import { NameStep } from "./src/join/NameStep";
 import { getApiBaseURL } from "./src/lib/mobile-config";
-import { parseSpaceLink, type SpaceRoute } from "./src/lib/spaces";
+import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/spaces";
 import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
 import { loadOnboardingState, saveOnboardingState } from "./src/screens/onboarding-store";
 
@@ -52,13 +52,11 @@ export default function App(): React.JSX.Element {
         if (mounted) setName(stored);
       });
     void Linking.getInitialURL()
-      .then(
-        (url) => (url ? parseSpaceLink(url) : null),
-        (cause: unknown) => {
-          reportError("initial-link")(cause);
-          return null;
-        },
-      )
+      .then(routeMobileLink)
+      .catch((cause: unknown) => {
+        reportError("initial-link")(cause);
+        return null;
+      })
       .then((route) => {
         if (mounted) setOpenedLink(route);
       });
@@ -124,11 +122,14 @@ function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNa
   // App links and chalk:// links open straight into joining.
   useEffect(() => {
     const subscription = Linking.addEventListener("url", ({ url }) => {
-      const route = parseSpaceLink(url);
-      if (route) join({ kind: "link", route });
+      void routeMobileLink(url)
+        .then((route) => {
+          if (route) join({ kind: "link", route });
+        })
+        .catch(reportError("open-link"));
     });
     return () => subscription.remove();
-  }, [join]);
+  }, [join, reportError]);
 
   useEffect(() => {
     if (!diagnosticsEnabled) return;

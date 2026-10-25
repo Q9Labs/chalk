@@ -63,6 +63,14 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             category: ["BROWSABLE", "DEFAULT"],
             data: [...PUBLIC_WEB_HOSTS.flatMap((host) => [{ scheme: "https", host, pathPrefix: "/space" }])],
           },
+          {
+            action: "VIEW",
+            autoVerify: true,
+            category: ["BROWSABLE", "DEFAULT"],
+            // Simple glob works below Android 12 too: each dot matches exactly one character.
+            // The invite parser checks the letters; unknown links fall back to the browser.
+            data: PUBLIC_WEB_HOSTS.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-..." })),
+          },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
         permissions: [

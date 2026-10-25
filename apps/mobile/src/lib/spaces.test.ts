@@ -1,8 +1,13 @@
+import { readFileSync } from "node:fs";
+import { createExpoConfig } from "../../app.config";
 import { afterEach, expect, it, vi } from "vitest";
+import { openBrowserAsync } from "expo-web-browser";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
-import { createGuestAccessGetter, parseSpaceLink } from "./spaces";
+import { createGuestAccessGetter, parseSpaceLink, routeMobileLink } from "./spaces";
 
 vi.mock("expo-secure-store", () => ({}));
+vi.mock("expo-web-browser", () => ({ openBrowserAsync: vi.fn() }));
+afterEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 const credential = {
@@ -20,6 +25,56 @@ it("uses an invite code as the route key when a short link has no slug", () => {
     inviteLink: "https://chalkmeet.com/abc-defg-hij",
     source: "space-link",
   });
+});
+
+it.each(["chalkmeet.com", "chalk.q9labs.ai"])("routes short and existing Space links on %s without opening a browser", async (host) => {
+  for (const path of ["/abc-defg-hij", "/space/example#spaceInviteToken=cspi1.key.payload.signature"]) {
+    const link = `https://${host}${path}`;
+    expect(await routeMobileLink(link)).toEqual(parseSpaceLink(link));
+    expect(await routeMobileLink(link)).not.toBeNull();
+  }
+  expect(openBrowserAsync).not.toHaveBeenCalled();
+});
+
+it.each(["chalkmeet.com", "chalk.q9labs.ai"])("opens unparsed %s links in a browser, including future shapes", async (host) => {
+  for (const path of ["/future/call", "/space/", "/abc-1234-hij", "/abc-defg-hij?future=1", "/privacy"]) {
+    const link = `https://${host}${path}`;
+    expect(await routeMobileLink(link)).toBeNull();
+    expect(openBrowserAsync).toHaveBeenLastCalledWith(link);
+  }
+});
+
+it.each([null, "not a URL", "chalk://unknown", "https://example.test/future", "https://chalkmeet.com.example.test/future"])("does not open unrelated or malformed input %s", async (input) => {
+  expect(await routeMobileLink(input)).toBeNull();
+  expect(openBrowserAsync).not.toHaveBeenCalled();
+});
+
+it("propagates browser failures to the link handler's error reporter", async () => {
+  vi.mocked(openBrowserAsync).mockRejectedValueOnce(new Error("Browser unavailable"));
+  await expect(routeMobileLink("https://chalkmeet.com/future")).rejects.toThrow("Browser unavailable");
+});
+
+it("associates only the short-link path shape and preserves the existing Space filter", () => {
+  const filters = createExpoConfig().expo.android.intentFilters;
+  const spaceFilter = filters[0];
+  const codeFilter = filters[1];
+  expect(spaceFilter?.autoVerify).toBe(true);
+  expect(spaceFilter?.data).toEqual(["chalkmeet.com", "chalk.q9labs.ai"].map((host) => ({ scheme: "https", host, pathPrefix: "/space" })));
+  expect(codeFilter?.autoVerify).toBe(true);
+  expect(codeFilter?.category).toEqual(["BROWSABLE", "DEFAULT"]);
+  expect(codeFilter?.data).toEqual(["chalkmeet.com", "chalk.q9labs.ai"].map((host) => ({ scheme: "https", host, pathPattern: "/...-....-..." })));
+  const manifest = readFileSync(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  for (const host of ["chalkmeet.com", "chalk.q9labs.ai"]) {
+    expect(manifest).toContain(`android:host="${host}" android:pathPattern="/...-....-..."`);
+    expect(manifest).toContain(`android:host="${host}" android:pathPrefix="/space"`);
+  }
+  // Android's simple glob: dots consume exactly one character, and the whole path must match.
+  const codePattern = codeFilter?.data.find((data) => "pathPattern" in data)?.pathPattern;
+  const codePath = new RegExp(`^${codePattern}$`, "u");
+  expect(codePath.test("/abc-defg-hij")).toBe(true);
+  for (const path of ["/", "/dashboard", "/dashboard/sign-in", "/dashboard/developer", "/docs", "/docs/chat", "/privacy", "/privacy/previous", "/privacy-policy", "/terms", "/space/example", "/abc-defg-hi", "/abcd-efg-hij", "/abc-defg-hij/"]) {
+    expect(codePath.test(path), path).toBe(false);
+  }
 });
 
 it.each(["refresh", "retry"] as const)("forwards replacement and cancellation during %s through the real public client", async (reason) => {
