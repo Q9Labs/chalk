@@ -647,6 +647,11 @@ func (a *PionCaptureAttempt) bootstrapWhileWatchingPlans(ctx context.Context, in
 	}
 	done := make(chan result, 1)
 	go func() {
+		defer func() {
+			if recover() != nil {
+				done <- result{err: capturePanicError()}
+			}
+		}()
 		snapshot, err := a.coordinator.Bootstrap(bootstrapCtx, initial)
 		done <- result{snapshot, err}
 	}()

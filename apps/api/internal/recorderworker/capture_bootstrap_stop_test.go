@@ -71,3 +71,22 @@ func (c *captureBlockedBootstrap) Bootstrap(ctx context.Context, _ captureplan.P
 	close(c.canceled)
 	return recordercapture.Snapshot{}, ctx.Err()
 }
+
+func TestCaptureBootstrapPanicReturnsAttemptFailure(t *testing.T) {
+	now := time.Now().UTC()
+	authority := captureTestPlanAtEpoch(t, 1, 1, now).Authority()
+	plan := capturePlanWatchPlan(t, authority, 1, now, captureplan.StopStateRunning, capturePlanWatchPulledTrack(t, "0", "bootstrap"))
+	attempt := &PionCaptureAttempt{coordinator: &capturePanicBootstrap{}}
+	_, _, err := attempt.bootstrapWhileWatchingPlans(t.Context(), plan, make(chan capturePlanEvent))
+	if err == nil || err.Error() != capturePanicError().Error() {
+		t.Fatalf("bootstrap panic must be contained in its attempt: %v", err)
+	}
+}
+
+type capturePanicBootstrap struct {
+	captureCoordinator
+}
+
+func (*capturePanicBootstrap) Bootstrap(context.Context, captureplan.Plan) (recordercapture.Snapshot, error) {
+	panic("fixture bootstrap panic")
+}
