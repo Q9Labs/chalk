@@ -120,22 +120,11 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       [UUID.dump!(ctx.identity.participant_id)]
     )
 
-    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false])
-    {:ok, {_address, port}} = :inet.sockname(listener)
-    :ok = :gen_tcp.close(listener)
-
-    node =
-      start_supervised!(
-        {ExternalSyncNode,
-         app_dir: Path.expand("../../..", __DIR__),
-         database_url: @database_url,
-         port: port,
-         node_id: "dropped-presence"}
-      )
+    node = external_node(Path.expand("../../..", __DIR__))
 
     try do
-      assert {:ok, _ready} = ExternalSyncNode.await_ready(node, 30_000)
-      returned = connect(port, ctx.identity)
+      assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
+      returned = connect(ready["port"], ctx.identity)
       on_exit(fn -> Client.close_tcp(returned) end)
 
       assert [[true]] =
@@ -431,7 +420,10 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   end
 
   defp external_node(app) do
-    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false])
+    # Do not hand a soon-to-start server a port from the outbound client range.
+    # Other test sockets can claim an ephemeral port before the child binds it.
+    port = 20_000 + rem(System.unique_integer([:positive, :monotonic]), 10_000)
+    {:ok, listener} = :gen_tcp.listen(port, [:binary, active: false])
     {:ok, {_address, port}} = :inet.sockname(listener)
     :ok = :gen_tcp.close(listener)
 
