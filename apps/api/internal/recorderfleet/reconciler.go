@@ -212,7 +212,7 @@ func (r *Reconciler) classifyInventory(inventory []Node, state Journal, now time
 	}
 	slices.Sort(quarantined)
 	if len(quarantined) > 0 {
-		return nodes, quarantined, fmt.Errorf("%w: quarantined_inventory provider_id=%q", ErrInventoryDrift, quarantined)
+		return nodes, quarantined, fmt.Errorf("%w: quarantined_inventory provider_id=%.128q total=%d", ErrInventoryDrift, quarantined[0], len(quarantined))
 	}
 	return nodes, quarantined, nil
 }
