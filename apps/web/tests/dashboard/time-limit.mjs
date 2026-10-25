@@ -55,6 +55,20 @@ try {
     const tenMinutes = new Date(Date.now() + 599000).toISOString();
     await updateDeadline(tenMinutes);
     await page.locator('[data-part="toast"]').filter({ hasText: "10 minutes left" }).waitFor();
+    const slowExtension = async (route) => {
+      if (route.request().postDataJSON()?.action !== "extend-call") return route.continue();
+      await delay(31000);
+      await route.abort();
+    };
+    await page.route("**/dashboard-api/call", slowExtension);
+    await page.getByRole("button", { name: "Add 30 min", exact: true }).click();
+    await page.locator('[data-part="toast"]').filter({ hasText: "Adding time…" }).waitFor();
+    await delay(11000);
+    assert(await page.locator('[data-part="toast"]').filter({ hasText: "Adding time…" }).isVisible(), "pending extension feedback must outlive the former 10-second dismissal");
+    await page.locator('[data-part="toast"]').filter({ hasText: "Couldn’t add time. Try again." }).waitFor({ timeout: 25000 });
+    await delay(1200);
+    await page.unroute("**/dashboard-api/call", slowExtension);
+    console.log("PASS slow extension retains feedback and exposes a retry after timeout");
     const request = page.waitForRequest((request) => request.url().endsWith("/dashboard-api/call") && request.postDataJSON()?.action === "extend-call");
     await page.getByRole("button", { name: "Add 30 min", exact: true }).click();
     const body = (await request).postDataJSON();
@@ -137,6 +151,14 @@ try {
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await page.waitForURL(`${origin}/dashboard`);
     console.log("PASS lost end event plus episode_ended command rejection leaves the browser call usable");
+    // The dashboard harness configures a public managed tenant, but only creates
+    // the signed-in tenant. Seed that separate local-only public tenant too.
+    const managedTenant = process.env.CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID;
+    assert.match(managedTenant, /^[0-9a-f-]{36}$/);
+    sql(
+      `insert into tenants (id,name,default_media_plane,media_plane_provider_config,storage_provider_config,cors_allowed_origins) select '${managedTenant}','Anonymous runtime proof',default_media_plane,media_plane_provider_config,storage_provider_config,cors_allowed_origins from tenants where id='${tenantId}' on conflict (id) do nothing`,
+    );
+    sql(`insert into tenant_artifact_policies (tenant_id) values ('${managedTenant}') on conflict (tenant_id) do nothing`);
     const anonymousContext = await fixture.browser.newContext();
     const anonymous = await anonymousContext.newPage();
     await anonymous.goto(`${origin}/space`);
@@ -175,6 +197,12 @@ try {
     await anonymous.getByRole("heading", { name: "Sign in to Chalk", exact: true }).waitFor();
     console.log("PASS real anonymous call warning, time-limit end page and signup route");
   }
+} catch (error) {
+  let index = 0;
+  for (const browserContext of fixture.browser.contexts()) {
+    for (const page of browserContext.pages()) await page.screenshot({ path: resolve(repository, `artifacts/time-limit-failure-${index++}.png`) }).catch(() => {});
+  }
+  throw error;
 } finally {
   await cleanup();
 }

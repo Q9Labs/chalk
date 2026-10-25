@@ -260,7 +260,7 @@ export function SpaceView({
     setCommandError(null);
     onDismissCommandError?.();
   };
-  const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: "warning", duration: 10000, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
+  const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
   const toasts = [
     ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),

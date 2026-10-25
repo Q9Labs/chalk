@@ -106,6 +106,7 @@ export class V1SyncClient implements V1CollaborationClient {
     return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())) };
   }
   #reconnectAttempt = 0;
+  #episodeEndTimer: unknown;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
   #noticeTimer: unknown;
@@ -190,6 +191,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#unsubscribeLifecycle = undefined;
     this.#clearReconnect();
     this.#clearDial();
+    this.#clock().clearTimeout(this.#episodeEndTimer);
+    this.#episodeEndTimer = undefined;
     this.#clearHeartbeat();
     this.#clearNoticeProbe();
     this.#commandScheduler.stop("client_stopped");
@@ -514,9 +517,19 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#requireLive();
         await this.#commandScheduler.acknowledge(frame);
         if (frame.outcome === "rejected" && frame.reason === "episode_ended") {
-          this.#phase = { phase: "terminal", terminalReason: "episode_ended" };
-          this.#emit();
-          this.#socket?.close(1000, "episode ended");
+          // Recover the committed end event before giving up its reason. Bound
+          // recovery so an unavailable server cannot strand a finished call.
+          if (this.#episodeEndTimer === undefined) {
+            this.#episodeEndTimer = this.#clock().setTimeout(() => {
+              this.#episodeEndTimer = undefined;
+              if (this.#control?.status === "ended" || this.#phase.phase === "terminal") return;
+              this.#phase = { phase: "terminal", terminalReason: "episode_ended" };
+              this.#clearReconnect();
+              this.#socket?.close(1000, "episode ended");
+              this.#emit();
+            }, 5000);
+          }
+          this.#recover("episode ended");
         }
         return;
       case "retryable_error":

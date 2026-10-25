@@ -1236,7 +1236,8 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
   });
   it("leaves the live call on an episode_ended rejection even when the end event is lost", async () => {
-    const { client, socket } = await liveClient();
+    const clock = new TestClock();
+    const { client, socket } = await liveClient({ clock });
     try {
       const command = client.setHandRaised(true, { commandId: commandIds[0] });
       const rejected = expect(command).rejects.toMatchObject({ message: "episode_ended" });
@@ -1244,7 +1245,45 @@ describe("V1SyncClient", () => {
       socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "rejected", reason: "episode_ended" });
       await rejected;
       await settle();
+      expect(client.getSnapshot().connection.phase).toBe("connecting");
+      clock.advance(5000);
       expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "episode_ended" });
+    } finally {
+      client.stop();
+    }
+  });
+  it("recovers the maximum-duration reason when a rejected command precedes the end event", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      const command = client.setHandRaised(true, { commandId: commandIds[0] });
+      const rejected = expect(command).rejects.toMatchObject({ message: "episode_ended" });
+      await settle();
+      socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "rejected", reason: "episode_ended" });
+      await rejected;
+      await settle();
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      await settle();
+      socket.open();
+      await settle();
+      expect(client.getSnapshot().connection.phase).toBe("recovering");
+      const ended = { ...state, revision: 2, status: "ended" as const, participants: [], admissionRequests: [], recording: null };
+      const digest = await computeV1StateDigest(ended);
+      const head = { revision: 2, state_schema_version: 1, state_digest: digest };
+      socket.receive({ type: "welcome", protocol: 1, participant_id: ownerId, participant_generation: 1, recovery_id: recoveryId, head, mode: "replay" });
+      socket.receive({
+        type: "replay_page",
+        recovery_id: recoveryId,
+        first_revision: 2,
+        last_revision: 2,
+        events: [{ type: "event", stream: "control", name: "episode_ended", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { reason: "maximum_duration" }, external_operation_id: commandIds[1] }],
+      });
+      await settle();
+      expect(client.getSnapshot().connection.phase).toBe("recovering");
+      expect(client.getSnapshot().control?.status).toBe("ended");
+      expect(client.getSnapshot().control?.endReason).toBe("maximum_duration");
     } finally {
       client.stop();
     }

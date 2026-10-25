@@ -67,7 +67,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
       case result do
         %Recovery{replay_cursor: revision} = recovery
         when status == "ended" and is_integer(revision) ->
-          %{recovery | mode: :replay}
+          %{recovery | mode: :replay, terminal_reason: :episode_ended}
 
         other ->
           other
