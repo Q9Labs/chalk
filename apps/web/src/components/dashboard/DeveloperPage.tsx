@@ -7,7 +7,7 @@ import { ago, clock, expiresSoon, fullDate, sessionDay } from "../../lib/dashboa
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { accessLabel, EndpointDialog, AddWebsiteDialog, CreateKeyDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";
-import { ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
+import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 
 type Open =
   | null
@@ -76,6 +76,16 @@ export function DeveloperPage() {
           <Icon name="plus" />
           Create API key
         </button>
+      </div>
+      <div style={{ marginBottom: 24 }}>
+        <h3 className="lbl">Tenant ID</h3>
+        <div className="linkrow">
+          <code className="mono" style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
+            {data.tenantId}
+          </code>
+          <CopyAction text={data.tenantId} label="Copy tenant ID" pill toastMessage="Tenant ID copied" />
+        </div>
+        <p className="help">Use this tenant ID with your API key to connect your app to Chalk.</p>
       </div>
       <KeysTable keys={keys} onRotate={(apiKey) => setOpen({ kind: "rotate-key", apiKey })} onRevoke={(apiKey) => setOpen({ kind: "revoke-key", apiKey })} />
       {data.nextKeyCursor ? <MoreButton label="Show more keys" cursor={data.nextKeyCursor} load={(keyCursor) => readPage("developer", { keyCursor })} onLoaded={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}

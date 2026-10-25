@@ -451,6 +451,7 @@ try {
     const developer = await ada.request("/dashboard-api/developer");
     assert.equal(developer.status, 200, await developer.clone().text());
     const developerDTO = await developer.json();
+    assert.equal(developerDTO.tenantId, firstTenant);
     assert.equal(developerDTO.keys.find((key) => key.id === keyId).lastUsedAt, "2026-10-18T00:00:00Z");
     const lastDelivery = developerDTO.webhooks.find((hook) => hook.id === webhookId).lastDelivery;
     assert.equal(lastDelivery.id, testDeliveryId);
@@ -643,7 +644,9 @@ try {
     assert.equal((await tenantFor("ada")).recording_render_mode, "on_demand", "Saving one account must not change another account");
     const developerSettings = await malik.request("/dashboard-api/developer");
     assert.equal(developerSettings.status, 200);
-    assert.equal((await developerSettings.json()).recordingRenderMode, "automatic");
+    const otherDeveloperDTO = await developerSettings.json();
+    assert.equal(otherDeveloperDTO.recordingRenderMode, "automatic");
+    assert.equal(otherDeveloperDTO.tenantId, secondTenant);
     for (const action of [
       { action: "set-recording-render-mode", mode: "always" },
       { action: "set-recording-render-mode", mode: "automatic", tenantId: firstTenant },

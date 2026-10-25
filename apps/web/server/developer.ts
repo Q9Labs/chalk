@@ -14,6 +14,7 @@ export async function developerPage(engine: Engine, cursors: { keyCursor?: strin
     run(engine.api.tenants.getTenant({ params })),
   ]);
   return {
+    tenantId: engine.tenantId,
     allowedWebsites: tenant.cors_allowed_origins,
     recordingRenderMode: tenant.recording_render_mode,
     keys: keys.api_keys.map(keyDTO),
