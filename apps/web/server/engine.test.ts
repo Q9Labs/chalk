@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Effect, Schema } from "effect";
-import { AdmitEpisodeParticipantPathParamsSchema, createChalkEffectClient } from "@q9labsai/chalk-client/effect";
+import { AdmitEpisodeParticipantPathParamsSchema, createChalkEffectClient, TenantIdSchema, DateTimeStringSchema } from "@q9labsai/chalk-client/effect";
 import { run, withSessionEngine } from "./engine";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
@@ -90,6 +90,30 @@ it("rejects a modified tenant cache and renews an expired one", async () => {
 
 describe("engine failure diagnostics through the real SDK decoder", () => {
   it.each([
+    { code: "api_key.invalid_expiry", expected: { status: 400, code: "api_key_invalid_expiry" } },
+    { code: "request.invalid", expected: { status: 400, code: "invalid_request" } },
+    { code: privateDetail, expected: { status: 502, code: "engine_unavailable" } },
+  ])("maps only known key validation codes without exposing response contents: $code", async ({ code, expected }) => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const api = await Effect.runPromise(
+      createChalkEffectClient({
+        baseUrl: "https://engine.example.test",
+        fetch: async () => Response.json({ error: { code, message: privateDetail } }, { status: 400 }),
+      }),
+    );
+    await expect(
+      run(
+        api.default.createAPIKey({
+          params: { tenant_id: Schema.decodeUnknownSync(TenantIdSchema)(tenantId) },
+          headers: { "Idempotency-Key": "expiry-validation" },
+          payload: { name: "Test", scopes: ["spaces:read"], expires_at: Schema.decodeUnknownSync(DateTimeStringSchema)("2027-10-25T23:59:00Z") },
+        }),
+      ),
+    ).rejects.toMatchObject(expected);
+    if (code === "api_key.invalid_expiry") expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ engine_status: 400, engine_code: code, sdk_error_tag: "HttpClientError" });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);
+  });
+  it.each([
     { code: "participant.not_active", expected: { status: 409, code: "participant_not_active" } },
     { code: privateDetail, expected: { status: 502, code: "engine_unavailable" } },
   ])("handles the admission transport code $code", async ({ code, expected }) => {
@@ -109,7 +133,7 @@ describe("engine failure diagnostics through the real SDK decoder", () => {
   ])("logs a bounded cause for a $status response without its contents", async ({ status, body, expected }) => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const api = await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://engine.example.test", fetch: async () => new Response(body, { status, headers: { "Content-Type": "application/json" } }) }));
-    await expect(run(api.tenants.createTenant({ payload: { name: privateDetail } }))).rejects.toMatchObject({ status: 502, code: "engine_unavailable" });
+    await expect(run(api.tenants.createTenant({ payload: { name: privateDetail } }))).rejects.toMatchObject(status === 400 ? { status: 400, code: "invalid_request" } : { status: 502, code: "engine_unavailable" });
     expect(log).toHaveBeenCalledOnce();
     expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ event: "dashboard.engine_failed", ...expected });
     expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);

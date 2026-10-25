@@ -47,13 +47,6 @@ export function accessLabel(scopes: readonly string[]): string {
     .join(", ");
 }
 
-function inDays(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(23, 59, 0, 0);
-  return date.toISOString();
-}
-
 function Cancel({ onClose }: { readonly onClose: () => void }) {
   return (
     <button type="button" className="btn gh" onClick={onClose}>
@@ -108,6 +101,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
   const [name, setName] = useState("");
   const [access, setAccess] = useState<Access>("full");
   const [expiry, setExpiry] = useState<"30" | "90" | "365">("90");
+  const [openedAt] = useState(Date.now);
   const [custom, setCustom] = useState<readonly Scope[]>([]);
   const [errors, setErrors] = useState<{ name?: boolean; scopes?: boolean }>({});
   const [saving, setSaving] = useState(false);
@@ -115,7 +109,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
   const intents = useIntentKeys();
   const nameInput = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const expiresAt = inDays(Number(expiry));
+  const expiresAt = new Date(openedAt + Number(expiry) * 24 * 60 * 60 * 1000).toISOString();
 
   async function create() {
     const trimmed = name.trim();
