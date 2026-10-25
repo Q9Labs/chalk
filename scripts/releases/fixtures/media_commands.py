@@ -49,9 +49,24 @@ def declared(path):
 
 
 def same(actual, expected, message):
-    """Compare as JSON text, so the number 1 is not the boolean true."""
+    """Compare as JSON text, so the number 1 is not the boolean true. A rejection leaves its message for the test to read."""
     if json.dumps(actual, sort_keys=True) != json.dumps(expected, sort_keys=True):
+        (root / 'rejected.txt').write_text(message)
         raise SystemExit(message)
+
+
+def rewrite_after_init(directory):
+    """Change one generated value the way a late write by the release script would, once `init` has accepted the configuration."""
+    main = directory / 'main.tf.json'
+    if main.exists():
+        tree = json.loads(main.read_text())
+        tree['module']['dispatcher']['handler'] = 'index.other'
+        main.write_text(json.dumps(tree))
+        return
+    variables = directory / 'terraform.tfvars.json'
+    values = json.loads(variables.read_text())
+    values['release_id'] = 'example-previous'
+    variables.write_text(json.dumps(values))
 
 
 def selected_object():
@@ -218,8 +233,11 @@ else:
         raise SystemExit('injected OpenTofu failure')
     main = directory / 'main.tf.json'
     inputs = json.loads(main.read_text())['module']['dispatcher'] if main.exists() else json.loads((directory / 'terraform.tfvars.json').read_text())
-    if operation == 'init':
+    if operation in ('init', 'plan', 'import'):
         check_configuration(directory)
+    if operation == 'init':
+        if fault == 'edit-after-init':
+            rewrite_after_init(directory)
     elif operation == 'plan':
         target = next((word.removeprefix('-target=') for word in args if word.startswith('-target=')), None)
         saved = directory / next(word.removeprefix('-out=') for word in args if word.startswith('-out='))
