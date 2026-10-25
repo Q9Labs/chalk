@@ -143,6 +143,15 @@ try {
     await anonymous.getByLabel("Your name").fill("Anonymous Deadline Host");
     await anonymous.getByRole("button", { name: "Join call", exact: true }).click();
     await anonymous.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+    const anonymousGuest = await (await fixture.browser.newContext()).newPage();
+    await anonymousGuest.goto(anonymous.url());
+    await anonymousGuest.getByLabel("Your name").fill("Anonymous Deadline Guest");
+    await anonymousGuest.getByRole("button", { name: "Join call", exact: true }).click();
+    const publicGuestJoined = anonymousGuest.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+    const admitPublicGuest = anonymous.getByRole("button", { name: "Admit Anonymous Deadline Guest", exact: true });
+    await Promise.race([publicGuestJoined, admitPublicGuest.waitFor({ timeout: 45000 })]);
+    if (await admitPublicGuest.isVisible()) await admitPublicGuest.click();
+    await publicGuestJoined;
     const slug = new URL(anonymous.url()).pathname.split("/").at(-1);
     assert.match(slug, /^[a-z0-9-]+$/);
     const [publicSpace, publicTenant, publicEpisode, publicCreated] = sql(`select s.id,s.tenant_id,e.id,e.created_at from spaces s join episodes e on e.space_id=s.id where s.slug='${slug}' and e.status='active'`).split("|");
@@ -156,8 +165,12 @@ try {
     assert.equal(publicResponse.status, 202, await publicResponse.text());
     await anonymous.locator('[data-part="toast"]').filter({ hasText: "Sign up free for calls up to 24 hours." }).waitFor();
     assert.equal(await anonymous.getByRole("button", { name: "Add 30 min", exact: true }).count(), 0);
+    await anonymousGuest.locator('[data-part="toast"]').filter({ hasText: "Sign up free for calls up to 24 hours." }).waitFor();
     await anonymous.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor({ timeout: 80000 });
     await anonymous.getByRole("button", { name: "Home", exact: true }).waitFor();
+    await anonymousGuest.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor();
+    await anonymousGuest.getByRole("button", { name: "Sign up free", exact: true }).click();
+    await anonymousGuest.getByRole("heading", { name: "Sign in to Chalk", exact: true }).waitFor();
     await anonymous.getByRole("button", { name: "Sign up free", exact: true }).click();
     await anonymous.getByRole("heading", { name: "Sign in to Chalk", exact: true }).waitFor();
     console.log("PASS real anonymous call warning, time-limit end page and signup route");
