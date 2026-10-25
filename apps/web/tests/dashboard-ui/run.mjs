@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 const root = resolve(import.meta.dirname, "../../../..");
 const require = createRequire(resolve(root, "apps/web/package.json"));
 const temporary = await mkdtemp(resolve(tmpdir(), "chalk-dashboard-ui-"));
-const webPort = process.env.CHALK_DEV_WEB_PORT || "3070";
+const webPort = process.env.CHALK_DEV_WEB_PORT || process.env.VITE_PORT || "3070";
 const fixturePort = process.env.FIXTURE_PORT || "3071";
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const fixtureOrigin = `http://127.0.0.1:${fixturePort}`;
@@ -65,6 +65,7 @@ try {
       probe.listen(port, "127.0.0.1", () => probe.close(accept));
     });
   }
+  await completed(start("pnpm", ["--filter", "web", "run", "sync:public"]));
   // Vite resolves the lazy whiteboard viewer through the package's built root entry.
   await completed(start("pnpm", ["exec", "turbo", "run", "build", "--filter=@q9labsai/chalk-whiteboard..."]));
   const video = resolve(temporary, "session.mp4");
@@ -73,13 +74,16 @@ try {
   await ready(`${webOrigin}/dashboard/sign-in`, vite);
   const fixture = start(process.execPath, ["apps/web/tests/dashboard-ui/fixture-server.mjs"], { env: { ...process.env, FIXTURE_VIDEO: video, FIXTURE_PORT: fixturePort, VITE_ORIGIN: webOrigin } });
   await ready(`${fixtureOrigin}/__fixture/log`, fixture);
-  await completed(
-    start(process.execPath, [
-      process.env.DASHBOARD_DEVELOPER_ONLY ? "apps/web/tests/dashboard-ui/developer-browser.mjs" : process.env.DASHBOARD_RECORDING_ONLY ? "apps/web/tests/dashboard-ui/recording-browser.mjs" : "apps/web/tests/dashboard-ui/checks.mjs",
-      require.resolve("playwright").replace(/index\.js$/, "index.mjs"),
-      fixtureOrigin,
-    ]),
-  );
+  await completed(start(process.execPath, ["apps/web/tests/dashboard-ui/asset-checks.mjs", require.resolve("playwright").replace(/index\.js$/, "index.mjs"), fixtureOrigin]));
+  if (!process.env.ASSET_PROOF_ONLY) {
+    await completed(
+      start(process.execPath, [
+        process.env.DASHBOARD_DEVELOPER_ONLY ? "apps/web/tests/dashboard-ui/developer-browser.mjs" : process.env.DASHBOARD_RECORDING_ONLY ? "apps/web/tests/dashboard-ui/recording-browser.mjs" : "apps/web/tests/dashboard-ui/checks.mjs",
+        require.resolve("playwright").replace(/index\.js$/, "index.mjs"),
+        fixtureOrigin,
+      ]),
+    );
+  }
 } finally {
   clearTimeout(deadline);
   clearInterval(watcher);

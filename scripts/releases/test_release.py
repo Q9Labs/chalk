@@ -646,6 +646,7 @@ class EnvelopeTests(unittest.TestCase):
                         self.assertEqual(installed, old_files[name])
                         self.assertEqual(digest(installed), expected)
 
+
     def test_previous_production_uses_deploy_result_and_manifest_not_nightly_archive(self):
         api = SimpleNamespace(repository='Q9Labs/chalk', deployments=lambda *args, **kwargs: [])
         def pages(route, key):

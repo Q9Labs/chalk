@@ -9,6 +9,7 @@ const fixture = (query) => fetch(`${origin}/__fixture/${query}`).then((r) => r.j
 const browser = await chromium.launch({ ...(process.env.DASHBOARD_BROWSER_PATH ? { executablePath: process.env.DASHBOARD_BROWSER_PATH } : {}), headless: true });
 const results = [];
 const errors = [];
+const externalAssets = new Set();
 const check = (name, ok, detail = "") => results.push(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `: ${detail}` : ""}`);
 
 async function open(route, { account = "hasan", set = "", signedOut = false, theme = "dark", width = 1440, clock = false } = {}) {
@@ -18,6 +19,10 @@ async function open(route, { account = "hasan", set = "", signedOut = false, the
   const cookies = [{ name: "chalk_theme", value: theme, url: origin }];
   if (!signedOut) cookies.push({ name: "fx_session", value: account, url: origin });
   await context.addCookies(cookies);
+  context.on("request", (request) => {
+    const url = new URL(request.url());
+    if (/^https?:$/.test(url.protocol) && url.origin !== origin && ["font", "stylesheet", "script"].includes(request.resourceType())) externalAssets.add(request.url());
+  });
   const tab = await context.newPage();
   await installClock(tab, clock);
   tab.on("console", (message) => message.type() === "error" && errors.push(`${route}: ${message.text()}`));
@@ -355,6 +360,7 @@ try {
 } finally {
   await browser.close();
   await fixture("reset");
+  check("all dashboard fonts and scripts use our origin", externalAssets.size === 0, [...externalAssets].join(", "));
   console.log(results.join("\n"));
   console.log(errors.length ? `CONSOLE ERRORS:\n${[...new Set(errors)].join("\n")}` : "no console errors");
 }

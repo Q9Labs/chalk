@@ -1,3 +1,4 @@
+import { getWhiteboardAssets } from "../assets";
 const MATHJAX_INPUT_EM = 16;
 const MATHJAX_INPUT_EX = 8;
 const MATHJAX_CONTAINER_WIDTH = 80 * MATHJAX_INPUT_EM;
@@ -55,11 +56,15 @@ async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
 // Existing global configuration must be preserved when a host initializes MathJax first.
 // fallow-ignore-next-line complexity
 function configureMathJax(target: typeof globalThis | Window, existing: (MathJaxRuntime & Record<string, unknown>) | undefined): void {
+  const configuredPath = getWhiteboardAssets()?.mathJaxBasePath;
+  // The speech worker uses blob URLs, so importScripts and map fetches need absolute URLs.
+  const basePath = configuredPath ? new URL(configuredPath, document.baseURI).href.replace(/\/$/, "") : undefined;
   target.MathJax = {
     ...(existing ?? {}),
-    options: { ...(existing?.options as object | undefined), enableMenu: false },
+    ...(basePath ? { loader: { paths: { mathjax: basePath, fonts: `${basePath}/fonts` }, ...(existing?.loader as object | undefined) } } : {}),
+    svg: { ...(basePath ? { dynamicPrefix: `${basePath}/fonts/mathjax-newcm-font/svg/dynamic` } : {}), fontCache: "none", ...(existing?.svg as object | undefined) },
+    options: { ...(basePath ? { worker: { path: `${basePath}/sre`, maps: `${basePath}/sre/mathmaps` } } : {}), ...(existing?.options as object | undefined), enableMenu: false },
     startup: { ...(existing?.startup as object | undefined), typeset: false },
-    svg: { fontCache: "none", ...(existing?.svg as object | undefined) },
   } as unknown as MathJaxRuntime & Record<string, unknown>;
 }
 
@@ -73,7 +78,8 @@ function loadMathJaxScript(): Promise<void> {
     }
 
     const script = document.createElement("script");
-    script.src = DEFAULT_MATHJAX_SCRIPT_URL;
+    const basePath = getWhiteboardAssets()?.mathJaxBasePath;
+    script.src = basePath ? `${basePath.replace(/\/$/, "")}/tex-svg.js` : DEFAULT_MATHJAX_SCRIPT_URL;
     script.async = true;
     script.dataset.chalkMathjax = "true";
     script.onload = () => resolve();
