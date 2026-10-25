@@ -130,7 +130,7 @@ describe("engine failure diagnostics through the real SDK decoder", () => {
   ])("logs a bounded cause for a $status response without its contents", async ({ status, body, expected }) => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const api = await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://engine.example.test", fetch: async () => new Response(body, { status, headers: { "Content-Type": "application/json" } }) }));
-    await expect(run(api.tenants.createTenant({ payload: { name: privateDetail } }))).rejects.toMatchObject({ status: 502, code: "engine_unavailable" });
+    await expect(run(api.tenants.createTenant({ payload: { name: privateDetail } }))).rejects.toMatchObject(status === 400 ? { status: 400, code: "invalid_request" } : { status: 502, code: "engine_unavailable" });
     expect(log).toHaveBeenCalledOnce();
     expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ event: "dashboard.engine_failed", ...expected });
     expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);

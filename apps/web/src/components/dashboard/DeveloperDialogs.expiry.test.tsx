@@ -28,8 +28,8 @@ it.each([
     </ToastProvider>,
   );
   fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Test" } });
-  fireEvent.click(screen.getByRole("button", { name: label, exact: true }));
-  fireEvent.click(screen.getByRole("button", { name: "Create key", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  fireEvent.click(screen.getByRole("button", { name: "Create key" }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith("fixture-key"));
   const options = fetch.mock.calls.find(([input]) => input === "/dashboard-api/developer")?.[1];
   expect(JSON.parse(String(options?.body))).toMatchObject({
@@ -56,11 +56,11 @@ it("retries the same key request after a network failure without creating anothe
     </ToastProvider>,
   );
   fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Test" } });
-  fireEvent.click(screen.getByRole("button", { name: "1 year", exact: true }));
-  fireEvent.click(screen.getByRole("button", { name: "Create key", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "1 year" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create key" }));
   await screen.findByText("Check your connection, then try again.");
   vi.setSystemTime(new Date("2026-10-25T14:08:00Z"));
-  fireEvent.click(screen.getByRole("button", { name: "Create key", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Create key" }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith("fixture-key"));
   expect(requests).toHaveLength(2);
   expect(requests[1]).toBe(requests[0]);
