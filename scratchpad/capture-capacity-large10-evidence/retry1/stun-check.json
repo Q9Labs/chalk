@@ -1,0 +1,40 @@
+{
+  "utc": "2026-10-25T06:06:10.201776+00:00",
+  "host": "stun.cloudflare.com",
+  "port": 3478,
+  "egress_ip": "18.236.77.160",
+  "resolved_ipv4": [
+    "162.159.207.0"
+  ],
+  "probes": [
+    {
+      "protocol": "UDP",
+      "remote": "162.159.207.0",
+      "local": [
+        "172.16.0.2",
+        36171
+      ],
+      "response_type": "0x101",
+      "transaction_matches": true,
+      "cookie_matches": true,
+      "mapped": [
+        {
+          "attribute": "0x20",
+          "address": "18.236.77.160",
+          "port": 36171
+        }
+      ],
+      "elapsed_s": 0.005
+    },
+    {
+      "protocol": "TCP",
+      "remote": "162.159.207.0",
+      "error": "TimeoutError: timed out",
+      "elapsed_s": 4.003
+    }
+  ],
+  "routes": "default via 172.16.0.1 dev eth0 \n172.16.0.0/30 dev eth0 proto kernel scope link src 172.16.0.2 \n172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1 linkdown \n",
+  "interfaces": "lo               UNKNOWN        127.0.0.1/8 ::1/128 \ndummy0           DOWN           \neth0             UP             172.16.0.2/30 2600:1f14:34cf:7b61:7c94::117/128 fe80::400:acff:fe10:2/64 \ndocker0          DOWN           172.17.0.1/16 \n",
+  "resolv": "nameserver 1.1.1.1\nnameserver 8.8.8.8\n",
+  "kernel": "Linux instabox-box-capture-large10-retr-093339-75544 6.18.54-instabox #1 SMP PREEMPT_DYNAMIC 2026-09-25 00:00:00 UTC x86_64 GNU/Linux\n"
+}

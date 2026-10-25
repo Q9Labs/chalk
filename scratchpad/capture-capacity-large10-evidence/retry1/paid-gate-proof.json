@@ -1,0 +1,5 @@
+{
+  "exit": 1,
+  "message": "BLOCKED: authorized retry exhausted; publisher media preflight failed",
+  "paid_state_exists": false
+}

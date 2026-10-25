@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-25T06:08:46.484920+00:00",
+  "guests_absent": 5,
+  "space_archived": 1,
+  "episode_ended": 1,
+  "recordings": 0,
+  "paid_creation_intents": 0,
+  "fleet_rows_created": 0,
+  "flag_applied": false,
+  "ssm_forward_terminated": true,
+  "post_cut_rebuild": "skipped by lead instruction",
+  "most_likely_cause": "unknown"
+}

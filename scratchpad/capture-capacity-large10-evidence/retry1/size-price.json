@@ -1,0 +1,8 @@
+{
+  "slug": "s-2vcpu-2gb",
+  "vcpus": 2,
+  "memory": 2048,
+  "price_monthly": 18,
+  "price_hourly": 0.02679,
+  "checked_utc": "2026-10-25T06:03:22.126613+00:00"
+}

@@ -1,0 +1,100 @@
+[
+  {
+    "publisher": 1,
+    "status": "live",
+    "ice": "connected",
+    "candidates": [
+      {
+        "type": "remote-candidate",
+        "candidateType": "host",
+        "address": "141.101.90.0",
+        "port": 1473,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "2600:1f14:34cf:7b26:ae70::15e",
+        "port": 9,
+        "protocol": "tcp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "172.16.0.2",
+        "port": 9,
+        "protocol": "tcp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "srflx",
+        "address": "35.93.162.163",
+        "port": 52337,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "172.16.0.2",
+        "port": 52337,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "2600:1f14:34cf:7b26:ae70::15e",
+        "port": 43924,
+        "protocol": "udp"
+      }
+    ]
+  },
+  {
+    "publisher": 2,
+    "status": "live",
+    "ice": "connected",
+    "candidates": [
+      {
+        "type": "remote-candidate",
+        "candidateType": "host",
+        "address": "141.101.90.0",
+        "port": 1473,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "2600:1f14:34cf:7b26:ae70::15e",
+        "port": 33587,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "172.16.0.2",
+        "port": 35661,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "2600:1f14:34cf:7b26:ae70::15e",
+        "port": 9,
+        "protocol": "tcp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "srflx",
+        "address": "35.93.162.163",
+        "port": 35661,
+        "protocol": "udp"
+      },
+      {
+        "type": "local-candidate",
+        "candidateType": "host",
+        "address": "172.16.0.2",
+        "port": 9,
+        "protocol": "tcp"
+      }
+    ]
+  }
+]
