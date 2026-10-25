@@ -6,14 +6,14 @@ where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(id)
 for no key update;
 
 -- name: GetSpacePublicInvite :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
 where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id);
 
 -- name: LockSpacePublicInvite :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -21,21 +21,21 @@ where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
 for update;
 
 -- name: GetSpacePublicInviteByHandle :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
 where handle = sqlc.arg(handle);
 
 -- name: GetSpacePublicInviteByCode :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
 where invite_code = sqlc.arg(invite_code) or invite_words = sqlc.arg(invite_code);
 
 -- name: LockSpacePublicInviteByHandle :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -53,7 +53,7 @@ values (
     sqlc.arg(admission_mode), sqlc.narg(last_actor_id)
 )
 on conflict (tenant_id, space_id) do nothing
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key;
 
@@ -69,7 +69,7 @@ set enabled = sqlc.arg(enabled),
     updated_at = case when enabled is not distinct from sqlc.arg(enabled)::boolean then updated_at else now() end,
     last_actor_id = case when enabled is not distinct from sqlc.arg(enabled)::boolean then last_actor_id else sqlc.narg(last_actor_id) end
 where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key;
 
@@ -85,7 +85,7 @@ set handle = sqlc.arg(handle),
     last_actor_id = sqlc.narg(last_actor_id),
     last_rotation_request_key = sqlc.narg(last_rotation_request_key)
 where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key;
 

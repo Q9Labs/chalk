@@ -228,7 +228,7 @@ values (
     $6, $7
 )
 on conflict (tenant_id, space_id) do nothing
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key
 `
@@ -243,25 +243,7 @@ type CreateSpacePublicInviteParams struct {
 	LastActorID   pgtype.UUID `json:"last_actor_id"`
 }
 
-type CreateSpacePublicInviteRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) CreateSpacePublicInvite(ctx context.Context, arg CreateSpacePublicInviteParams) (CreateSpacePublicInviteRow, error) {
+func (q *Queries) CreateSpacePublicInvite(ctx context.Context, arg CreateSpacePublicInviteParams) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, createSpacePublicInvite,
 		arg.TenantID,
 		arg.SpaceID,
@@ -271,12 +253,13 @@ func (q *Queries) CreateSpacePublicInvite(ctx context.Context, arg CreateSpacePu
 		arg.AdmissionMode,
 		arg.LastActorID,
 	)
-	var i CreateSpacePublicInviteRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -649,7 +632,7 @@ func (q *Queries) GetSpacePublicArrivalForCredential(ctx context.Context, arg Ge
 }
 
 const getSpacePublicInvite = `-- name: GetSpacePublicInvite :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -661,32 +644,15 @@ type GetSpacePublicInviteParams struct {
 	SpaceID  pgtype.UUID `json:"space_id"`
 }
 
-type GetSpacePublicInviteRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) GetSpacePublicInvite(ctx context.Context, arg GetSpacePublicInviteParams) (GetSpacePublicInviteRow, error) {
+func (q *Queries) GetSpacePublicInvite(ctx context.Context, arg GetSpacePublicInviteParams) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, getSpacePublicInvite, arg.TenantID, arg.SpaceID)
-	var i GetSpacePublicInviteRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -703,39 +669,22 @@ func (q *Queries) GetSpacePublicInvite(ctx context.Context, arg GetSpacePublicIn
 }
 
 const getSpacePublicInviteByCode = `-- name: GetSpacePublicInviteByCode :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
 where invite_code = $1 or invite_words = $1
 `
 
-type GetSpacePublicInviteByCodeRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) GetSpacePublicInviteByCode(ctx context.Context, inviteCode string) (GetSpacePublicInviteByCodeRow, error) {
+func (q *Queries) GetSpacePublicInviteByCode(ctx context.Context, inviteCode string) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, getSpacePublicInviteByCode, inviteCode)
-	var i GetSpacePublicInviteByCodeRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -752,39 +701,22 @@ func (q *Queries) GetSpacePublicInviteByCode(ctx context.Context, inviteCode str
 }
 
 const getSpacePublicInviteByHandle = `-- name: GetSpacePublicInviteByHandle :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
 where handle = $1
 `
 
-type GetSpacePublicInviteByHandleRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) GetSpacePublicInviteByHandle(ctx context.Context, handle []byte) (GetSpacePublicInviteByHandleRow, error) {
+func (q *Queries) GetSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, getSpacePublicInviteByHandle, handle)
-	var i GetSpacePublicInviteByHandleRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1189,7 +1121,7 @@ func (q *Queries) LockSpacePublicArrivalByIdempotency(ctx context.Context, arg L
 }
 
 const lockSpacePublicInvite = `-- name: LockSpacePublicInvite :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -1202,32 +1134,15 @@ type LockSpacePublicInviteParams struct {
 	SpaceID  pgtype.UUID `json:"space_id"`
 }
 
-type LockSpacePublicInviteRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (LockSpacePublicInviteRow, error) {
+func (q *Queries) LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, lockSpacePublicInvite, arg.TenantID, arg.SpaceID)
-	var i LockSpacePublicInviteRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1244,7 +1159,7 @@ func (q *Queries) LockSpacePublicInvite(ctx context.Context, arg LockSpacePublic
 }
 
 const lockSpacePublicInviteByHandle = `-- name: LockSpacePublicInviteByHandle :one
-select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+select tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
@@ -1252,32 +1167,15 @@ where handle = $1
 for update
 `
 
-type LockSpacePublicInviteByHandleRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (LockSpacePublicInviteByHandleRow, error) {
+func (q *Queries) LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, lockSpacePublicInviteByHandle, handle)
-	var i LockSpacePublicInviteByHandleRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1487,7 +1385,7 @@ set handle = $1,
     last_actor_id = $2,
     last_rotation_request_key = $3
 where tenant_id = $4 and space_id = $5
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key
 `
@@ -1500,25 +1398,7 @@ type RotateSpacePublicInviteParams struct {
 	SpaceID                pgtype.UUID `json:"space_id"`
 }
 
-type RotateSpacePublicInviteRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (RotateSpacePublicInviteRow, error) {
+func (q *Queries) RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, rotateSpacePublicInvite,
 		arg.Handle,
 		arg.LastActorID,
@@ -1526,12 +1406,13 @@ func (q *Queries) RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePu
 		arg.TenantID,
 		arg.SpaceID,
 	)
-	var i RotateSpacePublicInviteRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
@@ -1678,7 +1559,7 @@ set enabled = $1,
     updated_at = case when enabled is not distinct from $1::boolean then updated_at else now() end,
     last_actor_id = case when enabled is not distinct from $1::boolean then last_actor_id else $2 end
 where tenant_id = $3 and space_id = $4
-returning tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
+returning tenant_id, space_id, handle, invite_code, invite_words, generation, state_epoch, enabled, public_role,
           admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
           last_rotation_request_key
 `
@@ -1690,37 +1571,20 @@ type UpdateSpacePublicInviteEnabledParams struct {
 	SpaceID     pgtype.UUID `json:"space_id"`
 }
 
-type UpdateSpacePublicInviteEnabledRow struct {
-	TenantID               pgtype.UUID        `json:"tenant_id"`
-	SpaceID                pgtype.UUID        `json:"space_id"`
-	Handle                 []byte             `json:"handle"`
-	InviteCode             string             `json:"invite_code"`
-	Generation             int64              `json:"generation"`
-	StateEpoch             int64              `json:"state_epoch"`
-	Enabled                bool               `json:"enabled"`
-	PublicRole             string             `json:"public_role"`
-	AdmissionMode          string             `json:"admission_mode"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	RotatedAt              pgtype.Timestamptz `json:"rotated_at"`
-	DisabledAt             pgtype.Timestamptz `json:"disabled_at"`
-	LastActorID            pgtype.UUID        `json:"last_actor_id"`
-	LastRotationRequestKey pgtype.Text        `json:"last_rotation_request_key"`
-}
-
-func (q *Queries) UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (UpdateSpacePublicInviteEnabledRow, error) {
+func (q *Queries) UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (SpacePublicInvite, error) {
 	row := q.db.QueryRow(ctx, updateSpacePublicInviteEnabled,
 		arg.Enabled,
 		arg.LastActorID,
 		arg.TenantID,
 		arg.SpaceID,
 	)
-	var i UpdateSpacePublicInviteEnabledRow
+	var i SpacePublicInvite
 	err := row.Scan(
 		&i.TenantID,
 		&i.SpaceID,
 		&i.Handle,
 		&i.InviteCode,
+		&i.InviteWords,
 		&i.Generation,
 		&i.StateEpoch,
 		&i.Enabled,
