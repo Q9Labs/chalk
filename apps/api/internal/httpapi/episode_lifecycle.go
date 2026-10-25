@@ -492,7 +492,7 @@ func newEpisodeResponse(episode episodes.Episode) episodeResponse {
 }
 
 func newParticipantResponse(participant episodes.Participant) participantResponse {
-	return participantResponse{ID: participant.ID.String(), TenantID: participant.TenantID.String(), SpaceID: participant.SpaceID.String(), EpisodeID: participant.EpisodeID.String(), IdentityID: optionalIDString(participant.IdentityID), Role: participant.Role, Capabilities: append([]string(nil), participant.Capabilities...), Generation: participant.Generation, Status: participant.Status}
+	return participantResponse{ID: participant.ID.String(), TenantID: participant.TenantID.String(), SpaceID: participant.SpaceID.String(), EpisodeID: participant.EpisodeID.String(), IdentityID: optionalIDString(participant.IdentityID), Role: participant.Role, Capabilities: append([]string{}, participant.Capabilities...), Generation: participant.Generation, Status: participant.Status}
 }
 
 func newParticipantLifecycleResponse(participant episodes.Participant, intent episodes.Intent) participantLifecycleResponse {

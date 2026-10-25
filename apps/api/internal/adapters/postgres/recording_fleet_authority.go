@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
@@ -23,7 +24,7 @@ type recordingFleetAuthorityQuerier interface {
 	AbandonRecordingFleetBootstrap(context.Context, sqlc.AbandonRecordingFleetBootstrapParams) (string, error)
 	ActivateRecordingFleetBootstrap(context.Context, sqlc.ActivateRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error)
 	AuthorizeRecordingFleetWorker(context.Context, sqlc.AuthorizeRecordingFleetWorkerParams) (bool, error)
-	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (bool, error)
+	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (sqlc.AuthorizeRecordingFleetWorkerClaimRow, error)
 	CloseRecordingFleetNodeAdmission(context.Context, sqlc.CloseRecordingFleetNodeAdmissionParams) (string, error)
 	GetRecordingFleetDemand(context.Context, sqlc.GetRecordingFleetDemandParams) (sqlc.GetRecordingFleetDemandRow, error)
 	ListRecordingFleetNodeObservations(context.Context, sqlc.ListRecordingFleetNodeObservationsParams) ([]sqlc.ListRecordingFleetNodeObservationsRow, error)
@@ -60,7 +61,8 @@ func (r RecordingFleetAuthorityRepository) AbandonBootstrap(ctx context.Context,
 }
 
 type RecordingFleetAuthorityRepository struct {
-	queries recordingFleetAuthorityQuerier
+	admissionLimits recordingpipeline.AdmissionLimits
+	queries         recordingFleetAuthorityQuerier
 }
 
 func NewRecordingFleetAuthorityRepository(queries recordingFleetAuthorityQuerier) RecordingFleetAuthorityRepository {
@@ -72,7 +74,7 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 		return recorderfleet.Demand{}, recorderfleet.ErrProviderUnavailable
 	}
 	row, err := r.queries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{
-		Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
+		RecordingCap: int32(r.admissionLimits.WithDefaults().RecordingCap), Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
 	})
 	if err != nil {
 		return recorderfleet.Demand{}, fmt.Errorf("read recording fleet demand: %w", err)
@@ -80,10 +82,14 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 	if row.Revision == "" || !row.ObservedAt.Valid {
 		return recorderfleet.Demand{}, recorderfleet.ErrInventoryDrift
 	}
-	return recorderfleet.Demand{
+	demand := recorderfleet.Demand{
 		Revision: row.Revision, DesiredNodes: int(row.DesiredNodes), ScheduledPrewarms: int(row.ScheduledPrewarms),
 		HeldStarts: int(row.HeldStarts), QueuedJobs: int(row.QueuedJobs), ObservedAt: row.ObservedAt.Time,
-	}, nil
+	}
+	if key.Role == workeridentity.RoleCapture {
+		demand.CaptureCapacity = &recorderfleet.CaptureCapacityDemand{SlotDemand: int(row.SlotDemand), PhysicalNodeFloor: int(row.PhysicalNodeFloor)}
+	}
+	return demand, nil
 }
 
 func (r RecordingFleetAuthorityRepository) ObserveNodes(ctx context.Context, key recorderfleet.PoolKey, observedAt time.Time) ([]recorderfleet.NodeObservation, error) {
@@ -299,14 +305,17 @@ func (r RecordingFleetAuthorityRepository) AuthorizeWorkerClaim(ctx context.Cont
 	if r.queries == nil {
 		return recorderfleet.ErrProviderUnavailable
 	}
-	authorized, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
+	claim, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
 		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID),
 	})
 	if err != nil {
 		return fmt.Errorf("authorize recording fleet worker claim: %w", err)
 	}
-	if !authorized {
+	if claim.AdmissionClosed {
 		return recorderfleet.ErrAdmissionClosed
+	}
+	if !claim.Authorized {
+		return recorderfleet.ErrNodeNotFound
 	}
 	return nil
 }
@@ -380,3 +389,8 @@ func isUniqueViolation(err error) bool {
 }
 
 var _ recorderfleetauthority.Repository = RecordingFleetAuthorityRepository{}
+
+func (r RecordingFleetAuthorityRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingFleetAuthorityRepository {
+	r.admissionLimits = limits.WithDefaults()
+	return r
+}

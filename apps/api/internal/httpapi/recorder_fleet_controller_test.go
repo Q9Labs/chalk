@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,30 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
+
+func TestRecorderFleetDemandPreservesV1AndNegotiatesSlots(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	capacity := &recorderfleet.CaptureCapacityDemand{SlotDemand: 2, PhysicalNodeFloor: 3}
+	service := &recorderFleetControllerServiceStub{demand: recorderfleet.Demand{Revision: "slots", DesiredNodes: 3, HeldStarts: 2, ObservedAt: now, CaptureCapacity: capacity}}
+	controllerID, _ := utilities.NewID()
+	router := NewRecorderFleetControllerRouter(service, recorderFleetControllerVerifierStub{identity: recorderfleet.ControllerIdentity{ControllerID: controllerID}}, "nightly", nil)
+	legacy := httptest.NewRecorder()
+	router.ServeHTTP(legacy, httptest.NewRequest(http.MethodGet, "/internal/v1/recorder/fleet/demand?role=capture", nil))
+	const v1 = `{"schema_version":"recorder_fleet_demand.v1","environment":"nightly","role":"capture","revision":"slots","desired_nodes":3,"scheduled_prewarms":0,"held_starts":2,"queued_jobs":0,"observed_at":"2026-09-06T12:00:00Z"}`
+	if legacy.Code != http.StatusOK || strings.TrimSpace(legacy.Body.String()) != v1 {
+		t.Fatalf("v1 wire changed: status=%d body=%s", legacy.Code, legacy.Body.String())
+	}
+	server := httptest.NewTLSServer(router)
+	defer server.Close()
+	client, err := recorderfleetcontrol.New(recorderfleetcontrol.Config{BaseURL: server.URL, HTTPClient: server.Client(), Key: recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	demand, err := client.GetDemand(t.Context(), recorderfleet.PoolKey{Environment: "nightly", Role: workeridentity.RoleCapture})
+	if err != nil || !reflect.DeepEqual(demand, service.demand) {
+		t.Fatalf("v2 demand=%+v error=%v", demand, err)
+	}
+}
 
 func TestRecorderFleetControllerRouterMatchesClientContract(t *testing.T) {
 	t.Parallel()

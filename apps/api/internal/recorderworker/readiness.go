@@ -181,7 +181,7 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 			if ctx.Err() != nil {
 				return errors.Join(ctx.Err(), unexpectedDaemonError(daemonErr, authorityDraining), closeErr)
 			}
-			if authorityDraining && expectedDaemonDrainError(daemonErr) {
+			if (authorityDraining || errors.Is(daemonErr, ErrWorkerDraining)) && expectedDaemonDrainError(daemonErr) {
 				return closeErr
 			}
 			if daemonErr == nil {
@@ -203,7 +203,11 @@ func (r *ReadinessReporter) Run(ctx context.Context, daemon DrainableWorkerDaemo
 				return r.shutdown(ctx, daemon, cancelRun, daemonResult, failure)
 			}
 			if !receipt.AdmissionOpen {
-				daemon.Drain()
+				if graceful, ok := daemon.(interface{ CloseAdmission() }); ok {
+					graceful.CloseAdmission()
+				} else {
+					daemon.Drain()
+				}
 				authorityDraining = true
 				refresh = nil
 				continue

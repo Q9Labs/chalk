@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -554,6 +555,10 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 		}
 		if body.ReadyCapacity < 0 || len(body.Reason) > 256 || body.Resources != nil && !body.Resources.Valid(time.Now().UTC()) {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder pool health")
+			return
+		}
+		if body.ReadyCapacity > recorderfleet.MaxWorkerSlots {
+			writeError(w, http.StatusBadRequest, "request.invalid", fmt.Sprintf("Recorder ready capacity must be between 0 and %d", recorderfleet.MaxWorkerSlots))
 			return
 		}
 		observedAt := time.Now().UTC()

@@ -22,7 +22,10 @@ func TestTranscriptDownloadLifetime(t *testing.T) {
 		t.Run(fmt.Sprint(seconds), func(t *testing.T) {
 			downloads := &recordingDownloadHTTPStub{signedAt: time.Now()}
 			endpoint := transcriptArtifactDownloadEndpoint(service, downloads, &documentAuthorizer{})
-			_, err := endpoint.handle(ctx, createTranscriptDownloadRequest{TenantID: tenantID, TranscriptID: transcriptID, Body: createTranscriptDownloadBody{ExpiresInSeconds: seconds}})
+			response, err := endpoint.handle(ctx, createTranscriptDownloadRequest{TenantID: tenantID, TranscriptID: transcriptID, Body: createTranscriptDownloadBody{ExpiresInSeconds: seconds}})
+			if err == nil && response.SignedHeaders == nil {
+				t.Fatal("signed_headers must be an object, got null")
+			}
 			if seconds < 1 || seconds > 300 {
 				if !errors.Is(err, apiErrorInvalidURLExpiration) || downloads.calls != 0 {
 					t.Fatalf("invalid lifetime: error = %v, signing calls = %d", err, downloads.calls)

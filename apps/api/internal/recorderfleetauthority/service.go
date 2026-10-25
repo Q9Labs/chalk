@@ -154,7 +154,7 @@ func (s Service) PublishPool(ctx context.Context, projection recorderfleet.PoolP
 }
 
 func (s Service) RecordWorkerObservation(ctx context.Context, observation WorkerObservation) (recorderfleet.NodeObservation, error) {
-	if observation.Identity.WorkerID.IsZero() || !validRole(observation.Identity.Role) || observation.ReadyCapacity < 0 || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen || observation.Resources != nil && !observation.Resources.Valid(s.now().UTC()) {
+	if observation.Identity.WorkerID.IsZero() || !validRole(observation.Identity.Role) || observation.ReadyCapacity < 0 || observation.ReadyCapacity > recorderfleet.MaxWorkerSlots || observation.ObservedAt.IsZero() || !observation.Ready && observation.AdmissionOpen || observation.Resources != nil && !observation.Resources.Valid(s.now().UTC()) {
 		return recorderfleet.NodeObservation{}, recorderfleet.ErrRoleFence
 	}
 	return s.repository.RecordWorkerObservation(ctx, s.environment, observation)
@@ -241,6 +241,9 @@ func (v *BoundWorkerVerifier) Verify(request *http.Request) (workeridentity.Iden
 		authorize = v.authorizer.AuthorizeWorkerClaim
 	}
 	if err := authorize(request.Context(), identity); err != nil {
+		if errors.Is(err, recorderfleet.ErrAdmissionClosed) {
+			return workeridentity.Identity{}, err
+		}
 		return workeridentity.Identity{}, errors.Join(workeridentity.ErrUnverifiedPeer, err)
 	}
 	return identity, nil

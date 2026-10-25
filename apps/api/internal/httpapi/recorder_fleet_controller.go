@@ -106,8 +106,14 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 				return
 			}
 		}
+		schema := recorderfleet.DemandSchemaVersion
+		if request.Header.Get("X-Chalk-Fleet-Slot-Demand") == "1" && key.Role == workeridentity.RoleCapture && demand.CaptureCapacity != nil {
+			schema = recorderfleet.SlotDemandSchemaVersion
+		} else {
+			demand.CaptureCapacity = nil
+		}
 		writeJSON(w, http.StatusOK, recorderFleetDemandResponse{
-			SchemaVersion: recorderfleet.DemandSchemaVersion, Environment: environment,
+			SchemaVersion: schema, Environment: environment,
 			Role: key.Role, Demand: demand,
 		})
 	}

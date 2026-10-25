@@ -304,18 +304,29 @@ variable "reserved_capture_input_mbps" {
 }
 
 variable "ready_spare" {
-  description = "Cost-first recorder profile has no idle or implicit capture spare."
+  description = "Free Capture slots to keep ready; zero preserves the cost-first default."
   type        = number
   default     = 0
 
   validation {
-    condition     = var.ready_spare == 0
-    error_message = "ready_spare must be zero for this profile."
+    condition     = var.ready_spare >= 0 && floor(var.ready_spare) == var.ready_spare
+    error_message = "ready_spare must be a non-negative integer slot count."
+  }
+}
+
+variable "capture_max_nodes" {
+  description = "Maximum Capture droplets, including the free-slot floor."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.capture_max_nodes >= 1 && floor(var.capture_max_nodes) == var.capture_max_nodes
+    error_message = "capture_max_nodes must be a positive integer."
   }
 }
 
 variable "capture_episodes_per_node" {
-  description = "Qualified serial capture density for a two-vCPU node."
+  description = "Qualified Capture slots per node; keep one until density is measured."
   type        = number
   default     = 1
 }
