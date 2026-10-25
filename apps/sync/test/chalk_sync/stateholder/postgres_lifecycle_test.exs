@@ -73,10 +73,14 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
       assert recovery.mode == if(@joined, do: :replay, else: :terminal)
 
       if @joined do
-        Postgrex.query!(connection, "update participants set last_left_reason = 'left' where id = $1", [UUID.dump!(identity.participant_id)])
+        Postgrex.query!(
+          connection,
+          "update participants set last_left_reason = 'left' where id = $1",
+          [UUID.dump!(identity.participant_id)]
+        )
+
         assert {:ok, %{mode: :terminal}} = Postgres.recover(identity, cursor)
       end
-
 
       assert {:ok, %{mode: :terminal}} =
                Postgres.recover(
