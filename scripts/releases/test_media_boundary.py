@@ -104,6 +104,7 @@ CASE_COMMANDS = {
     ('bad-json', ''): INSTALLED + ' lambda init plan-log show',
     ('missing-state', ''): FIRST_INSTALL + ' plan show apply state lambda schedule',
     ('partial-state', ''): 'config list state artifact list state upload init-first list state-list import-log plan show apply state lambda schedule',
+    ('scheduler-repair', ''): INSTALLED + ' lambda init plan-log show plan-lambda show plan show apply state lambda schedule',
     ('no-op', 'disabled-scheduler'): INSTALLED + ' lambda init plan-log show plan-lambda show plan show state lambda schedule',
     ('missing-state', 'production'): 'config list artifact list',
     ('missing-state', 'plan-final-replace'): FIRST_INSTALL + ' plan show',
@@ -182,6 +183,8 @@ class DispatcherBoundary(unittest.TestCase):
                 if mode == 'binding':
                     function = next(item for item in state['resources'] if item['type'] == 'aws_lambda_function')
                     function['instances'][0]['attributes']['environment'][0]['variables']['CHALK_RELEASE_ID'] = 'example-previous'
+                if mode == 'scheduler-repair':
+                    next(item for item in state['resources'] if item['type'] == 'aws_scheduler_schedule')['instances'][0]['attributes']['state'] = 'DISABLED'
                 (root / 'installed-state.json').write_text(json.dumps(state))
                 initial = copy.deepcopy(state)
                 if mode == 'missing-state':
@@ -195,6 +198,8 @@ class DispatcherBoundary(unittest.TestCase):
                                                  'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE'))
                 aws_environment['AWS_PROFILE'] = ''
                 (root / 'aws-environment.json').write_text(json.dumps(aws_environment))
+                (root / 'binding.json').write_text(json.dumps(dict(release_id='example-release', manifest_digest='sha256:' + media.digest(manifest.read_bytes()),
+                                                                   corpus=value['dispatcher']['corpus_digest'], zip_digest=ZIP_DIGEST)))
                 (root / 'paths.json').write_text(json.dumps(dict(module=str(media.MODULE), root=str(media.ROOT / 'infrastructure/nightly/transcription'))))
                 args = SimpleNamespace(region='example', config_parameter='/example/config', environment='production' if fault == 'production' else 'nightly',
                                        manifest=manifest, output=output, dry_run=False)

@@ -26,10 +26,16 @@ OPERATIONS = {('ssm', 'get-parameter'), ('s3api', 'list-objects-v2'), ('s3api', 
               ('lambda', 'get-function-configuration'), ('scheduler', 'get-schedule')}
 LAMBDA = 'module.dispatcher.aws_lambda_function.dispatcher'
 LOG_GROUP = 'module.dispatcher.aws_cloudwatch_log_group.dispatcher'
+SCHEDULER = 'module.dispatcher.aws_scheduler_schedule.reconcile'
 
 
 def reply(value):
     print(json.dumps(value))
+
+
+def serial():
+    """Return the state generation: every apply and import changes the state, so an older saved plan is stale."""
+    return int((root / 'serial').read_text()) if (root / 'serial').exists() else 0
 
 
 def attributes(kind):
@@ -42,44 +48,81 @@ def declared(path):
     return {name for name, body in blocks if 'default' not in body}, {name for name, _ in blocks}
 
 
+def same(actual, expected, message):
+    """Compare as JSON text, so the number 1 is not the boolean true."""
+    if json.dumps(actual, sort_keys=True) != json.dumps(expected, sort_keys=True):
+        raise SystemExit(message)
+
+
+def selected_object():
+    """Return the object a release must select (the one this run uploaded, else the installed one) and its base64 hash."""
+    uploads = json.loads((root / 'uploads.json').read_text()) if (root / 'uploads.json').exists() else {}
+    if uploads:
+        (key, item), = uploads.items()
+        return dict(artifact_s3_bucket=item['bucket'], artifact_s3_key=key, artifact_s3_object_version=item['version']), item['hash']
+    function = attributes('aws_lambda_function')
+    return dict(artifact_s3_bucket=function['s3_bucket'], artifact_s3_key=function['s3_key'], artifact_s3_object_version=function['s3_object_version']), function['source_code_hash']
+
+
 def check_configuration(directory):
     """Reject the configuration directory the way `tofu init` and `tofu validate` would."""
     nightly, module = Path(paths['root']), Path(paths['module'])
     if (directory / '.terraform.lock.hcl').read_bytes() != (nightly / '.terraform.lock.hcl').read_bytes():
         raise SystemExit('provider lock file is not the checked-in lock file')
+    binding = json.loads((root / 'binding.json').read_text())
+    chosen, object_hash = selected_object()
+    release = dict(release_id=binding['release_id'], release_manifest_digest=binding['manifest_digest'], deepinfra_corpus_digest=binding['corpus'],
+                   artifact_sha256=binding['zip_digest'], artifact_sha256_base64=object_hash, scheduler_state='ENABLED')
     if (directory / 'main.tf.json').exists():
         tree = json.loads((directory / 'main.tf.json').read_text())
-        backend = tree['terraform']['backend']['s3']
-        if backend != {'bucket': config['dispatcher']['state_bucket'], 'key': config['dispatcher']['state_key'], 'region': 'example', 'encrypt': True, 'use_lockfile': True}:
-            raise SystemExit('backend is not the encrypted, locked dispatcher state')
-        if tree['provider'] != {'aws': {'region': 'example'}}:
-            raise SystemExit('unexpected provider configuration')
-        inputs = tree['module']['dispatcher']
-        if Path(inputs['source']) != module:
-            raise SystemExit('module source is not the dispatcher module')
-        required, known = declared(module / 'variables.tf')
-        names = set(inputs) - {'source'}
-        identity = dict(environment_name='nightly', function_name=config['dispatcher']['function_name'],
-                        scheduler_name=config['dispatcher']['scheduler_name'], scheduler_group_name=config['dispatcher']['scheduler_group'],
-                        control_api_url='https://nightly-api.chalkmeet.com', control_api_audience='chalk-nightly-control-api')
-        if not required <= names <= known or {key: inputs[key] for key in identity} != identity:
-            raise SystemExit('module inputs do not match the module declarations')
-        live = dict(attributes('aws_lambda_function')['environment'][0]['variables'], CHALK_RELEASE_ID=inputs['release_id'],
-                    CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'], DEEPINFRA_CORPUS_DIGEST=inputs['deepinfra_corpus_digest'])
+        inputs = tree.pop('module')['dispatcher']
+        same(tree, dict(terraform=dict(required_providers=dict(aws=dict(source='hashicorp/aws', version='~> 5.0')),
+                                       backend=dict(s3=dict(bucket=config['dispatcher']['state_bucket'], key=config['dispatcher']['state_key'],
+                                                            region='example', encrypt=True, use_lockfile=True))),
+                        provider=dict(aws=dict(region='example'))), 'backend, providers or outputs are not the dispatcher root')
+        function, log, invoke = attributes('aws_lambda_function'), attributes('aws_cloudwatch_log_group'), attributes('aws_lambda_function_event_invoke_config')
+        target = attributes('aws_scheduler_schedule')['target'][0]
+        retry = target['retry_policy'][0]
+        variables = function['environment'][0]['variables']
+        live = dict(variables, CHALK_RELEASE_ID=release['release_id'], CHALK_RELEASE_MANIFEST_DIGEST=release['release_manifest_digest'],
+                    DEEPINFRA_CORPUS_DIGEST=release['deepinfra_corpus_digest'])
         live.pop('CHALK_CONFIG_DIGEST')
-        if inputs['config_digest'] != 'sha256:' + hashlib.sha256(json.dumps(live, sort_keys=True, separators=(',', ':')).encode()).hexdigest():
-            raise SystemExit('config digest does not describe the Lambda environment')
+        expected = dict({**release, **chosen}, source=str(module), environment_name='nightly', function_name=config['dispatcher']['function_name'],
+                        scheduler_name=config['dispatcher']['scheduler_name'], scheduler_group_name=config['dispatcher']['scheduler_group'],
+                        control_api_url='https://nightly-api.chalkmeet.com', control_api_audience='chalk-nightly-control-api',
+                        api_workload_auth_parameter_arn=variables['CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN'],
+                        privacy_gate_accepted=variables['TRANSCRIPTION_PRIVACY_GATE_ACCEPTED'] == 'true',
+                        handler=function['handler'], timeout_seconds=function['timeout'], memory_size=function['memory_size'],
+                        ephemeral_storage_size=function['ephemeral_storage'][0]['size'], reserved_concurrency=function['reserved_concurrent_executions'],
+                        async_max_event_age_seconds=invoke['maximum_event_age_in_seconds'], async_maximum_retry_attempts=invoke['maximum_retry_attempts'],
+                        scheduler_input_json=target['input'], scheduler_max_event_age_seconds=retry['maximum_event_age_in_seconds'],
+                        scheduler_maximum_retry_attempts=retry['maximum_retry_attempts'], log_retention_days=log['retention_in_days'],
+                        log_kms_key_arn=log['kms_key_id'] or None, failure_queue_kms_key_arn=attributes('aws_sqs_queue')['kms_master_key_id'] or None,
+                        alarm_actions=attributes('aws_cloudwatch_metric_alarm')['alarm_actions'], ssm_kms_key_arns=[],
+                        config_digest='sha256:' + hashlib.sha256(json.dumps(live, sort_keys=True, separators=(',', ':')).encode()).hexdigest())
+        required, known = declared(module / 'variables.tf')
+        if not required <= set(expected) - {'source'} <= known:
+            raise SystemExit('module inputs do not match the module declarations')
+        same(inputs, expected, 'module inputs do not describe the installed dispatcher and the requested release')
         return
     expected = (nightly / 'main.tf').read_text().replace('source = "../../opentofu/modules/aws-transcription-dispatcher"', 'source = "' + str(module) + '"')
     if (directory / 'main.tf').read_text() != expected or (directory / 'variables.tf').read_bytes() != (nightly / 'variables.tf').read_bytes():
         raise SystemExit('first-install root is not the checked-in root')
+    values = dict(release, privacy_gate_accepted=True, **{key: value for key, value in chosen.items() if key != 'artifact_s3_bucket'})
+    values['config_digest'] = 'sha256:' + hashlib.sha256(json.dumps({key: value for key, value in values.items() if key != 'privacy_gate_accepted'}, sort_keys=True).encode()).hexdigest()
     required, known = declared(directory / 'variables.tf')
-    values = json.loads((directory / 'terraform.tfvars.json').read_text())
-    if not required <= set(values) <= known or values['privacy_gate_accepted'] is not True or values['scheduler_state'] != 'ENABLED':
+    if not required <= set(values) <= known:
         raise SystemExit('variable values do not match the root declarations')
-    described = {key: value for key, value in values.items() if key not in ('privacy_gate_accepted', 'config_digest')}
-    if values['config_digest'] != 'sha256:' + hashlib.sha256(json.dumps(described, sort_keys=True).encode()).hexdigest():
-        raise SystemExit('config digest does not describe the variable values')
+    same(json.loads((directory / 'terraform.tfvars.json').read_text()), values, 'variable values do not describe the requested release')
+
+
+def listed(changed):
+    """List every module resource the way a plan does: the changed entries sit between untouched ones."""
+    installed = json.loads((root / 'installed-state.json').read_text())
+    quiet = [dict(address='module.dispatcher.' + item['type'] + '.' + item['name'], change=dict(actions=['no-op']))
+             for item in installed['resources'] if 'module.dispatcher.' + item['type'] + '.' + item['name'] not in changed]
+    middle = len(quiet) // 2
+    return quiet[:middle] + [dict(address=address, change=change) for address, change in changed.items()] + quiet[middle:]
 
 
 def planned(inputs, target):
@@ -88,9 +131,9 @@ def planned(inputs, target):
     stage = 'final' if target is None else 'log' if target.endswith('aws_cloudwatch_log_group.dispatcher') else 'lambda'
     if mode == 'bad-json':
         return 'not JSON'
-    address, change = LAMBDA, dict(actions=['no-op'])
+    changed = {}
     if mode in ('missing-state', 'partial-state') and not (root / 'applied').exists():
-        change = dict(actions=['create'], before=None, after={})
+        changed[LAMBDA] = dict(actions=['create'], before=None, after={})
     if mode == 'binding' or fault == f'plan-{stage}-field' and stage != 'log':
         before = attributes('aws_lambda_function')
         after = copy.deepcopy(before)
@@ -102,20 +145,24 @@ def planned(inputs, target):
             after[tag].update(chalk_release_id=inputs['release_id'], chalk_release_manifest_digest=inputs['release_manifest_digest'], chalk_config_digest=inputs['config_digest'])
         if fault == f'plan-{stage}-field':
             after['handler'] = 'index.other'
-        change = dict(actions=['update'], before=before, after=after)
+        changed[LAMBDA] = dict(actions=['update'], before=before, after=after)
     elif fault == f'plan-{stage}-field':
         before = dict(attributes('aws_cloudwatch_log_group'), tags={}, tags_all={})
         after = copy.deepcopy(before)
         after['retention_in_days'] = 14
         for tag in ('tags', 'tags_all'):
             after[tag]['chalk_release_id'] = inputs['release_id']
-        address, change = LOG_GROUP, dict(actions=['update'], before=before, after=after)
+        changed[LOG_GROUP] = dict(actions=['update'], before=before, after=after)
     elif fault == f'plan-{stage}-replace':
-        address, change = LOG_GROUP if stage == 'log' else LAMBDA, dict(actions=['delete', 'create'], before={}, after={})
+        changed[LOG_GROUP if stage == 'log' else LAMBDA] = dict(actions=['delete', 'create'], before={}, after={})
     elif fault == f'plan-{stage}-resource':
-        address, change = 'module.dispatcher.aws_iam_role.dispatcher', dict(actions=['update'], before={}, after={'name': 'unexpected'})
-    return dict(resource_changes=[dict(address=address, change=change)],
-                output_changes=dict(identity=dict(actions=['update'] if mode == 'output-update' else ['no-op'])))
+        changed['module.dispatcher.aws_iam_role.dispatcher'] = dict(actions=['update'], before={}, after={'name': 'unexpected'})
+    if mode == 'scheduler-repair' and stage == 'final':
+        before = attributes('aws_scheduler_schedule')
+        changed[SCHEDULER] = dict(actions=['update'], before=before, after=dict(before, state='ENABLED'))
+    return dict(resource_changes=listed(changed),
+                output_changes=dict(function_arn=dict(actions=['no-op']), identity=dict(actions=['update'] if mode == 'output-update' else ['no-op']),
+                                    scheduler_arn=dict(actions=['no-op'])))
 
 
 if command == 'aws':
@@ -161,7 +208,7 @@ if command == 'aws':
                 response['Environment']['Variables']['CHALK_RELEASE_ID'] = 'example-previous'
         reply(response)
     elif operation == 'get-schedule':
-        reply(dict(State='DISABLED' if fault == 'disabled-scheduler' else 'ENABLED'))
+        reply(dict(State='DISABLED' if fault == 'disabled-scheduler' else attributes('aws_scheduler_schedule')['state']))
     else:
         raise SystemExit('unexpected AWS operation')
 else:
@@ -176,14 +223,24 @@ else:
     elif operation == 'plan':
         target = next((word.removeprefix('-target=') for word in args if word.startswith('-target=')), None)
         saved = directory / next(word.removeprefix('-out=') for word in args if word.startswith('-out='))
-        saved.write_text(json.dumps(dict(plan=planned(inputs, target), inputs=inputs)))
+        saved.write_text(json.dumps(dict(plan=planned(inputs, target), inputs=inputs, serial=serial())))
     elif operation == 'show':
-        plan = json.loads((directory / args[-1]).read_text())['plan']
+        saved = directory / args[-1]
+        shown = json.loads((root / 'shown.json').read_text()) if (root / 'shown.json').exists() else {}
+        shown[args[-1]] = hashlib.sha256(saved.read_bytes()).hexdigest()
+        (root / 'shown.json').write_text(json.dumps(shown))
+        plan = json.loads(saved.read_text())['plan']
         print(plan if isinstance(plan, str) else json.dumps(plan))
     elif operation == 'state':
         print('\n'.join('module.dispatcher.' + item['type'] + '.' + item['name'] for item in state['resources']))
     elif operation == 'apply':
-        inputs = json.loads((directory / args[-1]).read_text())['inputs']
+        saved = directory / args[-1]
+        shown = json.loads((root / 'shown.json').read_text()) if (root / 'shown.json').exists() else {}
+        if shown.get(args[-1]) != hashlib.sha256(saved.read_bytes()).hexdigest():
+            raise SystemExit('saved plan is not the plan that was shown')
+        if json.loads(saved.read_text())['serial'] != serial():
+            raise SystemExit('Saved plan is stale')
+        inputs = json.loads(saved.read_text())['inputs']
         uploads = json.loads((root / 'uploads.json').read_text()) if (root / 'uploads.json').exists() else {}
         installed = attributes('aws_lambda_function')
         objects = [(item['bucket'], key, item['version'], item['hash']) for key, item in uploads.items()]
@@ -197,7 +254,12 @@ else:
         function.update(source_code_hash=inputs['artifact_sha256_base64'], s3_key=inputs['artifact_s3_key'], s3_object_version=inputs['artifact_s3_object_version'])
         function['environment'][0]['variables'].update(CHALK_RELEASE_ID=inputs['release_id'], CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'],
                                                       DEEPINFRA_CORPUS_DIGEST=inputs['deepinfra_corpus_digest'], CHALK_CONFIG_DIGEST=inputs['config_digest'])
+        schedule = attributes('aws_scheduler_schedule')
+        schedule['state'] = inputs['scheduler_state']
         (root / 'state.json').write_text(json.dumps(state))
         (root / 'applied').touch()
-    elif operation != 'import':
+        (root / 'serial').write_text(str(serial() + 1))
+    elif operation == 'import':
+        (root / 'serial').write_text(str(serial() + 1))
+    else:
         raise SystemExit('unexpected tofu operation')
