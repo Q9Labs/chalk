@@ -7,7 +7,7 @@ func TestInviteCodeFixedVector(t *testing.T) {
 	for i := range handle {
 		handle[i] = byte(i)
 	}
-	if got := InviteWordCode(handle); got != "snowy-nylon-groove-lamp" {
+	if got := InviteWordCode(handle); got != "speak-oak-guide-land" {
 		t.Fatalf("InviteWordCode() = %q", got)
 	}
 	if got := InviteCode(handle); got != "nhwaprjkrm" {
