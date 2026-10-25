@@ -111,7 +111,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       client = connect(port, ctx.identity)
       recording_id = UUID.generate()
 
-      operation =
+      {:ok, operation} =
         Operation.new("abandoned_recording_start", :start_recording, %{
           "recordingId" => recording_id
         })
@@ -234,12 +234,16 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
 
       task =
         Task.async(fn ->
-          System.cmd(
-            "pnpm",
-            ["exec", "tsx", script, ctx.sdk, to_string(ctx.port), token(ctx.identity), marker],
-            cd: Path.expand("../../../../..", __DIR__),
-            stderr_to_stdout: true
-          )
+          {output, code} =
+            System.cmd(
+              "pnpm",
+              ["exec", "tsx", script, ctx.sdk, to_string(ctx.port), token(ctx.identity), marker],
+              cd: Path.expand("../../../../..", __DIR__),
+              stderr_to_stdout: true
+            )
+
+          IO.puts(output)
+          {output, code}
         end)
 
       assert eventually(fn -> File.exists?(marker <> ".ready") end, 1000)
@@ -259,7 +263,6 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       assert eventually(fn -> episode_status(ctx) == "ended" end)
       File.write!(marker <> ".ended", "return")
       {output, code} = Task.await(task, 35_000)
-      IO.puts(output)
       assert code == 0, output
       assert_no_leave(ctx)
     end
