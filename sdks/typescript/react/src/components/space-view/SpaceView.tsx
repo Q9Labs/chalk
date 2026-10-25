@@ -158,7 +158,7 @@ export function SpaceView({
   }, [deadline]);
   useEffect(() => {
     const previous = previousCountdown.current;
-    const next = callCountdown(deadline, now, previous?.deadline === deadline ? previous.seconds : undefined);
+    const next = callCountdown(deadline, now, previous?.deadline === deadline ? previous?.seconds : undefined);
     previousCountdown.current = { deadline, seconds: next.seconds };
     if (previous?.deadline !== deadline) setLimitWarning(null);
     if (next.warning !== null) setLimitWarning({ id: `time-limit-${deadline}-${next.warning}`, minutes: next.warning });

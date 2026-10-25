@@ -46,6 +46,8 @@ try {
             .waitFor();
         }
       }
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(300);
       await page.screenshot({ path: resolve(output, `${before ? "before" : "after"}-${state}-${device}.png`) });
     }
   }

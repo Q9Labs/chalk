@@ -10,9 +10,16 @@ try {
   const page = await context.newPage();
   fixture.recordPage(page);
   const frames = [];
+  let rejectCommand = false;
   await context.routeWebSocket(`${syncOrigin}*`, (socket) => {
     const server = socket.connectToServer();
-    socket.onMessage((message) => server.send(message));
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (rejectCommand && frame.type === "command") {
+        rejectCommand = false;
+        socket.send(JSON.stringify({ type: "ack", command_id: frame.command_id, delivery: "original", outcome: "rejected", reason: "episode_ended" }));
+      } else server.send(message);
+    });
     server.onMessage((message) => {
       const frame = JSON.parse(String(message));
       if (frame.type !== "ping" && frame.type !== "pong") frames.push(frame);
@@ -120,6 +127,13 @@ try {
     await page.getByRole("button", { name: "Start a new call", exact: true }).click();
     await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
     console.log("PASS owner Start a new call opens a usable new call");
+    rejectCommand = true;
+    await page.getByRole("button", { name: "Reactions", exact: true }).click();
+    await page.getByRole("button", { name: "Raise hand", exact: true }).click();
+    await page.getByRole("heading", { name: "The call ended", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await page.waitForURL(`${origin}/dashboard`);
+    console.log("PASS lost end event plus episode_ended command rejection leaves the browser call usable");
     const anonymousContext = await fixture.browser.newContext();
     const anonymous = await anonymousContext.newPage();
     await anonymous.goto(`${origin}/space`);
