@@ -2,6 +2,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.ExternalSyncNode
   alias ChalkSync.Live.MediaPlaneTestAdapter
@@ -297,7 +298,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   test "judge: a renewal blocked by Postgres closes the live socket instead of silent expiry",
        ctx do
     client = connect(ctx.port, ctx.identity)
-    coordinator = ChalkSync.Episodes.Coordinator.whereis(ctx.identity.episode)
+    coordinator = Coordinator.whereis(ctx.identity.episode)
     [socket] = :sys.get_state(coordinator).sockets |> Map.keys()
     [lock_connection] = SyncPostgres.start_connections(@database_url, 1)
     Process.unlink(lock_connection)
