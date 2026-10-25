@@ -159,18 +159,26 @@ func (q *Queries) AuthorizeRecordingFleetWorker(ctx context.Context, arg Authori
 }
 
 const authorizeRecordingFleetWorkerClaim = `-- name: AuthorizeRecordingFleetWorkerClaim :one
-select exists (
-    select 1 from recording_fleet_nodes
+with worker as (
+    select state, ready, admission_open, ready_capacity, observed_at
+    from recording_fleet_nodes
     where environment = $1
       and role = $2
       and worker_id = $3
-      and state = 'active'
+      and state in ('active', 'draining')
+)
+select exists (
+    select 1 from worker
+    where state = 'active'
       and ready
       and admission_open
       and ready_capacity > 0
       and observed_at > clock_timestamp() - interval '2 minutes'
       and observed_at <= clock_timestamp()
-) as authorized
+) as authorized,
+exists (
+    select 1 from worker where state = 'draining' or not admission_open
+) as admission_closed
 `
 
 type AuthorizeRecordingFleetWorkerClaimParams struct {
@@ -179,11 +187,16 @@ type AuthorizeRecordingFleetWorkerClaimParams struct {
 	WorkerID    pgtype.UUID `json:"worker_id"`
 }
 
-func (q *Queries) AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (bool, error) {
+type AuthorizeRecordingFleetWorkerClaimRow struct {
+	Authorized      bool `json:"authorized"`
+	AdmissionClosed bool `json:"admission_closed"`
+}
+
+func (q *Queries) AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error) {
 	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorkerClaim, arg.Environment, arg.Role, arg.WorkerID)
-	var authorized bool
-	err := row.Scan(&authorized)
-	return authorized, err
+	var i AuthorizeRecordingFleetWorkerClaimRow
+	err := row.Scan(&i.Authorized, &i.AdmissionClosed)
+	return i, err
 }
 
 const closeRecordingFleetNodeAdmission = `-- name: CloseRecordingFleetNodeAdmission :one

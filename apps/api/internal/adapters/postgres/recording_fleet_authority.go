@@ -24,7 +24,7 @@ type recordingFleetAuthorityQuerier interface {
 	AbandonRecordingFleetBootstrap(context.Context, sqlc.AbandonRecordingFleetBootstrapParams) (string, error)
 	ActivateRecordingFleetBootstrap(context.Context, sqlc.ActivateRecordingFleetBootstrapParams) (sqlc.RecordingFleetNode, error)
 	AuthorizeRecordingFleetWorker(context.Context, sqlc.AuthorizeRecordingFleetWorkerParams) (bool, error)
-	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (bool, error)
+	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (sqlc.AuthorizeRecordingFleetWorkerClaimRow, error)
 	CloseRecordingFleetNodeAdmission(context.Context, sqlc.CloseRecordingFleetNodeAdmissionParams) (string, error)
 	GetRecordingFleetDemand(context.Context, sqlc.GetRecordingFleetDemandParams) (sqlc.GetRecordingFleetDemandRow, error)
 	ListRecordingFleetNodeObservations(context.Context, sqlc.ListRecordingFleetNodeObservationsParams) ([]sqlc.ListRecordingFleetNodeObservationsRow, error)
@@ -305,14 +305,17 @@ func (r RecordingFleetAuthorityRepository) AuthorizeWorkerClaim(ctx context.Cont
 	if r.queries == nil {
 		return recorderfleet.ErrProviderUnavailable
 	}
-	authorized, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
+	claim, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
 		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID),
 	})
 	if err != nil {
 		return fmt.Errorf("authorize recording fleet worker claim: %w", err)
 	}
-	if !authorized {
+	if claim.AdmissionClosed {
 		return recorderfleet.ErrAdmissionClosed
+	}
+	if !claim.Authorized {
+		return recorderfleet.ErrNodeNotFound
 	}
 	return nil
 }

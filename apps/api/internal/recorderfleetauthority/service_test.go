@@ -101,7 +101,7 @@ func TestBoundWorkerVerifierAllowsDrainCompletionButRejectsClaimsAndRevocation(t
 		t.Fatalf("draining heartbeat error/calls = %v/%d", err, authorizer.workerCalls)
 	}
 	request, _ = http.NewRequest(http.MethodPost, "https://control.example/internal/v1/recorder/jobs/claim", nil)
-	if _, err := verifier.Verify(request); !errors.Is(err, recorderfleet.ErrAdmissionClosed) || authorizer.claimCalls != 1 {
+	if _, err := verifier.Verify(request); !errors.Is(err, recorderfleet.ErrAdmissionClosed) || errors.Is(err, workeridentity.ErrUnverifiedPeer) || authorizer.claimCalls != 1 {
 		t.Fatalf("closed claim error/calls = %v/%d", err, authorizer.claimCalls)
 	}
 	authorizer.workerErr = recorderfleet.ErrRoleFence

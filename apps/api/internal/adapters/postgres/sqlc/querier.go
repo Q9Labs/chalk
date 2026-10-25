@@ -20,7 +20,7 @@ type Querier interface {
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
 	AuthorizeRecordingArtifactReplay(ctx context.Context, arg AuthorizeRecordingArtifactReplayParams) (bool, error)
 	AuthorizeRecordingFleetWorker(ctx context.Context, arg AuthorizeRecordingFleetWorkerParams) (bool, error)
-	AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (bool, error)
+	AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error)
 	AuthorizeRecordingJobLease(ctx context.Context, arg AuthorizeRecordingJobLeaseParams) (pgtype.UUID, error)
 	AuthorizeRecordingRenderInput(ctx context.Context, arg AuthorizeRecordingRenderInputParams) (AuthorizeRecordingRenderInputRow, error)
 	CancelArtifactJob(ctx context.Context, arg CancelArtifactJobParams) (ArtifactJob, error)

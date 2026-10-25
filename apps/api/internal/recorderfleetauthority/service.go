@@ -241,6 +241,9 @@ func (v *BoundWorkerVerifier) Verify(request *http.Request) (workeridentity.Iden
 		authorize = v.authorizer.AuthorizeWorkerClaim
 	}
 	if err := authorize(request.Context(), identity); err != nil {
+		if errors.Is(err, recorderfleet.ErrAdmissionClosed) {
+			return workeridentity.Identity{}, err
+		}
 		return workeridentity.Identity{}, errors.Join(workeridentity.ErrUnverifiedPeer, err)
 	}
 	return identity, nil
