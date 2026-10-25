@@ -561,6 +561,10 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	}[operation]
 	body, _, err := c.do(ctx, http.MethodPost, path, requestBody, ControlPlaneResponseLimit)
 	if err != nil {
+		var responseError HTTPError
+		if errors.As(err, &responseError) && responseError.Status == http.StatusConflict && responseError.Code == "recording.capture_media_stopped" {
+			return capturesignaling.Execution{}, capturesignaling.ErrMediaStopped
+		}
 		return capturesignaling.Execution{}, err
 	}
 	var response recorderCaptureSignalingResponse

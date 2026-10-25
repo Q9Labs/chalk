@@ -46,7 +46,7 @@ func TestEmptyEpisodeLinger(t *testing.T) {
 	queries := sqlc.New(tx)
 	claim := func(want bool) {
 		t.Helper()
-		rows, err := queries.ClaimEmptyEpisodeLingers(ctx, 50)
+		rows, err := queries.ClaimEmptyEpisodeLingers(ctx, sqlc.ClaimEmptyEpisodeLingersParams{BatchSize: 50})
 		if err != nil {
 			t.Fatal(err)
 		}

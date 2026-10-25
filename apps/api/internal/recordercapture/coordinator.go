@@ -76,16 +76,17 @@ type Snapshot struct {
 type Coordinator struct {
 	mu sync.Mutex
 
-	authority    AttemptAuthority
-	signaling    SignalingPort
-	peer         PeerPort
-	maxRounds    int
-	now          func() time.Time
-	bootstrapped bool
-	closed       bool
-	connection   captureplane.CaptureConnection
-	plan         captureplan.Plan
-	tracks       map[string]captureplane.PulledCaptureTrack
+	authority       AttemptAuthority
+	signaling       SignalingPort
+	peer            PeerPort
+	maxRounds       int
+	now             func() time.Time
+	bootstrapped    bool
+	closed          bool
+	connection      captureplane.CaptureConnection
+	plan            captureplan.Plan
+	cleanupRevision captureplane.PlanRevision
+	tracks          map[string]captureplane.PulledCaptureTrack
 }
 
 func NewCoordinator(authority AttemptAuthority, signaling SignalingPort, peer PeerPort, config Config) (*Coordinator, error) {
@@ -163,6 +164,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 		c.bootstrapped = true
 		return c.snapshotLocked(), nil
 	}
+	c.plan = plan
 	createNegotiation, err := c.createConnection(ctx, plan)
 	if err != nil {
 		return Snapshot{}, err
@@ -175,6 +177,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.validatePulledTracks(pull, pullMetadata, requested); err != nil {
 		return Snapshot{}, err
 	}
+	c.setActiveTracks(pull.Tracks)
 	if err := c.peer.RegisterTracks(pull.Tracks); err != nil {
 		return Snapshot{}, fmt.Errorf("register initial capture tracks: %w", err)
 	}
@@ -264,15 +267,13 @@ func (c *Coordinator) Close(ctx context.Context, force bool) error {
 	if c.closed {
 		return nil
 	}
-	if !c.bootstrapped {
-		return ErrNotBootstrapped
-	}
 	if c.connection.ConnectionReference.IsZero() {
 		c.closed = true
 		return nil
 	}
 	// The media deadline forbids new capture, not fenced provider cleanup.
-	metadata := c.authority.metadata(c.plan.Revision(), captureplane.OperationCloseCaptureConnection, stableIdempotencyKey(c.authority.CaptureEpoch, c.plan.Revision(), captureplane.OperationCloseCaptureConnection, "connection"))
+	revision := max(c.plan.Revision(), c.cleanupRevision)
+	metadata := c.authority.metadata(revision, captureplane.OperationCloseCaptureConnection, stableIdempotencyKey(c.authority.CaptureEpoch, revision, captureplane.OperationCloseCaptureConnection, "connection"))
 	tracks := c.snapshotLocked().Tracks
 	input := captureplane.CloseCaptureConnectionInput{Metadata: metadata, Connection: c.connection.ConnectionReference, Tracks: tracks, Force: force}
 	execution, err := c.execute(ctx, captureplane.OperationCloseCaptureConnection, metadata.PlanRevision, metadata.IdempotencyKey, capturesignaling.CommandInput{CloseCaptureConnection: &input})
@@ -501,6 +502,9 @@ func (c *Coordinator) execute(ctx context.Context, operation captureplane.Operat
 		Identity:        capturesignaling.CommandIdentity{Operation: operation, PlanRevision: revision, IdempotencyKey: key},
 		Input:           input,
 	}
+	// A newer command can advance the durable connection even if its reply is
+	// lost or reconciliation later fails. Retirement must cover that revision.
+	c.cleanupRevision = max(c.cleanupRevision, revision)
 	execution, err := c.signaling.Execute(ctx, capturesignaling.ExecuteRequest{Command: command})
 	if err != nil {
 		return capturesignaling.Execution{}, err

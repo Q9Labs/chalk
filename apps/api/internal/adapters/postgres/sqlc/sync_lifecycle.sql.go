@@ -78,30 +78,45 @@ func (q *Queries) ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32)
 const claimEmptyEpisodeLingers = `-- name: ClaimEmptyEpisodeLingers :many
 select episodes.tenant_id, episodes.space_id, episodes.id as episode_id
 from episodes
-join sync_episode_control control on control.tenant_id = episodes.tenant_id
-    and control.space_id = episodes.space_id and control.episode_id = episodes.id
-join lateral (
+join sync_episode_control control on control.tenant_id=episodes.tenant_id
+    and control.space_id=episodes.space_id and control.episode_id=episodes.id
+left join episode_presence_leases presence on presence.tenant_id=episodes.tenant_id
+    and presence.space_id=episodes.space_id and presence.episode_id=episodes.id
+cross join lateral (
     select max(p.left_at) as last_departure_at from participants p
-    where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
+    where p.tenant_id=episodes.tenant_id and p.space_id=episodes.space_id and p.episode_id=episodes.id
         and p.joined_at is not null
-) departure on departure.last_departure_at is not null
-where episodes.status = 'active'
+) departure
+cross join lateral (
+    select least(
+        case when not exists (
+            select 1 from participants p
+            where p.tenant_id=episodes.tenant_id and p.space_id=episodes.space_id and p.episode_id=episodes.id
+                and p.status in ('joining', 'active', 'leaving')
+        ) then departure.last_departure_at end,
+        case when $1::timestamptz is not null then greatest(
+            $1::timestamptz,
+            coalesce(presence.expires_at, episodes.created_at + interval '120 seconds')
+        ) end
+    ) as empty_since
+) empty_window
+where episodes.status='active' and empty_window.empty_since is not null
     and not exists (
         select 1 from sync_external_operations o
-        where o.tenant_id = episodes.tenant_id and o.space_id = episodes.space_id and o.episode_id = episodes.id
-            and o.operation_name = 'tenant_end_episode'
-            and o.request_key = 'empty-episode-linger-' || ((extract(epoch from departure.last_departure_at) * 1000000)::bigint)::text
+        where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
+            and o.operation_name='tenant_end_episode'
+            and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
     )
-    and not exists (
-        select 1 from participants p
-        where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
-            and p.status in ('joining', 'active', 'leaving')
-    )
-    and departure.last_departure_at + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= now()
+    and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
 order by episodes.id
 for update of episodes skip locked
-limit $1
+limit $2
 `
+
+type ClaimEmptyEpisodeLingersParams struct {
+	PresenceRecoverAfter pgtype.Timestamptz `json:"presence_recover_after"`
+	BatchSize            int32              `json:"batch_size"`
+}
 
 type ClaimEmptyEpisodeLingersRow struct {
 	TenantID  pgtype.UUID `json:"tenant_id"`
@@ -109,8 +124,8 @@ type ClaimEmptyEpisodeLingersRow struct {
 	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
-func (q *Queries) ClaimEmptyEpisodeLingers(ctx context.Context, batchSize int32) ([]ClaimEmptyEpisodeLingersRow, error) {
-	rows, err := q.db.Query(ctx, claimEmptyEpisodeLingers, batchSize)
+func (q *Queries) ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEpisodeLingersParams) ([]ClaimEmptyEpisodeLingersRow, error) {
+	rows, err := q.db.Query(ctx, claimEmptyEpisodeLingers, arg.PresenceRecoverAfter, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -864,48 +879,63 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 }
 
 const episodeLingerStillDue = `-- name: EpisodeLingerStillDue :one
-select departure.last_departure_at::timestamptz as last_departure_at, coalesce(
-    episodes.status = 'active'
-    and not exists (
-        select 1 from participants p
-        where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
-            and p.status in ('joining', 'active', 'leaving')
-    )
+select empty_window.empty_since::timestamptz as empty_since, coalesce(
+    episodes.status='active'
     and not exists (
         select 1 from sync_external_operations o
-        where o.tenant_id = episodes.tenant_id and o.space_id = episodes.space_id and o.episode_id = episodes.id
-            and o.operation_name = 'tenant_end_episode'
-            and o.request_key = 'empty-episode-linger-' || ((extract(epoch from departure.last_departure_at) * 1000000)::bigint)::text
+        where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
+            and o.operation_name='tenant_end_episode'
+            and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
     )
-    and departure.last_departure_at + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= now(),
-    false
+    and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp(), false
 )::boolean as due
 from episodes
+left join episode_presence_leases presence on presence.tenant_id=episodes.tenant_id
+    and presence.space_id=episodes.space_id and presence.episode_id=episodes.id
 cross join lateral (
     select max(p.left_at) as last_departure_at from participants p
-    where p.tenant_id = episodes.tenant_id and p.space_id = episodes.space_id and p.episode_id = episodes.id
+    where p.tenant_id=episodes.tenant_id and p.space_id=episodes.space_id and p.episode_id=episodes.id
         and p.joined_at is not null
 ) departure
-where episodes.tenant_id = $1 and episodes.space_id = $2 and episodes.id = $3
+cross join lateral (
+    select least(
+        case when not exists (
+            select 1 from participants p
+            where p.tenant_id=episodes.tenant_id and p.space_id=episodes.space_id and p.episode_id=episodes.id
+                and p.status in ('joining', 'active', 'leaving')
+        ) then departure.last_departure_at end,
+        case when $1::timestamptz is not null then greatest(
+            $1::timestamptz,
+            coalesce(presence.expires_at, episodes.created_at + interval '120 seconds')
+        ) end
+    ) as empty_since
+) empty_window
+where episodes.tenant_id=$2 and episodes.space_id=$3 and episodes.id=$4
 `
 
 type EpisodeLingerStillDueParams struct {
-	TenantID  pgtype.UUID `json:"tenant_id"`
-	SpaceID   pgtype.UUID `json:"space_id"`
-	EpisodeID pgtype.UUID `json:"episode_id"`
+	PresenceRecoverAfter pgtype.Timestamptz `json:"presence_recover_after"`
+	TenantID             pgtype.UUID        `json:"tenant_id"`
+	SpaceID              pgtype.UUID        `json:"space_id"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
 }
 
 type EpisodeLingerStillDueRow struct {
-	LastDepartureAt pgtype.Timestamptz `json:"last_departure_at"`
-	Due             bool               `json:"due"`
+	EmptySince pgtype.Timestamptz `json:"empty_since"`
+	Due        bool               `json:"due"`
 }
 
-// Discovery uses an earlier snapshot. Recheck occupancy, clock and window key
-// after locking the Episode, which serializes all admission paths.
+// Recheck both empty signals after the Episode lock. Heartbeat renewal and
+// admission use that same lock, so an earlier reconnect cancels the old window.
 func (q *Queries) EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error) {
-	row := q.db.QueryRow(ctx, episodeLingerStillDue, arg.TenantID, arg.SpaceID, arg.EpisodeID)
+	row := q.db.QueryRow(ctx, episodeLingerStillDue,
+		arg.PresenceRecoverAfter,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+	)
 	var i EpisodeLingerStillDueRow
-	err := row.Scan(&i.LastDepartureAt, &i.Due)
+	err := row.Scan(&i.EmptySince, &i.Due)
 	return i, err
 }
 

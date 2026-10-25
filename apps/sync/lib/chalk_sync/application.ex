@@ -28,6 +28,7 @@ defmodule ChalkSync.Application do
         retention_scheduler_child(),
         boot_check_child(),
         {ChalkSync.Operations.Readiness, []},
+        presence_runtime_child(),
         listener_child()
       ]
       |> Enum.reject(&is_nil/1)
@@ -204,6 +205,17 @@ defmodule ChalkSync.Application do
          plug: ChalkSync.Transport.Router,
          ip: Application.fetch_env!(:chalk_sync, :listen_ip),
          port: port}
+    end
+  end
+
+  defp presence_runtime_child do
+    case Application.fetch_env!(:chalk_sync, :stateholder) do
+      ChalkSync.Stateholder.Postgres ->
+        {ChalkSync.Stateholder.Postgres.PresenceRuntime,
+         url: Application.fetch_env!(:chalk_sync, :database_url)}
+
+      _adapter ->
+        nil
     end
   end
 end

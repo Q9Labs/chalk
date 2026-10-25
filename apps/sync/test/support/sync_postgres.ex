@@ -858,6 +858,7 @@ defmodule ChalkSync.SyncPostgres do
         Map.get(policy, :maximum_episode_duration_seconds, 86_400),
       "artifact_policy" => artifact_policy
     }
+    |> Map.merge(Map.take(policy, ["linger_window_seconds"]))
   end
 
   defp pending_join_policy do

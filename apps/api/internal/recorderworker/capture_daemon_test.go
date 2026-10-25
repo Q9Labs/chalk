@@ -278,7 +278,7 @@ func TestCaptureDaemonReportsFailureWithoutIncrementingEpoch(t *testing.T) {
 	if control.failed.CaptureEpoch != claim.Envelope.CaptureEpoch {
 		t.Fatalf("failure epoch = %d, want server epoch %d", control.failed.CaptureEpoch, claim.Envelope.CaptureEpoch)
 	}
-	if control.failed.AvailableAt != now.Add(DefaultAttemptRetryDelay) || control.failed.ErrorCode != defaultCaptureFailureCode {
+	if control.failed.AvailableAt != now.Add(30*time.Second) || control.failed.ErrorCode != defaultCaptureFailureCode {
 		t.Fatalf("failure = %+v", control.failed)
 	}
 }

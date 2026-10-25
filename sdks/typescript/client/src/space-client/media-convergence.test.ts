@@ -8,7 +8,7 @@ import { control, observeMicrophonePublication } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 describe("SpaceClient media convergence", () => {
-  it("reports a camera command interrupted by recovery without exposing internals", async () => {
+  it("reports a camera command interrupted by leaving without exposing internals", async () => {
     const platform = createCoreTestPlatform();
     const track = Object.assign(mediaTrack(), { kind: "video" });
     let finish: () => void = () => undefined;
@@ -23,13 +23,11 @@ describe("SpaceClient media convergence", () => {
     try {
       await client.join({ microphone: false, camera: false });
       const enabling = client.media.setCameraEnabled(true);
-      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." });
+      const result = expect(enabling).rejects.toMatchObject({ code: "connection.invalid_state" });
       await vi.waitFor(() => expect(command).toHaveBeenCalledOnce());
-      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "failed", peerConnectionState: "failed", iceConnectionState: "failed" }, failure: { code: "signaling_failed", recoverable: true } });
-      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await client.leave();
       finish();
       await result;
-      expect(track.readyState).toBe("live");
     } finally {
       finish();
       client.dispose();

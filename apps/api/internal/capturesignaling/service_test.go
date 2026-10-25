@@ -977,3 +977,5 @@ func (p *memoryPort) FailCommand(_ context.Context, failure Failure) error {
 	p.failure = failure
 	return nil
 }
+
+func (p *memoryPort) CheckDispatch(context.Context, Command) error { return nil }

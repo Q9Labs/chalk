@@ -28,6 +28,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.Lifecycle
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
+  alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.PublicationGrants
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
   alias ChalkSync.Stateholder.Postgres.RoleTransitionPlanner
@@ -89,6 +90,23 @@ defmodule ChalkSync.Stateholder.Postgres do
       {:error, {:retryable, reason}} -> {:retryable, reason}
       {:error, _reason} -> {:retryable, :dependency_unavailable}
     end
+  end
+
+  @impl ChalkSync.Stateholder
+  def renew_presence(%Identity{} = identity) do
+    case Postgrex.transaction(
+           Database.connection(identity.episode),
+           &Presence.transaction(&1, identity),
+           timeout: @transaction_timeout_ms
+         ) do
+      {:ok, :ok} -> :ok
+      {:error, {:error, reason}} -> {:error, reason}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
   @impl ChalkSync.Stateholder

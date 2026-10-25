@@ -388,6 +388,19 @@ defmodule ChalkSync.Transport.SocketV1 do
     end
   end
 
+  defp handle_frame({:recovery_ack, ack}, %{phase: :live, coordinator: coordinator} = state) do
+    case Coordinator.acknowledge_recovery(
+           coordinator,
+           ack.recovery_id,
+           ack.revision,
+           ack.state_digest,
+           self()
+         ) do
+      :ok -> {:ok, state}
+      {:error, _reason} -> protocol_error(:recovery_required, state)
+    end
+  end
+
   defp handle_frame({:recovery_ack, _ack}, state),
     do: protocol_error(:recovery_required, state)
 
@@ -575,6 +588,13 @@ defmodule ChalkSync.Transport.SocketV1 do
             ],
        do: protocol_error(:collaboration_not_negotiated, state)
 
+  defp handle_frame(:ping, %{phase: :live} = state) do
+    case Stateholder.renew_presence(state.identity) do
+      :ok -> {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
+      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
+    end
+  end
+
   defp handle_frame(:ping, state),
     do: {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
 
@@ -747,6 +767,11 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp pop_outbound(%{coordinator: coordinator} = state) do
     case Coordinator.pop(coordinator, self()) do
+      {:ok, encoded, :terminal_welcome} ->
+        {:stop, :normal, {1000, "participant inactive"},
+         {:text, encode_with_context(state, encoded)},
+         %{state | terminal: %{close_code: 1000, reason: :terminal_recovery}}}
+
       {:ok, encoded, :recovery_complete} ->
         next = state |> Map.put(:phase, :live) |> start_heartbeat() |> start_entry_deadline()
         send(self(), :collaboration_drain)
@@ -902,7 +927,7 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
-             Map.get(hello, :collaboration),
+             if(recovery.mode == :terminal, do: nil, else: Map.get(hello, :collaboration)),
              state.observability
            ),
          {:ok, coordinator} <-

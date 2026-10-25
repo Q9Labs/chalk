@@ -131,6 +131,13 @@ type EpisodeCreateRequest struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
+type EpisodePresenceLease struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	SpaceID   pgtype.UUID        `json:"space_id"`
+	EpisodeID pgtype.UUID        `json:"episode_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
 type Identity struct {
 	ID          pgtype.UUID        `json:"id"`
 	TenantID    pgtype.UUID        `json:"tenant_id"`
@@ -1240,6 +1247,11 @@ type SyncMediaPause struct {
 	Source                string             `json:"source"`
 	PublicationID         string             `json:"publication_id"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncPresenceRuntime struct {
+	Singleton    bool               `json:"singleton"`
+	RecoverAfter pgtype.Timestamptz `json:"recover_after"`
 }
 
 type SyncPublicationFence struct {
