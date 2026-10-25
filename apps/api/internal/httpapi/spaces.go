@@ -449,7 +449,7 @@ func newSpaceListResponse(list spaces.SpaceList) (spaceListResponse, error) {
 func newSpaceResponse(space spaces.Space) spaceResponse {
 	roles := make([]spaceRoleResponse, 0, len(space.Roles))
 	for _, role := range space.Roles {
-		roles = append(roles, spaceRoleResponse{ID: role.ID.String(), Name: role.Name, Capabilities: append([]string(nil), role.Capabilities...)})
+		roles = append(roles, spaceRoleResponse{ID: role.ID.String(), Name: role.Name, Capabilities: append([]string{}, role.Capabilities...)})
 	}
 	return spaceResponse{
 		ID:                            space.ID.String(),
