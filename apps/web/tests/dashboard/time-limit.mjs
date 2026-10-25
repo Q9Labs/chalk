@@ -39,6 +39,12 @@ try {
   const createdAt = sql(`select created_at from episodes where id='${episodeId}'`);
   const deadline = new Date(Math.ceil(new Date(createdAt).getTime() / 1000) * 1000 + 60000).toISOString();
   if (process.env.TIME_LIMIT_EXPECT_FIXED === "1") {
+    const dashboardPost = (data) =>
+      page.evaluate(async (data) => {
+        const session = await (await fetch("/auth/session")).json();
+        const response = await fetch("/dashboard-api/call", { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": session.csrfToken }, body: JSON.stringify(data) });
+        if (!response.ok) throw new Error(await response.text());
+      }, data);
     const headers = { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}`, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() };
     const updateDeadline = async (value) => {
       const response = await fetch(`${apiOrigin}/v1/tenants/${tenantId}/spaces/${spaceId}/episodes/${episodeId}/deadline`, { method: "POST", headers: { ...headers, "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ deadline_at: value }) });
@@ -56,8 +62,7 @@ try {
     const extended = sql(`select deadline_at from episodes where id='${episodeId}'`);
     assert.equal(Date.parse(extended), Date.parse(tenMinutes) + 1800000);
     await page.waitForFunction(() => !document.querySelector('[data-part="call-timer"]')?.textContent.includes("left"));
-    const replay = await context.request.post(`${origin}/dashboard-api/call`, { headers: { Origin: origin }, data: body });
-    assert.equal(replay.status(), 200, await replay.text());
+    await dashboardPost(body);
     await delay(1000);
     assert.equal(sql(`select deadline_at from episodes where id='${episodeId}'`), extended, "retry must not add another 30 minutes");
     console.log("PASS Add 30 min through dashboard server; deadline moved exactly 30 min; replay did not extend twice");
@@ -65,8 +70,7 @@ try {
     await page.locator('[data-part="toast"]').filter({ hasText: "5 minutes left" }).waitFor();
     console.log("PASS deadline change re-armed the warning");
     const ceiling = new Date(new Date(createdAt).getTime() + 86400000).toISOString();
-    const clamped = await context.request.post(`${origin}/dashboard-api/call`, { headers: { Origin: origin }, data: { action: "extend-call", spaceId, episodeId, deadline: new Date(Date.parse(ceiling) + 1800000).toISOString(), idempotencyKey: crypto.randomUUID() } });
-    assert.equal(clamped.status(), 200, await clamped.text());
+    await dashboardPost({ action: "extend-call", spaceId, episodeId, deadline: new Date(Date.parse(ceiling) + 1800000).toISOString(), idempotencyKey: crypto.randomUUID() });
     for (let attempt = 0; attempt < 100 && Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)) < Date.parse(ceiling); attempt++) await delay(100);
     assert.equal(Date.parse(sql(`select deadline_at from episodes where id='${episodeId}'`)), Date.parse(ceiling));
     await page.clock.install();
@@ -75,8 +79,7 @@ try {
     assert.equal(await page.getByRole("button", { name: "Add 30 min", exact: true }).count(), 0);
     await page.clock.setSystemTime(new Date());
     console.log("PASS extension clamped at the 24 h ceiling and action hidden");
-    const admission = await context.request.post(`${origin}/dashboard-api/call`, { headers: { Origin: origin }, data: { action: "set-admission", spaceId, admission: "anyone" } });
-    assert.equal(admission.status(), 200, await admission.text());
+    await dashboardPost({ action: "set-admission", spaceId, admission: "anyone" });
     const call = await (await context.request.get(`${origin}/dashboard-api/call?spaceId=${spaceId}`)).json();
     const guestContext = await fixture.browser.newContext();
     const guest = await guestContext.newPage();

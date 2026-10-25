@@ -158,6 +158,11 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const startingCall = useRef(false);
   const [startError, setStartError] = useState<string | null>(null);
   useEffect(() => {
+    startKey.current = intentKey();
+    startingCall.current = false;
+    setStartError(null);
+  }, [spaceId]);
+  useEffect(() => {
     const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
@@ -216,7 +221,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
           if (startingCall.current) return;
           startingCall.current = true;
           owner.clearReload();
-          setStartError(null);
+          setStartError("Starting a new call…");
           void act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current })
             .then(({ call }) => navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } }))
             .catch(() => setStartError("Couldn’t start a new call. Try again."))
