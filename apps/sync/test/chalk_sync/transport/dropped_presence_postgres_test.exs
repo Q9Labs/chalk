@@ -116,7 +116,11 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
           "recordingId" => recording_id
         })
 
-      assert {:ok, _} = Postgres.begin_operation(ctx.identity, operation)
+      assert {:ok, %{external_operation_id: start_id}} =
+               Postgres.begin_operation(ctx.identity, operation)
+
+      assert eventually(fn -> operation_status(ctx, start_id) == "applied" end)
+      capture_ready(ctx, recording_id, start_id)
       assert eventually(fn -> recording_status(ctx, recording_id) == "recording" end)
       Client.close_tcp(client)
       before = attendance(ctx)
@@ -474,6 +478,40 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       Postgrex.query!(ctx.connection, "select status from episodes where id=$1", [
         UUID.dump!(ctx.fixture.episode.episode_id)
       ]).rows
+
+    status
+  end
+
+  # Trusted capture-worker input; the production consumer/finalizer applies it.
+  defp capture_ready(ctx, recording_id, start_id) do
+    request = "abandoned_capture_ready"
+
+    Postgrex.query!(
+      ctx.connection,
+      """
+      insert into sync_external_operations (
+        tenant_id,space_id,episode_id,external_operation_id,request_key,
+        request_fingerprint,operation_name,recording_id,payload,fence_active
+      ) values ($1,$2,$3,$4,$5,$6,'recording_capture_ready',$7,$8,false)
+      """,
+      scope(ctx) ++
+        [
+          UUID.dump!(UUID.generate()),
+          request,
+          :crypto.hash(:sha256, request),
+          UUID.dump!(recording_id),
+          %{"recordingId" => recording_id, "startOperationId" => start_id, "captureEpoch" => 1}
+        ]
+    )
+  end
+
+  defp operation_status(ctx, id) do
+    [[status]] =
+      Postgrex.query!(
+        ctx.connection,
+        "select status from sync_external_operations where external_operation_id=$1",
+        [UUID.dump!(id)]
+      ).rows
 
     status
   end
