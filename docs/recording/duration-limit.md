@@ -92,8 +92,9 @@ Episode or an existing reservation.
   4,096-chunk manifest bound remains unchanged.
 
 Runtime rollback must retain the widened database bounds. Do not roll back the
-migration: it explicitly refuses a down migration because longer reservations
-and artifacts may already exist. Reverting the code restores the two-hour
+migration while longer reservations or artifacts remain: its down step validates
+the restored two-hour bounds and fails atomically if any row exceeds them.
+Reverting the code restores the two-hour
 ceiling for new Recordings. In-flight four-hour Recordings retain their sealed
 deadlines, but old validators can reject their authority or exports above two
 hours. Finish or stop those Recordings and finish their exports before rollback.

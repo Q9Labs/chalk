@@ -2478,7 +2478,7 @@ create table recording_reservations (
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
     policy_snapshot_version text not null check (policy_snapshot_version = 'episode_config.v2'),
     participant_count integer not null check (participant_count between 1 and 10),
-    max_duration_seconds integer not null check (max_duration_seconds between 1 and 14400),
+    max_duration_seconds integer not null constraint recording_reservations_max_duration_seconds_check1 check (max_duration_seconds between 1 and 14400),
     input_bitrate_bps bigint not null check (input_bitrate_bps between 1 and 4000000),
     state text not null check (state in ('reserved', 'released', 'expired')),
     starts_at timestamptz,
