@@ -419,6 +419,13 @@ try {
     const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
     const keyId = (await keyResponse.json()).id;
+    const yearExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const yearKey = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "One year", scopes: ["spaces:read"], expiresAt: yearExpiry, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    assert.equal(yearKey.status, 200, await yearKey.clone().text());
+    const tooLate = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Too late", scopes: ["spaces:read"], expiresAt: new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString(), idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    assert.equal(tooLate.status, 400, await tooLate.clone().text());
+    assert.deepEqual(await tooLate.json(), { error: { code: "api_key_invalid_expiry" } });
+    console.log("PASS: real dashboard and API accept one-year keys and preserve expiry validation errors");
     assert.equal((await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Escalation", scopes: ["tenants:write"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken)).status, 400);
     const hookResponse = await post(ada, "/dashboard-api/developer", { action: "create-webhook", name: "Test", url: "https://example.com/hook?token=fixture-webhook-url-credential", enabled: true, eventTypes: ["episode.ended"], idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(hookResponse.status, 200, await hookResponse.clone().text());

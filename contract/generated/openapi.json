@@ -2158,7 +2158,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["api_key.invalid_expiry", "request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"]
           },
           "401": {
             "content": {
@@ -2481,7 +2481,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["api_key.invalid_id", "request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["api_key.invalid_expiry", "api_key.invalid_id", "request.invalid", "request.invalid_idempotency_key", "tenant.invalid_id"]
           },
           "401": {
             "content": {

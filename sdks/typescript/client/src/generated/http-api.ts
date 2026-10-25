@@ -58,6 +58,7 @@ const defaultGroup = HttpApiGroup.make("default")
       payload: S.CreateAPIKeyRequestBodySchema,
       success: S.CreateAPIKeyResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [
+        S.ApiKeyInvalidExpiryErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
@@ -469,6 +470,7 @@ const defaultGroup = HttpApiGroup.make("default")
       payload: S.RotateAPIKeyRequestBodySchema,
       success: S.RotateAPIKeyResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
+        S.ApiKeyInvalidExpiryErrorSchema.pipe(HttpApiSchema.status(400)),
         S.ApiKeyInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.RequestInvalidIdempotencyKeyErrorSchema.pipe(HttpApiSchema.status(400)),

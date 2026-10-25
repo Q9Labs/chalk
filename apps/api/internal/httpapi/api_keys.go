@@ -34,6 +34,9 @@ var (
 	apiErrorInvalidAPIKeyID = APIError{
 		Status: http.StatusBadRequest, Code: "api_key.invalid_id", Message: "Invalid API key id",
 	}
+	apiErrorInvalidAPIKeyExpiry = APIError{
+		Status: http.StatusBadRequest, Code: "api_key.invalid_expiry", Message: "API key expiry must be in the future and no more than 365 days from now.",
+	}
 	apiErrorAPIKeyNotFound = APIError{
 		Status: http.StatusNotFound, Code: "api_key.not_found", Message: "API key not found",
 	}
@@ -161,7 +164,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateAPIKeyRequest", createAPIKeyBody{}).
 		Responds(http.StatusCreated, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
-		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeySecretNotReplayable)...).
+		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyExpiry, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeySecretNotReplayable)...).
 		MapErrors(apiKeyAPIError)
 }
 
@@ -217,7 +220,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		Parameters(tenantIDParameter(), apiKeyIDParameter(), idempotencyKeyParameter()).
 		RequestBody("RotateAPIKeyRequest", rotateAPIKeyBody{}).
 		Responds(http.StatusOK, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
-		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyID, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive, apiErrorAPIKeySecretNotReplayable)...).
+		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyExpiry, apiErrorInvalidAPIKeyID, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive, apiErrorAPIKeySecretNotReplayable)...).
 		MapErrors(apiKeyAPIError)
 }
 
@@ -353,7 +356,9 @@ func apiKeyAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, apikeys.ErrInvalidAPIKeyID):
 		return apiErrorInvalidAPIKeyID, true
-	case errors.Is(err, apikeys.ErrInvalidName), errors.Is(err, apikeys.ErrInvalidScopes), errors.Is(err, apikeys.ErrInvalidExpiry):
+	case errors.Is(err, apikeys.ErrInvalidExpiry):
+		return apiErrorInvalidAPIKeyExpiry, true
+	case errors.Is(err, apikeys.ErrInvalidName), errors.Is(err, apikeys.ErrInvalidScopes):
 		return apiErrorInvalidRequest, true
 	case errors.Is(err, apikeys.ErrInvalidRequestKey):
 		return apiErrorInvalidRequestKey, true

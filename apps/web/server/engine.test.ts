@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Effect, Schema } from "effect";
-import { AdmitEpisodeParticipantPathParamsSchema, createChalkEffectClient } from "@q9labsai/chalk-client/effect";
+import { AdmitEpisodeParticipantPathParamsSchema, createChalkEffectClient, TenantIdSchema, DateTimeStringSchema } from "@q9labsai/chalk-client/effect";
 import { run, withSessionEngine } from "./engine";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
@@ -89,6 +89,27 @@ it("rejects a modified tenant cache and renews an expired one", async () => {
 });
 
 describe("engine failure diagnostics through the real SDK decoder", () => {
+  it.each([
+    { code: "api_key.invalid_expiry", expected: "api_key_invalid_expiry" },
+    { code: "request.invalid", expected: "invalid_request" },
+  ])("keeps key validation $code terminal instead of asking the person to retry", async ({ code, expected }) => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const api = await Effect.runPromise(
+      createChalkEffectClient({
+        baseUrl: "https://engine.example.test",
+        fetch: async () => Response.json({ error: { code, message: privateDetail } }, { status: 400 }),
+      }),
+    );
+    await expect(
+      run(
+        api.default.createAPIKey({
+          params: { tenant_id: Schema.decodeUnknownSync(TenantIdSchema)(tenantId) },
+          headers: { "Idempotency-Key": "expiry-validation" },
+          payload: { name: "Test", scopes: ["spaces:read"], expires_at: Schema.decodeUnknownSync(DateTimeStringSchema)("2027-10-25T23:59:00Z") },
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 400, code: expected });
+  });
   it.each([
     { code: "participant.not_active", expected: { status: 409, code: "participant_not_active" } },
     { code: privateDetail, expected: { status: 502, code: "engine_unavailable" } },

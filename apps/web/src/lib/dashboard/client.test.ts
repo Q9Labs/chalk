@@ -72,6 +72,13 @@ describe("dashboard client", () => {
     }
   });
 
+  it("shows the expiry policy instead of a retry toast", async () => {
+    const { module } = await client([json(400, { error: { code: "api_key_invalid_expiry" } })]);
+    const failure = await module.readPage("developer", {}).catch((error: unknown) => error);
+    expect(module.failureKind(failure)).toBe("terminal");
+    expect(module.errorMessage(failure)).toBe("API key expiry must be in the future and no more than 365 days from now.");
+  });
+
   it("asks for a fresh sign-in before a sensitive change", async () => {
     const { module } = await client([json(200, { profile, csrfToken: "t" }), json(401, { error: { code: "fresh_sign_in_required" } })]);
     const failure = await module.act("developer", { action: "revoke-key", keyId: "00000000-0000-4000-8000-000000000001" }).catch((error: unknown) => error);
