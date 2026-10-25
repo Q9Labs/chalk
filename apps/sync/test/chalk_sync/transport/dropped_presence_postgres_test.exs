@@ -236,6 +236,42 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     end
   end
 
+  test "compatibility rollout cannot expire a lease left by an earlier fenced entry", ctx do
+    first = connect(ctx.port, ctx.identity)
+    Client.close_tcp(first)
+    expire(ctx)
+
+    Postgrex.query!(
+      ctx.connection,
+      "update sync_entry_rollout set enforced=false where singleton",
+      []
+    )
+
+    on_exit(fn ->
+      Postgrex.query!(
+        ctx.connection,
+        "update sync_entry_rollout set enforced=true where singleton",
+        []
+      )
+    end)
+
+    returned = connect(ctx.port, ctx.identity)
+    on_exit(fn -> Client.close_tcp(returned) end)
+    assert probe(ctx, "tick") == 0
+    assert status(ctx) == "active"
+
+    Postgrex.query!(
+      ctx.connection,
+      "update sync_entry_rollout set enforced=true where singleton",
+      []
+    )
+
+    assert probe(ctx, "tick") == 0
+    assert status(ctx) == "active"
+    returned = returned |> Client.send_json(%{"type" => "ping"}) |> await_pong()
+    Client.close_tcp(returned)
+  end
+
   test "judge: two API instances and repeated expiry reserve one Leave", ctx do
     client = connect(ctx.port, ctx.identity)
     Client.close_tcp(client)
