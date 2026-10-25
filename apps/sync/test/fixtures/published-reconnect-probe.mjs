@@ -69,6 +69,9 @@ try {
   await until(() => welcomes.some((w) => w.mode === "terminal" && w.reason === "episode_ended"));
   await until(() => client.getSnapshot().connection.phase === "terminal");
   console.log("SDK_RETURN_PROOF=" + JSON.stringify({ version, connections, welcomes, recoveredBeforeEnd: true, completedRecoveries, closes, finalPhase: client.getSnapshot().connection.phase }));
+} catch (error) {
+  console.error("SDK_FAILURE=" + JSON.stringify({ version, connections, welcomes, closes, completedRecoveries, phase: client.getSnapshot().connection.phase }));
+  throw error;
 } finally {
   client.stop();
 }

@@ -388,6 +388,19 @@ defmodule ChalkSync.Transport.SocketV1 do
     end
   end
 
+  defp handle_frame({:recovery_ack, ack}, %{phase: :live, coordinator: coordinator} = state) do
+    case Coordinator.acknowledge_recovery(
+           coordinator,
+           ack.recovery_id,
+           ack.revision,
+           ack.state_digest,
+           self()
+         ) do
+      :ok -> {:ok, state}
+      {:error, _reason} -> protocol_error(:recovery_required, state)
+    end
+  end
+
   defp handle_frame({:recovery_ack, _ack}, state),
     do: protocol_error(:recovery_required, state)
 

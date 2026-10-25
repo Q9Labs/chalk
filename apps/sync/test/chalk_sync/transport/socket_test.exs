@@ -232,7 +232,7 @@ defmodule ChalkSync.Transport.SocketV1Test do
         end
 
       returned = Client.send_json(returned, Map.put(ack, invalid, wrong))
-      assert {:closed, 1012, _, _} = Client.recv(returned)
+      assert {:closed, 1002, _, _} = Client.recv(returned)
     end
   end
 

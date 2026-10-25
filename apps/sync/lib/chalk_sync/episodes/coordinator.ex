@@ -282,6 +282,7 @@ defmodule ChalkSync.Episodes.Coordinator do
       identity: identity,
       protocol_options: protocol_options,
       recovery: nil,
+      optional_recovery_ack: nil,
       enqueued_revision: 0,
       acknowledged_revision: 0,
       acknowledged_digest: nil,
@@ -377,6 +378,11 @@ defmodule ChalkSync.Episodes.Coordinator do
         state
       ) do
     case Map.fetch(state.sockets, socket) do
+      {:ok, %{optional_recovery_ack: {^recovery_id, ^revision, ^state_digest}}} ->
+        # Published 4.1 clients acknowledge up-to-date welcomes. It is optional:
+        # exact duplicates neither release credit nor advance recovery.
+        {:reply, :ok, state}
+
       {:ok, %{mode: :recovering} = subscriber} ->
         acknowledge_recovery_frame(
           state,
@@ -841,7 +847,16 @@ defmodule ChalkSync.Episodes.Coordinator do
         expected_ack: nil
       }
 
-      next_subscriber = %{subscriber | recovery: recovery_state}
+      optional_ack =
+        if recovery.mode == :up_to_date do
+          {recovery_id, recovery.head.revision, digest_hex(recovery.head.digest)}
+        end
+
+      next_subscriber = %{
+        subscriber
+        | recovery: recovery_state,
+          optional_recovery_ack: optional_ack
+      }
 
       acknowledgement =
         if recovery.mode == :snapshot do

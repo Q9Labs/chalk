@@ -274,6 +274,14 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
 
   # Long outages are an explicit acceptance run, not eight extra minutes in every CI run.
   if System.get_env("CHALK_SYNC_RESTART_PROOF") do
+    defp witness?(ctx),
+      do:
+        Postgrex.query!(
+          ctx.connection,
+          "select exists(select 1 from pg_locks where locktype='advisory' and classid=1128811595 and objid=1 and objsubid=2 and granted)",
+          []
+        ).rows == [[true]]
+
     for mode <- [:whole_runtime, :sync_only],
         seconds <- [2, 125],
         order <- [:api_first, :sync_first] do
@@ -456,14 +464,6 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
         "update sync_presence_runtime set recover_after=clock_timestamp()-interval '1 hour' where singleton",
         []
       )
-
-  defp witness?(ctx),
-    do:
-      Postgrex.query!(
-        ctx.connection,
-        "select exists(select 1 from pg_locks where locktype='advisory' and classid=1128811595 and objid=1 and objsubid=2 and granted)",
-        []
-      ).rows == [[true]]
 
   defp attendance(ctx),
     do:
