@@ -3,6 +3,8 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 )
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -18,4 +20,12 @@ func writeError(w http.ResponseWriter, status int, code string, message string) 
 			"message": message,
 		},
 	})
+}
+
+func cloneSignedHeaders(signed objectstorage.SignedURL) map[string][]string {
+	cloned := make(map[string][]string, len(signed.SignedHeader))
+	for name, values := range signed.SignedHeader {
+		cloned[name] = append([]string{}, values...)
+	}
+	return cloned
 }
