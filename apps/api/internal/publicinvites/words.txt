@@ -325,7 +325,6 @@ ember
 emblem
 emboss
 emerald
-enamel
 encore
 energy
 engine
@@ -335,6 +334,7 @@ entry
 equal
 equator
 eraser
+errand
 even
 evolve
 exact
