@@ -4,10 +4,11 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
 
-const fixture = await createDashboardProofFixture({ devicesMissing: true });
+const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "time-limit-runtime.webm" });
 const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, cleanup } = fixture;
 try {
   const page = await context.newPage();
+  fixture.recordPage(page);
   const frames = [];
   await context.routeWebSocket(`${syncOrigin}*`, (socket) => {
     const server = socket.connectToServer();
@@ -116,6 +117,33 @@ try {
     await fixture.deadlineGuest.getByRole("button", { name: "Home", exact: true }).click();
     await fixture.deadlineGuest.waitForURL(`${origin}/`);
     console.log("PASS all participants reached the reason-specific end page; guest Home works");
+    await page.getByRole("button", { name: "Start a new call", exact: true }).click();
+    await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+    console.log("PASS owner Start a new call opens a usable new call");
+    const anonymousContext = await fixture.browser.newContext();
+    const anonymous = await anonymousContext.newPage();
+    await anonymous.goto(`${origin}/space`);
+    await anonymous.getByLabel("Your name").fill("Anonymous Deadline Host");
+    await anonymous.getByRole("button", { name: "Join call", exact: true }).click();
+    await anonymous.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+    const slug = new URL(anonymous.url()).pathname.split("/").at(-1);
+    assert.match(slug, /^[a-z0-9-]+$/);
+    const [publicSpace, publicTenant, publicEpisode, publicCreated] = sql(`select s.id,s.tenant_id,e.id,e.created_at from spaces s join episodes e on e.space_id=s.id where s.slug='${slug}' and e.status='active'`).split("|");
+    assert(publicEpisode, "anonymous call must have an active real Episode");
+    const publicDeadline = new Date(Math.ceil(Date.parse(publicCreated) / 1000) * 1000 + 60000).toISOString();
+    const publicResponse = await fetch(`${apiOrigin}/v1/tenants/${publicTenant}/spaces/${publicSpace}/episodes/${publicEpisode}/deadline`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}`, "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ deadline_at: publicDeadline }),
+    });
+    assert.equal(publicResponse.status, 202, await publicResponse.text());
+    await anonymous.locator('[data-part="toast"]').filter({ hasText: "Sign up free for calls up to 24 hours." }).waitFor();
+    assert.equal(await anonymous.getByRole("button", { name: "Add 30 min", exact: true }).count(), 0);
+    await anonymous.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor({ timeout: 80000 });
+    await anonymous.getByRole("button", { name: "Home", exact: true }).waitFor();
+    await anonymous.getByRole("button", { name: "Sign up free", exact: true }).click();
+    await anonymous.getByRole("heading", { name: "Sign in to Chalk", exact: true }).waitFor();
+    console.log("PASS real anonymous call warning, time-limit end page and signup route");
   }
 } finally {
   await cleanup();
