@@ -38,8 +38,11 @@ try {
       const guest = await guestContext.newPage();
       await guest.goto(`${origin}${path}`);
       await guest.getByLabel("Your name").fill(name);
+      assert.equal(await guest.locator("html").getAttribute("data-chalk-theme"), "dark", "Both invite paths keep the default call theme");
       await guest.screenshot({ path: resolve(directory, `${name}.png`) });
       await guest.getByRole("button", { name: "Join call", exact: true }).click();
+      await guest.getByText(/Asking to join/).waitFor();
+      await owner.getByRole("button", { name: `Admit ${name}`, exact: true }).click();
       await guest.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
       await guest.screenshot({ path: resolve(directory, `${name}-joined.png`) });
       const live = await fetch(`${apiOrigin}/v1/tenants/${tenantId}/live-episodes?space_ids=${spaceId}`, { headers: { Authorization: `Bearer ${bindings.DASHBOARD_SERVICE_TOKEN}` } });
