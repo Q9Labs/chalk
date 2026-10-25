@@ -202,17 +202,17 @@ func (r *Reconciler) classifyInventory(inventory []Node, state Journal, now time
 			continue
 		}
 		if _, duplicate := nodes[node.ProviderID]; duplicate {
-			return nil, quarantined, ErrInventoryDrift
+			return nil, quarantined, fmt.Errorf("%w: duplicate_provider_id provider_id=%q", ErrInventoryDrift, node.ProviderID)
 		}
 		if _, duplicate := names[node.Name]; duplicate {
-			return nil, quarantined, ErrInventoryDrift
+			return nil, quarantined, fmt.Errorf("%w: duplicate_node_name node_name=%q", ErrInventoryDrift, node.Name)
 		}
 		nodes[node.ProviderID] = node
 		names[node.Name] = struct{}{}
 	}
 	slices.Sort(quarantined)
 	if len(quarantined) > 0 {
-		return nodes, quarantined, ErrInventoryDrift
+		return nodes, quarantined, fmt.Errorf("%w: quarantined_inventory provider_id=%q", ErrInventoryDrift, quarantined)
 	}
 	return nodes, quarantined, nil
 }
@@ -229,7 +229,7 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 			return state, Result{}, true, fmt.Errorf("confirm missing recorder node: %w", errors.Join(ErrProviderUnavailable, err))
 		}
 		if exists {
-			return state, Result{}, true, ErrInventoryDrift
+			return state, Result{}, true, fmt.Errorf("%w: missing_inventory_node_exists provider_id=%q", ErrInventoryDrift, providerID)
 		}
 		if managed.Identity != nil && managed.Phase != PhaseIdentityRevoked && managed.Phase != PhaseDeleting {
 			observation, err := r.observeIdentity(ctx, *managed.Identity)
@@ -237,7 +237,7 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 				return state, Result{}, true, err
 			}
 			if observation.ActiveLeases > 0 || !observation.leasesFresh(r.config.Now().UTC(), r.config.ObservationMaxAge) {
-				return state, Result{}, true, ErrInventoryDrift
+				return state, Result{}, true, fmt.Errorf("%w: missing_node_leases_unconfirmed provider_id=%q", ErrInventoryDrift, providerID)
 			}
 			state, result, err := r.advanceDrain(ctx, state, managed, Node{ProviderID: providerID, Name: managed.Name}, observation, r.config.Now().UTC())
 			return state, result, true, err
@@ -285,7 +285,7 @@ func (r *Reconciler) reconcileJournalInventory(ctx context.Context, state Journa
 			return state, Result{}, true, fmt.Errorf("ensure recorder fleet node: %w", errors.Join(ErrProviderUnavailable, err))
 		}
 		if node.Name != request.Name || node.BootGeneration != request.BootGeneration || !r.nodeMatchesRequest(node, request) {
-			return state, Result{}, true, ErrInventoryDrift
+			return state, Result{}, true, fmt.Errorf("%w: ensured_node_mismatch provider_id=%q", ErrInventoryDrift, node.ProviderID)
 		}
 		state.Nodes[node.ProviderID] = ManagedNode{ProviderID: node.ProviderID, Name: node.Name, Phase: PhaseAwaitingBootstrap, BootGeneration: node.BootGeneration}
 		state.PendingCreate = nil
@@ -359,7 +359,7 @@ func (r *Reconciler) reconcileAbsentObservations(ctx context.Context, state Jour
 			return state, Result{}, false, fmt.Errorf("confirm absent recorder node: %w", errors.Join(ErrProviderUnavailable, err))
 		}
 		if exists || observation.ActiveLeases > 0 || !observation.leasesFresh(now, r.config.ObservationMaxAge) {
-			return state, Result{}, false, ErrInventoryDrift
+			return state, Result{}, false, fmt.Errorf("%w: absent_observation_unconfirmed provider_id=%q", ErrInventoryDrift, identity.ProviderID)
 		}
 		// Fence claims before taking the later zero-lease sample, just as for
 		// a normal drain. The provider may be gone while a claim is in flight.
@@ -380,7 +380,7 @@ func (r *Reconciler) indexObservations(state Journal, nodes map[string]Node, obs
 			if observation.IdentityRevoked {
 				continue
 			}
-			return nil, ErrInventoryDrift
+			return nil, fmt.Errorf("%w: observation_without_node provider_id=%q", ErrInventoryDrift, observation.Identity.ProviderID)
 		}
 		if err := observation.Validate(r.config.Key, node); err != nil {
 			return nil, err

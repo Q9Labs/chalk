@@ -221,11 +221,11 @@ type Node struct {
 
 func (n Node) Validate() error {
 	if strings.TrimSpace(n.ProviderID) == "" || len(n.ProviderID) > 128 || strings.TrimSpace(n.Name) == "" || len(n.Name) > 255 || !validNodeStatus(n.Status) || !validSlug(n.Region, 32) || !validToken(n.Size, 64) || n.ImageID <= 0 || n.BootGeneration == 0 || n.CreatedAt.IsZero() {
-		return ErrInventoryDrift
+		return fmt.Errorf("%w: invalid_node provider_id=%q", ErrInventoryDrift, n.ProviderID)
 	}
 	for _, tag := range n.Tags {
 		if !validTag(tag) {
-			return ErrInventoryDrift
+			return fmt.Errorf("%w: invalid_node_tag provider_id=%q", ErrInventoryDrift, n.ProviderID)
 		}
 	}
 	return nil
