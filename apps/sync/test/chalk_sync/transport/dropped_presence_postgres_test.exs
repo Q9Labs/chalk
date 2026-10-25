@@ -6,6 +6,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   alias ChalkSync.ExternalSyncNode
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.Stateholder.Postgres.PresenceRuntime
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.TestWSClient, as: Client
@@ -63,6 +64,8 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   end
 
   setup %{connection: connection} do
+    start_supervised!({PresenceRuntime, url: @database_url})
+    allow_expiry(connection)
     fixture = SyncPostgres.seed_episode(connection, 1, %{"linger_window_seconds" => 300})
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
@@ -154,6 +157,10 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     expire(ctx)
     assert probe(ctx, "tick") == 1
     assert eventually(fn -> status(ctx) == "left" end)
+    {welcome, expired} = hello(ctx.port, ctx.identity)
+    assert welcome["mode"] == "terminal"
+    assert welcome["reason"] == "presence_expired"
+    Client.close_tcp(expired)
     admission = probe(ctx, "rejoin")
 
     identity = %{
@@ -239,6 +246,180 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     end
   end
 
+  test "judge: two API instances and repeated expiry reserve one Leave", ctx do
+    client = connect(ctx.port, ctx.identity)
+    Client.close_tcp(client)
+    expire(ctx)
+
+    counts =
+      1..2 |> Task.async_stream(fn _ -> probe(ctx, "tick") end) |> Enum.map(fn {:ok, n} -> n end)
+
+    assert Enum.sum(counts) == 1
+    assert eventually(fn -> status(ctx) == "left" end)
+    assert probe(ctx, "tick") == 0
+
+    assert [[1]] =
+             Postgrex.query!(
+               ctx.connection,
+               "select count(*) from sync_external_operations where target_participant_id=$1 and operation_name='participant_leave'",
+               [UUID.dump!(ctx.identity.participant_id)]
+             ).rows
+  end
+
+  test "judge: one dropped participant cannot end a still-occupied Episode", ctx do
+    fixture = SyncPostgres.seed_episode(ctx.connection, 2, %{"linger_window_seconds" => 0})
+    on_exit(fn -> SyncPostgres.cleanup(ctx.connection, fixture.episode) end)
+    [first, second] = fixture.identities
+    ctx = %{ctx | fixture: fixture, identity: first}
+    dropped = connect(ctx.port, first)
+    kept = connect(ctx.port, second)
+    on_exit(fn -> Client.close_tcp(kept) end)
+    Client.close_tcp(dropped)
+    expire(ctx)
+    assert probe(ctx, "tick") == 1
+    assert eventually(fn -> status(ctx) == "left" end)
+    assert probe(ctx, "tick") == 0
+    assert episode_status(ctx) == "active"
+
+    assert [["active"]] =
+             Postgrex.query!(ctx.connection, "select status from participants where id=$1", [
+               UUID.dump!(second.participant_id)
+             ]).rows
+
+    assert [[0]] =
+             Postgrex.query!(
+               ctx.connection,
+               "select count(*) from sync_external_operations where episode_id=$1 and operation_name in ('stop_recording','end_episode','tenant_end_episode')",
+               [UUID.dump!(fixture.episode.episode_id)]
+             ).rows
+  end
+
+  test "judge: a renewal blocked by Postgres closes the live socket instead of silent expiry",
+       ctx do
+    client = connect(ctx.port, ctx.identity)
+    coordinator = ChalkSync.Episodes.Coordinator.whereis(ctx.identity.episode)
+    [socket] = :sys.get_state(coordinator).sockets |> Map.keys()
+    [lock_connection] = SyncPostgres.start_connections(@database_url, 1)
+    Process.unlink(lock_connection)
+    on_exit(fn -> TestProcess.stop(lock_connection) end)
+    Postgrex.query!(lock_connection, "begin", [])
+
+    Postgrex.query!(
+      lock_connection,
+      "lock table participant_presence_leases in access exclusive mode",
+      []
+    )
+
+    try do
+      send(socket, :heartbeat_check)
+
+      assert {:closed, 1012, "presence recovery required", _client} =
+               judge_recv_until(client, fn frame -> match?({:closed, _, _, _}, frame) end)
+    after
+      Postgrex.query!(lock_connection, "rollback", [])
+    end
+
+    assert probe(ctx, "tick") == 0
+    assert status(ctx) == "active"
+  end
+
+  test "judge: old Sync with new API and no prior lease stays active", ctx do
+    node = external_node(ctx.old_app)
+
+    try do
+      client =
+        connect(
+          ExternalSyncNode.await_ready(node, 30_000) |> elem(1) |> Map.fetch!("port"),
+          ctx.identity
+        )
+
+      on_exit(fn -> Client.close_tcp(client) end)
+
+      assert [[0]] =
+               Postgrex.query!(
+                 ctx.connection,
+                 "select count(*) from participant_presence_leases where participant_id=$1",
+                 [UUID.dump!(ctx.identity.participant_id)]
+               ).rows
+
+      assert probe(ctx, "tick") == 0
+      assert status(ctx) == "active"
+    after
+      ExternalSyncNode.stop(node)
+    end
+  end
+
+  for shutdown <- [:stop, :kill] do
+    @tag shutdown: shutdown
+    test "#{shutdown} of Sync gives existing participants fresh grace after any downtime", ctx do
+      stop_supervised!(PresenceRuntime)
+      node = external_node(Path.expand("../../..", __DIR__))
+      assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
+      first = connect(ready["port"], ctx.identity)
+      apply(ExternalSyncNode, ctx.shutdown, [node])
+      Client.close_tcp(first)
+
+      # Simulate a downtime longer than any configured grace, with the API
+      # scheduler restarting independently (the probe is a fresh API process).
+      expire(ctx)
+      allow_expiry(ctx.connection)
+      assert probe(ctx, "tick") == 0
+      assert status(ctx) == "active"
+
+      replacement = external_node(Path.expand("../../..", __DIR__))
+
+      try do
+        assert {:ok, ready} = ExternalSyncNode.await_ready(replacement, 30_000)
+
+        assert [[true]] =
+                 Postgrex.query!(
+                   ctx.connection,
+                   "select recover_after > clock_timestamp()+interval '110 seconds' from participant_presence_runtime",
+                   []
+                 ).rows
+
+        assert probe(ctx, "tick") == 0
+        assert status(ctx) == "active"
+        returned = connect(ready["port"], ctx.identity)
+        assert status(ctx) == "active"
+        allow_expiry(ctx.connection)
+        assert probe(ctx, "tick") == 0
+        Client.close_tcp(returned)
+        expire(ctx)
+        assert probe(ctx, "tick") == 1
+        assert eventually(fn -> status(ctx) == "left" end)
+      after
+        ExternalSyncNode.stop(replacement)
+      end
+    end
+  end
+
+  defp allow_expiry(connection) do
+    Postgrex.query!(
+      connection,
+      "update participant_presence_runtime set recover_after=clock_timestamp()-interval '1 hour' where singleton",
+      []
+    )
+  end
+
+  defp judge_recv_until(client, predicate, remaining \\ 16)
+
+  defp judge_recv_until(_client, _predicate, 0),
+    do: flunk("expected wire frame not received within 16 frames")
+
+  defp judge_recv_until(client, predicate, remaining) do
+    frame = Client.recv(client, 8_000)
+
+    if predicate.(frame) do
+      frame
+    else
+      case frame do
+        {:json, _payload, next} -> judge_recv_until(next, predicate, remaining - 1)
+        other -> flunk("unexpected wire result #{inspect(other)}")
+      end
+    end
+  end
+
   defp await_pong(client) do
     case Client.recv(client) do
       {:json, %{"type" => "pong"}, client} -> client
@@ -259,6 +440,13 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   end
 
   defp connect(port, identity) do
+    {welcome, client} = hello(port, identity)
+    client = Client.acknowledge_recovery(client, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
+    client
+  end
+
+  defp hello(port, identity) do
     {:ok, client} = Client.connect(port, "/v1/sync")
 
     token =
@@ -289,9 +477,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       })
 
     assert {:json, %{"type" => "welcome"} = welcome, client} = Client.recv(client)
-    client = Client.acknowledge_recovery(client, welcome)
-    assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
-    client
+    {welcome, client}
   end
 
   defp expire(ctx) do

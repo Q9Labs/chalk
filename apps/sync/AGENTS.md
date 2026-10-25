@@ -19,3 +19,18 @@ acceleration only.
 - Run the repository-root `pnpm run gate` before committing; it selects this
   app's basic gate whenever Sync files or shared gate inputs change. Run
   `scripts/gate.sh` directly for Credo and the full test suite.
+
+### Dropped-participant compatibility
+
+Presence expiry owns one participant generation and one issued/confirmed entry.
+A later entry, including an older Sync writer's entry, cannot be evicted by a
+previous lease. Compatibility-mode entries and entries served only by old Sync
+have no renewable presence lease and do not receive automatic dropped cleanup.
+Use lease-aware Sync for the whole fleet before relying on empty-room cleanup.
+Each lease-aware Sync startup or database-session recovery grants all current
+participants 120 seconds to reconnect; expiry pauses while no such node is live.
+The updated TypeScript SDK automatically requests fresh normal admission after
+`presence_expired` recovery while the Episode is active. Older SDKs and recovery
+through old Sync do not support that automatic long-drop rejoin. Shared
+`participant_left` events keep their existing `left`/`removed` reasons, so older
+observers can still read them. Upgrade the SDK with Sync for long-drop recovery.

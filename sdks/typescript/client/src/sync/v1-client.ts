@@ -505,8 +505,14 @@ export class V1SyncClient implements V1CollaborationClient {
           this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
         }
         if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
-          this.#phase = { phase: "terminal", terminalReason: frame.payload.reason === "removed" ? "participant_removed" : "participant_inactive" };
-          this.#socket?.close(1000, "participant inactive");
+          if (frame.payload.reason === "removed") {
+            this.#phase = { phase: "terminal", terminalReason: "participant_removed" };
+            this.#socket?.close(1000, "participant inactive");
+          } else {
+            // Recovery distinguishes automatic presence expiry from deliberate Leave.
+            // Keep the shared participant_left event compatible with older replicas.
+            this.#recover("participant_departed");
+          }
         }
         this.#emit();
         return;

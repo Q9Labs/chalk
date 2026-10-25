@@ -1189,7 +1189,7 @@
     "conflictFields": ["command_id", "delivery", "outcome", "reason"]
   },
   "terminal": {
-    "reasons": ["episode_ended", "participant_inactive", "stale_participant_generation"]
+    "reasons": ["episode_ended", "participant_inactive", "stale_participant_generation", "presence_expired"]
   },
   "rejectionReasons": ["episode_ended", "participant_inactive", "stale_participant_generation", "capability_denied", "invalid_state", "invalid_target", "role_not_eligible", "screen_share_in_use", "recording_in_progress", "command_id_conflict", "external_operation_failed"],
   "retryableError": {

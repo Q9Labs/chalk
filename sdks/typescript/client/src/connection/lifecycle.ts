@@ -881,6 +881,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.gen(function* () {
           const ended = episodeEnded(snapshot);
           const removed = snapshot.connection.terminalReason === "participant_removed";
+          if (!ended && snapshot.connection.terminalReason === "presence_expired" && active(model)) {
+            yield* stopPorts();
+            yield* transition("reconnecting");
+            yield* performJoin().pipe(Effect.catch((failure) => failForSnapshot(failure)));
+            return true;
+          }
           if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
             if (ended) model.episodeEndConfirmed = true;
             if (removed) model.removedByHost = true;

@@ -23,10 +23,26 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
         from sync_entry_rollout where singleton for share`); err != nil {
 		return 0, fmt.Errorf("configure presence expiry writer: %w", err)
 	}
+	// The row lock serializes expiry with Sync's startup barrier. Session locks
+	// disappear on crash; an arbitrarily long outage never consumes the grace.
+	var available bool
+	if err := tx.QueryRow(ctx, `select recover_after <= clock_timestamp() and exists (
+        select 1 from pg_locks where locktype='advisory' and classid=1128811595
+        and objid=1 and objsubid=2 and mode='ShareLock' and granted
+        and database=(select oid from pg_database where datname=current_database()))
+        from participant_presence_runtime where singleton for share`).Scan(&available); err != nil {
+		return 0, fmt.Errorf("check presence runtime: %w", err)
+	}
+	if !available {
+		return 0, nil
+	}
 	rows, err := tx.Query(ctx, `select lease.tenant_id, lease.space_id, lease.episode_id, lease.participant_id
   from participant_presence_leases lease
   join participants p on p.id=lease.participant_id and p.generation=lease.participant_generation
   join episodes e on e.id=lease.episode_id
+  join participant_join_seats seat on seat.participant_id=lease.participant_id
+    and seat.generation=lease.participant_generation and lease.entry_generation > 0
+    and seat.issued_entry_generation=lease.entry_generation and seat.confirmed_entry_generation=lease.entry_generation
   where lease.expires_at <= now() and p.status='active' and e.status='active'
   order by lease.expires_at, lease.participant_id limit $1`, batch)
 	if err != nil {
@@ -70,9 +86,11 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 		}
 		var expiry pgtype.Timestamptz
 		var entryGeneration int64
-		err = tx.QueryRow(ctx, `select lease.expires_at, coalesce(seat.confirmed_entry_generation,0)
-   from participant_presence_leases lease left join participant_join_seats seat
+		err = tx.QueryRow(ctx, `select lease.expires_at, lease.entry_generation
+   from participant_presence_leases lease join participant_join_seats seat
      on seat.participant_id=lease.participant_id and seat.generation=lease.participant_generation
+     and lease.entry_generation > 0 and seat.issued_entry_generation=lease.entry_generation
+     and seat.confirmed_entry_generation=lease.entry_generation
    where lease.tenant_id=$1 and lease.space_id=$2 and lease.episode_id=$3 and lease.participant_id=$4
    and lease.participant_generation=$5 and lease.expires_at <= clock_timestamp()`, row.tenant, row.space, row.episode, row.participant, participant.Generation).Scan(&expiry, &entryGeneration)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -84,7 +102,8 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 		key := fmt.Sprintf("presence-expired-%s-%d-%d", participantID, participant.Generation, expiry.Time.UnixMicro())
 		payload, err := json.Marshal(struct {
 			EntryGeneration int64 `json:"entryGeneration"`
-		}{EntryGeneration: entryGeneration})
+			PresenceExpired bool  `json:"presenceExpired"`
+		}{EntryGeneration: entryGeneration, PresenceExpired: true})
 		if err != nil {
 			return 0, fmt.Errorf("encode presence expiry leave: %w", err)
 		}
