@@ -24,8 +24,11 @@ acceleration only.
 
 Presence expiry owns one participant generation and one issued/confirmed entry.
 A later entry, including an older Sync writer's entry, cannot be evicted by a
-previous lease. Compatibility-mode entries and entries served only by old Sync
-have no renewable presence lease and do not receive automatic dropped cleanup.
+previous lease. Disabling entry ownership invalidates all existing leases;
+expiry also pauses while enforcement is off. Re-enabling it does not reuse
+those discarded leases. Compatibility-mode entries and entries served only by
+old Sync have no renewable presence lease and do not receive automatic dropped
+cleanup.
 Use lease-aware Sync for the whole fleet before relying on empty-room cleanup.
 Each lease-aware Sync startup or database-session recovery grants all current
 participants 120 seconds to reconnect; expiry pauses while no such node is live.

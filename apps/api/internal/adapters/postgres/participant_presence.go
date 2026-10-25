@@ -19,9 +19,13 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 		return 0, nil
 	}
 	// Match Sync's entry-aware writer and lock order before Episode authority.
-	if _, err := tx.Exec(ctx, `select set_config('chalk.entry_writer','1',true)
-        from sync_entry_rollout where singleton for share`); err != nil {
+	configured, err := tx.Exec(ctx, `select set_config('chalk.entry_writer','1',true)
+        from sync_entry_rollout where singleton and enforced for share`)
+	if err != nil {
 		return 0, fmt.Errorf("configure presence expiry writer: %w", err)
+	}
+	if configured.RowsAffected() == 0 {
+		return 0, nil
 	}
 	// The row lock serializes expiry with Sync's startup barrier. Session locks
 	// disappear on crash; an arbitrarily long outage never consumes the grace.
