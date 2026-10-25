@@ -333,6 +333,7 @@ async function dashboard(request, response, page, url, entry) {
     }
     if (page === "developer")
       return send(response, 200, {
+        tenantId: "00000000-0000-4000-8000-000000000001",
         recordingRenderMode: data.recordingRenderMode ?? "on_demand",
         allowedWebsites: data.origins,
         keys: data.keys.filter((key) => !key.revokedAt),

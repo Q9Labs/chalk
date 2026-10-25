@@ -12,7 +12,7 @@ The server entry point requires Node.js 22 or later. Never import `@q9labsai/cha
 
 ## Prepare your Tenant and API key
 
-Ask your deployment operator for a provisioned Tenant ID and an existing Tenant API key. Store them as `CHALK_TENANT_ID` and `CHALK_API_KEY` on your backend. The setup below needs exactly `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write`; request artifact or webhook scopes only for features you use. Account registration, account sessions, and recent authentication are not part of this setup.
+Copy your tenant ID from the dashboard's Developer page, next to API keys, and create an API key there. Store them as `CHALK_TENANT_ID` and `CHALK_API_KEY` on your backend. For a self-hosted deployment without the dashboard, ask your deployment operator for both values. The setup below needs exactly `spaces:read`, `spaces:write`, `episodes:read`, and `episodes:write`; request artifact or webhook scopes only for features you use. Account registration, account sessions, and recent authentication are not part of this setup.
 
 Ask the operator to allow your frontend's exact origin (for example `http://localhost:5173`) in the Tenant's `cors_allowed_origins` and configure its media plane. Do not give the browser the Tenant key or permission to manage keys. Keep Space/Participant mappings on your backend.
 

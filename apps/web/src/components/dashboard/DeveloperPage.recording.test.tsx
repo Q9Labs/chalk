@@ -24,12 +24,23 @@ beforeEach(() => {
       if (typeof body === "object" && body !== null && "mode" in body && typeof body.mode === "string") mode = body.mode;
       return Response.json({ recordingRenderMode: mode });
     }
-    return Response.json({ recordingRenderMode: mode, allowedWebsites: [], keys: [], webhooks: [], nextKeyCursor: null, nextWebhookCursor: null });
+    return Response.json({ tenantId: "00000000-0000-4000-8000-000000000001", recordingRenderMode: mode, allowedWebsites: [], keys: [], webhooks: [], nextKeyCursor: null, nextWebhookCursor: null });
   });
 });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+it("shows and copies the tenant ID even when there are no API keys", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  await renderPage();
+  const tenantId = "00000000-0000-4000-8000-000000000001";
+  expect(await screen.findByText(tenantId)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Copy tenant ID" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(tenantId));
+  expect(await screen.findByText("Tenant ID copied")).toBeTruthy();
 });
 
 it("saves the render setting and reads it after remounting", async () => {
