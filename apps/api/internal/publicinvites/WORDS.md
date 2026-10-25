@@ -6,7 +6,11 @@ and [long wordlist](https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt)
 with common concrete nouns added. Credit: Electronic Frontier Foundation, 2016.
 Licensed under [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/).
 Changes: removed sensitive, negative, obscure and easily confused words; added common nouns;
-sorted the resulting list. This is an English-language editorial selection, not a guarantee
+sorted the resulting list. Before release, replaced 174 entries flagged as sensitive,
+negative, obscure, or easily confused with 148 approved candidates and 26 additional
+EFF words. The additional words are common positive or neutral terms of 3–6 letters;
+they exclude numbers, brands, sound-alike alternatives, and sensitive subject matter.
+The dictionary stays alphabetically sorted with exactly 1,024 unique entries. This is an English-language editorial selection, not a guarantee
 against every possible interpretation of a random phrase in every dialect.
 
 Each word consumes ten SHA-256 bits, without modulo bias. Four words provide 40 bits;
