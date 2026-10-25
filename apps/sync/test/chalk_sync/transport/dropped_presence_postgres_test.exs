@@ -243,14 +243,14 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
 
     Postgrex.query!(
       ctx.connection,
-      "update sync_entry_rollout set enforced=false where singleton",
+      "update sync_entry_rollout set enforced=false, enforced_at=null, release_id=null where singleton",
       []
     )
 
     on_exit(fn ->
       Postgrex.query!(
         ctx.connection,
-        "update sync_entry_rollout set enforced=true where singleton",
+        "update sync_entry_rollout set enforced=true, enforced_at=clock_timestamp(), release_id='test' where singleton",
         []
       )
     end)
@@ -262,7 +262,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
 
     Postgrex.query!(
       ctx.connection,
-      "update sync_entry_rollout set enforced=true where singleton",
+      "update sync_entry_rollout set enforced=true, enforced_at=clock_timestamp(), release_id='test' where singleton",
       []
     )
 
