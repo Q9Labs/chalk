@@ -39,7 +39,27 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       )
 
     assert status == 0, output
-    {:ok, connection: hd(connections), probe: probe}
+    old_root = Path.join(System.tmp_dir!(), "chalk-pre-presence-#{UUID.generate()}")
+    File.mkdir_p!(old_root)
+    on_exit(fn -> File.rm_rf!(old_root) end)
+    archive = File.read!(Path.expand("../../fixtures/pre-presence/source.tar.gz", __DIR__))
+
+    assert Base.encode16(:crypto.hash(:sha256, archive), case: :lower) ==
+             "d7ba6b2df9c5193d0675f0c96b4612f2c5c1a6172e0fe6dd733491c8fd44bc36"
+
+    :ok =
+      :erl_tar.extract({:binary, archive}, [:compressed, {:cwd, String.to_charlist(old_root)}])
+
+    old_app = Path.join(old_root, "apps/sync")
+
+    for args <- [["deps.get", "--check-locked"], ["compile"]] do
+      {output, code} =
+        System.cmd("mix", args, cd: old_app, env: [{"MIX_ENV", "test"}], stderr_to_stdout: true)
+
+      assert code == 0, output
+    end
+
+    {:ok, connection: hd(connections), probe: probe, old_app: old_app}
   end
 
   setup %{connection: connection} do
@@ -196,6 +216,38 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     expire(ctx)
     assert probe(ctx, "tick") == 1
     assert eventually(fn -> status(ctx) == "left" end)
+  end
+
+  test "a healthy return from new Sync to old Sync cannot be evicted by its prior lease", ctx do
+    first = connect(ctx.port, ctx.identity)
+    Client.close_tcp(first)
+    node = external_node(ctx.old_app)
+
+    try do
+      assert {:ok, ready} = ExternalSyncNode.await_ready(node, 30_000)
+      client = connect(ready["port"], ctx.identity)
+      client = Client.send_json(client, %{"type" => "ping"})
+      assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+      expire(ctx)
+      assert probe(ctx, "tick") == 0
+      assert status(ctx) == "active"
+      client = Client.send_json(client, %{"type" => "ping"})
+      assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+      Client.close_tcp(client)
+    after
+      ExternalSyncNode.stop(node)
+    end
+  end
+
+  defp external_node(app) do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, {_address, port}} = :inet.sockname(listener)
+    :ok = :gen_tcp.close(listener)
+
+    start_supervised!(
+      {ExternalSyncNode,
+       app_dir: app, database_url: @database_url, port: port, node_id: "presence-#{port}"}
+    )
   end
 
   defp connect(port, identity) do
