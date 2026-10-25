@@ -84,9 +84,9 @@ Episode or an existing reservation.
   transfer within ten minutes, excluding overhead. Capture uploads individual
   bundles, not the whole four-hour source. No duration-wide upload timeout needs
   widening; network throughput still determines whether a grant suffices.
-- Transcription splits microphone audio into chunks of at most fifteen minutes:
-  four hours needs sixteen chunks per continuous microphone track, rather than
-  eight. The dispatcher processes chunks independently. Its default provider
+- Transcription preparation splits microphone audio into five-minute chunks:
+  four hours needs forty-eight chunks per continuous microphone track, rather
+  than twenty-four. Provider admission separately allows up to fifteen minutes. The dispatcher processes chunks independently. Its default provider
   timeout is ninety seconds, capped at 120 seconds; the worker lease is fifteen
   minutes. Longer Recordings add chunks, not larger provider requests. The
   4,096-chunk manifest bound remains unchanged.
@@ -98,3 +98,18 @@ Reverting the code restores the two-hour
 ceiling for new Recordings. In-flight four-hour Recordings retain their sealed
 deadlines, but old validators can reject their authority or exports above two
 hours. Finish or stop those Recordings and finish their exports before rollback.
+
+## Processing duration authority
+
+Go admission, decode, render requests, render commits, and MP4 artifact validation
+all use `recordingpipeline.MaximumRecordingDuration`. Video Export and microphone
+preparation both call the same decoder with the whole Recording clock. Audio
+preparation then walks the decoded source spans and applies the independent
+five-minute chunk policy, not a second whole-Recording ceiling. Transcription
+manifests bound chunks by the Recording clock and their chunk policy; they have
+no two-hour cutoff. Sync and the renderer each retain one constant for their own
+language layer; database CHECKs use the corresponding seconds and milliseconds.
+
+The transcription source lease's two-hour expiry grace is a processing lease
+window after source retention expires, not a media-duration limit. It does not
+truncate four-hour Recordings or change their chunk lengths.
