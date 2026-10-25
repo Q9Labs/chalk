@@ -309,7 +309,7 @@ func TestReconcilerQuarantineDiagnosticIsBounded(t *testing.T) {
 				if test.malformedID != "" {
 					id = test.malformedID
 				}
-				node := fixture.provider.nodeFor(fixture.ensureRequest(i+1), id)
+				node := fixture.provider.nodeFor(fixture.ensureRequest(uint64(i+1)), id)
 				node.Tags = slices.DeleteFunc(node.Tags, func(tag string) bool { return tag == fixture.config.OwnerTag })
 				if test.malformedID == "" {
 					if err := node.Validate(); err != nil {
