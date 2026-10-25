@@ -31,7 +31,7 @@ type Querier interface {
 	ClaimChatAttachmentCleanup(ctx context.Context, arg ClaimChatAttachmentCleanupParams) ([]ClaimChatAttachmentCleanupRow, error)
 	ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error)
 	ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error)
-	ClaimEmptyEpisodeLingers(ctx context.Context, batchSize int32) ([]ClaimEmptyEpisodeLingersRow, error)
+	ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEpisodeLingersParams) ([]ClaimEmptyEpisodeLingersRow, error)
 	ClaimRecordingCaptureCommand(ctx context.Context, arg ClaimRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error)
 	ClaimTranscriptionCleanupJob(ctx context.Context, arg ClaimTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
@@ -101,8 +101,8 @@ type Querier interface {
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
-	// Discovery uses an earlier snapshot. Recheck occupancy, clock and window key
-	// after locking the Episode, which serializes all admission paths.
+	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
+	// admission use that same lock, so an earlier reconnect cancels the old window.
 	EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerStillDueParams) (EpisodeLingerStillDueRow, error)
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
