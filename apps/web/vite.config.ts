@@ -1,3 +1,4 @@
+import "./scripts/sync-public-assets";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import mdx from "@mdx-js/rollup";
 import rehypeShiki, { type RehypeShikiOptions } from "@shikijs/rehype";
@@ -11,6 +12,7 @@ import { execSync } from "child_process";
 import pkg from "./package.json";
 import sdkReactPkg from "../../sdks/typescript/react/package.json";
 import { sourceAliases } from "./vite.aliases";
+import { selfHostedExcalidraw } from "./scripts/self-hosted-excalidraw";
 
 const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
 const buildTime = new Date().toISOString();
@@ -81,6 +83,7 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
+    selfHostedExcalidraw(),
     tailwindcss(),
     tanstackStart({
       router: {

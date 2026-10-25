@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 // Workspace packages resolve to their sources, so the app and the call-state harness run unbuilt SDK code.
 export const sourceAliases = [
   { find: /^@q9labsai\/chalk-client\/invites$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/public-invites/index.ts", import.meta.url)) },
+  { find: /^@q9labsai\/chalk-whiteboard\/embedded$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/embedded/index.ts", import.meta.url)) },
+  { find: /^@q9labsai\/chalk-whiteboard\/assets$/, replacement: fileURLToPath(new URL("../../packages/whiteboard/src/assets.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-client\/effect$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/effect.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-client$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-react\/ui$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/components/ui/index.ts", import.meta.url)) },

@@ -7,9 +7,9 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-export async function startCallHarness(): Promise<{ origin: string; stop: () => Promise<void> }> {
+export async function startCallHarness(port = 0): Promise<{ origin: string; stop: () => Promise<void> }> {
   const reservation = createServer();
-  reservation.listen(0, "127.0.0.1");
+  reservation.listen(port, "127.0.0.1");
   await once(reservation, "listening");
   const address = reservation.address();
   await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));

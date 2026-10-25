@@ -13,14 +13,6 @@ import type { ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol";
 import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge";
 import { applyEmbeddedWhiteboardViewport } from "./renderer-viewport";
 
-declare global {
-  interface Window {
-    EXCALIDRAW_ASSET_PATH?: string;
-  }
-}
-
-window.EXCALIDRAW_ASSET_PATH = "./";
-
 const rendererRoot = requireRendererRoot();
 const bridge = new ChalkEmbeddedWhiteboardRendererBridge();
 
