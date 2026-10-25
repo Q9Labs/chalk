@@ -48,14 +48,16 @@ func TestDroppedPresenceLifecycleProbe(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		admission, err := episodes.NewService(repository).AdmitParticipant(ctx, episodes.AdmitParticipantInput{
+		admission, err := episodes.NewService(repository).JoinPublic(ctx, episodes.PublicJoinInput{
 			TenantID: parse("CHALK_PRESENCE_TENANT"), SpaceID: parse("CHALK_PRESENCE_SPACE"),
-			EpisodeID: parse("CHALK_PRESENCE_EPISODE"), ParticipantID: participant,
-			Name: "Returning participant", Role: "owner", Admission: episodes.AdmissionDirect,
+			IdentityMode: "guest", DisplayName: "Returning participant", Role: "owner",
 			Request: episodes.Request{Key: "presence-rejoin-" + participant.String()},
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+		if admission.EpisodeCreated || admission.Episode.ID != parse("CHALK_PRESENCE_EPISODE") {
+			t.Fatal("rejoin must use the existing live Episode")
 		}
 		encoded, err := json.Marshal(map[string]any{
 			"participant_id": admission.Participant.ID.String(),

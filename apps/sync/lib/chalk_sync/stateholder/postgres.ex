@@ -28,6 +28,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.Lifecycle
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
+  alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.PublicationGrants
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
   alias ChalkSync.Stateholder.Postgres.RoleTransitionPlanner
@@ -95,7 +96,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   def renew_presence(%Identity{} = identity) do
     case Postgrex.transaction(
            Database.connection(identity.episode),
-           &ChalkSync.Stateholder.Postgres.Presence.transaction(&1, identity),
+           &Presence.transaction(&1, identity),
            timeout: @transaction_timeout_ms
          ) do
       {:ok, :ok} -> :ok

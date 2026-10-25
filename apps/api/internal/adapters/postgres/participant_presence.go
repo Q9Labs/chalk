@@ -18,6 +18,11 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 	if batch <= 0 {
 		return 0, nil
 	}
+	// Match Sync's entry-aware writer and lock order before Episode authority.
+	if _, err := tx.Exec(ctx, `select set_config('chalk.entry_writer','1',true)
+        from sync_entry_rollout where singleton for share`); err != nil {
+		return 0, fmt.Errorf("configure presence expiry writer: %w", err)
+	}
 	rows, err := tx.Query(ctx, `select lease.tenant_id, lease.space_id, lease.episode_id, lease.participant_id
   from participant_presence_leases lease
   join participants p on p.id=lease.participant_id and p.generation=lease.participant_generation
