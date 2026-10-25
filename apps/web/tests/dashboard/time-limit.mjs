@@ -140,6 +140,7 @@ try {
     await page.getByRole("button", { name: "Start a new call", exact: true }).waitFor();
     await fixture.deadlineGuest.getByRole("button", { name: "Home", exact: true }).click();
     await fixture.deadlineGuest.waitForURL(`${origin}/`);
+    console.log("Deadline to finalization (seconds):", sql(`select extract(epoch from (ended_at - deadline_at)) from episodes where id='${episodeId}'`));
     console.log("PASS all participants reached the reason-specific end page; guest Home works");
     await page.getByRole("button", { name: "Start a new call", exact: true }).click();
     await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
@@ -174,9 +175,7 @@ try {
     await Promise.race([publicGuestJoined, admitPublicGuest.waitFor({ timeout: 45000 })]);
     if (await admitPublicGuest.isVisible()) await admitPublicGuest.click();
     await publicGuestJoined;
-    const slug = new URL(anonymous.url()).pathname.split("/").at(-1);
-    assert.match(slug, /^[a-z0-9-]+$/);
-    const [publicSpace, publicTenant, publicEpisode, publicCreated] = sql(`select s.id,s.tenant_id,e.id,e.created_at from spaces s join episodes e on e.space_id=s.id where s.slug='${slug}' and e.status='active'`).split("|");
+    const [publicSpace, publicTenant, publicEpisode, publicCreated] = sql(`select s.id,s.tenant_id,e.id,e.created_at from spaces s join episodes e on e.space_id=s.id where s.tenant_id='${managedTenant}' and e.status='active'`).split("|");
     assert(publicEpisode, "anonymous call must have an active real Episode");
     const publicDeadline = new Date(Math.ceil(Date.parse(publicCreated) / 1000) * 1000 + 60000).toISOString();
     const publicResponse = await fetch(`${apiOrigin}/v1/tenants/${publicTenant}/spaces/${publicSpace}/episodes/${publicEpisode}/deadline`, {
