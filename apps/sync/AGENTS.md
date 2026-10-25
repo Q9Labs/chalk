@@ -12,7 +12,7 @@ acceleration only.
 - Preserve the tenant-and-Episode authority key and semantic Stateholder
   transaction boundary.
 - Durable lifecycle comes only from API intents. Socket loss is volatile
-  presence and never a durable participant leave.
+  presence; only API expiry of the shared presence lease requests a durable Leave.
 - Protocol v1 and its generated contract are the production surface.
 - Keep every frame, queue, task set, replay, diagnostic buffer, and retained
   database set explicitly bounded.

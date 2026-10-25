@@ -92,8 +92,19 @@ one synchronous Postgres transaction. Admission produces bounded lifecycle
 intents. Removal, explicit Leave, capability recovery, deadline expiry, Recording,
 and Episode end reserve idempotent external operations under the same Episode
 control lock, execute provider effects outside the transaction, and finalize
-durable facts only after confirmation. Opening or losing a socket never creates
-a durable join or leave.
+durable facts only after confirmation. Opening or losing a socket never directly
+creates a durable join or leave.
+
+A v1 socket establishes a shared Postgres presence lease at entry. The existing
+20-second heartbeat check renews it while the client responds. After two minutes
+without renewal, the API deadline scheduler reserves the normal participant Leave
+operation. Provider confirmation marks the participant left, and the existing
+empty-Episode linger then applies. Two minutes matches the entry window and
+allows several heartbeat intervals for a mobile network switch. Reconnects on
+any Sync node renew under the same Episode authority lock as expiry; expiry
+rechecks after that lock. Participants with no lease remain on the legacy path,
+so migration does not evict existing calls. Apply the additive migration before
+upgrading API and Sync. Runtime rollback leaves the lease table in place.
 
 ## Protocol v1
 

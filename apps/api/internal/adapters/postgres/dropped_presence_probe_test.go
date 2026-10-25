@@ -48,7 +48,7 @@ func TestDroppedPresenceLifecycleProbe(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		admission, err := repository.AdmitParticipant(ctx, episodes.AdmitParticipantInput{
+		admission, err := episodes.NewService(repository).AdmitParticipant(ctx, episodes.AdmitParticipantInput{
 			TenantID: parse("CHALK_PRESENCE_TENANT"), SpaceID: parse("CHALK_PRESENCE_SPACE"),
 			EpisodeID: parse("CHALK_PRESENCE_EPISODE"), ParticipantID: participant,
 			Name: "Returning participant", Role: "owner", Admission: episodes.AdmissionDirect,

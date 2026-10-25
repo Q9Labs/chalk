@@ -92,6 +92,23 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
+  def renew_presence(%Identity{} = identity) do
+    case Postgrex.transaction(
+           Database.connection(identity.episode),
+           &ChalkSync.Stateholder.Postgres.Presence.transaction(&1, identity),
+           timeout: @transaction_timeout_ms
+         ) do
+      {:ok, :ok} -> :ok
+      {:error, {:error, reason}} -> {:error, reason}
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
+  end
+
+  @impl ChalkSync.Stateholder
   def prepare_entry_leave(episode, operation_id) do
     case Postgrex.transaction(
            Database.connection(episode),

@@ -7,6 +7,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   """
 
   alias ChalkSync.Stateholder.Postgres.Authority
+  alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.Transaction
   alias ChalkSync.UUID
@@ -30,7 +31,12 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       ensure_seat(connection, identity, participant.status)
       reconcile_applied_join(connection, identity)
 
-      allocate_requested_entry(connection, identity, requested)
+      admitted = allocate_requested_entry(connection, identity, requested)
+
+      if not is_nil(admitted.entry_ownership),
+        do: Presence.renew(connection, admitted)
+
+      admitted
     else
       # Recovery distinguishes expired admission from cancellation and departure.
       identity

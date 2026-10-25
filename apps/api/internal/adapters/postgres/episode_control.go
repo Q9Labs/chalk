@@ -177,6 +177,16 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			outcome.record()
 		}
 	}
+	if err != nil {
+		return count, err
+	}
+	err = r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		expired, err := enqueueExpiredParticipantPresence(ctx, queries, tx, batch-int32(count))
+		if err == nil {
+			count += expired
+		}
+		return err
+	})
 	return count, err
 }
 

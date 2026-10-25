@@ -78,6 +78,9 @@ defmodule ChalkSync.Stateholder.Memory do
     do: apply_lifecycle_intent(identity.episode, identity.admission_lifecycle_intent_id)
 
   @impl ChalkSync.Stateholder
+  def renew_presence(_identity), do: :ok
+
+  @impl ChalkSync.Stateholder
   def admit_entry(identity, requested),
     do: GenServer.call(__MODULE__, {:admit_entry, identity, requested})
 

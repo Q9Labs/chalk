@@ -104,14 +104,16 @@ defmodule ChalkSync.Transport.SocketV1 do
   def handle_info(:heartbeat_check, %{phase: :live} = state) do
     missed = state.missed_heartbeats + 1
 
-    if missed >= @missed_heartbeat_limit do
-      cancel_timer(state.heartbeat_timer)
-      stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
-    else
-      {:ok,
-       state
-       |> Map.put(:missed_heartbeats, missed)
-       |> schedule_heartbeat()}
+    cond do
+      missed >= @missed_heartbeat_limit ->
+        cancel_timer(state.heartbeat_timer)
+        stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
+
+      Stateholder.renew_presence(state.identity) == :ok ->
+        {:ok, state |> Map.put(:missed_heartbeats, missed) |> schedule_heartbeat()}
+
+      true ->
+        stop(state, 1012, "presence recovery required", :dependency_unavailable)
     end
   end
 

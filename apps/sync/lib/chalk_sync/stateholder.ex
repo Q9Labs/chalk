@@ -38,6 +38,7 @@ defmodule ChalkSync.Stateholder do
               :new | :legacy | pos_integer() | {:socket, :new | :legacy | pos_integer()}
             ) ::
               {:ok, Identity.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback renew_presence(Identity.t()) :: :ok | {:error, atom()} | {:retryable, atom()}
   @callback prepare_entry_leave(EpisodeKey.t(), String.t()) :: :ready | :pending | :superseded
   @callback record_lifecycle_failure(EpisodeKey.t(), String.t(), atom()) ::
               :ok | {:retryable, atom()}
@@ -159,6 +160,9 @@ defmodule ChalkSync.Stateholder do
 
   def admit_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
   def admit_entry(%Identity{} = identity, requested), do: impl().admit_entry(identity, requested)
+
+  @spec renew_presence(Identity.t()) :: :ok | {:error, atom()} | {:retryable, atom()}
+  def renew_presence(%Identity{} = identity), do: impl().renew_presence(identity)
 
   def admit_socket_entry(%Identity{}, :invalid), do: {:error, :invalid_admission_intent}
 
