@@ -1,0 +1,14 @@
+test_actual_guardian_enforces_its_deadline (test_safety.SafetyProof.test_actual_guardian_enforces_its_deadline) ... ok
+test_all_cleanup_actions_run_even_if_stop_ssh_and_revoke_fail (test_safety.SafetyProof.test_all_cleanup_actions_run_even_if_stop_ssh_and_revoke_fail) ... ok
+test_busy_deployment_lock_never_queues_a_mutation (test_safety.SafetyProof.test_busy_deployment_lock_never_queues_a_mutation) ... ok
+test_create_timeout_still_reconciles_and_charges_deleted_worker (test_safety.SafetyProof.test_create_timeout_still_reconciles_and_charges_deleted_worker) ... ok
+test_deadline_is_budget_derived_and_leaves_finalization_and_cleanup (test_safety.SafetyProof.test_deadline_is_budget_derived_and_leaves_finalization_and_cleanup) ... ok
+test_expired_remote_command_cannot_mutate_and_lock_is_nonblocking (test_safety.SafetyProof.test_expired_remote_command_cannot_mutate_and_lock_is_nonblocking) ... ok
+test_missing_sequence_or_measured_span_is_not_complete (test_safety.SafetyProof.test_missing_sequence_or_measured_span_is_not_complete) ... ok
+test_owner_loss_cleanup_process_is_independent (test_safety.SafetyProof.test_owner_loss_cleanup_process_is_independent) ... ok
+test_unknown_create_intent_is_not_free (test_safety.SafetyProof.test_unknown_create_intent_is_not_free) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.271s
+
+OK

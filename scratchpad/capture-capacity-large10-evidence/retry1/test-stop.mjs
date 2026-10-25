@@ -1,0 +1,13 @@
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const source=await readFile(new URL('./generator.mjs',import.meta.url),'utf8');
+const body=source.slice(source.indexOf('async function freeze(){'),source.indexOf('globalThis.capacityFreeze=freeze;'));
+const make=new Function('cleaning','stop','check','spec','randomUUID','mkdir','writeFile','readFile','unlink','delay',body+';return freeze');
+let writes=0;
+const stubs=[{},()=> 'id',async()=>{writes++},async()=>{writes++},async()=>'{"idle":true}',async()=>{},async()=>{}];
+await assert.rejects(make(false,false,async()=>true,...stubs)(),/stopped/);
+assert.equal(writes,0,'stop present at entry must prevent guard or API mutation');
+let checks=0;
+await assert.rejects(make(false,false,async()=>++checks>=3,...stubs)(),/stopped/);
+assert.ok(checks>=3,'stop delivered while guard is pending must be checked again');
+console.log('PASS: actual generator freeze rejects pre-existing and in-flight stop before mutation');

@@ -1,0 +1,1 @@
+PASS: actual generator freeze rejects pre-existing and in-flight stop before mutation
