@@ -9,7 +9,6 @@ active
 actor
 adore
 aerial
-afford
 agenda
 agent
 agile
@@ -115,11 +114,9 @@ broil
 bronze
 brook
 broom
-brunch
 brush
 bubble
 bucket
-buckle
 budget
 buffalo
 builder
@@ -154,7 +151,6 @@ card
 cargo
 carrot
 carry
-carton
 cartoon
 case
 castle
@@ -250,6 +246,7 @@ cube
 cupcake
 curl
 curry
+cursor
 curve
 cut
 cycle
@@ -326,6 +323,7 @@ elk
 elm
 email
 ember
+emblem
 emboss
 emerald
 enamel
@@ -339,8 +337,10 @@ equal
 equator
 eraser
 even
+evolve
 exact
 exit
+expert
 fable
 fabric
 fact
