@@ -5,8 +5,9 @@ immutable pool tags, unattached outbound-only firewalls, release/image
 contracts, the private temporary R2 bucket lifecycle, and the Singapore
 recording KEK. It never creates or replaces runtime Droplets: the external
 recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity,
-fencing, and replacement, so replacement cannot exceed ten capture nodes,
-ten render nodes, or the twenty-node global cap.
+fencing, and replacement. Capture defaults to a ten-node cap, set by
+`capture_max_nodes`. Render retains its ten-node cap and the shared planning
+budget remains twenty nodes.
 
 The default capture pool uses BLR1 CPU-Optimized two-vCPU nodes. Confirm current
 regional size availability before applying; `capture_region` is configurable.
@@ -18,8 +19,8 @@ Mbps; these are capacity inputs, not a claim of regional load qualification.
 The root exposes the contract formula as `desired_capture_nodes`:
 
 ```text
-max(episodes, ceil(participants / 40), ceil(input_mbps / 16))
-+ ready_spare (fixed at zero)
+min(capture_max_nodes, max(ceil((episodes + ready_spare) / capture_episodes_per_node),
+                           ceil(participants / 40), ceil(input_mbps / 16)))
 ```
 
 Reservations are checked against ten Episodes, one hundred participants, and
@@ -40,8 +41,8 @@ The runtime controller is implemented as a provider-neutral state machine in
 `apps/api/internal/recorderfleet`. Its initial qualification path is
 zero nodes → one bootstrapping node → one role-fenced ready node → admission
 closed → active leases drained → certificate revoked → zero nodes. The same
-contract accepts configured targets up to the eleven-node capture and ten-node
-render limits. The controller saturates its operational target at the configured
+contract accepts a configurable Capture cap and retains the ten-node Render
+limit. The controller saturates its operational target at the configured
 limit while preserving raw demand for capacity signals.
 
 The controller does not infer demand from claimable jobs. Its authoritative
@@ -97,9 +98,27 @@ corresponding uppercase suffixes are `ENVIRONMENT`, `ROLE`,
 `CHALK_RECORDER_FLEET_DIGITALOCEAN_VPC_UUID` are optional. Duration overrides
 use `DEMAND_MAX_AGE`, `OBSERVATION_MAX_AGE`, `STARTUP_TIMEOUT`, `DRAIN_TIMEOUT`,
 `HEALTH_REFRESH`, and `RECONCILE_INTERVAL` with Go duration syntax.
-Set `CHALK_RECORDER_FLEET_SLOTS_PER_NODE=1` for both the serial capture pool and
-the one-job-per-node render pool. This setting is required; the command has no
-implicit role-specific default.
+Keep `CHALK_RECORDER_FLEET_SLOTS_PER_NODE=1` until Capture density is measured.
+Render stays at one job per node. This setting is required; the command has no
+implicit role-specific default. `CHALK_RECORDER_FLEET_FREE_SLOTS` defaults to zero
+and applies only to Capture. Do not set production values in this change.
+
+After qualification, set Capture `SLOTS_PER_NODE=N`, `FREE_SLOTS=8`, and an
+explicit `MAX_NODES` that can hold the floor. New droplets receive
+`CHALK_RECORDER_CAPTURE_SLOTS=N` through a systemd environment-file override.
+Existing workers count only their fresh reported capacity; old or unknown
+workers count as one slot. The controller adds nodes when this mixed fleet
+cannot cover demand plus the floor, without exceeding its configured cap.
+
+Capture negotiates v2 demand on the existing private endpoint. It divides only
+slot demand, including held starts and preparations. Participant and bitrate
+floors remain node counts. Old controllers receive the unchanged v1 response.
+An old API forces the new controller to count one slot per node and log a
+warning; it still reconciles. Render does not divide its demand. Bootstrap rows
+are reserved at create, before provider activation. A stuck create uses the
+bootstrap abandonment fence; an issued identity uses the confirmed-404 lease
+recovery path. Scale-down closes admission only after a fresh zero lease read,
+then requires another zero read after the close before revocation or deletion.
 `CHALK_RECORDER_FLEET_SSH_KEY_IDS` is an optional comma-separated list of at
 most eight DigitalOcean public key IDs. It does not open the firewall.
 DigitalOcean refuses to create a Droplet from a custom-base image, such as the

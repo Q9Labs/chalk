@@ -31,7 +31,8 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.image_digest = excluded.image_digest
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
-  and recording_fleet_nodes.state in ('requested', 'active', 'draining', 'revoked')
+  -- An issued identity must use close-admission, a later lease read, and revoke.
+  and recording_fleet_nodes.state in ('requested', 'revoked')
 returning provider_id
 `
 
@@ -236,7 +237,7 @@ with reservation_demand as (
 job_demand as (
     select
         count(*) filter (where state in ('pending', 'retryable_failure'))::integer as queued_jobs,
-        count(*) filter (where state = 'leased' and lease_expires_at > $2::timestamptz)::integer as leased_jobs,
+        count(*) filter (where state = 'leased' and lease_expires_at > clock_timestamp())::integer as leased_jobs,
         max(updated_at) as job_revision
     from recording_jobs
     where (
@@ -265,6 +266,11 @@ facts as (
         case when $1::text = 'capture' then reservation_demand.held_starts else 0 end::integer as held_starts,
         job_demand.queued_jobs,
         job_demand.leased_jobs,
+		greatest(reservation_demand.episode_count, job_demand.queued_jobs + job_demand.leased_jobs)::integer as slot_demand,
+		greatest(
+		    ((reservation_demand.participant_count + 39) / 40)::integer,
+		    ((reservation_demand.input_bitrate_bps + 15999999) / 16000000)::integer
+		)::integer as physical_node_floor,
         case
             when $1::text = 'capture' then greatest(
                 reservation_demand.episode_count,
@@ -277,7 +283,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, 10 - base_nodes))::integer as prepared_nodes,
+    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($3::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )
@@ -287,13 +293,16 @@ select
     (scheduled_prewarms + prepared_nodes)::integer as scheduled_prewarms,
     held_starts,
     queued_jobs,
+	(slot_demand + prepared_nodes)::integer as slot_demand,
+	physical_node_floor,
     $2::timestamptz as observed_at
 from target
 `
 
 type GetRecordingFleetDemandParams struct {
-	Role       string             `json:"role"`
-	ObservedAt pgtype.Timestamptz `json:"observed_at"`
+	Role         string             `json:"role"`
+	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
+	RecordingCap int32              `json:"recording_cap"`
 }
 
 type GetRecordingFleetDemandRow struct {
@@ -302,11 +311,13 @@ type GetRecordingFleetDemandRow struct {
 	ScheduledPrewarms int32              `json:"scheduled_prewarms"`
 	HeldStarts        int32              `json:"held_starts"`
 	QueuedJobs        int32              `json:"queued_jobs"`
+	SlotDemand        int32              `json:"slot_demand"`
+	PhysicalNodeFloor int32              `json:"physical_node_floor"`
 	ObservedAt        pgtype.Timestamptz `json:"observed_at"`
 }
 
 func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingFleetDemandParams) (GetRecordingFleetDemandRow, error) {
-	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt)
+	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt, arg.RecordingCap)
 	var i GetRecordingFleetDemandRow
 	err := row.Scan(
 		&i.Revision,
@@ -314,6 +325,8 @@ func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingF
 		&i.ScheduledPrewarms,
 		&i.HeldStarts,
 		&i.QueuedJobs,
+		&i.SlotDemand,
+		&i.PhysicalNodeFloor,
 		&i.ObservedAt,
 	)
 	return i, err

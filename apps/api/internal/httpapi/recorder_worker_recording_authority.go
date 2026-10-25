@@ -321,14 +321,6 @@ func decodeSHA256Hex(value string) ([]byte, error) {
 	return decoded, nil
 }
 
-func cloneSignedHeaders(signed objectstorage.SignedURL) map[string][]string {
-	cloned := make(map[string][]string, len(signed.SignedHeader))
-	for name, values := range signed.SignedHeader {
-		cloned[name] = append([]string(nil), values...)
-	}
-	return cloned
-}
-
 func writeRecorderRecordingAuthorityError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, recordingkeys.ErrInvalidRequest), errors.Is(err, recordingobjects.ErrInvalidRequest):

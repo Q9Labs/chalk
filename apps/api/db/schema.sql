@@ -2444,7 +2444,7 @@ create index transcription_cleanup_jobs_claim_idx on transcription_cleanup_jobs(
 create table recording_capacity (
     id smallint primary key check (id = 1),
     reserved_episodes integer not null default 0 check (reserved_episodes between 0 and 20),
-    reserved_participants integer not null default 0 check (reserved_participants between 0 and 100),
+    reserved_participants integer not null default 0 constraint recording_capacity_reserved_participants_check1 check (reserved_participants between 0 and 200),
     reserved_input_bitrate_bps bigint not null default 0 check (reserved_input_bitrate_bps >= 0),
     updated_at timestamptz not null default now()
 );

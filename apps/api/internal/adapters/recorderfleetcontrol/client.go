@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
@@ -26,12 +28,15 @@ type Config struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	Key        recorderfleet.PoolKey
+	Logger     *slog.Logger
 }
 
 type Client struct {
-	baseURL *url.URL
-	client  *http.Client
-	key     recorderfleet.PoolKey
+	baseURL      *url.URL
+	client       *http.Client
+	key          recorderfleet.PoolKey
+	logger       *slog.Logger
+	slotFallback sync.Once
 }
 
 func New(config Config) (*Client, error) {
@@ -39,7 +44,10 @@ func New(config Config) (*Client, error) {
 	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" || config.Key.Validate() != nil || config.HTTPClient == nil {
 		return nil, recorderfleet.ErrInvalidConfig
 	}
-	return &Client{baseURL: baseURL, client: config.HTTPClient, key: config.Key}, nil
+	if config.Logger == nil {
+		config.Logger = slog.Default()
+	}
+	return &Client{baseURL: baseURL, client: config.HTTPClient, key: config.Key, logger: config.Logger}, nil
 }
 
 func (c *Client) GetDemand(ctx context.Context, key recorderfleet.PoolKey) (recorderfleet.Demand, error) {
@@ -62,8 +70,30 @@ func (c *Client) getDemand(ctx context.Context, key recorderfleet.PoolKey, wait 
 	if err := c.doJSON(ctx, http.MethodGet, fleetPath+"/demand", query, nil, &response, http.StatusOK); err != nil {
 		return recorderfleet.Demand{}, err
 	}
-	if response.SchemaVersion != recorderfleet.DemandSchemaVersion || response.Environment != key.Environment || response.Role != key.Role {
+	if response.Environment != key.Environment || response.Role != key.Role {
 		return recorderfleet.Demand{}, recorderfleet.ErrRoleFence
+	}
+	switch response.SchemaVersion {
+	case recorderfleet.DemandSchemaVersion:
+		if response.CaptureCapacity != nil {
+			return recorderfleet.Demand{}, recorderfleet.ErrInvalidDemand
+		}
+		if key.Role == workeridentity.RoleCapture {
+			c.slotFallback.Do(func() {
+				c.logger.WarnContext(ctx, "recorder fleet API lacks slot demand; using one slot per Capture node", "reason", "legacy_demand", "slots_per_node", 1)
+			})
+		}
+	case recorderfleet.SlotDemandSchemaVersion:
+		capacity := response.CaptureCapacity
+		if key.Role != workeridentity.RoleCapture || capacity == nil || capacity.SlotDemand == nil || capacity.PhysicalNodeFloor == nil {
+			return recorderfleet.Demand{}, recorderfleet.ErrInvalidDemand
+		}
+		response.Demand.CaptureCapacity = &recorderfleet.CaptureCapacityDemand{SlotDemand: *capacity.SlotDemand, PhysicalNodeFloor: *capacity.PhysicalNodeFloor}
+	default:
+		return recorderfleet.Demand{}, recorderfleet.ErrRoleFence
+	}
+	if err := response.Demand.Validate(); err != nil {
+		return recorderfleet.Demand{}, err
 	}
 	return response.Demand, nil
 }
@@ -187,6 +217,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, query url.Valu
 		return recorderfleet.ErrInvalidConfig
 	}
 	request.Header.Set("Accept", "application/json")
+	if path == fleetPath+"/demand" && c.key.Role == workeridentity.RoleCapture {
+		request.Header.Set("X-Chalk-Fleet-Slot-Demand", "1")
+	}
 	if path == fleetPath+"/nodes" {
 		request.Header.Set("X-Chalk-Fleet-Lease-Observation", "1")
 		request.Header.Set("X-Chalk-Fleet-Lease-Authority", "1")
@@ -264,6 +297,10 @@ type demandResponse struct {
 	Environment   string              `json:"environment"`
 	Role          workeridentity.Role `json:"role"`
 	recorderfleet.Demand
+	CaptureCapacity *struct {
+		SlotDemand        *int `json:"slot_demand"`
+		PhysicalNodeFloor *int `json:"physical_node_floor"`
+	} `json:"capture_capacity,omitempty"`
 }
 
 type nodesResponse struct {

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 	defer server.Close()
 	request := recorderFleetEnsureRequest()
 	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
-	data, err := renderRecorderCloudInit(request, "https://example.invalid/archive")
+	data, err := renderRecorderCloudInit(request, "https://example.invalid/archive", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 		t.Fatal("bootstrap ran before trust configuration")
 	}
 	request.Release.BootstrapCABase64 = base64.StdEncoding.EncodeToString([]byte("not a certificate"))
-	if _, err := renderRecorderCloudInit(request, "https://example.invalid/archive"); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
+	if _, err := renderRecorderCloudInit(request, "https://example.invalid/archive", 1); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 		t.Fatalf("malformed trust accepted: %v", err)
 	}
 }
@@ -46,7 +47,7 @@ func TestPortableRecorderTrustComesFromBootConfiguration(t *testing.T) {
 func TestRecorderCloudInitStopsBeforeWorkerAndCleanupOnInstallOrBootstrapFailure(t *testing.T) {
 	for _, failureCommand := range []string{"/usr/bin/python3", "/usr/local/sbin/chalk-recorder-bootstrap"} {
 		t.Run(failureCommand, func(t *testing.T) {
-			data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive")
+			data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive", 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -508,5 +509,22 @@ func TestRecorderFleetNodeExistsRequiresExact404(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCaptureCloudInitSetsQualifiedSlots(t *testing.T) {
+	for _, slots := range []int{1, 4} {
+		data, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive", slots)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(data, "CHALK_RECORDER_CAPTURE_SLOTS="+strconv.Itoa(slots)) || !strings.Contains(data, "EnvironmentFile=/etc/chalk-recorder/capture-slots.env") {
+			t.Fatalf("worker did not receive %d slots", slots)
+		}
+	}
+	for _, slots := range []int{0, -1} {
+		if _, err := renderRecorderCloudInit(recorderFleetEnsureRequest(), "https://example.invalid/archive", slots); err == nil {
+			t.Fatalf("accepted %d slots", slots)
+		}
 	}
 }

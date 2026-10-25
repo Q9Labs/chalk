@@ -371,7 +371,7 @@ func newTranscriptResponse(transcript transcripts.Transcript) transcriptResponse
 		Status:      transcript.Status,
 		Provider:    transcript.Provider,
 		Model:       transcript.Model,
-		Languages:   transcript.Languages,
+		Languages:   append([]string{}, transcript.Languages...),
 		Text:        transcript.Text,
 		Metadata:    rawJSONValue(transcript.Metadata),
 		CompletedAt: optionalTimestampString(transcript.CompletedAt),

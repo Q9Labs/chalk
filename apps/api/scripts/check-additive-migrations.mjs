@@ -65,7 +65,10 @@ function check(sql) {
   if (!sawUp) return "Missing goose Up section";
   const sqlUp = up.join(" ").toUpperCase();
   const destructive = /\b(?:DROP|RENAME)\b|\bALTER\s+(?:COLUMN\s+)?\w+\s+(?:SET\s+DATA\s+)?TYPE\b/.exec(sqlUp);
-  if (destructive && !approved) {
+  // This exact replacement only loosens the existing participant CHECK. No other
+  // statement or constraint can enter through this exception.
+  const widensRecordingParticipants = sqlUp === "ALTER TABLE RECORDING_CAPACITY DROP CONSTRAINT RECORDING_CAPACITY_RESERVED_PARTICIPANTS_CHECK1 ; ALTER TABLE RECORDING_CAPACITY ADD CONSTRAINT RECORDING_CAPACITY_RESERVED_PARTICIPANTS_CHECK1 CHECK ( RESERVED_PARTICIPANTS BETWEEN 0 AND 2 0 0 ) ;";
+  if (destructive && !approved && !widensRecordingParticipants) {
     return `${destructive[0]} in Up needs -- chalk:removed-in #<PR> naming the merged pull request that stopped using the object`;
   }
 }

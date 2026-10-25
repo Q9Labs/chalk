@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 )
@@ -259,6 +260,7 @@ type Config struct {
 	RecordingKMS             RecordingKMSConfig
 	RecordingBundleV2Enabled bool
 	RecorderFleetIssuer      RecorderFleetIssuerConfig
+	RecordingAdmission       recordingpipeline.AdmissionLimits
 	Redis                    RedisConfig
 
 	SyncToken     SyncTokenConfig
@@ -273,6 +275,10 @@ const (
 )
 
 func Load() (Config, error) {
+	admission, err := loadRecordingAdmission()
+	if err != nil {
+		return Config{}, err
+	}
 	var limits tenantlimits.Config
 	for _, setting := range []struct {
 		name   string
@@ -531,6 +537,7 @@ func Load() (Config, error) {
 		RecordingKMS:             recordingKMS,
 		RecordingBundleV2Enabled: envBool(RecordingBundleV2Enabled),
 		RecorderFleetIssuer:      recorderFleetIssuer,
+		RecordingAdmission:       admission,
 		Redis: RedisConfig{
 			URL: envOrDefault(RedisURL, DefaultRedisURL),
 		},

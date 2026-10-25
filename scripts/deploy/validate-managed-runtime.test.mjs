@@ -131,6 +131,17 @@ test("the nightly examples validate with recording, transcription and freshly is
     const validated = spawnSync("bash", args, { encoding: "utf8" });
     assert.equal(validated.status, 0, validated.stderr);
     const apiPath = join(directory, "api.env");
+    const defaultAPI = await readFile(apiPath, "utf8");
+    await writeFile(apiPath, defaultAPI + "\nCHALK_RECORDING_ADMISSION_CAP=1\n");
+    const equal = spawnSync("bash", args, { encoding: "utf8" });
+    assert.equal(equal.status, 0, equal.stderr);
+    await writeFile(apiPath, defaultAPI + "\nCHALK_RECORDING_ADMISSION_CAP=2\n");
+    const over = spawnSync("bash", args, { encoding: "utf8" });
+    assert.notEqual(over.status, 0);
+    assert.match(over.stderr, /CHALK_RECORDING_ADMISSION_CAP exceeds Capture MAX_NODES x SLOTS_PER_NODE/);
+    await writeFile(apiPath, defaultAPI);
+    const unset = spawnSync("bash", args, { encoding: "utf8" });
+    assert.equal(unset.status, 0, unset.stderr);
     await writeFile(apiPath, (await readFile(apiPath, "utf8")).replace(/^CHALK_RECORDING_KMS_KEY_ID=.*\n/m, ""));
     const missingKey = spawnSync("bash", args, { encoding: "utf8" });
     assert.notEqual(missingKey.status, 0);

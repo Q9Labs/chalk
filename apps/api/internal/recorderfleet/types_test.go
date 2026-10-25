@@ -3,9 +3,25 @@ package recorderfleet
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
+
+func TestDemandWithPhysicalFloorAndPreparation(t *testing.T) {
+	demand := Demand{
+		Revision: "physical-floor-and-preparation", DesiredNodes: 4,
+		ScheduledPrewarms: 1, HeldStarts: 2, ObservedAt: time.Now(),
+		CaptureCapacity: &CaptureCapacityDemand{SlotDemand: 3, PhysicalNodeFloor: 3},
+	}
+	if err := demand.Validate(); err != nil {
+		t.Fatalf("legacy floor plus preparation must remain valid: %v", err)
+	}
+	demand.DesiredNodes = 2
+	if err := demand.Validate(); err == nil {
+		t.Fatal("legacy demand below the resource floor must be rejected")
+	}
+}
 
 func TestConfigArchiveBucketNamesMatchReleasePipeline(t *testing.T) {
 	for _, bucket := range []string{"example-artifacts", "example.artifacts", "1example-artifacts", "123", strings.Repeat("a", 63)} {

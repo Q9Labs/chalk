@@ -160,6 +160,7 @@ type recordingPipelineTransactor interface {
 }
 
 type RecordingPipelineRepository struct {
+	admissionLimits          recordingpipeline.AdmissionLimits
 	tenantLimits             tenantlimits.Config
 	queries                  recordingPipelineQuerier
 	transactor               recordingPipelineTransactor
@@ -272,7 +273,9 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 	} else {
 		availableAt = time.Unix(0, 0).UTC()
 	}
+	limits := r.admissionLimits.WithDefaults()
 	params := sqlc.CreateRecordingReservationParams{
+		RecordingCap: int32(limits.RecordingCap), ParticipantCap: int32(limits.ParticipantCap), BitrateCapBps: limits.BitrateCapBPS(),
 		EpisodeCount:          1,
 		ParticipantCount:      int32(input.ParticipantCount),
 		InputBitrateBps:       input.InputBitrateBPS,
@@ -1572,5 +1575,10 @@ func captureBundleSchemaVersion(enabled bool, previous *recordingpipeline.Record
 
 func (r RecordingPipelineRepository) WithTenantLimits(limits tenantlimits.Config) RecordingPipelineRepository {
 	r.tenantLimits = limits
+	return r
+}
+
+func (r RecordingPipelineRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingPipelineRepository {
+	r.admissionLimits = limits.WithDefaults()
 	return r
 }

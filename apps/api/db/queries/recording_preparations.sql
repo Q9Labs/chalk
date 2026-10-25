@@ -50,7 +50,11 @@ with eligible as (
       and preparation.starts_at > sqlc.arg(observed_at)::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
 ), capacity as (
-    select greatest(0, 10 - reserved_episodes)::integer as available, reserved_episodes as occupied
+    -- Sync reserves ten participants for each new Recording.
+    select greatest(0, least(
+        coalesce(nullif(sqlc.arg(recording_cap)::integer, 0), 10) - reserved_episodes,
+        (coalesce(nullif(sqlc.arg(participant_cap)::integer, 0), 100) - reserved_participants) / 10
+    ))::integer as available, reserved_episodes as occupied
     from recording_capacity where id = 1
 ), ready as (
     select coalesce(max(ready_capacity), 0)::integer as available from recording_pool_health

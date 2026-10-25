@@ -25,9 +25,9 @@ with existing as (
     where recording_capacity.id = 1
       -- Storage retains the prior bound so grandfathered reservations can drain;
       -- these predicates are the launch policy for new admission.
-      and locked_capacity.reserved_episodes + sqlc.arg(episode_count)::integer <= 10
-      and locked_capacity.reserved_participants + sqlc.arg(participant_count)::integer <= 100
-      and locked_capacity.reserved_input_bitrate_bps + sqlc.arg(input_bitrate_bps)::bigint <= 40000000
+      and locked_capacity.reserved_episodes + sqlc.arg(episode_count)::integer <= coalesce(nullif(sqlc.arg(recording_cap)::integer, 0), 10)
+      and locked_capacity.reserved_participants + sqlc.arg(participant_count)::integer <= coalesce(nullif(sqlc.arg(participant_cap)::integer, 0), 100)
+      and locked_capacity.reserved_input_bitrate_bps + sqlc.arg(input_bitrate_bps)::bigint <= coalesce(nullif(sqlc.arg(bitrate_cap_bps)::bigint, 0), 40000000)
       and exists (
           select 1 from episodes
           where episodes.tenant_id = sqlc.arg(tenant_id)
