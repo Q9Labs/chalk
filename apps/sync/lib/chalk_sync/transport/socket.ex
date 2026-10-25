@@ -927,7 +927,10 @@ defmodule ChalkSync.Transport.SocketV1 do
          {:ok, protocol_options, negotiated?, collaboration_version} <-
            negotiate_collaboration(
              identity,
-             if(recovery.terminal_reason, do: nil, else: Map.get(hello, :collaboration)),
+             if(recovery.mode == :terminal or recovery.terminal_reason,
+               do: nil,
+               else: Map.get(hello, :collaboration)
+             ),
              state.observability
            ),
          {:ok, coordinator} <-
