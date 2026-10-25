@@ -1,0 +1,17 @@
+{
+  "started_utc": "2026-10-25T05:01:42.439208+00:00",
+  "cap_usd": 0.25,
+  "prior_task_total_upper_usd": 1.52812,
+  "round_spend_usd": 0,
+  "capture_usd": 0,
+  "render_usd": 0,
+  "instabox_usd": 0,
+  "resources_created": [
+    "free Instabox build/generator guests only"
+  ],
+  "updated_utc": "2026-10-25T05:13:14.143091+00:00",
+  "closed_utc": "2026-10-25T05:26:37.042215+00:00",
+  "status": "BLOCKED",
+  "new_task_total_upper_usd": 1.52812,
+  "reason": "free publisher preflight failed; paid harness judge FIX; DO run never launched"
+}

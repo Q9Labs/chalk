@@ -1,0 +1,7 @@
+{
+  "commit": "1802a2fc5cb60d67556602f2dc14fa03b6b9e33f",
+  "built": true,
+  "toolchain": "go1.26.10",
+  "capture_sha256": "7cdff34d3546974d017d8e5749e59845ca85fc1f4810cad73437e446bb7f8a90",
+  "boot_probe_sha256": "f99428d32d995ebc96babdb4cbb11bc2a0c373cb3ee59fd08fa765b9b8e1b73a"
+}

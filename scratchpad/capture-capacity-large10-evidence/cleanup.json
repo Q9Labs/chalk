@@ -1,0 +1,19 @@
+{
+  "checked_utc": "2026-10-25T05:27:10.921753+00:00",
+  "owned_local_processes": [],
+  "instabox_all_four_absent": true,
+  "spaces_archived": 4,
+  "episodes_ended": 4,
+  "recordings_created": 0,
+  "do_resources_created": 0,
+  "fleet_rows_created": 0,
+  "runtime_flag_applied": false,
+  "ssm_parameter_writes": 0,
+  "shared_service_restarts": 0,
+  "ssm_forward_statuses": [
+    "Terminated"
+  ],
+  "local_ssh_keys_created": 0,
+  "raw_evidence_private": true,
+  "flag_absent_from_runtime_config_and_process": true
+}
