@@ -283,8 +283,18 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
         expire(ctx, 301)
         allow_expiry(ctx.connection)
         assert eventually(fn -> not witness?(ctx) end)
-        if ctx.outage_mode == :sync_only, do: assert(tick(ctx) == 0)
-        Process.sleep(ctx.outage_seconds * 1000)
+
+        if ctx.outage_mode == :sync_only do
+          assert tick(ctx) == 0
+          # Keep the real API scheduler running while only Sync is down.
+          for second <- 1..ctx.outage_seconds do
+            Process.sleep(1_000)
+            if rem(second, 5) == 0 or second == ctx.outage_seconds, do: assert(tick(ctx) == 0)
+          end
+        else
+          Process.sleep(ctx.outage_seconds * 1000)
+        end
+
         if ctx.startup_order == :api_first, do: assert(tick(ctx) == 0)
         # A new supervised child starts a real application/runtime and its startup barrier.
         node = external_node(@sync_app)
