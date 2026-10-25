@@ -259,7 +259,7 @@ func (s Service) parseInviteCredential(raw string) (inviteCredential, error) {
 
 func (credential inviteCredential) matches(handle []byte, generation uint64) bool {
 	if credential.code != "" {
-		return InviteCode(handle) == credential.code
+		return InviteCode(handle) == credential.code || InviteWordCode(handle) == credential.code
 	}
 	return credential.token.Generation == generation && bytes.Equal(credential.token.Handle, handle)
 }
@@ -849,7 +849,7 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 		}
 		inviteLink, err = r.links.LegacyInviteURL(space.Slug, token)
 	} else {
-		inviteLink, err = r.links.InviteURL(InviteCode(invite.Handle))
+		inviteLink, err = r.links.InviteURL(InviteWordCode(invite.Handle))
 	}
 	if err != nil {
 		return PublicSpaceCreated{}, fmt.Errorf("build public Space invite link: %w", err)
@@ -1464,7 +1464,7 @@ func (r Runtime) managedInvite(ctx context.Context, invite Invite) (ManagedInvit
 	if space.TenantID != invite.TenantID || space.SpaceID != invite.SpaceID {
 		return ManagedInvite{}, ErrInviteUnavailable
 	}
-	canonicalURL, err := r.links.InviteURL(InviteCode(invite.Handle))
+	canonicalURL, err := r.links.InviteURL(InviteWordCode(invite.Handle))
 	if err != nil {
 		return ManagedInvite{}, err
 	}

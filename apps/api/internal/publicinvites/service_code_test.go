@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -18,7 +19,7 @@ type codeRepository struct {
 }
 
 func (r *codeRepository) GetInviteByCode(_ context.Context, code string) (Invite, error) {
-	if InviteCode(r.invite.Handle) != code {
+	if InviteCode(r.invite.Handle) != code && InviteWordCode(r.invite.Handle) != code {
 		return Invite{}, ErrInviteNotFound
 	}
 	return r.invite, nil
@@ -204,4 +205,33 @@ func testCodeSigner(t *testing.T) Signer {
 		t.Fatal(err)
 	}
 	return signer
+}
+
+func TestWordInviteResolvesAndRevokes(t *testing.T) {
+	invite := testCodeInvite(t, 3)
+	repository := &codeRepository{invite: invite}
+	service := NewService(repository, testCodeSigner(t))
+	code := InviteWordCode(invite.Handle)
+	for _, raw := range []string{code, strings.ToUpper(strings.ReplaceAll(code, "-", " . ")), "https://chalkmeet.com/" + code} {
+		resolved, _, err := service.ResolveInviteToken(context.Background(), raw)
+		if err != nil || string(resolved.Handle) != string(invite.Handle) {
+			t.Fatalf("resolve words: %v", err)
+		}
+	}
+	repository.invite.Enabled = false
+	if _, _, err := service.ResolveInviteToken(context.Background(), code); !errors.Is(err, ErrInviteUnavailable) {
+		t.Fatalf("disabled words: %v", err)
+	}
+	repository.invite.Enabled = true
+	repository.invite.Handle = repeatedCodeBytes(4)
+	repository.invite.Generation++
+	if _, _, err := service.ResolveInviteToken(context.Background(), code); !errors.Is(err, ErrInviteUnavailable) {
+		t.Fatalf("rotated words: %v", err)
+	}
+	for _, raw := range []string{code, FormatInviteCode(InviteCode(invite.Handle))} {
+		credential, err := service.parseInviteCredential(raw)
+		if err != nil || !credential.matches(invite.Handle, invite.Generation) || credential.matches(repository.invite.Handle, repository.invite.Generation) {
+			t.Fatalf("word/letter arrival credential matching: %v", err)
+		}
+	}
 }

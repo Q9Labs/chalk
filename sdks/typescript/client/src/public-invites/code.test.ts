@@ -5,6 +5,12 @@ import { parseInviteCode } from "./code";
 describe("parseInviteCode", () => {
   it.each([
     ["abc-defg-hij", "abc-defg-hij"],
+    ["apple-tiger-lamp-river", "apple-tiger-lamp-river"],
+    [" APPLE Tiger.lamp-river ", "apple-tiger-lamp-river"],
+    ["apple.tiger.lamp.river", "apple-tiger-lamp-river"],
+    ["unknown-tiger-lamp-river", undefined],
+    ["hate-tiger-lamp-river", undefined],
+    ["apple-tiger-lamp", undefined],
     ["ABCDEFGHIJ", "abc-defg-hij"],
     ["  ABC-DEFG-HIJ  ", "abc-defg-hij"],
     ["abcdefghij", "abc-defg-hij"],

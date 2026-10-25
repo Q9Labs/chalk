@@ -5,6 +5,9 @@ import { parseChalkInviteLink, parseSpaceInviteLink } from "./invites";
 describe("parseChalkInviteLink", () => {
   it.each([
     ["abc-defg-hij", { spaceInviteToken: "abc-defg-hij" }],
+    [" APPLE Tiger.lamp-river ", { spaceInviteToken: "apple-tiger-lamp-river" }],
+    ["https://chalkmeet.com/APPLE%20TIGER.LAMP-RIVER", { spaceInviteToken: "apple-tiger-lamp-river" }],
+    ["chalk://apple-tiger-lamp-river", { spaceInviteToken: "apple-tiger-lamp-river" }],
     ["ABCDEFGHIJ", { spaceInviteToken: "abc-defg-hij" }],
     ["https://chalkmeet.com/abc-defg-hij", { spaceInviteToken: "abc-defg-hij" }],
     ["chalkmeet.com/ABC-DEFG-HIJ", { spaceInviteToken: "abc-defg-hij" }],

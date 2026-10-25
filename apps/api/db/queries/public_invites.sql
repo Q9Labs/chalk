@@ -32,7 +32,7 @@ select tenant_id, space_id, handle, invite_code, generation, state_epoch, enable
        admission_mode, created_at, updated_at, rotated_at, disabled_at, last_actor_id,
        last_rotation_request_key
 from space_public_invites
-where invite_code = sqlc.arg(invite_code);
+where invite_code = sqlc.arg(invite_code) or invite_words = sqlc.arg(invite_code);
 
 -- name: LockSpacePublicInviteByHandle :one
 select tenant_id, space_id, handle, invite_code, generation, state_epoch, enabled, public_role,
