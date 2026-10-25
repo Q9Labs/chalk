@@ -102,19 +102,23 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
          node_id: "dropped-presence"}
       )
 
-    assert {:ok, _ready} = ExternalSyncNode.await_ready(node, 30_000)
-    returned = connect(port, ctx.identity)
-    on_exit(fn -> Client.close_tcp(returned) end)
+    try do
+      assert {:ok, _ready} = ExternalSyncNode.await_ready(node, 30_000)
+      returned = connect(port, ctx.identity)
+      on_exit(fn -> Client.close_tcp(returned) end)
 
-    assert [[true]] =
-             Postgrex.query!(
-               ctx.connection,
-               "select expires_at > clock_timestamp()+interval '110 seconds' from participant_presence_leases where participant_id=$1",
-               [UUID.dump!(ctx.identity.participant_id)]
-             ).rows
+      assert [[true]] =
+               Postgrex.query!(
+                 ctx.connection,
+                 "select expires_at > clock_timestamp()+interval '110 seconds' from participant_presence_leases where participant_id=$1",
+                 [UUID.dump!(ctx.identity.participant_id)]
+               ).rows
 
-    assert probe(ctx, "tick") == 0
-    assert status(ctx) == "active"
+      assert probe(ctx, "tick") == 0
+      assert status(ctx) == "active"
+    after
+      ExternalSyncNode.stop(node)
+    end
   end
 
   test "a return after grace uses normal admission and old cleanup cannot evict it", ctx do
