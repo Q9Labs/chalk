@@ -1,4 +1,4 @@
-import { formatSyncConnectDiagnostic } from "../sync/connect-diagnostics";
+import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import type { ConnectionMediaSnapshot } from "../media";
@@ -22,7 +22,8 @@ type SyncRecoveryAttempt = {
 type MediaRecoveryAttempt = {
   expiresAt: number | null;
 };
-const START_TIMEOUT_MS = 10000;
+// A 10s dial can fail and retry before the overall join gives up.
+const START_TIMEOUT_MS = 30000;
 const LEAVE_TIMEOUT_MS = 5000;
 const RECOVERY_BUDGET_MS = 10000;
 const MAX_RECOVERY_ATTEMPTS = 3;
@@ -358,7 +359,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const failure = snapshot.connection.connectFailure;
             if (failure && failure !== observedConnectFailure) {
               observedConnectFailure = failure;
-              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: "sync_hello_timeout", sync: failure });
+              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: syncConnectFailureCode(failure), sync: failure });
             }
             const count = snapshot.connection.dialTimeoutCount ?? 0;
             if (count > observedDialTimeouts) {
@@ -437,7 +438,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
         return effect.pipe(
           Effect.tap(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" }))),
-          Effect.tapError(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed" }))),
+          Effect.tapError((cause) => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failureFromCause(cause, "internal_error", "Connection step failed").code }))),
         );
       };
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
@@ -518,7 +519,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               onFailure: (cause) =>
                 Effect.gen(function* () {
                   stopStream(stream);
-                  const failure = failureFromCause(cause, "sync_start_failed", "The Connection could not start");
+                  const failure = failureFromCause(cause, "internal_error", "The Connection could not start");
                   model.failure = toFailure(failure);
                   if (model.joinCancelled) {
                     span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "invalid_state" });
@@ -1251,9 +1252,11 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
 }
 
 function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
-  const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
+  const evidence = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
+  const attempts = snapshot.connection.connectAttempt?.attempt;
+  const sync = evidence ? { ...evidence, ...(attempts === undefined ? {} : { attempts }) } : undefined;
   const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
-  return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
+  return new ConnectionLifecycleFailure({ code: syncConnectFailureCode(sync), recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
 }
 
 // The expired seat cannot reconnect with the same grant; only a new admission can retry it.

@@ -5,6 +5,10 @@ export type SyncConnectDiagnostic = {
   readonly closeCode: number | null;
   readonly closeReason: string | null;
   readonly durationMs: number;
+  /** One-based socket attempt since Sync start; absent in older SDK evidence. */
+  readonly attempt?: number;
+  /** Total sockets started when the join failed, including a pending replacement. */
+  readonly attempts?: number;
 };
 
 // Peer text is untrusted and can echo credentials. Retain only protocol-owned reasons.
@@ -37,6 +41,10 @@ const SAFE_REASONS = new Set([
 export function safeSyncCloseReason(reason: string | undefined): string | null {
   return reason ? (SAFE_REASONS.has(reason) ? reason : "redacted") : null;
 }
+/** Keep published error codes stable while separating upgrade from hello failures. */
+export function syncConnectFailureCode(diagnostic: SyncConnectDiagnostic | undefined): "sync_start_failed" | "sync_hello_timeout" {
+  return diagnostic?.stage === "upgrade" ? "sync_start_failed" : "sync_hello_timeout";
+}
 export function formatSyncConnectDiagnostic(diagnostic: SyncConnectDiagnostic): string {
-  return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${Math.round(diagnostic.durationMs)}ms]`;
+  return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${diagnostic.stage === "upgrade" && diagnostic.closeCode !== null ? "cause=closed_before_open; " : ""}${diagnostic.attempt === undefined ? "" : `attempt=${diagnostic.attempt}; `}${diagnostic.attempts === undefined ? "" : `attempts=${diagnostic.attempts}; `}${Math.round(diagnostic.durationMs)}ms]`;
 }

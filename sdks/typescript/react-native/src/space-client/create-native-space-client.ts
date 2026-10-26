@@ -38,7 +38,7 @@ export type NativeSpaceClientOptions = {
 export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
   ensureRandomUUID();
   const { storage } = options;
-  const syncStartupTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
+  const syncDialTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
   const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
   const fetch = globalThis.fetch;
@@ -61,9 +61,9 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
-    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage, syncStartupTimeoutMs),
+    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage, syncDialTimeoutMs),
     createChatFileTransport: (input) => createChatFileTransport(apiBaseURL, input, fetch),
-    createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncStartupTimeoutMs),
+    createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncDialTimeoutMs),
     subscribeForeground: (listener) => {
       const subscription = AppState.addEventListener("change", (state) => {
         if (state === "active") listener();
@@ -79,7 +79,8 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       whiteboardUrl: options.whiteboardURL,
       dependencies,
       fetch,
-      syncStartupTimeoutMs,
+      // Keep the 30s native dial allowance, plus time for its replacement.
+      syncStartupTimeoutMs: options.syncStartupTimeoutMs ?? 60000,
       initialMicrophoneEnabled: options.microphone,
       initialCameraEnabled: options.camera,
     },

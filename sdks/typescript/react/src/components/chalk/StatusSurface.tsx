@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { formatSyncConnectDiagnostic, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
+import { formatSyncConnectDiagnostic, getConnectionFailureDetail, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 
 export type StatusSurfacePhase = "entering" | "left" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
@@ -22,26 +22,13 @@ export interface StatusSurfaceProps {
   readonly retryPending?: boolean;
 }
 
-const DEFAULT_FAILURE_DETAIL = "Something went wrong while joining. Try again.";
-const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
-  "access.invalid": "Access to this call was rejected. Refresh the page and try again.",
-  "access.unavailable": "Couldn’t get access to the call. Try again.",
-  "connection.sync_start_failed": "Couldn’t reach the call service. Try again.",
-  "connection.sync_hello_timeout": "The call service did not respond in time. Try again.",
-  "connection.sync_recovery_exhausted": "The call connection could not recover. Try again.",
-  "connection.media_start_failed": "Audio and video could not connect. Try again.",
-  "connection.media_recovery_exhausted": "Audio and video could not reconnect. Try again.",
-  "environment.unsupported": "This browser cannot start the call. Use an up-to-date browser over HTTPS.",
-  "client.internal_error": DEFAULT_FAILURE_DETAIL,
-};
-
 /** All terminal call states share the same quiet page and host-owned navigation. */
 export function StatusSurface({ phase, callName = "the call", reason, episodeEndReason, endAction, errorCode, sync, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
     "episode-ended": episodeEndReason === "maximum_duration" ? { title: "The call reached its time limit", detail: "This call has ended for everyone." } : { title: "The call ended", detail: "" },
-    failed: { title: `Couldn’t connect to ${callName}`, detail: (errorCode && FAILURE_DETAILS[errorCode]) ?? DEFAULT_FAILURE_DETAIL },
+    failed: { title: `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync }) },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
     full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },
     elsewhere: { title: "You joined from another tab", detail: `${callName} is open in another tab or window. Use it here instead?` },

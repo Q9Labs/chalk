@@ -43,11 +43,11 @@ function browser() {
   vi.stubGlobal("WebSocket", SilentSocket);
   vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
 }
-function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
+function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs: number | null = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
   return createSpaceClientForPlatform(
     { space: "test", getAccess, logger },
     {
-      syncStartupTimeoutMs,
+      ...(syncStartupTimeoutMs === null ? {} : { syncStartupTimeoutMs }),
       onConnectionDiagnostic,
       dependencies: {
         createSyncClient: (input) => createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: new InMemoryV1PendingTargetStore() }),
@@ -61,6 +61,51 @@ afterEach(() => {
 });
 
 describe("public client startup failure contract", () => {
+  it("joins after a stalled upgrade and a slow replacement without a manual retry", async () => {
+    const sockets = await liveBrowser(false, { stallFirstUpgrade: true, upgradeDelayMs: 8000 });
+    vi.useFakeTimers();
+    const diagnostic = vi.fn();
+    const client = makeClient(async () => accessGrant(), null, undefined, diagnostic);
+    const joining = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+    try {
+      await vi.waitFor(() => expect(sockets).toHaveLength(1));
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(client.getSnapshot().connection.status).toBe("joining");
+      await vi.advanceTimersByTimeAsync(8500);
+      await expect(joining).resolves.toBeUndefined();
+      expect(sockets).toHaveLength(2);
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ event: "sync_dial_timeout" }));
+    } finally {
+      client.dispose();
+      await joining;
+    }
+  });
+
+  it("still fails within the default budget when every upgrade stalls", async () => {
+    browser();
+    vi.stubGlobal(
+      "WebSocket",
+      class extends EventTarget {
+        send() {}
+        close() {}
+      },
+    );
+    vi.useFakeTimers();
+    const client = makeClient(async () => accessGrant(), null);
+    const joining = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+    try {
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(client.getSnapshot().connection.status).toBe("joining");
+      await vi.advanceTimersByTimeAsync(2);
+      expect(await joining).toMatchObject({ code: "connection.sync_start_failed", sync: { stage: "upgrade", opened: false } });
+      expect(client.getSnapshot().connection.status).toBe("failed");
+    } finally {
+      client.dispose();
+      await joining;
+    }
+  });
+
   it.each([
     {
       stage: "rejected token",
@@ -92,7 +137,7 @@ describe("public client startup failure contract", () => {
           },
         ),
       getAccess: async () => accessGrant(),
-      code: "connection.sync_hello_timeout",
+      code: "connection.sync_start_failed",
       recoverable: true,
     },
     { stage: "Sync hello deadline", setup: () => {}, getAccess: async () => accessGrant(), code: "connection.sync_hello_timeout", recoverable: true },
@@ -161,14 +206,43 @@ describe("public client startup failure contract", () => {
       await vi.advanceTimersByTimeAsync(10_001);
       expect(attempts).toBeGreaterThan(1);
       expect(send).not.toHaveBeenCalled();
-      const failure = { code: "connection.sync_hello_timeout", recoverable: true, sync: { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: expect.any(Number) } };
+      const failure = { code: "connection.sync_start_failed", recoverable: true, sync: { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: expect.any(Number), attempt: expect.any(Number), attempts } };
       expect(await rejection).toMatchObject(failure);
       expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: failure });
+      expect(client.getSnapshot().connection.lastError?.sync?.attempt).toBeGreaterThanOrEqual(attempts - 1);
+      expect(client.getSnapshot().connection.lastError?.sync?.attempt).toBeLessThanOrEqual(attempts);
       expect(errors).toMatchObject([failure]);
       expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ sync: expect.objectContaining(failure.sync) }));
     } finally {
       client.dispose();
       await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
+  it("retains the closed attempt while its replacement is still pending at the deadline", async () => {
+    browser();
+    let attempts = 0;
+    vi.stubGlobal(
+      "WebSocket",
+      class extends EventTarget {
+        constructor() {
+          super();
+          if (++attempts === 1) queueMicrotask(() => this.dispatchEvent(Object.assign(new Event("close"), { code: 1006, reason: "" })));
+        }
+        send() {}
+        close() {}
+      },
+    );
+    vi.useFakeTimers();
+    const client = makeClient(async () => accessGrant(), 1_000);
+    try {
+      const rejection = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(attempts).toBeGreaterThan(0));
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(attempts).toBe(2);
+      expect(await rejection).toMatchObject({ code: "connection.sync_start_failed", sync: { opened: false, closeCode: 1006, attempt: 1, attempts: 2 } });
+    } finally {
+      client.dispose();
     }
   });
 
@@ -217,7 +291,7 @@ describe("public client startup failure contract", () => {
     const client = makeClient(async () => accessGrant(), 25, { debug });
     try {
       const rejection = await client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
-      const code = "connection.sync_hello_timeout";
+      const code = opened ? "connection.sync_hello_timeout" : "connection.sync_start_failed";
       expect(rejection).toMatchObject({ code, sync: { stage: opened ? "hello" : "upgrade", opened, closeCode: null, closeReason: null, durationMs: expect.any(Number) } });
       expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "connection_failed", sync: expect.objectContaining({ opened }) }));
     } finally {
@@ -252,7 +326,7 @@ describe("public client startup failure contract", () => {
       await vi.advanceTimersByTimeAsync(1001);
       expect(attempts).toBe(2);
       const failure = await rejection;
-      const expected = { code: "connection.sync_hello_timeout", sync: { stage: "upgrade", opened: false, closeCode: null, closeReason: null, durationMs: expect.any(Number) } };
+      const expected = { code: "connection.sync_start_failed", sync: { stage: "upgrade", opened: false, closeCode: null, closeReason: null, durationMs: expect.any(Number) } };
       expect(failure).toMatchObject(expected);
       expect(client.getSnapshot().connection.lastError).toMatchObject(expected);
       expect(client.getSnapshot().connection.lastError?.sync?.durationMs).toBeGreaterThan(1);
@@ -392,7 +466,7 @@ function accessGrant() {
     media: { token: token("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
   };
 }
-async function liveBrowser(invalidRecoverySnapshot = false) {
+async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number } = {}) {
   browser();
   vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   const control: V1ControlState = {
@@ -412,12 +486,17 @@ async function liveBrowser(invalidRecoverySnapshot = false) {
   const head = { revision: 1, state_schema_version: 1, state_digest: digest };
   const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
   const sockets: EventTarget[] = [];
-  class ProtocolSocket extends SilentSocket {
+  class ProtocolSocket extends EventTarget {
     constructor() {
       super();
       sockets.push(this);
+      if (network.stallFirstUpgrade && sockets.length === 1) return;
+      const open = () => this.dispatchEvent(new Event("open"));
+      if (network.upgradeDelayMs) setTimeout(open, network.upgradeDelayMs);
+      else queueMicrotask(open);
     }
-    override send(data?: string) {
+    close() {}
+    send(data?: string) {
       if (!data || JSON.parse(data).type !== "hello") return;
       this.dispatchEvent(
         new MessageEvent("message", {

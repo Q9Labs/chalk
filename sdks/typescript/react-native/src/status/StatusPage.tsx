@@ -1,4 +1,5 @@
 import { forwardRef, memo, useEffect, useRef } from "react";
+import { formatSyncConnectDiagnostic, getConnectionFailureDetail, type ClientFailure } from "@q9labsai/chalk-client";
 import { AccessibilityInfo, findNodeHandle, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useMeasuredRef } from "../frame/measurement";
@@ -14,6 +15,7 @@ export type CallOutcome = "left" | "ended" | "failed" | "removed" | "exited" | "
 export type StatusPageProps = {
   readonly outcome: CallOutcome;
   readonly callName: string;
+  readonly failure?: ClientFailure | null;
   readonly onRejoin: () => void;
   readonly onHome: () => void;
 };
@@ -30,7 +32,7 @@ function pageFor(outcome: CallOutcome, callName: string): Page {
     case "ended":
       return { title: "The call ended", actions: ["rejoin", "home"] };
     case "failed":
-      return { title: `Couldn’t connect to ${callName}`, detail: "Check your internet connection, then try again.", actions: ["rejoin", "home"], rejoinLabel: "Try again" };
+      return { title: `Couldn’t connect to ${callName}`, actions: ["rejoin", "home"], rejoinLabel: "Try again" };
     case "removed":
       return { title: `You were removed from ${callName}`, detail: "The host removed you from this call.", actions: ["home"] };
     case "exited":
@@ -44,9 +46,10 @@ function pageFor(outcome: CallOutcome, callName: string): Page {
  * A full-screen status page on the canvas (`.status`): a title, an optional line saying what to do,
  * and the ways forward as round actions with their names under them.
  */
-export function StatusPage({ outcome, callName, onRejoin, onHome }: StatusPageProps): React.JSX.Element {
+export function StatusPage({ outcome, callName, failure, onRejoin, onHome }: StatusPageProps): React.JSX.Element {
   const { colors } = useTheme();
   const page = pageFor(outcome, callName);
+  const detail = outcome === "failed" ? getConnectionFailureDetail({ code: failure?.code, sync: failure?.sync }) : page.detail;
   const pageStyle = [styles.page, { backgroundColor: colors.canvas }];
   const ref = useMeasuredRef<View>("status.page", pageStyle);
   const firstAction = useRef<View>(null);
@@ -60,9 +63,14 @@ export function StatusPage({ outcome, callName, onRejoin, onHome }: StatusPagePr
       <ChalkText accessibilityRole="header" style={styles.center} testID="status.title" variant="statusTitle">
         {page.title}
       </ChalkText>
-      {page.detail ? (
+      {detail ? (
         <ChalkText style={styles.center} testID="status.detail" tone="textMuted">
-          {page.detail}
+          {detail}
+        </ChalkText>
+      ) : null}
+      {outcome === "failed" && failure ? (
+        <ChalkText style={styles.center} testID="status.reference" tone="textMuted" variant="caption">
+          {`Reference: ${failure.code}${failure.sync ? ` ${formatSyncConnectDiagnostic(failure.sync)}` : ""}`}
         </ChalkText>
       ) : null}
       <View style={styles.actions}>

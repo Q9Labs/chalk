@@ -17,6 +17,7 @@
     "**/*.test.tsx",
     "**/*.test.mjs",
     "scripts/web-proof/fixtures/guest-media.mjs",
+    "scripts/web-proof/join-startup.mjs",
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "apps/api/scripts/smoke-lifecycle.mjs",

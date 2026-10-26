@@ -100,10 +100,11 @@ export class V1SyncClient implements V1CollaborationClient {
   #cancelDial: (() => void) | undefined;
   #dialTimeoutCount = 0;
   #connectStartedAt: number | null = null;
+  #connectAttemptCount = 0;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
-    return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())) };
+    return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())), attempt: this.#connectAttemptCount };
   }
   #reconnectAttempt = 0;
   #episodeEndTimer: unknown;
@@ -166,6 +167,8 @@ export class V1SyncClient implements V1CollaborationClient {
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
+    this.#connectAttemptCount = 0;
+    this.#connectFailure = undefined;
     const startupGeneration = ++this.#startupGeneration;
     let stored: readonly V1PendingTarget[];
     try {
@@ -375,9 +378,12 @@ export class V1SyncClient implements V1CollaborationClient {
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
+    this.#connectAttemptCount += 1;
     this.#connectStartedAt = this.#clock().now();
     this.#opened = false;
-    this.#connectFailure = undefined;
+    // A pending retry must not erase a rejected upgrade. An earlier hello is
+    // no longer the failing stage once its replacement is trying to open.
+    if (this.#connectFailure?.opened) this.#connectFailure = undefined;
     this.#emit();
     this.#entryNegotiated = false;
     let socket: V1Socket;
@@ -387,7 +393,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
       // Never propagate constructor exceptions: browsers can include the credentialed URL.
-      throw new V1SyncError("Sync WebSocket could not be created", "sync_hello_timeout");
+      throw new V1SyncError("Sync WebSocket could not be created", "sync_start_failed");
     }
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
@@ -429,7 +435,7 @@ export class V1SyncClient implements V1CollaborationClient {
     };
     socket.onerror = () => {
       if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
-        this.#connectFailure = this.#connectDiagnostic();
+        this.#connectFailure ??= this.#connectDiagnostic();
         this.#emit();
       }
       socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");

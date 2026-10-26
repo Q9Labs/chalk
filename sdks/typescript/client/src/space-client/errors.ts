@@ -44,6 +44,7 @@ const INVALID_PAYLOAD_CODE_BY_ACTION: ReadonlyMap<ConnectionError["action"], Err
 
 const MEDIA_TIMEOUT_FAILURE = { code: "media.timeout", recoverable: true, message: "Media did not respond in time. Try again." } as const;
 const SYNC_FAILURES: ReadonlyMap<string, { readonly failure: ClientFailure; readonly scope?: "media" }> = new Map([
+  ["sync_start_failed", { failure: { code: "connection.sync_start_failed", recoverable: true, message: "A connection to the call service could not be opened. Try again." } }],
   ["sync_hello_timeout", { failure: { code: "connection.sync_hello_timeout", recoverable: true, message: "Sync could not reach the call service. Try again." } }],
   ["not_live", { failure: { code: "connection.invalid_state", recoverable: true, message: "Wait for the call to connect, then try again." } }],
   ["signaling_timeout", { failure: MEDIA_TIMEOUT_FAILURE }],
