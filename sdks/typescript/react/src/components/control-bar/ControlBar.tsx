@@ -93,13 +93,11 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onMirrorChange={props.onMirrorChange}
         />
       ) : null}
-      <span className="chalk-shell-gap chalk-shell-desktop" />
       {has("screenshare") ? <ShareControl disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
       <span className="chalk-shell-desktop">{iconButton(fullscreen ? "Exit fullscreen" : "Fullscreen", <ShellIcon name={fullscreen ? "min" : "max"} />, toggleFullscreen, fullscreen)}</span>
-      <span className="chalk-shell-gap chalk-shell-desktop" />
 
       <span className="chalk-shell-phone">
         <DockLayout layout={props.layout ?? "focus"} onLayoutChange={props.onLayoutChange ?? (() => {})}>
