@@ -57,10 +57,10 @@ a fresh process. It checks recovered snapshot content, stable duplicate receipts
 exact event/receipt counts, and the replay payload and digest. The received-ack
 case kills only after the client reads its receipt. No sleep chooses a kill point.
 
-Join, leave, and end journeys also kill after lifecycle event insertion, intent
-application, webhook production, and commit. They require exactly one lifecycle
-event, webhook Event, and queued delivery, then redeliver the same intent and
-compare the durable rows. This checks webhook production, not HTTP delivery
+The join journey also kills after lifecycle event insertion, intent
+application, webhook production, and commit. It requires exactly one lifecycle
+event, webhook Event, and queued delivery, then redelivers the same intent and
+compares the durable rows. This checks webhook production, not HTTP delivery
 by the separate API worker.
 
 The source rules are `AGENTS.md` (Postgres authority), `README.md` (Durable

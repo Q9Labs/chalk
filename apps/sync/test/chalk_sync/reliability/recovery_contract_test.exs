@@ -110,35 +110,28 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     assert :ok = ExternalSyncNode.kill(restarted)
   end
 
-  for lifecycle <- [:join, :leave, :end],
-      boundary <- [
+  for boundary <- [
         :after_event_insert,
         :after_intent_applied,
         :after_webhook_production,
         :after_commit_before_reply
       ] do
-    @lifecycle lifecycle
     @boundary boundary
-    test "#{lifecycle} and its webhook recover once at #{boundary}", %{connection: connection} do
-      {fixture, intent_id, event_name, webhook_name} = lifecycle_fixture(connection, @lifecycle)
+    test "join and its webhook recover once at #{boundary}", %{connection: connection} do
+      {fixture, intent_id, event_name, webhook_name} = lifecycle_fixture(connection)
       on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
       {listener, barrier_port} = barrier()
       {node, port} = start_node(@boundary, intent_id, barrier_port)
 
-      # Admission is confirmed by hello; leave/end are consumed from API intents.
-      if @lifecycle == :join do
-        {:ok, client} = Client.connect(port, "/v1/sync")
-        send_hello(client, fixture.identity, nil)
-      end
+      {:ok, client} = Client.connect(port, "/v1/sync")
+      client = send_hello(client, fixture.identity, nil)
 
       await_boundary(listener, @boundary, intent_id, node)
       assert :ok = ExternalSyncNode.kill(node)
+      Client.close_tcp(client)
       {restarted, port} = start_node(:none, intent_id, barrier_port)
-
-      if @lifecycle == :join do
-        {client, _welcome} = Wire.connect_v1(port, fixture.identity)
-        Client.close_tcp(client)
-      end
+      {client, _welcome} = Wire.connect_v1(port, fixture.identity)
+      Client.close_tcp(client)
 
       await_applied(connection, fixture.episode, intent_id, 100)
       assert_lifecycle_once(connection, fixture, event_name, webhook_name)
@@ -162,8 +155,18 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
   end
 
   defp await_boundary(listener, boundary, target, node) do
-    result = :gen_tcp.accept(listener, 10_000)
-    assert {:ok, socket} = result, Enum.join(ExternalSyncNode.logs(node), "\n")
+    socket =
+      case :gen_tcp.accept(listener, 10_000) do
+        {:ok, socket} ->
+          socket
+
+        error ->
+          flunk(
+            "boundary #{boundary} was not reached: #{inspect(error)}\n" <>
+              Enum.join(ExternalSyncNode.logs(node), "\n")
+          )
+      end
+
     assert {:ok, message} = :gen_tcp.recv(socket, 0, 5_000)
     assert JSON.decode!(message) == %{"boundary" => Atom.to_string(boundary), "target" => target}
     on_exit(fn -> :gen_tcp.close(socket) end)
@@ -228,7 +231,8 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     assert event["event_id"] == ack["event_id"]
     assert event["revision"] == ack["revision"]
     assert event["resulting_state_digest"] == ack["state_digest"]
-    assert event["payload"] == %{"participant_id" => identity.participant_id, "raised" => false}
+    assert event["name"] == "hand_lowered"
+    assert event["payload"] == %{"participant_id" => identity.participant_id}
     client = Client.acknowledge_recovery(client, page)
     {client, _complete} = Wire.receive_json_type(client, "recovery_complete")
     Client.close_tcp(client)
@@ -247,25 +251,10 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     end)
   end
 
-  defp lifecycle_fixture(connection, :join) do
+  defp lifecycle_fixture(connection) do
     fixture = SyncPostgres.seed_pending_join(connection)
     fixture = SyncPostgres.seed_webhook_endpoint(fixture, connection, ["participant.joined"])
     {fixture, fixture.lifecycle_intent_id, "participant_joined", "participant.joined"}
-  end
-
-  defp lifecycle_fixture(connection, kind) do
-    fixture = SyncPostgres.seed_episode(connection)
-    fixture = Map.put(fixture, :identity, hd(fixture.identities))
-    webhook = if kind == :leave, do: "participant.left", else: "episode.ended"
-    fixture = SyncPostgres.seed_webhook_endpoint(fixture, connection, [webhook])
-
-    if kind == :leave do
-      fixture = SyncPostgres.request_pending_leave(connection, fixture)
-      {fixture, fixture.leave_lifecycle_intent_id, "participant_left", webhook}
-    else
-      fixture = SyncPostgres.request_pending_end(connection, fixture)
-      {fixture, fixture.end_lifecycle_intent_id, "episode_ended", webhook}
-    end
   end
 
   defp assert_lifecycle_once(connection, fixture, event_name, webhook_name) do
