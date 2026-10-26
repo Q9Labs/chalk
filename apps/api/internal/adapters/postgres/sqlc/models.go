@@ -239,6 +239,15 @@ type ParticipantMediaRefresh struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type ParticipantPresenceLease struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	SpaceID       pgtype.UUID        `json:"space_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ParticipantID pgtype.UUID        `json:"participant_id"`
+	Generation    int64              `json:"generation"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
 type PasswordReset struct {
 	AccountID pgtype.UUID        `json:"account_id"`
 	TokenHash string             `json:"token_hash"`

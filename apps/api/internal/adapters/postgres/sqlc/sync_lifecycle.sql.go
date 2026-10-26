@@ -144,6 +144,56 @@ func (q *Queries) ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEp
 	return items, nil
 }
 
+const claimExpiredParticipantPresence = `-- name: ClaimExpiredParticipantPresence :many
+select control.tenant_id, control.space_id, control.episode_id
+from sync_episode_control control
+where $1::timestamptz <= clock_timestamp()
+    and exists (
+        select 1 from participant_presence_leases lease
+        join participants p on p.tenant_id=lease.tenant_id and p.space_id=lease.space_id
+            and p.episode_id=lease.episode_id and p.id=lease.participant_id and p.generation=lease.generation
+        join episodes e on e.tenant_id=p.tenant_id and e.space_id=p.space_id and e.id=p.episode_id
+        where lease.tenant_id=control.tenant_id and lease.space_id=control.space_id
+            and lease.episode_id=control.episode_id and lease.expires_at <= clock_timestamp()
+            and p.status='active' and e.status='active'
+    )
+order by control.episode_id
+for update of control skip locked
+limit $2
+`
+
+type ClaimExpiredParticipantPresenceParams struct {
+	PresenceRecoverAfter pgtype.Timestamptz `json:"presence_recover_after"`
+	BatchSize            int32              `json:"batch_size"`
+}
+
+type ClaimExpiredParticipantPresenceRow struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+// Lock control before Episode/participant, as entry and heartbeat renewal do.
+func (q *Queries) ClaimExpiredParticipantPresence(ctx context.Context, arg ClaimExpiredParticipantPresenceParams) ([]ClaimExpiredParticipantPresenceRow, error) {
+	rows, err := q.db.Query(ctx, claimExpiredParticipantPresence, arg.PresenceRecoverAfter, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimExpiredParticipantPresenceRow
+	for rows.Next() {
+		var i ClaimExpiredParticipantPresenceRow
+		if err := rows.Scan(&i.TenantID, &i.SpaceID, &i.EpisodeID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createAdmissionRequest = `-- name: CreateAdmissionRequest :one
 insert into sync_admission_requests (
     tenant_id,
@@ -955,6 +1005,78 @@ type ExpireUncollectedPublicArrivalParams struct {
 func (q *Queries) ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error {
 	_, err := q.db.Exec(ctx, expireUncollectedPublicArrival, arg.TenantID, arg.ArrivalHandle)
 	return err
+}
+
+const expiredParticipantPresence = `-- name: ExpiredParticipantPresence :many
+select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation from participants p
+left join participant_join_seats seat on seat.tenant_id=p.tenant_id and seat.space_id=p.space_id
+    and seat.episode_id=p.episode_id and seat.participant_id=p.id and seat.generation=p.generation
+join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
+    and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
+where p.tenant_id=$1 and p.space_id=$2 and p.episode_id=$3
+    and p.status='active' and lease.expires_at <= clock_timestamp()
+order by p.id
+for update of p
+limit $4
+`
+
+type ExpiredParticipantPresenceParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SpaceID   pgtype.UUID `json:"space_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	BatchSize int32       `json:"batch_size"`
+}
+
+type ExpiredParticipantPresenceRow struct {
+	Participant     Participant `json:"participant"`
+	EntryGeneration int64       `json:"entry_generation"`
+}
+
+func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error) {
+	rows, err := q.db.Query(ctx, expiredParticipantPresence,
+		arg.TenantID,
+		arg.SpaceID,
+		arg.EpisodeID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpiredParticipantPresenceRow
+	for rows.Next() {
+		var i ExpiredParticipantPresenceRow
+		if err := rows.Scan(
+			&i.Participant.ID,
+			&i.Participant.Name,
+			&i.Participant.Metadata,
+			&i.Participant.Capabilities,
+			&i.Participant.TenantID,
+			&i.Participant.SpaceID,
+			&i.Participant.EpisodeID,
+			&i.Participant.AccountID,
+			&i.Participant.IdentityID,
+			&i.Participant.MediaConnectionID,
+			&i.Participant.MediaConnectionGeneration,
+			&i.Participant.Generation,
+			&i.Participant.Status,
+			&i.Participant.Role,
+			&i.Participant.JoinedAt,
+			&i.Participant.LeftAt,
+			&i.Participant.UpdatedAt,
+			&i.Participant.CreatedAt,
+			&i.Participant.FirstJoinedAt,
+			&i.Participant.LastLeftReason,
+			&i.EntryGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const failPendingTenantControlOperationsForEnd = `-- name: FailPendingTenantControlOperationsForEnd :execrows

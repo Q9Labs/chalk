@@ -5,9 +5,24 @@ defmodule ChalkSync.Stateholder.Postgres.Presence do
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.Transaction
 
-  # One room clock: any current participant's live connection keeps it fresh.
-  # Entry ownership and attendance do not belong to presence.
+  # Room liveness and participant attendance have separate clocks. Renewal is
+  # serialized with removal by the Episode authority lock, across Sync nodes.
   def renew(connection, identity) do
+    Postgrex.query!(
+      connection,
+      """
+      insert into participant_presence_leases
+        (tenant_id, space_id, episode_id, participant_id, generation, expires_at)
+      select $1, $2, $3, $4, $5, clock_timestamp() + interval '120 seconds'
+      from participants
+      where tenant_id=$1 and space_id=$2 and episode_id=$3 and id=$4
+        and generation=$5 and status in ('joining', 'active')
+      on conflict (tenant_id, space_id, episode_id, participant_id) do update
+        set generation=excluded.generation, expires_at=excluded.expires_at
+      """,
+      Scope.participant(identity) ++ [identity.participant_generation]
+    )
+
     Postgrex.query!(
       connection,
       """
