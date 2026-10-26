@@ -66,9 +66,10 @@ func (c Config) now() func() time.Time {
 // Snapshot is the coordinator's active provider-track view. The slices are
 // copied before they leave the coordinator.
 type Snapshot struct {
-	Connection   captureplane.CaptureConnection
-	PlanRevision captureplane.PlanRevision
-	Tracks       []captureplane.PulledCaptureTrack
+	Connection    captureplane.CaptureConnection
+	PlanRevision  captureplane.PlanRevision
+	Tracks        []captureplane.PulledCaptureTrack
+	PendingTracks bool
 }
 
 // Coordinator owns one provider connection and serializes all SDP exchanges for
@@ -76,17 +77,19 @@ type Snapshot struct {
 type Coordinator struct {
 	mu sync.Mutex
 
-	authority       AttemptAuthority
-	signaling       SignalingPort
-	peer            PeerPort
-	maxRounds       int
-	now             func() time.Time
-	bootstrapped    bool
-	closed          bool
-	connection      captureplane.CaptureConnection
-	plan            captureplan.Plan
-	cleanupRevision captureplane.PlanRevision
-	tracks          map[string]captureplane.PulledCaptureTrack
+	authority        AttemptAuthority
+	signaling        SignalingPort
+	peer             PeerPort
+	maxRounds        int
+	now              func() time.Time
+	bootstrapped     bool
+	closed           bool
+	connection       captureplane.CaptureConnection
+	plan             captureplan.Plan
+	cleanupRevision  captureplane.PlanRevision
+	tracks           map[string]captureplane.PulledCaptureTrack
+	retryUnavailable bool
+	pullAttempt      uint64
 }
 
 func NewCoordinator(authority AttemptAuthority, signaling SignalingPort, peer PeerPort, config Config) (*Coordinator, error) {
@@ -188,6 +191,8 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 		return Snapshot{}, err
 	}
 	c.setActiveTracks(pull.Tracks)
+	c.retryUnavailable = len(pull.Unavailable) > 0
+	c.pullAttempt++
 	c.plan = plan
 	c.bootstrapped = true
 	return c.snapshotLocked(), nil
@@ -344,7 +349,7 @@ func (c *Coordinator) snapshotLocked() Snapshot {
 		}
 		return tracks[left].MID < tracks[right].MID
 	})
-	return Snapshot{Connection: c.connection, PlanRevision: c.plan.Revision(), Tracks: tracks}
+	return Snapshot{Connection: c.connection, PlanRevision: c.plan.Revision(), Tracks: tracks, PendingTracks: c.retryUnavailable}
 }
 
 func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan) (Snapshot, error) {
@@ -355,7 +360,9 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 		if stringFingerprint(c.plan) != stringFingerprint(plan) {
 			return Snapshot{}, ErrPlanConflict
 		}
-		return c.snapshotLocked(), nil
+		if !c.retryUnavailable {
+			return c.snapshotLocked(), nil
+		}
 	}
 
 	desired, err := tracksForPlan(plan)
@@ -385,7 +392,7 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 		createNegotiation = &negotiation
 	}
 	if len(additions) > 0 {
-		metadata := c.authority.metadata(plan.Revision(), captureplane.OperationPullCaptureTracks, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationPullCaptureTracks, "additions"))
+		metadata := c.authority.metadata(plan.Revision(), captureplane.OperationPullCaptureTracks, stableIdempotencyKey(c.authority.CaptureEpoch, plan.Revision(), captureplane.OperationPullCaptureTracks, fmt.Sprintf("additions-%d", c.pullAttempt)))
 		pulled, err := c.executePull(ctx, metadata, c.connection.ConnectionReference, additions, nil)
 		if err != nil {
 			return Snapshot{}, err
@@ -407,6 +414,10 @@ func (c *Coordinator) reconcileLocked(ctx context.Context, plan captureplan.Plan
 			return Snapshot{}, err
 		}
 		c.setActiveTracks(pulled.Tracks)
+		c.retryUnavailable = len(pulled.Unavailable) > 0
+		c.pullAttempt++
+	} else {
+		c.retryUnavailable = false
 	}
 	c.connection.PlanRevision = plan.Revision()
 	c.plan = plan

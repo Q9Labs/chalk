@@ -600,7 +600,14 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 					cancel(nil)
 					return finish(err, writer)
 				}
-				continue
+				pending, err := a.coordinator.Snapshot()
+				if err != nil {
+					return finish(err, writer)
+				}
+				if !pending.PendingTracks {
+					continue
+				}
+				event.plan = plan
 			}
 			if event.err != nil {
 				if errors.Is(event.err, captureplan.ErrNoChange) || errors.Is(event.err, ErrNoChange) || errors.Is(event.err, captureplan.ErrWaitTimeout) {
@@ -632,6 +639,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				return finish(err, writer)
 			}
 			readers = updatedReaders
+			plan = appliedPlan
 		}
 	}
 }

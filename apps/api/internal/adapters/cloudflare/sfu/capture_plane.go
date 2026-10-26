@@ -544,9 +544,9 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	var response captureTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/new", url.PathEscape(input.Connection.String()))
 	if err := a.request(ctx, http.MethodPost, path, request, &response, "add_tracks"); err != nil {
-		if result, gone, goneErr := captureGonePullResult(err, response, input); gone {
-			if goneErr != nil {
-				return captureplane.PullCaptureTracksResult{}, goneErr
+		if result, handled, unavailableErr := captureUnavailablePullResult(err, response, input); handled {
+			if unavailableErr != nil {
+				return captureplane.PullCaptureTracksResult{}, unavailableErr
 			}
 			if err := captureReplayStore(a, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
 				return captureplane.PullCaptureTracksResult{}, err
@@ -584,11 +584,11 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	return result, nil
 }
 
-// captureGonePullResult accepts only a complete, identity-matched response
+// captureUnavailablePullResult accepts only a complete, identity-matched response
 // whose failed entries are per-track publication-not-found answers. A mixed
 // response keeps the successful pulls; unrelated failures retain their usual
 // classification and retry behavior.
-func captureGonePullResult(requestErr error, response captureTracksResponse, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, bool, error) {
+func captureUnavailablePullResult(requestErr error, response captureTracksResponse, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, bool, error) {
 	var failure providerFailure
 	if !errors.As(requestErr, &failure) || failure.operation != "add_tracks" || failure.stage != failureStageTrack || failure.statusCode != http.StatusOK {
 		return captureplane.PullCaptureTracksResult{}, false, nil
@@ -645,15 +645,18 @@ func captureGonePullResult(requestErr error, response captureTracksResponse, inp
 		incomplete = unresolved
 	}
 	pulled := make([]captureplane.PulledCaptureTrack, 0, len(input.Tracks))
-	gone := make([]captureplane.CaptureTrack, 0)
 	unavailable := make([]captureplane.CaptureTrack, 0)
+	missing := false
 	for _, track := range input.Tracks {
 		result, exists := byIdentity[captureTrackKey{owner: track.OwnerReference.String(), track: track.TrackReference.String()}]
 		if !exists {
 			return captureplane.PullCaptureTracksResult{}, false, nil
 		}
 		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "not_found_track_error") {
-			gone = append(gone, track)
+			missing = true
+			// A publisher can be visible before the SFU can serve its RTP.
+			// Keep it retryable; absence here is not an unpublish event.
+			unavailable = append(unavailable, track)
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(result.ErrorCode), "empty_track_error") {
@@ -669,14 +672,14 @@ func captureGonePullResult(requestErr error, response captureTracksResponse, inp
 		}
 		pulled = append(pulled, captureplane.PulledCaptureTrack{CaptureTrack: track, MID: mid})
 	}
-	if len(gone) == 0 {
+	if !missing {
 		return captureplane.PullCaptureTracksResult{}, false, nil
 	}
 	negotiation, err := captureNegotiation(input.Metadata, input.Connection, captureplane.OperationPullCaptureTracks, response.Description, response.RequiresImmediateRenegotiation)
 	if err != nil {
 		return captureplane.PullCaptureTracksResult{}, true, err
 	}
-	result := captureplane.PullCaptureTracksResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Tracks: pulled, Gone: gone, Unavailable: unavailable, Negotiation: negotiation}
+	result := captureplane.PullCaptureTracksResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Tracks: pulled, Unavailable: unavailable, Negotiation: negotiation}
 	if err := result.ValidateAgainst(input.Metadata); err != nil {
 		return captureplane.PullCaptureTracksResult{}, true, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 	}
