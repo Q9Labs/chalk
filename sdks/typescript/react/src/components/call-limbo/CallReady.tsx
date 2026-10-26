@@ -2,7 +2,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkCopyButton, ChalkSheet } from "../chalk-ui";
-import { inviteQR } from "./qr-code";
+import { InviteQR, inviteQr } from "../chalk-ui/InviteQR";
 
 export interface CallReadyProps {
   readonly open: boolean;
@@ -18,7 +18,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   const [entered, setEntered] = useState(false);
   const [present, setPresent] = useState(open);
   const id = useId();
-  const qr = showQR ? inviteQR(link) : null;
+  const qr = showQR ? inviteQr(link) : null;
   const close = () => {
     onClose();
     cardRef.current?.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
@@ -74,11 +74,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       </div>
       <div ref={qrRef} id={`${id}-qr`} hidden={!showQR}>
         <div className="mt-3 flex items-center gap-3.5">
-          {qr ? (
-            <svg role="img" aria-label="Scan to join this call" width="104" height="104" viewBox={`-4 -4 ${qr.length + 8} ${qr.length + 8}`} className="shrink-0 rounded-lg bg-white p-1" shapeRendering="crispEdges">
-              <path fill="#000" d={qr.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x} ${y}h1v1h-1z`] : []))).join("")} />
-            </svg>
-          ) : null}
+          {qr ? <InviteQR code={qr} /> : null}
           <p className="text-[13px] text-[var(--chalk-soft-text)]">{qr ? "Scan with a phone camera to join this call." : "This link is too long for a QR code. Copy the link to share it."}</p>
         </div>
       </div>

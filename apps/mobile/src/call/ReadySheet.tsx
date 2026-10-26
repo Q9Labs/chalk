@@ -1,11 +1,10 @@
-import { BottomSheet, ChalkText, CopyButton, IconButton, PillButton, useTheme } from "@q9labsai/chalk-react-native/ui";
+import { BottomSheet, ChalkText, CopyButton, IconButton, PillButton, QrCode, useTheme } from "@q9labsai/chalk-react-native/ui";
 import { setStringAsync } from "expo-clipboard";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { shareLink } from "../lib/share";
 import { displayLink } from "../lib/spaces";
-import { QrCode } from "./QrCode";
 
 type ReadySheetProps = {
   readonly open: boolean;
@@ -40,7 +39,7 @@ export function ReadySheet({ open, onClose, link }: ReadySheetProps): React.JSX.
       </View>
       {showQr ? (
         <Animated.View entering={FadeIn.duration(200)} style={styles.qr} testID="ready.qr-code">
-          <QrCode value={link} />
+          <QrCode size={112} value={link} />
           <ChalkText style={styles.qrText} tone="textSoft" variant="meta">
             Scan with a phone camera to join this call.
           </ChalkText>

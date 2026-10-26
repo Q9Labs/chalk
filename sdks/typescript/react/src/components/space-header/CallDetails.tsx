@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
-import { shareQr } from "./share-qr";
+import { InviteQR, inviteQr } from "../chalk-ui/InviteQR";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import type { SpaceHeaderProps } from "./space-header-contract";
 
@@ -208,7 +208,7 @@ export function CallDetails({
   readonly onDialog: (kind: "shortcuts" | "report") => void;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
-  const qr = shareQr(link);
+  const qr = inviteQr(link);
   const [details, setDetails] = useState(false);
   return (
     <div className="chalk-details">
@@ -228,10 +228,7 @@ export function CallDetails({
         </div>
         {qr ? (
           <div className="chalk-shell-qr-row">
-            <svg data-part="share-qr" className="chalk-shell-qr" viewBox={`0 0 ${qr.length + 8} ${qr.length + 8}`} role="img" aria-label="Scan to join this call" shapeRendering="crispEdges">
-              <rect width="100%" height="100%" fill="white" />
-              <path d={qr.flatMap((row, y) => row.flatMap((dark, x) => (dark ? [`M${x + 4},${y + 4}h1v1h-1z`] : []))).join("")} />
-            </svg>
+            <InviteQR code={qr} />
             <p>Scan with a phone camera to join this call.</p>
           </div>
         ) : null}
