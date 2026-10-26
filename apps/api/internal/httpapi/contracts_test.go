@@ -7,25 +7,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/apitest"
 )
-
-// These are operational probes, not public REST endpoint contracts.
-var operationalRouteReasons = map[string]string{
-	"GET /healthz":                  "Process liveness for the load balancer.",
-	"GET /readyz":                   "Dependency readiness for the load balancer.",
-	"GET /healthz/recorder/capture": "Capture-pool readiness for the load balancer.",
-	"GET /healthz/recorder/render":  "Render-pool readiness for the load balancer.",
-}
-
-var publicRouteReasons = map[string]string{
-	"POST /v1/public/spaces":                                   "Guest Space creation is a public entry point.",
-	"POST /v1/public/space-invite-entrance":                    "Guest entrance resolves an invite capability.",
-	"POST /v1/public/space-invite-arrivals":                    "Guest arrival exchanges an invite capability.",
-	"GET /v1/public/space-invite-arrival":                      "Guest arrival status uses its opaque handle.",
-	"DELETE /v1/public/space-invite-arrival":                   "Guest departure uses its opaque handle.",
-	"POST /v1/public/space-invite-arrival/access-grants":       "Guest access refresh uses its arrival capability.",
-	"GET /v1/tenants/{tenant_id}/problem-reports/availability": "Reports availability exposes no tenant data.",
-}
 
 // Bodyless writes still have an explicit request contract: the path parameters.
 var bodylessWriteReasons = map[string]string{
@@ -60,6 +43,10 @@ func mountedRoutes(t *testing.T, options Options) map[string]bool {
 }
 
 func TestMountedRouteContractCompleteness(t *testing.T) {
+	matrix, err := apitest.RouteMatrix()
+	if err != nil {
+		t.Fatal(err)
+	}
 	contracts := make(map[string]APIRouteContract)
 	operations := make(map[string]bool)
 	pathParameter := regexp.MustCompile(`\{([^}]+)\}`)
@@ -76,7 +63,7 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 		if contract.MountPath == "" || contract.Path != "/v1"+contract.MountPath {
 			t.Errorf("%s: contract mount path does not match public path", key)
 		}
-		public := publicRouteReasons[key] != ""
+		public := matrix[key].PublicReason != ""
 		if public != (contract.Auth == "") {
 			t.Errorf("%s: auth requirement disagrees with explicit public allowlist", key)
 		}
@@ -149,7 +136,7 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 		t.Run(variant.name, func(t *testing.T) {
 			mounted := mountedRoutes(t, variant.options)
 			for route := range mounted {
-				if operationalRouteReasons[route] != "" {
+				if matrix[route].ProtocolReason != "" {
 					continue
 				}
 				if _, declared := contracts[route]; !declared {
@@ -161,8 +148,11 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 					t.Errorf("declared route is not mounted: %s", route)
 				}
 			}
-			for route, reason := range publicRouteReasons {
-				if !mounted[route] || strings.TrimSpace(reason) == "" {
+			for route, row := range matrix {
+				if strings.HasPrefix(route, "POST /internal/") {
+					continue
+				}
+				if !mounted[route] || (len(row.Credentials) == 0 && strings.TrimSpace(row.PublicReason) == "") {
 					t.Errorf("stale or unexplained public allowlist entry: %s", route)
 				}
 			}
