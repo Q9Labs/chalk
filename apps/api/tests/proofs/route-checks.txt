@@ -5,17 +5,17 @@ They exclude VM start, compilation and database migration; resolution is 10 ms.
 These are check overhead observations, not Chalk performance-budget results.
 The fake-route commits exist only in the disposable proof checkout; the script recreates them.
 
-PROOF clean head 5a147f54372e726b8035b1de626a7b149832cadb
-PROOF machine x86_64; cores 4;  18:58:20 up 11 min,  1 user,  load average: 0.50, 0.51, 0.35
-PROOF PASS TestAuthorizationRouteMatrix: median 80 ms; range 70-80 ms; n=3
+PROOF clean head f37daca2d98a1f2336ebb053bad298ada250ed06
+PROOF machine x86_64; cores 4;  19:05:49 up 1 min,  1 user,  load average: 4.09, 1.64, 0.60
+PROOF PASS TestAuthorizationRouteMatrix: median 70 ms; range 70-80 ms; n=3
 PROOF PASS TestDisabledTranscriptionReturnsTypedUnavailable: median <10 ms; range <10-<10 ms; n=3
 PROOF PASS TestGeneratedOpenAPIMatchesEndpointContracts: median 20 ms; range 20-20 ms; n=3
 PROOF PASS TestMountedRouteContractCompleteness: median <10 ms; range <10-<10 ms; n=3
 PROOF PASS TestWorkloadAuthorizationRouteMatrix: median 210 ms; range 210-210 ms; n=3
-PROOF expected failure unprotected: scratch commit bb69eebe6d903c9baaab54acd55d646cc1d3a96c; exit 1
+PROOF expected failure unprotected: scratch commit 774c4ba1a1b7de005eb2c1c317e1bdb122ff0755; exit 1
     authz_route_matrix_test.go:69: mounted route has no authorization matrix entry: GET /v1/matrix-unprotected
-        authz_route_matrix_test.go:80: GET /v1/tenants/66eba40a-c5e8-4cef-b133-b8f3fb046e52/spaces/7c6580ad-8680-46cf-9b4a-994d3c6ae904: got 200, want 401: {"secret":"matrix-canary"}
-PROOF expected failure undeclared: scratch commit cccb6efe7f06bbb03f3e8929124fcd6d1c158e1f; exit 1
+        authz_route_matrix_test.go:80: GET /v1/tenants/2450f37a-4623-4489-a2ca-85821616a7bd/spaces/be3ba380-3a7b-4f97-ac82-874b689e206b: got 200, want 401: {"secret":"matrix-canary"}
+PROOF expected failure undeclared: scratch commit 30f6c45ec8d040f8f88f0a34c0e327e3c9b75475; exit 1
         contracts_test.go:142: mounted route has no typed endpoint declaration in PreviewRouteContracts: GET /v1/matrix-undeclared
         contracts_test.go:142: mounted route has no typed endpoint declaration in PreviewRouteContracts: GET /v1/matrix-undeclared
-PROOF restored clean head 5a147f54372e726b8035b1de626a7b149832cadb
+PROOF restored clean head f37daca2d98a1f2336ebb053bad298ada250ed06
