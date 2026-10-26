@@ -30,6 +30,7 @@ defmodule ChalkSync.Stateholder.Postgres.PresenceRuntime do
         )
 
         Postgrex.query!(transaction, "select pg_advisory_lock_shared(1128811595, 1)", [])
+        Postgrex.query!(transaction, "select pg_advisory_lock_shared(1128811595, 2)", [])
         :ok
       end)
   end

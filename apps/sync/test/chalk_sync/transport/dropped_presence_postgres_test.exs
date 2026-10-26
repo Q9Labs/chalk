@@ -166,6 +166,84 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     Client.close_tcp(healthy)
   end
 
+  test "expired dropped participant leaves while a healthy participant stays active", ctx do
+    fixture =
+      SyncPostgres.seed_webhook_endpoint(ctx.fixture, ctx.connection, ["participant.left"])
+
+    ctx = %{ctx | fixture: fixture}
+    dropped = connect(ctx.port, ctx.identity)
+    healthy_identity = Enum.at(ctx.fixture.identities, 1)
+    healthy = connect(ctx.port, healthy_identity)
+    Client.close_tcp(dropped)
+
+    assert tick(ctx) == 0
+    assert_no_leave(ctx)
+
+    expire_participant(ctx)
+    healthy = ping(healthy)
+    assert tick(ctx) == 1
+    assert eventually(fn -> participant_status(ctx, ctx.identity) == "left" end)
+    assert participant_status(ctx, healthy_identity) == "active"
+    assert episode_status(ctx) == "active"
+    assert tick(ctx) == 0
+
+    [[joined_at, left_at, reason]] =
+      Postgrex.query!(
+        ctx.connection,
+        "select joined_at,left_at,last_left_reason from participants where id=$1",
+        [UUID.dump!(ctx.identity.participant_id)]
+      ).rows
+
+    assert DateTime.compare(left_at, joined_at) in [:gt, :eq]
+    assert reason == "left"
+
+    [[body, deliveries]] =
+      Postgrex.query!(
+        ctx.connection,
+        "select e.body,(select count(*) from webhook_deliveries d where d.tenant_id=e.tenant_id and d.event_id=e.id) from webhook_events e where e.tenant_id=$1 and e.resource_id=$2 and e.event_name='participant.left'",
+        [UUID.dump!(ctx.fixture.episode.tenant_id), UUID.dump!(ctx.identity.participant_id)]
+      ).rows
+
+    event = Jason.decode!(body)
+
+    assert event["data"]["object"]["joined_at"] ==
+             joined_at |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+
+    assert event["data"]["object"]["left_at"] ==
+             left_at |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+
+    assert deliveries == 1
+    Client.close_tcp(healthy)
+  end
+
+  test "reconnect before the expiry claim cancels participant departure", ctx do
+    dropped = connect(ctx.port, ctx.identity)
+    Client.close_tcp(dropped)
+    expire_participant(ctx)
+    reconnected = connect(ctx.port, ctx.identity)
+    assert tick(ctx) == 0
+    assert participant_status(ctx, ctx.identity) == "active"
+    assert_no_leave(ctx)
+    Client.close_tcp(reconnected)
+  end
+
+  defp expire_participant(ctx) do
+    Postgrex.query!(
+      ctx.connection,
+      "update participant_presence_leases set expires_at=clock_timestamp()-interval '1 second' where participant_id=$1",
+      [UUID.dump!(ctx.identity.participant_id)]
+    )
+  end
+
+  defp participant_status(ctx, identity) do
+    [[status]] =
+      Postgrex.query!(ctx.connection, "select status from participants where id=$1", [
+        UUID.dump!(identity.participant_id)
+      ]).rows
+
+    status
+  end
+
   test "an abandoned unconfirmed replacement cannot strand the Episode", ctx do
     first = connect(ctx.port, ctx.identity)
     Client.close_tcp(first)

@@ -4729,3 +4729,17 @@ create table sync_presence_runtime (
 );
 insert into sync_presence_runtime(singleton, recover_after)
 values (true, clock_timestamp() + interval '120 seconds');
+
+create table participant_presence_leases (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    generation bigint not null,
+    expires_at timestamptz not null,
+    primary key (tenant_id, space_id, episode_id, participant_id),
+    foreign key (tenant_id, space_id, episode_id, participant_id)
+        references participants(tenant_id, space_id, episode_id, id) on delete cascade
+);
+create index participant_presence_leases_expiry_idx on participant_presence_leases(expires_at);
+

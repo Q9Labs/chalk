@@ -32,6 +32,8 @@ type Querier interface {
 	ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error)
 	ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error)
 	ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEpisodeLingersParams) ([]ClaimEmptyEpisodeLingersRow, error)
+	// Lock control before Episode/participant, as entry and heartbeat renewal do.
+	ClaimExpiredParticipantPresence(ctx context.Context, arg ClaimExpiredParticipantPresenceParams) ([]ClaimExpiredParticipantPresenceRow, error)
 	ClaimRecordingCaptureCommand(ctx context.Context, arg ClaimRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error)
 	ClaimTranscriptionCleanupJob(ctx context.Context, arg ClaimTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
@@ -107,6 +109,7 @@ type Querier interface {
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
+	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]Participant, error)
 	ExtendRecordingReservation(ctx context.Context, arg ExtendRecordingReservationParams) (ExtendRecordingReservationRow, error)
 	FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error)
 	FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error)

@@ -22,8 +22,9 @@ acceleration only.
 
 ### Abandoned-Episode compatibility
 
-Presence never marks a participant left or changes attendance or media. Any live
-participant connection renews the one shared Episode lease. After 120 seconds
+A live participant connection renews participant and Episode leases. After 120
+seconds without renewal, the API requests an ordinary participant leave, which
+closes attendance and emits participant.left through the existing finalizer. After 120 seconds
 without renewal, the existing customer linger can end the Episode through its
 normal operation and recording cleanup. Reconnect before end cancels this
 window, on published SDKs as well as head; after end use `episode_ended`.

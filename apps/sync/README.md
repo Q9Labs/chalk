@@ -113,6 +113,14 @@ reserving the existing idempotent end operation. Explicit all-left linger keeps
 its existing behavior even without Sync. Rooms with no lease use Episode
 creation plus grace, bounded by the same startup floor.
 
+Each live connection also renews a participant-generation lease. After 120 seconds
+without renewal, the API scheduler reserves an ordinary participant leave under
+the same Episode authority lock as renewal. Sync performs media cleanup, records
+`left_at`, and emits `participant.left`; the existing attendance endpoint reports
+the departure. Reconnect before reservation renews the lease and cancels expiry.
+A lease-aware Sync session witness and startup recovery floor prevent inference
+during Sync/database outages. This does not require a new client heartbeat.
+
 Apply the additive migration before API and Sync, and replace the whole Sync
 fleet before relying on abandonment cleanup: older **servers** do not renew
 room leases. Production Promote/Sync restarts replace the one Sync container;

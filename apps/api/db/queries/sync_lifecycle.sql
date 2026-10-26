@@ -829,3 +829,31 @@ where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_hand
 
 -- name: IsAdmissionRequestExpiryDue :one
 select sync_admission_expiry_due(sqlc.arg(expires_at)::timestamptz, sqlc.narg(arrival_state)::text, now())::boolean as due;
+
+-- name: ClaimExpiredParticipantPresence :many
+-- Lock control before Episode/participant, as entry and heartbeat renewal do.
+select control.tenant_id, control.space_id, control.episode_id
+from sync_episode_control control
+where sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
+    and exists (
+        select 1 from participant_presence_leases lease
+        join participants p on p.tenant_id=lease.tenant_id and p.space_id=lease.space_id
+            and p.episode_id=lease.episode_id and p.id=lease.participant_id and p.generation=lease.generation
+        join episodes e on e.tenant_id=p.tenant_id and e.space_id=p.space_id and e.id=p.episode_id
+        where lease.tenant_id=control.tenant_id and lease.space_id=control.space_id
+            and lease.episode_id=control.episode_id and lease.expires_at <= clock_timestamp()
+            and p.status='active' and e.status='active'
+    )
+order by control.episode_id
+for update of control skip locked
+limit sqlc.arg(batch_size);
+
+-- name: ExpiredParticipantPresence :many
+select p.* from participants p
+join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
+    and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
+where p.tenant_id=sqlc.arg(tenant_id) and p.space_id=sqlc.arg(space_id) and p.episode_id=sqlc.arg(episode_id)
+    and p.status='active' and lease.expires_at <= clock_timestamp()
+order by p.id
+for update of p
+limit sqlc.arg(batch_size);
