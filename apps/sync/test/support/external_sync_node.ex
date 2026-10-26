@@ -25,6 +25,7 @@ defmodule ChalkSync.ExternalSyncNode do
 
   @impl GenServer
   def init(options) do
+    Process.flag(:trap_exit, true)
     app_dir = Keyword.fetch!(options, :app_dir)
     database_url = Keyword.fetch!(options, :database_url)
     port = Keyword.fetch!(options, :port)

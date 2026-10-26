@@ -12,6 +12,8 @@ spawn(fn ->
 end)
 
 park = fn point, context ->
+  IO.puts(JSON.encode!(%{event: "recovery_hook", point: point, context: context}))
+
   if Atom.to_string(point) == boundary and
        (context[:command_id] == target or context[:lifecycle_intent_id] == target) do
     {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false], 5_000)

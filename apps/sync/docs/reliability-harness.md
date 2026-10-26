@@ -64,7 +64,7 @@ compare the durable rows. This checks webhook production, not HTTP delivery
 by the separate API worker.
 
 The source rules are `AGENTS.md` (Postgres authority), `README.md` (Durable
-architecture and Lifecycle), and `../../theory.md` (Sync authority).
+architecture and Lifecycle), and `../../../theory.md` (Sync authority).
 `Stateholder.Postgres.decide_command/2` places the acceptance and post-commit
 hooks around `run_decision_transaction/2`; `CommandPersistence.commit/5` puts
 the event/control/receipt hooks inside that transaction. `Lifecycle.persist_commit/6`

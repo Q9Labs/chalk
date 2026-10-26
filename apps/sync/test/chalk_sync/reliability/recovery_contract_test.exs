@@ -62,7 +62,7 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
         assert {:ok, _client, ack} = Wire.receive_command_ack(client, @target)
         ack
       else
-        await_boundary(listener, boundary, @target)
+        await_boundary(listener, boundary, @target, node)
         nil
       end
 
@@ -104,9 +104,8 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     assert command_counts(connection, fixture.episode) == [1, 1]
     assert_lifecycle_once(connection, fixture, "participant_joined", "participant.joined")
 
-    assert Enum.all?(before, fn {table, rows} ->
-             rows -- durable_rows(connection, fixture.episode)[table] == []
-           end)
+    after_recovery = durable_rows(connection, fixture.episode)
+    assert Enum.all?(before, fn {table, rows} -> rows -- after_recovery[table] == [] end)
 
     assert :ok = ExternalSyncNode.kill(restarted)
   end
@@ -132,7 +131,7 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
         send_hello(client, fixture.identity, nil)
       end
 
-      await_boundary(listener, @boundary, intent_id)
+      await_boundary(listener, @boundary, intent_id, node)
       assert :ok = ExternalSyncNode.kill(node)
       {restarted, port} = start_node(:none, intent_id, barrier_port)
 
@@ -162,8 +161,9 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     {listener, port}
   end
 
-  defp await_boundary(listener, boundary, target) do
-    assert {:ok, socket} = :gen_tcp.accept(listener, 10_000)
+  defp await_boundary(listener, boundary, target, node) do
+    result = :gen_tcp.accept(listener, 10_000)
+    assert {:ok, socket} = result, Enum.join(ExternalSyncNode.logs(node), "\n")
     assert {:ok, message} = :gen_tcp.recv(socket, 0, 5_000)
     assert JSON.decode!(message) == %{"boundary" => Atom.to_string(boundary), "target" => target}
     on_exit(fn -> :gen_tcp.close(socket) end)
@@ -277,14 +277,22 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     assert [[1]] =
              Postgrex.query!(
                connection,
-               "select count(*) from sync_control_events where tenant_id = $1 and episode_id = $2 and event_name = $3",
+               """
+               select count(*) from sync_control_events
+               where tenant_id = $1 and episode_id = $2 and event_name = $3
+               """,
                params
              ).rows
 
     assert [[1, 1]] =
              Postgrex.query!(
                connection,
-               "select count(distinct e.id), count(d.id) from webhook_events e join webhook_deliveries d on d.tenant_id = e.tenant_id and d.event_id = e.id where e.tenant_id = $1 and e.event_name = $2",
+               """
+               select count(distinct e.id), count(d.id)
+               from webhook_events e join webhook_deliveries d
+                 on d.tenant_id = e.tenant_id and d.event_id = e.id
+               where e.tenant_id = $1 and e.event_name = $2
+               """,
                [UUID.dump!(fixture.episode.tenant_id), webhook_name]
              ).rows
   end
