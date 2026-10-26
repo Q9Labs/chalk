@@ -52,7 +52,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
         if (sibling !== branch && sibling instanceof HTMLElement) {
           siblings.push({ element: sibling, inert: sibling.inert, filter: sibling.style.filter });
           if (blocking) sibling.inert = true;
-          sibling.style.filter = root.getAttribute("data-chalk-theme") === "light" ? "blur(10px) grayscale(.75)" : "blur(10px) grayscale(.75) brightness(.6)";
+          if (!blocking) sibling.style.filter = root.getAttribute("data-chalk-theme") === "light" ? "blur(10px) grayscale(.75)" : "blur(10px) grayscale(.75) brightness(.6)";
         }
       }
       branch = branch.parentElement;
@@ -66,6 +66,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       if (blocking && previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
   }, [active, blocking, overlay]);
+  const stacked = blocking && (children ? "name" : message.endsWith("…") ? "entering" : detail && action ? "waiting" : null);
   const layer = (
     <div
       ref={layerRef}
@@ -73,17 +74,24 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       data-call-limbo
       data-covered={covered}
       aria-hidden={!active}
-      className="absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]"
+      className={cn("absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]", blocking && "bg-[var(--chalk-app-canvas)]")}
       style={{
         pointerEvents: active && blocking ? "auto" : "none",
         opacity: covered ? 1 : 0,
         transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}
     >
-      <div data-part={active ? "limbo-message" : undefined} style={{ borderRadius: 16 }} className={cn("flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center", className)}>
+      <div data-part={active ? "limbo-message" : undefined} style={{ borderRadius: 16 }} className={cn("flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center", stacked && "w-[340px] py-8", className)}>
+        {stacked ? (
+          <span aria-hidden="true" className="mb-1 flex h-8 items-center text-[var(--chalk-soft-text)] [&>svg]:h-8 [&>svg]:w-8">
+            {stacked === "name" ? <CallEventIcon kind="host" /> : null}
+            {stacked === "waiting" ? <CallEventIcon kind="hand" /> : null}
+            {stacked === "entering" ? <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
+          </span>
+        ) : null}
         {message ? (
-          <p role={active ? "status" : undefined} className="flex items-center gap-2.5 text-[17px] font-semibold">
-            {message.endsWith("…") ? <span aria-hidden="true" className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
+          <p role={active ? "status" : undefined} className={cn("flex items-center gap-2.5 font-semibold", stacked ? "text-[18px]" : "text-[17px]")}>
+            {message.endsWith("…") && !stacked ? <span aria-hidden="true" className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
             {message}
           </p>
         ) : null}
@@ -96,9 +104,16 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
             This call is recorded. By joining, you agree to be recorded.
           </p>
         ) : null}
+        {stacked === "waiting" ? (
+          <span aria-hidden="true" className="mt-3 flex gap-1.5">
+            {[0, 1, 2].map((dot) => (
+              <span key={dot} className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--chalk-muted-text)] motion-reduce:animate-none" style={{ animationDelay: `${dot * 200}ms` }} />
+            ))}
+          </span>
+        ) : null}
         {children}
         {action ? (
-          <ChalkButton className="mt-6 !h-11" variant="outline" onClick={action.onClick} disabled={action.disabled}>
+          <ChalkButton className={cn("mt-6 !h-11", stacked && "w-full")} variant="outline" onClick={action.onClick} disabled={action.disabled}>
             {action.label}
           </ChalkButton>
         ) : null}
@@ -108,14 +123,8 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   if (overlay) return layer;
   return (
     <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}>
-      <div aria-hidden="true" inert className="absolute inset-0 flex flex-col p-5" style={{ filter: theme?.colorScheme === "light" ? "blur(18px) brightness(1.03)" : "blur(18px) brightness(.7)" }}>
-        <div className="text-sm font-medium text-[var(--chalk-app-text)]">{spaceName}</div>
-        <div className="my-5 flex-1 rounded-2xl border border-[var(--chalk-app-line-strong)]" style={{ background: "color-mix(in srgb, var(--chalk-app-text) 12%, var(--chalk-app-stage))" }} />
-        <div className="mx-auto flex h-16 items-center gap-3 rounded-2xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4">
-          {Array.from({ length: 6 }, (_, index) => (
-            <span key={index} className="h-9 w-9 rounded-full border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-control)]" />
-          ))}
-        </div>
+      <div aria-hidden="true" className="absolute left-5 top-5 text-sm font-medium text-[var(--chalk-muted-text)]">
+        {spaceName}
       </div>
       {layer}
     </div>
