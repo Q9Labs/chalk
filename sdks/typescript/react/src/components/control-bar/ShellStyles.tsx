@@ -146,7 +146,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   height: 22px;
   padding: 0 8px;
   border-radius: 6px;
-  background: rgba(12,14,18,.75);
+  background: var(--chalk-overlay);
   font-size: 12px;
   display: flex;
   align-items: center;

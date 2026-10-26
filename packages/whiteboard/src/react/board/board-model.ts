@@ -89,7 +89,7 @@ export function surfaceInk(surface: BoardSurface, theme: CallTheme): string {
 export function surfaceFill(surface: BoardSurface, theme: CallTheme): string {
   if (surface === "chalkboard") return "#1c2622";
   if (surface === "paper") return theme === "dark" ? "#eae6db" : "#f5f2ea";
-  return theme === "dark" ? "#151619" : "#ffffff";
+  return theme === "dark" ? "#060606" : "#ffffff";
 }
 
 export function selectionColor(surface: BoardSurface, theme: CallTheme): string {

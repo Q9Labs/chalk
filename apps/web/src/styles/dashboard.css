@@ -1049,7 +1049,7 @@
   aspect-ratio: 16/9;
   border-radius: 12px;
   overflow: hidden;
-  background: #0b0c0e;
+  background: #000000;
   color: #fff;
 }
 
@@ -1071,7 +1071,7 @@
   gap: 6px;
   padding: 0 10px;
   height: 52px;
-  background: rgba(12, 14, 18, 0.82);
+  background: var(--chalk-overlay-strong);
 }
 
 .site .dash .pctl .pb {

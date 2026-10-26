@@ -64,7 +64,7 @@ export function TileShell({ label, accentColor, pinned = false, ring = false, sp
       {ring ? <div aria-hidden="true" data-part="follow-ring" className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] shadow-[inset_0_0_0_2px_var(--chalk-text)]" /> : null}
       {corner}
       {chip ? (
-        <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[rgba(12,14,18,.75)] px-2 text-[12px] leading-[1.4] font-medium text-white">
+        <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[var(--chalk-overlay)] px-2 text-[12px] leading-[1.4] font-medium text-white">
           {chip}
         </div>
       ) : null}
