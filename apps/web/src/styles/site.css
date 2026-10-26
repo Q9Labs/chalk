@@ -34,7 +34,7 @@
 /* The page behind the site follows its theme too, so overscroll and scrollbars match.
    Inline `color-scheme` on <html> comes from the web theme, which keeps every non-call route light. */
 html:has(.site[data-chalk-theme="dark"]) {
-  background: #0b0c0e;
+  background: #000000;
   color-scheme: dark !important;
 }
 
@@ -914,7 +914,7 @@ html:has(.site[data-chalk-theme="light"]) {
     height: 24px;
     padding: 0 8px;
     border-radius: 6px;
-    background: rgba(12, 14, 18, 0.75);
+    background: var(--chalk-overlay);
     color: #fff;
     font-size: 12px;
     font-weight: 500;
@@ -1330,7 +1330,7 @@ html:has(.site[data-chalk-theme="light"]) {
     overflow: hidden;
     aspect-ratio: 16 / 9;
     border-radius: 12px;
-    background: #0b0c0e;
+    background: #000000;
   }
 
   & .mplay svg.still {
@@ -1350,7 +1350,7 @@ html:has(.site[data-chalk-theme="light"]) {
     height: 56px;
     margin: -28px 0 0 -28px;
     border-radius: 50%;
-    background: rgba(12, 14, 18, 0.75);
+    background: var(--chalk-overlay);
     color: #fff;
   }
 
@@ -1382,7 +1382,7 @@ html:has(.site[data-chalk-theme="light"]) {
     bottom: 9px;
     padding: 2px 6px;
     border-radius: 5px;
-    background: rgba(12, 14, 18, 0.75);
+    background: var(--chalk-overlay);
     color: #fff;
     font-size: 11px;
   }
@@ -1720,8 +1720,8 @@ html:has(.site[data-chalk-theme="light"]) {
 
 /* The recording still is video, so it keeps the dark call's canvas and tile in both themes. */
 .site .mplay {
-  --chalk-canvas: #0b0c0e;
-  --chalk-tile: #151619;
+  --chalk-canvas: #000000;
+  --chalk-tile: #060606;
 
   & .cfit {
     border-radius: 0;
