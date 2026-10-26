@@ -16,7 +16,6 @@ func TestResponseCollectionsEncodeEmptyArrays(t *testing.T) {
 		response any
 		field    string
 	}{
-		{"transcript", newTranscriptResponse(transcripts.Transcript{}), "languages"},
 		{"transcript artifact", newTranscriptArtifactResponse(transcripts.Transcript{}), "languages"},
 		{"participant", newParticipantResponse(episodes.Participant{}), "capabilities"},
 	} {

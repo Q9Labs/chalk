@@ -597,7 +597,6 @@ func run() error {
 		// Synchronous application-node provider calls are intentionally absent.
 		// Transcription work is claimed and fenced through the internal worker
 		// boundary after the request transaction commits.
-		Transcripts:            transcriptService,
 		TranscriptArtifacts:    transcriptArtifacts,
 		TranscriptWorker:       transcriptWorker,
 		WorkloadAuthorizer:     workloadAuthorizer,
@@ -968,7 +967,6 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 	if capabilities.Transcription {
 		return
 	}
-	options.Transcripts = nil
 	options.TranscriptArtifacts = nil
 	options.TranscriptWorker = nil
 	options.WorkloadAuthorizer = nil

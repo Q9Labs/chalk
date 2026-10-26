@@ -87,7 +87,6 @@ type Options struct {
 
 	TenantAuthz            TenantAuthorizer
 	Tenants                TenantService
-	Transcripts            TranscriptService
 	TranscriptArtifacts    TranscriptArtifactService
 	TranscriptWorker       TranscriptWorkerService
 	WorkloadAuthorizer     WorkloadAuthorizer

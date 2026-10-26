@@ -67,17 +67,12 @@ var (
 	apiErrorRecordingExportRetryLimit = APIError{Status: http.StatusConflict, Code: "recording.export_retry_limit_reached", Message: "Recording Export retry limit reached"}
 	apiErrorRecordingArtifactNotFound = APIError{Status: http.StatusNotFound, Code: "recording_artifact.not_found", Message: "Recording artifact not found"}
 
-	apiErrorInvalidTranscriptID        = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_id", Message: "Invalid transcript id"}
-	apiErrorInvalidTranscriptStatus    = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_status", Message: "Invalid transcript status"}
-	apiErrorInvalidTranscriptProvider  = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_provider", Message: "Invalid transcript provider"}
-	apiErrorInvalidTranscriptModel     = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_model", Message: "Invalid transcript model"}
-	apiErrorInvalidTranscriptLanguages = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_languages", Message: "Invalid transcript languages"}
-	apiErrorInvalidTranscriptField     = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_field", Message: "Invalid transcript field"}
-	apiErrorTranscriptionDisabled      = APIError{Status: http.StatusConflict, Code: "transcript.disabled", Message: "Transcription is disabled for this Episode"}
-	apiErrorTranscriptSourceExpired    = APIError{Status: http.StatusConflict, Code: "transcript.source_expired", Message: "The temporary transcription source has expired"}
-	apiErrorTranscriptAlreadyExists    = APIError{Status: http.StatusConflict, Code: "transcript.already_exists", Message: "A Transcript already exists for this Recording"}
-	apiErrorTranscriptNotFound         = APIError{Status: http.StatusNotFound, Code: "transcript.not_found", Message: "Transcript not found"}
-	apiErrorTranscriptNotReady         = APIError{Status: http.StatusConflict, Code: "transcript.not_ready", Message: "Transcript artifact is not ready"}
+	apiErrorInvalidTranscriptID     = APIError{Status: http.StatusBadRequest, Code: "transcript.invalid_id", Message: "Invalid transcript id"}
+	apiErrorTranscriptionDisabled   = APIError{Status: http.StatusConflict, Code: "transcript.disabled", Message: "Transcription is disabled for this Episode"}
+	apiErrorTranscriptSourceExpired = APIError{Status: http.StatusConflict, Code: "transcript.source_expired", Message: "The temporary transcription source has expired"}
+	apiErrorTranscriptAlreadyExists = APIError{Status: http.StatusConflict, Code: "transcript.already_exists", Message: "A Transcript already exists for this Recording"}
+	apiErrorTranscriptNotFound      = APIError{Status: http.StatusNotFound, Code: "transcript.not_found", Message: "Transcript not found"}
+	apiErrorTranscriptNotReady      = APIError{Status: http.StatusConflict, Code: "transcript.not_ready", Message: "Transcript artifact is not ready"}
 
 	apiErrorInvalidWebhookEndpointID        = APIError{Status: http.StatusBadRequest, Code: "webhook.invalid_endpoint_id", Message: "Invalid webhook endpoint id"}
 	apiErrorInvalidWebhookDeliveryID        = APIError{Status: http.StatusBadRequest, Code: "webhook.invalid_delivery_id", Message: "Invalid webhook delivery id"}
