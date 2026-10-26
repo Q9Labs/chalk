@@ -13,6 +13,8 @@ const output = resolve(process.argv[2] ?? ".private/join-startup-proof");
 await mkdir(output, { recursive: true });
 const lifecycle = "sdks/typescript/client/src/connection/lifecycle.ts";
 const surface = "sdks/typescript/react/src/components/chalk/StatusSurface.tsx";
+const diagnostics = "sdks/typescript/client/src/sync/connect-diagnostics.ts";
+const baseline = execFileSync("git", ["merge-base", "HEAD", "origin/master"], { encoding: "utf8" }).trim();
 const entry = resolve(output, "page.tsx");
 await writeFile(
   entry,
@@ -80,6 +82,7 @@ try {
       noExternal: [/.*/],
       esbuildOptions(options) {
         options.alias = { "@q9labsai/chalk-client": resolve("sdks/typescript/client/src/index.ts") };
+        options.nodePaths = [resolve("apps/web/node_modules")];
         options.jsx = "automatic";
       },
       esbuildPlugins:
@@ -88,8 +91,8 @@ try {
               {
                 name: "baseline",
                 setup(builder) {
-                  builder.onLoad({ filter: /(?:connection\/lifecycle\.ts|chalk\/StatusSurface\.tsx)$/ }, ({ path }) => ({
-                    contents: execFileSync("git", ["show", `origin/master:${path.endsWith("lifecycle.ts") ? lifecycle : surface}`], { encoding: "utf8" }),
+                  builder.onLoad({ filter: /(?:connection\/lifecycle\.ts|chalk\/StatusSurface\.tsx|sync\/connect-diagnostics\.ts)$/ }, ({ path }) => ({
+                    contents: execFileSync("git", ["show", `${baseline}:${path.endsWith("lifecycle.ts") ? lifecycle : path.endsWith("StatusSurface.tsx") ? surface : diagnostics}`], { encoding: "utf8" }),
                     loader: path.endsWith("tsx") ? "tsx" : "ts",
                   }));
                 },
