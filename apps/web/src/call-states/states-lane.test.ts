@@ -55,6 +55,7 @@ it("joining exposes consent; the ready card copies the link and announces Copied
     .waitFor();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("state=states-ready");
   await page.getByRole("button", { name: "Show QR code" }).click();
+  await page.getByRole("img", { name: "Scan to join this call" }).waitFor();
   expect(await page.getByRole("img", { name: "Scan to join this call" }).isVisible()).toBe(true);
 }, 30_000);
 
