@@ -98,7 +98,7 @@ describe("public client startup failure contract", () => {
       await vi.advanceTimersByTimeAsync(29_999);
       expect(client.getSnapshot().connection.status).toBe("joining");
       await vi.advanceTimersByTimeAsync(2);
-      expect(await joining).toMatchObject({ code: "connection.sync_hello_timeout", sync: { stage: "upgrade", opened: false } });
+      expect(await joining).toMatchObject({ code: "connection.sync_start_failed", sync: { stage: "upgrade", opened: false } });
       expect(client.getSnapshot().connection.status).toBe("failed");
     } finally {
       client.dispose();
@@ -137,7 +137,7 @@ describe("public client startup failure contract", () => {
           },
         ),
       getAccess: async () => accessGrant(),
-      code: "connection.sync_hello_timeout",
+      code: "connection.sync_start_failed",
       recoverable: true,
     },
     { stage: "Sync hello deadline", setup: () => {}, getAccess: async () => accessGrant(), code: "connection.sync_hello_timeout", recoverable: true },
@@ -206,7 +206,7 @@ describe("public client startup failure contract", () => {
       await vi.advanceTimersByTimeAsync(10_001);
       expect(attempts).toBeGreaterThan(1);
       expect(send).not.toHaveBeenCalled();
-      const failure = { code: "connection.sync_hello_timeout", recoverable: true, sync: { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: expect.any(Number) } };
+      const failure = { code: "connection.sync_start_failed", recoverable: true, sync: { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: expect.any(Number) } };
       expect(await rejection).toMatchObject(failure);
       expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: failure });
       expect(errors).toMatchObject([failure]);
@@ -262,7 +262,7 @@ describe("public client startup failure contract", () => {
     const client = makeClient(async () => accessGrant(), 25, { debug });
     try {
       const rejection = await client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
-      const code = "connection.sync_hello_timeout";
+      const code = opened ? "connection.sync_hello_timeout" : "connection.sync_start_failed";
       expect(rejection).toMatchObject({ code, sync: { stage: opened ? "hello" : "upgrade", opened, closeCode: null, closeReason: null, durationMs: expect.any(Number) } });
       expect(debug).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "connection_failed", sync: expect.objectContaining({ opened }) }));
     } finally {
@@ -297,7 +297,7 @@ describe("public client startup failure contract", () => {
       await vi.advanceTimersByTimeAsync(1001);
       expect(attempts).toBe(2);
       const failure = await rejection;
-      const expected = { code: "connection.sync_hello_timeout", sync: { stage: "upgrade", opened: false, closeCode: null, closeReason: null, durationMs: expect.any(Number) } };
+      const expected = { code: "connection.sync_start_failed", sync: { stage: "upgrade", opened: false, closeCode: null, closeReason: null, durationMs: expect.any(Number) } };
       expect(failure).toMatchObject(expected);
       expect(client.getSnapshot().connection.lastError).toMatchObject(expected);
       expect(client.getSnapshot().connection.lastError?.sync?.durationMs).toBeGreaterThan(1);

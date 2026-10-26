@@ -1,4 +1,4 @@
-import { formatSyncConnectDiagnostic } from "../sync/connect-diagnostics";
+import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
 import type { ConnectionMediaSnapshot } from "../media";
@@ -359,7 +359,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const failure = snapshot.connection.connectFailure;
             if (failure && failure !== observedConnectFailure) {
               observedConnectFailure = failure;
-              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: "sync_hello_timeout", sync: failure });
+              diagnostics.record({ event: "sync_connect_failed", state: model.state, epoch: model.epoch, code: syncConnectFailureCode(failure), sync: failure });
             }
             const count = snapshot.connection.dialTimeoutCount ?? 0;
             if (count > observedDialTimeouts) {
@@ -1254,7 +1254,7 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
 function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const sync = snapshot.connection.connectFailure ?? snapshot.connection.connectAttempt;
   const message = sync?.opened === false ? "Sync could not reach the call service" : "Sync could not connect";
-  return new ConnectionLifecycleFailure({ code: "sync_hello_timeout", recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
+  return new ConnectionLifecycleFailure({ code: syncConnectFailureCode(sync), recoverable: true, message: `${message}${sync ? ` ${formatSyncConnectDiagnostic(sync)}` : " before the startup deadline"}`, ...(sync ? { sync: Object.freeze({ ...sync }) } : {}) });
 }
 
 // The expired seat cannot reconnect with the same grant; only a new admission can retry it.

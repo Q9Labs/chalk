@@ -37,6 +37,10 @@ const SAFE_REASONS = new Set([
 export function safeSyncCloseReason(reason: string | undefined): string | null {
   return reason ? (SAFE_REASONS.has(reason) ? reason : "redacted") : null;
 }
+/** Keep published error codes stable while separating upgrade from hello failures. */
+export function syncConnectFailureCode(diagnostic: SyncConnectDiagnostic | undefined): "sync_start_failed" | "sync_hello_timeout" {
+  return diagnostic?.stage === "upgrade" ? "sync_start_failed" : "sync_hello_timeout";
+}
 export function formatSyncConnectDiagnostic(diagnostic: SyncConnectDiagnostic): string {
-  return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${Math.round(diagnostic.durationMs)}ms]`;
+  return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${diagnostic.stage === "upgrade" && diagnostic.closeCode !== null ? "cause=closed_before_open; " : ""}${Math.round(diagnostic.durationMs)}ms]`;
 }

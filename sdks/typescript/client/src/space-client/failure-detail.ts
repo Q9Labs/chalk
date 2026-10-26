@@ -14,6 +14,6 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
 
 /** Safe, actionable failure copy shared by web and native call screens. */
 export function getConnectionFailureDetail({ code, sync }: { readonly code?: ErrorCode; readonly sync?: ClientFailure["sync"] }): string {
-  if (code === "connection.sync_hello_timeout" && sync?.stage === "upgrade") return "Couldn’t reach the call service. Try another network, then try again.";
+  if (sync?.stage === "upgrade") return sync.closeCode !== null ? "The connection closed before the call service could be reached. Try again." : "A connection to the call service could not be opened. Try again.";
   return (code && FAILURE_DETAILS[code]) ?? DEFAULT_FAILURE_DETAIL;
 }

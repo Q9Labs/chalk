@@ -62,6 +62,10 @@ function frame(value) {
 
 const browser = await chromium.launch({ headless: true });
 const results = [];
+const lifetime = setTimeout(() => {
+  process.exitCode = 1;
+  void browser.close();
+}, 300000);
 try {
   for (const revision of ["before", "after"]) {
     const directory = resolve(output, revision);
@@ -94,7 +98,12 @@ try {
           : [],
     });
     const bundle = await readFile(resolve(directory, "page.js"));
-    for (const scenario of ["retry", "offline"]) {
+    for (const [scenario, device] of [
+      ["retry", "phone"],
+      ["offline", "phone"],
+      ["rejected", "phone"],
+      ["rejected", "desktop"],
+    ]) {
       let attempts = 0;
       let frames = [];
       const sockets = new Set();
@@ -124,6 +133,14 @@ try {
       });
       server.on("upgrade", (request, socket) => {
         attempts += 1;
+        if (scenario === "rejected") {
+          const timer = setTimeout(() => {
+            timers.delete(timer);
+            socket.destroy();
+          }, 52);
+          timers.add(timer);
+          return;
+        }
         if (scenario === "offline" || attempts === 1) return; // Blackhole the first HTTP upgrade.
         const timer = setTimeout(() => {
           timers.delete(timer);
@@ -159,7 +176,7 @@ try {
         timers.add(timer);
       });
       await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-      const context = await browser.newContext({ ...devices["Pixel 7"] });
+      const context = await browser.newContext(device === "phone" ? { ...devices["Pixel 7"] } : { viewport: { width: 1440, height: 900 } });
       try {
         const page = await context.newPage();
         page.on("pageerror", (error) => console.error("pageerror", error.message));
@@ -169,10 +186,17 @@ try {
         const expected = revision === "after" && scenario === "retry" ? "live" : "failed";
         assert.equal(result.connection.status, expected);
         if (expected === "live") assert.equal(attempts, 2);
-        await page.screenshot({ path: resolve(output, `${revision}-${scenario}.png`) });
+        if (revision === "after" && scenario !== "retry") assert.equal(result.connection.lastError.code, "connection.sync_start_failed");
+        if (revision === "after" && scenario === "rejected") {
+          assert.equal(result.connection.lastError.sync.opened, false);
+          assert.equal(result.connection.lastError.sync.closeCode, 1006);
+          assert.ok(result.connection.lastError.sync.durationMs < 1000);
+          await page.getByText("The connection closed before the call service could be reached. Try again.", { exact: true }).waitFor();
+        }
+        await page.screenshot({ path: resolve(output, `${revision}-${scenario}-${device}.png`) });
         await page.evaluate(() => window.disposeProof());
-        results.push({ revision, scenario, attempts, ...result });
-        console.log(JSON.stringify({ revision, scenario, attempts, status: result.connection.status, code: result.connection.lastError?.code, elapsedMs: result.elapsedMs }));
+        results.push({ revision, scenario, device, attempts, ...result });
+        console.log(JSON.stringify({ revision, scenario, device, attempts, status: result.connection.status, code: result.connection.lastError?.code, elapsedMs: result.elapsedMs }));
       } finally {
         await context.close();
         for (const timer of timers) clearTimeout(timer);
@@ -183,5 +207,6 @@ try {
   }
   await writeFile(resolve(output, "results.json"), JSON.stringify(results, null, 2));
 } finally {
+  clearTimeout(lifetime);
   await browser.close();
 }

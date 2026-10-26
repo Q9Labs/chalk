@@ -89,9 +89,11 @@ in `failure.sync` and connection diagnostics. The failure reference shows the sa
 short summary. Before `open`, `stage=upgrade` means the opening handshake is pending;
 browser WebSocket APIs do not reveal DNS, TCP, or TLS progress. After `open`, the
 startup stage is `hello` (including initial recovery). Unknown peer reasons become
-`redacted`; only fixed protocol reasons are retained. These startup failures keep
-the public `connection.sync_hello_timeout` code; use `failure.sync.stage` to
-distinguish upgrade from hello. Internal diagnostic event names such as
+`redacted`; only fixed protocol reasons are retained. Pre-open failures use `connection.sync_start_failed`; `connection.sync_hello_timeout`
+is reserved for startup after open. A pre-open close adds `cause=closed_before_open`
+to the reference. Its duration measures that socket attempt, not the whole join.
+Browsers do not expose the HTTP rejection status or distinguish a network failure
+from an edge rejection; an empty reason must not be labeled as a server timeout. Internal diagnostic event names such as
 `sync_connect_failed`, `sync_dial_timeout`, and `connection_failed` identify
 telemetry events, not public error codes. Retries can still succeed within the
 startup budget.

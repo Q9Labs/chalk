@@ -26,8 +26,8 @@ describe("failed call guidance", () => {
     const root = createRoot(container);
     try {
       await act(async () => root.render(<StatusSurface phase="failed" errorCode="connection.sync_hello_timeout" sync={{ stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: 24 }} />));
-      expect(container.textContent).toContain("Try another network");
-      expect(container.textContent).toContain("Reference: connection.sync_hello_timeout [upgrade; open=0; close=1006; reason=none; 24ms]");
+      expect(container.textContent).toContain("The connection closed before the call service could be reached");
+      expect(container.textContent).toContain("Reference: connection.sync_hello_timeout [upgrade; open=0; close=1006; reason=none; cause=closed_before_open; 24ms]");
     } finally {
       await act(async () => root.unmount());
     }

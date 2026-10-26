@@ -387,7 +387,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
       // Never propagate constructor exceptions: browsers can include the credentialed URL.
-      throw new V1SyncError("Sync WebSocket could not be created", "sync_hello_timeout");
+      throw new V1SyncError("Sync WebSocket could not be created", "sync_start_failed");
     }
     const connectionGeneration = ++this.#connectionGeneration;
     this.#socket = socket;
