@@ -76,6 +76,7 @@ func TestAuthorizationRouteMatrix(t *testing.T) {
 					case "tenant session":
 						principal := authentication.Principal{Kind: authentication.PrincipalUser, UserID: own.ParticipantID}
 						wrong = wrong.WithContext(authentication.ContextWithPrincipal(wrong.Context(), principal))
+						principal.UserID = fixture.ownerID
 						foreignRequest = foreignRequest.WithContext(authentication.ContextWithPrincipal(foreignRequest.Context(), principal))
 					case "API key":
 						principal := authentication.Principal{Kind: authentication.PrincipalAPIKey, APIKeyID: own.ParticipantID, TenantID: own.TenantID}
@@ -160,6 +161,7 @@ type routeMatrixFixture struct {
 	options                httpapi.Options
 	own, foreign           chatattachments.Subject
 	attachmentID, uploadID utilities.ID
+	ownerID                utilities.ID
 	fileID                 string
 	syncToken, mediaToken  string
 }
@@ -205,7 +207,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	if err != nil {
 		t.Fatal(err)
 	}
-	mediaSubject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: "cf_sfu", CloudflareConnectionID: "matrix-own-connection"}
+	mediaSubject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "matrix-own-connection"}
 	mediaToken, err := mediaSigner.Issue(t.Context(), mediaSubject)
 	if err != nil {
 		t.Fatal(err)
@@ -214,7 +216,10 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	if valid, err := active.AuthorizeActiveParticipant(t.Context(), mediaSubject); err != nil || !valid {
 		t.Fatalf("matrix media credential must belong to a real active Participant: %t, %v", valid, err)
 	}
-	fixture := routeMatrixFixture{own: own, foreign: foreign, syncToken: syncToken.Value, mediaToken: mediaToken.Token}
+	ownerID := accountTenantIntegrationID(t)
+	mustExec(t, tx, `insert into users(id,name,email) values($1,'Matrix owner',$2)`, uuid(ownerID), ownerID.String()+"@matrix.invalid")
+	mustExec(t, tx, `insert into memberships(id,tenant_id,user_id,role) values($1,$2,$3,'owner')`, uuid(accountTenantIntegrationID(t)), uuid(own.TenantID), uuid(ownerID))
+	fixture := routeMatrixFixture{own: own, foreign: foreign, ownerID: ownerID, syncToken: syncToken.Value, mediaToken: mediaToken.Token}
 	reservation := chatAttachmentReservation(t, foreign, 1, 1)
 	chatRepo := NewChatAttachmentRepository(tx)
 	if _, err := chatRepo.Reserve(t.Context(), reservation); err != nil {
