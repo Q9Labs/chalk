@@ -262,7 +262,7 @@ try {
     const { tab, context } = await open(CALL, { set: "limit=set-admission" });
     await tab.getByRole("button", { name: "Anyone with the link" }).click();
     await tab.waitForTimeout(500);
-    check("rate-limited action shows a toast with the wait", (await tab.locator(".toast").filter({ hasText: "Try again in 60 seconds" }).count()) === 1);
+    check("rate-limited action shows a toast with the wait", (await tab.locator("[data-part=toast]").filter({ hasText: "Try again in 60 seconds" }).count()) === 1);
     await context.close();
   }
   {
@@ -271,7 +271,7 @@ try {
     await tab.getByRole("menuitem", { name: "Revoke key" }).click();
     await tab.locator("[role=alertdialog] .btn.dz").click();
     await tab.waitForTimeout(500);
-    check("fresh sign-in requirement is explained", (await tab.locator(".toast").filter({ hasText: "Sign in again to make this change" }).count()) === 1);
+    check("fresh sign-in requirement is explained", (await tab.locator("[data-part=toast]").filter({ hasText: "Sign in again to make this change" }).count()) === 1);
     await context.close();
   }
   // Transcript seek and search on the past session.

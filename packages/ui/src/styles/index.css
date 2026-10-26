@@ -1278,7 +1278,36 @@
     opacity 0.15s ease-out,
     transform 0.15s ease-out;
 }
-.chalk-toast > span {
+/* One icon slot for every notice: a caller's icon or avatar, else the severity icon. Severity shows in that icon and a thin border tint only. */
+.chalk-toast {
+  --chalk-toast-accent: var(--chalk-muted-text);
+  font-size: 13px;
+}
+.chalk-toast[data-type="success"] {
+  --chalk-toast-accent: var(--chalk-positive);
+}
+.chalk-toast[data-type="warning"] {
+  --chalk-toast-accent: var(--chalk-warning);
+}
+.chalk-toast[data-type="error"] {
+  --chalk-toast-accent: var(--chalk-danger-text);
+}
+.chalk-toast:not([data-type="info"]) {
+  border-color: color-mix(in srgb, var(--chalk-toast-accent) 40%, var(--chalk-line));
+}
+.chalk-toast [data-part="toast-icon"] {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  color: var(--chalk-toast-accent);
+}
+.chalk-toast [data-part="toast-icon"] svg {
+  width: 20px;
+  height: 20px;
+}
+.chalk-toast > [data-part="toast-message"] {
   /* Long names, links and error tokens wrap inside the notice instead of widening it past the call. */
   min-width: 0;
   overflow-wrap: anywhere;
