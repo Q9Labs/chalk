@@ -307,7 +307,7 @@ it.each([
         await vi.advanceTimersByTimeAsync(1_200);
       });
       expect(engines[0]?.logicalWidth()).toBeCloseTo(0.8, 5);
-      expect(engines[1]?.logicalWidth()).toBeCloseTo(engines[0]?.logicalWidth() ?? 0, 5);
+      expect(engines[1]?.logicalWidth()).toBeCloseTo(1, 5);
       expect(sends[0]).toHaveBeenLastCalledWith(expect.objectContaining({ width: 0.8, lead: true }));
     }
     const settled = engines.map((engine) => engine.camera());
@@ -989,7 +989,7 @@ it("keeps following when a Bring animation's first frame predates its start", as
         await vi.advanceTimersByTimeAsync(600);
       });
       expect(container.querySelector(".chalk-board-chip")?.textContent ?? "").toContain("Following Someone");
-      expect(container.querySelector(".chalk-board-zoom-value")?.textContent).toBe("10%");
+      expect(container.querySelector(".chalk-board-zoom-value")?.textContent).toBe("300%");
       expect(onFollow).not.toHaveBeenCalledWith(null);
     },
     true,
@@ -1042,8 +1042,9 @@ it("receives Bring while the board tile is off-page and keeps that view on retur
         resize(800, 600);
         await vi.advanceTimersByTimeAsync(600);
       });
-      // cameraForView fits the 400x300 sender into 800x600 at zoom 2.
-      expect(engine.camera().x).toBeCloseTo(-75, 2);
+      // Resize pans to the presenter at the local 100% zoom.
+      expect(engine.camera().x).toBeCloseTo(125, 2);
+      expect(container.querySelector(".chalk-board-zoom-value")?.textContent).toBe("100%");
       await act(async () => engine.pan(12, 34));
       expect(onFollow).toHaveBeenLastCalledWith(null);
     },
@@ -1469,18 +1470,20 @@ it("does not resurrect an ended screen-switcher choice when the same person shar
   }
 });
 
-it("automatic first-content fit follows the default camera leadership rule", async () => {
+it("first content leaves the local camera and leadership unchanged", async () => {
   vi.useFakeTimers();
   const send = vi.fn(() => true);
   await withOpenBoard(
     async (_container, engine, _peer, _toast, render) => {
       await render({ following: null });
+      const before = engine.camera();
       send.mockClear();
       await act(async () => {
         engine.select("note");
         await vi.advanceTimersByTimeAsync(800);
       });
-      expect(send).toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
+      expect(engine.camera()).toEqual(before);
+      expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ lead: true }));
     },
     true,
     { sendView: send },
@@ -1532,7 +1535,6 @@ const cameraMoveCases: readonly { name: string; follow?: true; run: (container: 
         board.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
       })(),
   })),
-  { name: "first-content fit", run: (_container, engine) => engine.select("note") },
   { name: "follow apply", follow: true, run: (_container, _engine, peer) => peer.receive("remote", { x: 200, y: 0, width: 100, height: 100, bring: false, originParticipantId: "remote", originEpoch: "camera-table", originSequence: 2 }) },
 ];
 it.each(cameraMoveCases)("camera API leadership: $name", async ({ follow, run }) => {
