@@ -6,11 +6,10 @@ import { preloadWhiteboardStylesheet } from "@q9labsai/chalk-whiteboard/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ChalkProvider } from "../../bindings/context";
-import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
+import { useCan, useCanDrawWhiteboard, useConnection, useRecording, useSpaceClient, useWhiteboard } from "../../bindings/hooks";
 import { chalkThemeStyle, type ChalkColorScheme, type ChalkTheme } from "../../theme";
 import { useWhiteboardSceneSubscription } from "../../internal/useWhiteboardSceneSubscription";
 import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../../whiteboard/wire-adapters";
-import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
@@ -275,7 +274,6 @@ function SpaceSurface(
 ): React.JSX.Element {
   const client = useSpaceClient();
   const connection = useConnection();
-  const media = useMedia();
   const whiteboardState = useWhiteboard();
   const canEndEpisode = useCan("endEpisode");
   const canDrawWhiteboard = useCanDrawWhiteboard();
@@ -354,20 +352,11 @@ function SpaceSurface(
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
       reconnecting={{ isVisible: connection.status === "reconnecting", status: "reconnecting", showNotice: false }}
       overlay={
-        <>
-          {media.microphoneMutedByOtherDevice ? (
-            <div role="status" className="pointer-events-none absolute inset-x-3 top-16 z-40 flex justify-center">
-              <p className="chalk-toast text-center text-sm">Mic off: your other device is using it.</p>
-            </div>
-          ) : null}
-          {media.incomingRequests[0] ? (
-            <MediaRequestDialog
-              request={media.incomingRequests[0]}
-              onDecline={() => void runCommand(() => client.media.declineRequest(media.incomingRequests[0]!.requestId), media.incomingRequests[0]!.kind === "start_camera" ? "camera" : "microphone", "request")}
-              onAllow={() => void runCommand(() => client.media.acceptRequest(media.incomingRequests[0]!.requestId), media.incomingRequests[0]!.kind === "start_camera" ? "camera" : "microphone", "request")}
-            />
-          ) : null}
-        </>
+        media.microphoneMutedByOtherDevice ? (
+          <div role="status" className="pointer-events-none absolute inset-x-3 top-16 z-40 flex justify-center">
+            <p className="chalk-toast text-center text-sm">Mic off: your other device is using it.</p>
+          </div>
+        ) : undefined
       }
     />
   );
