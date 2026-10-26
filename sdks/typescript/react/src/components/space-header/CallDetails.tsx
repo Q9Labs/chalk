@@ -1,7 +1,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
-import { InviteQR, inviteQr } from "../chalk-ui/InviteQR";
+import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import type { SpaceHeaderProps } from "./space-header-contract";
 
@@ -208,7 +208,7 @@ export function CallDetails({
   readonly onDialog: (kind: "shortcuts" | "report") => void;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
-  const qr = inviteQr(link);
+  const qr = canEncodeInviteQr(link);
   const [details, setDetails] = useState(false);
   return (
     <div className="chalk-details">
@@ -228,7 +228,7 @@ export function CallDetails({
         </div>
         {qr ? (
           <div className="chalk-shell-qr-row">
-            <InviteQR code={qr} />
+            <InviteQR value={link} />
             <p>Scan with a phone camera to join this call.</p>
           </div>
         ) : null}

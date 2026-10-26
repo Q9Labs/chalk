@@ -2,7 +2,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { ChalkCopyButton, ChalkSheet } from "../chalk-ui";
-import { InviteQR, inviteQr } from "../chalk-ui/InviteQR";
+import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 
 export interface CallReadyProps {
   readonly open: boolean;
@@ -18,7 +18,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   const [entered, setEntered] = useState(false);
   const [present, setPresent] = useState(open);
   const id = useId();
-  const qr = showQR ? inviteQr(link) : null;
+  const qr = showQR && canEncodeInviteQr(link);
   const close = () => {
     onClose();
     cardRef.current?.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
@@ -74,7 +74,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       </div>
       <div ref={qrRef} id={`${id}-qr`} hidden={!showQR}>
         <div className="mt-3 flex items-center gap-3.5">
-          {qr ? <InviteQR code={qr} /> : null}
+          {qr ? <InviteQR value={link} /> : null}
           <p className="text-[13px] text-[var(--chalk-soft-text)]">{qr ? "Scan with a phone camera to join this call." : "This link is too long for a QR code. Copy the link to share it."}</p>
         </div>
       </div>
