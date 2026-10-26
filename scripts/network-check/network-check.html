@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="description" content="A one-minute comparison of Chalk and control network connections." />
+    <title>Chalk network check — one-minute connection comparison</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font:
+          14px/1.4 Inter,
+          Arial,
+          sans-serif;
+        background: #f7f8fa;
+        color: #18202b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+      }
+      main {
+        max-width: 1060px;
+        margin: auto;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      p {
+        margin: 6px 0;
+      }
+      #progress {
+        font-size: 19px;
+        font-weight: 650;
+        margin-top: 16px;
+      }
+      #summary {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        margin: 12px 0;
+        font-weight: 650;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 4px 10px;
+        border-bottom: 1px solid #cbd1d9;
+        vertical-align: top;
+      }
+      th:first-child,
+      td:first-child {
+        padding-left: 0;
+        width: 50px;
+      }
+      th {
+        font-weight: 650;
+      }
+      .pass {
+        color: #16703c;
+      }
+      .fail {
+        color: #b22925;
+      }
+      .muted,
+      footer {
+        color: #505d6e;
+      }
+      footer {
+        margin-top: 16px;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+      }
+      button {
+        font: inherit;
+        padding: 8px 16px;
+        min-height: 40px;
+        border: 1px solid #8792a1;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        margin: 10px 8px 0 0;
+      }
+      button:focus-visible {
+        outline: 3px solid #1475e0;
+        outline-offset: 2px;
+      }
+      details {
+        margin-top: 12px;
+      }
+      @media (max-width: 600px) {
+        body {
+          padding: 16px 10px;
+        }
+        h1 {
+          font-size: 24px;
+        }
+        th,
+        td {
+          padding: 5px 4px;
+          font-size: 12px;
+        }
+        #summary {
+          gap: 12px;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          background: #14171c;
+          color: #edf0f5;
+        }
+        .muted,
+        footer {
+          color: #b0bac8;
+        }
+        th,
+        td {
+          border-color: #424b58;
+        }
+        .pass {
+          color: #72d699;
+        }
+        .fail {
+          color: #ffaaa4;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main data-control="__CONTROL_ORIGIN__">
+      <h1>Chalk network check</h1>
+      <p>Keep this tab open for about one minute, then send a screenshot of the results.</p>
+      <p class="muted">No sign-in, microphone or camera. This checks connections only; it does not join a call.</p>
+      <p id="progress" role="status" aria-live="polite">Starting…</p>
+      <div id="summary"></div>
+      <table aria-label="Connection attempts">
+        <thead>
+          <tr>
+            <th scope="col">Try</th>
+            <th scope="col">Chalk Sync socket</th>
+            <th scope="col">Control socket</th>
+            <th scope="col">Control fetch</th>
+          </tr>
+        </thead>
+        <tbody id="attempts"></tbody>
+      </table>
+      <button id="stop" type="button">Stop check</button><button id="restart" type="button" hidden>Run again</button>
+      <details>
+        <summary>What these results mean</summary>
+        <p>OPEN means the WebSocket upgrade succeeded (HTTP 101). The check then closes it deliberately, without sending an access token. Code 1000 is a normal close; 1006 means the browser saw an abnormal close. A timeout means no open within 4.5 seconds.</p>
+        <p>Browsers do not expose a failed WebSocket’s HTTP status or the network’s reason. A failed Sync socket with working controls narrows the problem; it does not prove an ISP, hostname, QUIC or server fault.</p>
+        <p>Results stay on this screen. Requests send no call or user identifiers. Normal service access logs may record the request IP and browser.</p>
+      </details>
+      <footer>
+        <p id="run"></p>
+        <p id="endpoints"></p>
+        <p id="browser"></p>
+        <p id="visibility"></p>
+      </footer>
+    </main>
+    <script type="module">
+      const control = new URL(document.querySelector("main").dataset.control);
+      const sync = "wss://sync.chalkmeet.com/v1/sync";
+      const run = crypto.randomUUID();
+      const startedAt = new Date();
+      const started = performance.now();
+      const limit = 20;
+      const counters = [0, 0, 0];
+      const pending = new Set();
+      const timers = new Set();
+      let stopped = false;
+      let finished = 0;
+      let hidden = document.hidden;
+      document.addEventListener("visibilitychange", () => {
+        hidden ||= document.hidden;
+        renderVisibility();
+      });
+      document.querySelector("#run").textContent = `Run ${run} · started ${startedAt.toISOString()} · check v1`;
+      document.querySelector("#endpoints").textContent = `Sync: ${sync} · Control: ${control.origin}`;
+      document.querySelector("#browser").textContent = navigator.userAgent;
+      function renderVisibility() {
+        document.querySelector("#visibility").textContent = `Tab hidden during check: ${hidden ? "yes — timings may be delayed" : "no"} · last update ${new Date().toISOString()}`;
+      }
+      function summary() {
+        document.querySelector("#summary").textContent = `Sync ${counters[0]}/${limit} opened · Control ${counters[1]}/${limit} opened · Fetch ${counters[2]}/${limit} OK`;
+        renderVisibility();
+      }
+      function done() {
+        finished += 1;
+        summary();
+        if (finished === limit) {
+          document.querySelector("#progress").textContent = `Complete · ${Math.round((performance.now() - started) / 1000)} seconds · send this screenshot`;
+          document.querySelector("#stop").hidden = true;
+          document.querySelector("#restart").hidden = false;
+        }
+      }
+      function address(base, round) {
+        const url = new URL(base);
+        url.searchParams.set("probe", "qa-network-v1");
+        url.searchParams.set("run", run);
+        url.searchParams.set("attempt", round);
+        return url.href;
+      }
+      function socketCheck(url, cell, column) {
+        return new Promise((resolve) => {
+          const start = performance.now();
+          let socket;
+          let opened;
+          let complete = false;
+          const finish = (label, ok) => {
+            if (complete) return;
+            complete = true;
+            clearTimeout(timer);
+            pending.delete(cancel);
+            cell.textContent = label;
+            cell.className = ok ? "pass" : "fail";
+            if (ok) counters[column] += 1;
+            if (socket && socket.readyState < 2) socket.close();
+            resolve();
+          };
+          const cancel = () => finish("Stopped", false);
+          const timer = setTimeout(() => finish(opened === undefined ? `TIMEOUT ${Math.round(performance.now() - start)} ms · no open` : `OPEN ${opened} ms · close pending`, opened !== undefined), 4500);
+          pending.add(cancel);
+          try {
+            socket = new WebSocket(url);
+            socket.onopen = () => {
+              opened = Math.round(performance.now() - start);
+              socket.close(1000, "qa probe complete");
+            };
+            socket.onclose = (event) => finish(`${opened === undefined ? "FAIL" : "OPEN"} ${opened ?? Math.round(performance.now() - start)} ms · close ${event.code} · ${event.reason || "none"}`, opened !== undefined);
+            socket.onerror = () => {
+              cell.textContent = "Socket error · waiting for close";
+            };
+          } catch (error) {
+            finish(`BLOCKED · ${error.name} · ${Math.round(performance.now() - start)} ms`, false);
+          }
+        });
+      }
+      async function fetchCheck(url, cell) {
+        const start = performance.now();
+        const controller = new AbortController();
+        const cancel = () => controller.abort();
+        pending.add(cancel);
+        const timer = setTimeout(cancel, 4500);
+        try {
+          const response = await fetch(url, { cache: "no-store", credentials: "omit", signal: controller.signal });
+          await response.text();
+          cell.textContent = `${response.status} · ${Math.round(performance.now() - start)} ms`;
+          cell.className = response.ok ? "pass" : "fail";
+          if (response.ok) counters[2] += 1;
+        } catch (error) {
+          cell.textContent = `${stopped ? "Stopped" : error.name === "AbortError" ? "TIMEOUT" : "FAIL"} · ${Math.round(performance.now() - start)} ms`;
+          cell.className = "fail";
+        } finally {
+          clearTimeout(timer);
+          pending.delete(cancel);
+        }
+      }
+      async function attempt(round) {
+        if (stopped) return;
+        document.querySelector("#progress").textContent = `Checking ${round} of ${limit} · keep this tab open`;
+        const row = document.querySelector("#attempts").insertRow();
+        row.insertCell().textContent = String(round);
+        row.title = new Date().toISOString();
+        const cells = Array.from({ length: 3 }, () => {
+          const cell = row.insertCell();
+          cell.textContent = "Connecting…";
+          return cell;
+        });
+        await Promise.all([socketCheck(address(sync, round), cells[0], 0), socketCheck(address(control.origin.replace("https:", "wss:") + "/ws", round), cells[1], 1), fetchCheck(address(control.origin + "/ping", round), cells[2])]);
+        done();
+      }
+      function stop() {
+        stopped = true;
+        for (const timer of timers) clearTimeout(timer);
+        for (const cancel of pending) cancel();
+        document.querySelector("#progress").textContent = `Stopped · ${finished} complete attempts`;
+        document.querySelector("#stop").hidden = true;
+        document.querySelector("#restart").hidden = false;
+      }
+      document.querySelector("#stop").addEventListener("click", stop);
+      document.querySelector("#restart").addEventListener("click", () => location.reload());
+      window.addEventListener("pagehide", stop, { once: true });
+      summary();
+      for (let round = 1; round <= limit; round += 1) timers.add(setTimeout(() => attempt(round), (round - 1) * 3000));
+    </script>
+  </body>
+</html>
