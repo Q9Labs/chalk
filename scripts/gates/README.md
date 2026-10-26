@@ -132,9 +132,9 @@ box run -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-postgres.sh --
 ```
 
 `scripts/gates/instabox-run.sh` installs locked dependencies and the missing Ruby/lsof
-helpers, enables the Go version in `apps/api/go.mod`, and puts test scratch on the
-20-GB data disk. The snapshot's 4-GB `/tmp` tmpfs cannot satisfy queue proofs'
-8-GB admission floor. `--browser` installs Chromium; no command means `pnpm gate:full`.
+helpers, enables the Go version in `apps/api/go.mod`, and mounts data-disk scratch at `/tmp` for the command. The snapshot’s 4-GB
+`/tmp` tmpfs cannot satisfy queue proofs’ 8-GB admission floor. Keeping their
+scratch and fixed work paths under that one mount also preserves hard links. `--browser` installs Chromium; no command means `pnpm gate:full`.
 The snapshot supplies Node, Go, Erlang/Elixir, OpenTofu, scanners, and Docker.
 Versions are pinned in `.tool-versions`, `apps/api/go.mod`, and the CI setup actions.
 PostgreSQL helpers own and
