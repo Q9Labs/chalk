@@ -88,37 +88,6 @@ const styles = `.call-card-tabs {
   border-top: 1px solid var(--chalk-line);
   background: var(--chalk-surface);
 }
-.call-host-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 36px;
-  border: 1px solid var(--chalk-line-strong);
-  border-radius: 10px;
-  color: var(--chalk-soft-text);
-  font-size: 13px;
-  font-weight: 600;
-  transition: background-color 0.15s ease-out;
-}
-.call-host-button:hover,
-.call-host-button[aria-expanded="true"] {
-  background: var(--chalk-hover);
-}
-.call-host-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.call-host-button svg {
-  width: 16px;
-  height: 16px;
-  color: var(--chalk-muted-text);
-}
-.call-host-button .chev {
-  width: 14px;
-  height: 14px;
-}
 .call-mute-confirm {
   width: 280px;
   padding: 8px 8px 4px;
@@ -808,7 +777,6 @@ const styles = `.call-card-tabs {
 }
 @media (pointer: coarse) {
   .call-card-close,
-  .call-host-button,
   .call-person-row button,
   .call-staged-file button,
   .call-reaction,
@@ -830,7 +798,6 @@ const styles = `.call-card-tabs {
 }
 @media (prefers-reduced-motion: reduce) {
   .call-photo-viewer[open], .call-photo-viewer[open][data-closing] { transition: none; }
-  .call-host-button,
   .call-reaction,
   .call-reaction-bar,
   .call-reaction-bar button,

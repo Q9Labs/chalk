@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import { ChalkButton, ChalkPopover } from "../chalk-ui";
 import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
-import { MicrophoneOff01Icon, Search01Icon } from "../../utils/icons";
+import { Search01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import { Avatar } from "../atomic/Avatar";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
@@ -176,10 +176,9 @@ export const ParticipantsPanelSurface = React.memo(
             <ChalkPopover
               label="Mute everyone"
               trigger={
-                <button type="button" className="call-host-button" disabled={muting || unmutedCount === 0}>
-                  <MicrophoneOff01Icon aria-hidden="true" />
-                  <span>Mute everyone</span>
-                </button>
+                <ChalkButton className="w-full" disabled={muting || unmutedCount === 0}>
+                  Mute everyone
+                </ChalkButton>
               }
             >
               <div className="call-mute-confirm">
