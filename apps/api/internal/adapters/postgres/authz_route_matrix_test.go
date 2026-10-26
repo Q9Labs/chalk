@@ -239,7 +239,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		Recordings:            recordings.NewService(NewRecordingRepository(q)),
 		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithTransactor(lingerTestTransactor{tx})),
 		RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(nil), spaceService),
-		RecordingObjects:      objects, RecordingDownloads: storage, TranscriptArtifacts: transcriptService,
+		RecordingObjects:      storage, RecordingDownloads: storage, TranscriptArtifacts: transcriptService,
 		Webhooks:        webhooks.NewService(NewWebhookRepository(nil), nil),
 		ChatAttachments: chatattachments.NewService(chatRepo, storage), ChatParticipants: chatattachments.NewParticipantVerifier(syncVerifier),
 		WhiteboardFiles: whiteboardfiles.NewService(NewWhiteboardFileRepository(tx), storage), WhiteboardParticipants: whiteboardfiles.NewParticipantVerifier(syncVerifier),
