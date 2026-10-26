@@ -54,10 +54,10 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
       - name: Install browser and evidence tools
-        run: |
-          pnpm install --frozen-lockfile
-          sudo apt-get update
-          sudo apt-get install -y age
+        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: age
       - name: Resolve web engine browser cache key
         id: web-browser-key
         run: |
