@@ -24,7 +24,7 @@ export function SpacePage(props: SpacePageProps = {}) {
   return (
     <div data-chalk data-chalk-theme={mode} className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
       <div className="mx-auto w-full max-w-5xl shrink-0 px-4">
-        <PrivacyNotice />
+        <PrivacyNotice overCall />
       </div>
       <div className="relative min-h-0 flex-1">
         <SpaceEntry {...props} />

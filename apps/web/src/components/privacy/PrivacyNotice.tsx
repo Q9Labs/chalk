@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { PRIVACY_EFFECTIVE_DATE, PRIVACY_NOTICE_TEXT, PRIVACY_NOTICE_LINK_TEXT, PRIVACY_NOTICE_DISMISSAL_KEY } from "../../lib/privacy-policy";
 
-export function PrivacyNotice() {
+export function PrivacyNotice({ overCall = false }: { readonly overCall?: boolean }) {
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(false);
   useEffect(() => {
@@ -32,7 +32,7 @@ export function PrivacyNotice() {
 
   if (!pending || dismissed) return null;
   return (
-    <aside className="privacy-notice" aria-label="Privacy Policy update">
+    <aside className="privacy-notice" data-over-call={overCall || undefined} aria-label="Privacy Policy update">
       <p>
         {PRIVACY_NOTICE_TEXT}{" "}
         <a href="/privacy#whats-changing" target="_blank" rel="noopener noreferrer" title="Opens in a new tab">
