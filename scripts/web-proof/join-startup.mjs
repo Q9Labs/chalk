@@ -38,7 +38,7 @@ await fetch("/frames", { method: "POST", body: JSON.stringify([
 const token = audience => btoa('{"alg":"EdDSA"}') + "." + btoa(JSON.stringify({ aud: audience })) + ".fixture";
 const expires = new Date(deadline).toISOString();
 const diagnostics = [];
-const client = createSpaceClientForPlatform({ space: "fixture", baseUrl: location.origin, getAccess: async () => ({ subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participant, participant_generation: 1 }, sync: { token: token("chalk-sync"), expires_at: expires }, media: { token: token("chalk-media"), expires_at: expires, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:127.0.0.1:9" } } }) }, { apiBaseUrl: location.origin, syncUrl: location.origin.replace("http", "ws") + "/sync", whiteboardUrl: null, onConnectionDiagnostic: event => diagnostics.push(event) });
+const client = createSpaceClientForPlatform({ space: "fixture", baseUrl: location.origin, getAccess: async () => ({ subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participant, participant_generation: 1 }, sync: { token: token("chalk-sync"), expires_at: expires }, media: { token: token("chalk-media"), expires_at: expires, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:127.0.0.1:9" } } }) }, { apiBaseUrl: location.origin, syncUrl: location.origin.replace("http", "ws") + "/v1/sync", whiteboardUrl: null, onConnectionDiagnostic: event => diagnostics.push(event) });
 const root = createRoot(document.getElementById("root"));
 const started = performance.now();
 root.render(<StatusSurface phase="entering" callName="Fixture call" />);
@@ -194,7 +194,8 @@ try {
         await page.waitForFunction(() => window.proof, null, { timeout: 45000 });
         const result = await page.evaluate(() => window.proof);
         const expected = revision === "after" && (scenario === "retry" || scenario === "lossy-stalled") ? "live" : "failed";
-        assert.equal(result.connection.status, expected);
+        assert.ok(attempts > 0, JSON.stringify(result));
+        assert.equal(result.connection.status, expected, JSON.stringify(result));
         if (expected === "live") assert.equal(attempts, scenario === "retry" ? 2 : lossPattern.length);
         if (expected === "live" && scenario === "lossy-stalled") {
           assert.equal(fastCloses / attempts, 0.5);
