@@ -25,6 +25,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/problemreports"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -243,9 +245,14 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		_, _ = tx.Exec(context.Background(), `delete from sync_whiteboard_files where tenant_id=$1`, uuid(foreign.TenantID))
 		_, _ = tx.Exec(context.Background(), `delete from sync_whiteboard_scenes where tenant_id=$1`, uuid(foreign.TenantID))
 	})
+	limits := httpapi.DefaultRateLimitOptions()
+	limits.DisableAuthenticated = true
 	fixture.options = httpapi.Options{
-		APIKeys: apikeys.NewService(NewAPIKeyRepository(q, tx), apikeys.Config{}),
-		Tenants: tenants.NewService(tenantRepo), Memberships: memberships.NewService(membershipRepo),
+		RateLimit:      limits,
+		PublicInvites:  publicinvites.Runtime{},
+		ProblemReports: problemreports.NewService(NewProblemReportRepository(tx), nil),
+		APIKeys:        apikeys.NewService(NewAPIKeyRepository(q, tx), apikeys.Config{}),
+		Tenants:        tenants.NewService(tenantRepo), Memberships: memberships.NewService(membershipRepo),
 		TenantAuthz: authorization.NewTenantPolicy(membershipRepo, tenantRepo),
 		Spaces:      spaceService, Episodes: episodeService, ParticipantJoins: episodeService,
 		ParticipantMediaVerify: mediaVerifier, ParticipantMediaActive: active, ParticipantGeneration: active,
@@ -277,11 +284,12 @@ func (f routeMatrixFixture) request(row apitest.RouteCase, foreign bool) *http.R
 		path = path[:start] + f.foreign.ParticipantID.String() + path[end+1:]
 	}
 	if row.Query != "" {
-		path += "?" + row.Query
+		path += "?" + replacer.Replace(row.Query)
 	}
 	request := httptest.NewRequest(method, path, strings.NewReader(row.Body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", "matrix-request-key-0001")
+	request.Header.Set("If-Match", `"1"`)
 	return request
 }
 
