@@ -45,7 +45,7 @@ export function invariants(text) {
     return { line, ids, hash: createHash("sha256").update(normalized).digest("hex") };
   });
 }
-export function checkTheory(text, baseline) {
+function checkTheory(text, baseline) {
   const errors = [];
   const mappings = new Map();
   for (const match of text.matchAll(/^<!-- test:([a-z][a-z0-9-]*) ([^#\s]+)#(.+) -->$/gm)) {

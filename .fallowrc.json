@@ -39,6 +39,8 @@
     "tools/contract-fixture-proof/test/*.mjs",
     "tools/sdk-web-consumer-e2e/consumer/styles.css",
     "scripts/gates/chalk-gate-plan.mjs",
+    "scripts/gates/doclint.mjs",
+    "scripts/gates/theory-coverage.mjs",
     "scripts/gates/osv-snapshot.mjs",
     "scripts/integration-smoke/run.mjs",
     "scripts/recorder/analyze-media.mjs",

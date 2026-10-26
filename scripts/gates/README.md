@@ -126,12 +126,15 @@ The disposable machine is deleted when the command ends. Keep the single-worker
 settings above: the 4-vCPU / 8-GB machine has no room for extra workers.
 
 ```sh
-box run -- 'pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && pnpm gate:full'
-box run -- 'pnpm install --frozen-lockfile && apps/api/scripts/gate.sh'
-box run -- 'pnpm install --frozen-lockfile && scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
+box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && GOTOOLCHAIN=auto pnpm gate:full'
+box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && apps/api/scripts/gate.sh'
+box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
 ```
 
 The snapshot supplies Node, Go, Erlang/Elixir, OpenTofu, scanners, and Docker.
+The commands install Ruby for topology port allocation and lsof for process/port proofs,
+which the snapshot does not supply. `GOTOOLCHAIN=auto` lets Go use the version
+in `apps/api/go.mod` when the snapshot’s Go patch release is older.
 Versions are pinned in `.tool-versions`, `apps/api/go.mod`, and the CI setup actions;
 check those pins if a fresh snapshot cannot run a gate. PostgreSQL helpers own and
 clean up their task containers. Use `scripts/gates/with-postgres.sh --` for Sync

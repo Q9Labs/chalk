@@ -2,7 +2,7 @@
 
 OSS modern real-time collaboration and communication.
 
-For the full gate, run `box run -- 'pnpm install --frozen-lockfile && pnpm gate:full'` on Instabox. See [gate operations](scripts/gates/README.md) for setup, selection, and the commit hook.
+For the full gate, run `box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && GOTOOLCHAIN=auto pnpm gate:full'` on Instabox. See [gate operations](scripts/gates/README.md) for setup, selection, and the commit hook.
 
 - Keep Space and Episode as the canonical names defined in `GLOSSARY.md`.
 - Put shared behavior in packages first, then wire it into apps. Don't fix SDK behavior only in a demo.
