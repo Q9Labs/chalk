@@ -165,43 +165,40 @@ try {
           stalledDials += 1;
           return; // Accept TCP without sending an HTTP response.
         }
-        const timer = setTimeout(
-          () => {
-            timers.delete(timer);
-            if (socket.destroyed) return;
-            const accept = createHash("sha1")
-              .update(request.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-              .digest("base64");
-            socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
-            let buffered = Buffer.alloc(0);
-            // Minimal RFC6455 fixture accepts partial/coalesced masked browser frames.
-            // Kept here with the socket owner; no production parser is changed.
-            // fallow-ignore-next-line complexity
-            socket.on("data", (chunk) => {
-              buffered = Buffer.concat([buffered, chunk]);
-              while (buffered.length >= 6) {
-                const opcode = buffered[0] & 15;
-                let length = buffered[1] & 127;
-                const offset = length === 126 ? 4 : 2;
-                if (length === 127 || buffered.length < offset + 4) return;
-                if (length === 126) length = buffered.readUInt16BE(2);
-                if (buffered.length < offset + 4 + length) return;
-                const mask = buffered.subarray(offset, offset + 4);
-                const payload = buffered.subarray(offset + 4, offset + 4 + length).map((byte, index) => byte ^ mask[index % 4]);
-                buffered = buffered.subarray(offset + 4 + length);
-                if (opcode === 8) {
-                  socket.end();
-                  return;
-                }
-                if (opcode !== 1) continue;
-                const message = JSON.parse(payload.toString());
-                if (message.type === "hello") for (const item of frames) socket.write(frame(item));
-                if (message.type === "entered") socket.write(frame({ type: "entered_ack" }));
+        const timer = setTimeout(() => {
+          timers.delete(timer);
+          if (socket.destroyed) return;
+          const accept = createHash("sha1")
+            .update(request.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+            .digest("base64");
+          socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+          let buffered = Buffer.alloc(0);
+          // Minimal RFC6455 fixture accepts partial/coalesced masked browser frames.
+          // Kept here with the socket owner; no production parser is changed.
+          // fallow-ignore-next-line complexity
+          socket.on("data", (chunk) => {
+            buffered = Buffer.concat([buffered, chunk]);
+            while (buffered.length >= 6) {
+              const opcode = buffered[0] & 15;
+              let length = buffered[1] & 127;
+              const offset = length === 126 ? 4 : 2;
+              if (length === 127 || buffered.length < offset + 4) return;
+              if (length === 126) length = buffered.readUInt16BE(2);
+              if (buffered.length < offset + 4 + length) return;
+              const mask = buffered.subarray(offset, offset + 4);
+              const payload = buffered.subarray(offset + 4, offset + 4 + length).map((byte, index) => byte ^ mask[index % 4]);
+              buffered = buffered.subarray(offset + 4 + length);
+              if (opcode === 8) {
+                socket.end();
+                return;
               }
-            });
-          },
-          upgradeDelayMs,
-        );
+              if (opcode !== 1) continue;
+              const message = JSON.parse(payload.toString());
+              if (message.type === "hello") for (const item of frames) socket.write(frame(item));
+              if (message.type === "entered") socket.write(frame({ type: "entered_ack" }));
+            }
+          });
+        }, upgradeDelayMs);
         timers.add(timer);
       });
       await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
