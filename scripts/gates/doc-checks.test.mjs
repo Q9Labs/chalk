@@ -97,6 +97,24 @@ test("theory validates exact declared test names, not mentions or existing files
   write("theory.md", mapped("proof_test.exs", "writes durably"));
   assert.equal(run("theory-coverage").status, 0);
 });
+test("theory rejects declarations inside comments", (t) => {
+  const { write, run } = sandbox(t);
+  write("scripts/gates/theory-baseline.json", "[]");
+  for (const [file, name, declaration] of [
+    ["proof.test.ts", "writes durably", 'it("writes durably", () => {});'],
+    ["proof_test.go", "TestDurable", "func TestDurable(t *testing.T) {}"],
+  ]) {
+    write("theory.md", `${theory}\n## Test index\n\n<!-- test:durable ${file}#${name} -->\n`);
+    for (const source of [`/*\n${declaration}\n*/\n`, `// ${declaration}\n`]) {
+      write(file, source);
+      const result = run("theory-coverage");
+      assert.equal(result.status, 1, `${file}: ${source}\n${result.stdout}`);
+      assert.match(result.stderr, /named test does not exist/);
+    }
+    write(file, `const example = "/* not a comment */ //";\n${declaration}\n`);
+    assert.equal(run("theory-coverage").status, 0);
+  }
+});
 test("SDK effect rule rejects named, namespace, and aliased calls in both SDKs", (t) => {
   const { dir, write } = sandbox(t);
   const source = 'import React, { useEffect, useEffect as effect } from "react";\nuseEffect(() => {}, []);\nReact.useEffect(() => {}, []);\neffect(() => {}, []);\n// nosemgrep: chalk.forbid-sdk-use-effect -- Existing fixture cleanup proves a per-call exception.\nuseEffect(() => {}, []);\n';

@@ -72,7 +72,8 @@ function checkTheory(text, baseline) {
       fail(`${id}: missing test file: ${mapping.file}`);
       continue;
     }
-    const source = readFileSync(testPath, "utf8");
+    const testSource = readFileSync(testPath, "utf8");
+    const source = mapping.file.endsWith(".exs") ? testSource : testSource.replace(/("(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`)|(\/\/[^\r\n]*|\/\*[\s\S]*?\*\/)/g, (token, literal) => literal ?? token.replace(/[^\r\n]/g, " "));
     const names = [...[...source.matchAll(/^\s*func (Test\w+)\(t \*testing\.T\)/gm)].map((match) => match[1]), ...[...source.matchAll(/^\s*(?:test|it)\(\s*["'`]([^"'`]+)["'`]\s*,/gm)].map((match) => match[1]), ...[...source.matchAll(/^\s*test "([^"]+)"(?:\s*,|\s+do)/gm)].map((match) => match[1])];
     if (!names.includes(mapping.name)) fail(`${id}: named test does not exist: ${mapping.file}#${mapping.name}`);
   }
