@@ -38,6 +38,10 @@ await fetch("/frames", { method: "POST", body: JSON.stringify([
 const token = audience => btoa('{"alg":"EdDSA"}') + "." + btoa(JSON.stringify({ aud: audience })) + ".fixture";
 const expires = new Date(deadline).toISOString();
 const diagnostics = [];
+let dialCount = 0;
+globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
+  construct(target, args) { dialCount += 1; return Reflect.construct(target, args); }
+});
 const client = createSpaceClientForPlatform({ space: "fixture", baseUrl: location.origin, getAccess: async () => ({ subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participant, participant_generation: 1 }, sync: { token: token("chalk-sync"), expires_at: expires }, media: { token: token("chalk-media"), expires_at: expires, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:127.0.0.1:9" } } }) }, { apiBaseUrl: location.origin, syncUrl: location.origin.replace("http", "ws") + "/v1/sync", whiteboardUrl: null, onConnectionDiagnostic: event => diagnostics.push(event) });
 const root = createRoot(document.getElementById("root"));
 const started = performance.now();
@@ -49,7 +53,7 @@ try {
   const error = client.getSnapshot().connection.lastError;
   root.render(<StatusSurface phase="failed" callName="Fixture call" errorCode={error?.code} sync={error?.sync} onRetry={() => {}} onHome={() => {}} />);
 }
-window.proof = { connection: client.getSnapshot().connection, diagnostics, elapsedMs: Math.round(performance.now() - started) };
+window.proof = { dialCount, connection: client.getSnapshot().connection, diagnostics, elapsedMs: Math.round(performance.now() - started) };
 window.disposeProof = () => client.dispose();
 `,
 );
@@ -198,9 +202,13 @@ try {
         const result = await page.evaluate(() => window.proof);
         const expected = revision === "after" && (scenario === "retry" || scenario === "lossy-stalled") ? "live" : "failed";
         assert.ok(attempts > 0, JSON.stringify(result));
-        console.log(JSON.stringify({ revision, scenario, device, trial, attempts, fastCloses, fastCloseDelaysMs, stalledDials, status: result.connection.status, code: result.connection.lastError?.code, sync: result.connection.lastError?.sync, elapsedMs: result.elapsedMs }));
+        console.log(
+          JSON.stringify({ revision, scenario, device, trial, attempts, fastCloses, fastCloseDelaysMs, stalledDials, dialCount: result.dialCount, status: result.connection.status, code: result.connection.lastError?.code, sync: result.connection.lastError?.sync, elapsedMs: result.elapsedMs }),
+        );
         assert.equal(result.connection.status, expected, JSON.stringify(result));
         assert.ok(fastCloseDelaysMs.every((delay) => delay < 1000));
+        assert.ok(result.dialCount >= attempts && result.dialCount <= attempts + 1);
+        if (expected === "live") assert.equal(result.dialCount, attempts);
         if (expected === "live") assert.equal(attempts, scenario === "retry" ? 2 : lossPattern.length);
         if (expected === "live" && scenario === "lossy-stalled") {
           assert.equal(fastCloses / attempts, 0.5);
@@ -210,10 +218,10 @@ try {
         if (revision === "after" && scenario === "rejected") {
           assert.equal(result.connection.lastError.sync.opened, false);
           assert.equal(result.connection.lastError.sync.closeCode, 1006);
-          assert.equal(result.connection.lastError.sync.attempts, attempts);
+          assert.equal(result.connection.lastError.sync.attempts, result.dialCount);
           assert.ok(result.connection.lastError.sync.attempt <= attempts);
           await page.getByText("The connection closed before the call service could be reached. Try again.", { exact: true }).waitFor();
-          await page.getByText(new RegExp(`attempts=${attempts};`)).waitFor();
+          await page.getByText(new RegExp(`attempts=${result.dialCount};`)).waitFor();
         }
         if (trial < 2) await page.screenshot({ path: resolve(output, `${revision}-${scenario}-${device}-${trial}.png`) });
         await page.evaluate(() => window.disposeProof());
