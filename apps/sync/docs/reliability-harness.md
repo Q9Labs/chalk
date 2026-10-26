@@ -48,12 +48,12 @@ topology profile.
 
 The boundaries follow the actual transaction, not three independent writes:
 
-| Kill point | Expected durable result before retry |
-| --- | --- |
-| Command accepted, before transaction | No target event or receipt |
-| Event inserted, control updated, or receipt inserted inside transaction | Entire target transaction rolls back |
-| Commit completed, reply not sent | Event, folded state, and receipt survive together |
-| Client received receipt | Same event, state, and stable receipt survive |
+| Kill point                                                              | Expected durable result before retry              |
+| ----------------------------------------------------------------------- | ------------------------------------------------- |
+| Command accepted, before transaction                                    | No target event or receipt                        |
+| Event inserted, control updated, or receipt inserted inside transaction | Entire target transaction rolls back              |
+| Commit completed, reply not sent                                        | Event, folded state, and receipt survive together |
+| Client received receipt                                                 | Same event, state, and stable receipt survive     |
 
 The command journey starts with an acknowledged command, parks the target at
 each hook over a TCP barrier, sends SIGKILL to the separate Sync BEAM, and starts
