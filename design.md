@@ -1,28 +1,28 @@
 ---
 name: Chalk
 colors:
-  surface: "#0B0C0E"
-  surface-container: "#151619"
-  surface-container-high: "#1D1F23"
+  surface: "#000000"
+  surface-container: "#060606"
+  surface-container-high: "#0C0C0C"
   on-surface: "#ECECEE"
   on-surface-variant: "#9A9CA3"
   primary: "#ECECEE"
-  on-primary: "#0B0C0E"
+  on-primary: "#000000"
   secondary: "#55AAC9"
-  on-secondary: "#0B0C0E"
+  on-secondary: "#000000"
   outline: "rgba(255,255,255,0.4)"
-  outline-variant: "rgba(255,255,255,0.08)"
+  outline-variant: "rgba(255,255,255,0.045)"
   error: "#FF6B6B"
 call-dark:
-  canvas: "#0B0C0E"
-  surface: "#151619"
-  raised: "#1D1F23"
-  hover: "#272A2F"
-  pressed: "#30333A"
-  tile: "#151619"
-  popover: "#1D1F23"
-  line: "rgba(255,255,255,0.08)"
-  line-strong: "rgba(255,255,255,0.14)"
+  canvas: "#000000"
+  surface: "#060606"
+  raised: "#0C0C0C"
+  hover: "#161616"
+  pressed: "#1F1F1F"
+  tile: "#060606"
+  popover: "#0C0C0C"
+  line: "rgba(255,255,255,0.045)"
+  line-strong: "rgba(255,255,255,0.08)"
   wash: "rgba(255,255,255,0.05)"
   wash-strong: "rgba(255,255,255,0.08)"
   text: "#ECECEE"
@@ -58,9 +58,9 @@ call-light:
   warning: "#8A6400"
   info: "#1B70A0"
 call-fixed:
-  overlay: "rgba(12,14,18,0.75)"
-  overlay-strong: "rgba(12,14,18,0.82)"
-  overlay-hover: "rgba(40,42,48,0.95)"
+  overlay: "rgba(0,0,0,0.75)"
+  overlay-strong: "rgba(0,0,0,0.82)"
+  overlay-hover: "rgba(34,34,34,0.95)"
   on-overlay: "#FFFFFF"
   overlay-warning: "#E2BD3A"
   overlay-danger: "#FF6B6B"
@@ -143,35 +143,35 @@ The marketing site, the docs and the dashboard open dark like the call and switc
 
 Both call themes share one set of roles. Dark is the default. Light is a designed counterpart, not an inversion: white cards sit on a light gray canvas, and raised controls are one step darker than the cards.
 
-| Token         | Dark                     | Light              | Use                                                                     |
-| ------------- | ------------------------ | ------------------ | ----------------------------------------------------------------------- |
-| `canvas`      | `#0B0C0E`                | `#F3F3F5`          | Call background and status pages                                        |
-| `surface`     | `#151619`                | `#FFFFFF`          | Panel card, ready card, people pill, header buttons                     |
-| `tile`        | `#151619`                | `#E2E2E7`          | Tile background and the letterbox color of shared content               |
-| `raised`      | `#1D1F23`                | `#ECECF0`          | Round dock buttons, fields, chat bubbles, selected rows                 |
-| `popover`     | `#1D1F23`                | `#FFFFFF`          | Menus, popovers, toasts, floating chips                                 |
-| `hover`       | `#272A2F`                | `#E1E1E6`          | Hover surface of a raised control or row                                |
-| `pressed`     | `#30333A`                | `#D3D3D9`          | Pressed surface, switch track when off, meter track                     |
-| `line`        | `rgba(255,255,255,0.08)` | `rgba(0,0,0,0.09)` | Card borders and hairlines                                              |
-| `line-strong` | `rgba(255,255,255,0.14)` | `rgba(0,0,0,0.15)` | Menu and popover borders, dividers inside controls                      |
-| `wash`        | `rgba(255,255,255,0.05)` | `rgba(0,0,0,0.04)` | Hover wash over a tile; `wash-strong` (0.08 and 0.07) is the press wash |
-| `text`        | `#ECECEE`                | `#18181B`          | Text, icons, and the fill of inverted buttons                           |
-| `text-strong` | `#FFFFFF`                | `#000000`          | Hover state of an inverted button                                       |
-| `text-soft`   | `#C4C6CC`                | `#3D3E45`          | Secondary text on cards and in menus                                    |
-| `text-muted`  | `#9A9CA3`                | `#5C5D65`          | Meta, placeholders, section labels, inactive icons                      |
-| `danger`      | `#E5484D`                | `#D93A3F`          | Leave button and Stop sharing; `danger-hover` is `#EC5D61` or `#E04B50` |
-| `danger-text` | `#FF6B6B`                | `#BF272C`          | Off-state icons, error text, End call for everyone                      |
-| `success`     | `#80B879`                | `#2B8A3E`          | Level meter, switch on, good signal, copy done                          |
-| `warning`     | `#D9B641`                | `#8A6400`          | Weak signal, blocked-device badge, raised-hand icon in a row            |
-| `info`        | `#55AAC9`                | `#1B70A0`          | Unread dot and your own message reactions                               |
+| Token         | Dark                      | Light              | Use                                                                     |
+| ------------- | ------------------------- | ------------------ | ----------------------------------------------------------------------- |
+| `canvas`      | `#000000`                 | `#F3F3F5`          | Call background and status pages                                        |
+| `surface`     | `#060606`                 | `#FFFFFF`          | Panel card, ready card, people pill, header buttons                     |
+| `tile`        | `#060606`                 | `#E2E2E7`          | Tile background and the letterbox color of shared content               |
+| `raised`      | `#0C0C0C`                 | `#ECECF0`          | Round dock buttons, fields, chat bubbles, selected rows                 |
+| `popover`     | `#0C0C0C`                 | `#FFFFFF`          | Menus, popovers, toasts, floating chips                                 |
+| `hover`       | `#161616`                 | `#E1E1E6`          | Hover surface of a raised control or row                                |
+| `pressed`     | `#1F1F1F`                 | `#D3D3D9`          | Pressed surface, switch track when off, meter track                     |
+| `line`        | `rgba(255,255,255,0.045)` | `rgba(0,0,0,0.09)` | Card borders and hairlines                                              |
+| `line-strong` | `rgba(255,255,255,0.08)`  | `rgba(0,0,0,0.15)` | Menu and popover borders, dividers inside controls                      |
+| `wash`        | `rgba(255,255,255,0.05)`  | `rgba(0,0,0,0.04)` | Hover wash over a tile; `wash-strong` (0.08 and 0.07) is the press wash |
+| `text`        | `#ECECEE`                 | `#18181B`          | Text, icons, and the fill of inverted buttons                           |
+| `text-strong` | `#FFFFFF`                 | `#000000`          | Hover state of an inverted button                                       |
+| `text-soft`   | `#C4C6CC`                 | `#3D3E45`          | Secondary text on cards and in menus                                    |
+| `text-muted`  | `#9A9CA3`                 | `#5C5D65`          | Meta, placeholders, section labels, inactive icons                      |
+| `danger`      | `#E5484D`                 | `#D93A3F`          | Leave button and Stop sharing; `danger-hover` is `#EC5D61` or `#E04B50` |
+| `danger-text` | `#FF6B6B`                 | `#BF272C`          | Off-state icons, error text, End call for everyone                      |
+| `success`     | `#80B879`                 | `#2B8A3E`          | Level meter, switch on, good signal, copy done                          |
+| `warning`     | `#D9B641`                 | `#8A6400`          | Weak signal, blocked-device badge, raised-hand icon in a row            |
+| `info`        | `#55AAC9`                 | `#1B70A0`          | Unread dot and your own message reactions                               |
 
 Colors that stay the same in both themes, because they sit on video or stand for a fixed meaning:
 
 | Token                               | Value                                                                                  | Use                                                                    |
 | ----------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `overlay`                           | `rgba(12,14,18,0.75)` with `#FFFFFF` text                                              | Name tags, signal chip, tile and share hover buttons                   |
-| `overlay-strong`                    | `rgba(12,14,18,0.82)`                                                                  | Share notes, the switcher, and the own-share bar                       |
-| `overlay-hover`                     | `rgba(40,42,48,0.95)`                                                                  | Hover state of an overlay button                                       |
+| `overlay`                           | `rgba(0,0,0,0.75)` with `#FFFFFF` text                                                 | Name tags, signal chip, tile and share hover buttons                   |
+| `overlay-strong`                    | `rgba(0,0,0,0.82)`                                                                     | Share notes, the switcher, and the own-share bar                       |
+| `overlay-hover`                     | `rgba(34,34,34,0.95)`                                                                  | Hover state of an overlay button                                       |
 | `overlay-warning`, `overlay-danger` | `#E2BD3A`, `#FF6B6B`                                                                   | Raised-hand and weak-signal marks, and the mic-off mark, on an overlay |
 | `hand`                              | `#DCB740` with `#16140C` text                                                          | Raised-hand order badge and the active Raise hand row                  |
 | `scrim`                             | `rgba(0,0,0,0.55)`; the photo viewer uses `rgba(8,8,10,0.94)`                          | Behind phone sheets, small dialogs, and the photo viewer               |

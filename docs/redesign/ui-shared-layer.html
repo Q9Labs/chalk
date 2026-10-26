@@ -23,14 +23,14 @@
       }
       :root {
         color-scheme: dark;
-        --canvas: #0b0c0e;
-        --surface: #151619;
-        --raised: #1d1f23;
-        --popover: #1d1f23;
-        --hover: #272a2f;
-        --pressed: #30333a;
-        --line: rgba(255, 255, 255, 0.08);
-        --line-strong: rgba(255, 255, 255, 0.14);
+        --canvas: #000000;
+        --surface: #060606;
+        --raised: #0c0c0c;
+        --popover: #0c0c0c;
+        --hover: #161616;
+        --pressed: #1f1f1f;
+        --line: rgba(255, 255, 255, 0.045);
+        --line-strong: rgba(255, 255, 255, 0.08);
         --edge: rgba(255, 255, 255, 0.4);
         --wash: rgba(255, 255, 255, 0.05);
         --wash-strong: rgba(255, 255, 255, 0.08);
@@ -46,8 +46,8 @@
         --success: #80b879;
         --warning: #d9b641;
         --info: #55aac9;
-        --overlay: rgba(12, 14, 18, 0.75);
-        --overlay-strong: rgba(12, 14, 18, 0.82);
+        --overlay: rgba(0, 0, 0, 0.75);
+        --overlay-strong: rgba(0, 0, 0, 0.82);
         --overlay-warning: #e2bd3a;
         --overlay-danger: #ff6b6b;
         --on-overlay: #ffffff;
@@ -2325,7 +2325,7 @@
         height: 40px;
         border-radius: 10px;
         background: var(--c);
-        box-shadow: inset 0 0 0 1px var(--line-strong);
+        box-shadow: inset 0 0 0 1px var(--edge);
       }
       .sw b {
         display: block;
@@ -2415,7 +2415,7 @@
         width: 64px;
         height: 64px;
         background: var(--hover);
-        box-shadow: inset 0 0 0 1px var(--line-strong);
+        box-shadow: inset 0 0 0 1px var(--edge);
       }
       .space {
         display: grid;
@@ -3048,37 +3048,37 @@
                         <div class="sw-grid">
                           <div class="span-all label" style="margin-top: 6px">Surfaces</div>
                           <div class="sw">
-                            <i style="--c: #0b0c0e"></i>
-                            <div><b>canvas</b><code>#0B0C0E</code><span>Page and call background</span></div>
+                            <i style="--c: #000000"></i>
+                            <div><b>canvas</b><code>#000000</code><span>Page and call background</span></div>
                           </div>
                           <div class="sw">
-                            <i style="--c: #151619"></i>
-                            <div><b>surface</b><code>#151619</code><span>Cards, panels, tiles</span></div>
+                            <i style="--c: #060606"></i>
+                            <div><b>surface</b><code>#060606</code><span>Cards, panels, tiles</span></div>
                           </div>
                           <div class="sw">
-                            <i style="--c: #1d1f23"></i>
-                            <div><b>raised</b><code>#1D1F23</code><span>Fields, selected rows, round controls</span></div>
+                            <i style="--c: #0c0c0c"></i>
+                            <div><b>raised</b><code>#0c0c0c</code><span>Fields, selected rows, round controls</span></div>
                           </div>
                           <div class="sw">
-                            <i style="--c: #1d1f23"></i>
-                            <div><b>popover</b><code>#1D1F23</code><span>Every popup that floats</span></div>
+                            <i style="--c: #0c0c0c"></i>
+                            <div><b>popover</b><code>#0c0c0c</code><span>Every popup that floats</span></div>
                           </div>
                           <div class="sw">
-                            <i style="--c: #272a2f"></i>
-                            <div><b>hover</b><code>#272A2F</code><span>Hover of a control or row</span></div>
+                            <i style="--c: #161616"></i>
+                            <div><b>hover</b><code>#161616</code><span>Hover of a control or row</span></div>
                           </div>
                           <div class="sw">
-                            <i style="--c: #30333a"></i>
-                            <div><b>pressed</b><code>#30333A</code><span>Pressed, switch off, tracks</span></div>
+                            <i style="--c: #1f1f1f"></i>
+                            <div><b>pressed</b><code>#1f1f1f</code><span>Pressed, switch off, tracks</span></div>
                           </div>
                           <div class="span-all label" style="margin-top: 6px">Lines and scrim</div>
                           <div class="sw">
-                            <i style="--c: rgba(255, 255, 255, 0.08)"></i>
-                            <div><b>line</b><code>rgba(255,255,255,0.08)</code><span>Card borders, hairlines</span></div>
+                            <i style="--c: rgba(255, 255, 255, 0.045)"></i>
+                            <div><b>line</b><code>rgba(255,255,255,0.045)</code><span>Card borders, hairlines</span></div>
                           </div>
                           <div class="sw">
-                            <i style="--c: rgba(255, 255, 255, 0.14)"></i>
-                            <div><b>line-strong</b><code>rgba(255,255,255,0.14)</code><span>Popup borders, dividers</span></div>
+                            <i style="--c: rgba(255, 255, 255, 0.08)"></i>
+                            <div><b>line-strong</b><code>rgba(255,255,255,0.08)</code><span>Popup borders, dividers</span></div>
                           </div>
                           <div class="sw">
                             <i style="--c: rgba(255, 255, 255, 0.4)"></i>
@@ -3152,52 +3152,52 @@
                           <tbody>
                             <tr>
                               <td>text</td>
-                              <td style="background: #0b0c0e; color: #ececee">Aa<small>16.6</small></td>
-                              <td style="background: #151619; color: #ececee">Aa<small>15.3</small></td>
-                              <td style="background: #1d1f23; color: #ececee">Aa<small>14.0</small></td>
-                              <td style="background: #272a2f; color: #ececee">Aa<small>12.2</small></td>
+                              <td style="background: #000000; color: #ececee">Aa<small>17.8</small></td>
+                              <td style="background: #060606; color: #ececee">Aa<small>17.2</small></td>
+                              <td style="background: #0c0c0c; color: #ececee">Aa<small>16.6</small></td>
+                              <td style="background: #161616; color: #ececee">Aa<small>15.3</small></td>
                             </tr>
                             <tr>
                               <td>text-soft</td>
-                              <td style="background: #0b0c0e; color: #c4c6cc">Aa<small>11.5</small></td>
-                              <td style="background: #151619; color: #c4c6cc">Aa<small>10.6</small></td>
-                              <td style="background: #1d1f23; color: #c4c6cc">Aa<small>9.7</small></td>
-                              <td style="background: #272a2f; color: #c4c6cc">Aa<small>8.4</small></td>
+                              <td style="background: #000000; color: #c4c6cc">Aa<small>12.3</small></td>
+                              <td style="background: #060606; color: #c4c6cc">Aa<small>11.9</small></td>
+                              <td style="background: #0c0c0c; color: #c4c6cc">Aa<small>11.5</small></td>
+                              <td style="background: #161616; color: #c4c6cc">Aa<small>10.6</small></td>
                             </tr>
                             <tr>
                               <td>text-muted</td>
-                              <td style="background: #0b0c0e; color: #9a9ca3">Aa<small>7.1</small></td>
-                              <td style="background: #151619; color: #9a9ca3">Aa<small>6.6</small></td>
-                              <td style="background: #1d1f23; color: #9a9ca3">Aa<small>6.0</small></td>
-                              <td style="background: #272a2f; color: #9a9ca3">Aa<small>5.3</small></td>
+                              <td style="background: #000000; color: #9a9ca3">Aa<small>7.7</small></td>
+                              <td style="background: #060606; color: #9a9ca3">Aa<small>7.4</small></td>
+                              <td style="background: #0c0c0c; color: #9a9ca3">Aa<small>7.1</small></td>
+                              <td style="background: #161616; color: #9a9ca3">Aa<small>6.6</small></td>
                             </tr>
                             <tr>
                               <td>danger-text</td>
-                              <td style="background: #0b0c0e; color: #ff6b6b">Aa<small>7.1</small></td>
-                              <td style="background: #151619; color: #ff6b6b">Aa<small>6.5</small></td>
-                              <td style="background: #1d1f23; color: #ff6b6b">Aa<small>5.9</small></td>
-                              <td style="background: #272a2f; color: #ff6b6b">Aa<small>5.2</small></td>
+                              <td style="background: #000000; color: #ff6b6b">Aa<small>7.6</small></td>
+                              <td style="background: #060606; color: #ff6b6b">Aa<small>7.3</small></td>
+                              <td style="background: #0c0c0c; color: #ff6b6b">Aa<small>7.0</small></td>
+                              <td style="background: #161616; color: #ff6b6b">Aa<small>6.5</small></td>
                             </tr>
                             <tr>
                               <td>success</td>
-                              <td style="background: #0b0c0e; color: #80b879">Aa<small>8.4</small></td>
-                              <td style="background: #151619; color: #80b879">Aa<small>7.8</small></td>
-                              <td style="background: #1d1f23; color: #80b879">Aa<small>7.1</small></td>
-                              <td style="background: #272a2f; color: #80b879">Aa<small>6.2</small></td>
+                              <td style="background: #000000; color: #80b879">Aa<small>9.1</small></td>
+                              <td style="background: #060606; color: #80b879">Aa<small>8.7</small></td>
+                              <td style="background: #0c0c0c; color: #80b879">Aa<small>8.4</small></td>
+                              <td style="background: #161616; color: #80b879">Aa<small>7.8</small></td>
                             </tr>
                             <tr>
                               <td>warning</td>
-                              <td style="background: #0b0c0e; color: #d9b641">Aa<small>10.0</small></td>
-                              <td style="background: #151619; color: #d9b641">Aa<small>9.2</small></td>
-                              <td style="background: #1d1f23; color: #d9b641">Aa<small>8.4</small></td>
-                              <td style="background: #272a2f; color: #d9b641">Aa<small>7.3</small></td>
+                              <td style="background: #000000; color: #d9b641">Aa<small>10.7</small></td>
+                              <td style="background: #060606; color: #d9b641">Aa<small>10.3</small></td>
+                              <td style="background: #0c0c0c; color: #d9b641">Aa<small>10.0</small></td>
+                              <td style="background: #161616; color: #d9b641">Aa<small>9.2</small></td>
                             </tr>
                             <tr>
                               <td>info</td>
-                              <td style="background: #0b0c0e; color: #55aac9">Aa<small>7.4</small></td>
-                              <td style="background: #151619; color: #55aac9">Aa<small>6.9</small></td>
-                              <td style="background: #1d1f23; color: #55aac9">Aa<small>6.3</small></td>
-                              <td style="background: #272a2f; color: #55aac9">Aa<small>5.5</small></td>
+                              <td style="background: #000000; color: #55aac9">Aa<small>8.0</small></td>
+                              <td style="background: #060606; color: #55aac9">Aa<small>7.7</small></td>
+                              <td style="background: #0c0c0c; color: #55aac9">Aa<small>7.4</small></td>
+                              <td style="background: #161616; color: #55aac9">Aa<small>6.9</small></td>
                             </tr>
                           </tbody>
                         </table>
@@ -4267,7 +4267,7 @@
                           <div class="label">Person with actions (host knock)</div>
                           <div class="toast toast-person" role="alert">
                             <span class="av av-sm" style="--av: #4d5d73" role="img" aria-label="Nora Patel">NP</span><span class="tx"><b>Nora Patel</b> wants to join</span
-                            ><span class="acts"><button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Admit</button></span>
+                            ><span class="acts"><button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Let in</button></span>
                           </div>
                           <div class="label">Info with one action</div>
                           <div class="toast toast-info" role="status">
@@ -4694,7 +4694,7 @@
                               <span class="av av-md" style="--av: #315f72" role="img" aria-label="Sofia Chen">SC</span>
                               <div class="name">Sofia Chen<small>Waiting to join</small></div>
                             </div>
-                            <button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Admit</button>
+                            <button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Let in</button>
                           </div>
                           <div class="lsec">In the call</div>
                           <div class="prow">
@@ -4761,17 +4761,17 @@
                                 <span class="av av-md" style="--av: #315f72" role="img" aria-label="Sofia Chen">SC</span>
                                 <div class="name">Sofia Chen<small>Waiting to join</small></div>
                               </div>
-                              <button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Admit</button>
+                              <button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Let in</button>
                             </div>
                             <div class="prow wait-row">
                               <div class="who">
                                 <span class="av av-md" style="--av: #6b5b4f" role="img" aria-label="Abdulrahman Mohammed Altaweel Al Hashemi">AH</span>
                                 <div class="name">Abdulrahman Mohammed Altaweel Al Hashemi<small>Waiting to join</small></div>
                               </div>
-                              <button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Admit</button>
+                              <button class="btn btn-sm btn-ghost">Deny</button><button class="btn btn-sm btn-primary">Let in</button>
                             </div>
                           </div>
-                          <p class="note">Deny is ghost, Admit is the one primary pill. Long names truncate and the buttons keep their size.</p>
+                          <p class="note">Deny is ghost, Let in is the one primary pill. Long names truncate and the buttons keep their size.</p>
                         </div>
                         <div class="spec">
                           <h3>Call list rows</h3>
@@ -5530,7 +5530,7 @@
             <li>Left padding of 10px in a toast that holds an avatar, so the circle is never cut.</li>
             <li>Pulse duration of 1.6s on the waiting spinner.</li>
             <li>Placeholder portrait colors in the avatar crop demo. They stand in for a real photo.</li>
-            <li>Empty state copy and the Admit label, which design.md calls "Let in".</li>
+            <li>Empty state copy.</li>
             <li>Heights of the mock call stage, used only to show a toast in place.</li>
             <li>Touch sizes from 1000px down: an iPad gets 44px targets with the desktop layout.</li>
             <li>The host-only slot sits after Fullscreen, not between Board and Fullscreen as design.md orders Record.</li>
