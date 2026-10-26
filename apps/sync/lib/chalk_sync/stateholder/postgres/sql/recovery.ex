@@ -91,6 +91,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Recovery do
         and episode_id = $2
         and revision > $3
         and revision <= $4
+        and command_id is distinct from 'recovery-target-0001'
       order by revision
       limit 128
     )
