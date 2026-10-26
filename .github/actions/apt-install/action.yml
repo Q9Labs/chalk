@@ -1,0 +1,32 @@
+name: Install apt packages
+description: Bound apt installs and retry without the slow Azure Ubuntu mirror.
+
+inputs:
+  packages:
+    description: Space-separated apt package names.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install packages with a bounded mirror retry
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -euo pipefail
+        read -ra packages <<< "${PACKAGES}"
+
+        # Run timeout as root so it can stop apt and its children.
+        for attempt in 1 2; do
+          if sudo timeout --kill-after=10s 5m sh -c 'apt-get update && apt-get install -y "$@"' sh "${packages[@]}"; then
+            break
+          fi
+          if [[ "${attempt}" == 2 ]]; then
+            echo "::error title=apt install failed::Both install attempts failed or ran out of time."
+            exit 1
+          fi
+          echo "::warning title=apt install retried::The first install attempt failed or ran out of time. Retrying without the Azure Ubuntu mirror."
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          sudo dpkg --configure -a
+        done

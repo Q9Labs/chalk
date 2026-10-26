@@ -68,10 +68,12 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
       - name: Install proof dependencies
+        run: pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg imagemagick espeak fonts-dejavu-core age
+      - name: Install ImageMagick 7 entry point
         run: |
-          pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick espeak fonts-dejavu-core age
           # Ubuntu ships ImageMagick 6, without the ImageMagick 7 entry point.
           sudo tee /usr/local/bin/magick > /dev/null <<'SH'
           #!/bin/sh
