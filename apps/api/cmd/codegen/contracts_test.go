@@ -1,0 +1,47 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+)
+
+func TestGeneratedOpenAPIMatchesEndpointContracts(t *testing.T) {
+	routes := httpapi.PreviewRouteContracts()
+	gen := newGenerator(routes)
+	for _, route := range routes {
+		gen.addRoute(route)
+	}
+	checkedIn, err := os.ReadFile("../../../../contract/generated/openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The SDK generator reformats JSON. Compare canonical JSON so whitespace
+	// and HTML escaping do not count as contract drift.
+	var existing any
+	if err := json.Unmarshal(checkedIn, &existing); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := json.Marshal(gen.doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generated any
+	if err := json.Unmarshal(current, &generated); err != nil {
+		t.Fatal(err)
+	}
+	current, err = json.Marshal(generated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(current, canonical) {
+		t.Fatal("generated OpenAPI differs from endpoint contracts; run pnpm run generate:sdk")
+	}
+}

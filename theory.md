@@ -121,4 +121,6 @@ Split an entry when its steps can ship separately, and merge entries that duplic
 
 <!-- test:constraints-clean-break sdks/typescript/client/src/access/grant.test.ts#rejects legacy subject aliases instead of widening the current wire contract -->
 <!-- test:product-memory-identity-and-tenancy sdks/typescript/client/src/tenant-external-id.test.ts#creates and finds a Tenant with an opaque external account ID through the generated client -->
+<!-- test:constraints-one-tenancy-root apps/api/internal/adapters/postgres/authz_route_matrix_test.go#TestAuthorizationRouteMatrix -->
+<!-- test:product-goals-polyglot-contracts apps/api/cmd/codegen/contracts_test.go#TestGeneratedOpenAPIMatchesEndpointContracts -->
 <!-- test:sync-authority apps/sync/test/chalk_sync/reliability/recovery_contract_test.exs#commands survive every crash boundary -->

@@ -1,0 +1,621 @@
+[
+  {
+    "route": "POST /v1/chat/attachments/uploads",
+    "operation": "initiateChatAttachmentUpload",
+    "credentials": [{ "class": "participant sync token", "wrong": 401, "foreign": 201 }],
+    "body": "{\"clientAttachmentId\":\"matrix-own-upload-0001\",\"fileName\":\"matrix-own-note.txt\",\"mimeType\":\"text/plain\",\"byteLength\":1,\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+    "isolationReason": "Creation has no resource target; foreign body fields are rejected and foreign query IDs cannot override the signed token binding."
+  },
+  { "route": "POST /v1/chat/attachments/uploads/{uploadId}/finalize", "operation": "finalizeChatAttachmentUpload", "credentials": [{ "class": "participant sync token", "wrong": 401, "foreign": 404 }], "body": "{}" },
+  { "route": "GET /v1/chat/attachments/{attachmentId}/download", "operation": "getChatAttachmentDownload", "credentials": [{ "class": "participant sync token", "wrong": 401, "foreign": 404 }], "body": "" },
+  { "route": "DELETE /v1/public/space-invite-arrival", "operation": "leaveSpacePublicInviteArrival", "credentials": [], "publicReason": "Guest departure uses its opaque arrival handle.", "body": "" },
+  { "route": "GET /v1/public/space-invite-arrival", "operation": "getSpacePublicInviteArrival", "credentials": [], "publicReason": "Guest status uses its opaque arrival handle.", "body": "" },
+  { "route": "POST /v1/public/space-invite-arrival/access-grants", "operation": "refreshSpacePublicInviteAccess", "credentials": [], "publicReason": "Guest refresh uses its arrival capability.", "body": "{}" },
+  { "route": "POST /v1/public/space-invite-arrivals", "operation": "arriveBySpacePublicInvite", "credentials": [], "publicReason": "Guest arrival exchanges an invite capability.", "body": "{}" },
+  { "route": "POST /v1/public/space-invite-entrance", "operation": "preparePublicSpaceEntrance", "credentials": [], "publicReason": "Guest entrance resolves an invite capability.", "body": "{}" },
+  { "route": "POST /v1/public/spaces", "operation": "createPublicSpace", "credentials": [], "publicReason": "Guest Space creation is a public entry point.", "body": "{}" },
+  {
+    "route": "GET /v1/tenants",
+    "operation": "listTenants",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants",
+    "operation": "createTenant",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/by-external-id",
+    "operation": "findTenantByExternalID",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "",
+    "query": "external_id=foreign-account"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}",
+    "operation": "getTenant",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "PATCH /v1/tenants/{tenant_id}",
+    "operation": "updateTenant",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/api-keys",
+    "operation": "listAPIKeys",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/api-keys",
+    "operation": "createAPIKey",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "DELETE /v1/tenants/{tenant_id}/api-keys/{api_key_id}",
+    "operation": "revokeAPIKey",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate",
+    "operation": "rotateAPIKey",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/live-episodes",
+    "operation": "listSpaceLiveEpisodes",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "",
+    "query": "space_ids={space_id}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/memberships",
+    "operation": "listMemberships",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/memberships",
+    "operation": "createMembership",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "PATCH /v1/tenants/{tenant_id}/memberships/{membership_id}",
+    "operation": "updateMembership",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  { "route": "POST /v1/tenants/{tenant_id}/problem-reports", "operation": "sendProblemReport", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
+  { "route": "GET /v1/tenants/{tenant_id}/problem-reports/availability", "operation": "getProblemReportAvailability", "credentials": [], "publicReason": "Availability exposes no tenant data.", "body": "" },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/recordings",
+    "operation": "listRecordings",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/recordings/{recording_id}",
+    "operation": "getRecording",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/recordings/{recording_id}/download-url",
+    "operation": "createRecordingDownloadURL",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/recordings/{recording_id}/export",
+    "operation": "requestRecordingExport",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts",
+    "operation": "requestTranscript",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/space-activity",
+    "operation": "listSpaceActivity",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "",
+    "query": "space_ids={space_id}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces",
+    "operation": "listSpaces",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces",
+    "operation": "createSpace",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}",
+    "operation": "getSpace",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "PATCH /v1/tenants/{tenant_id}/spaces/{space_id}",
+    "operation": "updateSpace",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/archive",
+    "operation": "archiveSpace",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/entrance",
+    "operation": "prepareSpaceEntrance",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes",
+    "operation": "listEpisodes",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes",
+    "operation": "createEpisode",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}",
+    "operation": "getEpisode",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance",
+    "operation": "getEpisodeAttendance",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline",
+    "operation": "setEpisodeDeadline",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end",
+    "operation": "endEpisode",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants",
+    "operation": "admitEpisodeParticipant",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant",
+    "operation": "issueAccessGrant",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  { "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join", "operation": "cancelEpisodeParticipantJoin", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
+    "operation": "listCloudflareSFUPublications",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"connection_id\":\"foreign-connection\",\"tracks\":[],\"session_description\":{\"type\":\"offer\",\"sdp\":\"test\"}}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
+    "operation": "renegotiateCloudflareSFU",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"connection_id\":\"foreign-connection\",\"session_description\":{\"type\":\"offer\",\"sdp\":\"test\"}}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
+    "operation": "addCloudflareSFUTracks",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"connection_id\":\"foreign-connection\",\"tracks\":[],\"session_description\":{\"type\":\"offer\",\"sdp\":\"test\"}}"
+  },
+  {
+    "route": "PUT /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
+    "operation": "closeCloudflareSFUTracks",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"connection_id\":\"foreign-connection\",\"tracks\":[],\"session_description\":{\"type\":\"offer\",\"sdp\":\"test\"}}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove",
+    "operation": "removeEpisodeParticipant",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token",
+    "operation": "issueEpisodeParticipantSyncToken",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests",
+    "operation": "listSpacePublicAdmissionRequests",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/approval",
+    "operation": "approveSpacePublicAdmissionRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/denial",
+    "operation": "denySpacePublicAdmissionRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/public-invite",
+    "operation": "getSpacePublicInvite",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "PATCH /v1/tenants/{tenant_id}/spaces/{space_id}/public-invite",
+    "operation": "updateSpacePublicInvite",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{\"enabled\":false}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations",
+    "operation": "rotateSpacePublicInvite",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation",
+    "operation": "getSpaceRecordingPreparation",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "PATCH /v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation",
+    "operation": "prepareSpaceRecording",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{\"starts_at\":\"2030-01-01T00:00:00Z\",\"expected_revision\":1}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation/cancel",
+    "operation": "cancelSpaceRecordingPreparation",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/restore",
+    "operation": "restoreSpace",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/transcripts",
+    "operation": "listTranscripts",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "DELETE /v1/tenants/{tenant_id}/transcripts/{transcript_id}",
+    "operation": "deleteTranscript",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}",
+    "operation": "getTranscript",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/document",
+    "operation": "getTranscriptDocument",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url",
+    "operation": "createTranscriptDownloadURL",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/webhook-endpoints",
+    "operation": "listWebhookEndpoints",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/webhook-endpoints",
+    "operation": "createWebhookEndpoint",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{\"enabled\":true}"
+  },
+  {
+    "route": "DELETE /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}",
+    "operation": "deleteWebhookEndpoint",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}",
+    "operation": "getWebhookEndpoint",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "PATCH /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}",
+    "operation": "updateWebhookEndpoint",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries",
+    "operation": "listWebhookDeliveries",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}",
+    "operation": "getWebhookDelivery",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver",
+    "operation": "redeliverWebhookDelivery",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret",
+    "operation": "rotateWebhookEndpointSecret",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{\"revoke_previous_immediately\":false}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test",
+    "operation": "testWebhookEndpoint",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": "{}"
+  },
+  { "route": "GET /v1/whiteboard/files/{fileId}/download", "operation": "getWhiteboardFileDownload", "credentials": [{ "class": "participant sync token", "wrong": 401, "foreign": 404 }], "body": "" },
+  { "route": "GET /healthz", "credentials": [], "publicReason": "Process liveness.", "protocolReason": "Operational probe, not a REST endpoint." },
+  { "route": "GET /readyz", "credentials": [], "publicReason": "Dependency readiness.", "protocolReason": "Operational probe, not a REST endpoint." },
+  { "route": "GET /healthz/recorder/capture", "credentials": [], "publicReason": "Capture-pool readiness.", "protocolReason": "Operational probe, not a REST endpoint." },
+  { "route": "GET /healthz/recorder/render", "credentials": [], "publicReason": "Render-pool readiness.", "protocolReason": "Operational probe, not a REST endpoint." },
+  {
+    "route": "POST /internal/v1/transcription/jobs/claim",
+    "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 0 }],
+    "body": "{}",
+    "protocolReason": "Signed worker lease protocol, not a public REST endpoint.",
+    "isolationReason": "Allocates one job from the global jobs queue; no caller Tenant identity."
+  },
+  { "route": "POST /internal/v1/transcription/jobs/heartbeat", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  { "route": "POST /internal/v1/transcription/jobs/retry", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  { "route": "POST /internal/v1/transcription/jobs/complete", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  { "route": "POST /internal/v1/transcription/jobs/cancel", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  {
+    "route": "POST /internal/v1/transcription/cleanup/claim",
+    "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 0 }],
+    "body": "{}",
+    "protocolReason": "Signed worker lease protocol, not a public REST endpoint.",
+    "isolationReason": "Allocates one job from the global cleanup queue; no caller Tenant identity."
+  },
+  { "route": "POST /internal/v1/transcription/cleanup/complete", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  { "route": "POST /internal/v1/transcription/cleanup/retry", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  {
+    "route": "POST /internal/v1/transcription/finalize/claim",
+    "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 0 }],
+    "body": "{}",
+    "protocolReason": "Signed worker lease protocol, not a public REST endpoint.",
+    "isolationReason": "Allocates one job from the global finalize queue; no caller Tenant identity."
+  },
+  { "route": "POST /internal/v1/transcription/finalize/complete", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." },
+  { "route": "POST /internal/v1/transcription/finalize/retry", "credentials": [{ "class": "workload HMAC", "wrong": 401, "foreign": 409 }], "body": "{}", "protocolReason": "Signed worker lease protocol, not a public REST endpoint." }
+]
