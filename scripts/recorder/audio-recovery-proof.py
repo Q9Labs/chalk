@@ -50,12 +50,14 @@ def measure(directory):
     assert len(sources) == 2, sources
     traces = {"final_rms_dbfs": levels(mp4), "alpha_997_hz_dbfs": levels(mp4, 997),
               "bravo_1999_hz_dbfs": levels(mp4, 1999)}
+    presentation = json.loads((directory / "presentation.json").read_text())
+    names = {participant["id"]: participant["displayName"] for participant in presentation["initial"]["participants"]}
     source_levels = []
     for source in sources:
         path = pathlib.Path(source["path"])
         if not path.is_absolute():
             path = directory / "decoded" / path
-        source_levels.append({"start_ms": source["start_ms"], "end_ms": source["end_ms"],
+        source_levels.append({"speaker": names[source["participant_id"]], "start_ms": source["start_ms"], "end_ms": source["end_ms"],
                               "rms_dbfs": levels(path)})
     # Measure the recovered final mix, not merely the source files or stream count.
     for name in ("alpha_997_hz_dbfs", "bravo_1999_hz_dbfs"):

@@ -60,7 +60,9 @@ func TestLiveRecordingAudioRecoversMissingPublication(t *testing.T) {
 		return value
 	}
 	space, episode, recording, jobID, claimID := id(), id(), id(), id(), id()
-	fault := &recordingAudioFaultClient{client: &http.Client{Timeout: 10 * time.Second}}
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	fault := &recordingAudioFaultClient{client: &http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{Protocols: protocols}}}
 	adapter, err := cloudflaresfu.NewAdapterWithClient(config.CloudflareRealtimeConfig{
 		RealtimeAppID: os.Getenv(config.CloudflareRealtimeAppID), RealtimeAppSecret: os.Getenv(config.CloudflareRealtimeAppSecret), RequestTimeout: 10 * time.Second,
 	}, fault, "https://rtc.live.cloudflare.com/v1")
@@ -75,13 +77,14 @@ func TestLiveRecordingAudioRecoversMissingPublication(t *testing.T) {
 		tracks = append(tracks, track)
 	}
 	fault.track = tracks[1].TrackReference.String()
+	fault.owner = tracks[1].OwnerReference.String()
 	now := time.Now().UTC()
 	auth, err := recordingpipeline.NewRecorderJobAuthority(recordingpipeline.Job{ID: jobID, TenantID: tenant, EpisodeID: episode, RecordingID: recording, Kind: recordingpipeline.JobKindCapture, AttemptCount: 1, AttemptLimit: 3, FencingGeneration: 1}, recordingpipeline.ClaimFacts{SpaceID: space, PolicySnapshotVersion: recordingpipeline.SupportedPolicySnapshotVersion, HardDeadline: now.Add(5 * time.Minute), CaptureEpoch: 1}, claimID, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	claim := ClaimResult{ClaimRequestID: claimID, Envelope: auth.Envelope, EnvelopeDigest: auth.EnvelopeDigest, LeaseOwner: "audio-proof", LeaseToken: "local-proof-lease", LeaseExpiresAt: now.Add(5 * time.Minute)}
-	plans := &recordingAudioPlans{t: t, tracks: tracks, start: now}
+	plans := &recordingAudioPlans{tracks: tracks, start: now}
 	storage := &captureTestStorage{key: bytesOf(0x41)}
 	factory, err := NewPionCaptureAttemptFactory(PionCaptureAttemptFactoryConfig{
 		Signaling: &recordingAudioSignaling{adapter: adapter}, Plans: plans, Keys: storage, Objects: storage, Bundles: storage, Lifecycle: &captureTestLifecycle{},
@@ -100,6 +103,8 @@ func TestLiveRecordingAudioRecoversMissingPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := attempt.Run(ctx); err != nil {
+		snapshot, snapshotErr := attempt.(*PionCaptureAttempt).coordinator.Snapshot()
+		t.Logf("capture failure: active=%d snapshot_error=%v", len(snapshot.Tracks), snapshotErr)
 		t.Fatal(err)
 	}
 	fault.mu.Lock()
@@ -157,7 +162,7 @@ func TestLiveRecordingAudioRecoversMissingPublication(t *testing.T) {
 			t.Fatal(err)
 		}
 		timeline.Initial.Participants = append(timeline.Initial.Participants, recordingpresentation.Participant{ID: track.ParticipantID.String(), DisplayName: fmt.Sprintf("Speaker %c", 'A'+index), JoinOrdinal: int64(index + 1), Joined: true})
-		timeline.Initial.Media = append(timeline.Initial.Media, recordingpresentation.MediaSource{SourceID: sourceID, ParticipantID: track.ParticipantID.String(), ParticipantGeneration: 1, Kind: recordingpresentation.MediaKindMicrophone, TrackID: captured.TrackID, Epoch: int64(captured.Epoch), Visible: true})
+		timeline.Initial.Media = append(timeline.Initial.Media, recordingpresentation.MediaSource{SourceID: sourceID, ParticipantID: track.ParticipantID.String(), ParticipantGeneration: 1, Kind: recordingpresentation.MediaKindMicrophone, TrackID: captured.TrackID, Epoch: int64(captured.Epoch), Visible: false})
 		t.Logf("speaker=%c packets=%d epoch=%d", 'A'+index, counts[captured.TrackID], captured.Epoch)
 	}
 	presentation, err := recordingpresentation.Encode(timeline)
@@ -194,6 +199,7 @@ type recordingAudioFaultClient struct {
 	client   *http.Client
 	mu       sync.Mutex
 	track    string
+	owner    string
 	injected int
 }
 
@@ -210,7 +216,7 @@ func (c *recordingAudioFaultClient) Do(request *http.Request) (*http.Response, e
 			c.injected++
 			track := c.track
 			c.mu.Unlock()
-			encoded, _ := json.Marshal(map[string]any{"tracks": []any{map[string]any{"trackName": track, "errorCode": "not_found_track_error", "errorDescription": "Injected transient publication-not-forwardable window"}}})
+			encoded, _ := json.Marshal(map[string]any{"tracks": []any{map[string]any{"trackName": track, "sessionId": c.owner, "location": "remote", "errorCode": "not_found_track_error", "errorDescription": "Injected transient publication-not-forwardable window"}}})
 			return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(encoded)), Request: request}, nil
 		}
 		c.mu.Unlock()
@@ -248,11 +254,13 @@ func (s *recordingAudioSignaling) Execute(ctx context.Context, request capturesi
 	default:
 		err = fmt.Errorf("unexpected signaling command")
 	}
+	if err != nil {
+		err = fmt.Errorf("live signaling %s: %w", c.Identity.Operation, err)
+	}
 	return capturesignaling.Execution{Key: capturesignaling.CommandKey{SignalingHandle: c.SignalingHandle, Operation: c.Identity.Operation, PlanRevision: c.Identity.PlanRevision, IdempotencyKey: c.Identity.IdempotencyKey}, Result: result}, err
 }
 
 type recordingAudioPlans struct {
-	t      *testing.T
 	tracks []captureplane.PulledCaptureTrack
 	start  time.Time
 }
@@ -261,19 +269,22 @@ func (p *recordingAudioPlans) WaitForPlan(ctx context.Context, input captureplan
 	for {
 		revision := captureplane.PlanRevision(1)
 		tracks := p.tracks[:1]
-		stop := captureplan.StopStateRunning
 		elapsed := time.Since(p.start)
 		if elapsed >= 2*time.Second {
 			revision = 2
 			tracks = p.tracks
 		}
 		if elapsed >= 16*time.Second {
-			revision = 3
-			tracks = nil
-			stop = captureplan.StopStateRequested
+			return captureplan.Plan{}, capturesignaling.ErrMediaStopped
 		}
 		if revision > input.AfterRevision {
-			return capturePlanWatchPlan(p.t, input.Authority(), revision, time.Now().UTC(), stop, tracks...), nil
+			participants := make([]captureplan.ParticipantSnapshot, 0, len(tracks))
+			publications := make([]captureplan.TrackSnapshot, 0, len(tracks))
+			for index, track := range tracks {
+				participants = append(participants, captureplan.ParticipantSnapshot{ID: track.ParticipantID, Generation: 1, DisplayName: fmt.Sprintf("Speaker %c", 'A'+index), JoinOrdinal: int64(index + 1), Lifecycle: captureplan.ParticipantActive})
+				publications = append(publications, captureplan.TrackSnapshot{ParticipantID: track.ParticipantID, ParticipantGeneration: 1, Source: track.Source, Kind: track.Kind, OwnerReference: track.OwnerReference, TrackReference: track.TrackReference, OwnerMID: track.MID, PublicationReference: captureplan.PublicationReference(track.TrackReference), RequestedLayer: captureplane.TrackLayerAuto})
+			}
+			return captureplan.NewPlan(captureplan.PlanInput{Authority: input.Authority(), Revision: revision, LayoutProfile: captureplan.LayoutProfileComposite720PV1, ParticipantLimit: captureplan.MaximumParticipants, InputBitrateBPS: captureplan.MaximumInputBitrateBPS, EffectiveDeadline: p.start.Add(4 * time.Minute), StopState: captureplan.StopStateRunning, Participants: participants, Tracks: publications})
 		}
 		wait := input.MaxWait
 		if wait > time.Second {

@@ -544,9 +544,9 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	var response captureTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/new", url.PathEscape(input.Connection.String()))
 	if err := a.request(ctx, http.MethodPost, path, request, &response, "add_tracks"); err != nil {
-		if result, gone, goneErr := captureGonePullResult(err, response, input); gone {
-			if goneErr != nil {
-				return captureplane.PullCaptureTracksResult{}, goneErr
+		if result, handled, unavailableErr := captureUnavailablePullResult(err, response, input); handled {
+			if unavailableErr != nil {
+				return captureplane.PullCaptureTracksResult{}, unavailableErr
 			}
 			if err := captureReplayStore(a, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
 				return captureplane.PullCaptureTracksResult{}, err
@@ -584,11 +584,11 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	return result, nil
 }
 
-// captureGonePullResult accepts only a complete, identity-matched response
+// captureUnavailablePullResult accepts only a complete, identity-matched response
 // whose failed entries are per-track publication-not-found answers. A mixed
 // response keeps the successful pulls; unrelated failures retain their usual
 // classification and retry behavior.
-func captureGonePullResult(requestErr error, response captureTracksResponse, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, bool, error) {
+func captureUnavailablePullResult(requestErr error, response captureTracksResponse, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, bool, error) {
 	var failure providerFailure
 	if !errors.As(requestErr, &failure) || failure.operation != "add_tracks" || failure.stage != failureStageTrack || failure.statusCode != http.StatusOK {
 		return captureplane.PullCaptureTracksResult{}, false, nil
