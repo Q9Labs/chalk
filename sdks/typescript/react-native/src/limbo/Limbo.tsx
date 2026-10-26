@@ -31,6 +31,7 @@ export function Limbo({ state, callName, recording }: LimboProps): React.JSX.Ele
   const actionRef = useRef<View>(null);
   const consent = recording && (state.kind === "joining" || state.kind === "knocking") ? <Consent /> : null;
   // The mockup moves focus to the card's button when a state with one appears.
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native accessibility focus and reduced-motion animation.
   useEffect(() => {
     const node = actionRef.current && findNodeHandle(actionRef.current);
     if (node) AccessibilityInfo.setAccessibilityFocus(node);
@@ -132,6 +133,7 @@ function Spinner(): React.JSX.Element {
   const { colors } = useTheme();
   const reduceMotion = useReducedMotion();
   const turn = useSharedValue(0);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native accessibility focus and reduced-motion animation.
   useEffect(() => {
     if (reduceMotion) return;
     turn.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1);

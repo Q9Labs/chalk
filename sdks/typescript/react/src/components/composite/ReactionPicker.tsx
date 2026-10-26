@@ -33,6 +33,7 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
   // Focus search input when opened
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing picker focus and keyboard listener cleanup.
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -51,6 +52,7 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
   );
 
   // Handle escape key
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing picker focus and keyboard listener cleanup.
   useEffect(() => {
     if (!isOpen || typeof window === "undefined") return;
     const handleKeyDown = (e: KeyboardEvent) => {

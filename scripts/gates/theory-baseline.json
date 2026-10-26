@@ -1,0 +1,222 @@
+[
+  {
+    "id": "what-chalk-is-space",
+    "sha256": "e8644c2ce5c8de5c47e97fa4f3cfb17e421b2fcad72c3bc7410496ba6afa0202"
+  },
+  {
+    "id": "media-port",
+    "sha256": "68c7ba5847a00727003c6ecb6dbe25fd48cc4f03edd167e266c985ad75bfa31b"
+  },
+  {
+    "id": "the-three-values-these-values-win-every-tie-break-in-order",
+    "sha256": "50211aea8a0a03c9ec4508d4273ce0520cb02edcc35c782c37698103975b8e50"
+  },
+  {
+    "id": "the-three-values-correct",
+    "sha256": "72e2b130555cfb4c0f988bc52ef2965b0cbd78a90912ec89e9741eb80baf5159"
+  },
+  {
+    "id": "the-three-values-fast",
+    "sha256": "5762f90b7c9c231398f518f238028f285ed3133a79a6d2aef0adbb381ee0eeaf"
+  },
+  {
+    "id": "the-three-values-flexible",
+    "sha256": "747c08a2567016d935f53673920f8e3a6ebaae10e817d05a8deaea39a268fe42"
+  },
+  {
+    "id": "the-three-values-read-the-values-top-down",
+    "sha256": "64258e7eadac1d720d0958bedec3628172dd9b722c175bbed4fccf897cc2dfac"
+  },
+  {
+    "id": "product-goals-flexible-deployment",
+    "sha256": "046204fa81d1c685f3729e424a462956fe255378841177ab8bbce285f8e536d7"
+  },
+  {
+    "id": "product-goals-two-front-doors",
+    "sha256": "1727311f84af598f1c8c4cb9b5e099b68ef0b9ac6f75c5e826572be8a8ae3802"
+  },
+  {
+    "id": "product-goals-one-public-web-surface",
+    "sha256": "8f19825c1fd1d78ea979f5b949db1fc3b576f328edf1dc642485a8d21dc5abe4"
+  },
+  {
+    "id": "product-goals-cross-platform-parity",
+    "sha256": "782e621852bbcd30e063f458820df252b2276da93c109a97ec2085767e856b38"
+  },
+  {
+    "id": "product-goals-polyglot-contracts",
+    "sha256": "4d6fe4f8063bf4d693c7550892eb0110826171bdf01f1b1627e8231cbe9df57f"
+  },
+  {
+    "id": "product-goals-replaceable-media",
+    "sha256": "458ad8d88d66eaa7e63724400e6a248a5d760f01e0f1dc6f22590e8629988c96"
+  },
+  {
+    "id": "product-goals-complete-collaboration",
+    "sha256": "98626829d695042c3b374cb414e61fcf31e5628a08ed5cad402a6f12e07f6f8f"
+  },
+  {
+    "id": "product-memory-the-clean-model-carries-these-behaviors-forward",
+    "sha256": "60e7b9e344e3a68df39a3f0c2c449193e301b767bee397233d0e43c5b8873ada"
+  },
+  {
+    "id": "product-memory-space-lifecycle",
+    "sha256": "0946c38c480b3a6d107e20a27bea11090bf0ff55a0f1cd09252ef244ca6fcc04"
+  },
+  {
+    "id": "product-memory-episode-lifecycle",
+    "sha256": "f01b87141ec06d7f1166fea88816023f9df4dccc2a6ebe14f6a4ff03917a40a5"
+  },
+  {
+    "id": "product-memory-admission",
+    "sha256": "a1318e1266e655a168b9a183298509775de895a5f7872c483ce7438044855d7e"
+  },
+  {
+    "id": "product-memory-participants",
+    "sha256": "9cba01a5d997cb529d5b1c4c72df1c3033330ff970e0e73f4857c3f9d6196a26"
+  },
+  {
+    "id": "product-memory-capabilities",
+    "sha256": "ef86ffa8d855d8c35b817ec312952c025c0293e816a1b0d3e609c34ad8cd4f07"
+  },
+  {
+    "id": "product-memory-live-sync",
+    "sha256": "39ea62777d4e4d237158b8b1ecc586f803b600f5a37ed311888d7ff1e6fcf88a"
+  },
+  {
+    "id": "product-memory-media",
+    "sha256": "b554ec633bdee2ad8e7efebcb3454cdaf2ecf749b35e5369a5c2872f5fee10fd"
+  },
+  {
+    "id": "product-memory-artifacts",
+    "sha256": "7d0061af2529964841db1dc30e9948a6ed05483e9c469fa05ec0fe20728e8644"
+  },
+  {
+    "id": "product-memory-webhooks",
+    "sha256": "1fe436195a2e22372e76bad34f9812647d90aba15b369313817c3040533d5b0f"
+  },
+  {
+    "id": "product-memory-operations",
+    "sha256": "f22aad2f0e93c6e605eadecc0708b95b8a814e48621d734978aa828ce4684411"
+  },
+  {
+    "id": "constraints-customer-operated-app-tier-is-a-v1-requirement",
+    "sha256": "33c04ff4c13dd539717437e32b471448fec2fd8687794037b4bf2560be92c0f9"
+  },
+  {
+    "id": "constraints-both-planes-are-ports",
+    "sha256": "478927e1f0fd84697495411670ed426977f0b053b63d88a09d0a59669a9ef073"
+  },
+  {
+    "id": "constraints-core-data-stays-provider-neutral",
+    "sha256": "ba13e3ccad621bd2b87cc213b503f5f963a93ca8a0c99f4f932299fb18a6044d"
+  },
+  {
+    "id": "constraints-durable-facts-live-in-postgres",
+    "sha256": "f516ad67ae9d1a6a91648e245b4f60165e4bfd497c4d8c9814459cd1ca6eee83"
+  },
+  {
+    "id": "constraints-accessgrant-is-opaque",
+    "sha256": "308bca5c6e278ea0f7bc4444b8672d59884cbd0348905ab834e40ab6f808999d"
+  },
+  {
+    "id": "constraints-join-targets-the-space",
+    "sha256": "79990504962e773db7f242b9bd318782c277ea7340e2c5da12a5263373206407"
+  },
+  {
+    "id": "constraints-one-tenancy-root",
+    "sha256": "02e4ce7488ea521e68df55f9e9b9a0ed562da34e219be80bcfa1108412c31601"
+  },
+  {
+    "id": "constraints-space-and-episode-own-different-facts",
+    "sha256": "f3248db171f0abdd5884f22ebc8ed74dc4da26bd67e9c3b6d0acc06457c15377"
+  },
+  {
+    "id": "constraints-capabilities-travel-with-access",
+    "sha256": "2f6080ce1948bdfdbd0ecb74e5b7a29699249c4d68d638712ce2827083a046e7"
+  },
+  {
+    "id": "constraints-retention-is-tenant-configurable",
+    "sha256": "eb6d4a54792dd547d0ef503234b5f3c6038cef8140e723784cadeb1ea2ceecda"
+  },
+  {
+    "id": "constraints-media-egress-is-measurable",
+    "sha256": "9af0d3c63b012fccac3a00b2e476a438276907d7538101a6f598c81674a16e81"
+  },
+  {
+    "id": "identity-and-membership-user",
+    "sha256": "7f3e388e973705775d000cf1f83710a90d0c4be14bfce505d477bda71da2cc59"
+  },
+  {
+    "id": "sdk-space-model",
+    "sha256": "5da855316961569126e81bc3d46807b322a776bd8d238c3e54481f418bf56b27"
+  },
+  {
+    "id": "sdk-hooks",
+    "sha256": "258d34bd27b1aa2e482e4a48678a6f6fe4cfea9b8cb3c67e3430987412a8ce4c"
+  },
+  {
+    "id": "app-name",
+    "sha256": "ad18e65bb4cb19d9816945cb5bd26a18fdf102e10de6dd2832355a1c1a934635"
+  },
+  {
+    "id": "roles-and-capabilities-capabilities",
+    "sha256": "ff39b5c1ff2e612ab9b6191edeca69cf170e9ea8cabdd5cf9d33f59ba25ca50a"
+  },
+  {
+    "id": "identity-authority",
+    "sha256": "536959ebd260ca4ada8219aa5c7b7c86ef33e95bd415090678d52d852f7c3db6"
+  },
+  {
+    "id": "performance-budget-every-state-signal-is-sync-plane-and-near-instant",
+    "sha256": "6721c94ed3fc31a77f1526bfd3a8e9a7380dae68bc6c75aa0f8baf58a57fba3c"
+  },
+  {
+    "id": "performance-budget-join-path",
+    "sha256": "3161ecfe9062bc2ae764ab32c860cedd021abca34f9fa58ae4c75874b51f5d18"
+  },
+  {
+    "id": "performance-budget-sync-and-control",
+    "sha256": "ed27e2f9f76099a3a8e2877007772ef8171e24a1ff065c9df04e863e71a75100"
+  },
+  {
+    "id": "performance-budget-media",
+    "sha256": "2551826c0264a2bb2c3205d2cd4a4a3c44df82b5588b372161ebe2179059ffdb"
+  },
+  {
+    "id": "performance-budget-api-reads",
+    "sha256": "088190464775ca02f725d270ee982393899565ed05aea634722293b4b3562f49"
+  },
+  {
+    "id": "performance-budget-artifacts",
+    "sha256": "a41c5ebb8d79407c8056f31b2be5b52fd68d6b7d700baa4310422564622cae7d"
+  },
+  {
+    "id": "deliberate-v1-exclusions-end-to-end-encryption",
+    "sha256": "73599e814b1a7421ebcd9c0674c858a13480a8ccf14c1f1470648d90e9679d74"
+  },
+  {
+    "id": "deliberate-v1-exclusions-webinar-broadcasting",
+    "sha256": "9047898c686d45aa7ab3dec3308946ba71fa6b04afea1d4490b74172582ba91a"
+  },
+  {
+    "id": "deliberate-v1-exclusions-enterprise-identity-federation",
+    "sha256": "259036532e93297dc798e76d8f57015750037e19c2b2c5fe6b1f91913ba75af9"
+  },
+  {
+    "id": "deliberate-v1-exclusions-legal-hold",
+    "sha256": "9db9238c542a03022bfd3b5015ee611d2b63fa439138cf0d8f3bdfb2c855a712"
+  },
+  {
+    "id": "deliberate-v1-exclusions-tenant-signed-identity-assertions",
+    "sha256": "db9cb1665907e88dc7fe0a3f3ffbe482afe08c7a244895b9eba04c1a4204bc25"
+  },
+  {
+    "id": "spec-ownership",
+    "sha256": "e4d705c27707c04ca4e9392a35360161b22c9ce5813370517ae774db1db86b7e"
+  },
+  {
+    "id": "targets-not-measurements",
+    "sha256": "438d628a153bb12665a4a73df620f9c93104185a28b85a30a5eb38aa85c9d825"
+  }
+]

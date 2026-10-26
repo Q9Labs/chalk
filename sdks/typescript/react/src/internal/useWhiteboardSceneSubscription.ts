@@ -11,6 +11,7 @@ const recoveryDelayMs = (attempt: number): number => 250 * 2 ** attempt;
 export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Transport | null, active: boolean): WhiteboardSceneSubscription {
   const [subscription, setSubscription] = useState<WhiteboardSceneSubscription>({ status: "closed" });
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing board scene subscription lifetime.
   useEffect(() => {
     if (!active || !transport) {
       setSubscription({ status: "closed" });

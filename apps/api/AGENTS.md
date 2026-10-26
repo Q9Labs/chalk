@@ -12,7 +12,7 @@ Episode lifecycle, recordings, transcripts, and webhooks.
 - Consult the relevant sections of `apps/api/docs/code-standards.md` when writing Go here.
 - Read `apps/api/docs/route-workflow.md` before adding a new route.
 - Read `apps/api/docs/database-workflow.md` when doing database work, including its two-release removal rule and required `chalk:removed-in` marker.
-- Run the gate before committing: `scripts/gate.sh`.
+- Run `apps/api/scripts/gate.sh` from the repo root via Instabox; see [gate operations](../../scripts/gates/README.md).
 
 ## Media plane providers
 
@@ -31,8 +31,7 @@ Episode lifecycle, recordings, transcripts, and webhooks.
 - After changing route contracts, run `pnpm run generate:sdk` from the repo root
   and keep `contract/generated/openapi.json` plus `sdks/typescript/client/src/generated/*`
   in sync. This includes OpenAPI types, Effect schemas, and the generated
-  Effect `HttpApi` definition. The root gate runs
-  `pnpm run check:sdk-generated` as a non-mutating drift check.
+  Effect `HttpApi` definition. See [gate operations](../../scripts/gates/README.md) for generated-file checks.
 - Keep runtime mounting and `PreviewRouteContracts` sourced from the same endpoint
   collections. Use the generated OpenAPI/SDK artifacts and their drift check for
   current contract coverage instead of recording route-specific gap lists here.

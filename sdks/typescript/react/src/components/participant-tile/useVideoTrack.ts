@@ -15,6 +15,7 @@ export type VideoTrackStatus = "idle" | "loading" | "playing" | "muted" | "ended
 export function useVideoTrack(videoRef: RefObject<HTMLVideoElement | null>, track: MediaStreamTrack | null | undefined, enabled: boolean): VideoTrackStatus {
   const [status, setStatus] = useState<VideoTrackStatus>("idle");
   const loadedRef = useRef(false);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing DOM video binding and media-track cleanup.
   useEffect(() => {
     const video = videoRef.current;
     loadedRef.current = false;

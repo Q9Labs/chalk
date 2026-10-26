@@ -4,8 +4,8 @@ The static site uses named Cloudflare Pages Functions only under `/auth/*` and
 `/dashboard-api/*`. `server/` is imported only by those Functions. The production
 composition root imports `oauth.ts`, never `tests/dashboard/fixture-provider.ts`.
 There is no dashboard database or generic engine proxy. The production web build
-emits the advanced-mode directory `dist/client/_worker.js/` with an `index.js`
-entrypoint and its generated `_routes.json`. The release archive preserves this
+emits the advanced-mode directory `dist/client/_worker.js/` with an “index.js”
+entrypoint and its generated “\_routes.json”. The release archive preserves this
 directory while site/docs paths remain static.
 
 ## Build output
@@ -14,11 +14,11 @@ directory while site/docs paths remain static.
 `wrangler pages functions build --outdir dist/client/_worker.js`. Do not use
 `--outfile`: that flag writes a multipart upload envelope, not JavaScript, and
 `wrangler pages deploy` cannot compile it as a Pages worker. The dashboard suite
-requires the directory and `index.js`, syntax-checks every JavaScript module, and
+requires the directory and “index.js”, syntax-checks every JavaScript module, and
 scans all those modules for fixture identity code. Both the Pages deployment and
 the web Release archive consume the same validated directory. The fixture e2e
 harness compiles named Functions separately; the OAuth smoke harness excludes
-`_worker.js` regardless of whether it is a file or directory.
+“\_worker.js” regardless of whether it is a file or directory.
 
 ## Browser contract
 
@@ -273,7 +273,7 @@ reference template), then run the owned, bounded local stack:
 DASHBOARD_ENGINE_DEADLINE_SECONDS=1800 DASHBOARD_OAUTH_SMOKE_SECONDS=1800 bash apps/web/tests/dashboard/real-engine.sh bash apps/web/tests/dashboard/oauth-smoke.sh
 ```
 
-`oauth-smoke.sh` writes bindings only to a mode-0600 temporary `.dev.vars`, never
+`apps/web/tests/dashboard/oauth-smoke.sh` writes bindings only to a mode-0600 temporary `.dev.vars`, never
 CLI binding arguments. It owns and cleans up Pages on exit, owner loss or deadline.
 It creates an ephemeral session secret unless supplied; restarting invalidates
 local sessions. Apple is not smoke-tested on HTTP localhost. Live Sync and vendor

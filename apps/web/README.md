@@ -72,7 +72,7 @@ call the CI alias with the workflow SHA:
 pnpm run release:web:ci -- --sha "$GITHUB_SHA"
 ```
 
-The runner requires Node 22 or newer, pins pnpm and Wrangler, installs from the
+The runner requires Node 22 or newer, pins the package manager and Wrangler, installs from the
 local pnpm store when possible, and uses Turbo's build cache. It passes the full
 SHA into the build metadata and service worker and always invokes the existing
 deployment verifier after each upload.

@@ -361,6 +361,7 @@ export function createGatePlan(files, options = {}) {
       "node",
       "--test",
       "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/doc-checks.test.mjs",
       "scripts/gates/remote-queue.test.mjs",
       "scripts/dev/chalk-resources.test.mjs",
       "apps/mobile/scripts/run-ios.test.mjs",

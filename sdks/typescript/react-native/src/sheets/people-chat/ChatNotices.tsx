@@ -29,6 +29,7 @@ export function ChatNotices({ chatVisible, sheetOpen, onOpenChat }: ChatNoticesP
   const latest = useRef({ chatVisible, sheetOpen, onOpenChat, soundsEnabled });
   latest.current = { chatVisible, sheetOpen, onOpenChat, soundsEnabled };
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native chat-notice observation.
   useEffect(() => {
     if (status !== "ready") return;
     const previous = seen.current;

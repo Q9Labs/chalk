@@ -305,8 +305,8 @@ apps/api/scripts/smoke-healthz.sh
 apps/api/scripts/smoke-lifecycle.mjs
 ```
 
-`smoke-healthz.sh` verifies `/healthz`, `/readyz`, 404, and 405 behavior against
-a running API. `smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
+`apps/api/scripts/smoke-healthz.sh` verifies `/healthz`, `/readyz`, 404, and 405 behavior against
+a running API. `apps/api/scripts/smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
 sends `SIGTERM`, and verifies the process exits cleanly within configurable
 startup/shutdown budgets.
 
@@ -389,10 +389,10 @@ within Discord's 2,000-unit content and 6,000-unit combined embed limits.
 
 ### Real-stack report proof
 
-Run on the M4 through the repo runner:
+Run on Instabox after committing and pushing:
 
 ```sh
-CHALK_REMOTE_NEEDS_BROWSER=1 scripts/gates/remote.sh -- node apps/web/tests/dashboard/report-proof.mjs
+box run -- 'pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && node apps/web/tests/dashboard/report-proof.mjs'
 ```
 
 The browser drives real OwnerCall and SpacePage menus, delivery failure/retry,

@@ -1,0 +1,24 @@
+{
+  "doclint": {
+    "median_ms": 101.4,
+    "min_ms": 99.1,
+    "max_ms": 106.6,
+    "runs": 5,
+    "failed_runs": 0,
+    "samples_ms": [106.6, 104.3, 101.4, 99.1, 101.4]
+  },
+  "theory-coverage": {
+    "median_ms": 50.3,
+    "min_ms": 47.9,
+    "max_ms": 52.2,
+    "runs": 5,
+    "failed_runs": 0,
+    "samples_ms": [51.2, 48.7, 50.3, 47.9, 52.2]
+  },
+  "context": {
+    "machine": "Hasan\u2019s MacBook Air",
+    "scope": "100 maintained Markdown/MDX documents; independent Node subprocesses; warm filesystem",
+    "fast_gate_seconds": 2.582,
+    "note": "Serial check cost, not a statistically controlled whole-hook before/after comparison. Profile hot spots: child-process/git enumeration and path normalization. All timed checks exited 0 and printed a pass count."
+  }
+}

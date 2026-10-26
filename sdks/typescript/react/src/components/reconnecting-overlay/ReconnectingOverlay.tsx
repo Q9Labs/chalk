@@ -15,6 +15,7 @@ export interface ReconnectingOverlayProps {
 export const ReconnectingOverlay = memo(function ReconnectingOverlay({ isVisible, status, onRetry, onLeft, message, showNotice }: ReconnectingOverlayProps) {
   const reconnecting = isVisible && status === "reconnecting";
   const [elapsed, setElapsed] = useState(false);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing reconnect clock and announcement lifecycle.
   useEffect(() => {
     setElapsed(false);
     if (!reconnecting) return;

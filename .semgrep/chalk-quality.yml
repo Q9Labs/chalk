@@ -1,4 +1,21 @@
 rules:
+  - id: chalk.forbid-sdk-use-effect
+    message: SDK effects need an explicit per-call exception with a reason; prefer subscriptions and event handlers.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: useEffect(...)
+      - pattern: $REACT.useEffect(...)
+      - patterns:
+          - pattern-inside: |
+              import { useEffect as $EFFECT } from "react";
+              ...
+          - pattern: $EFFECT(...)
+    paths:
+      include:
+        - "/sdks/typescript/react/**"
+        - "/sdks/typescript/react-native/**"
+
   - id: chalk.forbid-dynamic-code
     message: Avoid eval, new Function, and string-based timers.
     severity: ERROR

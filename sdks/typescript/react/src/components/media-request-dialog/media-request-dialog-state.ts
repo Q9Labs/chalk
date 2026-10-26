@@ -38,12 +38,14 @@ export function useMediaRequestDialogState({ request, onDecline, onAllow, onActi
   const [pendingAction, setPendingAction] = useState<MediaRequestAction | null>(null);
   const [errorMessageState, setErrorMessage] = useState<string | null>(null);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing request reset and expiry-clock cleanup.
   useEffect(() => {
     setNow(Date.now());
     setPendingAction(null);
     setErrorMessage(null);
   }, [request.requestId]);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing request reset and expiry-clock cleanup.
   useEffect(() => {
     if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) return;
     const interval = window.setInterval(() => setNow(Date.now()), 1000);

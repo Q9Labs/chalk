@@ -107,7 +107,7 @@ returns it unchanged, and `SpaceClient` handles refresh and recovery.
 
 ## Component maintenance
 
-`control-bar-behavior.ts` owns the shared contracts, state, and commands for the
+`sdks/typescript/react/src/components/control-bar/control-bar-behavior.ts` owns the shared contracts, state, and commands for the
 controls. The component files own presentation.
 
 The SDK-owned `@q9labsai/chalk-react/preview` dev-tool entrypoint exposes the

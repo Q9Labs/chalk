@@ -10,7 +10,7 @@ seams.
 Provenance: the rulings behind every entry, with reasoning and rejected
 candidates, are in git history:
 `git show 3f6d94f9:scratchpad/history/2026-W32.md`. The
-superseded `sdks/ubiquitous-language.md` is deleted; its UI shape catalog
+superseded SDK vocabulary document (sdks/ubiquitous-language.md) is deleted; its UI shape catalog
 remains in git history as input for the React-wave design sheet. Space and Episode remain the names used in code, API contracts and UI.
 Everyday words such as call, meeting, host, room, lobby and session are allowed
 in user-facing copy when they help people understand the product. There is no

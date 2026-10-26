@@ -25,6 +25,7 @@ export function setMeasurementRegistry(next: MeasurementRegistry | null): void {
 /** A ref for the host view that carries `testID`; attach it to that view. */
 export function useMeasuredRef<TNode extends MeasurableNode>(testID: string | undefined, style: StyleProp<ViewStyle | TextStyle>): RefObject<TNode | null> {
   const ref = useRef<TNode>(null);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native measurement registry lifetime.
   useEffect(() => {
     if (!registry || !testID) return;
     const declared = StyleSheet.flatten(style) ?? {};

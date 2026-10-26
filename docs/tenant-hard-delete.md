@@ -89,7 +89,7 @@ the encrypted live authority files and object bytes at least 14 days.
 
 ## Approval and backup
 
-1. Create `scope.json` with `delete` and `keep` arrays of exact `{id, name}`
+1. Create “scope.json” with `delete` and `keep` arrays of exact `{id, name}`
    identities. Both are required, disjoint, and together must match every current
    Tenant. New, renamed or missing identities stop the purge.
 2. Inventory with `pnpm tenant:purge --scope /private/scope.json --dry-run`.
@@ -113,7 +113,7 @@ the encrypted live authority files and object bytes at least 14 days.
    manifest, dump, staging schema and restoration instructions. Encrypt with
    authenticated encryption, store the key separately in the private vault, and
    retain the encrypted archive outside Git for at least 14 days.
-6. Write `backup-receipt.json`: `plan_digest` (SHA-256 of compact Go JSON of the
+6. Write “backup-receipt.json”: `plan_digest` (SHA-256 of compact Go JSON of the
    keys-only plan), `archive_path`, `archive_digest` (ciphertext SHA-256),
    `restore_verified: true`, `restore_tables` (matching ordered name/count/digest
    entries), `completed_at`, and `retain_until`. The command checks the private

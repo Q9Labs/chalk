@@ -7,6 +7,7 @@ export function useCallToasts() {
   const client = useSpaceClient();
   const [toasts, setToasts] = useState<readonly (Toast & { readonly failureCode?: string })[]>([]);
   const sequence = useRef(0);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing client notice subscriptions and cleanup.
   useEffect(() => {
     setToasts([]);
     let previous = client.getSnapshot();

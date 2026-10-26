@@ -31,6 +31,7 @@ export function useSoundCues(enabled: boolean, createPlayer: (options: { readonl
       }, 0);
   }, []);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing sound event subscriptions and audio cleanup.
   useEffect(() => {
     const player = createPlayerRef.current({ outputDeviceId });
     playerRef.current = player;

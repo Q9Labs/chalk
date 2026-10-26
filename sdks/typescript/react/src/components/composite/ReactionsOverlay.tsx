@@ -59,11 +59,13 @@ function TileReaction({ reaction, root }: { readonly reaction: ActiveReaction; r
   const [host, setHost] = useState<Element | null>(null);
   const emoji = useRef<HTMLSpanElement>(null);
   const reduced = usePrefersReducedMotion();
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing reaction host lookup and cancellable animation.
   useEffect(() => {
     const frame = root.current?.closest("[data-part=call-frame]");
     const tile = Array.from(frame?.querySelectorAll<HTMLElement>("[data-stage-item]") ?? []).find((element) => element.dataset.stageItem === reaction.participantId && element.getAttribute("aria-hidden") !== "true");
     setHost(tile?.firstElementChild ?? root.current);
   }, [reaction.participantId, root]);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing reaction host lookup and cancellable animation.
   useEffect(() => {
     const element = emoji.current;
     if (!element || !host) return;

@@ -27,7 +27,7 @@ transcript proofs still require both media capabilities before a nightly can hol
 
 Run browser suites in a configured M4 checkout, not a developer laptop. Keep its
 proof configuration and evidence in that checkout. For hosted runs,
-`web-call-proof.yml` accepts an environment and returns `result=passed` only
+`.github/workflows/web-call-proof.yml` accepts an environment and returns `result=passed` only
 when the test, cleanup, and encrypted evidence upload pass. Nightly runs it after
 deploy and after the recording/transcript proof. Both workflows share the same
 environment lock because existing proof cleanup resets the webhook. Both must pass to hold a cut;

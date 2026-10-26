@@ -2,7 +2,7 @@
 
 This fixture packs `@q9labsai/chalk-client`, `@q9labsai/chalk-react`, and their
 supporting package archives, installs them in a temporary consumer outside the
-pnpm workspace, and bundles a browser application using package imports only.
+repository workspace, and bundles a browser application using package imports only.
 It never imports from the Chalk source tree. The fixture uses the root
 `createSpaceClient` signature and public `/effect` seam solely to inject its
 protocol-faithful local adapters, then passes the canonical `SpaceClient` to the

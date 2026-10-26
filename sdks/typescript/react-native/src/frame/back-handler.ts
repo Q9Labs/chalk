@@ -8,6 +8,7 @@ import { BackHandler } from "react-native";
 export function useBackHandler(active: boolean, onBack: () => void): void {
   const latest = useRef(onBack);
   latest.current = onBack;
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native hardware-back listener cleanup.
   useEffect(() => {
     if (!active) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {

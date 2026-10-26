@@ -114,6 +114,7 @@ export function EmbeddedWhiteboard({
     await exportBoardImage(value);
   }, []);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing embedded native board lifecycle and cleanup.
   useEffect(() => {
     let active = true;
     setLoadError(null);
@@ -132,6 +133,7 @@ export function EmbeddedWhiteboard({
     };
   }, [loadAttempt, onError, rendererURLOverride]);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing embedded native board lifecycle and cleanup.
   useEffect(() => {
     setCompatibilityNotice(null);
     const controller = new ChalkWhiteboardController({
@@ -196,14 +198,17 @@ export function EmbeddedWhiteboard({
     };
   }, [clearNotices, toasts, handleControllerError, handleControllerMetric, handleControllerUserExport, journeyId, localParticipantColor, rendererPort, theme, traceparent, tracestate, transport]);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing embedded native board lifecycle and cleanup.
   useEffect(() => {
     controllerRef.current?.setBoard(board);
   }, [board]);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing embedded native board lifecycle and cleanup.
   useEffect(() => {
     controllerRef.current?.setCapabilities({ canDraw, canClear });
   }, [canClear, canDraw]);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing embedded native board lifecycle and cleanup.
   useEffect(() => {
     if (viewport) controllerRef.current?.setViewport(viewport);
   }, [viewport]);

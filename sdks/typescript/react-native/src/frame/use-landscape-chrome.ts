@@ -6,6 +6,7 @@ export function useLandscapeChrome({ fades, boardVisible }: { readonly fades: bo
   const canHide = fades && !boardVisible;
   const [hidden, setHidden] = useState(false);
   const [shownAt, setShownAt] = useState(0);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native landscape-chrome timer cleanup.
   useEffect(() => {
     if (!canHide) {
       setHidden(false);

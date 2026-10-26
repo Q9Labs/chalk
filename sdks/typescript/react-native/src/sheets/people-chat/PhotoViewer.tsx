@@ -37,6 +37,7 @@ export function PhotoViewer({ viewing, onChange, onClose }: PhotoViewerProps): R
   const photo = photos[index] ?? photos[0];
   const count = photos.length;
   useBackHandler(true, onClose);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native photo-viewer accessibility focus.
   useEffect(() => {
     const node = closeRef.current && findNodeHandle(closeRef.current);
     if (node) AccessibilityInfo.setAccessibilityFocus(node);

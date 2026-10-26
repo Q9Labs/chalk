@@ -29,6 +29,7 @@ export type AttachmentSource = { readonly state: "loading" } | { readonly state:
 export function useAttachmentSource(attachment: ChatAttachment): AttachmentSource {
   const client = useSpaceClient();
   const [source, setSource] = useState<AttachmentSource>({ state: "loading" });
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native attachment resolution and stale-result cleanup.
   useEffect(() => {
     let live = true;
     resolveUrl(client, attachment)

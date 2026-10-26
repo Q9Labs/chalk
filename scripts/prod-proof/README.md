@@ -66,7 +66,7 @@ revision first. Do not remove pre-existing endpoints as part of proof setup.
 
 ### GitHub Actions
 
-`real-call-proof.yml` accepts an environment through manual dispatch or
+`.github/workflows/real-call-proof.yml` accepts an environment through manual dispatch or
 `workflow_call`, and a timer runs it on production every day at 05:41 UTC. A failed timer run
 posts its run link to the production alerts Discord channel (`CHALK_ALERTS_DISCORD_WEBHOOK_URL`
 in the `production` environment). A caller uses

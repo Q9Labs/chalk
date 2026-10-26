@@ -65,6 +65,6 @@ counted as successful delivery. This qualification does not establish a
 supported peak send rate or uninterrupted service under saturation.
 
 The release reliability script currently references the absent
-`test/chalk_sync/reliability/soak_profile_test.exs`; this manual measurement does
+test/chalk_sync/reliability/soak_profile_test.exs (a historical missing-test reference); this manual measurement does
 not imply the entire release profile passed. Production-like topology and
 database recovery remain in `realtime_sync.failover_qualification`.

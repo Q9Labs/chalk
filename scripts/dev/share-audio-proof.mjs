@@ -1,4 +1,4 @@
-// Run on testbox with a dedicated development SFU application, never production.
+// Run on Instabox with a dedicated development SFU application, never production.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";

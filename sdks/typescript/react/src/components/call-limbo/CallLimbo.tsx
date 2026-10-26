@@ -30,6 +30,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing cover animation and overlay interaction cleanup.
   useEffect(() => {
     let nextFrame = 0;
     const frame = requestAnimationFrame(() => {
@@ -40,6 +41,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       cancelAnimationFrame(nextFrame);
     };
   }, [active]);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing cover animation and overlay interaction cleanup.
   useEffect(() => {
     if (!overlay || !active || !layerRef.current) return;
     const root = layerRef.current.closest("[data-chalk]");

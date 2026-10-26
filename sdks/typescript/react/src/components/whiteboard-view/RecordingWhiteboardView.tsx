@@ -46,6 +46,7 @@ export function RecordingWhiteboardView({ state: stateValue, files, expectedScen
     if (!Object.hasOwn(files ?? {}, fileId)) throw new TypeError(`recording whiteboard file is missing: ${recordingWhiteboardFileAssetId(fileId)}`);
   }
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing recording-board subscription cleanup.
   useEffect(() => {
     if (!ready) return;
     setPresentedState(null);
@@ -69,6 +70,7 @@ export function RecordingWhiteboardView({ state: stateValue, files, expectedScen
     };
   }, [elements, files, ready, state]);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing recording-board subscription cleanup.
   useEffect(() => {
     if (presentedState !== state || onPresented === undefined) return;
     onPresented(state);

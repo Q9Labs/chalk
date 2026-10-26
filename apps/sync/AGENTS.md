@@ -16,9 +16,7 @@ acceleration only.
 - Protocol v1 and its generated contract are the production surface.
 - Keep every frame, queue, task set, replay, diagnostic buffer, and retained
   database set explicitly bounded.
-- Run the repository-root `pnpm run gate` before committing; it selects this
-  app's basic gate whenever Sync files or shared gate inputs change. Run
-  `scripts/gate.sh` directly for Credo and the full test suite.
+- Run `apps/sync/scripts/gate.sh` from the repo root via Instabox; see [gate operations](../../scripts/gates/README.md).
 
 ### Abandoned-Episode compatibility
 
