@@ -132,10 +132,6 @@ export function setCamera(engine: WhiteboardEngineHandle, camera: Camera): void 
   engine.api.updateScene({ appState: { scrollX: camera.scrollX, scrollY: camera.scrollY, zoom: { value: camera.zoom as never } } });
 }
 
-export function hasContent(engine: WhiteboardEngineHandle): boolean {
-  return engine.api.getSceneElements().length > 0;
-}
-
 export async function boardImage(engine: WhiteboardEngineHandle, background: string): Promise<Blob> {
   const { api, excalidraw } = engine;
   return excalidraw.exportToBlob({ elements: api.getSceneElements(), files: api.getFiles(), appState: { exportBackground: true, viewBackgroundColor: background }, mimeType: "image/png", exportPadding: 24 });
