@@ -7,7 +7,7 @@ import { useMediaQuery, usePrefersReducedMotion } from "./useMediaQuery";
 import type { WhiteboardCanvasProps } from "../WhiteboardCanvas";
 import type { WhiteboardViewBounds } from "../../collab/view";
 import type { ReactNode } from "react";
-import { applyTool, boardImage, hasContent, placeNote, pressHistory, readCamera, restyleSelection, sceneSignature, setCamera, settleNoteText, type PenChoice } from "./board-engine";
+import { applyTool, boardImage, placeNote, pressHistory, readCamera, restyleSelection, sceneSignature, setCamera, settleNoteText, type PenChoice } from "./board-engine";
 import {
   ISLAND_PLACES,
   SURFACES,
@@ -326,8 +326,6 @@ export function Board({
   const canDraw = primary && (board.collab?.canDraw ?? board.canDraw ?? true);
   const compact = phone || narrow;
   const history = useEngineHistory(root, engine);
-  // Once this person draws or places a note, the camera is theirs: the board never fits under their hand.
-  const touched = useRef(false);
   const views = useRef(new Map<string, ChalkWhiteboardView & { readonly participantId: string }>());
   const cursors = useRef(new Map<string, RemoteCursor>());
   const pen: PenChoice = useMemo(() => ({ color, width, surface, theme: colorScheme }), [color, width, surface, colorScheme]);
@@ -443,9 +441,11 @@ export function Board({
       if (!view || viewportRef.current.width <= 0 || viewportRef.current.height <= 0) return;
       if (!selected && !appliedVersions.current.isNew(view, participantId)) return;
       appliedVersions.current.remember(view, participantId);
-      move(cameraForView(view, viewportRef.current), animate, "follow");
+      const cursor = cursors.current.get(participantId);
+      const focus = cursor && Date.now() - Date.parse(cursor.occurredAt) <= 10_000 && cursor.x >= view.x && cursor.x <= view.x + view.width && cursor.y >= view.y && cursor.y <= view.y + view.height ? { x: cursor.x, y: cursor.y, width: 0, height: 0 } : view;
+      move(cameraForView(focus, viewportRef.current, camera.cameraRef.current.zoom), animate, "follow");
     },
-    [move, viewportRef],
+    [move, viewportRef, camera.cameraRef],
   );
 
   reapplyView.current = () => {
@@ -493,10 +493,14 @@ export function Board({
   useEffect(() => {
     if (!subscribe) return;
     return subscribe((event) => {
-      if (event.type === "cursor") rememberCursor(cursors.current, event);
-      else if (event.type === "view") latestView.current(event);
+      if (event.type === "cursor") {
+        rememberCursor(cursors.current, event);
+        if (followingRef.current === event.participantId && Date.now() - Date.parse(event.occurredAt) <= 10_000) {
+          camera.move(cameraForView({ x: event.x, y: event.y, width: 0, height: 0 }, camera.viewportRef.current, camera.cameraRef.current.zoom), false, "follow");
+        }
+      } else if (event.type === "view") latestView.current(event);
     });
-  }, [subscribe]);
+  }, [subscribe, camera.move, camera.viewportRef, camera.cameraRef]);
 
   useEffect(() => {
     selectedFollow.current = following;
@@ -521,24 +525,9 @@ export function Board({
     let beforeEditing = sceneSignature(engine);
     let wasEditing = false;
     setElementCount(engine.api.getSceneElements().length);
-    // The first drawing to arrive from others is fitted into view once, as the mockup opens the board.
-    if (hasContent(engine)) {
-      touched.current = true;
-      if (!followingRef.current) camera.fit();
-    }
-    const offDown = engine.api.onPointerDown(() => {
-      touched.current = true;
-    });
     const offChange = engine.api.onChange((elements, appState) => {
       const count = elements.filter((element) => !element.isDeleted).length;
       setElementCount(count);
-      if (!touched.current && count > 0) {
-        touched.current = true;
-        if (!followingRef.current)
-          requestAnimationFrame(() => {
-            if (!followingRef.current) camera.fit();
-          });
-      }
       const editing = appState.editingTextElement !== null;
       if (!wasEditing && editing) beforeEditing = sceneSignature(engine);
       const finishedEditing = wasEditing && !editing;
@@ -548,10 +537,9 @@ export function Board({
       }
     });
     return () => {
-      offDown();
       offChange();
     };
-  }, [engine, camera.fit]);
+  }, [engine]);
 
   useEffect(() => {
     const element = root.current;
@@ -655,7 +643,6 @@ export function Board({
     if (!engine || !container || !root.current) return;
     const rect = root.current.getBoundingClientRect();
     const { scrollX, scrollY, zoom } = camera.cameraRef.current;
-    touched.current = true;
     placeNote(engine, container, { x: (event.clientX - rect.left) / zoom - scrollX, y: (event.clientY - rect.top) / zoom - scrollY }, color);
     setTool("selection");
   };

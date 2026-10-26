@@ -137,9 +137,8 @@ export function visibleView(camera: Camera, viewport: Viewport, bounds: Whiteboa
   };
 }
 
-/** The camera that fits someone else's view into this viewport, centred. */
-export function cameraForView(view: Omit<ChalkWhiteboardView, "bring">, viewport: Viewport): Camera {
-  const zoom = clampZoom(Math.min(viewport.width / view.width, viewport.height / view.height));
+/** Pan to someone else's view without changing the local zoom. */
+export function cameraForView(view: Omit<ChalkWhiteboardView, "bring">, viewport: Viewport, zoom: number): Camera {
   return { zoom, scrollX: viewport.width / (2 * zoom) - (view.x + view.width / 2), scrollY: viewport.height / (2 * zoom) - (view.y + view.height / 2) };
 }
 

@@ -9,11 +9,6 @@ const boardBox = () => {
   return box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null;
 };
 const zoomLabel = () => document.querySelector(".chalk-board-zoom-value")?.textContent ?? "";
-const fittedZoomLabel = ({ width, height }: { width: number; height: number }) => {
-  const board = document.querySelector<HTMLElement>(".chalk-board");
-  if (!board) throw new Error("The board did not open");
-  return `${Math.round(Math.min(4, Math.max(0.1, Math.min(board.clientWidth / width, board.clientHeight / height))) * 100)}%`;
-};
 
 const stageBoard = '[data-stage-item="whiteboard"]';
 
@@ -57,6 +52,7 @@ async function settleStage(page: Page) {
 async function drawStroke(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const box = await page.evaluate(boardBox);
   if (!box) throw new Error("The board did not open");
+  if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
   await page.getByRole("button", { name: "Pen", exact: true }).click();
   await page.mouse.move(box.x + box.width * from.x, box.y + box.height * from.y);
   await page.mouse.down();
@@ -81,6 +77,7 @@ async function trackStageMotion(context: BrowserContext) {
 }
 
 async function joinBoardParticipants(contexts: BrowserContext[]) {
+  await routeLocalBoardBuild(contexts);
   const [a, b] = await Promise.all(contexts.map((context) => context.newPage()));
   await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? "http://localhost:3000").href);
   await a.getByLabel("Your name", { exact: true }).fill("BoardA");
@@ -101,12 +98,23 @@ async function joinBoardParticipants(contexts: BrowserContext[]) {
   return [a, b];
 }
 
+async function routeLocalBoardBuild(contexts: BrowserContext[]) {
+  const local = process.env.CHALK_PROOF_LOCAL_WEB_URL;
+  if (!local) return;
+  const origin = new URL(process.env.CHALK_PROOF_WEB_URL ?? "https://chalkmeet.com").origin;
+  for (const context of contexts) {
+    // Serve this checkout at the allowed web origin; API and sync remain real.
+    await context.route(`${origin}/**`, async (route) => {
+      const url = new URL(route.request().url());
+      const response = await route.fetch({ url: new URL(`${url.pathname}${url.search}`, local).href });
+      await route.fulfill({ response });
+    });
+  }
+}
+
 async function prepareCornerStrokes(a: Page, b: Page) {
   await a.getByRole("button", { name: "Board", exact: true }).click();
   await Promise.all([a, b].map(settleStage));
-  // Following keeps the peer from fitting the first incoming stroke to a different camera.
-  await b.getByLabel("Follow BoardA", { exact: true }).click();
-  await b.getByText("Following BoardA").waitFor();
   for (const page of [a, b]) await expect.poll(() => page.evaluate(boardPixels)).toMatchObject({ upperLeft: false, lowerRight: false, newLowerRight: false });
   await drawStroke(a, { x: 0.15, y: 0.2 }, { x: 0.24, y: 0.25 });
   await drawStroke(a, { x: 0.72, y: 0.68 }, { x: 0.82, y: 0.74 });
@@ -114,7 +122,6 @@ async function prepareCornerStrokes(a: Page, b: Page) {
     await expect.poll(() => page.locator(".chalk-board").getAttribute("data-elements")).toBe("2");
     await expect.poll(() => page.evaluate(boardPixels)).toMatchObject({ upperLeft: true, lowerRight: true });
   }
-  await b.getByRole("button", { name: "Stop", exact: true }).click();
 }
 
 async function switchPersonToBoard(a: Page, b: Page) {
@@ -224,26 +231,130 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     const following = browser.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Proof" });
     await expect(following).toBeVisible();
     const wide = { x: 0, y: 0, width: 4000, height: 2500, bring: false };
-    const wideZoom = await browser.evaluate(fittedZoomLabel, wide);
     expect(await guest.board.view(wide)).toBe(true);
-    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe(wideZoom);
+    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe("100%");
     const narrow = { x: 100, y: 100, width: 400, height: 250, bring: false };
-    const narrowZoom = await browser.evaluate(fittedZoomLabel, narrow);
     expect(await guest.board.view(narrow)).toBe(true);
-    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe(narrowZoom);
+    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe("100%");
     await screen.getByRole("button", "Stop", { exact: true }).click();
     await expect(following).not.toBeVisible();
 
     // Bring everyone makes the web follow the guest again, with a toast that says who did it.
     const bring = { x: 0, y: 0, width: 2000, height: 1250, bring: true };
-    const bringZoom = await browser.evaluate(fittedZoomLabel, bring);
     expect(await guest.board.view(bring)).toBe(true);
     await expect.poll(() => browser.locator('[data-part="toast"]').filter({ hasText: "Proof brought everyone to this view" }).isVisible()).toBe(true);
-    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe(bringZoom);
+    await expect.poll(() => browser.evaluate(zoomLabel), { timeout: 15_000 }).toBe("100%");
     await expect(following).toBeVisible();
     await app.screenshot("board-web");
 
     await screen.getByRole("button", "Leave call", { exact: true }).click();
     await guest.leave();
   });
+});
+
+function trackProofZoom() {
+  const board = document.querySelector(".chalk-board");
+  const label = document.querySelector(".chalk-board-zoom-value");
+  if (!board || !label) throw new Error("Missing board zoom");
+  const values = new Set([label.textContent]);
+  board.setAttribute("data-proof-zooms", [...values].join(","));
+  new MutationObserver(() => {
+    values.add(label.textContent);
+    board.setAttribute("data-proof-zooms", [...values].join(","));
+  }).observe(label, { childList: true, characterData: true, subtree: true });
+}
+
+async function captureZoomProof(pages: Page[], directory: string, name: string) {
+  for (const [index, page] of pages.entries()) await page.screenshot({ path: `${directory}/${name}-${index}.png` });
+}
+
+async function followEdgeStrokes(a: Page, b: Page, directory: string) {
+  // The first small remote drawing must not trigger automatic fit.
+  await drawStroke(a, { x: 0.49, y: 0.45 }, { x: 0.51, y: 0.46 });
+  await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
+  await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
+  await b.getByLabel("Follow BoardA", { exact: true }).click();
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
+  // Each new stroke must arrive visibly in the middle of the phone canvas.
+  for (const [index, point] of [
+    { x: 0.12, y: 0.18 },
+    { x: 0.86, y: 0.8 },
+  ].entries()) {
+    await drawStroke(a, point, { x: point.x + 0.015, y: point.y + 0.015 });
+    await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe(String(index + 2));
+    await expect
+      .poll(() =>
+        b.evaluate(() => {
+          const canvas = document.querySelector(".chalk-board canvas");
+          if (!(canvas instanceof HTMLCanvasElement)) return false;
+          const context = canvas.getContext("2d");
+          const pixels = context?.getImageData(canvas.width / 2 - 40, canvas.height / 2 - 40, 80, 80).data;
+          return pixels?.some((value, i) => i % 4 === 3 && value > 32) ?? false;
+        }),
+      )
+      .toBe(true);
+    await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
+    await captureZoomProof([a, b], directory, `edge-${index}`);
+  }
+}
+
+async function resizeAndReconnect(a: Page, b: Page, follower: BrowserContext) {
+  await a.setViewportSize({ width: 1280, height: 800 });
+  await b.setViewportSize({ width: 430, height: 780 });
+  await Promise.all([a, b].map(settleStage));
+  for (const page of [a, b]) await expect.poll(() => page.evaluate(zoomLabel)).toBe("100%");
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
+  await follower.setOffline(true);
+  await follower.setOffline(false);
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
+  await drawStroke(a, { x: 0.3, y: 0.35 }, { x: 0.32, y: 0.36 });
+  await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements"), { timeout: 20000 }).toBe("4");
+  expect(await b.locator(".chalk-board").getAttribute("data-proof-zooms")).toBe("100%");
+}
+
+async function checkManualZoom(a: Page, b: Page) {
+  await a.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect.poll(() => a.evaluate(zoomLabel)).toBe("125%");
+  await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
+  await b.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
+  await b.getByLabel("Follow BoardA", { exact: true }).click();
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
+  await drawStroke(a, { x: 0.7, y: 0.3 }, { x: 0.72, y: 0.32 });
+  await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("5");
+  await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
+  await b.getByRole("button", { name: "Fit to content", exact: true }).click();
+  await expect.poll(() => b.evaluate(zoomLabel)).not.toBe("125%");
+}
+
+async function disposeZoomProof(browser: Browser, pages: Page[], directory: string) {
+  await captureZoomProof(pages, directory, "final").catch(() => {});
+  try {
+    await closeBoardParticipants(browser);
+  } finally {
+    await browser.close();
+  }
+}
+
+test("whiteboard keeps local zoom with desktop teacher and phone follower", async () => {
+  const directory = process.env.CHALK_E2E_DIRECTORY ?? ".private/web-proof/whiteboard-100";
+  await mkdir(directory, { recursive: true });
+  const browser = await chromium.launch();
+  let pages: Page[] = [];
+  try {
+    const teacher = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const follower = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const [a, b] = await joinBoardParticipants([teacher, follower]);
+    pages = [a, b];
+    await a.getByRole("button", { name: "Board", exact: true }).click();
+    await Promise.all(pages.map(settleStage));
+    for (const page of pages) await expect.poll(() => page.evaluate(zoomLabel)).toBe("100%");
+    await b.evaluate(trackProofZoom);
+    await followEdgeStrokes(a, b, directory);
+    await resizeAndReconnect(a, b, follower);
+    await checkManualZoom(a, b);
+    await captureZoomProof(pages, directory, "manual");
+  } finally {
+    await disposeZoomProof(browser, pages, directory);
+  }
 });

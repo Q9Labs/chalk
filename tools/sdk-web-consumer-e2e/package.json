@@ -10,9 +10,9 @@
     "test:chromium": "node ./scripts/run.mjs --browsers=chromium"
   },
   "dependencies": {
-    "@q9labsai/chalk-client": "workspace:^5.2.0",
-    "@q9labsai/chalk-react": "workspace:^5.2.0",
-    "@q9labsai/chalk-ui": "workspace:^5.2.0",
+    "@q9labsai/chalk-client": "workspace:^5.2.1",
+    "@q9labsai/chalk-react": "workspace:^5.2.1",
+    "@q9labsai/chalk-ui": "workspace:^5.2.1",
     "esbuild": "0.28.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
