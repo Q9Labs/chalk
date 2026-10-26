@@ -193,7 +193,8 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     {node, port}
   end
 
-  defp stable_ack(ack), do: Map.drop(ack, ["delivery"])
+  defp stable_ack(ack),
+    do: Map.take(ack, ["command_id", "outcome", "reason", "event_id", "revision", "state_digest"])
 
   defp cursor(ack),
     do: %{
