@@ -121,4 +121,4 @@ Split an entry when its steps can ship separately, and merge entries that duplic
 
 <!-- test:constraints-clean-break sdks/typescript/client/src/access/grant.test.ts#rejects legacy subject aliases instead of widening the current wire contract -->
 <!-- test:product-memory-identity-and-tenancy sdks/typescript/client/src/tenant-external-id.test.ts#creates and finds a Tenant with an opaque external account ID through the generated client -->
-<!-- test:sync-authority apps/sync/test/chalk_sync/reliability/postgres_failover_profile_test.exs#stable receipts and recovery survive primary loss and standby promotion -->
+<!-- test:sync-authority apps/sync/test/chalk_sync/reliability/recovery_contract_test.exs#commands survive every crash boundary -->
