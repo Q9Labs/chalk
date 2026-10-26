@@ -117,30 +117,6 @@ export const ParticipantsPanelSurface = React.memo(
     return (
       <section className={cn("call-people", className)} aria-label="People">
         <CallCardStyles />
-        {onMuteEveryone ? (
-          <div className="call-host-controls">
-            <ChalkPopover
-              label="Mute everyone"
-              trigger={
-                <button type="button" className="call-host-button" disabled={muting || unmutedCount === 0}>
-                  <MicrophoneOff01Icon aria-hidden="true" />
-                  <span>Mute everyone</span>
-                </button>
-              }
-            >
-              <div className="call-mute-confirm">
-                <b>Mute everyone?</b>
-                <p>
-                  {unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.
-                </p>
-                <div className="call-mute-actions">
-                  <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
-                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>{muting ? "Muting…" : "Mute everyone"}</Popover.Close>
-                </div>
-              </div>
-            </ChalkPopover>
-          </div>
-        ) : null}
         {error ? <p role="alert">{error}</p> : null}
         {searchable && (participants.length > 8 || query.length > 0) ? (
           <label className="call-people-search">
@@ -195,6 +171,30 @@ export const ParticipantsPanelSurface = React.memo(
         ) : (
           <p className="call-no-people">No one in the call matches “{query.trim()}”.</p>
         )}
+        {onMuteEveryone ? (
+          <div className="call-host-controls">
+            <ChalkPopover
+              label="Mute everyone"
+              trigger={
+                <button type="button" className="call-host-button" disabled={muting || unmutedCount === 0}>
+                  <MicrophoneOff01Icon aria-hidden="true" />
+                  <span>Mute everyone</span>
+                </button>
+              }
+            >
+              <div className="call-mute-confirm">
+                <b>Mute everyone?</b>
+                <p>
+                  {unmutedCount} {unmutedCount === 1 ? "person" : "people"} will be muted. They can unmute themselves.
+                </p>
+                <div className="call-mute-actions">
+                  <Popover.Close render={<ChalkButton disabled={muting} />}>Cancel</Popover.Close>
+                  <Popover.Close render={<ChalkButton variant="solid" disabled={muting} onClick={() => void muteEveryone()} />}>{muting ? "Muting…" : "Mute everyone"}</Popover.Close>
+                </div>
+              </div>
+            </ChalkPopover>
+          </div>
+        ) : null}
       </section>
     );
   },
