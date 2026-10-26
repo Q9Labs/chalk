@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import { CallLimbo } from "../call-limbo/CallLimbo";
 import { StatusSurface } from "../chalk/StatusSurface";
+import { ReconnectingCard, offlineNotice } from "./ReconnectingCard";
 export const RECONNECTING_NOTICE_MS = 2_000;
 export interface ReconnectingOverlayProps {
   isVisible: boolean;
@@ -21,7 +22,7 @@ export const ReconnectingOverlay = memo(function ReconnectingOverlay({ isVisible
     const timer = setTimeout(() => setElapsed(true), RECONNECTING_NOTICE_MS);
     return () => clearTimeout(timer);
   }, [reconnecting]);
-  if (status === "reconnecting") return showNotice === false ? null : <CallLimbo overlay blocking={false} active={reconnecting && elapsed} message={message ?? "Reconnecting…"} />;
+  if (status === "reconnecting") return showNotice === false || !reconnecting || !elapsed ? null : <ReconnectingCard {...offlineNotice(true, null)} headline={message ?? "Reconnecting…"} />;
   if (!isVisible) return null;
   if (status === "failed")
     return (

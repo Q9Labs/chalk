@@ -1,13 +1,8 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
+import { ReconnectingCard, offlineNotice } from "../reconnecting-overlay/ReconnectingCard";
 import { useConnection, useOffline, useSpaceClient } from "../../bindings/hooks";
 /** Most drops recover within a second or two, so the notice waits this long before it appears. */
 export const RECONNECTING_GRACE_MS = 2_000;
-
-export function offlineNoticeText(pendingCount: number, online: boolean): string {
-  const state = online ? "Reconnecting" : "You're offline";
-  if (pendingCount === 0) return online ? "Reconnecting…" : "You're offline. Reconnecting…";
-  return `${state}. ${pendingCount === 1 ? "1 action" : `${pendingCount} actions`} will send when you're back.`;
-}
 
 /** Keep queued actions automatic while preserving the reconnecting notice. */
 export function OfflineActions({ reconnecting: requestedReconnecting = false, hasNotice = false }: { readonly reconnecting?: boolean; readonly hasNotice?: boolean } = {}): React.JSX.Element | null {
@@ -24,13 +19,14 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false, ha
 
   const count = offline.pending.length;
   const messagesOnly = offline.pending.every((action) => action.kind === "chat_message");
-  const pendingDetail = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"} will send when you’re back` : undefined;
-  const notice = reconnecting ? (reconnectingNoticeDue ? `${offlineNoticeText(0, online)}${pendingDetail ? ` ${pendingDetail}` : ""}` : null) : connection.syncHealth === "degraded" ? "Connection is slow" : null;
+  const pending = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"}` : null;
+  const slow = !reconnecting && connection.syncHealth === "degraded";
   if (hasNotice) return null;
-  if (notice)
+  if (reconnecting && reconnectingNoticeDue) return <ReconnectingCard {...offlineNotice(online, pending)} offline={!online} />;
+  if (slow)
     return (
       <div role="status" data-part="connection-notice" style={{ pointerEvents: "none" }} className="absolute inset-x-4 top-16 z-50 mx-auto w-fit max-w-[calc(100%_-_2rem)] rounded-full bg-[var(--chalk-surface)] px-3 py-1 text-center text-sm text-[var(--chalk-text)]">
-        {notice}
+        Connection is slow
       </div>
     );
   return null;

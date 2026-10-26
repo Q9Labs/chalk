@@ -38,9 +38,9 @@ describe("ReconnectingOverlay", () => {
     await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS - 1));
     expect(container.querySelector('[role="status"]')).toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
-    expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Reconnecting…");
     await act(async () => vi.advanceTimersByTime(10_000));
-    expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Reconnecting…");
     expect(container.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
@@ -53,7 +53,7 @@ describe("ReconnectingOverlay", () => {
     await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS - 1));
     expect(container.querySelector('[role="status"]')).toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
-    expect(container.querySelector('[role="status"]')?.textContent).toBe("Reconnecting…");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Reconnecting…");
   });
 
   it("shows the status page for failed", async () => {
