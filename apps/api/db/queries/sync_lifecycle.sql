@@ -849,7 +849,9 @@ for update of control skip locked
 limit sqlc.arg(batch_size);
 
 -- name: ExpiredParticipantPresence :many
-select p.* from participants p
+select sqlc.embed(p), coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation from participants p
+left join participant_join_seats seat on seat.tenant_id=p.tenant_id and seat.space_id=p.space_id
+    and seat.episode_id=p.episode_id and seat.participant_id=p.id and seat.generation=p.generation
 join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
     and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
 where p.tenant_id=sqlc.arg(tenant_id) and p.space_id=sqlc.arg(space_id) and p.episode_id=sqlc.arg(episode_id)

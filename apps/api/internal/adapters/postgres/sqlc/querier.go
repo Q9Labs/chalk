@@ -109,7 +109,7 @@ type Querier interface {
 	EraseWebhookEventsForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
-	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]Participant, error)
+	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error)
 	ExtendRecordingReservation(ctx context.Context, arg ExtendRecordingReservationParams) (ExtendRecordingReservationRow, error)
 	FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error)
 	FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error)

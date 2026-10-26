@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -47,12 +48,18 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 		if err != nil {
 			return 0, fmt.Errorf("recheck expired participant presence: %w", err)
 		}
-		for _, participant := range participants {
+		for _, expired := range participants {
+			participant := expired.Participant
 			id, err := utilities.NewID()
 			if err != nil {
 				return 0, err
 			}
-			payload := []byte(`{}`)
+			payload, err := json.Marshal(struct {
+				EntryGeneration int64 `json:"entryGeneration"`
+			}{EntryGeneration: expired.EntryGeneration})
+			if err != nil {
+				return 0, fmt.Errorf("encode expired participant presence: %w", err)
+			}
 			_, _, err = createParticipantRemovalOperation(ctx, queries, tx, tenantExternalOperationInput{
 				TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 				OperationName:       "participant_leave",

@@ -1008,7 +1008,9 @@ func (q *Queries) ExpireUncollectedPublicArrival(ctx context.Context, arg Expire
 }
 
 const expiredParticipantPresence = `-- name: ExpiredParticipantPresence :many
-select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason from participants p
+select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation from participants p
+left join participant_join_seats seat on seat.tenant_id=p.tenant_id and seat.space_id=p.space_id
+    and seat.episode_id=p.episode_id and seat.participant_id=p.id and seat.generation=p.generation
 join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
     and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
 where p.tenant_id=$1 and p.space_id=$2 and p.episode_id=$3
@@ -1025,7 +1027,12 @@ type ExpiredParticipantPresenceParams struct {
 	BatchSize int32       `json:"batch_size"`
 }
 
-func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]Participant, error) {
+type ExpiredParticipantPresenceRow struct {
+	Participant     Participant `json:"participant"`
+	EntryGeneration int64       `json:"entry_generation"`
+}
+
+func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error) {
 	rows, err := q.db.Query(ctx, expiredParticipantPresence,
 		arg.TenantID,
 		arg.SpaceID,
@@ -1036,30 +1043,31 @@ func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredPar
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Participant
+	var items []ExpiredParticipantPresenceRow
 	for rows.Next() {
-		var i Participant
+		var i ExpiredParticipantPresenceRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Metadata,
-			&i.Capabilities,
-			&i.TenantID,
-			&i.SpaceID,
-			&i.EpisodeID,
-			&i.AccountID,
-			&i.IdentityID,
-			&i.MediaConnectionID,
-			&i.MediaConnectionGeneration,
-			&i.Generation,
-			&i.Status,
-			&i.Role,
-			&i.JoinedAt,
-			&i.LeftAt,
-			&i.UpdatedAt,
-			&i.CreatedAt,
-			&i.FirstJoinedAt,
-			&i.LastLeftReason,
+			&i.Participant.ID,
+			&i.Participant.Name,
+			&i.Participant.Metadata,
+			&i.Participant.Capabilities,
+			&i.Participant.TenantID,
+			&i.Participant.SpaceID,
+			&i.Participant.EpisodeID,
+			&i.Participant.AccountID,
+			&i.Participant.IdentityID,
+			&i.Participant.MediaConnectionID,
+			&i.Participant.MediaConnectionGeneration,
+			&i.Participant.Generation,
+			&i.Participant.Status,
+			&i.Participant.Role,
+			&i.Participant.JoinedAt,
+			&i.Participant.LeftAt,
+			&i.Participant.UpdatedAt,
+			&i.Participant.CreatedAt,
+			&i.Participant.FirstJoinedAt,
+			&i.Participant.LastLeftReason,
+			&i.EntryGeneration,
 		); err != nil {
 			return nil, err
 		}
