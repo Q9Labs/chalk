@@ -2,6 +2,7 @@ import { CHALK_REACTIONS, type ChatMessage, type ChatReactionInput, type ChatAtt
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowLeft01Icon, ArrowRight01Icon, Cancel01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
+import { formatClockTime } from "../../utils/formatClockTime";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkPopover } from "../chalk-ui";
 import { useChatAttachmentPreviews } from "./use-chat-attachment-previews";
@@ -180,7 +181,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                   <bdi>{senderName}</bdi>
                 </b>
               ) : null}
-              {showTimestamp ? (displayTime ?? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp))) : null}
+              {showTimestamp ? (displayTime ?? formatClockTime(timestamp)) : null}
             </div>
           ) : null}
           <div
@@ -355,7 +356,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
             <span className="call-photo-viewer-name">
               <b dir="auto">{photo?.fileName}</b>
               <small aria-live="polite">
-                {isLocal ? "You" : senderName}, {displayTime ?? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp))}
+                {isLocal ? "You" : senderName}, {displayTime ?? formatClockTime(timestamp)}
                 {photos.length > 1 ? ` · ${photoIndex + 1} of ${photos.length}` : ""}
               </small>
             </span>
