@@ -274,7 +274,7 @@ async function followEdgeStrokes(a: Page, b: Page, directory: string) {
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
   await b.getByLabel("Follow BoardA", { exact: true }).click();
-  await b.getByText("Following BoardA").waitFor();
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   // Each new stroke must arrive visibly in the middle of the phone canvas.
   for (const [index, point] of [
     { x: 0.12, y: 0.18 },
@@ -303,10 +303,10 @@ async function resizeAndReconnect(a: Page, b: Page, follower: BrowserContext) {
   await b.setViewportSize({ width: 430, height: 780 });
   await Promise.all([a, b].map(settleStage));
   for (const page of [a, b]) await expect.poll(() => page.evaluate(zoomLabel)).toBe("100%");
-  await b.getByText("Following BoardA").waitFor();
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   await follower.setOffline(true);
   await follower.setOffline(false);
-  await b.getByText("Following BoardA").waitFor();
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   await drawStroke(a, { x: 0.3, y: 0.35 }, { x: 0.32, y: 0.36 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements"), { timeout: 20000 }).toBe("4");
   expect(await b.locator(".chalk-board").getAttribute("data-proof-zooms")).toBe("100%");
@@ -319,7 +319,7 @@ async function checkManualZoom(a: Page, b: Page) {
   await b.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
   await b.getByLabel("Follow BoardA", { exact: true }).click();
-  await b.getByText("Following BoardA").waitFor();
+  await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   await drawStroke(a, { x: 0.7, y: 0.3 }, { x: 0.72, y: 0.32 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("5");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
