@@ -72,19 +72,7 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           <span className="text-xs font-semibold text-[var(--chalk-app-text-muted)]" aria-live="polite">
             {pending === 1 ? "1 person waiting" : `${pending} people waiting`}
           </span>
-          <div className="flex items-center gap-1">
-            {loading ? <Spinner size="sm" aria-label="Updating requests" /> : null}
-            {pending > 1 && onDenyAll ? (
-              <ChalkButton variant="ghost" className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(onDenyAll)}>
-                Decline all
-              </ChalkButton>
-            ) : null}
-            {pending > 1 && onAdmitAll ? (
-              <ChalkButton className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(onAdmitAll)}>
-                Let everyone in
-              </ChalkButton>
-            ) : null}
-          </div>
+          {loading ? <Spinner size="sm" aria-label="Updating requests" /> : null}
         </div>
       ) : null}
 
@@ -115,6 +103,16 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           ))
         )}
       </ul>
+      {pending > 1 && onAdmitAll && onDenyAll ? (
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <ChalkButton disabled={busy || loading} onClick={() => void perform(onDenyAll)}>
+            Decline all
+          </ChalkButton>
+          <ChalkButton variant="solid" disabled={busy || loading} onClick={() => void perform(onAdmitAll)}>
+            Let everyone in
+          </ChalkButton>
+        </div>
+      ) : null}
     </>
   );
 
