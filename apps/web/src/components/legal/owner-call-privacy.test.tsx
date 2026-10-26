@@ -6,7 +6,7 @@ import { Route } from "../../routes/dashboard_.call.$spaceId.join";
 
 vi.mock("@tanstack/react-router", async (original) => ({ ...(await original<typeof import("@tanstack/react-router")>()), createFileRoute: () => (options: unknown) => ({ options, useParams: () => ({ spaceId: "owner-space" }) }) }));
 const theme = vi.hoisted(() => ({ mode: "dark" }));
-vi.mock("../../lib/theme-context", () => ({ useTheme: () => theme }));
+vi.mock("../../lib/theme-context", () => ({ useTheme: () => ({ preference: theme.mode, setPreference: vi.fn() }) }));
 vi.mock("../dashboard/OwnerCall", () => ({ OwnerCall: ({ spaceId }: { spaceId: string }) => <div>Owner call {spaceId}</div> }));
 afterEach(() => {
   cleanup();
