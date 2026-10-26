@@ -87,17 +87,24 @@ p {
 }
 
 .privacy-notice {
+  position: fixed;
+  z-index: 60;
+  inset-block-end: 16px;
+  inset-inline-start: 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-block: 16px;
-  padding: 8px 12px;
-  border: 1px solid var(--chalk-app-line-strong);
+  gap: 8px;
+  max-inline-size: min(380px, calc(100vw - 32px));
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--chalk-line-strong);
   border-radius: 12px;
-  background: var(--chalk-app-panel);
-  color: var(--chalk-app-text);
-  font-size: 14px;
+  background: var(--chalk-popover);
+  color: var(--chalk-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.privacy-notice p {
+  margin: 0;
 }
 .privacy-notice a {
   text-decoration: underline;
@@ -106,6 +113,17 @@ p {
 .privacy-notice-dismiss {
   flex-shrink: 0;
   min-height: 44px;
-  padding-inline: 8px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  color: var(--chalk-muted-text);
   cursor: pointer;
+}
+.privacy-notice-dismiss:hover {
+  color: var(--chalk-text);
+}
+/* On a phone the call's control bar fills the bottom edge, so the notice sits above it. */
+@media (max-width: 640px) {
+  .privacy-notice {
+    inset-block-end: 104px;
+  }
 }
