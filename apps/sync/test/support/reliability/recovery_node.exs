@@ -4,6 +4,13 @@
 target = System.fetch_env!("CHALK_RECOVERY_TARGET")
 boundary = System.fetch_env!("CHALK_RECOVERY_BOUNDARY")
 
+# ExternalSyncNode owns normal cleanup; this bounds orphan lifetime after an
+# untrappable loss of the parent test VM, including nodes with no parked hook.
+spawn(fn ->
+  Process.sleep(120_000)
+  System.halt(98)
+end)
+
 park = fn point, context ->
   if Atom.to_string(point) == boundary and
        (context[:command_id] == target or context[:lifecycle_intent_id] == target) do

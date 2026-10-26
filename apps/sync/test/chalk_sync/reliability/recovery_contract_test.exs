@@ -50,12 +50,12 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     {listener, barrier_port} = barrier()
     {node, port} = start_node(boundary, @target, barrier_port)
     {client, _welcome} = Wire.connect_v1(port, fixture.identity)
-    {client, anchor} = Wire.commit_hand(client, @anchor, false)
+    {client, anchor} = Wire.commit_hand(client, @anchor, true)
     client = Wire.acknowledge_control_event(client, anchor["event"])
     cursor = cursor(anchor["ack"])
     before = durable_rows(connection, fixture.episode)
 
-    client = Wire.send_hand(client, @target, true)
+    client = Wire.send_hand(client, @target, false)
 
     acknowledged =
       if boundary == :after_ack do
@@ -78,14 +78,20 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     {client, welcome} = Wire.connect_v1(port, fixture.identity)
     expected_revision = anchor["ack"]["revision"] + if(committed, do: 1, else: 0)
     assert welcome["head"]["revision"] == expected_revision
+    assert welcome["snapshot"]["control_revision"] == expected_revision
+    assert [participant] = welcome["snapshot"]["participants"]
+    assert participant["participant_id"] == fixture.identity.participant_id
+    assert participant["hand_raised"] == not committed
+    assert welcome["snapshot"]["state_digest"] == welcome["head"]["state_digest"]
+    unless committed, do: assert(welcome["head"]["state_digest"] == anchor["ack"]["state_digest"])
 
     # A second command, acknowledged before every crash, must never disappear.
-    client = Wire.send_hand(client, @anchor, false)
+    client = Wire.send_hand(client, @anchor, true)
     assert {:ok, client, duplicate_anchor} = Wire.receive_command_ack(client, @anchor)
     assert stable_ack(duplicate_anchor) == stable_ack(anchor["ack"])
     assert duplicate_anchor["delivery"] == "duplicate"
 
-    client = Wire.send_hand(client, @target, true)
+    client = Wire.send_hand(client, @target, false)
     assert {:ok, client, target_ack} = Wire.receive_command_ack(client, @target)
     assert target_ack["outcome"] == "committed"
     assert target_ack["revision"] == anchor["ack"]["revision"] + 1
@@ -221,7 +227,7 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     assert event["event_id"] == ack["event_id"]
     assert event["revision"] == ack["revision"]
     assert event["resulting_state_digest"] == ack["state_digest"]
-    assert event["payload"] == %{"participant_id" => identity.participant_id, "raised" => true}
+    assert event["payload"] == %{"participant_id" => identity.participant_id, "raised" => false}
     client = Client.acknowledge_recovery(client, page)
     {client, _complete} = Wire.receive_json_type(client, "recovery_complete")
     Client.close_tcp(client)
