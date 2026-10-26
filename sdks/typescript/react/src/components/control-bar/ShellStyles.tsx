@@ -99,10 +99,6 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   font-weight: 600;
   white-space: nowrap;
 }
-.chalk-shell-record-slot {
-  width: 44px;
-  height: 44px;
-}
 .chalk-shell-gap {
   width: 8px;
 }
@@ -123,6 +119,15 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 }
 .chalk-shell-people {
   inset-inline-start: 20px;
+}
+.chalk-shell-record {
+  inset-inline-start: 72px;
+}
+@media (min-width: 641px) and (max-width: 800px) {
+  .chalk-shell-record {
+    inset-inline-start: 20px;
+    bottom: 52px;
+  }
 }
 .chalk-shell-chat {
   inset-inline-end: 20px;

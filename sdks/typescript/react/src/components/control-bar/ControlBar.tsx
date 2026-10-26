@@ -98,9 +98,6 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
-      <span className="chalk-shell-record-slot chalk-shell-desktop">
-        {has("record") && (props.onToggleRecording || props.displayOnly) ? iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording) : null}
-      </span>
       <span className="chalk-shell-desktop">{iconButton(fullscreen ? "Exit fullscreen" : "Fullscreen", <ShellIcon name={fullscreen ? "min" : "max"} />, toggleFullscreen, fullscreen)}</span>
       <span className="chalk-shell-gap chalk-shell-desktop" />
 
@@ -174,6 +171,9 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           {linkLabel}
         </ChalkTooltip>
       </span>
+      {has("record") && (props.onToggleRecording || props.displayOnly) ? (
+        <span className="chalk-shell-corner chalk-shell-record chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span>
+      ) : null}
       <span className="chalk-shell-corner chalk-shell-chat">{chat}</span>
     </div>
   );
