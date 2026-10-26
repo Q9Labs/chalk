@@ -54,6 +54,7 @@ export function StatusPage({ outcome, callName, failure, onRejoin, onHome }: Sta
   const ref = useMeasuredRef<View>("status.page", pageStyle);
   const firstAction = useRef<View>(null);
   // The mockup moves focus to the first action when the page appears.
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native status-page accessibility focus.
   useEffect(() => {
     const node = firstAction.current && findNodeHandle(firstAction.current);
     if (node) AccessibilityInfo.setAccessibilityFocus(node);

@@ -120,7 +120,7 @@ rounded:
 # Design System: Chalk
 
 Source-derived using [Google Stitch's DESIGN.md guidance](https://github.com/google-labs-code/stitch-skills/blob/main/plugins/stitch-design/skills/extract-design-md/SKILL.md).
-Tokens and composed themes live in [shared UI styles](packages/ui/src/styles/index.css), [web theme](apps/web/src/lib/theme.ts), and SDK theme modules. The frontmatter holds the call's dark and light palettes under `call-dark` and `call-light`; `colors` repeats the dark one in Stitch's roles, because the site, the docs and the dashboard open dark too. This file owns visual direction, not delivery status. All sizes are CSS pixels, measured on a 1440 by 900 laptop unless a phone is named.
+The canonical semantic CSS token home is [shared UI styles](packages/ui/src/styles/index.css), imported by `apps/web/src/styles.css` and consumed by the React SDK. SDK theme modules apply per-surface overrides; `apps/web/src/lib/theme.ts` chooses the preference, not the palette. The frontmatter holds the call's dark and light palettes under `call-dark` and `call-light`; `colors` repeats the dark one in Stitch's roles, because the site, the docs and the dashboard open dark too. This file owns visual direction, not delivery status. All sizes are CSS pixels, measured on a 1440 by 900 laptop unless a phone is named.
 
 ## 1. Visual Theme & Atmosphere
 
@@ -597,7 +597,7 @@ Chalk targets WCAG 2.2 AA in the call, in both call themes, and on the site.
 
 ## 9. Implementation Notes
 
-First-party CSS tokens live in `apps/web/src/styles/tokens.css`. Product components consume these semantic values instead of adding nearby hex values. Shared React components expose state and composition without forcing a separate visual language. New components reuse the existing color, type, space, radius, elevation, and motion scales. A design that needs a new token adds a semantic token here and in the shared implementation before a component uses it.
+First-party semantic CSS tokens live in the [canonical shared UI styles](packages/ui/src/styles/index.css) described above. `apps/web/src/styles/tokens.css` is a legacy legal/account-page sheet, not the shared token authority. Product components consume these semantic values instead of adding nearby hex values. Shared React components expose state and composition without forcing a separate visual language. New components reuse the existing color, type, space, radius, elevation, and motion scales. A design that needs a new token adds a semantic token here and in the shared implementation before a component uses it.
 
 Layers stack in this order, from the bottom: tiles (`10`, floating tiles `12`), chrome (`30`), the phone scrim (`38`), cards (`40`, phone sheets `41`, chat peek `45`), limbo (`70`), the status page (`75`), menus (`80`), the call details popover (`85`), toasts (`90`), the photo viewer (`93`), tooltips (`95`), and small dialogs (`96`).
 

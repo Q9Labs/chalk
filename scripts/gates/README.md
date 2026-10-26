@@ -4,12 +4,10 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. The testbox wrapper invokes the same commit script through
-`pnpm exec` instead of the one-CPU package alias, allowing Go to use the
-allocated CPUs; Vitest and Erlang remain capped at two workers/schedulers.
-`gate.report.json` records every selected/skipped lane.
+q9gate concurrency 1. “gate.report.json” records every selected/skipped lane.
 
-The pre-commit hook runs `pnpm gate:fast`: tracker check plus the `scope`, `format`,
+Every gate profile first runs `doclint.mjs` and `theory-coverage.mjs` from this directory.
+The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
 (about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
 `GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
@@ -120,155 +118,44 @@ shipment target from branch, release mode, or directory.
   workflows add multi-node partitions, PostgreSQL failover, sustained load,
   process restart, and real-browser proof.
 
-## Running a gate on the M4 (default)
+## Heavy runs on Instabox
 
-`scripts/gates/remote.sh <root|api|sync|recorder|-- command...>` runs on
-`agents-macmini` in a throwaway checkout. `--dry-run` prints the plan without SSH.
-The runner snapshots the local commit plus staged, unstaged, and untracked work;
-ignored files are not shipped. The merge-base tree becomes `origin/master`.
-
-The M4 registers a durable SQLite ticket, then a detached dispatcher waits and runs
-the job there. Ticket order is FIFO; the lead can use `--priority` to move ahead of
-other waiting tickets, without interrupting a running job. `--run-id ID` (or
-`CHALK_REMOTE_RUN_ID`) reuses the original ticket and result, including after an
-ambiguous submission response. Registration finishes only after the whole snapshot
-arrives. A default run ID is printed before registration.
-
-Network drops automatically retry log reads from the last confirmed byte. After
-Air sleep, a T3 restart, or Ctrl-C, run `scripts/gates/remote.sh --attach ID`.
-Ctrl-C detaches; it does not cancel the ticket. There is no default queue expiry.
-An explicit `CHALK_REMOTE_QUEUE_TIMEOUT_SECONDS` retains its old meaning (exit 76).
-The M4 waits for at least 3 GiB of free + inactive + speculative memory and
-the configured free disk floor before admission. Setup and gate runtime remain
-bounded as before.
-
-State lives under `~/.local/share/chalk-remote/v1` on the M4. A dispatcher owns
-admissions and reaps dead worker descendants and their queue-owned
-`/tmp/chalk-queue-work-*` checkouts when each ticket finishes. It exits
-when idle, after one more queue check outside its lock, so a ticket registered
-while it exits still runs. A later submission or attach restarts it; a wake that
-finds a dispatcher running exits at once instead of waiting. Live log reads also
-restart a dead dispatcher and record exit 137 for interrupted work. Logs and
-submission files expire after seven days. Abandoned partial uploads expire after
-an hour; an active upload holds a lease and cannot be reaped. The dispatcher
-applies both limits when it starts and every five minutes while it runs, so a
-long wait for disk or memory still frees them. Small result tombstones remain so
-an old run ID cannot execute twice.
-
-### Cut-over and undo
-
-New submissions use three FIFO slots (`CHALK_REMOTE_SLOTS`, 1–100). The queue
-records the count in its database when it is created (for an existing queue, on
-the first call after this upgrade), and every dispatcher reads it from there, so
-a wake from a client with a different setting cannot change it. Each job
-receives `CHALK_REMOTE_SLOT`; the worker assigns distinct ports in blocks
-`21000 + slot * 100 + role` and a private temp/state directory. Role 19 is Metro,
-exported as `RCT_METRO_PORT`. Expo CLI binds Metro to it and passes it to Android
-builds, and the mobile dev profile probes it. iOS Debug builds use the prebuilt
-React Native core, which keeps port 8081 compiled in, so in a slot
-`pnpm --filter @q9labsai/chalk-mobile ios --device <udid>` runs
-`apps/mobile/scripts/run-ios.mjs` instead of `expo run:ios`: it starts Metro on
-`RCT_METRO_PORT`, builds the Debug app with `xcodebuild`, and launches it with
-`-RCT_jsLocation 127.0.0.1:$RCT_METRO_PORT`. It drives `simctl` directly, so it
-needs no Simulator.app, which Xcode 27 no longer ships.
-PostgreSQL gate and topology wrappers already allocate ephemeral ports and unique
-databases.
-`--exclusive`, root/full gates, call-performance and performance-budget commands
-wait for running slots to drain, then hold admission alone. A queued exclusive
-ticket blocks later tickets; priority only changes waiting ticket order.
-
-The client installs helpers by content hash and verifies the transfer before an
-atomic rename. Each ticket carries its own worker script; deployment does not
-rewrite running code. Legacy waiters keep their old shlock and drain one at a
-time. A live legacy lock owner counts as one occupied slot. Ordinary jobs never
-acquire that lock, even when all new slots are running. Only exclusive jobs take
-it for the lifetime of the worker. Native shlock reclaims a dead worker’s lock;
-the dispatcher never unlinks it. The exclusive supervisor owns the lock until
-its workload exits, even if the dispatcher dies.
-Detected legacy waiters get a 35-second handoff window before another exclusive
-job, covering their 30-second polling interval. Admission reserves the
-lock before checking for legacy checkouts without a lock. That check has a
-30-second limit; a checkout that remains active fails only the new ticket.
-Bare legacy waiters remain queued and cannot extend this guard. New checkout names and port blocks avoid the old harness's process
-veto and fixed ports. No legacy job is adopted, cancelled, or rewrapped.
-Cleanup reads real environment entries (Darwin sysctl or Linux procfs), never
-argv, and checks native process birth identities before and after ownership reads.
-Session ownership requires the original supervisor to remain alive. Supervisors
-persist birth-protected member receipts, and cleanup never refreshes a receipt to
-a replacement's birth. Queue dispatchers strip inherited workload identities.
-Port matches never authorize signals. Reserved local slot ports
-must be free before release; a foreign holder quarantines the slot and its PID,
-command and socket appear in job status and logs. Cleanup failures also quarantine
-only that slot, with a 30-second retry. Evidence has at most eight holder records
-and 2,048 UTF-8 bytes; repeated connections do not append equivalent evidence.
-Queued status and clients report the blocking job IDs, errors and retry times;
-client output changes only when that report changes. When the next ticket has a
-free slot but free disk or memory is below its admission floor, queued status
-carries one line such as `waiting: free disk 3.1 GiB < 8 GiB floor`, with the
-reading taken when that wait began. Clients print it once per wait, and a wait
-limit that expires adds it to the final `[remote]` line. Healthy slots keep running. After a
-dispatcher restart, surviving supervisors finish and supply their saved exit codes.
-Job-specific Postgres and Redis container and volume receipts survive dispatcher crashes;
-completion and recovery remove those resources before releasing the slot.
-FIFO applies among new tickets. After merge, lanes may voluntarily resubmit
-legacy waiters through the new client to use the slots sooner.
-
-To undo, restore the old client for future submissions. Let new tickets finish or
-reattach with this revision; keep their state and helpers until they drain. No
-shared runner or launchd service is replaced.
-
-Tiny proofs (isolated queues; no shared heavy admission):
+Commit and push first: `box run` fetches the pushed HEAD, not working-tree edits.
+Run Linux gates and browser suites on Instabox, never on the laptop or M4.
+The disposable machine is deleted when the command ends. Keep the single-worker
+settings above: the 4-vCPU / 8-GB machine has no room for extra workers.
 
 ```sh
-node --test scripts/gates/remote-queue.test.mjs
-python3 scripts/gates/remote-queue-ssh-test.py agents-macmini
+box run -- 'pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && pnpm gate:full'
+box run -- 'pnpm install --frozen-lockfile && apps/api/scripts/gate.sh'
+box run -- 'pnpm install --frozen-lockfile && scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
 ```
 
-`root` installs Chromium. Set `CHALK_REMOTE_NEEDS_BROWSER=1` for custom `--`
-commands that need it. `CHALK_REMOTE_REPO` overrides the local repository root.
-See `scripts/gates/remote.sh --help` for the remaining `CHALK_REMOTE_*` settings.
+The snapshot supplies Node, Go, Erlang/Elixir, OpenTofu, scanners, and Docker.
+Versions are pinned in `.tool-versions`, `apps/api/go.mod`, and the CI setup actions;
+check those pins if a fresh snapshot cannot run a gate. PostgreSQL helpers own and
+clean up their task containers. Use `scripts/gates/with-postgres.sh --` for Sync
+runs; the API gate manages its own database. The root full gate selects both.
+For a focused browser/performance command, replace the final command in the first
+example and keep the Chromium install. The [performance runbook](../../docs/performance-budget.md)
+separates diagnostic timings from calibrated budgets; do not enforce old timing
+limits on the new runner without re-measuring them.
 
-## Dedicated-CPU timing runs (explicit opt-in)
+## Documentation checks
 
-Use `scripts/gates/remote-testbox.sh` only for timing runs that need a dedicated
-c-8 box, including call-performance budgets. Testbox bills every box; ordinary
-gates use the M4. The opt-in runner defaults to `c-8` for every command.
+`node scripts/gates/doclint.mjs` checks maintained Markdown/MDX for missing local
+links and literal repository paths, undeclared package scripts in package-manager commands, and retired runner
+guidance. Frozen proof directories, fixture/testdata documents, changesets, and
+changelogs are historical evidence, not maintained runbooks. Paths resolve from
+the document or repository root. Examples must have an exact document/path entry
+and a reason in `doclint-examples.json`; do not allow whole directories.
 
-`scripts/gates/remote-testbox.sh <root|api|sync|recorder|-- command...>` runs on a
-disposable Linux Droplet through the testbox skill.
-`--dry-run` prints the exact plan without creating a box.
+`node scripts/gates/theory-coverage.mjs` checks every prose paragraph and
+list item in [theory.md](../../theory.md), except tracker-maintenance instructions and the test index.
+Each has an `invariant` marker and a `test` mapping to a file and exact declared
+test name. `theory-baseline.json` freezes today's unmapped text; it is debt, not
+proof. New or changed requirements need a named test, not another baseline entry.
+The checker proves the index is intact, not that a test proves every word.
 
-Testbox ships the real tip and merge-base with `origin/HEAD`, then commits
-tracked working-tree changes on top. Stage new files before running: the wrapper
-rejects non-ignored untracked files rather than silently omitting them. Ignored
-files (including local dependencies and secrets) are not shipped. Custom base
-refs must exist in testbox's limited history; fetch `origin/master` locally first.
-
-The wrapper checks Node, Go, Erlang, Elixir, and OpenTofu against the same
-version sources as Gate CI and installs only mismatches. The shared testbox
-image includes these pins, Gitleaks, Semgrep, prebuilt OSV, and the pinned
-Playwright Chromium revision. Matching Chromium skips OS dependency setup;
-a different revision still installs its dependencies. The existing helpers own PostgreSQL 18.3 and Sync topology.
-Root and custom runs verify the repo's Playwright Chromium revision.
-TTL covers provisioning, setup, and the gate: root/custom 60 minutes, API/Sync
-45 minutes, recorder 20 minutes.
-All runs default to `c-8` (8 dedicated CPU / 16 GB), including custom timing
-commands. The measured region is `blr1`.
-New shared images must be available there before use. This is an
-allocation choice, not a claim that the region is faster.
-
-Each run retains testbox's $0.50 default ceiling and automatic cleanup.
-`CHALK_REMOTE_SIZE`, `CHALK_REMOTE_REGION`, `CHALK_REMOTE_TTL`, and
-`CHALK_REMOTE_BUDGET` override the allocation for a bounded experiment.
-The snapshot must be available in the selected region.
-`CHALK_PHASE` epoch markers and UTC headers time each setup step and the gate;
-testbox imports the markers into receipt phases. The job checks that competing
-OS upgrade and firmware timers/services are masked.
-
-Provisioning prints live. The current testbox CLI saves job output but does not
-stream it; collected step headers and the final 60 lines print at completion.
-`CHALK_REMOTE_VERBOSE=1` prints the complete collected job log.
-`CHALK_REMOTE_TAIL_LINES` and `CHALK_REMOTE_LOG_DIR` control the tail and combined
-local log (default `${TMPDIR:-/tmp}/chalk-remote-logs`). Testbox keeps its receipt,
-launcher log, job log, and artifact archive in `~/.local/state/testbox/<task>/`.
-The wrapper returns testbox's exit status, including setup and provisioning failures.
+The SDK effect rule has one adjacent, reasoned suppression per existing call.
+New effects need a deliberate exception; do not suppress an entire file.

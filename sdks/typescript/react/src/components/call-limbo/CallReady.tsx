@@ -23,14 +23,17 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
     onClose();
     cardRef.current?.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
   };
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing focus restoration and cancellable entrance/QR animation.
   useEffect(() => {
     if (!open && cardRef.current?.contains(document.activeElement)) cardRef.current.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
   }, [open]);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing focus restoration and cancellable entrance/QR animation.
   useEffect(() => {
     if (!showQR || reducedMotion) return;
     const animation = qrRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
     return () => animation?.cancel();
   }, [showQR, reducedMotion]);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing focus restoration and cancellable entrance/QR animation.
   useEffect(() => {
     if (open) setPresent(true);
     const frame = requestAnimationFrame(() => setEntered(open));

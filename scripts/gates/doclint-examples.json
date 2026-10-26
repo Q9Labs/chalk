@@ -1,0 +1,17 @@
+[
+  {
+    "file": "apps/api/docs/database-workflow.md",
+    "path": "YYYYMMDDHHMMSS_description.sql",
+    "reason": "Migration filename template, not a checked-in migration."
+  },
+  {
+    "file": "apps/web/docs/runtime-assets.md",
+    "path": "dist/prod/chunk-K2UTITRG.js:8",
+    "reason": "Versioned dependency bundle location at the documented audit revision."
+  },
+  {
+    "file": "apps/web/docs/runtime-assets.md",
+    "path": "sre/speech-worker.js",
+    "reason": "MathJax dependency asset name, not a repository source file."
+  }
+]

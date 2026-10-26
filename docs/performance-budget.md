@@ -7,29 +7,29 @@ The machine-readable limits are in `apps/web/perf-budgets.json`.
 
 ## Run
 
-Run heavy work through testbox, not on the laptop:
+Run heavy work on Instabox with `box run`, not on the laptop. Commit and push first;
+see [gate operations](../scripts/gates/README.md) for runner setup:
 
 ```sh
-python3 ~/.agents/skills/testbox/testbox.py run --repo "$PWD" --region blr1 --size c-8 --ttl 3600 --budget 0.35 --command 'pnpm install --frozen-lockfile && node apps/web/scripts/check-call-performance.mjs --self-test'
+box run -- 'pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && node apps/web/scripts/check-call-performance.mjs --self-test --bundle-only'
 ```
 
 The focused timing gate is `pnpm run gate -- --lane call-performance --files
 apps/web/src/call-states/performance.tsx`; the lifecycle gate uses `--lane
-call-leaks` instead. Run both on testbox. The root gate selects both for web,
+call-leaks` instead. Run both on Instabox. The root gate selects both for web,
 React SDK, UI, whiteboard and dependency changes, and full gates. The PR Gate
 workflow already runs this root gate and installs Chromium.
 The pre-commit fast profile deliberately does not run browser measurements.
 
 Gate lanes enforce bundle size and lifecycle leaks everywhere, including
-GitHub Actions. Timing limits are enforced only on testbox (identified by
-`TESTBOX_SOURCE_COMMIT`): off-testbox `--gate` runs select bundle-only mode,
+GitHub Actions. Timing limits are not enforced by gate mode on uncalibrated runners: `--gate` runs select bundle-only mode,
 while `--gate --leaks-only` still measures and enforces leaks. This is an
 explicit policy, not an automatic retry or a pass after noisy timing failures.
-Direct runs enforce timing by default; `--bundle-only` explicitly checks only bundle size.
+Direct diagnostic runs must use `--bundle-only` until this runner has calibrated limits.
 `--skip-build` reuses a previously built harness only for diagnosis.
 
 The console prints measured median/budget pairs. JSON defaults to
-`artifacts/call-performance.json` and contains every sample, min/median/max,
+“artifacts/call-performance.json” and contains every sample, min/median/max,
 loaded initial and lazy resources, browser version, CPU, load, calibration,
 errors and failures. `--out` changes the path. A broken budget, missing explicit scenario limit, or missing
 observation exits nonzero. `--record-baseline` collects data without enforcing
@@ -68,9 +68,9 @@ touch/mobile enabled, at 6×. These are repeatable CPU stress profiles, not clai
 of equivalence to a particular physical laptop or phone. CPU throttling does
 not model memory bandwidth, radio, thermals, mobile GPU or real video decode.
 
-The reference runner is an otherwise task-owned dedicated CPU testbox (`c-8`,
-8 vCPUs, 16 GiB), not the shared-CPU default. Use the same runner class for
-comparisons. The throttle factors stress main-thread work while keeping the
+The budgets were measured on Testbox's 8-core box. An Instabox timing is not a budget result until the budgets are re-measured there.
+The former reference runner had 8 dedicated vCPUs and 16 GiB of memory.
+Re-measuring the budgets is separate work. The throttle factors stress main-thread work while keeping the
 same viewport and media workload; they do not throttle native video/compositor
 threads as a real slow device would. Blank-page and unthrottled/paused-video
 controls distinguish a capped browser clock from loaded rendering costs.
@@ -114,7 +114,7 @@ by these scenarios (for example, board math insertion).
 
 Change a budget deliberately in its own commit. Include the user trade-off,
 old and new measurements (at least five repetitions on the same class of
-testbox), min/median/max, CPU and Chromium version, and why the added cost is
+runner), min/median/max, CPU and Chromium version, and why the added cost is
 worth accepting. Do not raise a budget merely to turn CI green. Compare the
 production code against the pinned baseline commit in the data file; do not
 silently replace it with whichever revision happens to pass today.
@@ -123,7 +123,8 @@ silently replace it with whichever revision happens to pass today.
 handling, sized above the configured interaction/blocking budgets. It feeds the
 result through the same budget evaluator as a normal run and requires an actual
 budget failure plus Long Tasks and Event Timing evidence, then closes the
-context. Full testbox gate runs include this self-test automatically.
+context. Add `--self-test` to a bundle-only diagnostic to exercise this timing injection.
+The leak gate includes its own injected-leak self-test automatically.
 It never writes a slowdown into product source. Normal measurements run
 without this injection. The test does not persist a slowdown or raise a limit.
 
@@ -256,7 +257,7 @@ and DOM headroom are deliberately conservative until the integrated redesign is 
 
 ## Leaks
 
-Full testbox performance gates also run eight lifecycle journeys: leave/rejoin,
+Full performance gates also run eight lifecycle journeys: leave/rejoin,
 Chat/People open/close, participant join/leave, share start/stop, board open/close,
 reconnecting/recovered, Spotlight/Grid, and a 24-reaction burst. Each runs once to
 warm caches, then 20 times in the **same document**. Leave is sampled while left;
@@ -331,7 +332,7 @@ an interval and a self-rescheduling RAF are observed while live and return to ze
 after teardown.
 
 For calibration (three full repetitions of every journey), after building the
-harness on testbox:
+harness on Instabox:
 
 ```sh
 node apps/web/scripts/check-call-performance.mjs --skip-build --leaks-only --leak-repeats 3 --self-test --out artifacts/leaks-calibration.json
@@ -356,8 +357,8 @@ or leaks triggered only by real transports, device changes or long sessions.
 
 ### Calibration and known findings (2026-10-18)
 
-Count calibration used shared 4-vCPU testboxes; timing verification uses the
-dedicated `c-8` reference runner described above. Shared-run timing numbers are
+Count calibration used shared 4-vCPU machines; historical timing verification used the
+dedicated 8-core reference runner described above. Shared-run timing numbers are
 not comparable with the reference budgets. Only complete 21-sample journeys
 count toward the calibration spread; an interrupted three-repeat command is not
 a successful full run.

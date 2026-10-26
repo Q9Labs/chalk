@@ -1,9 +1,9 @@
 # Transcription dispatcher release scripts
 
 `build-release.sh <unique-release-id>` builds the dispatcher package, requires
-`dist/index.js`, creates a reproducible ZIP, and emits a digest sidecar, file
+“dist/index.js”, creates a reproducible ZIP, and emits a digest sidecar, file
 SBOM, provenance record, and release manifest under
-`infrastructure/.artifacts/transcription-dispatcher/`. The release ID is part
+“infrastructure/.artifacts/transcription-dispatcher/”. The release ID is part
 of the ZIP name and the ZIP's SHA-256 is also part of that name, so a mutable
 `latest` artifact cannot pass. `SOURCE_DATE_EPOCH` may be supplied to pin the
 release timestamp; otherwise the source commit timestamp is used. The script

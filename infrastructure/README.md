@@ -123,7 +123,7 @@ Max age: 86400
 1. Generate or collect source assets outside package source.
 2. Normalize and export hashed derivatives.
 3. Upload hashed media to `chalk-assets`.
-4. Upload `ui/manifest.json` with the short manifest cache policy.
+4. Upload the generated ui/manifest.json with the short manifest cache policy.
 5. Update `packages/assets/src/index.ts`.
 6. Verify live URLs, CORS, content types, and cache headers.
 

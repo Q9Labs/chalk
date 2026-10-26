@@ -247,7 +247,7 @@ Production R2 adoption is fail-closed. A plan must name the existing bucket,
 provide its private inventory import ID, and carry a digest of the approved
 no-delete/no-replacement plan before mutation is possible. Nightly can use its
 explicit generated name. All backend configuration and credentials are
-provided outside this tree; `gate.sh` always initializes with the backend
+provided outside this tree; `scripts/recorder/gate.sh` always initializes with the backend
 disabled and never applies a provider.
 
 The private bucket also serves browser-authorized whiteboard files through

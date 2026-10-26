@@ -9,7 +9,7 @@ apps/api/scripts/dev-services.sh start
 apps/api/scripts/dev-services.sh describe
 ```
 
-These manage Postgres and Redis through OrbStack-compatible container commands and print local connection URLs. For one service, use `dev-postgres.sh` or `dev-redis.sh` in the same directory. The scripts define image versions.
+These manage Postgres and Redis through OrbStack-compatible container commands and print local connection URLs. For one service, use `apps/api/scripts/dev-postgres.sh` or `apps/api/scripts/dev-redis.sh` in the same directory. The scripts define image versions.
 
 ## Schema changes
 
@@ -23,7 +23,7 @@ apps/api/scripts/db-migrate.sh down
 apps/api/scripts/db-migrate.sh up
 ```
 
-`db-migrate.sh` defaults to the local database. For managed databases, set `CHALK_DATABASE_URL` to the direct owner connection, not the runtime/PgBouncer URL.
+`apps/api/scripts/db-migrate.sh` defaults to the local database. For managed databases, set `CHALK_DATABASE_URL` to the direct owner connection, not the runtime/PgBouncer URL.
 
 Production images contain `chalk-migrate` and the checked-in migrations. Before API/Sync activation, the controller runs a one-shot migration to the release manifest's `minimum_migration`. Owner credentials stay out of runtime services. Only an explicitly named checked-in repair may fill an out-of-order gap; other gaps fail. API readiness rejects an older schema. Runtime rollback does not undo migrations.
 

@@ -3,6 +3,7 @@ import type { SpaceHeaderProps } from "./space-header-contract";
 export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: () => void) {
   const latest = useRef(actions);
   latest.current = actions;
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing global call-keyboard listener cleanup.
   useEffect(() => {
     let talking = false;
     const restore = () => {

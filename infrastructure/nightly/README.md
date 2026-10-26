@@ -22,7 +22,7 @@ identity. Sync still builds with `MIX_ENV=prod`.
 | Transcription      | `chalk-nightly-transcription-dispatcher`, audience `chalk-nightly-control-api`, separate workload and DeepInfra secrets.                  |
 | Scheduler          | `chalk-nightly-transcription-reconcile` in group `chalk-nightly`, initially disabled.                                                     |
 | Release metadata   | `/chalk/nightly/release/recorder.json`, with explicit nightly host, DO context and state coordinates.                                     |
-| Uptime             | `wrangler.nightly.toml`, separate Worker secrets and explicit nightly API and Sync targets.                                               |
+| Uptime             | `infrastructure/uptime-worker/wrangler.nightly.toml`, separate Worker secrets and explicit nightly API and Sync targets.                  |
 | External services  | Separate SFU application, tunnel, Axiom datasets and tokens, and Google OAuth client; no email sender.                                    |
 
 The controller's existing [runtime input contract](../managed-episode/contracts/runtime-inputs.json)

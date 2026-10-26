@@ -23,7 +23,7 @@ PostgreSQL service.
 The Dockerfiles use named build contexts so a build never sends the repository's
 multi-gigabyte working tree to BuildKit. The official Go 1.26.10 and Elixir
 1.19.5/OTP 28 image indexes are pinned by multi-architecture digest. Go 1.26.10
-matches the current `apps/api/go.mod` and the `db-migrate.sh` helper default.
+matches the current `apps/api/go.mod` and the `apps/api/scripts/db-migrate.sh` helper default.
 
 Production images are published by the manually dispatched release workflow in
 `.github/workflows/ci.yml` after the target commit passes its local gate. The

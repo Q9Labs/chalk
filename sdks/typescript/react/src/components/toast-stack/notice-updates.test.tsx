@@ -136,6 +136,7 @@ it("does not remount a folded rich toast for equivalent new JSX icons", async ()
     mounted = vi.fn(),
     unmounted = vi.fn();
   function Message() {
+    // nosemgrep: chalk.forbid-sdk-use-effect -- Observe committed notice state in the existing lifecycle test.
     useEffect(() => {
       mounted();
       return () => {
@@ -182,6 +183,7 @@ it("refits fresh action and icon elements without looping, remounting rich input
     dismiss = vi.fn();
   let renders = 0;
   function Message() {
+    // nosemgrep: chalk.forbid-sdk-use-effect -- Observe committed notice state in the existing lifecycle test.
     useEffect(() => {
       mount();
     }, []);

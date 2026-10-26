@@ -113,8 +113,8 @@ promotion, managed failover, backup, restore, or PITR claim.
 
 Each run writes an ignored bundle under
 `apps/sync/.artifacts/release-topology/<schedule>/<run-id>/` by default. It
-contains `manifest.json`, `transitions.jsonl`, `verdict.json`, and
-`reproducer.json`. The manifest is made read-only after it is written.
+contains “manifest.json”, `transitions.jsonl`, “verdict.json”, and
+“reproducer.json”. The manifest is made read-only after it is written.
 
 The manifest holds the scheduler version, environment, versioned schedule,
 release/configuration/topology digests, sanitized command-vector hashes,

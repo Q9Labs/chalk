@@ -6,6 +6,9 @@ export GOFLAGS="${GOFLAGS:--buildvcs=false}"
 cd "$(dirname "$0")/../.."
 node scripts/gates/check-install.mjs
 
+node scripts/gates/doclint.mjs
+node scripts/gates/theory-coverage.mjs
+
 if [[ "${1:-}" == "--" ]]; then
   shift
 fi

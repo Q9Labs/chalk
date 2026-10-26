@@ -85,6 +85,7 @@ export const ReactionBubble = React.memo(({ emoji, participantName, onComplete, 
   const timeoutMs = baseDuration;
   const floatDurationMs = prefersReducedMotion || !animProps ? baseDuration : animProps.duration;
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing reaction dismissal timer cleanup.
   useEffect(() => {
     if (!animated) return;
     const timer = setTimeout(() => {

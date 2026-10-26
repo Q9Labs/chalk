@@ -59,6 +59,7 @@ function selectStructure(snapshot: SpaceSnapshot): Structure {
 export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): React.JSX.Element {
   const client = useSpaceClient();
   const toasts = useToasts();
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing stage/board subscriptions and layout reconciliation.
   useEffect(() => ownNativeBoardSession(client, () => toasts.show({ kind: "error", dismissible: true, message: "Couldn’t open the board. Try again from More." })), [client, toasts]);
   const structure = useSpaceSelector(selectStructure, shallowEqual);
   const selectViewsAvailable = useCallback(() => client.whiteboard.transport()?.supportsViews === true, [client]);
@@ -68,6 +69,7 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   const { shareAspect } = useDevScenario();
   const [sheet, setSheet] = useState<{ readonly id: string | null; readonly open: boolean }>({ id: null, open: false });
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing stage/board subscriptions and layout reconciliation.
   useEffect(() => {
     if (view.following && !structure.present.split("\n").includes(view.following)) view.setFollowing(null);
   }, [structure.present, view.following, view.setFollowing]);
@@ -77,6 +79,7 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
   const next = nextStageOrder(order, present, structure.selfId, structure.speaker);
   if (next !== order) setOrder(next);
 
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing stage/board subscriptions and layout reconciliation.
   useEffect(() => {
     view.setBoardOpen(null);
     view.setFollowing(null);

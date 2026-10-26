@@ -1,0 +1,38 @@
+docs/broken.md:3: missing Markdown target: missing.md
+docs/broken.md:3: missing Markdown target: missing.md
+docs/broken.md:3: missing repo path: apps/web/src/missing.ts
+docs/broken.md:3: unknown pnpm script: invented-script
+docs/broken.md:3: unknown pnpm script: invented-script
+docs/broken.md:3: retired runner reference
+theory.md:7: each product paragraph/list item needs exactly one invariant id
+theory.md:7: new-rule: new or changed invariant needs a named test mapping
+theory.md:5: durable: new or changed invariant needs a named test mapping
+theory.md:5: each product paragraph/list item needs exactly one invariant id
+theory.md:1: remove obsolete baseline entry: durable
+theory.md:5: durable: named test does not exist: proof_test.go#TestMissing
+theory.md:5: durable: missing test file: missing_test.go
+sdks/typescript/react-native/src/effect.ts:2: rejected SDK useEffect
+sdks/typescript/react-native/src/effect.ts:3: rejected SDK useEffect
+sdks/typescript/react-native/src/effect.ts:4: rejected SDK useEffect
+sdks/typescript/react/src/effect.ts:2: rejected SDK useEffect
+sdks/typescript/react/src/effect.ts:3: rejected SDK useEffect
+sdks/typescript/react/src/effect.ts:4: rejected SDK useEffect
+✔ doclint rejects missing relative Markdown target with file:line (59.694459ms)
+✔ doclint rejects missing reference-link target with file:line (62.313167ms)
+✔ doclint rejects missing repo path with file:line (58.073292ms)
+✔ doclint rejects unknown explicit pnpm script with file:line (58.889833ms)
+✔ doclint rejects unknown shorthand pnpm script with file:line (58.408625ms)
+✔ doclint rejects retired runner guidance with file:line (56.442375ms)
+✔ Markdown links cannot resolve from the repo root instead of the document (57.168542ms)
+✔ doclint accepts real links, paths, scripts, built-ins, and exact examples (105.281167ms)
+✔ theory allows only frozen existing gaps and rejects new or changed requirements (236.482292ms)
+✔ theory validates exact declared test names, not mentions or existing files alone (236.983166ms)
+✔ SDK effect rule rejects named, namespace, and aliased calls in both SDKs (986.765375ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2031.221584

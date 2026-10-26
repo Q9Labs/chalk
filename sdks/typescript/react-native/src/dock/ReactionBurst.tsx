@@ -28,6 +28,7 @@ export const ReactionBurst = memo(function ReactionBurst({ participantId }: { re
 function FloatingEmoji({ reaction }: { readonly reaction: ActiveReaction }): React.JSX.Element {
   const reduceMotion = useReducedMotion();
   const progress = useSharedValue(0);
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing cancellable native reaction animation.
   useEffect(() => {
     progress.value = withTiming(1, { duration: DURATION, easing: easings.easeOut });
   }, [progress]);

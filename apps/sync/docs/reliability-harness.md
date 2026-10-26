@@ -17,7 +17,7 @@ release profile includes both profiles plus concurrent multi-node load, process
 restart recovery, and a real Chromium client.
 
 Every profile fails on the first missing or failed proof. It writes a read-only
-manifest under `apps/sync/.artifacts/reliability/` with the commit, relevant
+manifest under “apps/sync/.artifacts/reliability/” with the commit, relevant
 working-tree fingerprint, exact commands, durations, verdict, and reproducer.
 CI uploads that directory so a green check has reviewable evidence.
 

@@ -28,7 +28,7 @@ The native bridge uses exact build, protocol, renderer-generation, and
 scene-generation checks. Messages are strictly decoded and bounded to 32 MiB,
 duplicate message IDs are ignored, and a reload requests a canonical snapshot
 instead of trusting renderer state. Documents containing a required element
-type outside `embedded/compatibility-manifest.json` open read-only with an
+type outside `packages/whiteboard/src/embedded/compatibility-manifest.json` open read-only with an
 “Update required” message.
 
 The canonical `whiteboard-v1` transport keeps the existing 128-element and

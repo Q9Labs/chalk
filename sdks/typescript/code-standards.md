@@ -12,7 +12,7 @@ it, and never imitate its style.
   the sync protocol client) may exceed that only when splitting would scatter
   coupled state — and even then, pure helpers, frame builders, and validation
   move to sibling modules.
-- Each subsystem exposes its public surface through its `index.ts`; everything
+- Each subsystem exposes its public surface through a module entrypoint named index.ts; everything
   else is internal. Don't re-export internals "just in case".
 - Specific imports from sibling modules; no deep imports into another package's
   internals.

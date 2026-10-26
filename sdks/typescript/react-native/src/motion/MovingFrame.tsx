@@ -45,6 +45,7 @@ export function MovingFrame({ frame, children, style, testID }: MovingFrameProps
   const mounted = useRef(false);
 
   const { x, y, width, height } = frame;
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native layout animation lifecycle.
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;

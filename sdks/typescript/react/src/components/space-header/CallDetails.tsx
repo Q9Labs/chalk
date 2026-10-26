@@ -43,6 +43,7 @@ export function CallDialog({
   const [includeDiagnostics, setIncludeDiagnostics] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
+  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing call-detail clock and focus lifecycle.
   useEffect(() => {
     if (open && kind === "report") {
       setText("");
