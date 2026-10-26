@@ -168,6 +168,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#started) return;
     this.#started = true;
     this.#connectAttemptCount = 0;
+    this.#connectFailure = undefined;
     const startupGeneration = ++this.#startupGeneration;
     let stored: readonly V1PendingTarget[];
     try {
@@ -380,7 +381,9 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#connectAttemptCount += 1;
     this.#connectStartedAt = this.#clock().now();
     this.#opened = false;
-    this.#connectFailure = undefined;
+    // A pending retry must not erase a rejected upgrade. An earlier hello is
+    // no longer the failing stage once its replacement is trying to open.
+    if (this.#connectFailure?.opened) this.#connectFailure = undefined;
     this.#emit();
     this.#entryNegotiated = false;
     let socket: V1Socket;
@@ -432,7 +435,7 @@ export class V1SyncClient implements V1CollaborationClient {
     };
     socket.onerror = () => {
       if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
-        this.#connectFailure = this.#connectDiagnostic();
+        this.#connectFailure ??= this.#connectDiagnostic();
         this.#emit();
       }
       socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");

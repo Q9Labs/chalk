@@ -3,8 +3,8 @@ import { formatSyncConnectDiagnostic, safeSyncCloseReason } from "./connect-diag
 
 describe("safe Sync close reasons", () => {
   it("includes the socket attempt count without inventing one for older clients", () => {
-    const diagnostic = { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: 52, attempt: 4 } as const;
-    expect(formatSyncConnectDiagnostic(diagnostic)).toContain("cause=closed_before_open; attempt=4; 52ms");
+    const diagnostic = { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: 52, attempt: 4, attempts: 5 } as const;
+    expect(formatSyncConnectDiagnostic(diagnostic)).toContain("cause=closed_before_open; attempt=4; attempts=5; 52ms");
   });
   it.each([
     "authentication failed",

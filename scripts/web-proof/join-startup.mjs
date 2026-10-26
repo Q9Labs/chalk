@@ -206,9 +206,10 @@ try {
           assert.equal(result.connection.lastError.sync.opened, false);
           assert.equal(result.connection.lastError.sync.closeCode, 1006);
           assert.ok(result.connection.lastError.sync.durationMs < 1000);
-          assert.equal(result.connection.lastError.sync.attempt, attempts);
+          assert.equal(result.connection.lastError.sync.attempts, attempts);
+          assert.ok(result.connection.lastError.sync.attempt <= attempts);
           await page.getByText("The connection closed before the call service could be reached. Try again.", { exact: true }).waitFor();
-          await page.getByText(new RegExp(`attempt=${attempts};`)).waitFor();
+          await page.getByText(new RegExp(`attempts=${attempts};`)).waitFor();
         }
         if (trial < 2) await page.screenshot({ path: resolve(output, `${revision}-${scenario}-${device}-${trial}.png`) });
         await page.evaluate(() => window.disposeProof());

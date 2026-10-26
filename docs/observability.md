@@ -92,7 +92,9 @@ startup stage is `hello` (including initial recovery). Unknown peer reasons beco
 `redacted`; only fixed protocol reasons are retained. Pre-open failures use `connection.sync_start_failed`; `connection.sync_hello_timeout`
 is reserved for startup after open. A pre-open close adds `cause=closed_before_open`
 to the reference. `attempt=N` is the one-based socket attempt since Sync started.
-Its duration measures that socket attempt, not the whole join.
+Its duration measures that socket attempt, not the whole join. The final failure
+also includes `attempts=N`, the total dials started, including any pending retry.
+A pending retry retains the last completed failure until it opens or fails.
 Browsers do not expose the HTTP rejection status or distinguish a network failure
 from an edge rejection; an empty reason must not be labeled as a server timeout. Internal diagnostic event names such as
 `sync_connect_failed`, `sync_dial_timeout`, and `connection_failed` identify

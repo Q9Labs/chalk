@@ -217,6 +217,33 @@ describe("public client startup failure contract", () => {
     }
   });
 
+  it("retains the closed attempt while its replacement is still pending at the deadline", async () => {
+    browser();
+    let attempts = 0;
+    vi.stubGlobal(
+      "WebSocket",
+      class extends EventTarget {
+        constructor() {
+          super();
+          if (++attempts === 1) queueMicrotask(() => this.dispatchEvent(Object.assign(new Event("close"), { code: 1006, reason: "" })));
+        }
+        send() {}
+        close() {}
+      },
+    );
+    vi.useFakeTimers();
+    const client = makeClient(async () => accessGrant(), 1_000);
+    try {
+      const rejection = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(attempts).toBeGreaterThan(0));
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(attempts).toBe(2);
+      expect(await rejection).toMatchObject({ code: "connection.sync_start_failed", sync: { opened: false, closeCode: 1006, attempt: 1, attempts: 2 } });
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("reports hello when a retry opens after an earlier failed upgrade", async () => {
     browser();
     let attempts = 0;
