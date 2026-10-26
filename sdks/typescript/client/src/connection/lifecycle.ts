@@ -22,7 +22,8 @@ type SyncRecoveryAttempt = {
 type MediaRecoveryAttempt = {
   expiresAt: number | null;
 };
-const START_TIMEOUT_MS = 10000;
+// A 10s dial can fail and retry before the overall join gives up.
+const START_TIMEOUT_MS = 30000;
 const LEAVE_TIMEOUT_MS = 5000;
 const RECOVERY_BUDGET_MS = 10000;
 const MAX_RECOVERY_ATTEMPTS = 3;
@@ -437,7 +438,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
         return effect.pipe(
           Effect.tap(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" }))),
-          Effect.tapError(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed" }))),
+          Effect.tapError((cause) => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failureFromCause(cause, "internal_error", "Connection step failed").code }))),
         );
       };
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
@@ -518,7 +519,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               onFailure: (cause) =>
                 Effect.gen(function* () {
                   stopStream(stream);
-                  const failure = failureFromCause(cause, "sync_start_failed", "The Connection could not start");
+                  const failure = failureFromCause(cause, "internal_error", "The Connection could not start");
                   model.failure = toFailure(failure);
                   if (model.joinCancelled) {
                     span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "invalid_state" });

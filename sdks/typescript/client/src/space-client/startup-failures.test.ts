@@ -43,11 +43,11 @@ function browser() {
   vi.stubGlobal("WebSocket", SilentSocket);
   vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
 }
-function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
+function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs: number | null = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
   return createSpaceClientForPlatform(
     { space: "test", getAccess, logger },
     {
-      syncStartupTimeoutMs,
+      ...(syncStartupTimeoutMs === null ? {} : { syncStartupTimeoutMs }),
       onConnectionDiagnostic,
       dependencies: {
         createSyncClient: (input) => createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: new InMemoryV1PendingTargetStore() }),
@@ -61,6 +61,51 @@ afterEach(() => {
 });
 
 describe("public client startup failure contract", () => {
+  it("joins after a stalled upgrade and a slow replacement without a manual retry", async () => {
+    const sockets = await liveBrowser(false, { stallFirstUpgrade: true, upgradeDelayMs: 8000 });
+    vi.useFakeTimers();
+    const diagnostic = vi.fn();
+    const client = makeClient(async () => accessGrant(), null, undefined, diagnostic);
+    const joining = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+    try {
+      await vi.waitFor(() => expect(sockets).toHaveLength(1));
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(client.getSnapshot().connection.status).toBe("joining");
+      await vi.advanceTimersByTimeAsync(8500);
+      await expect(joining).resolves.toBeUndefined();
+      expect(sockets).toHaveLength(2);
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ event: "sync_dial_timeout" }));
+    } finally {
+      client.dispose();
+      await joining;
+    }
+  });
+
+  it("still fails within the default budget when every upgrade stalls", async () => {
+    browser();
+    vi.stubGlobal(
+      "WebSocket",
+      class extends EventTarget {
+        send() {}
+        close() {}
+      },
+    );
+    vi.useFakeTimers();
+    const client = makeClient(async () => accessGrant(), null);
+    const joining = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+    try {
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(client.getSnapshot().connection.status).toBe("joining");
+      await vi.advanceTimersByTimeAsync(2);
+      expect(await joining).toMatchObject({ code: "connection.sync_hello_timeout", sync: { stage: "upgrade", opened: false } });
+      expect(client.getSnapshot().connection.status).toBe("failed");
+    } finally {
+      client.dispose();
+      await joining;
+    }
+  });
+
   it.each([
     {
       stage: "rejected token",
@@ -392,7 +437,7 @@ function accessGrant() {
     media: { token: token("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
   };
 }
-async function liveBrowser(invalidRecoverySnapshot = false) {
+async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number } = {}) {
   browser();
   vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   const control: V1ControlState = {
@@ -412,12 +457,17 @@ async function liveBrowser(invalidRecoverySnapshot = false) {
   const head = { revision: 1, state_schema_version: 1, state_digest: digest };
   const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
   const sockets: EventTarget[] = [];
-  class ProtocolSocket extends SilentSocket {
+  class ProtocolSocket extends EventTarget {
     constructor() {
       super();
       sockets.push(this);
+      if (network.stallFirstUpgrade && sockets.length === 1) return;
+      const open = () => this.dispatchEvent(new Event("open"));
+      if (network.upgradeDelayMs) setTimeout(open, network.upgradeDelayMs);
+      else queueMicrotask(open);
     }
-    override send(data?: string) {
+    close() {}
+    send(data?: string) {
       if (!data || JSON.parse(data).type !== "hello") return;
       this.dispatchEvent(
         new MessageEvent("message", {
