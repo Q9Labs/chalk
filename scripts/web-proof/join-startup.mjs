@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { build } from "tsup";
 import { chromium, devices } from "playwright";
 
@@ -15,6 +15,12 @@ const lifecycle = "sdks/typescript/client/src/connection/lifecycle.ts";
 const surface = "sdks/typescript/react/src/components/chalk/StatusSurface.tsx";
 const diagnostics = "sdks/typescript/client/src/sync/connect-diagnostics.ts";
 const transport = "sdks/typescript/client/src/sync/v1-client.ts";
+const baselineSources = Object.fromEntries([lifecycle, surface, diagnostics, transport].map((path) => [basename(path), path]));
+async function readFrames(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString());
+}
 const baseline = execFileSync("git", ["merge-base", "HEAD", "origin/master"], { encoding: "utf8" }).trim();
 await writeFile(resolve(output, "revision.json"), JSON.stringify({ head: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), baseline }, null, 2));
 const entry = resolve(output, "page.tsx");
@@ -98,7 +104,7 @@ try {
                 name: "baseline",
                 setup(builder) {
                   builder.onLoad({ filter: /(?:connection\/lifecycle\.ts|chalk\/StatusSurface\.tsx|sync\/(?:connect-diagnostics|v1-client)\.ts)$/ }, ({ path }) => ({
-                    contents: execFileSync("git", ["show", `${baseline}:${path.endsWith("lifecycle.ts") ? lifecycle : path.endsWith("StatusSurface.tsx") ? surface : path.endsWith("v1-client.ts") ? transport : diagnostics}`], { encoding: "utf8" }),
+                    contents: execFileSync("git", ["show", `${baseline}:${baselineSources[basename(path)]}`], { encoding: "utf8" }),
                     loader: path.endsWith("tsx") ? "tsx" : "ts",
                   }));
                 },
@@ -113,6 +119,7 @@ try {
     async function runCase(scenario, device, trial = 0) {
       let attempts = 0;
       const lossPattern = scenario === "lossy-stalled" ? (trial % 2 === 0 ? ["close", "stall", "close", "open"] : ["close", "stall", "close", "stall", "close", "open"]) : { retry: ["stall", "open"], offline: ["stall"], rejected: ["close"] }[scenario];
+      const upgradeDelayMs = scenario === "lossy-stalled" ? (trial % 3 === 0 ? 1600 : 600) : 8000;
       let fastCloses = 0;
       const fastCloseDelaysMs = [];
       let stalledDials = 0;
@@ -124,9 +131,7 @@ try {
           response.setHeader("Content-Type", "text/javascript");
           response.end(bundle);
         } else if (request.url === "/frames") {
-          const chunks = [];
-          for await (const chunk of request) chunks.push(chunk);
-          frames = JSON.parse(Buffer.concat(chunks).toString());
+          frames = await readFrames(request);
           response.end("ok");
         } else if (request.url.includes("/publications")) {
           response.setHeader("Content-Type", "application/json");
@@ -195,7 +200,7 @@ try {
               }
             });
           },
-          scenario === "lossy-stalled" ? (trial % 3 === 0 ? 1600 : 600) : 8000,
+          upgradeDelayMs,
         );
         timers.add(timer);
       });
