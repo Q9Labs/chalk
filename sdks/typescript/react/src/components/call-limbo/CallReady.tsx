@@ -58,7 +58,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
         </button>
       </div>
       <p className="mr-1 text-[13px] text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
-      <div data-part="ready-link" style={{ borderRadius: 999 }} className="mt-3 flex h-11 items-center justify-between gap-2 bg-[var(--chalk-raised)] pl-3.5 pr-1 font-medium">
+      <div data-part="ready-link" style={{ borderRadius: 999 }} className="mt-3 flex h-11 items-center justify-between gap-2 bg-[var(--chalk-hover)] pl-3.5 pr-1 font-medium">
         <span className="min-w-0 truncate">{link.replace(/^https?:\/\//, "")}</span>
         <span className="flex gap-0.5">
           <button type="button" className="chalk-copy" aria-label={showQR ? "Hide QR code" : "Show QR code"} aria-expanded={showQR} aria-controls={`${id}-qr`} onClick={() => setShowQR(!showQR)}>
@@ -106,8 +106,8 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       aria-labelledby={id}
       aria-hidden={!open}
       inert={!open}
-      style={{ borderRadius: 16, opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
-      className="absolute bottom-[76px] left-5 z-40 w-80 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
+      style={{ opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
+      className="absolute bottom-[76px] left-5 z-40 w-80 rounded-xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] shadow-[0_12px_32px_var(--chalk-menu-shadow-color)] pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
     >
       {content}
     </section>

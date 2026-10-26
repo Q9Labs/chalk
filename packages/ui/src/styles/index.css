@@ -1866,7 +1866,7 @@
     opacity 0.2s var(--chalk-ease-out-expo),
     transform 0.2s var(--chalk-ease-out-expo);
 }
-.chalk-sheet[data-variant="details"] {
+.chalk-sheet:is([data-variant="details"], [data-variant="ready"]) {
   max-height: 88%;
   overflow: auto;
   padding: 8px 14px 42px;
@@ -1886,7 +1886,7 @@
   padding: 2px 0 4px 10px;
   font-size: 15px;
 }
-.chalk-sheet[data-variant="details"]:is([data-starting-style], [data-ending-style]) {
+.chalk-sheet:is([data-variant="details"], [data-variant="ready"]):is([data-starting-style], [data-ending-style]) {
   opacity: 0;
   transform: translateY(32px);
 }
