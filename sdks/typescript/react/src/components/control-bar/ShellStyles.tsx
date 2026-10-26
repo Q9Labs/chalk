@@ -99,6 +99,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   font-weight: 600;
   white-space: nowrap;
 }
+.chalk-shell-record-slot {
+  width: 44px;
+  height: 44px;
+}
 .chalk-shell-gap {
   width: 8px;
 }
