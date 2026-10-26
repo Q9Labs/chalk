@@ -175,6 +175,7 @@ type routeMatrixFixture struct {
 
 func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments.Subject) routeMatrixFixture {
 	t.Helper()
+	mustExec(t, tx, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(own.TenantID), uuid(foreign.TenantID))
 	q := sqlc.New(tx)
 	tenantRepo := NewTenantRepository(q)
 	membershipRepo := NewMembershipRepository(q, tx)
