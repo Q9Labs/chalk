@@ -1,4 +1,5 @@
-import { createContext, Fragment, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, createRef, Fragment, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { StyleSheet, View } from "react-native";
 
 /** Layers above the call, bottom to top. Sheets sit under the limbo and status overlays; menus and toasts sit above everything. */
 export type PortalLayer = "sheets" | "menus" | "toasts";
@@ -6,6 +7,7 @@ export type PortalLayer = "sheets" | "menus" | "toasts";
 type Entry = { readonly key: number; readonly node: ReactNode };
 
 type PortalStore = {
+  readonly menuHost: RefObject<View | null>;
   readonly set: (layer: PortalLayer, key: number, node: ReactNode) => void;
   readonly remove: (layer: PortalLayer, key: number) => void;
   readonly subscribe: (listener: () => void) => () => void;
@@ -20,6 +22,7 @@ function createPortalStore(): PortalStore {
     for (const listener of listeners) listener();
   };
   return {
+    menuHost: createRef<View>(),
     set(layer, key, node) {
       const current = layers[layer];
       const index = current.findIndex((entry) => entry.key === key);
@@ -52,6 +55,10 @@ function usePortalStore(): PortalStore {
   return store;
 }
 
+export function useMenuHostRef(): RefObject<View | null> {
+  return usePortalStore().menuHost;
+}
+
 let nextKey = 0;
 
 /**
@@ -75,12 +82,13 @@ export function Portal({ layer, children }: { readonly layer: PortalLayer; reado
 
 export function PortalHost({ layer }: { readonly layer: PortalLayer }): React.JSX.Element {
   const entries = usePortalEntries(layer);
+  const hostRef = useMenuHostRef();
+  const content = entries.map((entry) => <Fragment key={entry.key}>{entry.node}</Fragment>);
+  if (layer !== "menus") return <>{content}</>;
   return (
-    <>
-      {entries.map((entry) => (
-        <Fragment key={entry.key}>{entry.node}</Fragment>
-      ))}
-    </>
+    <View collapsable={false} pointerEvents="box-none" ref={hostRef} style={StyleSheet.absoluteFill}>
+      {content}
+    </View>
   );
 }
 
