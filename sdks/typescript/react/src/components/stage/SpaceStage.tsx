@@ -61,7 +61,7 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
             onChangeShare={item.participant.isLocal ? onChangeShare : undefined}
             switcher={
               shares.length > 1 ? (
-                <div role="group" aria-label="Whose screen is big" className={cn("absolute left-2 z-30 flex rounded-[999px] bg-[rgba(12,14,18,.82)] p-[3px]", item.participant.screenShareState === "low-quality" ? "top-11" : "top-2")}>
+                <div role="group" aria-label="Whose screen is big" className={cn("absolute left-2 z-30 flex rounded-[999px] bg-[var(--chalk-overlay-strong)] p-[3px]", item.participant.screenShareState === "low-quality" ? "top-11" : "top-2")}>
                   {shares.map((share) => (
                     <button
                       key={share.id}

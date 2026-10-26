@@ -133,7 +133,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       corner={
         <>
           {showStatus && hasPoorConnection ? (
-            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
+            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[var(--chalk-overlay)] px-[7px]">
               <SignalBars />
             </span>
           ) : null}
@@ -141,7 +141,11 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
               <ChalkMenu
                 trigger={
-                  <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
+                  <button
+                    type="button"
+                    aria-label={`More options for ${participant.displayName}`}
+                    className="grid h-8 w-8 place-items-center rounded-full bg-[var(--chalk-overlay)] text-white outline-none hover:bg-[var(--chalk-overlay-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"
+                  >
                     <StageIcon name="more" size={18} />
                   </button>
                 }
