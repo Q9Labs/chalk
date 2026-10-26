@@ -52,6 +52,13 @@ func TestAuthorizationRouteMatrix(t *testing.T) {
 	foreign := chatAttachmentQuotaFixture(ctx, t, tx)(true)
 	fixture := newRouteMatrixFixture(t, tx, own, foreign)
 	router := httpapi.NewRouter(fixture.options)
+	control := httptest.NewRequest(http.MethodGet, "/v1/tenants/"+own.TenantID.String(), nil)
+	control = control.WithContext(authentication.ContextWithPrincipal(control.Context(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: fixture.ownerID}))
+	controlResponse := httptest.NewRecorder()
+	router.ServeHTTP(controlResponse, control)
+	if controlResponse.Code != http.StatusOK {
+		t.Fatalf("owner credential positive control: %d %s", controlResponse.Code, controlResponse.Body.String())
+	}
 	mounted := matrixMountedRoutes(t, router)
 	for route := range mounted {
 		row, covered := matrix[route]
@@ -226,11 +233,11 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		t.Fatal(err)
 	}
 	fixture.attachmentID, fixture.uploadID = reservation.Upload.AttachmentID, reservation.Upload.UploadID
-	mustExec(t, tx, `update sync_chat_attachments set status='ready',immutable_object_identity='matrix-private-object' where attachment_id=$1`, uuid(fixture.attachmentID))
+	mustExec(t, tx, `update sync_chat_attachments set status='ready',immutable_object_identity='matrix-private-object',finalized_at=now() where attachment_id=$1`, uuid(fixture.attachmentID))
 	fixture.fileID = "matrix-private-file-" + foreign.ParticipantID.String()
 	sceneID := accountTenantIntegrationID(t)
 	mustExec(t, tx, `insert into sync_whiteboard_scenes(tenant_id,space_id,episode_id,scene_id) values($1,$2,$3,$4)`, uuid(foreign.TenantID), uuid(foreign.SpaceID), uuid(foreign.EpisodeID), uuid(sceneID))
-	mustExec(t, tx, `insert into sync_whiteboard_files(upload_id,tenant_id,space_id,episode_id,scene_id,participant_id,participant_generation,file_id,object_key,mime_type,byte_length,sha256,status,immutable_object_identity,expires_at) values($1,$2,$3,$4,$5,$6,1,$7,'matrix-private-whiteboard-object-'||$7,'image/png',1,decode(repeat('00',32),'hex'),'ready','matrix-private-identity',now()+interval '1 hour')`, uuid(accountTenantIntegrationID(t)), uuid(foreign.TenantID), uuid(foreign.SpaceID), uuid(foreign.EpisodeID), uuid(sceneID), uuid(foreign.ParticipantID), fixture.fileID)
+	mustExec(t, tx, `insert into sync_whiteboard_files(upload_id,tenant_id,space_id,episode_id,scene_id,participant_id,participant_generation,file_id,object_key,mime_type,byte_length,sha256,status,immutable_object_identity,finalized_at,expires_at) values($1,$2,$3,$4,$5,$6,1,$7,'matrix-private-whiteboard-object-'||$7,'image/png',1,decode(repeat('00',32),'hex'),'ready','matrix-private-identity',now(),now()+interval '1 hour')`, uuid(accountTenantIntegrationID(t)), uuid(foreign.TenantID), uuid(foreign.SpaceID), uuid(foreign.EpisodeID), uuid(sceneID), uuid(foreign.ParticipantID), fixture.fileID)
 	t.Cleanup(func() {
 		_, _ = tx.Exec(context.Background(), `delete from sync_whiteboard_files where tenant_id=$1`, uuid(foreign.TenantID))
 		_, _ = tx.Exec(context.Background(), `delete from sync_whiteboard_scenes where tenant_id=$1`, uuid(foreign.TenantID))
