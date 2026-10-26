@@ -5,7 +5,6 @@ import { CallCardStyles } from "../call-card/CallCardStyles";
 import { useCan, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { MicrophoneOff01Icon, Search01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
-import { Avatar } from "../atomic/Avatar";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
 import { ParticipantRow } from "./participant-row";
 import { useParticipantVolumeContext } from "./participant-volume-context";
@@ -100,7 +99,6 @@ export const ParticipantsPanelSurface = React.memo(
     const [muting, setMuting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const filtered = participants.filter((person) => person.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-    const raised = participants.filter((person) => person.isHandRaised);
     const unmutedCount = participants.filter((person) => !person.isLocal && !person.isMuted).length;
     const muteEveryone = async () => {
       if (!onMuteEveryone || muting) return;
@@ -151,19 +149,6 @@ export const ParticipantsPanelSurface = React.memo(
         {canManageAdmission && admissionEnabled && admissionCount > 0 ? (
           <>
             <AdmissionPanel inline />
-            <h3 className="call-people-section">In the call</h3>
-          </>
-        ) : null}
-        {!query && raised.length > 1 ? (
-          <>
-            <h3 className="call-people-section">Raised hands</h3>
-            {raised.map((person) => (
-              <div className="call-raised-row" key={person.id}>
-                {person.handOrder !== undefined ? <span className="call-hand-number">{person.handOrder}</span> : null}
-                <Avatar name={person.displayName} src={person.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" />
-                <bdi className="min-w-0 flex-1 truncate">{person.displayName}</bdi>
-              </div>
-            ))}
             <h3 className="call-people-section">In the call</h3>
           </>
         ) : null}
