@@ -181,13 +181,13 @@ it(
 );
 
 it(
-  "lets a host admit a knock and hides host controls from a guest",
+  "lets a host let a knock in and hides host controls from a guest",
   async () =>
     journey(async (page) => {
       await openPeople(page, "card-knocks");
       await capture(page, "laptop-knocks-dark");
-      await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).click();
-      await page.getByRole("button", { name: "Admit Rania Aziz", exact: true }).waitFor({ state: "detached" });
+      await page.getByRole("button", { name: "Let Rania Aziz in", exact: true }).click();
+      await page.getByRole("button", { name: "Let Rania Aziz in", exact: true }).waitFor({ state: "detached" });
       await openPeople(page, "card-guest");
       expect(await page.getByRole("button", { name: "Mute everyone", exact: true }).count()).toBe(0);
       expect(await page.getByRole("button", { name: "Who can join", exact: true }).count()).toBe(0);
