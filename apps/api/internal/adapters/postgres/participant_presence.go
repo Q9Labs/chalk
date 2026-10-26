@@ -22,6 +22,13 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 	if err != nil {
 		return 0, fmt.Errorf("claim expired participant presence: %w", err)
 	}
+	// The API is now an entry-aware Leave writer too. The rollout barrier
+	// rejects legacy writers once confirmed entry generations are in use.
+	if len(rooms) > 0 {
+		if _, err := tx.Exec(ctx, "select set_config('chalk.entry_writer', '1', true)"); err != nil {
+			return 0, fmt.Errorf("authorize participant presence leave writer: %w", err)
+		}
+	}
 	count := 0
 	for _, room := range rooms {
 		tenantID, spaceID, episodeID := utilities.IDFromBytes(room.TenantID.Bytes), utilities.IDFromBytes(room.SpaceID.Bytes), utilities.IDFromBytes(room.EpisodeID.Bytes)

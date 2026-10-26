@@ -4742,4 +4742,3 @@ create table participant_presence_leases (
         references participants(tenant_id, space_id, episode_id, id) on delete cascade
 );
 create index participant_presence_leases_expiry_idx on participant_presence_leases(expires_at);
-
