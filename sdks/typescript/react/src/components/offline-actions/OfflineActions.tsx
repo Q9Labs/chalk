@@ -22,7 +22,7 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false, ha
   const pending = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"}` : null;
   const slow = !reconnecting && connection.syncHealth === "degraded";
   if (hasNotice) return null;
-  if (reconnecting && reconnectingNoticeDue) return <ReconnectingCard {...offlineNotice(online, pending)} offline={!online} />;
+  if (reconnecting && reconnectingNoticeDue) return <ReconnectingCard {...offlineNotice(online, pending)} />;
   if (slow)
     return (
       <div role="status" data-part="connection-notice" style={{ pointerEvents: "none" }} className="absolute inset-x-4 top-16 z-50 mx-auto w-fit max-w-[calc(100%_-_2rem)] rounded-full bg-[var(--chalk-surface)] px-3 py-1 text-center text-sm text-[var(--chalk-text)]">
