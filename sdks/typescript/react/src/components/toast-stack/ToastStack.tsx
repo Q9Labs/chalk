@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { memo, useLayoutEffect, useRef, useState, type RefObject, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { ChalkToast, type ChalkToastProps } from "../chalk-ui/ChalkToast";
 import { cn } from "../../utils/cn";
@@ -12,6 +12,7 @@ export interface ToastStackProps {
   readonly onDismiss: (id: string) => void;
   readonly maxVisible?: number;
   readonly className?: string;
+  readonly children?: ReactNode;
   /**
    * Called with the ids of the notices the stage has no room for, so the host can offer them elsewhere, such as from the header.
    * With it, a call shorter than `FOLD_BELOW_PX` folds every notice. Taller calls fold notices past `maxVisible` or outside the available band, announcing each folded message once.
@@ -24,7 +25,7 @@ export interface ToastStackProps {
  * 8px gaps), and the 242px the open drawing tools lift notices by, 611px in all.
  */
 export const FOLD_BELOW_PX = 620;
-export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisible = 3, className, onFold }: ToastStackProps) {
+export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisible = 3, className, onFold, children }: ToastStackProps) {
   const stack = useRef<HTMLDivElement>(null);
   const short = useShortCall(stack, onFold !== undefined);
   // Until the call's height is known, a folding stack shows nothing, so no notice mounts and then folds.
@@ -90,6 +91,7 @@ export const ToastStack = memo(function ToastStack({ toasts, onDismiss, maxVisib
         {shown.map((toast) => (
           <ChalkToast key={toast.id} {...toast} announce={toast.announcementText === undefined && noticeAnnouncement(toast) === ""} onDismiss={() => onDismiss(toast.id)} />
         ))}
+        {children}
       </div>
       {/* Text speech is independent of presentation. Opaque messages without speech text keep their visible live-region fallback. */}
       <div data-part="notice-announcer" className="sr-only">

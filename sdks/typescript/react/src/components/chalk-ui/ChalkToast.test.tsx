@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ChalkToast } from "./ChalkToast";
 
 it("derives live-region attributes from the current announce prop in both directions", async () => {
@@ -68,5 +68,32 @@ it("announces the next real message once after re-enabling announce", async () =
     observer.disconnect();
     await act(async () => root.unmount());
     container.remove();
+  }
+});
+
+it("fades info and success while warnings and errors wait for dismissal", async () => {
+  vi.useFakeTimers();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const dismiss = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        <>
+          {(["info", "success", "warning", "error"] as const).map((type) => (
+            <ChalkToast key={type} message={type} type={type} onDismiss={() => dismiss(type)} />
+          ))}
+        </>,
+      ),
+    );
+    expect(container.querySelectorAll('[data-part="toast-dismiss"]')).toHaveLength(2);
+    await act(async () => vi.advanceTimersByTime(5000));
+    await act(async () => vi.advanceTimersByTime(160));
+    expect(dismiss.mock.calls).toEqual([["info"], ["success"]]);
+    expect(container.querySelector('[data-type="warning"]')?.getAttribute("data-exiting")).toBeNull();
+    expect(container.querySelector('[data-type="error"]')?.getAttribute("data-exiting")).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
   }
 });

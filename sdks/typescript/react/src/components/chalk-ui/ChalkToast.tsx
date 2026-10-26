@@ -18,7 +18,7 @@ export interface ChalkToastProps {
   readonly announce?: boolean;
   readonly onDismiss: () => void;
 }
-export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
+export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" || type === "success" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const identity = noticeIdentity({ message, announcementText, announcementKey, type });

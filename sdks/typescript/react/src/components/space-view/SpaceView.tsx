@@ -26,6 +26,7 @@ import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
+import { MediaRequestDialog } from "../media-request-dialog/MediaRequestDialog";
 import { NoticeButton } from "../toast-stack/NoticeButton";
 import { BoardToastContext, type BoardToast } from "@q9labsai/chalk-whiteboard/react";
 import { CallCard } from "../call-card/CallCard";
@@ -132,6 +133,7 @@ export function SpaceView({
   const participantsSlice = useParticipants();
   const callLink = useCallLink(participantsSlice.roster.length <= 1);
   const media = useMedia();
+  const mediaRequest = media.incomingRequests[0];
   const connection = useConnection();
   const offline = useOffline();
   const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
@@ -387,7 +389,17 @@ export function SpaceView({
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
             </CallCard>
           }
-          toasts={<ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setFoldedNotices} />}
+          toasts={
+            <ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setFoldedNotices}>
+              {mediaRequest ? (
+                <MediaRequestDialog
+                  request={mediaRequest}
+                  onDecline={() => void runCommand(() => client.media.declineRequest(mediaRequest.requestId), mediaRequest.kind === "start_camera" ? "camera" : "microphone", "request")}
+                  onAllow={() => void runCommand(() => client.media.acceptRequest(mediaRequest.requestId), mediaRequest.kind === "start_camera" ? "camera" : "microphone", "request")}
+                />
+              ) : null}
+            </ToastStack>
+          }
           mediaOutput={
             <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
               <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
