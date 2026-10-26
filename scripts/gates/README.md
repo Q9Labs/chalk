@@ -126,17 +126,18 @@ The disposable machine is deleted when the command ends. Keep the single-worker
 settings above: the 4-vCPU / 8-GB machine has no room for extra workers.
 
 ```sh
-box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && GOTOOLCHAIN=auto pnpm gate:full'
-box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && apps/api/scripts/gate.sh'
-box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq ruby lsof && pnpm install --frozen-lockfile && scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
+box run -- 'bash scripts/gates/instabox-run.sh --browser'
+box run -- 'bash scripts/gates/instabox-run.sh apps/api/scripts/gate.sh'
+box run -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
 ```
 
+`scripts/gates/instabox-run.sh` installs locked dependencies and the missing Ruby/lsof
+helpers, enables the Go version in `apps/api/go.mod`, and puts test scratch on the
+20-GB data disk. The snapshot's 4-GB `/tmp` tmpfs cannot satisfy queue proofs'
+8-GB admission floor. `--browser` installs Chromium; no command means `pnpm gate:full`.
 The snapshot supplies Node, Go, Erlang/Elixir, OpenTofu, scanners, and Docker.
-The commands install Ruby for topology port allocation and lsof for process/port proofs,
-which the snapshot does not supply. `GOTOOLCHAIN=auto` lets Go use the version
-in `apps/api/go.mod` when the snapshot’s Go patch release is older.
-Versions are pinned in `.tool-versions`, `apps/api/go.mod`, and the CI setup actions;
-check those pins if a fresh snapshot cannot run a gate. PostgreSQL helpers own and
+Versions are pinned in `.tool-versions`, `apps/api/go.mod`, and the CI setup actions.
+PostgreSQL helpers own and
 clean up their task containers. Use `scripts/gates/with-postgres.sh --` for Sync
 runs; the API gate manages its own database. The root full gate selects both.
 For a focused browser/performance command, replace the final command in the first
