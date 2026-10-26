@@ -25,7 +25,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
-	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -176,10 +175,6 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	transcriptRepo := NewTranscriptRepositoryWithPool(q, tx)
 	transcriptService := transcripts.NewArtifactService(transcriptRepo, transcriptRepo)
 	storage := objectstorage.NewService(matrixObjectStore{})
-	objects, err := recordingobjects.NewService(storage, NewRecordingObjectRepository(q), recordingobjects.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +237,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		Spaces:      spaceService, Episodes: episodeService, ParticipantJoins: episodeService,
 		ParticipantMediaVerify: mediaVerifier, ParticipantMediaActive: active, ParticipantGeneration: active,
 		Recordings:            recordings.NewService(NewRecordingRepository(q)),
-		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithTransactor(tx)),
+		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithTransactor(lingerTestTransactor{tx})),
 		RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(nil), spaceService),
 		RecordingObjects:      objects, RecordingDownloads: storage, TranscriptArtifacts: transcriptService,
 		Webhooks:        webhooks.NewService(NewWebhookRepository(nil), nil),

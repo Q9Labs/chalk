@@ -44,10 +44,6 @@
     "sha256": "782e621852bbcd30e063f458820df252b2276da93c109a97ec2085767e856b38"
   },
   {
-    "id": "product-goals-polyglot-contracts",
-    "sha256": "4d6fe4f8063bf4d693c7550892eb0110826171bdf01f1b1627e8231cbe9df57f"
-  },
-  {
     "id": "product-goals-replaceable-media",
     "sha256": "458ad8d88d66eaa7e63724400e6a248a5d760f01e0f1dc6f22590e8629988c96"
   },
@@ -122,10 +118,6 @@
   {
     "id": "constraints-join-targets-the-space",
     "sha256": "79990504962e773db7f242b9bd318782c277ea7340e2c5da12a5263373206407"
-  },
-  {
-    "id": "constraints-one-tenancy-root",
-    "sha256": "02e4ce7488ea521e68df55f9e9b9a0ed562da34e219be80bcfa1108412c31601"
   },
   {
     "id": "constraints-space-and-episode-own-different-facts",

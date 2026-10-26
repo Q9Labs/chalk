@@ -101,7 +101,7 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 		}
 		parameters := make(map[string]bool)
 		for _, parameter := range contract.Parameters {
-			if parameter.Name == "" || parameter.Type == "" || (parameter.In != "path" && parameter.In != "query") {
+			if parameter.Name == "" || parameter.Type == "" || (parameter.In != "path" && parameter.In != "query" && parameter.In != "header") {
 				t.Errorf("%s: incomplete parameter metadata: %+v", key, parameter)
 			}
 			if parameter.In == "path" {
