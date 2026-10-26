@@ -197,10 +197,10 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	}
 	intentID := accountTenantIntegrationID(t)
 	mustExec(t, tx, `insert into sync_episode_control(tenant_id,space_id,episode_id,folded_state,state_schema_version,state_digest,snapshot_bytes) values($1,$2,$3,'{}',1,decode(repeat('00',32),'hex'),2) on conflict do nothing`, uuid(own.TenantID), uuid(own.SpaceID), uuid(own.EpisodeID))
-	mustExec(t, tx, `insert into sync_lifecycle_intents(tenant_id,space_id,episode_id,lifecycle_intent_id,request_key,request_fingerprint,intent_name,participant_id,participant_generation,payload,status,applied_event_id,applied_revision,completed_at) values($1,$2,$3,$4,$7,decode(repeat('00',32),'hex'),'participant_joined',$5,1,'{}','applied',$6,1,now())`, uuid(own.TenantID), uuid(own.SpaceID), uuid(own.EpisodeID), uuid(intentID), uuid(own.ParticipantID), uuid(accountTenantIntegrationID(t)), intentID.String())
-	t.Cleanup(func() {
-		_, _ = tx.Exec(context.Background(), `delete from sync_lifecycle_intents where lifecycle_intent_id=$1`, uuid(intentID))
-	})
+	eventID := accountTenantIntegrationID(t)
+	mustExec(t, tx, `insert into sync_lifecycle_intents(tenant_id,space_id,episode_id,lifecycle_intent_id,request_key,request_fingerprint,intent_name,participant_id,participant_generation,payload,status) values($1,$2,$3,$4,$6,decode(repeat('00',32),'hex'),'participant_joined',$5,1,'{}','pending')`, uuid(own.TenantID), uuid(own.SpaceID), uuid(own.EpisodeID), uuid(intentID), uuid(own.ParticipantID), intentID.String())
+	mustExec(t, tx, `insert into sync_control_events(tenant_id,space_id,episode_id,event_id,base_revision,revision,event_name,payload,lifecycle_intent_id,event_schema_version,resulting_state_digest,encoded_bytes) values($1,$2,$3,$4,0,1,'participant_joined','{}',$5,1,decode(repeat('00',32),'hex'),2)`, uuid(own.TenantID), uuid(own.SpaceID), uuid(own.EpisodeID), uuid(eventID), uuid(intentID))
+	mustExec(t, tx, `update sync_lifecycle_intents set status='applied',applied_event_id=$1,applied_revision=1,completed_at=now() where lifecycle_intent_id=$2`, uuid(eventID), uuid(intentID))
 	syncToken, err := signer.Issue(t.Context(), synctokens.Input{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, AdmissionLifecycleIntentID: intentID, DisplayName: "Matrix caller", Role: "collaborator", Capabilities: []string{"sendChat"}})
 	if err != nil {
 		t.Fatal(err)
@@ -312,14 +312,14 @@ func assertMatrixUploadBinding(t *testing.T, tx pgx.Tx, router http.Handler, req
 	}
 	// Strict JSON decoding must reject identity overrides before reserving data.
 	var before, after int
-	if err := tx.QueryRow(t.Context(), `select count(*) from sync_chat_attachments`).Scan(&before); err != nil {
+	if err := tx.QueryRow(t.Context(), `select count(*) from sync_chat_attachments where tenant_id in ($1,$2)`, uuid(fixture.own.TenantID), uuid(foreign.TenantID)).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"clientAttachmentId":"matrix-body-injection-0001","fileName":"note.txt","mimeType":"text/plain","byteLength":1,"sha256":"` + strings.Repeat("00", 32) + `","tenant_id":"` + foreign.TenantID.String() + `","space_id":"` + foreign.SpaceID.String() + `","episode_id":"` + foreign.EpisodeID.String() + `","participant_id":"` + foreign.ParticipantID.String() + `"}`
 	injection := httptest.NewRequest(http.MethodPost, request.URL.String(), strings.NewReader(body))
 	injection.Header.Set("Authorization", "Bearer "+fixture.syncToken)
 	assertMatrixDenial(t, router, injection, http.StatusBadRequest, fixture.forbiddenData())
-	if err := tx.QueryRow(t.Context(), `select count(*) from sync_chat_attachments`).Scan(&after); err != nil {
+	if err := tx.QueryRow(t.Context(), `select count(*) from sync_chat_attachments where tenant_id in ($1,$2)`, uuid(fixture.own.TenantID), uuid(foreign.TenantID)).Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if before != after {

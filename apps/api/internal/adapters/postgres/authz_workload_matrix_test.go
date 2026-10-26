@@ -89,7 +89,7 @@ func TestWorkloadAuthorizationRouteMatrix(t *testing.T) {
 				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 					t.Fatal(err)
 				}
-				if len(result.Assignments) != 1 || result.Assignments[0].JobID != jobID.String() || strings.Contains(response.Body.String(), otherJob.String()) {
+				if len(result.Assignments) != 1 || result.Assignments[0].JobID != jobID.String() || strings.Contains(response.Body.String(), otherJob.String()) || strings.Contains(response.Body.String(), "matrix-other-private") {
 					t.Fatalf("claim must expose only its assigned job, not another job: %s", response.Body.String())
 				}
 				return
@@ -193,8 +193,11 @@ func seedMatrixOtherJob(t *testing.T, tx pgx.Tx, jobID utilities.ID, cleanup boo
 	if cleanup {
 		mustExec(t, tx, `insert into transcription_cleanup_jobs(id,tenant_id,recording_id,transcript_id,object_key,object_kind,due_at,state,attempt_count,attempt_limit) select $1,tenant_id,recording_id,transcript_id,$2,object_kind,'2001-01-01','pending',0,4 from transcription_cleanup_jobs where id=$3`, uuid(id), "matrix-other-private-object-"+id.String(), uuid(jobID))
 	} else {
-		mustExec(t, tx, `update artifact_jobs set priority=1000000 where id=$1`, uuid(jobID))
-		mustExec(t, tx, `insert into artifact_jobs(id,idempotency_key,tenant_id,episode_id,recording_id,transcript_id,chunk_id,artifact_kind,payload_schema_version,state,available_at,attempt_count,attempt_limit,priority) select $1,$2,tenant_id,episode_id,recording_id,transcript_id,chunk_id,artifact_kind,1,'pending',available_at,0,4,999999 from artifact_jobs where id=$3`, uuid(id), "matrix-other-private-job-"+id.String(), uuid(jobID))
+		mustExec(t, tx, `update artifact_jobs set priority=100 where id=$1`, uuid(jobID))
+		mustExec(t, tx, `insert into artifact_jobs(id,idempotency_key,tenant_id,episode_id,recording_id,transcript_id,chunk_id,artifact_kind,payload_schema_version,state,available_at,attempt_count,attempt_limit,priority) select $1,$2,tenant_id,episode_id,recording_id,transcript_id,chunk_id,artifact_kind,1,'pending',available_at,0,4,99 from artifact_jobs where id=$3`, uuid(id), "matrix-other-private-job-"+id.String(), uuid(jobID))
+		chunkID := accountTenantIntegrationID(t)
+		mustExec(t, tx, `insert into transcript_chunks(id,transcript_id,tenant_id,chunk_index,generation,start_ms,end_ms,storage_key,result_key,checksum,size,content_type) select $1,c.transcript_id,c.tenant_id,c.chunk_index+1,c.generation,0,1000,$2,$3,c.checksum,c.size,c.content_type from transcript_chunks c join artifact_jobs j on j.chunk_id=c.id where j.id=$4`, uuid(chunkID), "matrix-other-private-source-"+id.String(), "matrix-other-private-result-"+id.String(), uuid(jobID))
+		mustExec(t, tx, `update artifact_jobs set chunk_id=$1 where id=$2 and chunk_id is not null`, uuid(chunkID), uuid(id))
 	}
 	return id
 }
@@ -203,7 +206,7 @@ func seedMatrixChunkSource(t *testing.T, tx pgx.Tx, transcriptID, jobID utilitie
 	t.Helper()
 	chunkID := accountTenantIntegrationID(t)
 	mustExec(t, tx, `insert into recording_transcription_sources(recording_id,tenant_id,manifest_key,manifest_sha256,manifest_size,manifest_content_type,schema_version,committed_at,generation,commit_digest,status,expires_at,lease_transcript_id,lease_expires_at) select recording_id,tenant_id,$2,decode(repeat('00',32),'hex'),1,'application/json',1,now(),1,decode(repeat('00',32),'hex'),'leased',now()+interval '1 hour',id,now()+interval '30 minutes' from transcriptions where id=$1`, uuid(transcriptID), "matrix-manifest-"+jobID.String())
-	mustExec(t, tx, `insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,identity_kind,track_class,storage_key,checksum,size,content_type) select $1,recording_id,tenant_id,0,1,0,1000,0,1000,'unknown','microphone',$2,decode(repeat('00',32),'hex'),1,'audio/flac' from transcriptions where id=$3`, uuid(chunkID), "matrix-source-"+jobID.String(), uuid(transcriptID))
+	mustExec(t, tx, `insert into transcript_chunks(id,transcript_id,tenant_id,chunk_index,generation,start_ms,end_ms,storage_key,result_key,checksum,size,content_type) select $1,id,tenant_id,0,1,0,1000,$2,$3,decode(repeat('00',32),'hex'),1,'audio/flac' from transcriptions where id=$4`, uuid(chunkID), "matrix-source-"+jobID.String(), "matrix-result-"+jobID.String(), uuid(transcriptID))
 	mustExec(t, tx, `update artifact_jobs set chunk_id=$1 where id=$2`, uuid(chunkID), uuid(jobID))
 	mustExec(t, tx, `update transcriptions set source_manifest_key=$1,source_expires_at=now()+interval '30 minutes' where id=$2`, "matrix-manifest-"+jobID.String(), uuid(transcriptID))
 }
