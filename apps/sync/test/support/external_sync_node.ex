@@ -25,6 +25,7 @@ defmodule ChalkSync.ExternalSyncNode do
 
   @impl GenServer
   def init(options) do
+    Process.flag(:trap_exit, true)
     app_dir = Keyword.fetch!(options, :app_dir)
     database_url = Keyword.fetch!(options, :database_url)
     port = Keyword.fetch!(options, :port)
@@ -37,7 +38,10 @@ defmodule ChalkSync.ExternalSyncNode do
         :exit_status,
         :stderr_to_stdout,
         {:args,
-         Enum.map(["run", "--no-start", "scripts/sync-node-local.exs"], &String.to_charlist/1)},
+         Enum.map(
+           ["run", "--no-start", Keyword.get(options, :script, "scripts/sync-node-local.exs")],
+           &String.to_charlist/1
+         )},
         {:cd, String.to_charlist(app_dir)},
         {:env,
          [
@@ -45,7 +49,7 @@ defmodule ChalkSync.ExternalSyncNode do
            {~c"CHALK_SYNC_TEST_DATABASE_URL", String.to_charlist(database_url)},
            {~c"CHALK_SYNC_NODE_PORT", port |> Integer.to_string() |> String.to_charlist()},
            {~c"CHALK_SYNC_NODE_ID", String.to_charlist(node_id)}
-         ]},
+         ] ++ Keyword.get(options, :env, [])},
         {:line, 16_384}
       ])
 
