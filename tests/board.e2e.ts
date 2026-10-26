@@ -52,6 +52,7 @@ async function settleStage(page: Page) {
 async function drawStroke(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const box = await page.evaluate(boardBox);
   if (!box) throw new Error("The board did not open");
+  if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
   await page.getByRole("button", { name: "Pen", exact: true }).click();
   await page.mouse.move(box.x + box.width * from.x, box.y + box.height * from.y);
   await page.mouse.down();
