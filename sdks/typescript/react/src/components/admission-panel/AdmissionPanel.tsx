@@ -4,6 +4,7 @@ import { useCan, useParticipants, useSpaceClient } from "../../bindings/hooks";
 import { cn } from "../../utils/cn";
 import { Cancel01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
+import { ChalkButton } from "../chalk-ui";
 
 export interface AdmissionParticipant {
   id: string;
@@ -27,15 +28,6 @@ interface AdmissionPanelSurfaceProps extends AdmissionPanelProps {
   readonly onAdmitAll?: () => void | Promise<void>;
   readonly onDenyAll?: () => void | Promise<void>;
 }
-
-const TEXT_BUTTON_CLASS =
-  "inline-flex h-7 items-center rounded-[6px] px-2 text-xs font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] disabled:opacity-50";
-
-const LET_IN_BUTTON_CLASS =
-  "inline-flex h-8 items-center rounded-[8px] border border-transparent bg-[var(--chalk-app-control-active)] px-3 text-[13px] font-semibold text-[var(--chalk-app-control-active-text)] transition-colors hover:border-[var(--chalk-app-control-active-line)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] disabled:opacity-50";
-
-const DECLINE_BUTTON_CLASS =
-  "inline-flex h-8 items-center rounded-[8px] border border-[var(--chalk-app-line-strong)] px-3 text-[13px] font-semibold text-[var(--chalk-app-text-muted)] transition-colors hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)] disabled:opacity-50";
 
 function getWaitingLabel(joinedAt?: Date): string {
   if (!joinedAt) return "Wants to join";
@@ -83,14 +75,14 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           <div className="flex items-center gap-1">
             {loading ? <Spinner size="sm" aria-label="Updating requests" /> : null}
             {pending > 1 && onDenyAll ? (
-              <button type="button" disabled={busy || loading} onClick={() => void perform(onDenyAll)} className={TEXT_BUTTON_CLASS}>
+              <ChalkButton variant="ghost" className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(onDenyAll)}>
                 Decline all
-              </button>
+              </ChalkButton>
             ) : null}
             {pending > 1 && onAdmitAll ? (
-              <button type="button" disabled={busy || loading} onClick={() => void perform(onAdmitAll)} className={TEXT_BUTTON_CLASS}>
+              <ChalkButton className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(onAdmitAll)}>
                 Let everyone in
-              </button>
+              </ChalkButton>
             ) : null}
           </div>
         </div>
@@ -112,12 +104,12 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
                 <p className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(participant.joinedAt)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button type="button" disabled={busy || loading} onClick={() => void perform(() => onAdmit(participant.id))} className={LET_IN_BUTTON_CLASS} aria-label={`Let ${participant.displayName} in`}>
-                  Let in
-                </button>
-                <button type="button" disabled={busy || loading} onClick={() => void perform(() => onDeny(participant.id))} className={DECLINE_BUTTON_CLASS} aria-label={`Decline ${participant.displayName}`}>
+                <ChalkButton variant="ghost" className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(() => onDeny(participant.id))} aria-label={`Decline ${participant.displayName}`}>
                   Decline
-                </button>
+                </ChalkButton>
+                <ChalkButton variant="solid" className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(() => onAdmit(participant.id))} aria-label={`Let ${participant.displayName} in`}>
+                  Let in
+                </ChalkButton>
               </div>
             </li>
           ))
