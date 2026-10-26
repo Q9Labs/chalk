@@ -1652,6 +1652,10 @@
 .chalk-frame-overlays > * {
   pointer-events: auto;
 }
+/* The notice wrapper spans the call; only the notice inside it takes clicks. */
+.chalk-frame-overlays > .chalk-toasts {
+  pointer-events: none;
+}
 .chalk-frame[data-idle="true"] :is(.chalk-frame-header, .chalk-frame-dock) {
   opacity: 0;
   pointer-events: none;
