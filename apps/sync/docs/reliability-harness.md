@@ -41,6 +41,10 @@ the correctness oracle. Release CI runs it for at least five minutes.
 `correctness` profile through the full Sync gate. It reuses `ExternalSyncNode`,
 the v1 wire client, the Postgres fixtures, and the Stateholder fault hooks.
 It has no topology tag, external provider dependency, or in-memory storage.
+The five tests took 13.3 seconds on Instabox, including 20 Sync process starts.
+That is test time, not machine provisioning, dependency download, or compilation
+time. This is small enough for the existing PR gate rather than the nightly
+topology profile.
 
 The boundaries follow the actual transaction, not three independent writes:
 
@@ -59,9 +63,9 @@ case kills only after the client reads its receipt. No sleep chooses a kill poin
 
 The join journey also kills after lifecycle event insertion, intent
 application, webhook production, and commit. It requires exactly one lifecycle
-event, webhook Event, and queued delivery, then redelivers the same intent and
-compares the durable rows. This checks webhook production, not HTTP delivery
-by the separate API worker.
+event, webhook Event, and queued delivery. The test then redelivers the same
+intent and compares the durable rows. This checks join and webhook production,
+not provider-side leave or end operations, or HTTP delivery by the API worker.
 
 The source rules are `AGENTS.md` (Postgres authority), `README.md` (Durable
 architecture and Lifecycle), and `../../../theory.md` (Sync authority).

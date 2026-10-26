@@ -1,6 +1,7 @@
 defmodule ChalkSync.Reliability.RecoveryContractTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Episodes.Reducer
   alias ChalkSync.ExternalSyncNode
   alias ChalkSync.Reliability.Wire
   alias ChalkSync.Stateholder.Postgres
@@ -83,6 +84,16 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
     assert participant["participant_id"] == fixture.identity.participant_id
     assert participant["hand_raised"] == not committed
     assert welcome["snapshot"]["state_digest"] == welcome["head"]["state_digest"]
+
+    assert {:ok, recovered_state} =
+             Reducer.from_snapshot(
+               fixture.episode.episode_id,
+               Map.delete(welcome["snapshot"], "state_digest")
+             )
+
+    assert Base.encode16(Reducer.digest(recovered_state), case: :lower) ==
+             welcome["head"]["state_digest"]
+
     unless committed, do: assert(welcome["head"]["state_digest"] == anchor["ack"]["state_digest"])
 
     # A second command, acknowledged before every crash, must never disappear.
@@ -130,7 +141,10 @@ defmodule ChalkSync.Reliability.RecoveryContractTest do
       assert :ok = ExternalSyncNode.kill(node)
       Client.close_tcp(client)
       {restarted, port} = start_node(:none, intent_id, barrier_port)
-      {client, _welcome} = Wire.connect_v1(port, fixture.identity)
+      {client, welcome} = Wire.connect_v1(port, fixture.identity)
+      assert welcome["head"]["revision"] == 1
+      assert [%{"participant_id" => participant_id}] = welcome["snapshot"]["participants"]
+      assert participant_id == fixture.identity.participant_id
       Client.close_tcp(client)
 
       await_applied(connection, fixture.episode, intent_id, 100)
