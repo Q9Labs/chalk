@@ -73,7 +73,7 @@ func TestWorkloadAuthorizationRouteMatrix(t *testing.T) {
 				} else if strings.Contains(route, "/finalize/") {
 					seedClaimableTranscriptChunk(t, ctx, tx, transcriptID)
 				}
-				otherJob := seedMatrixOtherJob(t, tx, jobID, strings.Contains(route, "/cleanup/"))
+				otherData := seedMatrixOtherJob(t, tx, jobID, strings.Contains(route, "/cleanup/"))
 				response := httptest.NewRecorder()
 				valid := request()
 				matrixSignWorkload(t, valid, body, "transcription-dispatcher")
@@ -89,8 +89,13 @@ func TestWorkloadAuthorizationRouteMatrix(t *testing.T) {
 				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 					t.Fatal(err)
 				}
-				if len(result.Assignments) != 1 || result.Assignments[0].JobID != jobID.String() || strings.Contains(response.Body.String(), otherJob.String()) || strings.Contains(response.Body.String(), "matrix-other-private") {
+				if len(result.Assignments) != 1 || result.Assignments[0].JobID != jobID.String() {
 					t.Fatalf("claim must expose only its assigned job, not another job: %s", response.Body.String())
+				}
+				for _, private := range otherData {
+					if strings.Contains(response.Body.String(), private) {
+						t.Fatalf("claim exposed another job's data %q: %s", private, response.Body.String())
+					}
 				}
 				return
 			}
@@ -187,9 +192,10 @@ func seedMatrixCleanupJob(t *testing.T, tx pgx.Tx, transcriptID utilities.ID) ut
 	return id
 }
 
-func seedMatrixOtherJob(t *testing.T, tx pgx.Tx, jobID utilities.ID, cleanup bool) utilities.ID {
+func seedMatrixOtherJob(t *testing.T, tx pgx.Tx, jobID utilities.ID, cleanup bool) []string {
 	t.Helper()
 	id := accountTenantIntegrationID(t)
+	private := []string{id.String(), "matrix-other-private"}
 	if cleanup {
 		mustExec(t, tx, `insert into transcription_cleanup_jobs(id,tenant_id,recording_id,transcript_id,object_key,object_kind,due_at,state,attempt_count,attempt_limit) select $1,tenant_id,recording_id,transcript_id,$2,object_kind,'2001-01-01','pending',0,4 from transcription_cleanup_jobs where id=$3`, uuid(id), "matrix-other-private-object-"+id.String(), uuid(jobID))
 	} else {
@@ -199,8 +205,21 @@ func seedMatrixOtherJob(t *testing.T, tx pgx.Tx, jobID utilities.ID, cleanup boo
 		mustExec(t, tx, `insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,identity_kind,track_class,storage_key,checksum,size,content_type) select $1,c.recording_id,c.tenant_id,c.chunk_index+1,c.generation,0,1000,0,1000,'unknown','microphone',$2,c.checksum,c.size,c.content_type from recording_transcription_source_chunks c join artifact_jobs j on j.chunk_id=c.id where j.id=$3`, uuid(chunkID), "matrix-other-private-source-"+id.String(), uuid(jobID))
 		mustExec(t, tx, `insert into transcript_chunks(id,transcript_id,tenant_id,chunk_index,generation,start_ms,end_ms,storage_key,result_key,checksum,size,content_type) select $1,c.transcript_id,c.tenant_id,c.chunk_index+1,c.generation,0,1000,$2,$3,c.checksum,c.size,c.content_type from transcript_chunks c join artifact_jobs j on j.chunk_id=c.id where j.id=$4`, uuid(chunkID), "matrix-other-private-source-"+id.String(), "matrix-other-private-result-"+id.String(), uuid(jobID))
 		mustExec(t, tx, `update artifact_jobs set chunk_id=$1 where id=$2 and chunk_id is not null`, uuid(chunkID), uuid(id))
+		var kind string
+		if err := tx.QueryRow(t.Context(), `select artifact_kind from artifact_jobs where id=$1`, uuid(id)).Scan(&kind); err != nil {
+			t.Fatal(err)
+		}
+		if kind == "transcription_finalize" {
+			recordingID, transcriptID := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+			mustExec(t, tx, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,completed_at) select $1,r.tenant_id,r.space_id,r.episode_id,'completed','r2',now() from recordings r join artifact_jobs j on j.recording_id=r.id where j.id=$2`, uuid(recordingID), uuid(id))
+			mustExec(t, tx, `insert into transcriptions(id,tenant_id,recording_id,space_id,episode_id,status,languages) select $1,t.tenant_id,$2,t.space_id,t.episode_id,'verifying',t.languages from transcriptions t join artifact_jobs j on j.transcript_id=t.id where j.id=$3`, uuid(transcriptID), uuid(recordingID), uuid(id))
+			mustExec(t, tx, `update artifact_jobs set recording_id=$1,transcript_id=$2 where id=$3`, uuid(recordingID), uuid(transcriptID), uuid(id))
+			seedClaimableTranscriptChunk(t, t.Context(), tx, transcriptID)
+			mustExec(t, tx, `update transcription_chunk_results set result_key=$1 where chunk_id in(select id from transcript_chunks where transcript_id=$2)`, "matrix-other-private-result-"+id.String(), uuid(transcriptID))
+			private = append(private, recordingID.String(), transcriptID.String())
+		}
 	}
-	return id
+	return private
 }
 
 func seedMatrixChunkSource(t *testing.T, tx pgx.Tx, transcriptID, jobID utilities.ID) {

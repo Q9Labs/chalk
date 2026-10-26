@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -151,6 +152,9 @@ func assertMatrixDenial(t *testing.T, router http.Handler, request *http.Request
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&envelope); err != nil || envelope.Error.Code == "" || envelope.Error.Message == "" {
 		t.Fatalf("denial must contain only a typed error, not resource data: %s (%v)", response.Body.String(), err)
+	}
+	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
+		t.Fatalf("denial has trailing content: %s", response.Body.String())
 	}
 	if status == http.StatusConflict && envelope.Error.Code != "lease.stale" {
 		t.Fatalf("foreign lease error = %q, want lease.stale", envelope.Error.Code)

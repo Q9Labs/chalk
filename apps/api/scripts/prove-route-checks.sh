@@ -53,13 +53,13 @@ expect_failure() {
   local label="$1" package="$2" test_name="$3" diagnostic="$4"
   local log="$proof_dir/$label.log" status=0
   (cd apps/api && go test -vet=off -count=1 "$package" -run "^$test_name$") > "$log" 2>&1 || status=$?
-  if [[ "$status" == 0 ]] || ! rg -q "$diagnostic" "$log"; then
+  if [[ "$status" == 0 ]] || ! grep -Eq "$diagnostic" "$log"; then
     cat "$log"
     echo "PROOF FAILED: $label did not fail for the intended reason" >&2
     exit 1
   fi
   echo "PROOF expected failure $label: scratch commit $(git rev-parse HEAD); exit $status"
-  rg -- '-{3} FAIL|got 200, want 401|no authorization matrix entry|no typed endpoint declaration' "$log"
+  grep -E -- '-{3} FAIL|got 200, want 401|no authorization matrix entry|no typed endpoint declaration' "$log"
 }
 
 python3 - "$router" <<'PY'
