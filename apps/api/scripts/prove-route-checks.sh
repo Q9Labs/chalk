@@ -44,7 +44,9 @@ for line in open(sys.argv[1]):
 assert len(times) == 5, times
 for name, runs in sorted(times.items()):
     assert len(runs) == 3, (name, runs)
-    print(f'PROOF PASS {name}: median {statistics.median(runs):g} ms; range {min(runs):g}-{max(runs):g} ms; n=3')
+    def display(value):
+        return '<10' if value == 0 else f'{value:g}'
+    print(f'PROOF PASS {name}: median {display(statistics.median(runs))} ms; range {display(min(runs))}-{display(max(runs))} ms; n=3')
 PY
 
 expect_failure() {
@@ -74,7 +76,7 @@ source = source.replace('\tmountV1Routes(r, options)', '''\tmountV1Routes(r, opt
 path.write_text(source)
 PY
 gofmt -w "$router"
-git -c user.name='Route check proof' -c user.email='route-check-proof@example.invalid' commit --only -m 'proof: mount fake unprotected routes' -- "$router" >/dev/null
+git -c core.hooksPath=/dev/null -c user.name='Route check proof' -c user.email='route-check-proof@example.invalid' commit --only -m 'proof: mount fake unprotected routes' -- "$router" >/dev/null
 expect_failure unprotected ./internal/adapters/postgres TestAuthorizationRouteMatrix 'got 200, want 401'
 restore
 
@@ -88,7 +90,7 @@ source = path.read_text().replace('\tmountV1Routes(r, options)', '''\tmountV1Rou
 path.write_text(source)
 PY
 gofmt -w "$router"
-git -c user.name='Route check proof' -c user.email='route-check-proof@example.invalid' commit --only -m 'proof: mount fake undeclared route' -- "$router" >/dev/null
+git -c core.hooksPath=/dev/null -c user.name='Route check proof' -c user.email='route-check-proof@example.invalid' commit --only -m 'proof: mount fake undeclared route' -- "$router" >/dev/null
 expect_failure undeclared ./internal/httpapi TestMountedRouteContractCompleteness 'no typed endpoint declaration.*matrix-undeclared'
 restore
 echo "PROOF restored clean head $(git rev-parse HEAD)"

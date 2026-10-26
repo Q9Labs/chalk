@@ -124,13 +124,12 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 		}
 	}
 
-	// Exercise both runtime composition branches. A non-nil service enables the
-	// artifact branch without reading data during route inventory.
+	// Disabled and enabled transcription must expose the same route contracts.
 	for _, variant := range []struct {
 		name    string
 		options Options
 	}{
-		{name: "fallback"},
+		{name: "disabled"},
 		{name: "artifacts", options: Options{TranscriptArtifacts: struct{ TranscriptArtifactService }{}}},
 	} {
 		t.Run(variant.name, func(t *testing.T) {

@@ -21,7 +21,7 @@ func TestGeneratedOpenAPIMatchesEndpointContracts(t *testing.T) {
 	}
 	// The SDK generator reformats JSON. Compare canonical JSON so whitespace
 	// and HTML escaping do not count as contract drift.
-	var existing openAPIDoc
+	var existing any
 	if err := json.Unmarshal(checkedIn, &existing); err != nil {
 		t.Fatal(err)
 	}
@@ -30,6 +30,14 @@ func TestGeneratedOpenAPIMatchesEndpointContracts(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, err := json.Marshal(gen.doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generated any
+	if err := json.Unmarshal(current, &generated); err != nil {
+		t.Fatal(err)
+	}
+	current, err = json.Marshal(generated)
 	if err != nil {
 		t.Fatal(err)
 	}
