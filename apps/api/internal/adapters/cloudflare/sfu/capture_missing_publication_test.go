@@ -33,7 +33,7 @@ func TestCapturePullMissingPublicationKeepsNegotiation(t *testing.T) {
 			adapter := newCaptureTestAdapter(t, client)
 			input := captureplane.PullCaptureTracksInput{Metadata: captureMetadata(test.name), Connection: "receiver", Tracks: []captureplane.CaptureTrack{track}}
 			result, err := adapter.PullCaptureTracks(context.Background(), input)
-			if err != nil || len(result.Gone) != 1 || result.Gone[0] != track || len(result.Tracks) != 0 {
+			if err != nil || len(result.Unavailable) != 1 || result.Unavailable[0] != track || len(result.Tracks) != 0 {
 				t.Fatalf("missing publication must leave capture running: result=%+v err=%v", result, err)
 			}
 			if test.offer && result.Negotiation.Requirement != captureplane.NegotiationAnswerNeeded {
@@ -63,7 +63,7 @@ func TestCapturePullMixedMissingPublicationDoesNotReplaySuccess(t *testing.T) {
 	adapter := newCaptureTestAdapter(t, client)
 	input := captureplane.PullCaptureTracksInput{Metadata: captureMetadata("mixed-missing"), Connection: "receiver", Tracks: requested}
 	result, err := adapter.PullCaptureTracks(context.Background(), input)
-	if err != nil || len(result.Tracks) != 1 || result.Tracks[0].CaptureTrack != requested[0] || len(result.Gone) != 1 || result.Gone[0] != requested[1] {
+	if err != nil || len(result.Tracks) != 1 || result.Tracks[0].CaptureTrack != requested[0] || len(result.Unavailable) != 1 || result.Unavailable[0] != requested[1] {
 		t.Fatalf("partial subscription lost: result=%+v err=%v", result, err)
 	}
 	if _, err := adapter.PullCaptureTracks(context.Background(), input); err != nil || len(client.requests) != 1 {
@@ -86,7 +86,7 @@ func TestCapturePullMixedAnonymousMissingPublication(t *testing.T) {
 	adapter := newCaptureTestAdapter(t, client)
 	input := captureplane.PullCaptureTracksInput{Metadata: captureMetadata("mixed-anonymous-missing"), Connection: "receiver", Tracks: requested}
 	result, err := adapter.PullCaptureTracks(context.Background(), input)
-	if err != nil || len(result.Tracks) != 1 || result.Tracks[0].CaptureTrack != requested[0] || len(result.Gone) != 1 || result.Gone[0] != requested[1] || result.Negotiation.Requirement != captureplane.NegotiationAnswerNeeded {
+	if err != nil || len(result.Tracks) != 1 || result.Tracks[0].CaptureTrack != requested[0] || len(result.Unavailable) != 1 || result.Unavailable[0] != requested[1] || result.Negotiation.Requirement != captureplane.NegotiationAnswerNeeded {
 		t.Fatalf("anonymous missing track discarded partial success: result=%+v err=%v", result, err)
 	}
 	if _, err := adapter.PullCaptureTracks(context.Background(), input); err != nil || len(client.requests) != 1 {

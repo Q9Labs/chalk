@@ -473,6 +473,7 @@ type fakeSignaling struct {
 	repeatOffer      bool
 	pullCount        int
 	pullGone         bool
+	pullUnavailable  int
 	leases           []time.Time
 	wrongKey         bool
 }
@@ -494,6 +495,10 @@ func (s *fakeSignaling) Execute(_ context.Context, request capturesignaling.Exec
 	case captureplane.OperationPullCaptureTracks:
 		s.pullCount++
 		input := command.Input.PullCaptureTracks
+		if s.pullUnavailable > 0 {
+			s.pullUnavailable--
+			return capturesignaling.Execution{Key: key, Result: capturesignaling.CommandResult{PullCaptureTracks: &captureplane.PullCaptureTracksResult{Connection: connection, Unavailable: append([]captureplane.CaptureTrack(nil), input.Tracks...), Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}}}}, nil
+		}
 		if s.pullGone {
 			return capturesignaling.Execution{Key: key, Result: capturesignaling.CommandResult{PullCaptureTracks: &captureplane.PullCaptureTracksResult{
 				Connection: connection, Gone: append([]captureplane.CaptureTrack(nil), input.Tracks...),
@@ -660,5 +665,62 @@ func TestCoordinatorDeadlineAllowsOnlyProviderShutdown(t *testing.T) {
 	}
 	if countOperation(signaling.operations, captureplane.OperationCloseCaptureConnection) != 1 {
 		t.Fatalf("shutdown calls = %v", signaling.operations)
+	}
+}
+
+func TestUnavailableCaptureTrackRecoversWithoutPlanChange(t *testing.T) {
+	attempt := newAttempt(t)
+	signaling := &fakeSignaling{pullUnavailable: 2}
+	coordinator := newCoordinator(t, attempt, signaling, &fakePeer{}, Config{})
+	plan := newPlan(t, attempt, 1, []planTrack{{name: "late"}})
+	first, err := coordinator.Bootstrap(context.Background(), plan)
+	if err != nil || len(first.Tracks) != 0 || !first.PendingTracks {
+		t.Fatalf("bootstrap: %+v %v", first, err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := coordinator.Reconcile(context.Background(), plan); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recovered, err := coordinator.Snapshot()
+	if err != nil || len(recovered.Tracks) != 1 || recovered.PendingTracks {
+		t.Fatalf("recovery: %+v %v", recovered, err)
+	}
+	if signaling.pullCount != 3 {
+		t.Fatalf("pulls = %d", signaling.pullCount)
+	}
+	keys := map[string]bool{}
+	for i, op := range signaling.operations {
+		if op == captureplane.OperationPullCaptureTracks {
+			key := signaling.keys[i]
+			if keys[key] {
+				t.Fatal("retry replayed an unavailable result")
+			}
+			keys[key] = true
+		}
+	}
+	if _, err := coordinator.Reconcile(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	if signaling.pullCount != 3 {
+		t.Fatal("resubscribed a recovered track")
+	}
+}
+
+func TestUnavailableCaptureTrackIsNotRetriedAfterRemoval(t *testing.T) {
+	attempt := newAttempt(t)
+	signaling := &fakeSignaling{pullUnavailable: 1}
+	coordinator := newCoordinator(t, attempt, signaling, &fakePeer{}, Config{})
+	plan := newPlan(t, attempt, 1, []planTrack{{name: "late"}})
+	if _, err := coordinator.Bootstrap(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	empty := newPlan(t, attempt, 2, nil)
+	snapshot, err := coordinator.Reconcile(context.Background(), empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.PendingTracks || signaling.pullCount != 1 {
+		t.Fatal("retried a removed publication")
 	}
 }
