@@ -39,8 +39,8 @@
   ],
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b0c0e",
-  "theme_color": "#0b0c0e",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "categories": ["business", "productivity", "communication"],
   "shortcuts": [
     {
