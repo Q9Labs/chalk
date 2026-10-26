@@ -14,6 +14,11 @@ on:
     # New advisories against packages nobody changed fail here, not on unrelated pull requests.
     - cron: "17 1 * * *"
   workflow_dispatch:
+    inputs:
+      join_startup_proof:
+        description: Run 30 joins with stalled and dropped WebSocket upgrades
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,6 +63,43 @@ jobs:
             node scripts/gates/chalk-gate-plan.mjs --ci-jobs --full >> "${GITHUB_OUTPUT}"
           fi
           cat "${GITHUB_OUTPUT}"
+
+  join-startup-proof:
+    name: Join startup proof
+    if: github.event_name == 'workflow_dispatch' && inputs.join_startup_proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 12.8.1
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install browser runtime
+        uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
+      - name: Prove join startup under loss and stalls
+        run: node scripts/web-proof/join-startup.mjs '${{ runner.temp }}/join-startup-proof'
+      - name: Save join startup proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: join-startup-proof
+          path: |
+            ${{ runner.temp }}/join-startup-proof/*.png
+            ${{ runner.temp }}/join-startup-proof/*.json
+          if-no-files-found: error
 
   # Jobs narrow a pull request only when Select gate jobs succeeded and reported full=false. A failed job can still
   # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded.

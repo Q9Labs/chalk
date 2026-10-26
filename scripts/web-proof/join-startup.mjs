@@ -16,6 +16,7 @@ const surface = "sdks/typescript/react/src/components/chalk/StatusSurface.tsx";
 const diagnostics = "sdks/typescript/client/src/sync/connect-diagnostics.ts";
 const transport = "sdks/typescript/client/src/sync/v1-client.ts";
 const baseline = execFileSync("git", ["merge-base", "HEAD", "origin/master"], { encoding: "utf8" }).trim();
+await writeFile(resolve(output, "revision.json"), JSON.stringify({ head: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), baseline }, null, 2));
 const entry = resolve(output, "page.tsx");
 await writeFile(
   entry,
@@ -106,9 +107,12 @@ try {
           : [],
     });
     const bundle = await readFile(resolve(directory, "page.js"));
+    // Each fault case owns its real server, sockets, timers and browser cleanup.
+    // This manual proof matrix is not shipped in the SDK.
+    // fallow-ignore-next-line complexity
     async function runCase(scenario, device, trial = 0) {
       let attempts = 0;
-      const lossPattern = trial % 2 === 0 ? ["close", "stall", "close", "open"] : ["close", "stall", "close", "stall", "close", "open"];
+      const lossPattern = scenario === "lossy-stalled" ? (trial % 2 === 0 ? ["close", "stall", "close", "open"] : ["close", "stall", "close", "stall", "close", "open"]) : { retry: ["stall", "open"], offline: ["stall"], rejected: ["close"] }[scenario];
       let fastCloses = 0;
       const fastCloseDelaysMs = [];
       let stalledDials = 0;
@@ -140,8 +144,8 @@ try {
       });
       server.on("upgrade", (request, socket) => {
         attempts += 1;
-        const step = scenario === "lossy-stalled" ? lossPattern[attempts - 1] : null;
-        if (scenario === "rejected" || step === "close") {
+        const step = lossPattern[Math.min(attempts - 1, lossPattern.length - 1)];
+        if (step === "close") {
           fastCloses += 1;
           const receivedAt = performance.now();
           const timer = setTimeout(() => {
@@ -152,7 +156,7 @@ try {
           timers.add(timer);
           return;
         }
-        if (scenario === "offline" || step === "stall" || (scenario === "retry" && attempts === 1)) {
+        if (step === "stall") {
           stalledDials += 1;
           return; // Accept TCP without sending an HTTP response.
         }
@@ -165,6 +169,9 @@ try {
               .digest("base64");
             socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
             let buffered = Buffer.alloc(0);
+            // Minimal RFC6455 fixture accepts partial/coalesced masked browser frames.
+            // Kept here with the socket owner; no production parser is changed.
+            // fallow-ignore-next-line complexity
             socket.on("data", (chunk) => {
               buffered = Buffer.concat([buffered, chunk]);
               while (buffered.length >= 6) {
