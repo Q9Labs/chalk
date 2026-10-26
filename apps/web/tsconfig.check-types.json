@@ -8,6 +8,7 @@
       "@q9labsai/chalk-client/invites": ["../../sdks/typescript/client/src/public-invites/index.ts"],
       "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],
       "@q9labsai/chalk-react": ["../../sdks/typescript/react/src/index.ts"],
+      "@q9labsai/chalk-react/toast": ["../../sdks/typescript/react/src/toast.ts"],
       "@q9labsai/chalk-react/preview": ["../../sdks/typescript/react/src/test-support/index.ts"],
       "@q9labsai/chalk-react/utils": ["../../sdks/typescript/react/src/utils/index.ts"],
       "@q9labsai/chalk-react/ui": ["../../sdks/typescript/react/src/components/ui/index.ts"],

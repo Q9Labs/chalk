@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 
 import { errorMessage } from "../../lib/dashboard/client";
 import { trapDialogFocus } from "../docs/dialog-focus";
-import { ChalkToast } from "@q9labsai/chalk-react";
+import { ChalkToast } from "@q9labsai/chalk-react/toast";
 import { Icon, type IconName } from "../site/Icon";
 
 const PHONE = "(max-width: 640px)";
