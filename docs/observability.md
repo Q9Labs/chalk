@@ -91,7 +91,8 @@ browser WebSocket APIs do not reveal DNS, TCP, or TLS progress. After `open`, th
 startup stage is `hello` (including initial recovery). Unknown peer reasons become
 `redacted`; only fixed protocol reasons are retained. Pre-open failures use `connection.sync_start_failed`; `connection.sync_hello_timeout`
 is reserved for startup after open. A pre-open close adds `cause=closed_before_open`
-to the reference. Its duration measures that socket attempt, not the whole join.
+to the reference. `attempt=N` is the one-based socket attempt since Sync started.
+Its duration measures that socket attempt, not the whole join.
 Browsers do not expose the HTTP rejection status or distinguish a network failure
 from an edge rejection; an empty reason must not be labeled as a server timeout. Internal diagnostic event names such as
 `sync_connect_failed`, `sync_dial_timeout`, and `connection_failed` identify

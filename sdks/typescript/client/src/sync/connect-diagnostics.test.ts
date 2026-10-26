@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { formatSyncConnectDiagnostic, safeSyncCloseReason } from "./connect-diagnostics";
 
 describe("safe Sync close reasons", () => {
+  it("includes the socket attempt count without inventing one for older clients", () => {
+    const diagnostic = { stage: "upgrade", opened: false, closeCode: 1006, closeReason: null, durationMs: 52, attempt: 4 } as const;
+    expect(formatSyncConnectDiagnostic(diagnostic)).toContain("cause=closed_before_open; attempt=4; 52ms");
+  });
   it.each([
     "authentication failed",
     "delivery recovery required",

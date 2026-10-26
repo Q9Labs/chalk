@@ -5,6 +5,8 @@ export type SyncConnectDiagnostic = {
   readonly closeCode: number | null;
   readonly closeReason: string | null;
   readonly durationMs: number;
+  /** One-based socket attempt since Sync start; absent in older SDK evidence. */
+  readonly attempt?: number;
 };
 
 // Peer text is untrusted and can echo credentials. Retain only protocol-owned reasons.
@@ -42,5 +44,5 @@ export function syncConnectFailureCode(diagnostic: SyncConnectDiagnostic | undef
   return diagnostic?.stage === "upgrade" ? "sync_start_failed" : "sync_hello_timeout";
 }
 export function formatSyncConnectDiagnostic(diagnostic: SyncConnectDiagnostic): string {
-  return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${diagnostic.stage === "upgrade" && diagnostic.closeCode !== null ? "cause=closed_before_open; " : ""}${Math.round(diagnostic.durationMs)}ms]`;
+  return `[${diagnostic.stage}; open=${diagnostic.opened ? 1 : 0}; close=${diagnostic.closeCode ?? "none"}; reason=${safeSyncCloseReason(diagnostic.closeReason ?? undefined) ?? "none"}; ${diagnostic.stage === "upgrade" && diagnostic.closeCode !== null ? "cause=closed_before_open; " : ""}${diagnostic.attempt === undefined ? "" : `attempt=${diagnostic.attempt}; `}${Math.round(diagnostic.durationMs)}ms]`;
 }

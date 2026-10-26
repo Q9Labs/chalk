@@ -100,10 +100,11 @@ export class V1SyncClient implements V1CollaborationClient {
   #cancelDial: (() => void) | undefined;
   #dialTimeoutCount = 0;
   #connectStartedAt: number | null = null;
+  #connectAttemptCount = 0;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
-    return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())) };
+    return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())), attempt: this.#connectAttemptCount };
   }
   #reconnectAttempt = 0;
   #episodeEndTimer: unknown;
@@ -166,6 +167,7 @@ export class V1SyncClient implements V1CollaborationClient {
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
+    this.#connectAttemptCount = 0;
     const startupGeneration = ++this.#startupGeneration;
     let stored: readonly V1PendingTarget[];
     try {
@@ -375,6 +377,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #connect(): void {
     if (!this.#started || !this.#transportAvailable || this.#socket || this.#phase.phase === "terminal") return;
     this.#phase = { phase: "connecting" };
+    this.#connectAttemptCount += 1;
     this.#connectStartedAt = this.#clock().now();
     this.#opened = false;
     this.#connectFailure = undefined;
