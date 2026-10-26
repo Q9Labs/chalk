@@ -136,7 +136,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await fixture("set?end=1");
     const ended = await visible(tab, '.srow a[aria-label*=", 7 min,"]', 40000);
     await screenshot(tab, "ended");
-    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.orow").count()) === 0 && (await tab.locator(".srow").getByText("Recording", { exact: true }).count()) === 1);
+    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.knock").count()) === 0 && (await tab.locator(".srow").getByText("Recording", { exact: true }).count()) === 1);
     await context.close();
   }
   {
@@ -148,7 +148,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
   {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
     await fixture("set?knocks=1");
-    const arrived = await visible(tab, ".orow");
+    const arrived = await visible(tab, ".knock");
     await screenshot(tab, "first-knock");
     check("idle Ask to join Call discovers its first knock without navigation or visibility changes", arrived);
     await context.close();
@@ -158,7 +158,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=1" });
     await fixture("set?knocks=0");
     const removed = await tab
-      .locator(".orow")
+      .locator(".knock")
       .waitFor({ state: "hidden", timeout: 8000 })
       .then(
         () => true,
@@ -166,13 +166,13 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       );
     check("Call drops a pending knock when the server stops returning it", removed);
     await fixture("set?knocks=1");
-    const next = await visible(tab, ".orow");
+    const next = await visible(tab, ".knock");
     check("Call keeps observing new knocks after the last one disappears", next);
     if (next) {
       await tab.getByRole("button", { name: "Deny", exact: true }).click();
-      await tab.locator(".orow").waitFor({ state: "hidden" });
+      await tab.locator(".knock").waitFor({ state: "hidden" });
       await fixture("set?knocks=1");
-      check("Call keeps observing new knocks after denying the last one", await visible(tab, ".orow"));
+      check("Call keeps observing new knocks after denying the last one", await visible(tab, ".knock"));
     }
     await context.close();
   }
@@ -268,7 +268,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await tab.evaluate(() => {
       const trace = (window.__denyTrace = { labels: [], armed: false, staleRead: false });
       const sample = () => {
-        const label = [...document.querySelectorAll(".orow button")].map((button) => button.textContent).join(", ") || "<removed>";
+        const label = [...document.querySelectorAll(".knock button")].map((button) => button.textContent).join(", ") || "<removed>";
         if (trace.labels.at(-1) !== label) trace.labels.push(label);
       };
       new MutationObserver(sample).observe(document.body, { subtree: true, childList: true, characterData: true });
@@ -320,7 +320,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     check("stale refresh cannot undo deny", raced && consumed && !resurrected(held) && held.at(-1).includes("Denying…"), held.join(" → "));
     releasePolls();
     await tab
-      .locator(".orow")
+      .locator(".knock")
       .waitFor({ state: "hidden", timeout: 10000 })
       .catch(() => {});
     const settled = await tab.evaluate(() => window.__denyTrace.labels);
@@ -434,7 +434,7 @@ export async function budgetChecks({ open, fixture, check, CALL }) {
         const response = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
         await tab.clock.runFor(5000);
         await response;
-        await tab.locator(".orow").waitFor({ state: tick % 2 ? "hidden" : "visible" });
+        await tab.locator(".knock").waitFor({ state: tick % 2 ? "hidden" : "visible" });
       }
       check("twelve knock changes apply without a full Call read", (await reads("call")) === initial);
       await tab.route("**/dashboard-api/call-status?*", async (route) => {
@@ -549,7 +549,7 @@ export async function pollingBackoffChecks({ open, fixture, check, CALL }) {
       await tab.route("**/dashboard-api/call-status?*", (route) => route.fulfill({ status, json: { error: { code: "access_lost" } } }));
       await tab.clock.runFor(3000);
       await tab.locator(".errp").waitFor({ state: "visible" });
-      check(`terminal ${status} clears ready call and admission data`, (await tab.locator(".liveb,.orow").count()) === 0);
+      check(`terminal ${status} clears ready call and admission data`, (await tab.locator(".liveb,.knock").count()) === 0);
     } finally {
       await context.close();
     }
@@ -661,13 +661,13 @@ export async function reviewPollChecks({ open, fixture, check, CALL }) {
       const settled = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-status"));
       await tab.clock.runFor(3000);
       await settled;
-      await tab.locator(".orow").waitFor({ state: "hidden" });
+      await tab.locator(".knock").waitFor({ state: "hidden" });
       await tab.waitForTimeout(150);
       await tab.waitForLoadState("networkidle");
       check("Call knock decisions do not reload full history", (await reads()) === initial);
       await fixture("set?knocks=1");
       await tab.clock.runFor(5000);
-      await tab.locator(".orow").waitFor({ state: "visible" });
+      await tab.locator(".knock").waitFor({ state: "visible" });
       check("shared status polling resumes after a knock decision", (await reads()) === initial);
     } finally {
       await context.close();
