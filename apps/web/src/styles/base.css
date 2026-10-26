@@ -121,12 +121,13 @@ p {
 .privacy-notice-dismiss:hover {
   color: var(--chalk-text);
 }
-/* On a phone the dashboard toast spans the bottom edge, so the notice sits above it. A call fills the bottom with its control bar, sheets and notices, so there the notice sits under the call header instead. */
+/* A call fills its bottom with the control dock, sheets and toasts, so over a call the notice sits under the call header at every width. */
+.privacy-notice[data-over-call] {
+  inset-block: 68px auto;
+}
+/* On a phone the dashboard toast spans the bottom edge, so there the notice sits above it. */
 @media (max-width: 640px) {
-  .privacy-notice {
+  .privacy-notice:not([data-over-call]) {
     inset-block-end: 88px;
-  }
-  .privacy-notice[data-over-call] {
-    inset-block: 68px auto;
   }
 }
