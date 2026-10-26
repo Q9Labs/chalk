@@ -99,9 +99,6 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   font-weight: 600;
   white-space: nowrap;
 }
-.chalk-shell-gap {
-  width: 8px;
-}
 .chalk-shell-dot {
   position: absolute;
   top: 6px;
