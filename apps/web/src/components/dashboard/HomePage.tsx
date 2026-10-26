@@ -172,8 +172,15 @@ export function HomePage() {
       ) : shown(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
+            <span className="empty-icon" aria-hidden="true">
+              <Icon name="cam" />
+            </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
+            <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+              <Icon name="plus" />
+              Start a call
+            </button>
           </div>
         </div>
       ) : (
