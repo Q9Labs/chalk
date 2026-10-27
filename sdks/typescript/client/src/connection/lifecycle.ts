@@ -455,6 +455,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.episodeEndReason = undefined;
           model.removedByHost = false;
           yield* transition("joining");
+          if (model.activeScope) yield* stopPorts();
           const span = diagnostics.startSpan({ step: "join", state: model.state, epoch: model.epoch });
           const scope = yield* Scope.make("sequential");
           model.activeScope = scope;
@@ -1043,7 +1044,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }),
         configureJoin: (intent) =>
           Effect.sync(() => {
-            if (model.state !== "idle" && model.state !== "left" && model.state !== "failed") throw lifecycleFailure("invalid_state", false, `Cannot configure Join while ${model.state}`);
+            if (model.state !== "idle" && model.state !== "left" && model.state !== "failed" && model.state !== "reconnecting") throw lifecycleFailure("invalid_state", false, `Cannot configure Join while ${model.state}`);
             if (intent.microphone !== undefined) model.intent.microphone = intent.microphone;
             if (intent.camera !== undefined) model.intent.camera = intent.camera;
           }),

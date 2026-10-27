@@ -461,16 +461,16 @@ describe("public client startup failure contract", () => {
 });
 
 const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
-function accessGrant() {
+function accessGrant(participantGeneration = 1) {
   const token = (audience: string) => `${btoa('{"alg":"EdDSA"}')}.${btoa(JSON.stringify({ aud: audience }))}.fixture`;
   const expiresAt = new Date(Date.now() + 300000).toISOString();
   return {
-    subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participantId, participant_generation: 1 },
+    subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participantId, participant_generation: participantGeneration },
     sync: { token: token("chalk-sync"), expires_at: expiresAt },
     media: { token: token("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
   };
 }
-async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number } = {}) {
+async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number; readonly entryConfirmation?: boolean; readonly participantGeneration?: () => number } = {}) {
   browser();
   vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   const control: V1ControlState = {
@@ -489,8 +489,10 @@ async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly 
   const digest = await computeV1StateDigest(control);
   const head = { revision: 1, state_schema_version: 1, state_digest: digest };
   const recoveryId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
-  const sockets: EventTarget[] = [];
+  const sockets: ProtocolSocket[] = [];
   class ProtocolSocket extends EventTarget {
+    readonly sent: string[] = [];
+    closed = false;
     constructor() {
       super();
       sockets.push(this);
@@ -499,16 +501,22 @@ async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly 
       if (network.upgradeDelayMs) setTimeout(open, network.upgradeDelayMs);
       else queueMicrotask(open);
     }
-    close() {}
+    close() {
+      this.closed = true;
+    }
     send(data?: string) {
-      if (!data || JSON.parse(data).type !== "hello") return;
+      if (!data) return;
+      const { type } = JSON.parse(data);
+      this.sent.push(type);
+      if (type !== "hello") return;
       this.dispatchEvent(
         new MessageEvent("message", {
           data: JSON.stringify({
             type: "welcome",
             protocol: 1,
             participant_id: participantId,
-            participant_generation: 1,
+            participant_generation: network.participantGeneration?.() ?? 1,
+            ...(network.entryConfirmation ? { entry_confirmation: true, entry_generation: 1 } : {}),
             recovery_id: recoveryId,
             head,
             mode: "snapshot",
@@ -612,6 +620,35 @@ describe("public client exhausted recovery", () => {
       platform.emitSync(live);
       await vi.advanceTimersByTimeAsync(1000);
       expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
+  it("starts a clean admission and confirms entry when joining again after offline recovery exhausts", async () => {
+    const requests: string[] = [];
+    const sockets = await liveBrowser(false, { entryConfirmation: true, participantGeneration: () => requests.length });
+    const client = makeClient(async ({ reason }) => {
+      requests.push(reason);
+      return accessGrant(requests.length);
+    });
+    try {
+      await client.join({ microphone: false, camera: false });
+      vi.useFakeTimers();
+      window.dispatchEvent(new Event("offline"));
+      await vi.advanceTimersByTimeAsync(11000);
+      expect(client.getSnapshot().connection).toMatchObject({ status: "reconnecting", lastError: { code: "connection.sync_recovery_exhausted" } });
+      const retry = client.join({ microphone: false, camera: false });
+      await vi.advanceTimersByTimeAsync(1);
+      await retry;
+      expect(requests).toEqual(["join", "join"]);
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(sockets).toHaveLength(2);
+      expect(sockets[0]?.closed).toBe(true);
+      expect(sockets[1]?.closed).toBe(false);
+      expect(sockets[1]?.sent).toContain("hello");
+      expect(sockets[1]?.sent).toContain("entered");
     } finally {
       client.dispose();
       if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
