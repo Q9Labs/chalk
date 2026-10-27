@@ -20,6 +20,7 @@ EOF
 cat > "$root/gplay" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ -f "${GPLAY_SERVICE_ACCOUNT_JSON:-}" ]] || { echo 'gplay credentials are not configured' >&2; exit 1; }
 case "$1 $2" in
   'edits create') echo '{"id":"test"}' ;;
   'edits delete') echo null ;;

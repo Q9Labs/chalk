@@ -24,7 +24,7 @@ chmod 700 "$work"
 printf '%s' "$PLAY_CREDENTIALS" > "$work/credentials.json"
 chmod 600 "$work/credentials.json"
 unset PLAY_CREDENTIALS
-export GOOGLE_APPLICATION_CREDENTIALS="$work/credentials.json"
+export GPLAY_SERVICE_ACCOUNT_JSON="$work/credentials.json"
 
 curl --fail --silent --show-error --location https://github.com/tamtom/play-console-cli/releases/download/v1.0.2/gplay-linux-amd64 -o "$work/gplay"
 echo 'e951a13d8a35bdab43e8b4ba25ab22e45bb1487a7d27ae5b97faf2f9bb66c72e  '"$work/gplay" | sha256sum --check --status
