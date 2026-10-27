@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "../../../../client/src/space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../../../../client/src/space-client/space-client";
 import { control, terminalTestPlatform } from "../../../../client/src/space-client/terminal.test.helpers";
 import { Chalk } from "./Chalk";
+
+beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
+afterEach(() => vi.unstubAllGlobals());
 
 vi.mock("../space-view/SpaceView", () => ({ SpaceView: () => <div>Live Space</div> }));
 vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialog: () => null }));
