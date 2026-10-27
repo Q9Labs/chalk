@@ -80,8 +80,8 @@
     "build:embedded-module": "tsup ./src/embedded/index.ts --format esm --out-dir ./dist/embedded --platform browser && tsc --project tsconfig.embedded.json --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "build:renderer": "node ./scripts/build-embedded.mjs",
     "dev": "tsup ./src/assets.ts ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
-    "test": "pnpm exec vitest run && pnpm run test:declarations",
-    "test:declarations": "node --test scripts/rewrite-declaration-specifiers-proof.mjs",
+    "test": "node ../../scripts/test/run.mjs pnpm exec vitest run && pnpm run test:declarations",
+    "test:declarations": "node ../../scripts/test/run.mjs node --test scripts/rewrite-declaration-specifiers-proof.mjs",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
     "clean": "rm -rf dist"

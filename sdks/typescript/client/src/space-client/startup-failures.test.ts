@@ -42,11 +42,12 @@ function browser() {
   vi.stubGlobal("window", new EventTarget());
   vi.stubGlobal("RTCPeerConnection", PeerConnection);
   vi.stubGlobal("WebSocket", SilentSocket);
+  vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
 }
 function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs: number | null = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
   return createSpaceClientForPlatform(
-    { space: "test", getAccess, logger },
+    { space: "test", baseUrl: "http://localhost:8080", getAccess, logger },
     {
       ...(syncStartupTimeoutMs === null ? {} : { syncStartupTimeoutMs }),
       onConnectionDiagnostic,
@@ -473,7 +474,6 @@ function accessGrant(participantGeneration = 1, id = participantId) {
 async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number; readonly entryConfirmation?: boolean; readonly participantGeneration?: () => number; readonly participantId?: string } = {}) {
   browser();
   const joinedParticipantId = network.participantId ?? participantId;
-  vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   const control: V1ControlState = {
     revision: 1,
     stateSchemaVersion: 1,
@@ -770,6 +770,7 @@ describe("public client exhausted recovery", () => {
       vi.useFakeTimers();
       if (stage === "sync") {
         vi.stubGlobal("WebSocket", SilentSocket);
+        vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
         sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006, wasClean: false }));
       } else {
         const peer = PeerConnection.instances.at(-1)!;
