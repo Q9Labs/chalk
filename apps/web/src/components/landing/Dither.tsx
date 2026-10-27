@@ -62,7 +62,7 @@ export function Dither({ kind }: { readonly kind: Kind }) {
     const context = canvas.getContext("2d");
     if (!context) return;
     const dark = theme === "dark";
-    const base: Color = dark ? [11, 12, 14] : [255, 255, 255];
+    const base: Color = dark ? [11, 12, 14] : [243, 243, 245];
     const nightAnchor: Color = dark ? [39, 81, 143] : [108, 147, 209];
     const levels = dark ? [0, 0.35, 0.65, 1] : [0, 0.28, 0.55, 0.85];
     const palette =

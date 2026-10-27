@@ -1,10 +1,11 @@
+import { IS_NIGHTLY } from "../../lib/site-head";
 import { CallActions } from "./Hero";
 import { Dither } from "./Dither";
 
 export function CtaSection() {
   return (
     <section className="band" id="start" aria-labelledby="cta-title">
-      <div className="ctn dpanel cta-panel">
+      <div className={`ctn dpanel cta-panel${IS_NIGHTLY ? " nightly-panel" : ""}`}>
         <Dither kind="cta" />
         <h2 className="h2" id="cta-title">
           Your next call is one link away.

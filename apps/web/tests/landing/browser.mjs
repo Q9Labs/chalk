@@ -73,6 +73,8 @@ try {
       page.on("pageerror", (error) => errors.push(error.message));
       await page.goto(origin);
       const preview = page.getByRole("group", { name: "Interactive Q9 team call preview" });
+      await preview.locator(".xtoast").waitFor({ timeout: 15000 });
+      if (proof) await preview.screenshot({ path: resolve(proof, `${channel}-joined-toast.png`) });
       await preview.getByRole("button", { name: "Mute microphone", exact: true }).click();
       assert.equal(await preview.getByRole("button", { name: "Unmute microphone", exact: true }).getAttribute("aria-pressed"), "false");
       await preview.getByRole("button", { name: "Turn camera off", exact: true }).click();
@@ -85,6 +87,7 @@ try {
       await preview.getByRole("textbox", { name: "Message the preview call" }).fill("Friday works for me too.");
       await preview.getByRole("button", { name: "Send preview message" }).click();
       assert.match(await preview.getByRole("log").textContent(), /Friday works for me too/);
+      if (proof) await preview.screenshot({ path: resolve(proof, `${channel}-chat-controls.png`) });
       await preview.getByRole("button", { name: "Leave preview call" }).click();
       await preview.getByRole("button", { name: "Rejoin" }).click();
       await preview.getByRole("button", { name: "Close preview chat" }).click();
@@ -126,6 +129,11 @@ try {
           const speaker = await preview.locator(".spk .xtag").textContent();
           await page.waitForTimeout(3100);
           assert.equal(await preview.locator(".spk .xtag").textContent(), speaker);
+          const stage = await preview.locator(".xstage").boundingBox();
+          const dock = await preview.locator(".xdock").boundingBox();
+          assert(stage && dock && stage.y + stage.height <= dock.y - 4, "Dock must not overlap participant tiles");
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.keyboard.press("Tab");
           if (proof) await page.screenshot({ path: resolve(proof, `${channel}-${theme}-${width}.png`), fullPage: true });
         }
       }

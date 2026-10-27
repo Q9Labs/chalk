@@ -2779,3 +2779,46 @@ html:has(.site[data-chalk-theme="light"]) {
 .site .xwrap.still .xtile.spk::after {
   border-width: 1px;
 }
+
+.site .xwrap {
+  container-type: inline-size;
+}
+.site[data-chalk-theme="dark"] .cta-panel.nightly-panel {
+  --pn-card: rgba(10, 22, 48, 0.6);
+}
+.site .xform input:focus-visible {
+  outline: 2px solid var(--x-text);
+  outline-offset: -2px;
+}
+@container (max-width:340px) {
+  .site .xdock {
+    display: grid;
+    grid-template-columns: repeat(4, 44px);
+    justify-content: center;
+    gap: 4px;
+    bottom: 12px;
+  }
+  .site .xstage,
+  .site .xchat {
+    bottom: 124px;
+  }
+  .site .xwrap.still .xstage {
+    inset: 8px;
+  }
+}
+@media (max-width: 800px) {
+  .site .hdev .cmd {
+    flex: none;
+    max-width: 100%;
+    height: 44px;
+  }
+  .site .hdev .ib {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .site .hdocs {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
