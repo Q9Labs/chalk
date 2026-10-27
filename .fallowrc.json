@@ -53,6 +53,7 @@
     "scripts/deploy/verify-vendor-store.mjs",
     "apps/web/scripts/prepare-vendor-store.ts",
     "apps/web/tests/dashboard-ui/*.mjs",
+    "apps/web/tests/landing/*.mjs",
     "apps/web/tests/selfhost-assets/*.mjs",
     "apps/web/public/fonts/*.css",
     "apps/web/functions/**/*.ts",
