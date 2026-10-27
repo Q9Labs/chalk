@@ -78,6 +78,8 @@ try {
   let hiddenClosed = false, lateTimers = 0;
   for (const name of ['hidden','visible']) {
     const page = await context.newPage(); pages.push(page);
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false });
     page.on('console', message => { if(message.type()==='log') {
       const data=JSON.parse(message.text());
       if(name==='hidden' && data.event==='late_timer') lateTimers++;
@@ -97,7 +99,9 @@ try {
     await page.waitForFunction(()=>window.client?.getSnapshot().connection.phase==='live');
   }
   await pages[1].bringToFront();
-  log('hidden_started',{visibility:await pages[0].evaluate(()=>document.visibilityState)});
+  const visibility=await pages[0].evaluate(()=>document.visibilityState);
+  log('hidden_started',{visibility});
+  if(visibility!=='hidden') throw new Error('background page is not hidden');
   const started=Date.now();
   while(Date.now()-started<duration) {
     await new Promise(resolveTick=>setTimeout(resolveTick,30000));
