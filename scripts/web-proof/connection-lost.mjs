@@ -11,6 +11,8 @@ import { chromium } from "playwright";
 
 const output = resolve(process.argv[2] ?? ".private/connection-lost-proof");
 await mkdir(output, { recursive: true });
+await writeFile(resolve(output, "input.css"), `@import "${resolve("packages/ui/src/styles/index.css")}";\n@source "${resolve("sdks/typescript/react/src")}";\n@source "${resolve("packages/ui/src")}";`);
+execFileSync("pnpm", ["--dir", "packages/ui", "exec", "tailwindcss", "-i", resolve(output, "input.css"), "-o", resolve(output, "styles.css")], { stdio: "pipe" });
 const baseline = execFileSync("git", ["merge-base", "HEAD", "origin/master"], { encoding: "utf8" }).trim();
 const changed = ["sdks/typescript/client/src/connection/lifecycle.ts", "sdks/typescript/client/src/space-client/failure-detail.ts", "sdks/typescript/react/src/components/chalk/StatusSurface.tsx"];
 const entry = resolve(output, "page.tsx");
@@ -61,6 +63,7 @@ const aliases = {
   "@q9labsai/chalk-ui/button": "packages/ui/src/button.tsx",
   "@q9labsai/chalk-ui": "packages/ui/src/index.ts",
   "@q9labsai/chalk-assets": "packages/assets/src/index.ts",
+  "@q9labsai/recording-presentation": "packages/recording-presentation/src/index.ts",
   "@q9labsai/chalk-whiteboard/react": "packages/whiteboard/src/react/index.ts",
   "@q9labsai/chalk-whiteboard": "packages/whiteboard/src/index.ts",
   "@q9labsai/facehash/react": "packages/facehash/src/react.ts",
@@ -117,10 +120,14 @@ try {
           for await (const chunk of request) chunks.push(chunk);
           frames = JSON.parse(Buffer.concat(chunks).toString());
           response.writeHead(204).end();
+        } else if (request.url === "/styles.css") {
+          response.writeHead(200, { "content-type": "text/css" }).end(await readFile(resolve(output, "styles.css")));
         } else if (request.url === "/page.js") {
           response.writeHead(200, { "content-type": "text/javascript" }).end(await readFile(resolve(directory, "page.js")));
         } else {
-          response.writeHead(200, { "content-type": "text/html" }).end('<html><head><style>html,body,#root{height:100%;margin:0;background:#000;color:#eee;font:14px Arial}button{cursor:pointer}</style></head><body><div id="root"></div><script type="module" src="/page.js"></script></body></html>');
+          response
+            .writeHead(200, { "content-type": "text/html" })
+            .end('<html><head><link rel="stylesheet" href="/styles.css"><style>html,body,#root{height:100%;margin:0;background:#000;color:#eee;font:14px Arial}button{cursor:pointer}</style></head><body><div id="root"></div><script type="module" src="/page.js"></script></body></html>');
         }
       });
       server.on("connection", (socket) => {
