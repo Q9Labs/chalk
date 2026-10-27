@@ -21,6 +21,22 @@ describe("failed call guidance", () => {
     }
   });
 
+  it("offers to rejoin a lost connection without calling it a join failure", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let rejoins = 0;
+    try {
+      await act(async () => root.render(<StatusSurface phase="failed" callName="Fixture call" errorCode="connection.sync_recovery_exhausted" onRetry={() => rejoins++} />));
+      expect(container.querySelector("h1")?.textContent).toBe("Connection lost");
+      expect(container.textContent).not.toContain("Couldn’t connect");
+      expect(container.querySelector("button")?.textContent).toBe("Rejoin");
+      await act(async () => container.querySelector("button")?.click());
+      expect(rejoins).toBe(1);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it("includes safe socket details in the failure reference", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -39,7 +55,7 @@ describe("failed call guidance", () => {
     ["connection.sync_start_failed", "reach the call service"],
     ["connection.sync_hello_timeout", "did not respond in time"],
     ["connection.media_start_failed", "Audio and video could not connect"],
-    ["connection.sync_recovery_exhausted", "call connection could not recover"],
+    ["connection.sync_recovery_exhausted", "Rejoin to continue"],
     ["connection.media_recovery_exhausted", "Audio and video could not reconnect"],
     ["environment.unsupported", "up-to-date browser"],
     ["client.internal_error", "Something went wrong"],

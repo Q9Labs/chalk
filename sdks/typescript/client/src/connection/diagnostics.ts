@@ -51,6 +51,13 @@ export type ConnectionDiagnostic = {
   readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  readonly recovery?: {
+    readonly reference: "connection.sync_recovery_exhausted" | "connection.media_recovery_exhausted";
+    readonly attempts: number;
+    readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null;
+    readonly lastHeartbeatReplyAgoMs: number | null;
+    readonly visibilityState: DocumentVisibilityState | null;
+  };
 };
 
 export class ConnectionDiagnostics {
@@ -75,6 +82,23 @@ export class ConnectionDiagnostics {
     } catch {
       // Diagnostics callbacks cannot affect Connection state or cleanup.
     }
+  }
+
+  recordRecoveryExhausted(input: { readonly state: ConnectionState; readonly epoch: number; readonly code: "sync_recovery_exhausted" | "media_recovery_exhausted"; readonly attempts: number; readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null }): void {
+    const { state, epoch, code, attempts, transport } = input;
+    this.record({
+      event: "recovery_exhausted",
+      state,
+      epoch,
+      code,
+      recovery: {
+        reference: `connection.${code}`,
+        attempts,
+        transport,
+        lastHeartbeatReplyAgoMs: transport?.lastHeartbeatReplyAt == null ? null : Math.max(0, this.#now() - transport.lastHeartbeatReplyAt),
+        visibilityState: typeof document === "undefined" ? null : document.visibilityState,
+      },
+    });
   }
 
   snapshot(): readonly ConnectionDiagnostic[] {

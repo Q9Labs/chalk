@@ -103,6 +103,7 @@ export type V1EpisodeSnapshot = {
     readonly dialTimeoutCount?: number;
     readonly connectAttempt?: import("./connect-diagnostics").SyncConnectDiagnostic;
     readonly connectFailure?: import("./connect-diagnostics").SyncConnectDiagnostic;
+    readonly recoveryDiagnostic?: import("./connect-diagnostics").SyncRecoveryDiagnostic;
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;

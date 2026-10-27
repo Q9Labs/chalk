@@ -654,7 +654,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               const syncAttempt: SyncRecoveryAttempt = { client: null, expiresAt: null, started: true };
               while (model.epoch === epoch && active(model)) {
                 const plan = yield* recoveryPlan(model.recoveryQueued ?? kind);
-                const outcome = yield* attemptRecovery(plan, mediaAttempt, syncAttempt).pipe(
+                let attempts = 0;
+                const outcome = yield* attemptRecovery(plan, mediaAttempt, syncAttempt, () => attempts++).pipe(
                   Effect.match({
                     onSuccess: (attempt) => ({ attempt, failure: null }),
                     onFailure: (failure) => ({ attempt: null, failure }),
@@ -672,9 +673,18 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 yield* enqueue(
                   Effect.gen(function* () {
                     if (model.epoch !== epoch || !active(model)) return;
+                    if (plan.kind === "sync" && model.sync?.getSnapshot().connection.phase === "live") {
+                      model.recoveryQueued = "media";
+                      return;
+                    }
                     const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
+                    const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
+                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport });
+                    if (plan.kind === "sync") {
+                      yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
+                      return;
+                    }
                     model.failure = toFailure(lifecycleFailure(code, true, "Connection interrupted. Reconnecting in the background."));
-                    diagnostics.record({ event: "recovery_exhausted", state: model.state, epoch, code });
                     yield* publish();
                   }),
                 );
@@ -696,15 +706,15 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : [100, 250, 500],
           })),
         );
-      const attemptRecovery = (plan: RecoveryPlan, mediaAttempt: MediaRecoveryAttempt, syncAttempt: SyncRecoveryAttempt): Effect.Effect<number | null, ConnectionLifecycleFailure> =>
+      const attemptRecovery = (plan: RecoveryPlan, mediaAttempt: MediaRecoveryAttempt, syncAttempt: SyncRecoveryAttempt, onAttempt: () => void): Effect.Effect<number | null, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           for (let attempt = 1; attempt <= plan.attempts; attempt += 1) {
             const remaining = plan.deadline - (yield* Clock.currentTimeMillis);
             if (remaining <= 0) return null;
+            onAttempt();
             diagnostics.record({ event: "recovery_attempt", state: model.state, epoch: model.epoch, attempt });
             const failure = yield* recoveryOperation(mediaAttempt, syncAttempt).pipe(
-              Effect.timeout(remaining),
-              Effect.catchTag("TimeoutError", () => Effect.fail(lifecycleFailure("sync_start_failed", true, "Connection recovery is still waiting for the transport"))),
+              (effect) => withinForegroundBudget(effect, remaining, lifecycleFailure("sync_start_failed", true, "Connection recovery is still waiting for the transport")),
               Effect.match({ onSuccess: () => null, onFailure: (cause) => cause }),
             );
             if (failure === null) return attempt;

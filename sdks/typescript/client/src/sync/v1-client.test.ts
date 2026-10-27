@@ -1188,7 +1188,7 @@ describe("V1SyncClient", () => {
       const digest = await computeV1StateDigest(next);
       socket.receive({ type: "event", stream: "control", name: "participant_left", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { participant_id: peerId, reason: "removed" }, external_operation_id: commandIds[1] });
       await snapshotWhen(client, (snapshot) => snapshot.connection.phase === "terminal");
-      expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: "participant_removed" });
+      expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "participant_removed" });
       expect(socket.sent.some((raw) => JSON.parse(raw).type === "delivery_ack")).toBe(true);
     } finally {
       client.stop();
@@ -1409,7 +1409,7 @@ describe("V1SyncClient", () => {
       reason,
     });
     await expect(pending).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: terminalHead.revision, state_digest: terminalHead.state_digest });
-    expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: reason });
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: reason });
   });
   it("retains exact control-event evidence and recovers on conflicting duplicates", async () => {
     await exerciseConflictingControlEvidence();

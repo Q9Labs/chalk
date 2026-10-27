@@ -24,11 +24,12 @@ export interface StatusSurfaceProps {
 
 /** All terminal call states share the same quiet page and host-owned navigation. */
 export function StatusSurface({ phase, callName = "the call", reason, episodeEndReason, endAction, errorCode, sync, theme, onRejoin, onHome, onRetry, onReportProblem, rejoinDisabled = false, retryPending = false }: StatusSurfaceProps): React.JSX.Element {
+  const connectionLost = phase === "failed" && errorCode === "connection.sync_recovery_exhausted";
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
     "episode-ended": episodeEndReason === "maximum_duration" ? { title: "The call reached its time limit", detail: "This call has ended for everyone." } : { title: "The call ended", detail: "" },
-    failed: { title: `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync }) },
+    failed: { title: connectionLost ? "Connection lost" : `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync }) },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
     full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },
     elsewhere: { title: "You joined from another tab", detail: `${callName} is open in another tab or window. Use it here instead?` },
@@ -58,7 +59,7 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
       ) : null}
       <div data-part="status-actions" className="mt-5 flex gap-7">
         {phase === "episode-ended" && episodeEndReason === "maximum_duration" && endAction ? <StatusAction icon={<StatusIcon retry />} label={endAction.label} onClick={endAction.onClick} /> : null}
-        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
+        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" || connectionLost ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
         {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
       </div>
       {onReportProblem && phase !== "entering" ? (

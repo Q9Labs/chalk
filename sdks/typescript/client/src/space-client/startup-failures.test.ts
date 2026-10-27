@@ -3,6 +3,7 @@ import { createV1SyncClient, InMemoryV1PendingTargetStore } from "../sync";
 import type { SpaceClientOptions } from "./types";
 import { createSpaceClient, SpaceClientError } from "./index";
 import { createSpaceClientForPlatform } from "./space-client";
+import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { computeV1StateDigest } from "../sync/v1-reducer";
 import type { V1ControlState } from "../sync/v1-types";
 import type { ClientFailure } from "./types";
@@ -562,6 +563,61 @@ describe("public client capture warnings", () => {
 });
 
 describe("public client exhausted recovery", () => {
+  it("keeps recovering media when Sync has already reconnected", async () => {
+    vi.useFakeTimers();
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    try {
+      const joining = client.join({ microphone: false, camera: false });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await joining;
+      const live = platform.sync.getSnapshot();
+      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering" } });
+      platform.emitSync({ ...live, connection: { phase: "connecting" } });
+      await vi.advanceTimersByTimeAsync(500);
+      platform.emitSync(live);
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      expect(client.getSnapshot().connection.lastError?.code).not.toBe("connection.sync_recovery_exhausted");
+      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live" } });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
+  it.each(["hidden", "suspended"] as const)("does not terminate Sync recovery for time spent %s", async (interruption) => {
+    vi.useFakeTimers();
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    try {
+      const joining = client.join({ microphone: false, camera: false });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await joining;
+      const live = platform.sync.getSnapshot();
+      platform.emitSync({ ...live, connection: { phase: "connecting" } });
+      await vi.advanceTimersByTimeAsync(500);
+      if (interruption === "hidden") {
+        vi.stubGlobal("document", { visibilityState: "hidden" });
+        await vi.advanceTimersByTimeAsync(30_000);
+      } else {
+        vi.setSystemTime(Date.now() + 30_000);
+        await vi.advanceTimersByTimeAsync(10_000);
+      }
+      expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      expect(client.getSnapshot().connection.lastError).toBeNull();
+      vi.stubGlobal("document", { visibilityState: "visible" });
+      platform.emitSync(live);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
   it("surfaces snapshot failure through the public client without starting another recovery", async () => {
     const sockets = await liveBrowser(true);
     const client = makeClient(async () => accessGrant());
@@ -617,15 +673,22 @@ describe("public client exhausted recovery", () => {
   });
   it.each(["sync", "media"] as const)("keeps the %s recovery stage", async (stage) => {
     const sockets = await liveBrowser();
-    const client = makeClient(async () => accessGrant());
     const errors: ClientFailure[] = [];
+    const diagnostics: ConnectionDiagnostic[] = [];
+    const warn = vi.fn();
+    const client = makeClient(
+      async () => accessGrant(),
+      25,
+      { warn },
+      (event) => diagnostics.push(event),
+    );
     client.on("error", ({ error }) => errors.push(error));
     try {
       await client.join({ microphone: false, camera: false });
       vi.useFakeTimers();
       if (stage === "sync") {
         vi.stubGlobal("WebSocket", SilentSocket);
-        sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006 }));
+        sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006, wasClean: false }));
       } else {
         const peer = PeerConnection.instances.at(-1)!;
         peer.connectionState = "disconnected";
@@ -636,6 +699,28 @@ describe("public client exhausted recovery", () => {
       for (let second = 0; second < 15 && !errors.some((error) => error.code === code); second++) await vi.advanceTimersByTimeAsync(1000);
       expect(client.getSnapshot().connection.lastError).toMatchObject({ code, recoverable: true });
       expect(errors).toContainEqual(expect.objectContaining({ code, recoverable: true }));
+      const exhausted = diagnostics.filter((event) => event.event === "recovery_exhausted");
+      expect(exhausted).toHaveLength(1);
+      expect(exhausted[0]?.recovery).toMatchObject({ reference: code, attempts: expect.any(Number), transport: { socketAttempts: expect.any(Number), socketCloses: expect.any(Array) }, visibilityState: null });
+      expect(warn).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "recovery_exhausted", recovery: exhausted[0]?.recovery }));
+      if (stage === "sync") {
+        expect(exhausted[0]?.recovery?.attempts).toBeGreaterThan(0);
+        expect(exhausted[0]?.recovery?.transport?.socketCloses).toContainEqual({ code: 1006, wasClean: false });
+        expect(client.getSnapshot().connection.status).toBe("failed");
+        expect(client.getSnapshot().participants.roster).toEqual([]);
+        expect(client.getSnapshot().media.remote).toEqual([]);
+        const dialCount = sockets.length;
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(sockets).toHaveLength(dialCount);
+        vi.useRealTimers();
+        await liveBrowser();
+        await client.join({ microphone: false, camera: false });
+        expect(client.getSnapshot().connection.status).toBe("live");
+        expect(client.getSnapshot().participants.roster).not.toHaveLength(0);
+        expect(client.getSnapshot().connection.lastError).toBeNull();
+      } else {
+        expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      }
     } finally {
       client.dispose();
       if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
