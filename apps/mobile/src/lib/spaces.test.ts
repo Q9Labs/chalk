@@ -6,8 +6,10 @@ import { Platform } from "react-native";
 import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
 import { createGuestAccessGetter, parseSpaceLink, routeMobileLink } from "./spaces";
+import { getApiBaseURL } from "./mobile-config";
 
 vi.mock("expo-secure-store", () => ({}));
+vi.mock("./mobile-config", () => ({ getApiBaseURL: vi.fn(() => "https://api.chalkmeet.com") }));
 vi.mock("react-native", () => ({
   Platform: {
     get OS() {
@@ -29,6 +31,26 @@ const credential = {
   slug: "media-recovery",
   spaceInviteToken: "invite-token",
 };
+
+it("accepts nightly call links only when connected to the nightly API", () => {
+  const link = "https://nightly.chalkmeet.com/abc-defg-hij";
+  expect(parseSpaceLink(link)).toBeNull();
+  vi.mocked(getApiBaseURL).mockReturnValue("https://nightly-api.chalkmeet.com");
+  expect(parseSpaceLink(link)?.inviteLink).toBe(link);
+  expect(createExpoConfig("nightly").expo.extra.apiBaseURL).toBe("https://nightly-api.chalkmeet.com");
+  expect(createExpoConfig("production").expo.extra.apiBaseURL).toBeUndefined();
+  expect(createExpoConfig("nightly").expo.android.intentFilters[1]?.data.some((item) => item.host === "nightly.chalkmeet.com")).toBe(true);
+  expect(createExpoConfig("production").expo.android.intentFilters[1]?.data.some((item) => item.host === "nightly.chalkmeet.com")).toBe(false);
+  vi.mocked(getApiBaseURL).mockReturnValue("https://api.chalkmeet.com");
+});
+
+it("opens unrecognised nightly links in the browser when using the nightly API", async () => {
+  vi.mocked(getApiBaseURL).mockReturnValue("https://nightly-api.chalkmeet.com");
+  const link = "https://nightly.chalkmeet.com/abc-defg-hij?utm_source=chat";
+  expect(await routeMobileLink(link)).toBeNull();
+  expect(openBrowserAsync).toHaveBeenCalledWith(link, { browserPackage: "test.browser" });
+  vi.mocked(getApiBaseURL).mockReturnValue("https://api.chalkmeet.com");
+});
 
 it("uses an invite code as the route key when a short link has no slug", () => {
   expect(parseSpaceLink("https://chalkmeet.com/abc-defg-hij")).toEqual({
