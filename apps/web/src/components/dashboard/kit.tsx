@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 
 import { errorMessage } from "../../lib/dashboard/client";
 import { trapDialogFocus } from "../docs/dialog-focus";
+import { ChalkToast } from "@q9labsai/chalk-react/toast";
 import { Icon, type IconName } from "../site/Icon";
 
 const PHONE = "(max-width: 640px)";
@@ -238,32 +239,29 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
   const show = useCallback((message: string, options: { icon?: IconName; undo?: () => void } = {}) => {
     setToast({ id: Date.now(), message, icon: options.icon ?? "check", undo: options.undo });
   }, []);
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast((current) => (current?.id === toast.id ? null : current)), toast.undo ? 6000 : 3200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="toast-slot" role="status">
+      <div className="toast-slot">
         {toast ? (
-          <div className="toast">
-            <Icon name={toast.icon} />
-            <span>{toast.message}</span>
-            {toast.undo ? (
-              <button
-                type="button"
-                className="btn sm"
-                onClick={() => {
-                  toast.undo?.();
-                  setToast(null);
-                }}
-              >
-                Undo
-              </button>
-            ) : null}
-          </div>
+          <ChalkToast
+            key={toast.id}
+            type={toast.icon === "alert" ? "error" : "success"}
+            duration={toast.icon === "alert" ? Infinity : toast.undo ? 6000 : 3200}
+            message={toast.message}
+            action={
+              toast.undo
+                ? {
+                    label: "Undo",
+                    onClick: () => {
+                      toast.undo?.();
+                      setToast(null);
+                    },
+                  }
+                : undefined
+            }
+            onDismiss={() => setToast((current) => (current?.id === toast.id ? null : current))}
+          />
         ) : null}
       </div>
     </ToastContext.Provider>
