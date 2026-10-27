@@ -72,7 +72,7 @@ defmodule ChalkSync.Transport.Router do
           observability: observability,
           connection_attributes: SocketContext.request(conn)
         },
-        timeout: 60_000
+        timeout: 120_000
       )
       |> halt()
     else
