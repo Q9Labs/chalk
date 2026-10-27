@@ -570,8 +570,8 @@ describe("public client exhausted recovery", () => {
       await client.join({ microphone: false, camera: false });
       const live = platform.sync.getSnapshot();
       vi.useFakeTimers();
-      platform.emitSync({ ...live, connection: { phase: "connecting" } });
       platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering" } });
+      platform.emitSync({ ...live, connection: { phase: "connecting" } });
       await vi.advanceTimersByTimeAsync(500);
       platform.emitSync(live);
       await vi.advanceTimersByTimeAsync(11_000);
