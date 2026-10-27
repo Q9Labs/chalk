@@ -212,7 +212,9 @@ export function SpaceView({
     ...(feature("whiteboard") && canDrawWhiteboard ? ["whiteboard" as const] : []),
     "leave",
   ];
+  const headerLayout = pinnedId ? "focus" : layout;
   const updateLayout = (nextLayout: "grid" | "focus") => {
+    setPinnedId(null);
     setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };
@@ -313,7 +315,7 @@ export function SpaceView({
               onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
               onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
-              onToggleLayout: () => updateLayout(layout === "grid" ? "focus" : "grid"),
+              onToggleLayout: () => updateLayout(headerLayout === "grid" ? "focus" : "grid"),
               onClosePanel: () => setActivePanel(null),
               onPushToTalk: (enabled) => {
                 if (enabled && connection.status !== "live") return;
@@ -323,7 +325,7 @@ export function SpaceView({
             duration: episodeDuration,
             timeLeft: countdown.seconds,
             isRecording: recording.current?.status === "recording",
-            layout,
+            layout: headerLayout,
             onLayoutChange: updateLayout,
             notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
           }}

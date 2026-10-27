@@ -68,7 +68,7 @@ export function ParticipantRow({
       ref={rootRef}
       className="call-person-row group"
       onClick={(event) => {
-        if (event.target instanceof Element && !event.target.closest("button, input, [role=menu]")) onParticipantClick?.(participant.id);
+        if (event.target instanceof Element && event.currentTarget.contains(event.target) && !event.target.closest("button, input, [role=menu]")) onParticipantClick?.(participant.id);
       }}
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">

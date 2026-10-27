@@ -141,6 +141,26 @@ it.skipIf(baseline).each([
       if (viewport.width < 640) await people(b);
       await b.getByRole("button", { name: "Show Amina on main screen", exact: true }).click();
       await expect.poll(() => b.locator('[data-stage-item="a"]').getAttribute("data-pinned")).toBeNull();
+      if (viewport.width < 640) await people(b);
+      await b.getByRole("button", { name: "Options for Amina", exact: true }).click();
+      await b.locator('.chalk-menu[aria-label="Options for Amina"]').getByText("Volume", { exact: true }).click();
+      await b
+        .locator('.chalk-menu[aria-label="Options for Amina"]')
+        .locator(".cursor-pointer")
+        .click({ position: { x: 30, y: 10 }, timeout: 2000 });
+      await expect.poll(() => b.locator('[data-stage-item="a"]').getAttribute("data-pinned")).toBeNull();
+      await b.getByRole("button", { name: "Show Amina on main screen", exact: true }).waitFor();
+      await b.keyboard.press("Escape");
+      if (viewport.width >= 640) {
+        await b.getByRole("button", { name: "Video tile for Amina", exact: true }).click();
+        await b.getByRole("button", { name: "Switch to grid", exact: true }).click();
+        await expect.poll(() => b.locator('[data-stage-item="a"]').getAttribute("data-stage-role")).toBe("grid");
+        await b.getByRole("button", { name: "Video tile for Amina", exact: true }).click();
+        await expect.poll(() => b.locator('[data-stage-item="a"]').getAttribute("data-stage-role")).toBe("primary");
+        await b.getByRole("button", { name: "Switch to grid", exact: true }).waitFor();
+        await b.getByRole("button", { name: "Video tile for Amina", exact: true }).click();
+        await expect.poll(() => b.locator('[data-stage-item="a"]').getAttribute("data-stage-role")).toBe("grid");
+      }
     } finally {
       await context.close();
     }
