@@ -149,7 +149,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "chat_reaction_set",
           "ping"
         ],
-        "heartbeat" => %{"intervalMs" => 20_000, "missedDeadlinesBeforeClose" => 2}
+        "heartbeat" => %{"intervalMs" => 20_000, "missedDeadlinesBeforeClose" => 5}
       },
       %{"id" => "terminal", "transitionsTo" => "closed"},
       %{"id" => "draining", "transitionsTo" => "closed"}

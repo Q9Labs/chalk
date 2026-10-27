@@ -25,7 +25,9 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   @hello_timeout_ms 5_000
   @heartbeat_interval_ms 20_000
-  @missed_heartbeat_limit 2
+  # Hidden, silent Chromium tabs can wake chained timers only once per minute.
+  # Five checks leave at least 80 seconds since the last incoming frame.
+  @missed_heartbeat_limit 5
   @terminal_ack_timeout_ms 5_000
   @entry_timeout_ms 120_000
 

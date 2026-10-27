@@ -47,7 +47,7 @@ defmodule ChalkSync.Transport.SocketCloseTest do
 
   test "heartbeat timeout remains abnormal when WebSock calls terminate normally" do
     assert {:ok, initial} = SocketV1.init(%{})
-    state = %{initial | phase: :live, missed_heartbeats: 1}
+    state = %{initial | phase: :live, missed_heartbeats: 4}
 
     assert {:stop, :normal, {1001, "heartbeat timeout"}, stopped} =
              SocketV1.handle_info(:heartbeat_check, state)

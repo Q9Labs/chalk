@@ -7,6 +7,38 @@ defmodule ChalkSync.Transport.SocketV1Test do
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.TestWSClient, as: Client
 
+  @tag timeout: 90_000
+  test "a heartbeat delayed 70 seconds keeps the participant live", %{port: port} do
+    host = identity()
+    seed_participants(host, [host])
+    client = connect_live(port, host)
+
+    Process.sleep(70_000)
+    assert {:ok, _projections, client} = Client.drain(client)
+    client = Client.send_json(client, %{"type" => "ping"})
+    assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+
+    {client, ack} =
+      command(client, "late-heartbeat-hand-0001", "set_hand_raised", %{"raised" => true})
+
+    assert ack["outcome"] == "committed"
+    Client.close_tcp(client)
+  end
+
+  @tag timeout: 110_000
+  test "a silent participant still loses its socket after five heartbeat checks", %{port: port} do
+    host = identity()
+    seed_participants(host, [host])
+    client = connect_live(port, host)
+
+    started = System.monotonic_time(:millisecond)
+
+    assert {:closed, 1001, "heartbeat timeout", _client} =
+             recv_until_closed(client, started + 105_000)
+
+    assert System.monotonic_time(:millisecond) - started >= 80_000
+  end
+
   test "wire events correlate edge headers with verified hello identity", %{port: port} do
     owner = self()
     handler = "connect-diagnostics-#{System.unique_integer([:positive])}"
@@ -314,6 +346,15 @@ defmodule ChalkSync.Transport.SocketV1Test do
                  identity.admission_lifecycle_intent_id
                )
     end)
+  end
+
+  defp recv_until_closed(client, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    case Client.recv(client, remaining) do
+      {:json, _projection, client} -> recv_until_closed(client, deadline)
+      result -> result
+    end
   end
 
   defp command(client, command_id, name, payload) do

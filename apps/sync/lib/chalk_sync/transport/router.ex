@@ -49,7 +49,7 @@ defmodule ChalkSync.Transport.Router do
               entry_generation: entry_generation(conn.query_params["entry_generation"]),
               connection_attributes: SocketContext.request(conn)
             },
-            timeout: 60_000
+            timeout: 120_000
           )
           |> halt()
 
@@ -72,7 +72,7 @@ defmodule ChalkSync.Transport.Router do
           observability: observability,
           connection_attributes: SocketContext.request(conn)
         },
-        timeout: 60_000
+        timeout: 120_000
       )
       |> halt()
     else

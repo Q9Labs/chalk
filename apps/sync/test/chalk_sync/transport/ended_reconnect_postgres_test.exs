@@ -59,6 +59,51 @@ defmodule ChalkSync.Transport.EndedReconnectPostgresTest do
     end
   end
 
+  @tag timeout: 110_000
+  test "Sync and whiteboard sockets survive a 90 second client frame gap", ctx do
+    [identity | _] = ctx.seed.identities
+    {:ok, sync} = Client.connect(ctx.port, "/v1/sync")
+
+    sync =
+      Client.send_json(sync, %{
+        "type" => "hello",
+        "protocol" => 1,
+        "token" => token(identity),
+        "streams" =>
+          Map.new(["control", "media", "presence", "requests"], &{&1, %{"cursor" => nil}})
+      })
+
+    assert {:json, %{"type" => "welcome"} = welcome, sync} = Client.recv(sync)
+    sync = Client.acknowledge_recovery(sync, welcome)
+    assert {:json, %{"type" => "recovery_complete"}, sync} = Client.recv(sync)
+    assert {:json, %{"stream" => "media"}, sync} = Client.recv(sync)
+    assert {:json, %{"stream" => "presence"}, sync} = Client.recv(sync)
+    {:ok, whiteboard} = Client.connect(ctx.port, "/v1/whiteboard")
+
+    whiteboard =
+      Client.send_json(whiteboard, %{
+        "type" => "hello",
+        "protocol" => "whiteboard-v1",
+        "token" => token(identity),
+        "cursor" => nil
+      })
+
+    assert {:json, %{"type" => "welcome", "protocol" => "whiteboard-v1"}, whiteboard} =
+             Client.recv(whiteboard)
+
+    started = System.monotonic_time(:millisecond)
+    Process.sleep(90_000)
+
+    for client <- [sync, whiteboard] do
+      assert {:ok, _projections, client} = Client.drain(client)
+      client = Client.send_json(client, %{"type" => "ping"})
+      assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+      Client.close_tcp(client)
+    end
+
+    assert System.monotonic_time(:millisecond) - started >= 90_000
+  end
+
   defp end_episode(episode) do
     {:ok, operation} = Operation.new("ended_reconnect_end", :tenant_end_episode, %{})
     {:ok, %{external_operation_id: id}} = Postgres.begin_internal_operation(episode, operation)

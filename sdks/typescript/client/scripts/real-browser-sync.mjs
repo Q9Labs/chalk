@@ -14,7 +14,11 @@ const fixturePrefix = "CHALK_SYNC_BROWSER_FIXTURE=";
 const fixtureTimeoutMs = 30_000;
 const browserTimeoutMs = 15_000;
 
-await run();
+if (process.env.CHALK_SYNC_BROWSER_BACKGROUND === "1") {
+  await import("./background-heartbeat.mjs");
+} else {
+  await run();
+}
 
 async function run() {
   const external = externalFixture();
