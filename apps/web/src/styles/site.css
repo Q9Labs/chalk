@@ -2443,7 +2443,7 @@ html:has(.site[data-chalk-theme="light"]) {
   bottom: 82px;
 }
 .site .xtile .xtr .av {
-  width: clamp(48px, 10vw, 132px) !important;
+  width: clamp(48px, 10cqw, 132px) !important;
   height: auto !important;
   aspect-ratio: 1;
 }
