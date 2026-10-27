@@ -272,7 +272,7 @@ func recordRateLimiterUnavailable(ctx context.Context, policy string) {
 	case ratelimit.PolicyNameCORSPolicyLookup, ratelimit.PolicyNameAuthenticatedRead, ratelimit.PolicyNameAuthenticatedWrite,
 		ratelimit.PolicyNameWebhookRead, ratelimit.PolicyNameTelemetryIntake,
 		ratelimit.PolicyNameAuthenticatedRead + ".service_ceiling", ratelimit.PolicyNameAuthenticatedWrite + ".service_ceiling",
-		reportParticipantLimit.Name, reportIPLimit.Name, reportAccountLimit.Name, reportEpisodeLimit.Name:
+		reportParticipantLimit.Name, reportIPLimit.Name, reportAccountLimit.Name, reportEpisodeLimit.Name, connectionReportParticipantLimit.Name:
 	default:
 		policy = "unknown"
 	}

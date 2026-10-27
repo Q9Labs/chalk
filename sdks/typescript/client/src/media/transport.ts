@@ -14,12 +14,18 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
     if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
     return withDeadline(timeoutMs, async (signal) => {
+      const startedAt = performance.now();
       const response = await fetch(`${mediaPath}/${path}`, {
         ...init,
         signal,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}), ...init?.headers },
       });
       if (!response.ok) {
+        try {
+          options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt });
+        } catch {
+          /* Observers cannot interrupt signaling. */
+        }
         throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
           status: response.status,
           retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),

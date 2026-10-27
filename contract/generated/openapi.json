@@ -2606,6 +2606,145 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/connection-reports": {
+      "post": {
+        "operationId": "reportConnectionFailure",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Report connection failure",
+        "x-chalk-max-body-bytes": 32768,
+        "x-chalk-rate-limit": {
+          "limit": 6,
+          "name": "connection_reports.participant",
+          "window_seconds": 600
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/live-episodes": {
       "get": {
         "operationId": "listSpaceLiveEpisodes",
@@ -12658,6 +12797,130 @@
           }
         },
         "required": ["connection_id", "tracks"],
+        "type": "object"
+      },
+      "ConnectionReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "attempt": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "close_code": {
+                  "maximum": 4999,
+                  "minimum": 1000,
+                  "type": ["integer", "null"]
+                },
+                "code": {
+                  "enum": [
+                    "invalid_state",
+                    "invalid_access",
+                    "access_unavailable",
+                    "permission_denied",
+                    "device_not_found",
+                    "device_busy",
+                    "device_constraint_invalid",
+                    "media_capture_failed",
+                    "sync_start_failed",
+                    "state_digest_recovery_failed",
+                    "sync_hello_timeout",
+                    "media_start_failed",
+                    "join_cleanup_unconfirmed",
+                    "sync_recovery_exhausted",
+                    "media_recovery_exhausted",
+                    "command_rejected",
+                    "leave_unconfirmed",
+                    "episode_ended",
+                    "unsupported_environment",
+                    "internal_error",
+                    "collaboration_unavailable",
+                    "chat_cursor_reset_required",
+                    "rate_limited",
+                    "invalid_payload"
+                  ],
+                  "type": "string"
+                },
+                "duration_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "elapsed_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "event": {
+                  "enum": [
+                    "space_join_span",
+                    "state_changed",
+                    "connection_failed",
+                    "sync_connect_failed",
+                    "sync_dial_timeout",
+                    "access_refreshed",
+                    "access_refresh_failed",
+                    "recovery_attempt",
+                    "recovery_succeeded",
+                    "recovery_exhausted",
+                    "cleanup_completed",
+                    "cleanup_unconfirmed",
+                    "sync_socket_open",
+                    "sync_socket_close",
+                    "sync_heartbeat_gap",
+                    "media_state",
+                    "media_http_error"
+                  ],
+                  "type": "string"
+                },
+                "heartbeat_gap_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "http_status": {
+                  "maximum": 599,
+                  "minimum": 400,
+                  "type": ["integer", "null"]
+                },
+                "outcome": {
+                  "enum": ["started", "succeeded", "failed", "cancelled"],
+                  "type": "string"
+                },
+                "phase": {
+                  "enum": ["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"],
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"],
+                  "type": "string"
+                },
+                "step": {
+                  "enum": ["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"],
+                  "type": "string"
+                }
+              },
+              "required": ["elapsed_ms", "event"],
+              "type": "object"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          },
+          "trigger": {
+            "enum": ["join_failed", "connection_lost", "recovery_exhausted"],
+            "type": "string"
+          },
+          "version": {
+            "enum": [1],
+            "type": "integer"
+          }
+        },
+        "required": ["events", "trigger", "version"],
         "type": "object"
       },
       "CreateAPIKeyRequest": {

@@ -1,3 +1,4 @@
+import { ConnectionReporter } from "./report";
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createV1SyncClient } from "../sync";
@@ -10,6 +11,32 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       now: () => Date.now(),
       setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
       clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
+    },
+    createConnectionReporter: (access) => {
+      const random = globalThis.crypto;
+      if (!random?.randomUUID) return undefined;
+      return new ConnectionReporter({
+        traceparent: `00-${random.randomUUID().replaceAll("-", "")}-${random.randomUUID().replaceAll("-", "").slice(0, 16)}-01`,
+        now: () => performance.now(),
+        access,
+        online: () => globalThis.navigator?.onLine !== false,
+        subscribeOnline: (listener) => {
+          globalThis.window?.addEventListener("online", listener);
+          return () => globalThis.window?.removeEventListener("online", listener);
+        },
+        send: async (grant, report, signal, traceparent) => {
+          const response = await fetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(grant.subject.tenantId)}/connection-reports`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${grant.media.token}`, "Content-Type": "application/json", traceparent },
+            body: JSON.stringify(report),
+            signal,
+            keepalive: true,
+            credentials: "omit",
+          });
+          // A response (including rejection) is final; retry only transport failures.
+          await response.body?.cancel();
+        },
+      });
     },
     mediaDevices: createBrowserMediaDevices(),
     cancelPendingAdmission: async (access, signal) => {
@@ -78,6 +105,8 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
+      onDiagnostic: input.onTransportDiagnostic,
+      traceparent: input.traceparent,
       tenantId: subject.tenantId,
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
@@ -136,6 +165,8 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
 function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
   return createV1SyncClient({
     url: syncURL,
+    onDiagnostic: input.onTransportDiagnostic,
+    traceparent: input.traceparent,
     token: input.token,
     mediaPlane: input.media,
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },

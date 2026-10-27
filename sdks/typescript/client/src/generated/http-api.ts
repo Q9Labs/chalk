@@ -446,6 +446,23 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("reportConnectionFailure", "/v1/tenants/:tenant_id/connection-reports", {
+      params: S.ReportConnectionFailurePathParamsSchema,
+      payload: S.ReportConnectionFailureRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.delete("revokeAPIKey", "/v1/tenants/:tenant_id/api-keys/:api_key_id", {
       params: S.RevokeAPIKeyPathParamsSchema,
       success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),

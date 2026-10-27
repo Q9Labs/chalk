@@ -296,6 +296,73 @@ export const CloudflareSFUTracksRequestSchema = Schema.Struct({
 });
 export type CloudflareSFUTracksRequest = typeof CloudflareSFUTracksRequestSchema.Type;
 
+export const ConnectionReportRequestSchema = Schema.Struct({
+  events: Schema.Array(
+    Schema.Struct({
+      attempt: Schema.optional(Schema.NullOr(Schema.Number)),
+      close_code: Schema.optional(Schema.NullOr(Schema.Number)),
+      code: Schema.optional(
+        Schema.Literals([
+          "invalid_state",
+          "invalid_access",
+          "access_unavailable",
+          "permission_denied",
+          "device_not_found",
+          "device_busy",
+          "device_constraint_invalid",
+          "media_capture_failed",
+          "sync_start_failed",
+          "state_digest_recovery_failed",
+          "sync_hello_timeout",
+          "media_start_failed",
+          "join_cleanup_unconfirmed",
+          "sync_recovery_exhausted",
+          "media_recovery_exhausted",
+          "command_rejected",
+          "leave_unconfirmed",
+          "episode_ended",
+          "unsupported_environment",
+          "internal_error",
+          "collaboration_unavailable",
+          "chat_cursor_reset_required",
+          "rate_limited",
+          "invalid_payload",
+        ]),
+      ),
+      duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+      elapsed_ms: Schema.Number,
+      event: Schema.Literals([
+        "space_join_span",
+        "state_changed",
+        "connection_failed",
+        "sync_connect_failed",
+        "sync_dial_timeout",
+        "access_refreshed",
+        "access_refresh_failed",
+        "recovery_attempt",
+        "recovery_succeeded",
+        "recovery_exhausted",
+        "cleanup_completed",
+        "cleanup_unconfirmed",
+        "sync_socket_open",
+        "sync_socket_close",
+        "sync_heartbeat_gap",
+        "media_state",
+        "media_http_error",
+      ]),
+      heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+      http_status: Schema.optional(Schema.NullOr(Schema.Number)),
+      outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
+      phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
+      state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
+      step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+  trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted"]),
+  version: Schema.Literal(1),
+});
+export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;
+
 export const CreateAPIKeyRequestSchema = Schema.Struct({
   expires_at: DateTimeStringSchema,
   name: Schema.String.check(Schema.isMinLength(1)),
@@ -2333,6 +2400,21 @@ export const RenegotiateCloudflareSFU429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
+
+export const ReportConnectionFailurePathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type ReportConnectionFailurePathParams = typeof ReportConnectionFailurePathParamsSchema.Type;
+
+export const ReportConnectionFailureRequestBodySchema = ConnectionReportRequestSchema;
+export type ReportConnectionFailureRequestBody = typeof ReportConnectionFailureRequestBodySchema.Type;
+
+export const ReportConnectionFailure429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type ReportConnectionFailure429ResponseHeaders = typeof ReportConnectionFailure429ResponseHeadersSchema.Type;
 
 export const RequestRecordingExportPathParamsSchema = Schema.Struct({
   recording_id: RecordingIdSchema,
@@ -5687,6 +5769,18 @@ export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
 ]);
 export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
 
+export const ReportConnectionFailureErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type ReportConnectionFailureError = typeof ReportConnectionFailureErrorSchema.Type;
+
 export const RequestRecordingExportErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6010,6 +6104,7 @@ export const ChalkOperationPolicies = {
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  reportConnectionFailure: { maxBodyBytes: 32768, rateLimit: { limit: 6, policy: "connection_reports.participant", windowSeconds: 600 } },
   requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

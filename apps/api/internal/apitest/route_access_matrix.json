@@ -133,6 +133,12 @@
     ],
     "body": "{}"
   },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/connection-reports",
+    "operation": "reportConnectionFailure",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"version\":1,\"trigger\":\"join_failed\",\"events\":[{\"event\":\"connection_failed\",\"elapsed_ms\":0}]}"
+  },
   { "route": "POST /v1/tenants/{tenant_id}/problem-reports", "operation": "sendProblemReport", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
   { "route": "GET /v1/tenants/{tenant_id}/problem-reports/availability", "operation": "getProblemReportAvailability", "credentials": [], "publicReason": "Availability exposes no tenant data.", "body": "" },
   {

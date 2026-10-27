@@ -29,8 +29,8 @@ it("keeps an open owner report editable with Send disabled when the five-minute 
   vi.setSystemTime(new Date("2026-10-23T12:00:00Z"));
   window.sessionStorage.clear();
   const platform = terminalTestPlatform();
-  const send = vi.fn();
-  vi.stubGlobal("fetch", send);
+  const requests = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal("fetch", requests);
   mocks.dashboardAction.mockResolvedValue({ access: opaqueAccessGrant(1) });
   mocks.createClient.mockImplementation((options) =>
     createSpaceClientForPlatform(options, {
@@ -62,9 +62,10 @@ it("keeps an open owner report editable with Send disabled when the five-minute 
     expect(screen.queryByRole("button", { name: "Report a problem" })).toBeNull();
     fireEvent.change(input, { target: { value: "I can still edit and copy this." } });
     expect(input.value).toBe("I can still edit and copy this.");
-    if (!input.form) throw new Error("Report form missing");
-    fireEvent.submit(input.form);
-    expect(send).not.toHaveBeenCalled();
+    const form = input.form;
+    if (!form) throw new Error("Report form missing");
+    await act(async () => fireEvent.submit(form));
+    expect(requests.mock.calls.map(([url]) => url)).toEqual(["https://api.chalk.test/v1/tenants/tenant-1/connection-reports"]);
   } finally {
     await act(async () => cleanup());
     vi.useRealTimers();

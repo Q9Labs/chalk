@@ -1,3 +1,4 @@
+import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -225,6 +226,8 @@ export type V1CollaborationClient = {
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };
 export type V1SyncClientOptions = {
+  readonly traceparent?: string;
+  readonly onDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly url: string;
   readonly token: () => Promise<string>;
   readonly webSocket: SyncWebSocketFactory;

@@ -249,6 +249,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/connection-reports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Report connection failure */
+    post: operations["reportConnectionFailure"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/live-episodes": {
     parameters: {
       query?: never;
@@ -1289,6 +1306,73 @@ export interface components {
         source?: string;
         trackName: string;
       }[];
+    };
+    ConnectionReportRequest: {
+      events: {
+        attempt?: number | null;
+        close_code?: number | null;
+        /** @enum {string} */
+        code?:
+          | "invalid_state"
+          | "invalid_access"
+          | "access_unavailable"
+          | "permission_denied"
+          | "device_not_found"
+          | "device_busy"
+          | "device_constraint_invalid"
+          | "media_capture_failed"
+          | "sync_start_failed"
+          | "state_digest_recovery_failed"
+          | "sync_hello_timeout"
+          | "media_start_failed"
+          | "join_cleanup_unconfirmed"
+          | "sync_recovery_exhausted"
+          | "media_recovery_exhausted"
+          | "command_rejected"
+          | "leave_unconfirmed"
+          | "episode_ended"
+          | "unsupported_environment"
+          | "internal_error"
+          | "collaboration_unavailable"
+          | "chat_cursor_reset_required"
+          | "rate_limited"
+          | "invalid_payload";
+        duration_ms?: number | null;
+        elapsed_ms: number;
+        /** @enum {string} */
+        event:
+          | "space_join_span"
+          | "state_changed"
+          | "connection_failed"
+          | "sync_connect_failed"
+          | "sync_dial_timeout"
+          | "access_refreshed"
+          | "access_refresh_failed"
+          | "recovery_attempt"
+          | "recovery_succeeded"
+          | "recovery_exhausted"
+          | "cleanup_completed"
+          | "cleanup_unconfirmed"
+          | "sync_socket_open"
+          | "sync_socket_close"
+          | "sync_heartbeat_gap"
+          | "media_state"
+          | "media_http_error";
+        heartbeat_gap_ms?: number | null;
+        http_status?: number | null;
+        /** @enum {string} */
+        outcome?: "started" | "succeeded" | "failed" | "cancelled";
+        /** @enum {string} */
+        phase?: "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped" | "new" | "connected" | "disconnected" | "closed";
+        /** @enum {string} */
+        state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
+        /** @enum {string} */
+        step?: "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
+      }[];
+      /** @enum {string} */
+      trigger: "join_failed" | "connection_lost" | "recovery_exhausted";
+      /** @enum {integer} */
+      version: 1;
     };
     CreateAPIKeyRequest: {
       expires_at: components["schemas"]["DateTimeString"];
@@ -3830,6 +3914,96 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  reportConnectionFailure: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConnectionReportRequest"];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
         headers: {
           [name: string]: unknown;
         };

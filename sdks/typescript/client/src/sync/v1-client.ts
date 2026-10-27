@@ -1,3 +1,4 @@
+import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
@@ -387,6 +388,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#phase = { phase: "connecting" };
     this.#connectAttemptCount += 1;
     this.#connectStartedAt = this.#clock().now();
+    const socketStartedAt = this.#connectStartedAt;
     this.#opened = false;
     // A pending retry must not erase a rejected upgrade. An earlier hello is
     // no longer the failing stage once its replacement is trying to open.
@@ -418,6 +420,7 @@ export class V1SyncClient implements V1CollaborationClient {
       if (socket !== this.#socket) return;
       this.#clearDial();
       this.#opened = true;
+      this.#diagnostic({ event: "sync_socket_open", attempt: this.#connectAttemptCount, duration_ms: this.#clock().now() - socketStartedAt });
       this.#connectFailure = undefined;
       void this.#authenticate(socket);
     };
@@ -425,6 +428,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
     socket.onclose = (event) => {
+      this.#diagnostic({ event: "sync_socket_close", close_code: event.code, duration_ms: this.#clock().now() - socketStartedAt, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
       if (this.#started) {
         this.#socketCloses.push({ code: event.code, wasClean: event.wasClean ?? null });
         if (this.#socketCloses.length > 50) {
@@ -463,6 +467,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const hello = {
         type: "hello",
         protocol: 1,
+        ...(this.#options.traceparent ? { traceparent: this.#options.traceparent } : {}),
         token,
         streams: {
           control: { cursor: this.#control && { revision: this.#control.revision, state_schema_version: this.#control.stateSchemaVersion, state_digest: this.#control.stateDigest } },
@@ -983,12 +988,20 @@ export class V1SyncClient implements V1CollaborationClient {
   #updateLocalMediaStates(): void {
     this.#liveTargets.updateFromPublications(this.#localPublications);
   }
+  #diagnostic(event: ConnectionReportTransportEvent): void {
+    try {
+      this.#options.onDiagnostic?.(event);
+    } catch {
+      /* Observers cannot interrupt the transport. */
+    }
+  }
   #startHeartbeat(): void {
     this.#clearHeartbeat();
     this.#heartbeatTimer = this.#clock().setTimeout(() => {
       this.#heartbeatTimer = undefined;
       if (this.#phase.phase !== "live") return;
       this.#missedHeartbeats += 1;
+      if (this.#missedHeartbeats > 1) this.#diagnostic({ event: "sync_heartbeat_gap", duration_ms: this.#missedHeartbeats * 20000, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
       if (this.#missedHeartbeats > 2) {
         this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
         return;
