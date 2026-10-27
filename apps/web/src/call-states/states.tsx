@@ -166,7 +166,7 @@ export const CALL_STATES: readonly CallState[] = [
     {
       id: `board-follow-${scheme}`,
       title: `Board following Nora, ${scheme}`,
-      actions: [{ click: "More options for Nora" }, { click: "Follow", role: "menuitem" }],
+      actions: [{ click: `More options for ${nora.name}` }, { click: "Follow", role: "menuitem" }],
       render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
     { id: `board-small-${scheme}`, title: `Board with one small word, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ scene: "small" }} /> },
