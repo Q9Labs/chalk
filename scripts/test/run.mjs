@@ -10,7 +10,6 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(
 child.on("error", (error) => {
   throw error;
 });
-child.on("exit", (code, signal) => {
-  if (signal) process.kill(process.pid, signal);
-  else process.exitCode = code;
+child.on("exit", (code) => {
+  process.exitCode = code ?? 1;
 });
