@@ -1,8 +1,11 @@
 import { createConvergenceScenario } from "../../tests/helpers/media-convergence";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "./core.test.helpers";
 import { control, expectAcknowledgedEnd, joinWithTerminalControl, terminalTestClient, terminalTestPlatform } from "./terminal.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
+
+beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
+afterEach(() => vi.unstubAllGlobals());
 
 describe("SpaceClient terminal callbacks", () => {
   it.each(["host", "guest"] as const)("does not force-close published media when the %s observes the call end", async (role) => {
