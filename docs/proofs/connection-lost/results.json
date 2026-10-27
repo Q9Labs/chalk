@@ -1,6 +1,6 @@
 {
   "baseline": "b500d79304a46c3f4069f805187555a6aaddd868",
-  "head": "df268d94b375837f3fdfad1442f6d5e8db671d8e",
+  "head": "29cfa6785fbf4638b5c18b1ff087d1710f85f13b",
   "results": [
     {
       "revision": "before",
@@ -12,7 +12,7 @@
           "episode": {
             "id": "episode-1",
             "startedAt": null,
-            "deadline": "2026-10-27T12:19:03.464Z"
+            "deadline": "2026-10-27T12:28:07.673Z"
           },
           "lastError": null,
           "episodeEnded": false,
@@ -27,7 +27,7 @@
           "episode": {
             "id": "episode-1",
             "startedAt": null,
-            "deadline": "2026-10-27T12:19:03.464Z"
+            "deadline": "2026-10-27T12:28:07.673Z"
           },
           "lastError": {
             "code": "connection.sync_recovery_exhausted",
@@ -41,203 +41,7 @@
         "remoteTracks": 0,
         "diagnostics": [
           {
-            "timestamp": 1793103243542,
-            "event": "state_changed",
-            "state": "joining",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103243543,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243543,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243544,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "succeeded",
-            "durationMs": 1
-          },
-          {
-            "timestamp": 1793103243544,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243546,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "succeeded",
-            "durationMs": 2
-          },
-          {
-            "timestamp": 1793103243546,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243553,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "succeeded",
-            "durationMs": 7
-          },
-          {
-            "timestamp": 1793103243553,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243553,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103243554,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243554,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243554,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243556,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "succeeded",
-            "durationMs": 2
-          },
-          {
-            "timestamp": 1793103243578,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "succeeded",
-            "durationMs": 24
-          },
-          {
-            "timestamp": 1793103243578,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "succeeded",
-            "durationMs": 24
-          },
-          {
-            "timestamp": 1793103243578,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103243578,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103243578,
-            "event": "state_changed",
-            "state": "live",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103243579,
-            "event": "space_join_span",
-            "state": "live",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "succeeded",
-            "durationMs": 36
-          },
-          {
-            "timestamp": 1793103244788,
-            "event": "state_changed",
-            "state": "reconnecting",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103244789,
-            "event": "recovery_attempt",
-            "state": "reconnecting",
-            "epoch": 1,
-            "attempt": 1
-          },
-          {
-            "timestamp": 1793103254795,
+            "timestamp": 1793103798934,
             "event": "recovery_exhausted",
             "state": "reconnecting",
             "epoch": 1,
@@ -257,7 +61,7 @@
           "episode": {
             "id": "episode-1",
             "startedAt": null,
-            "deadline": "2026-10-27T12:19:15.461Z"
+            "deadline": "2026-10-27T12:28:19.575Z"
           },
           "lastError": null,
           "episodeEnded": false,
@@ -272,7 +76,7 @@
           "episode": {
             "id": "episode-1",
             "startedAt": null,
-            "deadline": "2026-10-27T12:19:15.461Z"
+            "deadline": "2026-10-27T12:28:19.575Z"
           },
           "lastError": {
             "code": "connection.sync_recovery_exhausted",
@@ -286,203 +90,7 @@
         "remoteTracks": 0,
         "diagnostics": [
           {
-            "timestamp": 1793103255505,
-            "event": "state_changed",
-            "state": "joining",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103255505,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255506,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255506,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103255506,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255509,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "succeeded",
-            "durationMs": 3
-          },
-          {
-            "timestamp": 1793103255509,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255512,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "succeeded",
-            "durationMs": 3
-          },
-          {
-            "timestamp": 1793103255512,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255513,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "succeeded",
-            "durationMs": 1
-          },
-          {
-            "timestamp": 1793103255514,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255514,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255514,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255515,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "succeeded",
-            "durationMs": 1
-          },
-          {
-            "timestamp": 1793103255536,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "succeeded",
-            "durationMs": 22
-          },
-          {
-            "timestamp": 1793103255536,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "succeeded",
-            "durationMs": 22
-          },
-          {
-            "timestamp": 1793103255536,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103255536,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103255536,
-            "event": "state_changed",
-            "state": "live",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103255537,
-            "event": "space_join_span",
-            "state": "live",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "succeeded",
-            "durationMs": 32
-          },
-          {
-            "timestamp": 1793103256677,
-            "event": "state_changed",
-            "state": "reconnecting",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103256678,
-            "event": "recovery_attempt",
-            "state": "reconnecting",
-            "epoch": 1,
-            "attempt": 1
-          },
-          {
-            "timestamp": 1793103266684,
+            "timestamp": 1793103810806,
             "event": "recovery_exhausted",
             "state": "reconnecting",
             "epoch": 1,
@@ -502,7 +110,7 @@
           "episode": {
             "id": "episode-1",
             "startedAt": null,
-            "deadline": "2026-10-27T12:19:28.209Z"
+            "deadline": "2026-10-27T12:28:32.426Z"
           },
           "lastError": null,
           "episodeEnded": false,
@@ -527,203 +135,7 @@
         "remoteTracks": 0,
         "diagnostics": [
           {
-            "timestamp": 1793103268249,
-            "event": "state_changed",
-            "state": "joining",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103268249,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268250,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268250,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103268250,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268254,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "succeeded",
-            "durationMs": 4
-          },
-          {
-            "timestamp": 1793103268254,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268259,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "succeeded",
-            "durationMs": 5
-          },
-          {
-            "timestamp": 1793103268259,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268259,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103268261,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268261,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268261,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268263,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "succeeded",
-            "durationMs": 2
-          },
-          {
-            "timestamp": 1793103268285,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "succeeded",
-            "durationMs": 24
-          },
-          {
-            "timestamp": 1793103268285,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "succeeded",
-            "durationMs": 24
-          },
-          {
-            "timestamp": 1793103268285,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103268285,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103268285,
-            "event": "state_changed",
-            "state": "live",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103268288,
-            "event": "space_join_span",
-            "state": "live",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "succeeded",
-            "durationMs": 39
-          },
-          {
-            "timestamp": 1793103269474,
-            "event": "state_changed",
-            "state": "reconnecting",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103269474,
-            "event": "recovery_attempt",
-            "state": "reconnecting",
-            "epoch": 1,
-            "attempt": 1
-          },
-          {
-            "timestamp": 1793103279480,
+            "timestamp": 1793103823697,
             "event": "recovery_exhausted",
             "state": "reconnecting",
             "epoch": 1,
@@ -740,24 +152,18 @@
                   }
                 ],
                 "omittedSocketCloses": 0,
-                "lastHeartbeatReplyAt": 1793103268786
+                "lastHeartbeatReplyAt": 1793103813004
               },
-              "lastHeartbeatReplyAgoMs": 10694,
+              "lastHeartbeatReplyAgoMs": 10693,
               "visibilityState": "visible"
             }
           },
           {
-            "timestamp": 1793103279481,
+            "timestamp": 1793103823697,
             "event": "connection_failed",
             "state": "reconnecting",
             "epoch": 1,
             "code": "sync_recovery_exhausted"
-          },
-          {
-            "timestamp": 1793103279484,
-            "event": "state_changed",
-            "state": "failed",
-            "epoch": 1
           }
         ]
       },
@@ -773,7 +179,7 @@
           "episode": {
             "id": "episode-1",
             "startedAt": null,
-            "deadline": "2026-10-27T12:19:40.245Z"
+            "deadline": "2026-10-27T12:28:44.523Z"
           },
           "lastError": null,
           "episodeEnded": false,
@@ -798,203 +204,7 @@
         "remoteTracks": 0,
         "diagnostics": [
           {
-            "timestamp": 1793103280286,
-            "event": "state_changed",
-            "state": "joining",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103280286,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280287,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280287,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "acquire_initial_media",
-            "spanId": "space-join-span-2",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103280287,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280290,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "access_initialize",
-            "spanId": "space-join-span-3",
-            "outcome": "succeeded",
-            "durationMs": 3
-          },
-          {
-            "timestamp": 1793103280290,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280293,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_media_client",
-            "spanId": "space-join-span-4",
-            "outcome": "succeeded",
-            "durationMs": 3
-          },
-          {
-            "timestamp": 1793103280293,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280293,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "create_sync_client",
-            "spanId": "space-join-span-5",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103280294,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280294,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280294,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280295,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_media",
-            "spanId": "space-join-span-6",
-            "outcome": "succeeded",
-            "durationMs": 1
-          },
-          {
-            "timestamp": 1793103280313,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "wait_for_sync_live",
-            "spanId": "space-join-span-7",
-            "outcome": "succeeded",
-            "durationMs": 19
-          },
-          {
-            "timestamp": 1793103280313,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "start_sync",
-            "spanId": "space-join-span-8",
-            "outcome": "succeeded",
-            "durationMs": 19
-          },
-          {
-            "timestamp": 1793103280314,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "started"
-          },
-          {
-            "timestamp": 1793103280314,
-            "event": "space_join_span",
-            "state": "joining",
-            "epoch": 1,
-            "step": "confirm_entered",
-            "spanId": "space-join-span-9",
-            "outcome": "succeeded",
-            "durationMs": 0
-          },
-          {
-            "timestamp": 1793103280314,
-            "event": "state_changed",
-            "state": "live",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103280316,
-            "event": "space_join_span",
-            "state": "live",
-            "epoch": 1,
-            "step": "join",
-            "spanId": "space-join-span-1",
-            "outcome": "succeeded",
-            "durationMs": 30
-          },
-          {
-            "timestamp": 1793103281462,
-            "event": "state_changed",
-            "state": "reconnecting",
-            "epoch": 1
-          },
-          {
-            "timestamp": 1793103281462,
-            "event": "recovery_attempt",
-            "state": "reconnecting",
-            "epoch": 1,
-            "attempt": 1
-          },
-          {
-            "timestamp": 1793103291468,
+            "timestamp": 1793103835767,
             "event": "recovery_exhausted",
             "state": "reconnecting",
             "epoch": 1,
@@ -1011,24 +221,18 @@
                   }
                 ],
                 "omittedSocketCloses": 0,
-                "lastHeartbeatReplyAt": 1793103280815
+                "lastHeartbeatReplyAt": 1793103825099
               },
-              "lastHeartbeatReplyAgoMs": 10653,
+              "lastHeartbeatReplyAgoMs": 10668,
               "visibilityState": "visible"
             }
           },
           {
-            "timestamp": 1793103291469,
+            "timestamp": 1793103835767,
             "event": "connection_failed",
             "state": "reconnecting",
             "epoch": 1,
             "code": "sync_recovery_exhausted"
-          },
-          {
-            "timestamp": 1793103291472,
-            "event": "state_changed",
-            "state": "failed",
-            "epoch": 1
           }
         ]
       },

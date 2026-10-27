@@ -114,16 +114,19 @@ try {
     ]) {
       let frames = [];
       const sockets = new Set();
+      const assets = new Map([
+        ["/styles.css", { type: "text/css", path: resolve(output, "styles.css") }],
+        ["/page.js", { type: "text/javascript", path: resolve(directory, "page.js") }],
+      ]);
       const server = createServer(async (request, response) => {
+        const asset = assets.get(request.url);
         if (request.url === "/frames") {
           const chunks = [];
           for await (const chunk of request) chunks.push(chunk);
           frames = JSON.parse(Buffer.concat(chunks).toString());
           response.writeHead(204).end();
-        } else if (request.url === "/styles.css") {
-          response.writeHead(200, { "content-type": "text/css" }).end(await readFile(resolve(output, "styles.css")));
-        } else if (request.url === "/page.js") {
-          response.writeHead(200, { "content-type": "text/javascript" }).end(await readFile(resolve(directory, "page.js")));
+        } else if (asset) {
+          response.writeHead(200, { "content-type": asset.type }).end(await readFile(asset.path));
         } else {
           response
             .writeHead(200, { "content-type": "text/html" })

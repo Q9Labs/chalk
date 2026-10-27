@@ -84,6 +84,23 @@ export class ConnectionDiagnostics {
     }
   }
 
+  recordRecoveryExhausted(input: { readonly state: ConnectionState; readonly epoch: number; readonly code: "sync_recovery_exhausted" | "media_recovery_exhausted"; readonly attempts: number; readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null }): void {
+    const { state, epoch, code, attempts, transport } = input;
+    this.record({
+      event: "recovery_exhausted",
+      state,
+      epoch,
+      code,
+      recovery: {
+        reference: `connection.${code}`,
+        attempts,
+        transport,
+        lastHeartbeatReplyAgoMs: transport?.lastHeartbeatReplyAt == null ? null : Math.max(0, this.#now() - transport.lastHeartbeatReplyAt),
+        visibilityState: typeof document === "undefined" ? null : document.visibilityState,
+      },
+    });
+  }
+
   snapshot(): readonly ConnectionDiagnostic[] {
     return Object.freeze([...this.#events]);
   }

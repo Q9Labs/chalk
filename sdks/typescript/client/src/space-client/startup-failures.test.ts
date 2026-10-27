@@ -564,12 +564,14 @@ describe("public client capture warnings", () => {
 
 describe("public client exhausted recovery", () => {
   it("keeps recovering media when Sync has already reconnected", async () => {
+    vi.useFakeTimers();
     const platform = createCoreTestPlatform();
     const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
     try {
-      await client.join({ microphone: false, camera: false });
+      const joining = client.join({ microphone: false, camera: false });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await joining;
       const live = platform.sync.getSnapshot();
-      vi.useFakeTimers();
       platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering" } });
       platform.emitSync({ ...live, connection: { phase: "connecting" } });
       await vi.advanceTimersByTimeAsync(500);
@@ -587,12 +589,14 @@ describe("public client exhausted recovery", () => {
   });
 
   it.each(["hidden", "suspended"] as const)("does not terminate Sync recovery for time spent %s", async (interruption) => {
+    vi.useFakeTimers();
     const platform = createCoreTestPlatform();
     const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
     try {
-      await client.join({ microphone: false, camera: false });
+      const joining = client.join({ microphone: false, camera: false });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await joining;
       const live = platform.sync.getSnapshot();
-      vi.useFakeTimers();
       platform.emitSync({ ...live, connection: { phase: "connecting" } });
       await vi.advanceTimersByTimeAsync(500);
       if (interruption === "hidden") {

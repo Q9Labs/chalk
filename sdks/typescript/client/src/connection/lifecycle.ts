@@ -679,19 +679,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     }
                     const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
                     const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
-                    diagnostics.record({
-                      event: "recovery_exhausted",
-                      state: model.state,
-                      epoch,
-                      code,
-                      recovery: {
-                        reference: `connection.${code}`,
-                        attempts,
-                        transport,
-                        lastHeartbeatReplyAgoMs: transport?.lastHeartbeatReplyAt == null ? null : Math.max(0, clock.currentTimeMillisUnsafe() - transport.lastHeartbeatReplyAt),
-                        visibilityState: typeof document === "undefined" ? null : document.visibilityState,
-                      },
-                    });
+                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport });
                     if (plan.kind === "sync") {
                       yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
                       return;
