@@ -1,11 +1,15 @@
 import { Deferred, Effect, Fiber } from "effect";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
+
+beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
+afterEach(() => vi.unstubAllGlobals());
+
 describe("ConnectionLifecycle Episode snapshot", () => {
   it.each(["startup", "live"] as const)("surfaces a failed digest recovery during %s without replacing the Sync client", async (phase) => {
     const fixture = recoveryFixture();

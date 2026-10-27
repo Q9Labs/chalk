@@ -21,7 +21,7 @@
       "persistent": true
     },
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!**/node_modules/**", "!**/dist/**", "!**/coverage/**", "!**/.turbo/**", "!**/.astro/**", "!**/.next/**", "!**/.wrangler/**", "!**/.output/**", "!example/**", "!ios/**", "!android/**"],
+      "inputs": ["$TURBO_ROOT$/scripts/test/**", "$TURBO_DEFAULT$", "!**/*.md", "!**/node_modules/**", "!**/dist/**", "!**/coverage/**", "!**/.turbo/**", "!**/.astro/**", "!**/.next/**", "!**/.wrangler/**", "!**/.output/**", "!example/**", "!ios/**", "!android/**"],
       "outputs": ["coverage/**"],
       "env": ["CI", "NODE_ENV"]
     },

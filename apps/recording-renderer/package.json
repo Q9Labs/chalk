@@ -8,7 +8,7 @@
     "build:node": "vite build --config vite.node.config.ts",
     "fixture": "node ./dist/node/compose-fixture.js",
     "check-types": "tsc-rs -p tsconfig.node.json --noEmit && tsc-rs -p tsconfig.compose.json",
-    "test": "vitest run --config vite.node.config.ts",
+    "test": "node ../../scripts/test/run.mjs vitest run --config vite.node.config.ts",
     "lint": "pnpm exec oxfmt --check . && pnpm run check-types"
   },
   "dependencies": {
