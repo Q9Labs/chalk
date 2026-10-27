@@ -5769,7 +5769,16 @@ export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
 ]);
 export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
 
-export const ReportConnectionFailureErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export const ReportConnectionFailureErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type ReportConnectionFailureError = typeof ReportConnectionFailureErrorSchema.Type;
 
 export const RequestRecordingExportErrorSchema = Schema.Union([
