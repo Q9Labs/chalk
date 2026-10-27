@@ -43,6 +43,16 @@ class PublishReleaseTest(unittest.TestCase):
                 self.assertIn('visible change', notes)
                 self.assertNotIn('baseline (', notes)
 
+            env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}', CAPTURE=str(root / 'capture'),
+                       GITHUB_REPOSITORY='owner/repo', GITHUB_RUN_ID='124', RELEASE_CHANNEL='production',
+                       TARGET_SHA=previous, PREVIOUS_SHA=target)
+            subprocess.run(['python3', str(SCRIPT)], cwd=root, env=env, check=True)
+            args, notes = json.loads((root / 'capture').read_text())
+            self.assertIn('production-124', args)
+            self.assertIn('visible change', notes)
+            self.assertIn('Removed', notes)
+            self.assertNotIn('No commits changed', notes)
+
 
 if __name__ == '__main__':
     unittest.main()

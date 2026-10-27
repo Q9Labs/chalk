@@ -25,10 +25,15 @@ def main():
     run_url = f'{repository_url}/actions/runs/{run_id}'
     notes = [f'Verified {channel} deployment of `{target}`.', '', f'[Deployment run]({run_url})']
     if previous:
-        subprocess.run(['git', 'merge-base', '--is-ancestor', previous, target], check=True)
-        commits = subprocess.check_output(['git', 'log', '--format=- %s (%h)', f'{previous}..{target}'], text=True)
-        notes += ['', f'[Changes since previous {channel}]({repository_url}/compare/{previous}...{target})', '',
-                  commits.strip() or 'No commits changed.']
+        added = subprocess.check_output(['git', 'log', '--format=- %s (%h)', f'{previous}..{target}'], text=True).strip()
+        removed = subprocess.check_output(['git', 'log', '--format=- %s (%h)', f'{target}..{previous}'], text=True).strip()
+        notes += ['', f'[Changes since previous {channel}]({repository_url}/compare/{previous}...{target})']
+        if added:
+            notes += ['', 'Added commits:', added]
+        if removed:
+            notes += ['', 'Removed commits:', removed]
+        if not added and not removed:
+            notes += ['', 'No commits changed.']
     else:
         notes += ['', 'No previous nightly deployment was available for comparison.']
     command = ['gh', 'release', 'create', tag, '--repo', github.repository, '--target', target,
