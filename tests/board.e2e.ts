@@ -115,6 +115,8 @@ async function routeLocalBoardBuild(contexts: BrowserContext[]) {
 async function prepareCornerStrokes(a: Page, b: Page) {
   await a.getByRole("button", { name: "Board", exact: true }).click();
   await Promise.all([a, b].map(settleStage));
+  // This checks fixed drawing coordinates, not the presenter-follow camera.
+  await b.getByRole("button", { name: "Stop", exact: true }).click();
   for (const page of [a, b]) await expect.poll(() => page.evaluate(boardPixels)).toMatchObject({ upperLeft: false, lowerRight: false, newLowerRight: false });
   await drawStroke(a, { x: 0.15, y: 0.2 }, { x: 0.24, y: 0.25 });
   await drawStroke(a, { x: 0.72, y: 0.68 }, { x: 0.82, y: 0.74 });
@@ -216,7 +218,7 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
           .count(),
       )
       .toBe(0);
-    await screen.getByLabel("More options for Proof").click();
+    await screen.getByRole("button", "More options for Proof guest 1", { exact: true }).click();
     await screen.getByRole("menuitem", "Stop following", { exact: true }).click();
 
     // A pen stroke and a sticky note from the web reach the guest.
@@ -239,7 +241,7 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await expect.poll(() => browser.evaluate(elementCount), { timeout: 15_000 }).toBe(before + 1);
 
     // Only the menu starts Follow; a participant click pins their video.
-    await screen.getByLabel("More options for Proof").click();
+    await screen.getByRole("button", "More options for Proof guest 1", { exact: true }).click();
     await screen.getByRole("menuitem", "Follow", { exact: true }).click();
     await expect(following).toBeVisible();
     const wide = { x: 0, y: 0, width: 4000, height: 2500, bring: false };
