@@ -32,11 +32,11 @@ defmodule ChalkSync.Operations.Probe do
     end
   rescue
     _exception ->
-      log_failure(:probe, :probe_failed, %{observed: "exception"})
+      record_failure(:probe, :probe_failed, %{observed: "exception"})
       {:error, :probe_failed}
   catch
     :exit, _reason ->
-      log_failure(:probe, :probe_failed, %{observed: "exit"})
+      record_failure(:probe, :probe_failed, %{observed: "exit"})
       {:error, :probe_failed}
   end
 
@@ -180,10 +180,10 @@ defmodule ChalkSync.Operations.Probe do
           })
 
         if reason == :lifecycle_intent_lag do
-          log_failure(:database_validation, reason, Map.merge(measurements, oldest_due))
+          record_failure(:database_validation, reason, Map.merge(measurements, oldest_due))
           {:error, reason, %{database: database}}
         else
-          log_failure(:database_validation, reason, measurements)
+          record_failure(:database_validation, reason, measurements)
           error
         end
 
@@ -208,15 +208,17 @@ defmodule ChalkSync.Operations.Probe do
     result = probe.()
 
     case result do
-      {:error, reason} -> log_failure(check, reason, measurements)
-      {:error, reason, _details} -> log_failure(check, reason, measurements)
+      {:error, reason} -> record_failure(check, reason, measurements)
+      {:error, reason, _details} -> record_failure(check, reason, measurements)
       _success -> :ok
     end
 
     result
   end
 
-  defp log_failure(check, reason, measurements) do
+  @doc false
+  @spec record_failure(atom(), atom(), map()) :: :ok
+  def record_failure(check, reason, measurements) do
     attributes =
       Map.merge(measurements, %{check: Atom.to_string(check), reason: Atom.to_string(reason)})
 
