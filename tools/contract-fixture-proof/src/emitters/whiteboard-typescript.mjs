@@ -29,7 +29,7 @@ export type WhiteboardV1Element = {
 };
 export type WhiteboardV1Cursor = { readonly scene_id: string; readonly revision: string };
 export type WhiteboardV1SharedAppState = { readonly view_background_color: string } | null;
-export type WhiteboardV1PresentationExtension = { readonly name: "presentation_v1" };
+export type WhiteboardV1PresentationExtension = { readonly name: "presentation_v1"; readonly presenter?: true };
 export type WhiteboardV1ViewExtension = { readonly name: "view_v1" } | { readonly name: "view_v1"; readonly origins: true } | { readonly name: "view_v1"; readonly origins: true; readonly owner: true };
 export type WhiteboardV1DrawPolicyExtension = { readonly name: "draw_policy_v1" };
 export type WhiteboardV1Extensions =
@@ -59,7 +59,7 @@ export type WhiteboardV1ClientFrame =
   | { readonly type: "ping" };
 export type WhiteboardV1ServerFrame =
   | { readonly type: "welcome"; readonly protocol: "whiteboard-v1"; readonly participant_id: string; readonly participant_generation: number; readonly capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly participant_capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly scene_id: string; readonly revision: string; readonly can_draw: boolean }
-  | { readonly type: "welcome"; readonly protocol: "whiteboard-v1"; readonly participant_id: string; readonly participant_generation: number; readonly capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly participant_capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly scene_id: string; readonly revision: string; readonly can_draw: boolean; readonly presenting: boolean; readonly view_owner_id?: string }
+  | { readonly type: "welcome"; readonly protocol: "whiteboard-v1"; readonly participant_id: string; readonly participant_generation: number; readonly capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly participant_capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly scene_id: string; readonly revision: string; readonly can_draw: boolean; readonly presenting: boolean; readonly presenter_id?: string | null; readonly view_owner_id?: string }
   | { readonly type: "snapshot_page"; readonly request_id: string; readonly scene_id: string; readonly revision: string; readonly page: number; readonly page_count: number; readonly elements: readonly WhiteboardV1Element[]; readonly app_state: WhiteboardV1SharedAppState }
   | { readonly type: "update"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "update_part"; readonly operation_id: string; readonly scene_id: string; readonly revision: string; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
@@ -68,7 +68,7 @@ export type WhiteboardV1ServerFrame =
   | ({ readonly type: "view"; readonly participant_id: string; readonly display_name: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly bring: boolean; readonly occurred_at: string } & WhiteboardV1ViewOrigin & WhiteboardV1ViewOrder)
   | { readonly type: "permission_updated"; readonly participant_id: string; readonly can_draw: boolean }
   | { readonly type: "draw_access"; readonly policy: WhiteboardV1DrawPolicy; readonly can_draw: boolean; readonly capabilities: readonly ("drawWhiteboard" | "manageWhiteboard")[]; readonly grants: readonly WhiteboardV1DrawGrant[] }
-  | { readonly type: "presentation_updated"; readonly scene_id: string; readonly revision: string; readonly presenting: boolean }
+  | { readonly type: "presentation_updated"; readonly scene_id: string; readonly revision: string; readonly presenting: boolean; readonly presenter_id?: string | null }
   | { readonly type: "reset_required"; readonly scene_id: string; readonly reason: "scene_changed" | "cursor_expired" | "gap" }
   | { readonly type: "operation_error"; readonly correlation_id: string; readonly operation: "submit_update" | "request_snapshot" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation"; readonly code: "unavailable" | "permission_denied" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "rate_limited" | "overloaded" | "storage_unavailable"; readonly recoverable: boolean; readonly message: string }
   | { readonly type: "view_ack"; readonly input_id: string }
@@ -253,7 +253,7 @@ function isExtensions(value: unknown): value is WhiteboardV1Extensions {
   const drawPolicyLast = value.length > 0 && isExtension(value[value.length - 1], drawPolicy);
   const base = drawPolicyLast ? value.slice(0, -1) : value;
   if (base.length === 0) return drawPolicyLast;
-  return (base.length === 1 || base.length === 2) && isExtension(base[0], presentation) && (base.length === 1 || isExtension(base[1], view) || (hasExactKeys(base[1], view.ownerExactFields) && base[1].name === view.name && base[1].origins === true && base[1].owner === true) || (hasExactKeys(base[1], view.extendedExactFields) && base[1].name === view.name && base[1].origins === true));
+  return (base.length === 1 || base.length === 2) && (isExtension(base[0], presentation) || (hasExactKeys(base[0], presentation.presenterExactFields) && base[0].name === presentation.name && base[0].presenter === true)) && (base.length === 1 || isExtension(base[1], view) || (hasExactKeys(base[1], view.ownerExactFields) && base[1].name === view.name && base[1].origins === true && base[1].owner === true) || (hasExactKeys(base[1], view.extendedExactFields) && base[1].name === view.name && base[1].origins === true));
 }
 
 function isDrawPolicy(value: unknown): value is WhiteboardV1DrawPolicy {
@@ -265,6 +265,10 @@ function isDrawGrant(value: unknown): value is WhiteboardV1DrawGrant {
 }
 
 function isWelcome(value: Record<string, unknown>): boolean {
+  if ("presenter_id" in value) {
+    const { presenter_id, ...welcome } = value;
+    return (presenter_id === null || isUuid(presenter_id)) && isWelcome(welcome);
+  }
   if ("view_owner_id" in value) {
     const { view_owner_id, ...welcome } = value;
     return isUuid(view_owner_id) && isWelcome(welcome);
@@ -273,6 +277,14 @@ function isWelcome(value: Record<string, unknown>): boolean {
     hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.welcome.exactFields) ||
     (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.welcome.extendedExactFields) && typeof value.presenting === "boolean");
   return exact && value.protocol === "whiteboard-v1" && isUuid(value.participant_id) && Number.isSafeInteger(value.participant_generation) && Number(value.participant_generation) > 0 && isCapabilities(value.capabilities) && isCapabilities(value.participant_capabilities) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision) && typeof value.can_draw === "boolean";
+}
+
+function isPresentationUpdated(value: Record<string, unknown>): boolean {
+  if ("presenter_id" in value) {
+    const { presenter_id, ...frame } = value;
+    return (presenter_id === null || isUuid(presenter_id)) && isPresentationUpdated(frame);
+  }
+  return hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.presentationUpdated.exactFields) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision) && typeof value.presenting === "boolean";
 }
 
 function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
@@ -297,7 +309,8 @@ function isServerFrame(value: unknown): value is WhiteboardV1ServerFrame {
     case "draw_access":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.drawAccess.exactFields) && isDrawPolicy(value.policy) && typeof value.can_draw === "boolean" && isCapabilities(value.capabilities) && Array.isArray(value.grants) && value.grants.length <= WhiteboardV1ProtocolLimits.drawAccessMaxGrants && value.grants.every(isDrawGrant);
     case "presentation_updated":
-      return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.presentationUpdated.exactFields) && isUuid(value.scene_id) && isUnsignedDecimal(value.revision) && typeof value.presenting === "boolean";
+      return isPresentationUpdated(value);
+
     case "reset_required":
       return hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.resetRequired.exactFields) && isUuid(value.scene_id) && typeof value.reason === "string" && WhiteboardV1ProtocolMetadata.resetReasons.some((reason) => reason === value.reason);
     case "operation_error":

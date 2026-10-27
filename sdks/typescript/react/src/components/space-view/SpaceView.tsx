@@ -7,7 +7,7 @@ import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useP
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
-import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
+import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
@@ -53,6 +53,7 @@ export interface SpaceViewFeatures {
 
 export interface SpaceViewWhiteboard {
   readonly isOpen: boolean;
+  readonly presenterId?: string | null;
   readonly props: WhiteboardViewProps;
   /** Shares this person's board view so others can follow it; answers false when the board service can't. */
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
@@ -124,6 +125,7 @@ export function SpaceView({
   onEndEpisode,
   className,
 }: SpaceViewProps): React.JSX.Element {
+  const phone = useIsMobile();
   const effectiveShareUrl = inviteLink ?? shareUrl;
   const callToasts = useCallToasts();
   const [soundsEnabled] = useSoundsSetting();
@@ -166,6 +168,7 @@ export function SpaceView({
     if (next.warning !== null) setLimitWarning({ id: `time-limit-${deadline}-${next.warning}`, minutes: next.warning });
   }, [deadline, now]);
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
@@ -326,6 +329,8 @@ export function SpaceView({
           }}
           stage={
             <SpaceStage
+              pinnedId={pinnedId}
+              onPinnedChange={setPinnedId}
               tiles={tiles}
               layout={layout}
               onLayoutChange={updateLayout}
@@ -388,7 +393,19 @@ export function SpaceView({
           sidebar={
             <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
               {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-              {drawer.panel === "participants" && feature("participants") ? <ParticipantsPanel variant="mobile" admissionEnabled={feature("admission")} generatedAvatars={generatedAvatars} onCommandError={onCommandError} onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "participants" && feature("participants") ? (
+                <ParticipantsPanel
+                  onParticipantClick={(id) => {
+                    setPinnedId((current) => (current === id ? null : id));
+                    if (phone) setActivePanel(null);
+                  }}
+                  variant="mobile"
+                  admissionEnabled={feature("admission")}
+                  generatedAvatars={generatedAvatars}
+                  onCommandError={onCommandError}
+                  onClose={() => setActivePanel(null)}
+                />
+              ) : null}
               {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
             </CallCard>
           }

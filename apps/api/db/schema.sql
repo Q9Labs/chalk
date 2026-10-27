@@ -842,6 +842,7 @@ create table sync_whiteboard_scenes (
     scene_id uuid not null,
     is_current boolean not null default true,
     presenting_episode_id uuid,
+    presenting_participant_id uuid,
     revision bigint not null default 0,
     app_state jsonb,
     element_count integer not null default 0,

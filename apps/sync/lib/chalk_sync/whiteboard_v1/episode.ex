@@ -25,7 +25,9 @@ defmodule ChalkSync.WhiteboardV1.Episode do
          "scene_id" => context.scene_id,
          "revision" => Integer.to_string(context.revision),
          "can_draw" => context.can_draw,
-         "presenting" => context.is_presenting
+         "presenting" => context.is_presenting,
+         "presenter_id" =>
+           if(context.is_presenting, do: Map.get(context, :presenter_id), else: nil)
        }}
     end
   end
@@ -103,7 +105,8 @@ defmodule ChalkSync.WhiteboardV1.Episode do
          "type" => "presentation_updated",
          "scene_id" => commit.scene_id,
          "revision" => Integer.to_string(commit.revision),
-         "presenting" => commit.presenting
+         "presenting" => commit.presenting,
+         "presenter_id" => if(commit.presenting, do: identity.participant_id, else: nil)
        }}
     end
   end
@@ -217,7 +220,8 @@ defmodule ChalkSync.WhiteboardV1.Episode do
          "type" => "presentation_updated",
          "scene_id" => presentation.scene_id,
          "revision" => Integer.to_string(presentation.revision),
-         "presenting" => presentation.presenting
+         "presenting" => presentation.presenting,
+         "presenter_id" => Map.get(presentation, :presenter_id)
        }
      ]}
   end

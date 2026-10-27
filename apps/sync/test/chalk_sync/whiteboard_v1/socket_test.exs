@@ -1243,20 +1243,27 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     })
   end
 
-  for {client, extensions, owner?, policy?} <- [
+  for {client, extensions, owner?, policy?, presenter?} <- [
         {"published 5.1.0",
          [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}], false,
-         false},
+         false, false},
         {"current",
          [
            %{"name" => "presentation_v1"},
            %{"name" => "view_v1", "origins" => true, "owner" => true},
            %{"name" => "draw_policy_v1"}
-         ], true, true}
+         ], true, true, false},
+        {"presenter-aware",
+         [
+           %{"name" => "presentation_v1", "presenter" => true},
+           %{"name" => "view_v1", "origins" => true, "owner" => true},
+           %{"name" => "draw_policy_v1"}
+         ], true, true, true}
       ] do
     @hello_extensions extensions
     @hello_owner owner?
     @hello_policy policy?
+    @hello_presenter presenter?
     test "negotiates Follow and drawing access for a #{client} hello" do
       {:ok, initial} = SocketWhiteboardV1.init(%{})
       identity = %{identity() | episode: %{identity().episode | episode_id: UUID.generate()}}
@@ -1275,6 +1282,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
       welcome = JSON.decode!(wire)
       assert welcome["presenting"] == false
+      assert Map.has_key?(welcome, "presenter_id") == @hello_presenter
+      assert live.presenter_negotiated == @hello_presenter
       assert Map.has_key?(welcome, "view_owner_id") == @hello_owner
       assert live.view_negotiated
       assert live.view_origins_negotiated
@@ -1304,6 +1313,21 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
       assert JSON.decode!(changed_wire)["can_draw"] == true
       assert changed.can_draw
+
+      presentation = %{
+        "type" => "presentation_updated",
+        "scene_id" => changed.scene_id,
+        "revision" => Integer.to_string(changed.revision + 1),
+        "presenting" => true,
+        "presenter_id" => @participant_id
+      }
+
+      assert {:push, {:text, presentation_wire}, _} =
+               SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, presentation}, changed)
+
+      decoded = JSON.decode!(presentation_wire)
+      assert decoded["presenting"]
+      assert Map.has_key?(decoded, "presenter_id") == @hello_presenter
     end
   end
 

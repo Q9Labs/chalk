@@ -206,6 +206,18 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await guest.ready;
     await guest.board.open();
     await expect(screen.getByRole("toolbar", "Drawing tools", { exact: true })).toBeVisible();
+    const following = browser.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Proof" });
+    await expect(following).toBeVisible();
+    await expect
+      .poll(() =>
+        browser
+          .locator('[data-part="toast"]')
+          .filter({ hasText: /following/i })
+          .count(),
+      )
+      .toBe(0);
+    await screen.getByLabel("More options for Proof").click();
+    await screen.getByRole("menuitem", "Stop following", { exact: true }).click();
 
     // A pen stroke and a sticky note from the web reach the guest.
     const box = await browser.evaluate(boardBox);
@@ -226,9 +238,9 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await guest.board.draw();
     await expect.poll(() => browser.evaluate(elementCount), { timeout: 15_000 }).toBe(before + 1);
 
-    // Following the guest by its tile moves the web view with the guest's view.
-    await screen.getByLabel("Follow Proof").click();
-    const following = browser.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Proof" });
+    // Only the menu starts Follow; a participant click pins their video.
+    await screen.getByLabel("More options for Proof").click();
+    await screen.getByRole("menuitem", "Follow", { exact: true }).click();
     await expect(following).toBeVisible();
     const wide = { x: 0, y: 0, width: 4000, height: 2500, bring: false };
     expect(await guest.board.view(wide)).toBe(true);
@@ -273,7 +285,10 @@ async function followEdgeStrokes(a: Page, b: Page, directory: string) {
   await drawStroke(a, { x: 0.49, y: 0.45 }, { x: 0.51, y: 0.46 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
-  await b.getByLabel("Follow BoardA", { exact: true }).click();
+  await b.getByLabel("More options for BoardA", { exact: true }).click();
+  await b.getByRole("menuitem", { name: "Stop following", exact: true }).click();
+  await b.getByLabel("More options for BoardA", { exact: true }).click();
+  await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
   await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   // Each new stroke must arrive visibly in the middle of the phone canvas.
   for (const [index, point] of [
@@ -318,7 +333,8 @@ async function checkManualZoom(a: Page, b: Page) {
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
   await b.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
-  await b.getByLabel("Follow BoardA", { exact: true }).click();
+  await b.getByLabel("More options for BoardA", { exact: true }).click();
+  await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
   await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   await drawStroke(a, { x: 0.7, y: 0.3 }, { x: 0.72, y: 0.32 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("5");

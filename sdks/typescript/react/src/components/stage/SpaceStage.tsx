@@ -10,6 +10,8 @@ import { Board } from "../board/Board";
 import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
 
 export interface SpaceStageProps {
+  readonly pinnedId?: string | null;
+  readonly onPinnedChange?: (id: string | null) => void;
   readonly tiles: readonly Participant[];
   readonly layout: StageLayout;
   readonly onLayoutChange?: (layout: StageLayout) => void;
@@ -24,18 +26,27 @@ export interface SpaceStageProps {
   readonly className?: string;
 }
 /** One keyed renderer for people, the live board and each screen, in both layouts. */
-export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
+export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutChange, generatedAvatars = true, whiteboard, onOverflowClick, shareCapture, onStopSharing, onChangeShare, colorScheme = "dark", onCloseBoard, className }: SpaceStageProps): React.JSX.Element {
   const items = useMemo(() => buildStageItems(tiles, whiteboard?.isOpen === true), [tiles, whiteboard?.isOpen]);
   const [selectedShare, setSelectedShare] = useState<string | null>(null);
-  const [pin, setPin] = useState<string | null>(null);
-  const [following, setFollowing] = useState<string | null>(null);
+  const [localPin, setLocalPin] = useState<string | null>(null);
+  const pin = pinnedId === undefined ? localPin : pinnedId;
+  const setPin = useCallback(
+    (id: string | null) => {
+      setLocalPin(id);
+      onPinnedChange?.(id);
+    },
+    [onPinnedChange],
+  );
+  const [following, setFollowing] = useState<string | null | undefined>(undefined);
   const boardOpen = whiteboard?.isOpen === true && Boolean(whiteboard.props);
   // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing stage layout and participant reconciliation.
   useEffect(() => {
-    if (!boardOpen) setFollowing(null);
+    if (!boardOpen) setFollowing(undefined);
   }, [boardOpen]);
   const canFollow = boardOpen && Boolean(whiteboard?.sendView);
-  const followed = canFollow && tiles.some((tile) => tile.id === following) ? following : null;
+  const target = following === undefined ? whiteboard?.presenterId : following;
+  const followed = canFollow && tiles.some((tile) => tile.id === target && !tile.isLocal) ? (target ?? null) : null;
   const activePin = items.some((item) => item.id === pin) ? pin : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
@@ -43,14 +54,17 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   useEffect(() => {
     if (pin !== activePin) setPin(activePin);
     if (selectedShare !== activeShare) setSelectedShare(activeShare);
-  }, [pin, activePin, selectedShare, activeShare]);
-  const follow = useCallback((id: string | null) => {
-    if (id) {
-      setPin(null);
-      setSelectedShare(null);
-    }
-    setFollowing(id);
-  }, []);
+  }, [pin, activePin, selectedShare, activeShare, setPin]);
+  const follow = useCallback(
+    (id: string | null) => {
+      if (id) {
+        setPin(null);
+        setSelectedShare(null);
+      }
+      setFollowing(id);
+    },
+    [setPin],
+  );
   const renderContentTile = useCallback(
     (item: Extract<StageItem, { kind: "screen-share" | "whiteboard" }>, context: StageTileRenderContext) => {
       if (item.kind === "screen-share")
@@ -110,15 +124,14 @@ export function SpaceStage({ tiles, layout, onLayoutChange, generatedAvatars = t
   return (
     <Stage
       items={items}
-      layout={layout}
+      layout={activePin ? "focus" : layout}
       pinnedId={activePin ?? activeShare ?? (followed ? "whiteboard" : null)}
       onPinnedChange={setPin}
-      onFollowChange={(id) => follow(followed === id ? null : id)}
+      onFollowChange={canFollow ? (id) => follow(followed === id ? null : id) : undefined}
       followingId={followed}
-      clickAction={canFollow ? "follow" : "pin"}
       renderContentTile={renderContentTile}
       onItemClick={focusContent}
-      onOverflowClick={canFollow ? undefined : onOverflowClick}
+      onOverflowClick={onOverflowClick}
       generatedAvatars={generatedAvatars}
       emptyState={<QuietSpace />}
       className={className}

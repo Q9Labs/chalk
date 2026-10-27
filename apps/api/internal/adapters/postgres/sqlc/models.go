@@ -1412,18 +1412,19 @@ type SyncWhiteboardPermission struct {
 }
 
 type SyncWhiteboardScene struct {
-	TenantID            pgtype.UUID        `json:"tenant_id"`
-	SpaceID             pgtype.UUID        `json:"space_id"`
-	EpisodeID           pgtype.UUID        `json:"episode_id"`
-	SceneID             pgtype.UUID        `json:"scene_id"`
-	IsCurrent           bool               `json:"is_current"`
-	PresentingEpisodeID pgtype.UUID        `json:"presenting_episode_id"`
-	Revision            int64              `json:"revision"`
-	AppState            []byte             `json:"app_state"`
-	ElementCount        int32              `json:"element_count"`
-	EncodedBytes        int64              `json:"encoded_bytes"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	SpaceID                 pgtype.UUID        `json:"space_id"`
+	EpisodeID               pgtype.UUID        `json:"episode_id"`
+	SceneID                 pgtype.UUID        `json:"scene_id"`
+	IsCurrent               bool               `json:"is_current"`
+	PresentingEpisodeID     pgtype.UUID        `json:"presenting_episode_id"`
+	PresentingParticipantID pgtype.UUID        `json:"presenting_participant_id"`
+	Revision                int64              `json:"revision"`
+	AppState                []byte             `json:"app_state"`
+	ElementCount            int32              `json:"element_count"`
+	EncodedBytes            int64              `json:"encoded_bytes"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Tenant struct {

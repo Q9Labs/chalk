@@ -127,7 +127,10 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
     assert {:ok, %{outcome: :committed, scene_id: ^scene_id, revision: 2}} =
              PostgresRepository.set_presentation(host, presentation)
 
-    assert {:ok, %{is_presenting: true}} = PostgresRepository.connect(participant)
+    presenter_id = host.participant_id
+
+    assert {:ok, %{is_presenting: true, presenter_id: ^presenter_id}} =
+             PostgresRepository.connect(participant)
 
     assert {:ok, %{outcome: :duplicate, revision: 2, presenting: true}} =
              PostgresRepository.set_presentation(host, presentation)
@@ -139,7 +142,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     assert {:ok,
             [
-              %{type: :presentation, revision: 2, presenting: true},
+              %{type: :presentation, revision: 2, presenting: true, presenter_id: ^presenter_id},
               %{type: :update, revision: 3}
             ]} = PostgresRepository.read_after(participant, scene_id, 1)
 
@@ -149,9 +152,26 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
              PostgresRepository.clear(host, clear)
 
     assert new_scene_id != scene_id
+    assert {:ok, %{presenter_id: ^presenter_id}} = PostgresRepository.connect(participant)
+
+    assert {:ok, %{outcome: :committed}} =
+             PostgresRepository.set_presentation(host, %{
+               operation_id: "whiteboard-presentation-stop",
+               presenting: false
+             })
+
+    assert {:ok, %{is_presenting: false, presenter_id: nil}} =
+             PostgresRepository.connect(participant)
+
+    assert {:ok, %{outcome: :committed}} =
+             PostgresRepository.set_presentation(host, %{
+               operation_id: "whiteboard-presentation-reopen",
+               presenting: true
+             })
+
     assert {:error, :stale_scene} = PostgresRepository.commit_update(host, denied_update)
 
-    assert {:ok, %{scene_id: ^new_scene_id, revision: 0, elements: [], is_presenting: true}} =
+    assert {:ok, %{scene_id: ^new_scene_id, revision: 2, elements: [], is_presenting: true}} =
              PostgresRepository.snapshot(host)
   end
 

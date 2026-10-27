@@ -9,7 +9,8 @@
   "extensions": {
     "presentation": {
       "name": "presentation_v1",
-      "exactFields": ["name"]
+      "exactFields": ["name"],
+      "presenterExactFields": ["name", "presenter"]
     },
     "view": {
       "name": "view_v1",

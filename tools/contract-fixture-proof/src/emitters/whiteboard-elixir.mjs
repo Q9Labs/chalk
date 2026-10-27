@@ -102,6 +102,11 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
   end
 
   defp hello_extension_set?(extensions) when is_list(extensions) do
+    extensions = Enum.map(extensions, fn
+      %{"name" => "presentation_v1", "presenter" => true} = extension when map_size(extension) == 2 -> %{"name" => "presentation_v1"}
+      extension -> extension
+    end)
+
     {base, draw_policy} =
       case Enum.split(extensions, -1) do
         {base, [%{"name" => ${render(contract.extensions.drawPolicy.name)}} = extension]}
@@ -272,6 +277,10 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       frame["width"] <= ${contract.frames.view.maxExtent} and frame["height"] <= ${contract.frames.view.maxExtent}
   end
 
+  defp valid_welcome?(%{"presenter_id" => presenter} = frame) do
+    (is_nil(presenter) or uuid?(presenter)) and valid_welcome?(Map.delete(frame, "presenter_id"))
+  end
+
   defp valid_welcome?(%{"view_owner_id" => owner} = frame) do
     uuid?(owner) and valid_welcome?(Map.delete(frame, "view_owner_id"))
   end
@@ -340,6 +349,10 @@ ${renderAttribute("error_codes", contract.errorCodes).join("\n")}
       capabilities?(frame["capabilities"]) and is_list(frame["grants"]) and
       length(frame["grants"]) <= @limits["drawAccessMaxGrants"] and
       Enum.all?(frame["grants"], &(exact?(&1, ${render(contract.frames.drawAccess.grantExactFields)}) and uuid?(&1["participant_id"]) and is_boolean(&1["can_draw"])))
+  end
+
+  defp valid_presentation_updated?(%{"presenter_id" => presenter} = frame) do
+    (is_nil(presenter) or uuid?(presenter)) and valid_presentation_updated?(Map.delete(frame, "presenter_id"))
   end
 
   defp valid_presentation_updated?(frame) do

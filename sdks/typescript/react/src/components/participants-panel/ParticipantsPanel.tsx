@@ -30,6 +30,7 @@ export interface ParticipantListParticipant {
 export type ParticipantListVariant = "default" | "sidebar" | "mobile";
 
 export interface ParticipantsPanelProps {
+  onParticipantClick?: (id: string) => void;
   onAddPeople?: () => void;
   searchable?: boolean;
   onClose?: () => void;
@@ -92,6 +93,7 @@ export const ParticipantsPanelSurface = React.memo(
     onCommandError,
     participantVolumes,
     onParticipantVolumeChange,
+    onParticipantClick,
     participantGradientPreference,
     generatedAvatars = true,
   }: ParticipantsPanelSurfaceProps) => {
@@ -172,6 +174,7 @@ export const ParticipantsPanelSurface = React.memo(
             <ParticipantRow
               key={participant.id}
               participant={participant}
+              onParticipantClick={onParticipantClick}
               variant={variant}
               canManageParticipants={canManageParticipants}
               onAssignRole={onAssignRole}

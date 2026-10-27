@@ -1,5 +1,5 @@
 import { Facehash } from "@q9labsai/facehash/react";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
@@ -7,7 +7,7 @@ import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
-import { ChalkMenu, ChalkMenuItem, ChalkSheet } from "../chalk-ui";
+import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { TileShell } from "./TileShell";
 import { useVideoTrack } from "./useVideoTrack";
 
@@ -37,8 +37,7 @@ export interface ParticipantTileProps {
   onClick?: () => void;
   onDoubleClick?: () => void;
   pinned?: boolean;
-  /** While the board is open, a click follows this person's view instead of pinning the tile. */
-  clickAction?: "pin" | "follow";
+  onFollow?: () => void;
   following?: boolean;
   primary?: boolean;
   className?: string;
@@ -83,7 +82,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   onClick,
   onDoubleClick,
   pinned,
-  clickAction = "pin",
+  onFollow,
   following = false,
   primary,
   className,
@@ -97,34 +96,24 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
 }: ParticipantTileSurfaceProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const phone = useMediaQuery("(max-width:640px)");
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const returnFocus = useRef<HTMLElement | null>(null);
-  const openOptions = () => {
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setOptionsOpen(true);
-  };
-  const closeOptions = () => {
-    setOptionsOpen(false);
-    queueMicrotask(() => returnFocus.current?.focus());
-  };
   const [localMirrored] = useMirrorSetting();
   const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
-  const first = participant.displayName.split(" ")[0] ?? participant.displayName;
-  const actionLabel = clickAction === "follow" ? `${following ? "Stop following" : "Follow"} ${first}` : `${pinned ? "Unpin" : "Pin"} ${participant.displayName}`;
+  const actionLabel = `${pinned ? "Unpin" : "Pin"} ${participant.displayName}`;
+  const followLabel = following ? "Stop following" : "Follow";
   const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
 
   return (
     <TileShell
-      label={clickAction === "follow" ? actionLabel : `Video tile for ${participant.displayName}`}
+      label={`Video tile for ${participant.displayName}`}
       accentColor={colors.primary}
-      pinned={clickAction === "follow" ? following : pinned}
+      pinned={pinned}
       ring={following}
       lift={!primary}
       speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
       audioLevel={participant.audioLevel}
-      onClick={onClick && phone && clickAction === "pin" ? openOptions : onClick}
+      onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={cn(aspectRatioClasses[aspectRatio], className)}
       style={style}
@@ -137,8 +126,8 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               <SignalBars />
             </span>
           ) : null}
-          {onClick && !phone ? (
-            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+          {onClick || onFollow ? (
+            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100">
               <ChalkMenu
                 trigger={
                   <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
@@ -146,7 +135,8 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                   </button>
                 }
               >
-                <ChalkMenuItem onClick={onClick}>{actionLabel}</ChalkMenuItem>
+                {onClick ? <ChalkMenuItem onClick={onClick}>{actionLabel}</ChalkMenuItem> : null}
+                {onFollow ? <ChalkMenuItem onClick={onFollow}>{followLabel}</ChalkMenuItem> : null}
               </ChalkMenu>
             </span>
           ) : null}
@@ -212,32 +202,6 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           </div>
         </div>
       )}
-      {phone && onClick && clickAction === "pin" ? (
-        <ChalkSheet
-          open={optionsOpen}
-          onOpenChange={(open) => {
-            if (open) openOptions();
-            else closeOptions();
-          }}
-          title={`Options for ${participant.displayName}`}
-        >
-          <div className="flex items-center gap-3 px-2 pt-1 pb-3.5 text-base font-semibold">
-            <Avatar name={participant.displayName} size="sm" />
-            {participant.displayName}
-          </div>
-          <button
-            type="button"
-            className="flex min-h-[52px] w-full items-center gap-3.5 rounded-[16px] bg-[var(--chalk-raised)] px-4 text-left text-base leading-[1.4] hover:bg-[var(--chalk-hover)] active:bg-[var(--chalk-pressed)]"
-            onClick={() => {
-              onClick();
-              closeOptions();
-            }}
-          >
-            <StageIcon name="pin" size={20} className="text-[var(--chalk-soft-text)]" />
-            <span>{pinned ? "Unpin" : "Pin"}</span>
-          </button>
-        </ChalkSheet>
-      ) : null}
       {children}
     </TileShell>
   );

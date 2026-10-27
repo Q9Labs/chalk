@@ -179,6 +179,8 @@ export type ChalkWhiteboardSummary = {
   readonly drawPolicy: ChalkWhiteboardDrawPolicy | null;
   /** The host's per-person choices for people in the call. Empty unless this person is a host. */
   readonly drawPermissions: readonly ChalkWhiteboardDrawPermission[];
+  /** The person who opened the current presentation; absent on older servers. */
+  readonly presenterId?: string | null;
   readonly presenting: boolean;
   readonly error: ChalkWhiteboardV1Failure | null;
 };

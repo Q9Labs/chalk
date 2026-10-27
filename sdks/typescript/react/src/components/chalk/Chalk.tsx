@@ -298,6 +298,7 @@ function SpaceSurface(
     whiteboardAvailable && whiteboardState.engine.presenting && whiteboardSubscription.status === "ready"
       ? {
           isOpen: true,
+          presenterId: whiteboardState.engine.presenterId,
           props: {
             canDraw: canDrawWhiteboard,
             collab: {

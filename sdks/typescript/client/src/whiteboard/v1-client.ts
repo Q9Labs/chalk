@@ -116,7 +116,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #presentationSupported = false;
   #viewsSupported = false;
   #presenting = false;
-  #hello: HelloLevel = "owner-view";
+  #presenterId: string | null = null;
+  #hello: HelloLevel = "presenter-view";
   #viewSequence = 0;
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
@@ -171,7 +172,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = "owner-view";
+    this.#hello = "presenter-view";
     this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
@@ -228,6 +229,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#drawPolicy = null;
     this.#drawPermissions = [];
     this.#presenting = false;
+    this.#presenterId = null;
     this.#publishSummary("unsubscribed", null);
   }
 
@@ -570,6 +572,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         this.#sceneId = frame.scene_id;
         this.#revision = frame.revision;
         this.#presenting = frame.presenting;
+        this.#presenterId = frame.presenter_id ?? null;
         this.#publishSummary("ready", null);
         return;
       case "reset_required":
@@ -649,6 +652,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#drawPermissions = [];
     this.#presentationSupported = "presenting" in frame;
     this.#presenting = "presenting" in frame ? frame.presenting : false;
+    this.#presenterId = "presenter_id" in frame ? (frame.presenter_id ?? null) : null;
     // A change restored from the store has no caller to reject, so the summary carries the refusal too.
     const refused = !drawPolicyNegotiated(this.#hello) && this.#dropPolicyChanges();
     this.#publishSummary("loading", refused ? policyUnavailable() : null);
@@ -990,7 +994,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (step === "fail") return false;
     if (step === "step-down") return this.#stepDownHello();
     if (step === "retry-hello") return this.#retryHello();
-    if (phase === "live") this.#hello = "owner-view";
+    if (phase === "live") this.#hello = "presenter-view";
     return true;
   }
 
@@ -1133,6 +1137,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       drawPolicy: this.#drawPolicy,
       drawPermissions: this.#drawPermissions,
       presenting: this.#presenting,
+      presenterId: this.#presenterId,
       error: this.#summaryError,
     };
   }
@@ -1374,24 +1379,25 @@ function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonl
 }
 
 // Older Sync servers close an unknown hello, so the client steps down this list.
-const HELLO_LEVELS = ["owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
+const HELLO_LEVELS = ["presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
 type HelloLevel = (typeof HELLO_LEVELS)[number];
 
 function viewsNegotiated(level: HelloLevel): boolean {
-  return level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
+  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
 }
 
 function viewOriginsNegotiated(level: HelloLevel): boolean {
-  return level === "owner-view" || level === "draw-policy" || level === "versioned-view";
+  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
 }
 
 function drawPolicyNegotiated(level: HelloLevel): boolean {
-  return level === "owner-view" || level === "draw-policy";
+  return level === "presenter-view" || level === "owner-view" || level === "draw-policy";
 }
 
 function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
   const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
   if (level === "legacy") return hello;
+  if (level === "presenter-view") return { ...hello, extensions: [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] };
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };
