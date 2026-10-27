@@ -176,7 +176,7 @@ Reproduce both a join failure and a full 60-second offline drop against the loca
 API/Postgres/Sync stack (only remote vendor services are fixtures) on Instabox:
 
 ```sh
-box run -- 'bash scripts/gates/instabox-run.sh --browser env GOMAXPROCS=1 ERL_FLAGS="+S 1:1" DASHBOARD_ENGINE_DEADLINE_SECONDS=600 bash apps/web/tests/dashboard/real-engine.sh pnpm --filter web exec node tests/dashboard/connection-reports-browser.mjs'
+box run -- 'sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client && bash scripts/gates/instabox-run.sh --browser env GOMAXPROCS=1 ERL_FLAGS="+S 1:1" DASHBOARD_ENGINE_DEADLINE_SECONDS=600 bash apps/web/tests/dashboard/real-engine.sh pnpm --filter web exec node tests/dashboard/connection-reports-browser.mjs'
 ```
 
 The proof writes allowlisted evidence under `artifacts/connection-reports/`:
