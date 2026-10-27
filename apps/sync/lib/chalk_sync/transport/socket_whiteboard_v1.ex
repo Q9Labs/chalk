@@ -47,6 +47,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        hello_timer: timer,
        identity: nil,
        connected_at: nil,
+       opened_at_ms: System.monotonic_time(:millisecond),
+       last_heartbeat_at_ms: nil,
        display_name: nil,
        presentation_negotiated: false,
        presenter_negotiated: false,
@@ -757,7 +759,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_frame({:ping, _ping}, state) do
-    {:push, {:text, Protocol.pong()}, state}
+    {:push, {:text, Protocol.pong()},
+     %{state | last_heartbeat_at_ms: System.monotonic_time(:millisecond)}}
   end
 
   defp handle_frame(_frame, state) do
@@ -1102,12 +1105,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp observe_terminal(state, terminate_reason) do
+    now = System.monotonic_time(:millisecond)
+
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
       state.connection_attributes
       |> Map.merge(SocketClose.attributes(terminate_reason, state.terminal))
-      |> Map.merge(%{protocol: "whiteboard-v1", phase: state.phase})
+      |> Map.merge(%{
+        protocol: "whiteboard-v1",
+        phase: state.phase,
+        socket_age_ms: now - state.opened_at_ms,
+        heartbeat_gap_ms: if(state.last_heartbeat_at_ms, do: now - state.last_heartbeat_at_ms)
+      })
       |> put_scene_id(state.scene_id)
     )
   end

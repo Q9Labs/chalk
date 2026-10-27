@@ -76,7 +76,12 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert_receive {:socket_event, "sync.websocket.authenticated", authenticated}
     assert authenticated.tenant_id == host.episode.tenant_id
     assert authenticated.episode_id == host.episode.episode_id
-    assert authenticated.participant_id == host.participant_id
+
+    assert authenticated.participant_id_hash ==
+             :crypto.hash(:sha256, host.participant_id) |> Base.encode16(case: :lower)
+
+    refute Map.has_key?(authenticated, :participant_id)
+    refute inspect(authenticated) =~ host.participant_id
     refute inspect(authenticated) =~ "do-not-log"
     client = Client.close(client)
     Client.recv(client)
@@ -84,7 +89,9 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert closed.client_ip == connected.client_ip
     assert closed.user_agent == connected.user_agent
     assert closed.tenant_id == authenticated.tenant_id
-    assert closed.participant_id == authenticated.participant_id
+    assert closed.participant_id_hash == authenticated.participant_id_hash
+    refute Map.has_key?(closed, :participant_id)
+    refute inspect(closed) =~ host.participant_id
     assert closed.episode_id == authenticated.episode_id
     assert Map.has_key?(closed, :close_code)
   end
@@ -112,7 +119,11 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert {:closed, 1012, _reason, _client} = Client.recv(client)
     assert_receive {:failed_hello, closed}
     assert closed.tenant_id == host.episode.tenant_id
-    assert closed.participant_id == host.participant_id
+
+    assert closed.participant_id_hash ==
+             :crypto.hash(:sha256, host.participant_id) |> Base.encode16(case: :lower)
+
+    refute Map.has_key?(closed, :participant_id)
     assert closed.episode_id == host.episode.episode_id
     assert closed.close_code == 1012
   end

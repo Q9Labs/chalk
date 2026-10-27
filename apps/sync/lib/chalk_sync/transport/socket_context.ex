@@ -26,7 +26,8 @@ defmodule ChalkSync.Transport.SocketContext do
       Map.merge(state.connection_attributes, %{
         tenant_id: identity.episode.tenant_id,
         episode_id: identity.episode.episode_id,
-        participant_id: identity.participant_id
+        participant_id_hash:
+          :crypto.hash(:sha256, identity.participant_id) |> Base.encode16(case: :lower)
       })
 
     observability =

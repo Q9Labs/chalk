@@ -1009,7 +1009,10 @@ func (q *Queries) ExpireUncollectedPublicArrival(ctx context.Context, arg Expire
 }
 
 const expiredParticipantPresence = `-- name: ExpiredParticipantPresence :many
-select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation from participants p
+select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation,
+    (lease.expires_at is not null)::boolean as has_presence_lease,
+    (extract(epoch from clock_timestamp() - coalesce(lease.expires_at - interval '120 seconds', p.joined_at)) * 1000)::bigint as presence_age_ms
+from participants p
 left join participant_join_seats seat on seat.tenant_id=p.tenant_id and seat.space_id=p.space_id
     and seat.episode_id=p.episode_id and seat.participant_id=p.id and seat.generation=p.generation
 left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
@@ -1030,8 +1033,10 @@ type ExpiredParticipantPresenceParams struct {
 }
 
 type ExpiredParticipantPresenceRow struct {
-	Participant     Participant `json:"participant"`
-	EntryGeneration int64       `json:"entry_generation"`
+	Participant      Participant `json:"participant"`
+	EntryGeneration  int64       `json:"entry_generation"`
+	HasPresenceLease bool        `json:"has_presence_lease"`
+	PresenceAgeMs    int64       `json:"presence_age_ms"`
 }
 
 func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error) {
@@ -1070,6 +1075,8 @@ func (q *Queries) ExpiredParticipantPresence(ctx context.Context, arg ExpiredPar
 			&i.Participant.FirstJoinedAt,
 			&i.Participant.LastLeftReason,
 			&i.EntryGeneration,
+			&i.HasPresenceLease,
+			&i.PresenceAgeMs,
 		); err != nil {
 			return nil, err
 		}

@@ -182,6 +182,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     expire_participant(ctx)
     healthy = ping(healthy)
     assert tick(ctx) == 1
+    assert_expiry_evidence(ctx, "lease_expired", "last_seen_age_ms", 120_000)
     assert eventually(fn -> participant_status(ctx, ctx.identity) == "left" end)
     assert participant_status(ctx, healthy_identity) == "active"
     assert episode_status(ctx) == "active"
@@ -257,6 +258,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     allow_expiry(ctx.connection)
     healthy = ping(healthy)
     assert tick(ctx) == 1
+    assert_expiry_evidence(ctx, "missing_lease", "joined_age_ms", 600_000)
     assert eventually(fn -> participant_status(ctx, ctx.identity) == "left" end)
     assert participant_status(ctx, healthy_identity) == "active"
     assert episode_status(ctx) == "active"
@@ -306,6 +308,27 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     assert participant_status(ctx, ctx.identity) == "active"
     assert_no_leave(ctx)
     Client.close_tcp(reconnected)
+  end
+
+  defp assert_expiry_evidence(ctx, path, age_key, minimum_age_ms) do
+    participant_hash =
+      :crypto.hash(:sha256, ctx.identity.participant_id) |> Base.encode16(case: :lower)
+
+    [[attributes]] =
+      Postgrex.query!(
+        ctx.connection,
+        "select attributes from observability_journey_events where name='participant.connection_expired' and attributes->>'participant_id_hash'=$1 order by occurred_at desc limit 1",
+        [participant_hash]
+      ).rows
+
+    assert attributes["tenant_id"] == ctx.fixture.episode.tenant_id
+    assert attributes["episode_id"] == ctx.fixture.episode.episode_id
+    assert attributes["participant_id_hash"] == participant_hash
+    refute Map.has_key?(attributes, "participant_id")
+    refute inspect(attributes) =~ ctx.identity.participant_id
+    assert attributes["expiry_path"] == path
+    assert String.to_integer(attributes[age_key]) >= minimum_age_ms
+    if path == "missing_lease", do: refute(Map.has_key?(attributes, "last_seen_age_ms"))
   end
 
   defp expire_participant(ctx) do
