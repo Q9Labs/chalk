@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseParsedAccessGrant } from "../access/grant";
 import { ConnectionReporter, type ConnectionReport } from "./report";
 
@@ -50,6 +50,7 @@ function fixture(online = true) {
 }
 const fail = (reporter: ConnectionReporter) => reporter.recordDiagnostic({ event: "connection_failed", state: "joining", epoch: 1, code: "sync_start_failed", sync: { stage: "hello", opened: true, closeCode: 1006, closeReason: "Bearer private@example.test 192.0.2.1", durationMs: 30000 } });
 const settled = async () => {
+  await vi.dynamicImportSettled();
   await Promise.resolve();
   await Promise.resolve();
 };
