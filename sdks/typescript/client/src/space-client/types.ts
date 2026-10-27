@@ -230,6 +230,7 @@ export type WhiteboardSlice = {
     readonly sceneId: string | null;
     readonly revision: string | null;
     readonly presenting: boolean;
+    readonly presenterId?: string | null;
     readonly error: ChalkWhiteboardV1Failure | null;
   };
   /** Who can draw, as Sync last told this person. `canDraw` is false until the board subscription is live. */

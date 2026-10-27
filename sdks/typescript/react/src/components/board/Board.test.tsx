@@ -416,6 +416,15 @@ it.each([false, true])("relays a leader through C → B → A, reduced motion %s
   }
 });
 
+async function followMenu(container: HTMLElement, name: string) {
+  const trigger = container.querySelector<HTMLElement>(`[aria-label="More options for ${name}"]`);
+  if (!trigger) throw new Error(`Missing menu for ${name}`);
+  await act(async () => trigger.click());
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) => item.textContent === "Follow" || item.textContent === "Stop following");
+  if (!item) throw new Error(`Missing Follow menu item for ${name}`);
+  return item;
+}
+
 it("ignores unchanged owner refreshes without camera writes or relay echoes", async () => {
   vi.useFakeTimers();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 16));
@@ -654,7 +663,7 @@ it("does not permanently hide Follow after one rejected view send", async () => 
     );
     await finishOpening(container);
     expect(sendView).toHaveBeenCalled();
-    const follow = container.querySelector('[aria-label="Follow Omar"]');
+    const follow = await followMenu(container, "Omar");
     if (!(follow instanceof HTMLElement)) throw new Error("Omar's tile is missing");
     await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
@@ -665,7 +674,7 @@ it("does not permanently hide Follow after one rejected view send", async () => 
   }
 });
 
-it.each(["other", "screen-share:other"])("follows on the first click after pinning %s and makes Board primary", async (pinned) => {
+it.each(["other", "screen-share:other"])("follows from the menu after pinning %s and makes Board primary", async (pinned) => {
   const client = createPreviewClient();
   const container = document.createElement("div");
   document.body.append(container);
@@ -687,7 +696,7 @@ it.each(["other", "screen-share:other"])("follows on the first click after pinni
     await act(async () => container.querySelector<HTMLElement>(`[data-stage-item="${pinned}"] button`)?.click());
     await render(true);
     await finishOpening(container);
-    const follow = container.querySelector<HTMLElement>('[aria-label="Follow Omar"]');
+    const follow = await followMenu(container, "Omar");
     expect(follow).not.toBeNull();
     await act(async () => follow?.click());
     expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
@@ -728,7 +737,8 @@ it("returns to the followed board when an explicitly pinned remote share ends", 
   try {
     await render(true);
     await finishOpening(container);
-    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    const follow = await followMenu(container, "Omar");
+    await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
     await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
     expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
@@ -759,7 +769,7 @@ it("does not resume following when the board closes and reopens", async () => {
     );
   try {
     await act(async () => render(true));
-    const follow = container.querySelector('[aria-label="Follow Omar"]');
+    const follow = await followMenu(container, "Omar");
     if (!(follow instanceof HTMLElement)) throw new Error("Omar's tile is missing");
     await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="other"]')?.textContent).toContain("following");
@@ -1232,7 +1242,7 @@ it("processes Bring even after the same origin version was applied through a rel
   });
 });
 
-it("keeps overflowed people followable when the host supplies a Participants panel", async () => {
+it("opens the supplied People panel for overflow instead of starting Follow", async () => {
   const client = createPreviewClient();
   const container = document.createElement("div");
   document.body.append(container);
@@ -1250,11 +1260,8 @@ it("keeps overflowed people followable when the host supplies a Participants pan
     const overflow = container.querySelector<HTMLButtonElement>('button[aria-label^="Show "][aria-label$="more participants"]');
     expect(overflow).not.toBeNull();
     await act(async () => overflow?.click());
-    expect(openParticipants).not.toHaveBeenCalled();
-    const follow = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Follow Person 29");
-    expect(follow).toBeDefined();
-    await act(async () => follow?.click());
-    expect(container.textContent).toContain("Following Person");
+    expect(openParticipants).toHaveBeenCalledOnce();
+    expect(container.textContent).not.toContain("Following Person");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -1405,7 +1412,8 @@ it("does not resurrect an ended share pin when the same person shares again", as
   try {
     await render(true);
     await finishOpening(container);
-    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    const follow = await followMenu(container, "Omar");
+    await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
     await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:other"] button')?.click());
     expect(container.querySelector('[data-stage-item="screen-share:other"]')?.getAttribute("data-stage-role")).toBe("primary");
@@ -1448,7 +1456,8 @@ it("does not resurrect an ended screen-switcher choice when the same person shar
   try {
     await render(true);
     await finishOpening(container);
-    await act(async () => container.querySelector<HTMLElement>('[aria-label="Follow Omar"]')?.click());
+    const follow = await followMenu(container, "Omar");
+    await act(async () => follow.click());
     expect(container.querySelector('[data-stage-item="whiteboard"]')?.getAttribute("data-stage-role")).toBe("primary");
     await act(async () => container.querySelector<HTMLElement>('[data-stage-item="screen-share:self"] button')?.click());
     const switcher = container.querySelector('[data-stage-item="screen-share:self"] [aria-label="Whose screen is big"]');

@@ -33,10 +33,9 @@ export interface StageProps {
   readonly onPinnedChange?: (id: string | null) => void;
   readonly onItemClick?: (item: StageItem) => void;
   readonly onItemDoubleClick?: (item: StageItem) => void;
-  /** While the board is open, clicking a person follows their board view. */
+  /** Whiteboard Follow is available only through a participant menu. */
   readonly followingId?: string | null;
   readonly onFollowChange?: (id: string) => void;
-  readonly clickAction?: "pin" | "follow";
   /** Upper bound of grid tiles, or secondary tiles in spotlight; overflow includes shared content. */
   readonly maxPerPage?: number;
   /** Tiles narrower than this fold the rest into overflow. */
@@ -122,7 +121,6 @@ export function Stage({
   pinnedId,
   followingId = null,
   onFollowChange,
-  clickAction = "pin",
   onPinnedChange,
   onOverflowClick,
   onItemClick,
@@ -312,15 +310,14 @@ export function Stage({
     for (const item of ordered) {
       map.set(item.id, {
         onClick: () => {
-          if (clickAction === "follow" && item.kind === "participant" && !item.participant.isLocal) onFollowChange?.(item.id);
-          else togglePin(item);
+          togglePin(item);
           onItemClick?.(item);
         },
         onDoubleClick: onItemDoubleClick ? () => onItemDoubleClick(item) : undefined,
       });
     }
     return map;
-  }, [clickAction, interactive, onFollowChange, onItemDoubleClick, onItemClick, ordered, togglePin]);
+  }, [interactive, onItemDoubleClick, onItemClick, ordered, togglePin]);
 
   if (ordered.length === 0) {
     return (
@@ -355,7 +352,7 @@ export function Stage({
                   aspectRatio="fill"
                   primary={frame?.role === "primary"}
                   pinned={pinned}
-                  clickAction={item.participant.isLocal ? "pin" : clickAction}
+                  onFollow={onFollowChange && !item.participant.isLocal ? () => onFollowChange(item.id) : undefined}
                   following={followingId === item.id}
                   onClick={click}
                   onDoubleClick={doubleClick}
@@ -419,7 +416,6 @@ export function Stage({
                 setOverflowOpen(false);
               }}
             >
-              {clickAction === "follow" && !item.participant.isLocal ? `${followingId === item.id ? "Stop following" : "Follow"} ` : ""}
               {item.participant.displayName}
               {item.participant.isMuted ? " · Muted" : ""}
             </button>

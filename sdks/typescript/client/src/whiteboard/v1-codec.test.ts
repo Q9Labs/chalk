@@ -50,6 +50,14 @@ describe("whiteboard-v1 codec", () => {
     expect(JSON.parse(encodeWhiteboardV1ClientFrame(extended))).toEqual(extended);
   });
 
+  it("negotiates the presentation opener without changing legacy frames", () => {
+    const hello = { type: "hello", protocol: "whiteboard-v1", token: "participant-token", cursor: null, extensions: [{ name: "presentation_v1", presenter: true }] } as const;
+    expect(JSON.parse(encodeWhiteboardV1ClientFrame(hello))).toEqual(hello);
+    const presentation = { type: "presentation_updated", scene_id: sceneId, revision: "1", presenting: true, presenter_id: sceneId };
+    expect(decodeWhiteboardV1ServerFrame(JSON.stringify(presentation))).toEqual(presentation);
+    expect(() => decodeWhiteboardV1ServerFrame(JSON.stringify({ ...presentation, presenter_id: "invalid" }))).toThrow();
+  });
+
   it("accepts both legacy and negotiated welcomes", () => {
     const welcome = {
       type: "welcome",

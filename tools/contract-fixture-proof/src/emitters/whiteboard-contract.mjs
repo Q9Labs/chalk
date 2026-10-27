@@ -30,6 +30,7 @@ function validateWhiteboardContract(contract) {
     throw new Error("Invalid whiteboard contract: presentation_v1 extension is required");
   }
   requireExactStrings(contract.extensions.presentation.exactFields, ["name"], "extensions.presentation.exactFields");
+  requireExactStrings(contract.extensions.presentation.presenterExactFields, ["name", "presenter"], "extensions.presentation.presenterExactFields");
   if (contract.extensions?.view?.name !== "view_v1") {
     throw new Error("Invalid whiteboard contract: view_v1 extension is required");
   }

@@ -823,7 +823,7 @@
     0 6px 18px rgb(0 0 0 / 0.5);
 }
 
-/* A tile under 70px tall, such as a face floating over a phone board, keeps a small tag with the first name. Its menu would cover the tag, and clicking the tile does the same. */
+/* Floating phone faces keep their name and menu reachable in the small tile. */
 @container (max-height: 70px) {
   [data-part="tile-tag"] {
     left: 4px;
@@ -833,9 +833,16 @@
     font-size: 11px;
   }
   [data-part="tile-full-name"],
-  [data-part="tile-following"],
-  [data-part="tile-menu"] {
+  [data-part="tile-following"] {
     display: none;
+  }
+  [data-part="tile-menu"] {
+    top: 2px;
+    right: 2px;
+  }
+  [data-part="tile-menu"] button {
+    width: 28px;
+    height: 28px;
   }
   [data-part="tile-short-name"] {
     display: inline;

@@ -14,7 +14,11 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       "transport" => "websocket-json-text"
     },
     "extensions" => %{
-      "presentation" => %{"name" => "presentation_v1", "exactFields" => ["name"]},
+      "presentation" => %{
+        "name" => "presentation_v1",
+        "exactFields" => ["name"],
+        "presenterExactFields" => ["name", "presenter"]
+      },
       "view" => %{
         "name" => "view_v1",
         "exactFields" => ["name"],
@@ -430,6 +434,12 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   end
 
   defp hello_extension_set?(extensions) when is_list(extensions) do
+    extensions = Enum.map(extensions, fn
+      %{"name" => "presentation_v1",
+          "presenter" => true} = extension when map_size(extension) == 2 -> %{"name" => "presentation_v1"}
+      extension -> extension
+    end)
+
     {base, draw_policy} =
       case Enum.split(extensions, -1) do
         {base, [%{"name" => "draw_policy_v1"} = extension]}
@@ -666,6 +676,10 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
       frame["width"] <= 2000000 and frame["height"] <= 2000000
   end
 
+  defp valid_welcome?(%{"presenter_id" => presenter} = frame) do
+    (is_nil(presenter) or uuid?(presenter)) and valid_welcome?(Map.delete(frame, "presenter_id"))
+  end
+
   defp valid_welcome?(%{"view_owner_id" => owner} = frame) do
     uuid?(owner) and valid_welcome?(Map.delete(frame, "view_owner_id"))
   end
@@ -824,6 +838,11 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   "participant_id",
   "can_draw"
 ]) and uuid?(&1["participant_id"]) and is_boolean(&1["can_draw"])))
+  end
+
+  defp valid_presentation_updated?(%{"presenter_id" => presenter} = frame) do
+    (is_nil(presenter) or uuid?(presenter)) and valid_presentation_updated?(Map.delete(frame,
+        "presenter_id"))
   end
 
   defp valid_presentation_updated?(frame) do

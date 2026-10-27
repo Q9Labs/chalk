@@ -85,7 +85,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   def lock_scene do
     """
-    select scene_id, revision, app_state, coalesce(presenting_episode_id = $3, false) as is_presenting
+    select scene_id, revision, app_state, coalesce(presenting_episode_id = $3, false) as is_presenting, presenting_participant_id::text
     from sync_whiteboard_scenes
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and is_current
     for update
@@ -181,8 +181,8 @@ defmodule ChalkSync.WhiteboardV1.SQL do
   def insert_scene do
     """
     insert into sync_whiteboard_scenes (
-      tenant_id, space_id, episode_id, scene_id, is_current, presenting_episode_id, revision
-    ) select $1, $2, $3, $4, true, case when $5 then $3::uuid else null end, 0 where $3::uuid is not null
+      tenant_id, space_id, episode_id, scene_id, is_current, presenting_episode_id, presenting_participant_id, revision
+    ) select $1, $2, $3, $4, true, case when $5 then $3::uuid else null end, $6, 0 where $3::uuid is not null
     """
   end
 
@@ -191,6 +191,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     update sync_whiteboard_scenes
     set
       presenting_episode_id = case when $5 then $3::uuid else null end,
+      presenting_participant_id = case when $5 then $6::uuid else null end,
       revision = revision + 1,
       updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and scene_id = $4 and is_current
@@ -291,7 +292,7 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   def read_after do
     """
-    select operation_name, operation_id, scene_id, revision, event_elements, event_presenting
+    select operation_name, operation_id, scene_id, revision, event_elements, event_presenting, participant_id::text
     from sync_whiteboard_operation_receipts
     where tenant_id = $1 and episode_id = $2 and scene_id = $3 and revision > $4
       and operation_name in ('submit_update', 'set_presentation')

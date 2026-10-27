@@ -33,12 +33,17 @@ it("handles a double click when a focused tile has no single-click action", asyn
   }
 });
 
-it.each([false, true])("announces the actual follow action, following=%s", async (following) => {
+it.each([false, true])("tile clicks pin without starting Follow, following=%s", async (following) => {
   const container = document.createElement("div");
   const root = createRoot(container);
+  const onClick = vi.fn();
+  const onFollow = vi.fn();
   try {
-    await act(async () => root.render(<ParticipantTileSurface participant={{ id: "nora", displayName: "Nora", isVideoEnabled: false }} mediaVisible={false} clickAction="follow" following={following} onClick={() => undefined} animatedAvatars={false} />));
-    expect(container.querySelector(`button[aria-label="${following ? "Stop following" : "Follow"} Nora"]`)).not.toBeNull();
+    await act(async () => root.render(<ParticipantTileSurface participant={{ id: "nora", displayName: "Nora", isVideoEnabled: false }} mediaVisible={false} following={following} onFollow={onFollow} onClick={onClick} animatedAvatars={false} />));
+    const tile = container.querySelector<HTMLButtonElement>('button[aria-label="Video tile for Nora"]');
+    await act(async () => tile?.click());
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(onFollow).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }

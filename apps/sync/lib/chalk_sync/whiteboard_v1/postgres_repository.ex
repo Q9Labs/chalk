@@ -83,7 +83,14 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
            :missing <- receipt(connection, identity, operation.operation_id, fingerprint),
            new_scene_id = UUID.generate(),
            :ok <- retire_scene(connection, identity, scene.scene_id),
-           :ok <- insert_scene(connection, identity, new_scene_id, scene.is_presenting),
+           :ok <-
+             insert_scene(
+               connection,
+               identity,
+               new_scene_id,
+               scene.is_presenting,
+               scene.presenter_id
+             ),
            :ok <-
              insert_receipt(
                connection,
@@ -326,7 +333,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
          encoded_scene_id,
          revision,
          elements,
-         nil
+         nil,
+         _participant_id
        ]) do
     %{
       type: :update,
@@ -343,14 +351,16 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
          encoded_scene_id,
          revision,
          nil,
-         presenting
+         presenting,
+         participant_id
        ]) do
     %{
       type: :presentation,
       operation_id: operation_id,
       scene_id: UUID.load!(encoded_scene_id),
       revision: revision,
-      presenting: presenting
+      presenting: presenting,
+      presenter_id: if(presenting, do: participant_id, else: nil)
     }
   end
 
@@ -394,14 +404,16 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
              SQL.ensure_scene(),
              context(identity) ++ [uuid(generated_scene_id)]
            ),
-         {:ok, %Postgrex.Result{rows: [[scene_id, revision, app_state, is_presenting]]}} <-
+         {:ok,
+          %Postgrex.Result{rows: [[scene_id, revision, app_state, is_presenting, presenter_id]]}} <-
            Postgrex.query(connection, SQL.lock_scene(), context(identity)) do
       {:ok,
        %{
          scene_id: UUID.load!(scene_id),
          revision: revision,
          app_state: app_state,
-         is_presenting: is_presenting
+         is_presenting: is_presenting,
+         presenter_id: presenter_id
        }}
     else
       {:ok, %Postgrex.Result{rows: []}} ->
@@ -536,11 +548,14 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
     end
   end
 
-  defp insert_scene(connection, identity, scene_id, is_presenting) do
+  defp nullable_uuid(nil), do: nil
+  defp nullable_uuid(id), do: uuid(id)
+
+  defp insert_scene(connection, identity, scene_id, is_presenting, presenter_id) do
     case Postgrex.query(
            connection,
            SQL.insert_scene(),
-           context(identity) ++ [uuid(scene_id), is_presenting]
+           context(identity) ++ [uuid(scene_id), is_presenting, nullable_uuid(presenter_id)]
          ) do
       {:ok, _result} -> :ok
       {:error, _error} -> {:retryable, :storage_unavailable}
@@ -548,7 +563,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp update_presentation(connection, identity, scene_id, presenting) do
-    params = context(identity) ++ [uuid(scene_id), presenting]
+    params = context(identity) ++ [uuid(scene_id), presenting, uuid(identity.participant_id)]
 
     case Postgrex.query(connection, SQL.update_presentation(), params) do
       {:ok, %Postgrex.Result{rows: [[revision, is_presenting]]}} ->

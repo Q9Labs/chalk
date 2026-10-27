@@ -22,6 +22,7 @@ export function ParticipantRow({
   onCommandError,
   participantVolumes,
   onParticipantVolumeChange,
+  onParticipantClick,
   participantGradientPreference,
   generatedAvatars = true,
   menuOpen,
@@ -63,7 +64,13 @@ export function ParticipantRow({
     variant === "mobile" ? "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" : variant === "sidebar" ? "opacity-70 text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)] hover:opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
 
   return (
-    <div ref={rootRef} className="call-person-row group">
+    <div
+      ref={rootRef}
+      className="call-person-row group"
+      onClick={(event) => {
+        if (event.target instanceof Element && event.currentTarget.contains(event.target) && !event.target.closest("button, input, [role=menu]")) onParticipantClick?.(participant.id);
+      }}
+    >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <div className="relative">
           <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" gradientPreference={participantGradientPreference} />
@@ -85,9 +92,17 @@ export function ParticipantRow({
                 />
               </div>
             ) : (
-              <span className="min-w-0 truncate text-sm font-medium text-[var(--chalk-app-text)]" onClick={() => participant.isLocal && onUpdateDisplayName && setIsEditing(true)} title={participant.isLocal && onUpdateDisplayName ? "Click to edit" : undefined}>
+              <button
+                type="button"
+                className="min-w-0 truncate text-left text-sm font-medium text-[var(--chalk-app-text)]"
+                onClick={() => {
+                  if (onParticipantClick) onParticipantClick(participant.id);
+                  else if (participant.isLocal && onUpdateDisplayName) setIsEditing(true);
+                }}
+                aria-label={onParticipantClick ? `Show ${participant.displayName} on main screen` : participant.displayName}
+              >
                 <bdi>{participant.displayName}</bdi>
-              </span>
+              </button>
             )}
             {participant.isHost && !isEditing ? <span className="shrink-0 text-xs text-[var(--chalk-app-text-muted)]">Host</span> : null}
             {participant.isLocal && !isEditing && (
@@ -165,6 +180,7 @@ export function ParticipantRow({
 }
 
 export interface ParticipantRowProps {
+  onParticipantClick?: (id: string) => void;
   participant: ParticipantListParticipant;
   variant: ParticipantListVariant;
   canManageParticipants: boolean;

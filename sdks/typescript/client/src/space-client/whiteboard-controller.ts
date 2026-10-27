@@ -71,6 +71,7 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
       drawPolicy: summary.drawPolicy,
       drawPermissions: Object.freeze(summary.drawPermissions.map((permission) => Object.freeze({ ...permission }))),
       presenting: summary.presenting,
+      presenterId: summary.presenterId ?? null,
       error: summary.error ? Object.freeze({ ...summary.error }) : null,
     });
     this.#publish();
@@ -91,7 +92,7 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   #publish(): void {
     const slice: WhiteboardSlice = Object.freeze({
       open: this.#summary.status !== "unsubscribed",
-      engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, presenting: this.#summary.presenting, error: this.#summary.error }),
+      engine: Object.freeze({ status: this.#summary.status, sceneId: this.#summary.sceneId, revision: this.#summary.revision, presenting: this.#summary.presenting, presenterId: this.#summary.presenterId ?? null, error: this.#summary.error }),
       access: Object.freeze({ canDraw: this.#summary.canDraw, policy: this.#summary.drawPolicy, permissions: this.#summary.drawPermissions }),
     });
     const current = this.#store.getSnapshot().whiteboard;
@@ -107,6 +108,7 @@ function sameWhiteboard(left: WhiteboardSlice, right: WhiteboardSlice): boolean 
     left.engine.sceneId === right.engine.sceneId &&
     left.engine.revision === right.engine.revision &&
     left.engine.presenting === right.engine.presenting &&
+    left.engine.presenterId === right.engine.presenterId &&
     sameError(left.engine.error, right.engine.error) &&
     sameAccess(left.access, right.access)
   );

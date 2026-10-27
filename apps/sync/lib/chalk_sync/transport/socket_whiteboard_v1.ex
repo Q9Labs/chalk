@@ -49,6 +49,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
        connected_at: nil,
        display_name: nil,
        presentation_negotiated: false,
+       presenter_negotiated: false,
        view_negotiated: false,
        view_origins_negotiated: false,
        draw_policy_negotiated: false,
@@ -867,6 +868,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
     enqueue_and_push(next, [frame])
   end
 
+  defp presenter_frame(%{presenter_negotiated: true}, frame), do: frame
+  defp presenter_frame(_state, frame), do: Map.delete(frame, "presenter_id")
+
   defp push_next(state) do
     case OutboundQueue.pop(state.outbound, System.monotonic_time(:millisecond)) do
       {:ok, frame, queue} ->
@@ -874,7 +878,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           send(self(), :whiteboard_drain)
         end
 
-        {:push, {:text, Protocol.encode!(frame)}, %{state | outbound: queue}}
+        {:push, {:text, Protocol.encode!(presenter_frame(state, frame))},
+         %{state | outbound: queue}}
 
       :empty ->
         {:ok, state}
@@ -1117,6 +1122,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp authenticated_hello(state, identity, claims, extensions) do
     presentation_negotiated = Enum.any?(extensions, &(&1["name"] == "presentation_v1"))
+
+    presenter_negotiated =
+      Enum.any?(extensions, &(&1["name"] == "presentation_v1" and &1["presenter"] == true))
+
     view_negotiated = Enum.any?(extensions, &(&1["name"] == "view_v1"))
 
     view_origins_negotiated =
@@ -1145,6 +1154,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
           Map.delete(welcome, "presenting")
         end
 
+      welcome = if presenter_negotiated, do: welcome, else: Map.delete(welcome, "presenter_id")
+
       welcome =
         if view_owner_negotiated, do: Map.put(welcome, "view_owner_id", owner_id), else: welcome
 
@@ -1159,6 +1170,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
             connected_at: connected_at,
             display_name: claims.display_name,
             presentation_negotiated: presentation_negotiated,
+            presenter_negotiated: presenter_negotiated,
             view_negotiated: view_negotiated,
             view_origins_negotiated: view_origins_negotiated,
             draw_policy_negotiated: draw_policy_negotiated,
