@@ -1020,11 +1020,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert frame_state.terminal == %{close_code: 1009, reason: :protocol_error}
 
-    assert {:push, {:text, ~s({"type":"pong"})}, ^state} =
+    assert {:push, {:text, ~s({"type":"pong"})}, pinged} =
              SocketWhiteboardV1.handle_in(
                {~s({"type":"ping"}), [opcode: :text]},
                state
              )
+
+    assert is_integer(pinged.last_heartbeat_at_ms)
   end
 
   test "retains transport close reasons without guessing unavailable close codes" do
@@ -1046,7 +1048,9 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       initial
       | phase: :live,
         connected_at: connected_earlier(),
-        scene_id: @scene_id
+        scene_id: @scene_id,
+        opened_at_ms: System.monotonic_time(:millisecond) - 90_000,
+        last_heartbeat_at_ms: System.monotonic_time(:millisecond) - 70_000
     }
 
     for {terminate_reason, reason} <- [
@@ -1064,6 +1068,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                        }}
 
       assert attributes.close_code == nil
+      assert attributes.socket_age_ms >= 90_000
+      assert attributes.heartbeat_gap_ms >= 70_000
     end
 
     assert :ok =
