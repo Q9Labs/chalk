@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { PreviewSpaceView, createPreviewClient } from "@q9labsai/chalk-react/preview";
+import { PreviewSpaceView, createPreviewClient, type WhiteboardViewProps } from "@q9labsai/chalk-react/preview";
 import type { ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import type { WhiteboardWireElement, WhiteboardCollaborationEvent } from "@q9labsai/chalk-whiteboard";
 import { HOST, liveSnapshot } from "./fixtures";
@@ -39,7 +39,7 @@ function FollowPinCall({ self, room }: { readonly self: "a" | "b"; readonly room
       client.dispose();
     };
   }, [channel, client]);
-  const [board] = useState(() => ({
+  const [board] = useState<WhiteboardViewProps>(() => ({
     canDraw: true,
     collab: {
       subscribe: (listener: (event: WhiteboardCollaborationEvent) => void) => {
@@ -53,7 +53,11 @@ function FollowPinCall({ self, room }: { readonly self: "a" | "b"; readonly room
       },
       submitUpdate: async (input: { readonly elements: readonly WhiteboardWireElement[] }) => {
         send({ type: "update", sceneId: "scene-1", revision: "1", elements: input.elements });
-        return { sceneId: "scene-1", revision: "1" };
+        return { operationId: "update", sceneId: "scene-1", revision: "1" };
+      },
+      clear: async () => {
+        send({ type: "snapshot", sceneId: "scene-1", revision: "0", elements: [] });
+        return { operationId: "clear", sceneId: "scene-1", revision: "0" };
       },
       sendCursor: () => true,
     },
@@ -91,7 +95,7 @@ class FollowPinFixture extends HTMLElement {
     if (!target) throw new Error("Missing fixture root");
     target.replaceChildren();
     const host = document.createElement("div");
-    target.append(host);
+    target.appendChild(host);
     const root = createRoot(host);
     root.render(<FollowPinCall self={self} room={room} />);
     return () => root.unmount();
