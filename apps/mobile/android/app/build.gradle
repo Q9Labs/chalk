@@ -111,6 +111,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode
         versionName appVersionName
+        manifestPlaceholders.chalkNightlyHost = System.getenv("CHALK_APP_VARIANT") == "nightly" ? "nightly.chalkmeet.com" : "chalkmeet.com"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

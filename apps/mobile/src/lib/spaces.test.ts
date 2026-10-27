@@ -39,6 +39,8 @@ it("accepts nightly call links only when connected to the nightly API", () => {
   expect(parseSpaceLink(link)?.inviteLink).toBe(link);
   expect(createExpoConfig("nightly").expo.extra.apiBaseURL).toBe("https://nightly-api.chalkmeet.com");
   expect(createExpoConfig("production").expo.extra.apiBaseURL).toBeUndefined();
+  expect(createExpoConfig("nightly").expo.android.intentFilters[1]?.data.some((item) => item.host === "nightly.chalkmeet.com")).toBe(true);
+  expect(createExpoConfig("production").expo.android.intentFilters[1]?.data.some((item) => item.host === "nightly.chalkmeet.com")).toBe(false);
   vi.mocked(getApiBaseURL).mockReturnValue("https://api.chalkmeet.com");
 });
 

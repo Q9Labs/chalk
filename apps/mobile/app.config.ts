@@ -16,6 +16,7 @@ export type MobileExpoExtra = {
 
 export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
   const extra: MobileExpoExtra = { buildProfile, ...(buildProfile === "nightly" ? { apiBaseURL: "https://nightly-api.chalkmeet.com" } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } };
+  const androidWebHosts = buildProfile === "nightly" ? [...PUBLIC_WEB_HOSTS, "nightly.chalkmeet.com"] : PUBLIC_WEB_HOSTS;
 
   return {
     expo: {
@@ -62,7 +63,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             action: "VIEW",
             autoVerify: true,
             category: ["BROWSABLE", "DEFAULT"],
-            data: [...PUBLIC_WEB_HOSTS.flatMap((host) => [{ scheme: "https", host, pathPrefix: "/space" }])],
+            data: [...androidWebHosts.flatMap((host) => [{ scheme: "https", host, pathPrefix: "/space" }])],
           },
           {
             action: "VIEW",
@@ -70,7 +71,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
             category: ["BROWSABLE", "DEFAULT"],
             // Keep the simple short-code rule on the same data element: Android below API 31
             // ignores the advanced four-word rule without claiming every URL on these hosts.
-            data: PUBLIC_WEB_HOSTS.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-...", pathAdvancedPattern: "/[a-z]+-[a-z]+-[a-z]+-[a-z]+" })),
+            data: androidWebHosts.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-...", pathAdvancedPattern: "/[a-z]+-[a-z]+-[a-z]+-[a-z]+" })),
           },
         ],
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],

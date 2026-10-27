@@ -46,6 +46,7 @@
         <action android:name="android.intent.action.VIEW"/>
         <data android:scheme="https" android:host="chalkmeet.com" android:pathPrefix="/space"/>
         <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPrefix="/space"/>
+        <data android:scheme="https" android:host="${chalkNightlyHost}" android:pathPrefix="/space"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
@@ -53,6 +54,7 @@
         <action android:name="android.intent.action.VIEW"/>
         <data android:scheme="https" android:host="chalkmeet.com" android:pathPattern="/...-....-..." android:pathAdvancedPattern="/[a-z]+-[a-z]+-[a-z]+-[a-z]+"/>
         <data android:scheme="https" android:host="chalk.q9labs.ai" android:pathPattern="/...-....-..." android:pathAdvancedPattern="/[a-z]+-[a-z]+-[a-z]+-[a-z]+"/>
+        <data android:scheme="https" android:host="${chalkNightlyHost}" android:pathPattern="/...-....-..." android:pathAdvancedPattern="/[a-z]+-[a-z]+-[a-z]+-[a-z]+"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
