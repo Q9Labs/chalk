@@ -1,6 +1,7 @@
-alias ChalkSync.{SyncPostgres, TestProcess}
 alias ChalkSync.Auth.DevTokenVerifier
 alias ChalkSync.Stateholder.Postgres
+alias ChalkSync.SyncPostgres
+alias ChalkSync.TestProcess
 
 {:ok, _} = Application.ensure_all_started(:chalk_sync)
 connections = SyncPostgres.start_connections(System.fetch_env!("CHALK_SYNC_TEST_DATABASE_URL"))
