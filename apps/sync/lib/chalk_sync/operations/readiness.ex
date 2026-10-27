@@ -87,6 +87,7 @@ defmodule ChalkSync.Operations.Readiness do
   def handle_info({:probe_result, _pid, _result}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, ref, :process, pid, _reason}, %{probe_pid: pid, probe_ref: ref} = state) do
+    Probe.record_failure(:probe_worker, :probe_failed, %{observed: "terminated"})
     {:noreply, finish_probe(state, {:error, :probe_failed})}
   end
 
@@ -118,9 +119,13 @@ defmodule ChalkSync.Operations.Readiness do
   defp probe_result(probe_fun) do
     probe_fun.()
   rescue
-    _exception -> {:error, :probe_failed}
+    _exception ->
+      Probe.record_failure(:probe_worker, :probe_failed, %{observed: "exception"})
+      {:error, :probe_failed}
   catch
-    :exit, _reason -> {:error, :probe_failed}
+    :exit, _reason ->
+      Probe.record_failure(:probe_worker, :probe_failed, %{observed: "exit"})
+      {:error, :probe_failed}
   end
 
   defp finish_probe(state, result) do

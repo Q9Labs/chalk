@@ -910,11 +910,52 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
     schedule_join_expiry(connection, fixture, -31)
 
-    Readiness.probe_now(readiness)
-    health = Readiness.probe_now(readiness)
-    refute Readiness.ready?(readiness)
-    assert health.status == "unready"
-    assert health.dependencies.reason == "lifecycle_intent_lag"
+    handler = "readiness-failure-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:chalk_sync, :observability, :event],
+        fn _event, _measurements, metadata, owner ->
+          send(owner, {:readiness_event, metadata})
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        Readiness.probe_now(readiness)
+        health = Readiness.probe_now(readiness)
+        refute Readiness.ready?(readiness)
+        assert health.status == "unready"
+        assert health.dependencies.reason == "lifecycle_intent_lag"
+        refute JSON.encode!(health) =~ fixture.lifecycle_intent_id
+        refute JSON.encode!(health) =~ "oldest_due_intent"
+      end)
+
+    assert_receive {:readiness_event,
+                    %{
+                      event: "sync.readiness.failed",
+                      attributes:
+                        %{check: "database_validation", reason: "lifecycle_intent_lag"} =
+                          attributes
+                    }}
+
+    assert attributes.oldest_pending_lifecycle_intent_ms >= 31_000
+    assert attributes.lifecycle_lag_limit_ms == 30_000
+    assert attributes.oldest_due_intent_id == fixture.lifecycle_intent_id
+    assert attributes.oldest_due_intent_kind == "participant_joined"
+    assert attributes.oldest_due_intent_attempts == 0
+    assert {:ok, due_at, 0} = DateTime.from_iso8601(attributes.oldest_due_intent_due_at)
+    assert DateTime.diff(DateTime.utc_now(), due_at) >= 31
+    assert log =~ "\"event\":\"sync.readiness.failed\""
+    assert log =~ fixture.lifecycle_intent_id
+    assert log =~ attributes.oldest_due_intent_due_at
+    refute log =~ fixture.identity.participant_id
+    refute log =~ fixture.episode.episode_id
+    refute log =~ "Pending Participant"
 
     assert {:ok, %{result: :superseded}} =
              Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
@@ -1026,8 +1067,14 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :applied}} =
              Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
-    recovered = Readiness.probe_now(readiness)
-    assert recovered.dependencies == %{reason: "required_process_unavailable"}
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        recovered = Readiness.probe_now(readiness)
+        assert recovered.dependencies == %{reason: "required_process_unavailable"}
+      end)
+
+    assert log =~ "\"check\":\"Elixir.ChalkSync.Fanout.PostgresNotifications\""
+    assert log =~ "\"observed\":false"
   end
 
   defp intent_attempt(connection, fixture) do

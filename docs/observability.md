@@ -75,6 +75,22 @@ they do not establish the underlying cause of a `dependency_unavailable` result.
 The response contains no intent, Episode, participant, or Tenant identifiers.
 Readiness thresholds, retry scheduling, and the one-second query timeout are unchanged.
 
+Each failed probe check emits `sync.readiness.failed` through Sync's existing
+observability telemetry and short-span path, plus a warning-level JSON journal
+line. It records the check and reason, measured database values and limits or
+consumer freshness/failure counters where available; unavailable dependencies
+report `observed=false`. Exceptions and exits record only their category, never
+the raw error text. These are probe observations, before readiness hysteresis.
+
+For lifecycle lag, the journal and trace also contain the oldest currently due
+intent's ID, kind, ISO-8601 due time and attempt count from the same database
+snapshot as the lag measurement. This is separate from the oldest lag-eligible
+intent, which can be a retry whose next attempt is still in the future. If there
+is no due intent, the event reports `oldest_due_intent=none`. These identifiers
+are log/trace-only; `/readyz` remains identifier-free. Tokens, payloads, participant
+and Tenant identifiers, display names, request keys and raw error text are not
+included.
+
 ### Sync connection failures
 
 `sync.websocket.handshake` records `client_ip` (the edge's `CF-Connecting-IP`,

@@ -1,16 +1,21 @@
 defmodule ChalkSync.Operations.Probe do
   @moduledoc false
 
+  require Logger
+
   alias ChalkSync.Database
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Fanout.PostgresNotifications
   alias ChalkSync.LifecycleConsumer
+  alias ChalkSync.Observability
   alias ChalkSync.ProviderBridge.Client, as: ProviderBridgeClient
   alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   alias ChalkSync.Retention.Scheduler, as: RetentionScheduler
   alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.UUID
 
   @query_timeout_ms 1_000
+  @lifecycle_lag_limit_ms 30_000
   @external_operation_staleness_floor_ms 2_000
   @external_operation_staleness_ceiling_ms 30_000
 
@@ -18,17 +23,21 @@ defmodule ChalkSync.Operations.Probe do
   def run(options \\ []) do
     boot? = Keyword.get(options, :boot?, false)
 
-    with :ok <- production_modules(),
-         {:ok, provider_bridge} <- provider_bridge_observation(),
-         {:ok, database} <- database_observations(),
-         :ok <- validate_observed_database(database),
+    with :ok <- observe(:production_modules, &production_modules/0),
+         {:ok, provider_bridge} <- observe(:provider_bridge, &provider_bridge_observation/0),
+         {:ok, database, oldest_due} <- observe(:database, &database_observations/0),
+         :ok <- validate_observed_database(database, oldest_due),
          {:ok, processes} <- process_observations(boot?) do
       {:ok, %{database: database, processes: processes, provider_bridge: provider_bridge}}
     end
   rescue
-    _exception -> {:error, :probe_failed}
+    _exception ->
+      record_failure(:probe, :probe_failed, %{observed: "exception"})
+      {:error, :probe_failed}
   catch
-    :exit, _reason -> {:error, :probe_failed}
+    :exit, _reason ->
+      record_failure(:probe, :probe_failed, %{observed: "exit"})
+      {:error, :probe_failed}
   end
 
   defp production_modules do
@@ -108,7 +117,19 @@ defmodule ChalkSync.Operations.Probe do
          {:ok,
           %{
             rows: [
-              [pending_age_ms, retention_cleanup_lag_ms, pending, due, retrying, attempts, code]
+              [
+                pending_age_ms,
+                retention_cleanup_lag_ms,
+                pending,
+                due,
+                retrying,
+                attempts,
+                code,
+                due_id,
+                due_kind,
+                due_at,
+                due_attempts
+              ]
             ]
           }} <-
            Postgrex.query(connection, pending_age_query(), [], timeout: @query_timeout_ms),
@@ -136,20 +157,79 @@ defmodule ChalkSync.Operations.Probe do
            oldest_error_code: public_lifecycle_error_code(code)
          },
          retention_cleanup_lag_ms: retention_cleanup_lag_ms
-       }}
+       }, oldest_due_observation(due_id, due_kind, due_at, due_attempts)}
     else
       _error -> {:error, :database_unavailable}
     end
   end
 
-  defp validate_observed_database(database) do
+  defp validate_observed_database(database, oldest_due) do
     case validate_database(database) do
-      {:error, :lifecycle_intent_lag} ->
-        {:error, :lifecycle_intent_lag, %{database: database}}
+      {:error, reason} = error ->
+        measurements =
+          database
+          |> Map.delete(:lifecycle_intents)
+          |> Map.merge(%{
+            lifecycle_pending: database.lifecycle_intents.pending,
+            lifecycle_due: database.lifecycle_intents.due,
+            lifecycle_retrying: database.lifecycle_intents.retrying,
+            lifecycle_lag_limit_ms: @lifecycle_lag_limit_ms,
+            minimum_migration:
+              Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration),
+            max_wal_lag_bytes: Application.get_env(:chalk_sync, :max_synchronous_wal_lag_bytes, 0)
+          })
+
+        if reason == :lifecycle_intent_lag do
+          record_failure(:database_validation, reason, Map.merge(measurements, oldest_due))
+          {:error, reason, %{database: database}}
+        else
+          record_failure(:database_validation, reason, measurements)
+          error
+        end
 
       result ->
         result
     end
+  end
+
+  defp oldest_due_observation(nil, _kind, _due_at, _attempts),
+    do: %{oldest_due_intent: "none"}
+
+  defp oldest_due_observation(id, kind, due_at, attempts) do
+    %{
+      oldest_due_intent_id: UUID.load!(id),
+      oldest_due_intent_kind: kind,
+      oldest_due_intent_due_at: DateTime.to_iso8601(due_at),
+      oldest_due_intent_attempts: attempts
+    }
+  end
+
+  defp observe(check, probe, measurements \\ %{observed: false}) do
+    result = probe.()
+
+    case result do
+      {:error, reason} -> record_failure(check, reason, measurements)
+      {:error, reason, _details} -> record_failure(check, reason, measurements)
+      _success -> :ok
+    end
+
+    result
+  end
+
+  @doc false
+  @spec record_failure(atom(), atom(), map()) :: :ok
+  def record_failure(check, reason, measurements) do
+    attributes =
+      Map.merge(measurements, %{check: Atom.to_string(check), reason: Atom.to_string(reason)})
+
+    context = Observability.root(nil, "sync.readiness.failed", attributes)
+
+    Logger.warning(fn ->
+      attributes
+      |> Map.merge(Observability.frame_fields(context))
+      |> Map.put(:event, "sync.readiness.failed")
+      |> JSON.encode!()
+    end)
   end
 
   defp public_lifecycle_error_code(nil), do: nil
@@ -215,7 +295,7 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp validate_lifecycle_lag(%{oldest_pending_lifecycle_intent_ms: age_ms})
-       when age_ms >= 30_000,
+       when age_ms >= @lifecycle_lag_limit_ms,
        do: {:error, :lifecycle_intent_lag}
 
   defp validate_lifecycle_lag(_observations), do: :ok
@@ -256,19 +336,32 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp process_observations(boot?) do
-    with true <- alive?(ChalkSync.Episodes.Supervisor),
-         true <- alive?(ChalkSync.CommandTaskSupervisor),
-         true <- alive?(ChalkSync.Episodes.CommandIntake),
-         true <- alive?(PostgresNotifications),
-         true <- alive?(LifecycleConsumer),
-         true <- alive?(ExternalOperationConsumer),
-         true <- alive?(RetentionScheduler),
-         {:ok, fanout} <- safe_health(PostgresNotifications),
-         {:ok, lifecycle} <- safe_health(LifecycleConsumer),
-         {:ok, external_operations} <- safe_health(ExternalOperationConsumer),
-         {:ok, retention} <- safe_health(RetentionScheduler),
-         :ok <- validate_lifecycle_health(lifecycle, boot?),
-         :ok <- validate_external_operation_health(external_operations, boot?) do
+    with :ok <- observe_process(ChalkSync.Episodes.Supervisor),
+         :ok <- observe_process(ChalkSync.CommandTaskSupervisor),
+         :ok <- observe_process(ChalkSync.Episodes.CommandIntake),
+         :ok <- observe_process(PostgresNotifications),
+         :ok <- observe_process(LifecycleConsumer),
+         :ok <- observe_process(ExternalOperationConsumer),
+         :ok <- observe_process(RetentionScheduler),
+         {:ok, fanout} <-
+           observe(PostgresNotifications, fn -> safe_health(PostgresNotifications) end),
+         {:ok, lifecycle} <- observe(LifecycleConsumer, fn -> safe_health(LifecycleConsumer) end),
+         {:ok, external_operations} <-
+           observe(ExternalOperationConsumer, fn -> safe_health(ExternalOperationConsumer) end),
+         {:ok, retention} <-
+           observe(RetentionScheduler, fn -> safe_health(RetentionScheduler) end),
+         :ok <-
+           observe(
+             :lifecycle_consumer,
+             fn -> validate_lifecycle_health(lifecycle, boot?) end,
+             consumer_measurements(lifecycle)
+           ),
+         :ok <-
+           observe(
+             :external_operation_consumer,
+             fn -> validate_external_operation_health(external_operations, boot?) end,
+             consumer_measurements(external_operations)
+           ) do
       {:ok,
        %{
          coordinator_supervisor: "ok",
@@ -373,7 +466,29 @@ defmodule ChalkSync.Operations.Probe do
     :exit, _reason -> {:error, :retention_cleanup_unavailable}
   end
 
-  defp alive?(name) when is_atom(name), do: is_pid(Process.whereis(name))
+  defp observe_process(name) do
+    observe(name, fn ->
+      if is_pid(Process.whereis(name)), do: :ok, else: {:error, :required_process_unavailable}
+    end)
+  end
+
+  defp consumer_measurements(health) do
+    health
+    |> Map.take([
+      :consecutive_failures,
+      :active_work,
+      :active_work_age_ms,
+      :active_work_timeout_ms
+    ])
+    |> Map.put(
+      :last_success_age_ms,
+      if(is_nil(health.last_success_at_ms),
+        do: "never",
+        else: System.monotonic_time(:millisecond) - health.last_success_at_ms
+      )
+    )
+    |> Map.reject(fn {_key, value} -> is_nil(value) end)
+  end
 
   defp readiness_episode do
     %EpisodeKey{tenant_id: "readiness", space_id: "readiness", episode_id: "readiness"}
@@ -407,7 +522,7 @@ defmodule ChalkSync.Operations.Probe do
   defp pending_age_query do
     """
     with pending_intents as (
-      select lifecycle_intent_id, next_attempt_at, attempt_count, last_error_code,
+      select lifecycle_intent_id, intent_name, next_attempt_at, attempt_count, last_error_code,
         case
           when intent_name = 'participant_joined' and attempt_count = 0 then next_attempt_at
           else created_at
@@ -432,7 +547,9 @@ defmodule ChalkSync.Operations.Probe do
           and control.retention_cleaned_at is null
       ),
       pending.total, pending.due, pending.retrying,
-      oldest.attempt_count, oldest.last_error_code
+      oldest.attempt_count, oldest.last_error_code,
+      oldest_due.lifecycle_intent_id, oldest_due.intent_name,
+      oldest_due.next_attempt_at, oldest_due.attempt_count
     from (
       select
         greatest((extract(epoch from (now() - min(lag_since))) * 1000)::bigint, 0)
@@ -449,6 +566,13 @@ defmodule ChalkSync.Operations.Probe do
       order by lag_since, lifecycle_intent_id
       limit 1
     ) oldest on true
+    left join lateral (
+      select lifecycle_intent_id, intent_name, next_attempt_at, attempt_count
+      from pending_intents
+      where next_attempt_at <= now()
+      order by next_attempt_at, lifecycle_intent_id
+      limit 1
+    ) oldest_due on true
     """
   end
 
