@@ -16,7 +16,7 @@ import { NameNeeded } from "../components/space/SpacePage";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type BoardFixture, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
-export type Action = { readonly click: string; readonly role?: "button" | "menuitemradio" } | { readonly wait: number };
+export type Action = { readonly click: string; readonly role?: "button" | "menuitem" | "menuitemradio" } | { readonly wait: number };
 
 export type CallStateMeta = {
   readonly id: string;
@@ -166,7 +166,7 @@ export const CALL_STATES: readonly CallState[] = [
     {
       id: `board-follow-${scheme}`,
       title: `Board following Nora, ${scheme}`,
-      actions: [{ click: "Follow Nora" }],
+      actions: [{ click: "More options for Nora" }, { click: "Follow", role: "menuitem" }],
       render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
     { id: `board-small-${scheme}`, title: `Board with one small word, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ scene: "small" }} /> },

@@ -214,7 +214,7 @@ export function SpaceView({
   ];
   const headerLayout = pinnedId ? "focus" : layout;
   const updateLayout = (nextLayout: "grid" | "focus") => {
-    setPinnedId(null);
+    if (nextLayout === "grid") setPinnedId(null);
     setUncontrolledLayout(nextLayout);
     onLayoutChange?.(nextLayout);
   };

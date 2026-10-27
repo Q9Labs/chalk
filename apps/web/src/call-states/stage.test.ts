@@ -211,9 +211,9 @@ it.each([390, 650])("floats people over a board on a %ipx-wide screen and keeps 
         .map(([, name]) => name),
     ),
   ).toEqual(["Nora", "Malik", "You"]);
-  // On a wide window the tile menu would cover the short tag, so small faces leave it out.
+  // Compact tiles keep their menu so Follow remains reachable.
   await page.locator('[data-stage-role="float"]').first().hover();
-  expect(await page.locator('[data-stage-role="float"] [data-part="tile-menu"]').evaluateAll((menus) => menus.filter((menu) => getComputedStyle(menu).display !== "none").length)).toBe(0);
+  expect(await page.locator('[data-stage-role="float"] [data-part="tile-menu"]').evaluateAll((menus) => menus.filter((menu) => getComputedStyle(menu).display !== "none").length)).toBe(3);
   const controlsTop = Math.min(...(await page.locator(".chalk-board-island, .chalk-board-zoom").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top))));
   const toastBottom = await page.locator('[data-part="toast-stack"]').evaluate((stack) => stack.getBoundingClientRect().bottom);
   expect(toastBottom).toBeLessThanOrEqual(controlsTop - 8);
@@ -292,13 +292,11 @@ it("uses supplied voice level for the ring and mirrors only the self camera", as
 it("pins from the phone options row and refits instantly with reduced motion", async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   await open("stage-spotlight");
-  await page.getByRole("button", { name: "Video tile for Akash", exact: true }).click();
-  await page.getByRole("button", { name: "Pin", exact: true }).click();
+  await page.getByRole("button", { name: "More options for Akash", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Pin Akash", exact: true }).click();
   expect(await page.locator('[data-stage-item="stage-2"]').getAttribute("data-stage-role")).toBe("primary");
   expect(await page.locator('[data-stage-item="stage-2"]').evaluate((element) => element.getAnimations().length)).toBe(0);
-  // Base UI removes closed popups on its next animation frame, even without motion.
-  expect(await page.locator('[role="dialog"][data-open]').count()).toBe(0);
-  expect(await page.getByRole("dialog").evaluateAll((dialogs) => dialogs.every((dialog) => dialog.hasAttribute("data-closed") && dialog.hasAttribute("data-ending-style") && dialog.getAnimations().length === 0))).toBe(true);
+  await expect.poll(() => page.getByRole("menu").count()).toBe(0);
   await page.setViewportSize({ width: 1440, height: 900 });
 });
 
@@ -314,9 +312,11 @@ it("labels audio only on a remote share that includes it", async () => {
 it.each(["dark", "light"])("the board follow proof action follows Nora in %s", async (scheme) => {
   const state = `board-follow-${scheme}`;
   await open(state);
-  const action = await page.evaluate((id) => window.__CALL_STATES__?.find((entry) => entry.id === id)?.actions?.[0], state);
-  if (!action || !("click" in action)) throw new Error("Board follow proof has no click action");
-  await page.getByRole(action.role ?? "button", { name: action.click, exact: true }).click({ timeout: 5000 });
+  const actions = await page.evaluate((id) => window.__CALL_STATES__?.find((entry) => entry.id === id)?.actions, state);
+  if (!actions?.length) throw new Error("Board follow proof has no actions");
+  for (const action of actions) {
+    if ("click" in action) await page.getByRole(action.role ?? "button", { name: action.click, exact: true }).click({ timeout: 5000 });
+  }
   await page.locator(".chalk-board-chip").filter({ hasText: "Following Nora" }).waitFor();
   expect(await page.getByRole("button", { name: "Stop following Nora", exact: true }).isVisible()).toBe(true);
 });
