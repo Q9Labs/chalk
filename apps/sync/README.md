@@ -99,7 +99,7 @@ A v1 socket renews one shared Postgres **Episode** lease at entry and on each
 client ping (published SDKs ping every 20 seconds). Any current participant's
 connection on any Sync node keeps the room live. After 120 seconds without a
 renewal, the existing empty-room linger starts; after the customer's linger,
-the ordinary Episode-end operation stops media and recording. Presence never
+the ordinary Episode-end operation stops media and recording. Room-lease expiry never
 issues Leave, changes attendance or removes an individual's media. A return
 before Episode end renews the room lease and cancels this empty window, with
 no SDK upgrade, new participant or new terminal reason. After end, clients
@@ -115,7 +115,10 @@ creation plus grace, bounded by the same startup floor.
 
 Each live connection also renews a participant-generation lease. After 120 seconds
 without renewal, the API scheduler reserves an ordinary participant leave under
-the same Episode authority lock as renewal. Sync performs media cleanup, records
+the same Episode authority lock as renewal. A legacy joined participant that never
+opens its first Sync socket has no lease; its join timestamp starts a separate
+600-second grace. The runtime recovery floor still applies in both cases.
+Sync performs media cleanup, records
 `left_at`, and emits `participant.left`; the existing attendance endpoint reports
 the departure. Reconnect before reservation renews the lease and cancels expiry.
 A lease-aware Sync session witness and startup recovery floor prevent inference
