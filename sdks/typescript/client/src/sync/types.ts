@@ -7,7 +7,7 @@ export type SyncLifecycle = {
 export type SyncSocket = {
   onopen: (() => void) | null;
   onmessage: ((event: { readonly data: unknown }) => void) | null;
-  onclose: ((event: { readonly code: number; readonly reason?: string }) => void) | null;
+  onclose: ((event: { readonly code: number; readonly reason?: string; readonly wasClean?: boolean }) => void) | null;
   onerror: (() => void) | null;
   send(data: string): void;
   close(code?: number, reason?: string): void;

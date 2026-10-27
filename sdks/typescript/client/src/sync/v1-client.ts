@@ -1,4 +1,4 @@
-import { safeSyncCloseReason, type SyncConnectDiagnostic } from "./connect-diagnostics";
+import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
@@ -101,6 +101,9 @@ export class V1SyncClient implements V1CollaborationClient {
   #dialTimeoutCount = 0;
   #connectStartedAt: number | null = null;
   #connectAttemptCount = 0;
+  #socketCloses: SyncRecoveryDiagnostic["socketCloses"][number][] = [];
+  #omittedSocketCloses = 0;
+  #lastHeartbeatReplyAt: number | null = null;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
@@ -168,6 +171,9 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#started) return;
     this.#started = true;
     this.#connectAttemptCount = 0;
+    this.#socketCloses = [];
+    this.#omittedSocketCloses = 0;
+    this.#lastHeartbeatReplyAt = null;
     this.#connectFailure = undefined;
     const startupGeneration = ++this.#startupGeneration;
     let stored: readonly V1PendingTarget[];
@@ -226,6 +232,7 @@ export class V1SyncClient implements V1CollaborationClient {
     return {
       connection: {
         ...this.#phase,
+        recoveryDiagnostic: { socketAttempts: this.#connectAttemptCount, socketCloses: this.#socketCloses.slice(), omittedSocketCloses: this.#omittedSocketCloses, lastHeartbeatReplyAt: this.#lastHeartbeatReplyAt },
         ...(this.#connectStartedAt !== null && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectAttempt: this.#connectDiagnostic() } : {}),
         ...(this.#connectFailure && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectFailure: this.#connectFailure } : {}),
         ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}),
@@ -418,6 +425,13 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
     socket.onclose = (event) => {
+      if (this.#started) {
+        this.#socketCloses.push({ code: event.code, wasClean: event.wasClean ?? null });
+        if (this.#socketCloses.length > 50) {
+          this.#socketCloses.shift();
+          this.#omittedSocketCloses += 1;
+        }
+      }
       if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
         this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
         this.#emit();
@@ -590,6 +604,7 @@ export class V1SyncClient implements V1CollaborationClient {
       case "pong": {
         this.#requireLive();
         this.#missedHeartbeats = 0;
+        this.#lastHeartbeatReplyAt = this.#now();
         const previous = this.#health.health;
         this.#health.observePong(this.#now());
         if (previous !== this.#health.health) this.#emit();

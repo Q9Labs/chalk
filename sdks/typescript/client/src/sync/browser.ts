@@ -41,14 +41,14 @@ class BrowserSyncSocket implements SyncSocket {
   readonly #socket: WebSocket;
   onopen: (() => void) | null = null;
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
-  onclose: ((event: { readonly code: number; readonly reason?: string }) => void) | null = null;
+  onclose: SyncSocket["onclose"] = null;
   onerror: (() => void) | null = null;
 
   constructor(socket: WebSocket) {
     this.#socket = socket;
     this.#socket.addEventListener("open", () => this.onopen?.());
     this.#socket.addEventListener("message", (event) => this.onmessage?.({ data: event.data }));
-    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code, reason: event.reason }));
+    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code, reason: event.reason, ...(typeof event.wasClean === "boolean" ? { wasClean: event.wasClean } : {}) }));
     this.#socket.addEventListener("error", () => this.onerror?.());
   }
 

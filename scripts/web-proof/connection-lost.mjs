@@ -156,6 +156,7 @@ try {
             const message = JSON.parse(payload.toString());
             if (message.type === "hello") for (const item of frames) socket.write(frame(item));
             if (message.type === "entered") socket.write(frame({ type: "entered_ack" }));
+            if (message.type === "ping") socket.write(frame({ type: "pong" }));
           }
         });
       });
@@ -167,6 +168,7 @@ try {
         await page.goto(`http://127.0.0.1:${server.address().port}`);
         await page.waitForFunction(() => window.proof?.client.getSnapshot().connection.status === "live");
         assert.equal(await page.getByText("Remote participant", { exact: true }).count(), 1);
+        await page.waitForTimeout(750); // Allow a real heartbeat round-trip before disconnecting.
         const live = await page.evaluate(() => window.proof.snapshot());
         await context.setOffline(true);
         await page.waitForFunction(() => window.proof.client.getSnapshot().connection.lastError?.code === "connection.sync_recovery_exhausted", null, { timeout: 45000 });
@@ -180,6 +182,14 @@ try {
           assert.equal(exhausted.connection.status, "failed");
           assert.deepEqual(exhausted.roster, []);
           assert.equal(exhausted.remoteTracks, 0);
+          const giveUp = exhausted.diagnostics.filter((event) => event.event === "recovery_exhausted");
+          assert.equal(giveUp.length, 1);
+          assert.equal(giveUp[0].recovery.reference, "connection.sync_recovery_exhausted");
+          assert.ok(giveUp[0].recovery.attempts > 0);
+          assert.ok(giveUp[0].recovery.transport.socketCloses.length > 0);
+          assert.ok(giveUp[0].recovery.transport.socketCloses.every((close) => Number.isInteger(close.code) && typeof close.wasClean === "boolean"));
+          assert.equal(typeof giveUp[0].recovery.lastHeartbeatReplyAgoMs, "number");
+          assert.equal(giveUp[0].recovery.visibilityState, "visible");
           assert.equal(await page.getByText("Remote participant", { exact: true }).count(), 0);
         }
         await page.evaluate(

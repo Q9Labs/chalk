@@ -1,3 +1,11 @@
+/** Transport facts only. No URLs, close reasons, payloads, or identities. */
+export type SyncRecoveryDiagnostic = {
+  readonly socketAttempts: number;
+  readonly socketCloses: readonly { readonly code: number; readonly wasClean: boolean | null }[];
+  readonly omittedSocketCloses: number;
+  readonly lastHeartbeatReplyAt: number | null;
+};
+
 /** Browsers expose only upgrade/open and hello, never DNS/TCP/TLS progress. */
 export type SyncConnectDiagnostic = {
   readonly stage: "upgrade" | "hello";

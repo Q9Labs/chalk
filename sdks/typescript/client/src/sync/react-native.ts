@@ -10,6 +10,7 @@ export type ReactNativeAsyncStorage = {
 export type ReactNativeWebSocketCloseEvent = {
   readonly code?: unknown;
   readonly reason?: unknown;
+  readonly wasClean?: unknown;
 };
 
 export type ReactNativeWebSocket = {
@@ -88,7 +89,7 @@ class ReactNativeSyncSocket implements SyncSocket {
     this.#socket = socket;
     this.#socket.onopen = () => this.onopen?.();
     this.#socket.onmessage = (event) => this.onmessage?.({ data: event.data });
-    this.#socket.onclose = (event) => this.onclose?.({ code: typeof event.code === "number" ? event.code : 1006, reason: typeof event.reason === "string" ? event.reason : undefined });
+    this.#socket.onclose = (event) => this.onclose?.({ code: typeof event.code === "number" ? event.code : 1006, reason: typeof event.reason === "string" ? event.reason : undefined, ...(typeof event.wasClean === "boolean" ? { wasClean: event.wasClean } : {}) });
     this.#socket.onerror = () => this.onerror?.();
   }
 
@@ -112,7 +113,7 @@ class BrowserFallbackSyncSocket implements SyncSocket {
     this.#socket = socket;
     this.#socket.addEventListener("open", () => this.onopen?.());
     this.#socket.addEventListener("message", (event) => this.onmessage?.({ data: event.data }));
-    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code, reason: event.reason }));
+    this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code, reason: event.reason, ...(typeof event.wasClean === "boolean" ? { wasClean: event.wasClean } : {}) }));
     this.#socket.addEventListener("error", () => this.onerror?.());
   }
 

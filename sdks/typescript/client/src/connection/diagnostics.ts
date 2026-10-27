@@ -51,6 +51,13 @@ export type ConnectionDiagnostic = {
   readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  readonly recovery?: {
+    readonly reference: "connection.sync_recovery_exhausted" | "connection.media_recovery_exhausted";
+    readonly attempts: number;
+    readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null;
+    readonly lastHeartbeatReplyAgoMs: number | null;
+    readonly visibilityState: DocumentVisibilityState | null;
+  };
 };
 
 export class ConnectionDiagnostics {

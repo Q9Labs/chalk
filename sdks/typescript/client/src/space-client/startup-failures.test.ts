@@ -617,15 +617,22 @@ describe("public client exhausted recovery", () => {
   });
   it.each(["sync", "media"] as const)("keeps the %s recovery stage", async (stage) => {
     const sockets = await liveBrowser();
-    const client = makeClient(async () => accessGrant());
     const errors: ClientFailure[] = [];
+    const diagnostics: ConnectionDiagnostic[] = [];
+    const warn = vi.fn();
+    const client = makeClient(
+      async () => accessGrant(),
+      25,
+      { warn },
+      (event) => diagnostics.push(event),
+    );
     client.on("error", ({ error }) => errors.push(error));
     try {
       await client.join({ microphone: false, camera: false });
       vi.useFakeTimers();
       if (stage === "sync") {
         vi.stubGlobal("WebSocket", SilentSocket);
-        sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006 }));
+        sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006, wasClean: false }));
       } else {
         const peer = PeerConnection.instances.at(-1)!;
         peer.connectionState = "disconnected";
@@ -636,7 +643,13 @@ describe("public client exhausted recovery", () => {
       for (let second = 0; second < 15 && !errors.some((error) => error.code === code); second++) await vi.advanceTimersByTimeAsync(1000);
       expect(client.getSnapshot().connection.lastError).toMatchObject({ code, recoverable: true });
       expect(errors).toContainEqual(expect.objectContaining({ code, recoverable: true }));
+      const exhausted = diagnostics.filter((event) => event.event === "recovery_exhausted");
+      expect(exhausted).toHaveLength(1);
+      expect(exhausted[0]?.recovery).toMatchObject({ reference: code, attempts: expect.any(Number), transport: { socketAttempts: expect.any(Number), socketCloses: expect.any(Array) }, visibilityState: null });
+      expect(warn).toHaveBeenCalledWith("SpaceClient connection event", expect.objectContaining({ event: "recovery_exhausted", recovery: exhausted[0]?.recovery }));
       if (stage === "sync") {
+        expect(exhausted[0]?.recovery?.attempts).toBeGreaterThan(0);
+        expect(exhausted[0]?.recovery?.transport?.socketCloses).toContainEqual({ code: 1006, wasClean: false });
         expect(client.getSnapshot().connection.status).toBe("failed");
         expect(client.getSnapshot().participants.roster).toEqual([]);
         expect(client.getSnapshot().media.remote).toEqual([]);
