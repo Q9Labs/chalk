@@ -359,7 +359,10 @@ export function createGatePlan(files, options = {}) {
   const tasks = [
     task("self-test", "Gate routing, Sync reliability and production-proof self-tests", true, "always required", [
       "node",
+      "scripts/test/run.mjs",
+      "node",
       "--test",
+      "scripts/test/no-network.test.mjs",
       "scripts/gates/chalk-gate-plan.test.mjs",
       "scripts/gates/doc-checks.test.mjs",
       "scripts/gates/remote-queue.test.mjs",
