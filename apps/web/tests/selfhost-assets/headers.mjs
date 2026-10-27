@@ -25,7 +25,7 @@ test("Pages serves a single cache policy for fonts, vendor assets and HTML", asy
       await mkdir(resolve(file, ".."), { recursive: true });
       await writeFile(file, "asset");
     }
-    runtime = new Miniflare({ modules: true, script: "export default { fetch(request, env) { return env.ASSETS.fetch(request) } }", compatibilityDate: "2026-07-01", assets: { directory, binding: "ASSETS" } });
+    runtime = new Miniflare({ cf: false, modules: true, script: "export default { fetch(request, env) { return env.ASSETS.fetch(request) } }", compatibilityDate: "2026-07-01", assets: { directory, binding: "ASSETS" } });
     for (const [path, policy] of cases) {
       const response = await runtime.dispatchFetch(`http://chalk.test${path}`);
       assert.equal(response.status, 200);

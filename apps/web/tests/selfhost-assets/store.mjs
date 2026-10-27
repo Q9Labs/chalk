@@ -18,7 +18,7 @@ const script = ts.transpileModule(await readFile(workerPath, "utf8"), { compiler
 
 async function fixture(t) {
   const base = await mkdtemp(join(tmpdir(), "chalk-vendor-store-"));
-  const runtime = new Miniflare({ modules: true, script, r2Buckets: ["VENDOR_ASSETS"], compatibilityDate: "2026-07-01", host: "127.0.0.1", port: 0 });
+  const runtime = new Miniflare({ cf: false, modules: true, script, r2Buckets: ["VENDOR_ASSETS"], compatibilityDate: "2026-07-01", host: "127.0.0.1", port: 0 });
   t.after(async () => {
     await runtime.dispose();
     await rm(base, { recursive: true, force: true });
