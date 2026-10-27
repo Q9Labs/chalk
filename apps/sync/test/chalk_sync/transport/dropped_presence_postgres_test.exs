@@ -234,7 +234,16 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
 
     Postgrex.query!(
       ctx.connection,
-      "update participants set joined_at=clock_timestamp()-interval '121 seconds' where id=$1",
+      "update participants set joined_at=clock_timestamp()-interval '150 seconds' where id=$1",
+      [UUID.dump!(ctx.identity.participant_id)]
+    )
+
+    assert tick(ctx) == 0
+    assert participant_status(ctx, ctx.identity) == "active"
+
+    Postgrex.query!(
+      ctx.connection,
+      "update participants set joined_at=clock_timestamp()-interval '601 seconds' where id=$1",
       [UUID.dump!(ctx.identity.participant_id)]
     )
 
@@ -277,7 +286,7 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   test "a first socket cancels missing-lease expiry before the claim", ctx do
     Postgrex.query!(
       ctx.connection,
-      "update participants set joined_at=clock_timestamp()-interval '121 seconds' where id=$1",
+      "update participants set joined_at=clock_timestamp()-interval '601 seconds' where id=$1",
       [UUID.dump!(ctx.identity.participant_id)]
     )
 

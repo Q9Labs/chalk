@@ -116,8 +116,8 @@ creation plus grace, bounded by the same startup floor.
 Each live connection also renews a participant-generation lease. After 120 seconds
 without renewal, the API scheduler reserves an ordinary participant leave under
 the same Episode authority lock as renewal. A legacy joined participant that never
-opens its first Sync socket has no lease; its join timestamp starts the same
-120-second grace. The runtime recovery floor still applies in both cases.
+opens its first Sync socket has no lease; its join timestamp starts a separate
+600-second grace. The runtime recovery floor still applies in both cases.
 Sync performs media cleanup, records
 `left_at`, and emits `participant.left`; the existing attendance endpoint reports
 the departure. Reconnect before reservation renews the lease and cancels expiry.

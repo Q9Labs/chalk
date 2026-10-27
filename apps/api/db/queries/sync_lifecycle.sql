@@ -842,7 +842,7 @@ where sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
             and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
         where p.tenant_id=control.tenant_id and p.space_id=control.space_id
             and p.episode_id=control.episode_id
-            and coalesce(lease.expires_at, p.joined_at + interval '120 seconds') <= clock_timestamp()
+            and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
             and p.status='active' and e.status='active'
     )
 order by control.episode_id
@@ -857,7 +857,7 @@ left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and l
     and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
 where p.tenant_id=sqlc.arg(tenant_id) and p.space_id=sqlc.arg(space_id) and p.episode_id=sqlc.arg(episode_id)
     and p.status='active'
-    and coalesce(lease.expires_at, p.joined_at + interval '120 seconds') <= clock_timestamp()
+    and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
 order by p.id
 for update of p
 limit sqlc.arg(batch_size);
