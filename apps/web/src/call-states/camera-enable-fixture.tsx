@@ -19,7 +19,7 @@ class CameraEnableFixture extends HTMLElement {
       allowPublish = resolve;
     });
     const client = createSpaceClientForPlatform(
-      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { space: "space-1", baseUrl: window.location.origin, getAccess: async () => opaqueAccessGrant("test") },
       {
         ...platform,
         dependencies: {
