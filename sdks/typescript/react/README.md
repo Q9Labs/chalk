@@ -44,6 +44,14 @@ as the final `participants.issueAccess` argument with the server-only state from
 `getAccessRefreshState`; Chalk selects replacement only when recovery needs it.
 See the [web quickstart](../../../docs/sdk-web-quickstart.md) for the endpoint call.
 
+Sound cues are on by default. People already in a call hear a quiet chime when
+a new participant joins, at most once every three seconds. Initial rosters,
+your own joins, and reconnects do not chime. Playback follows browser autoplay
+rules: the Join click enables audio, with later clicks or key presses retrying
+blocked audio. A refusal never interrupts the call or queues old chimes.
+Embedding apps can disable all cues with `features={{ sounds: false }}` on
+`Chalk` or `SpaceView`. A participant's Sounds preference also applies.
+
 Pass an existing client when its lifecycle belongs to the embedding
 application. Chalk will use it without disposing it.
 

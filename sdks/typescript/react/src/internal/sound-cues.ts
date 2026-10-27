@@ -52,7 +52,7 @@ export interface SoundPlayer {
   readonly dispose: () => void;
 }
 
-/** The mockup's tones. A player belongs to one mounted call and closes its context on disposal. */
+/** A player belongs to one mounted call and closes its context on disposal. */
 export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?: string } = {}): SoundPlayer {
   let context: AudioContext | null = null;
   let disposed = false;
@@ -61,17 +61,20 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
     const created = !context;
     try {
       context ??= new AudioContext();
+      if (created && outputDeviceId && "setSinkId" in context && typeof context.setSinkId === "function") void Promise.resolve(context.setSinkId(outputDeviceId)).catch(() => undefined);
+      if (context.state === "suspended") void context.resume().catch(() => undefined);
     } catch {
       // A blocked or exhausted browser audio context can be retried on the next gesture.
       return;
     }
-    if (created && outputDeviceId && "setSinkId" in context && typeof context.setSinkId === "function") void Promise.resolve(context.setSinkId(outputDeviceId)).catch(() => undefined);
-    if (context.state === "suspended") void context.resume().catch(() => undefined);
   };
   if (typeof window !== "undefined") {
     window.addEventListener("click", unlock, { capture: true });
     window.addEventListener("keydown", unlock, { capture: true });
   }
+  // The call view mounts after Join, so that gesture has already reached the page.
+  // Initialize now; a later gesture retries browsers that still refuse autoplay.
+  unlock();
   const tone = (frequency: number, offset: number, duration: number, volume = 0.07, type: OscillatorType = "sine", to?: number) => {
     if (!context || context.state !== "running") return;
     const oscillator = context.createOscillator(),
@@ -116,44 +119,48 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
   return {
     play(cue) {
       if (disposed || !context || context.state !== "running") return;
-      switch (cue) {
-        case "join":
-          tone(659, 0, 0.2);
-          tone(988, 0.1, 0.28, 0.06);
-          break;
-        case "leave":
-          tone(784, 0, 0.2);
-          tone(523, 0.1, 0.3, 0.06);
-          break;
-        case "knock":
-          thud(0);
-          thud(0.17);
-          break;
-        case "message":
-          tone(1175, 0, 0.16, 0.05, "triangle");
-          break;
-        case "hand-raise":
-          tone(1319, 0, 0.32, 0.045);
-          tone(1760, 0.07, 0.4, 0.035);
-          break;
-        case "mute":
-          tone(560, 0, 0.07, 0.06, "triangle", 380);
-          break;
-        case "unmute":
-          tone(420, 0, 0.07, 0.06, "triangle", 640);
-          break;
-        case "recording":
-          tone(587, 0, 0.14);
-          tone(587, 0.18, 0.14);
-          tone(880, 0.36, 0.32, 0.06);
-          break;
-        case "error":
-          tone(392, 0, 0.16, 0.05, "triangle");
-          tone(311, 0.13, 0.24, 0.05, "triangle");
-          break;
-        case "reaction":
-          tone(880, 0, 0.12, 0.035, "triangle");
-          break;
+      try {
+        switch (cue) {
+          case "join":
+            tone(659, 0, 0.16, 0.04);
+            tone(988, 0.08, 0.22, 0.03);
+            break;
+          case "leave":
+            tone(784, 0, 0.2);
+            tone(523, 0.1, 0.3, 0.06);
+            break;
+          case "knock":
+            thud(0);
+            thud(0.17);
+            break;
+          case "message":
+            tone(1175, 0, 0.16, 0.05, "triangle");
+            break;
+          case "hand-raise":
+            tone(1319, 0, 0.32, 0.045);
+            tone(1760, 0.07, 0.4, 0.035);
+            break;
+          case "mute":
+            tone(560, 0, 0.07, 0.06, "triangle", 380);
+            break;
+          case "unmute":
+            tone(420, 0, 0.07, 0.06, "triangle", 640);
+            break;
+          case "recording":
+            tone(587, 0, 0.14);
+            tone(587, 0.18, 0.14);
+            tone(880, 0.36, 0.32, 0.06);
+            break;
+          case "error":
+            tone(392, 0, 0.16, 0.05, "triangle");
+            tone(311, 0.13, 0.24, 0.05, "triangle");
+            break;
+          case "reaction":
+            tone(880, 0, 0.12, 0.035, "triangle");
+            break;
+        }
+      } catch {
+        // Sound cues must never interrupt the call when browser audio is unavailable.
       }
     },
     dispose() {
@@ -162,7 +169,7 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
         window.removeEventListener("click", unlock, true);
         window.removeEventListener("keydown", unlock, true);
       }
-      if (context) void context.close();
+      if (context) void Promise.resolve(context.close()).catch(() => undefined);
     },
   };
 }
