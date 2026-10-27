@@ -11,6 +11,16 @@ const COOLDOWN_MS = 60000;
 // Shared by connections in this SDK instance; bounded even across repeated joins.
 const participantCooldowns = new Map<string, number>();
 const milliseconds = (value: number) => Math.max(0, Math.min(MAX_MS, Math.round(Number.isFinite(value) ? value : 0)));
+const optionalMilliseconds = (value: number | null | undefined) => (value == null ? undefined : milliseconds(value));
+
+function reserveParticipantReport(access: ParsedAccessGrant, now: number): boolean {
+  const key = `${access.subject.tenantId}:${access.subject.participantId}`;
+  for (const [participant, until] of participantCooldowns) if (until <= now) participantCooldowns.delete(participant);
+  if (participantCooldowns.has(key)) return false;
+  if (participantCooldowns.size >= 128) participantCooldowns.delete(participantCooldowns.keys().next().value ?? "");
+  participantCooldowns.set(key, now + COOLDOWN_MS);
+  return true;
+}
 
 type ReporterOptions = {
   readonly traceparent: string;
@@ -43,14 +53,13 @@ export class ConnectionReporter {
       event: diagnostic.event,
       elapsed_ms: this.#elapsed(),
       state: diagnostic.state,
-      ...(diagnostic.step ? { step: diagnostic.step } : {}),
-      ...(diagnostic.outcome ? { outcome: diagnostic.outcome } : {}),
-      ...(diagnostic.code ? { code: diagnostic.code } : {}),
-      ...(diagnostic.attempt === undefined ? {} : { attempt: milliseconds(diagnostic.attempt) }),
-      ...(diagnostic.durationMs === undefined ? {} : { duration_ms: milliseconds(diagnostic.durationMs) }),
-      ...(diagnostic.sync?.closeCode == null ? {} : { close_code: diagnostic.sync.closeCode }),
-      ...(diagnostic.sync ? { duration_ms: milliseconds(diagnostic.sync.durationMs) } : {}),
-      ...(diagnostic.recovery?.lastHeartbeatReplyAgoMs == null ? {} : { heartbeat_gap_ms: milliseconds(diagnostic.recovery.lastHeartbeatReplyAgoMs) }),
+      step: diagnostic.step,
+      outcome: diagnostic.outcome,
+      code: diagnostic.code,
+      attempt: optionalMilliseconds(diagnostic.attempt),
+      duration_ms: optionalMilliseconds(diagnostic.sync?.durationMs ?? diagnostic.durationMs),
+      close_code: diagnostic.sync?.closeCode ?? undefined,
+      heartbeat_gap_ms: optionalMilliseconds(diagnostic.recovery?.lastHeartbeatReplyAgoMs),
     });
     if (diagnostic.event === "recovery_exhausted") this.#report("recovery_exhausted");
     else if (diagnostic.event === "connection_failed") this.#report(diagnostic.state === "joining" ? "join_failed" : "connection_lost");
@@ -95,12 +104,7 @@ export class ConnectionReporter {
     const access = this.#options.access();
     // Never turn diagnostics into an anonymous ingestion or credential-refresh path.
     if (!access) return;
-    const now = this.#options.now();
-    const key = `${access.subject.tenantId}:${access.subject.participantId}`;
-    for (const [participant, until] of participantCooldowns) if (until <= now) participantCooldowns.delete(participant);
-    if (participantCooldowns.has(key)) return;
-    if (participantCooldowns.size >= 128) participantCooldowns.delete(participantCooldowns.keys().next().value ?? "");
-    participantCooldowns.set(key, now + COOLDOWN_MS);
+    if (!reserveParticipantReport(access, this.#options.now())) return;
     const events = this.#events.slice();
     const report: ConnectionReport = { version: 1, trigger, events };
     while (events.length && new TextEncoder().encode(JSON.stringify(report)).byteLength > MAX_BYTES) events.shift();

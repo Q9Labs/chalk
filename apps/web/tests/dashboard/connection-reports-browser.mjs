@@ -49,8 +49,7 @@ try {
   );
   async function joinNewCall() {
     await page.goto(`${origin}/dashboard`);
-    await page.getByRole("button", { name: "Start a call", exact: true }).click();
-    await page.getByRole("button", { name: "Join call", exact: true }).click();
+    for (const name of ["Start a call", "Join call"]) await page.getByRole("button", { name, exact: true }).click();
   }
   await joinNewCall();
   await page.locator('[data-chalk-status="failed"]').waitFor({ timeout: 60000 });

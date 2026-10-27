@@ -948,9 +948,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
-          if (snapshot.connection.phase !== model.mediaSnapshot?.connection.phase || snapshot.connection.peerConnectionState !== model.mediaSnapshot?.connection.peerConnectionState) {
-            onTransportDiagnostic({ event: "media_state", phase: snapshot.connection.peerConnectionState ?? snapshot.connection.phase });
-          }
+          const phase = mediaDiagnosticPhase(snapshot);
+          if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
           model.mediaSnapshot = snapshot;
           if (active(model) && (snapshot.connection.phase === "recovering" || (snapshot.connection.phase === "failed" && snapshot.failure?.recoverable))) yield* recover("media");
           yield* publish();
@@ -1259,6 +1258,10 @@ function syncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefined):
   if (phase === "connecting") return "connecting";
   return "idle";
 }
+function mediaDiagnosticPhase(snapshot: ConnectionMediaSnapshot | null) {
+  return snapshot?.connection.peerConnectionState ?? snapshot?.connection.phase;
+}
+
 function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
   if (phase === "live") return "healthy";
   if (phase === "recovering") return "recovering";
