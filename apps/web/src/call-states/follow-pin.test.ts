@@ -1,3 +1,4 @@
+import type {} from "./follow-pin-fixture";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";

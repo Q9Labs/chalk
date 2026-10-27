@@ -651,8 +651,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#drawPolicy = null;
     this.#drawPermissions = [];
     this.#presentationSupported = "presenting" in frame;
-    this.#presenting = "presenting" in frame ? frame.presenting : false;
-    this.#presenterId = "presenter_id" in frame ? (frame.presenter_id ?? null) : null;
+    if ("presenting" in frame) {
+      this.#presenting = frame.presenting;
+      this.#presenterId = frame.presenter_id ?? null;
+    } else {
+      this.#presenting = false;
+      this.#presenterId = null;
+    }
     // A change restored from the store has no caller to reject, so the summary carries the refusal too.
     const refused = !drawPolicyNegotiated(this.#hello) && this.#dropPolicyChanges();
     this.#publishSummary("loading", refused ? policyUnavailable() : null);
