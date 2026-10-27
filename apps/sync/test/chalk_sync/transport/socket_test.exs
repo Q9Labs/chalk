@@ -7,6 +7,32 @@ defmodule ChalkSync.Transport.SocketV1Test do
   alias ChalkSync.Stateholder.Memory
   alias ChalkSync.TestWSClient, as: Client
 
+  @tag timeout: 90_000
+  test "a heartbeat delayed 70 seconds keeps the participant live", %{port: port} do
+    host = identity()
+    seed_participants(host, [host])
+    client = connect_live(port, host)
+
+    assert {:error, :timeout, client} = Client.recv_frame(client, 70_000)
+    client = Client.send_json(client, %{"type" => "ping"})
+    assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+
+    {client, ack} =
+      command(client, "late-heartbeat-hand-0001", "set_hand_raised", %{"raised" => true})
+
+    assert ack["outcome"] == "committed"
+    Client.close_tcp(client)
+  end
+
+  @tag timeout: 110_000
+  test "a silent participant still loses its socket after five heartbeat checks", %{port: port} do
+    host = identity()
+    seed_participants(host, [host])
+    client = connect_live(port, host)
+
+    assert {:closed, 1001, "heartbeat timeout", _client} = Client.recv(client, 105_000)
+  end
+
   test "wire events correlate edge headers with verified hello identity", %{port: port} do
     owner = self()
     handler = "connect-diagnostics-#{System.unique_integer([:positive])}"

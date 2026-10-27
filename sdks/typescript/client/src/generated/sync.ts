@@ -43,7 +43,7 @@ export const SyncProtocolMetadata = {
       accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
-        missedDeadlinesBeforeClose: 2,
+        missedDeadlinesBeforeClose: 5,
       },
     },
     {

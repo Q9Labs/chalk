@@ -41,6 +41,19 @@ one current snapshot instead of the growing Episode observation history. Explici
 cursor reads retain the paginated history contract. Deploy API support for the
 latest-only read before updating Sync; the response byte bound stays unchanged.
 
+## Hidden-tab heartbeat tolerance
+
+The v1 transport still checks every 20 seconds, but closes only after five
+consecutive missed checks. Depending on check alignment, this tolerates 80–100
+seconds without an incoming frame, including Chromium's once-per-minute timer
+wake-ups in silent background tabs. Its WebSocket idle timeout is 120 seconds,
+so it does not race a throttled heartbeat. Published SDKs need no upgrade.
+
+The trade-off is that an open but silent socket takes 80–100 seconds to mark
+disconnected instead of 20–40 seconds. Explicit Leave and a detected TCP close
+remain immediate. The separate 120-second participant lease expiry and
+600-second missing-lease fallback are unchanged.
+
 ## Durable architecture
 
 The v1 command path is:
