@@ -216,6 +216,33 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
     Client.close_tcp(healthy)
   end
 
+  test "a legacy joined participant without a first socket expires while the host stays", ctx do
+    healthy_identity = Enum.at(ctx.fixture.identities, 1)
+    healthy = connect(ctx.port, healthy_identity)
+
+    assert Postgrex.query!(
+             ctx.connection,
+             "select 1 from participant_presence_leases where participant_id=$1",
+             [UUID.dump!(ctx.identity.participant_id)]
+           ).rows == []
+
+    assert tick(ctx) == 0
+
+    Postgrex.query!(
+      ctx.connection,
+      "update participants set joined_at=clock_timestamp()-interval '121 seconds' where id=$1",
+      [UUID.dump!(ctx.identity.participant_id)]
+    )
+
+    healthy = ping(healthy)
+    assert tick(ctx) == 1
+    assert eventually(fn -> participant_status(ctx, ctx.identity) == "left" end)
+    assert participant_status(ctx, healthy_identity) == "active"
+    assert episode_status(ctx) == "active"
+    assert tick(ctx) == 0
+    Client.close_tcp(healthy)
+  end
+
   test "reconnect before the expiry claim cancels participant departure", ctx do
     dropped = connect(ctx.port, ctx.identity)
     Client.close_tcp(dropped)
