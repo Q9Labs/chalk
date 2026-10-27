@@ -461,17 +461,18 @@ describe("public client startup failure contract", () => {
 });
 
 const participantId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
-function accessGrant(participantGeneration = 1) {
-  const token = (audience: string) => `${btoa('{"alg":"EdDSA"}')}.${btoa(JSON.stringify({ aud: audience }))}.fixture`;
+function accessGrant(participantGeneration = 1, id = participantId) {
+  const token = (audience: string) => `${btoa('{"alg":"EdDSA"}')}.${btoa(JSON.stringify({ aud: audience, sub: id }))}.fixture`;
   const expiresAt = new Date(Date.now() + 300000).toISOString();
   return {
-    subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participantId, participant_generation: participantGeneration },
+    subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: id, participant_generation: participantGeneration },
     sync: { token: token("chalk-sync"), expires_at: expiresAt },
     media: { token: token("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
   };
 }
-async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number; readonly entryConfirmation?: boolean; readonly participantGeneration?: () => number } = {}) {
+async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly stallFirstUpgrade?: boolean; readonly upgradeDelayMs?: number; readonly entryConfirmation?: boolean; readonly participantGeneration?: () => number; readonly participantId?: string } = {}) {
   browser();
+  const joinedParticipantId = network.participantId ?? participantId;
   vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
   const control: V1ControlState = {
     revision: 1,
@@ -483,7 +484,7 @@ async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly 
     deadlineGeneration: 1,
     roleCapabilities: { owner: [] },
     recording: null,
-    participants: [{ participantId, displayName: "Test", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: [] }],
+    participants: [{ participantId: joinedParticipantId, displayName: "Test", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: [] }],
     admissionRequests: [],
   };
   const digest = await computeV1StateDigest(control);
@@ -492,6 +493,8 @@ async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly 
   const sockets: ProtocolSocket[] = [];
   class ProtocolSocket extends EventTarget {
     readonly sent: string[] = [];
+    readonly helloSubjects: string[] = [];
+    enteredAcks = 0;
     closed = false;
     constructor() {
       super();
@@ -506,15 +509,20 @@ async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly 
     }
     send(data?: string) {
       if (!data) return;
-      const { type } = JSON.parse(data);
+      const { type, token } = JSON.parse(data);
       this.sent.push(type);
+      if (type === "entered") {
+        this.enteredAcks++;
+        this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ type: "entered_ack" }) }));
+      }
       if (type !== "hello") return;
+      this.helloSubjects.push(JSON.parse(atob(token.split(".")[1])).sub);
       this.dispatchEvent(
         new MessageEvent("message", {
           data: JSON.stringify({
             type: "welcome",
             protocol: 1,
-            participant_id: participantId,
+            participant_id: joinedParticipantId,
             participant_generation: network.participantGeneration?.() ?? 1,
             ...(network.entryConfirmation ? { entry_confirmation: true, entry_generation: 1 } : {}),
             recovery_id: recoveryId,
@@ -530,7 +538,7 @@ async function liveBrowser(invalidRecoverySnapshot = false, network: { readonly 
               deadline_generation: 1,
               role_capabilities: { owner: [] },
               recording: null,
-              participants: [{ participant_id: participantId, display_name: "Test", hand_raised: false, admission_revision: 1, role: "owner", capabilities: [] }],
+              participants: [{ participant_id: joinedParticipantId, display_name: "Test", hand_raised: false, admission_revision: 1, role: "owner", capabilities: [] }],
               admission_requests: [],
             },
           }),
@@ -626,6 +634,43 @@ describe("public client exhausted recovery", () => {
     }
   });
 
+  it("rejects an expired participant refresh identity swap, then explicitly rejoins and confirms the replacement", async () => {
+    const requests: string[] = [];
+    const sockets = await liveBrowser(false, { entryConfirmation: true });
+    const replacementId = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c99";
+    let expired = false;
+    const client = makeClient(async ({ reason }) => {
+      requests.push(reason);
+      return accessGrant(1, expired ? replacementId : participantId);
+    });
+    try {
+      await client.join({ microphone: false, camera: false });
+      vi.useFakeTimers();
+      expired = true;
+      vi.setSystemTime(Date.now() + 300001);
+      sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006, reason: "" }));
+      await vi.advanceTimersByTimeAsync(300);
+      expect(requests).toContain("retry");
+      expect(sockets[1]?.closed).toBe(true);
+      expect(sockets[1]?.sent).not.toContain("hello");
+      expect(client.getSnapshot().self.participantId).not.toBe(replacementId);
+      await vi.advanceTimersByTimeAsync(11000);
+      expect(client.getSnapshot().connection).toMatchObject({ status: "reconnecting", lastError: { code: "connection.sync_recovery_exhausted" } });
+      const replacementSockets = await liveBrowser(false, { entryConfirmation: true, participantId: replacementId });
+      const retry = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await retry).toBeUndefined();
+      expect(requests.at(-1)).toBe("join");
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().self.participantId).toBe(replacementId);
+      expect(replacementSockets[0]?.helloSubjects).toEqual([replacementId]);
+      expect(replacementSockets[0]?.enteredAcks).toBe(1);
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
   it("starts a clean admission and confirms entry when joining again after offline recovery exhausts", async () => {
     const requests: string[] = [];
     const sockets = await liveBrowser(false, { entryConfirmation: true, participantGeneration: () => requests.length });
@@ -639,9 +684,9 @@ describe("public client exhausted recovery", () => {
       window.dispatchEvent(new Event("offline"));
       await vi.advanceTimersByTimeAsync(11000);
       expect(client.getSnapshot().connection).toMatchObject({ status: "reconnecting", lastError: { code: "connection.sync_recovery_exhausted" } });
-      const retry = client.join({ microphone: false, camera: false });
+      const retry = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
       await vi.advanceTimersByTimeAsync(1);
-      await retry;
+      expect(await retry).toBeUndefined();
       expect(requests).toEqual(["join", "join"]);
       expect(client.getSnapshot().connection.status).toBe("live");
       expect(sockets).toHaveLength(2);
