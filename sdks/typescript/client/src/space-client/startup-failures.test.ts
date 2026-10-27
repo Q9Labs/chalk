@@ -770,7 +770,6 @@ describe("public client exhausted recovery", () => {
       vi.useFakeTimers();
       if (stage === "sync") {
         vi.stubGlobal("WebSocket", SilentSocket);
-        vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
         sockets[0]?.dispatchEvent(Object.assign(new Event("close"), { code: 1006, wasClean: false }));
       } else {
         const peer = PeerConnection.instances.at(-1)!;
