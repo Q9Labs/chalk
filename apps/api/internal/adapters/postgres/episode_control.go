@@ -29,6 +29,7 @@ type tenantExternalOperationInput struct {
 	RecordingID                 utilities.ID
 	FenceActive                 bool
 	JourneyName                 string
+	JourneyAttributes           map[string]string
 	Payload                     []byte
 }
 
@@ -233,7 +234,7 @@ func createTenantExternalOperation(ctx context.Context, queries *sqlc.Queries, t
 	if err != nil {
 		return sqlc.SyncExternalOperation{}, err
 	}
-	if err := persistLifecycleJourneyRoot(ctx, tx, journey, input.JourneyName); err != nil {
+	if err := persistLifecycleJourneyRootWith(ctx, tx, journey, input.JourneyName, input.JourneyAttributes); err != nil {
 		return sqlc.SyncExternalOperation{}, err
 	}
 	operation, err := queries.CreateTenantExternalOperation(ctx, sqlc.CreateTenantExternalOperationParams{

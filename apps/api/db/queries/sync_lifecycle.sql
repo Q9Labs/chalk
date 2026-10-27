@@ -850,7 +850,10 @@ for update of control skip locked
 limit sqlc.arg(batch_size);
 
 -- name: ExpiredParticipantPresence :many
-select sqlc.embed(p), coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation from participants p
+select sqlc.embed(p), coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation,
+    (lease.expires_at is not null)::boolean as has_presence_lease,
+    (extract(epoch from clock_timestamp() - coalesce(lease.expires_at - interval '120 seconds', p.joined_at)) * 1000)::bigint as presence_age_ms
+from participants p
 left join participant_join_seats seat on seat.tenant_id=p.tenant_id and seat.space_id=p.space_id
     and seat.episode_id=p.episode_id and seat.participant_id=p.id and seat.generation=p.generation
 left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id

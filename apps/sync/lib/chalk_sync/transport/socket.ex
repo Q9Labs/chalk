@@ -60,6 +60,8 @@ defmodule ChalkSync.Transport.SocketV1 do
        terminal_ack_timer: nil,
        terminal_head: nil,
        missed_heartbeats: 0,
+       opened_at_ms: System.monotonic_time(:millisecond),
+       last_heartbeat_at_ms: nil,
        identity: nil,
        coordinator: nil,
        commands: %{},
@@ -255,6 +257,7 @@ defmodule ChalkSync.Transport.SocketV1 do
       }
       |> Map.merge(state.connection_attributes)
       |> Map.merge(SocketClose.attributes(reason, state.terminal))
+      |> Map.merge(heartbeat_attributes(state))
     )
 
     :ok
@@ -276,9 +279,19 @@ defmodule ChalkSync.Transport.SocketV1 do
       }
       |> Map.merge(state.connection_attributes)
       |> Map.merge(SocketClose.attributes(reason, state.terminal))
+      |> Map.merge(heartbeat_attributes(state))
     )
 
     :ok
+  end
+
+  defp heartbeat_attributes(state) do
+    now = System.monotonic_time(:millisecond)
+
+    %{
+      socket_age_ms: now - state.opened_at_ms,
+      heartbeat_gap_ms: if(state.last_heartbeat_at_ms, do: now - state.last_heartbeat_at_ms)
+    }
   end
 
   defp stop(state, close_code, message, reason) do
@@ -591,6 +604,8 @@ defmodule ChalkSync.Transport.SocketV1 do
        do: protocol_error(:collaboration_not_negotiated, state)
 
   defp handle_frame(:ping, %{phase: :live} = state) do
+    state = %{state | last_heartbeat_at_ms: System.monotonic_time(:millisecond)}
+
     case Stateholder.renew_presence(state.identity) do
       :ok -> {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
       _ -> stop(state, 1012, "service restart", :dependency_unavailable)
