@@ -11,6 +11,7 @@ import { SiteFooter } from "../components/site/SiteFooter";
 import { SiteNav } from "../components/site/SiteNav";
 import { SiteRoot } from "../components/site/theme";
 import { buildPublicSiteHead, SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../lib/site-head";
+import landingCss from "../styles/landing.css?url";
 
 const title = "Chalk | Calls for your team, and inside your product";
 const description = "Start a call and share one link that keeps working next week, or render the same call in your own app with a few lines of React. Chalk is open source.";
@@ -49,13 +50,15 @@ const structuredData = {
 };
 
 export const Route = createFileRoute("/")({
-  head: () =>
-    buildPublicSiteHead({
+  head: () => {
+    const head = buildPublicSiteHead({
       path: "/",
       title,
       description,
       imageAlt: "Chalk: calls for your team, and inside your product",
-    }),
+    });
+    return { ...head, links: [...head.links, { rel: "stylesheet", href: landingCss }] };
+  },
   component: LandingPage,
 });
 
