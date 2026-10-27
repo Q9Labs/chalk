@@ -378,7 +378,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   test "drops ephemeral cursors during recovery and still answers ping" do
     state = recovering_state()
     assert {:ok, ^state} = receive_frame(%{"type" => "cursor", "x" => 1, "y" => 2}, state)
-    assert {:push, {:text, encoded}, ^state} = receive_frame(%{"type" => "ping"}, state)
+    assert {:push, {:text, encoded}, pinged} = receive_frame(%{"type" => "ping"}, state)
+    assert is_integer(pinged.last_heartbeat_at_ms)
     assert JSON.decode!(encoded) == %{"type" => "pong"}
   end
 
