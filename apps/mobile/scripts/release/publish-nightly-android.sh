@@ -3,6 +3,15 @@ set -euo pipefail
 
 package=ai.q9labs.chalk.mobile
 release_name="nightly-$SOURCE_RUN"
+require_current_cut() {
+  gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=1" |
+    jq -e --arg run "$SOURCE_RUN" --arg sha "$SOURCE_SHA" \
+      '.[0] | .sha == $sha and .payload.proof_run_id == $run and .payload.proof_result == "passed"' >/dev/null || {
+    echo 'The nightly cut is no longer current; refusing a stale Android release.' >&2
+    exit 1
+  }
+}
+require_current_cut
 work=$(mktemp -d "$RUNNER_TEMP/chalk-play.XXXXXX")
 edit=''
 cleanup() {
@@ -39,6 +48,7 @@ export CHALK_APP_VARIANT=nightly CHALK_ANDROID_VERSION_CODE="$version_code" SIGN
 bash apps/mobile/scripts/release/build-signed-android.sh
 mapfile -t bundles < <(find "$work/output" -maxdepth 1 -name '*.aab' -type f)
 [[ ${#bundles[@]} -eq 1 ]] || { echo 'Expected exactly one signed Android bundle.' >&2; exit 1; }
+require_current_cut
 gplay publish track --package "$package" --track internal --bundle "${bundles[0]}" \
   --version-name "$release_name" --release-notes "Nightly build of ${SOURCE_SHA:0:12}." \
   --skip-metadata --skip-screenshots
