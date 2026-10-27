@@ -4,20 +4,12 @@ import { Avatar, Faces, identityColor } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 
 type CallPerson = { readonly name: string; readonly camera: boolean; readonly speaking?: boolean; readonly muted?: boolean; readonly you?: boolean };
-
 const TEAM_CALL: readonly CallPerson[] = [
   { name: "Nora Patel", camera: true, speaking: true },
   { name: "Akash Rao", camera: false, muted: true },
   { name: "Sofia Lind", camera: true },
   { name: "Hasan Shoaib", camera: true, you: true },
 ];
-
-type Stage = { readonly width: number; readonly height: number; readonly top: number; readonly bottom: number; readonly side: number };
-
-const DESKTOP: Stage = { width: 1440, height: 810, top: 60, bottom: 84, side: 16 };
-const PHONE: Stage = { width: 390, height: 780, top: 52, bottom: 106, side: 8 };
-/** A recording frame: tiles only, no header or dock. */
-const STILL: Stage = { width: 1440, height: 810, top: 16, bottom: 16, side: 16 };
 
 function mix(hex: string, amount: number, target: number): string {
   const channels = [1, 3, 5].map((at) => {
@@ -45,154 +37,219 @@ function CameraPicture({ name }: { readonly name: string }) {
   );
 }
 
-function Tiles({ stage, people }: { readonly stage: Stage; readonly people: readonly CallPerson[] }) {
-  const gap = 8;
-  const columns = 2;
-  const rows = Math.ceil(people.length / columns);
-  const tileWidth = (stage.width - stage.side * 2 - gap * (columns - 1)) / columns;
-  const tileHeight = (stage.height - stage.top - stage.bottom - gap * (rows - 1)) / rows;
-  const face = Math.round(Math.max(32, Math.min(150, Math.min(tileWidth, tileHeight) * 0.42)));
-  return people.map((person, i) => (
-    <div key={person.name} className={person.speaking ? "ctile spk" : "ctile"} style={{ left: stage.side + (i % columns) * (tileWidth + gap), top: stage.top + Math.floor(i / columns) * (tileHeight + gap), width: tileWidth, height: tileHeight }}>
-      {person.camera ? (
-        <CameraPicture name={person.name} />
-      ) : (
-        <div className="ctr">
-          <Avatar name={person.name} size={face} tile />
-        </div>
-      )}
-      <div className="ctag">
-        <span>{person.you ? `${person.name.split(" ")[0]} (You)` : person.name}</span>
-        {person.muted ? <Icon name="micOff" /> : null}
-      </div>
-    </div>
-  ));
-}
-
-function SplitPill({ icon }: { readonly icon: "mic" | "cam" | "share" }) {
-  return (
-    <span className="csplit">
-      <i>
-        <Icon name={icon} />
-      </i>
-      <i className="car">
-        <Icon name="down" />
-      </i>
-    </span>
+export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still = false }: { readonly label: string; readonly name?: string; readonly people?: readonly CallPerson[]; readonly still?: boolean }) {
+  const [mic, setMic] = useState(true);
+  const [camera, setCamera] = useState(true);
+  const [sharing, setSharing] = useState(false);
+  const [hand, setHand] = useState(false);
+  const [chat, setChat] = useState(false);
+  const [light, setLight] = useState(false);
+  const [left, setLeft] = useState(false);
+  const [seconds, setSeconds] = useState(521);
+  const [speaker, setSpeaker] = useState(0);
+  const [toast, setToast] = useState("");
+  const [messages, setMessages] = useState(() =>
+    name === "Q9 team"
+      ? [
+          { who: "Sofia", text: "Can we move the launch to Friday?" },
+          { who: "Nora", text: "Friday works for me." },
+        ]
+      : [
+          { who: "Lena", text: "Open page 42, please." },
+          { who: "Omar", text: "Got it." },
+        ],
   );
-}
-
-function DesktopChrome({ name, time, people }: { readonly name: string; readonly time: string; readonly people: readonly CallPerson[] }) {
-  return (
-    <>
-      <div className="chd">
-        <div className="ctl">
-          {name} <span className="ctm num">{time}</span>
-          <Icon name="down" />
-        </div>
-        <div className="chr">
-          <span className="cpill">
-            <Faces names={people.slice(0, 3).map((person) => person.name)} size={24} />
-            <b className="num">{people.length}</b>
-          </span>
-          <span className="crb">
-            <Icon name="grid" />
-          </span>
-        </div>
-      </div>
-      <div className="cdock">
-        <SplitPill icon="mic" />
-        <SplitPill icon="cam" />
-        <span className="cgap" />
-        <SplitPill icon="share" />
-        <span className="crb">
-          <Icon name="smile" />
-        </span>
-        <span className="crb">
-          <Icon name="pen" />
-        </span>
-        <span className="crb">
-          <Icon name="max" />
-        </span>
-        <span className="cgap" />
-        <span className="crb leave">
-          <Icon name="hang" />
-        </span>
-      </div>
-      <span className="crb ccorner l">
-        <Icon name="link" />
-      </span>
-      <span className="crb ccorner r">
-        <Icon name="chat" />
-        <i className="bd" />
-      </span>
-    </>
-  );
-}
-
-function PhoneChrome({ name, time }: { readonly name: string; readonly time: string }) {
-  return (
-    <>
-      <div className="chd">
-        <div className="ctl">
-          {name} <span className="ctm num">{time}</span>
-          <Icon name="down" />
-        </div>
-      </div>
-      <div className="cdock">
-        {(["mic", "cam", "smile", "more"] as const).map((icon) => (
-          <span key={icon} className="crb">
-            <Icon name={icon} />
-          </span>
-        ))}
-        <span className="crb leave">
-          <Icon name="hang" />
-        </span>
-      </div>
-    </>
-  );
-}
-
-type CallPreviewProps = {
-  readonly label: string;
-  readonly layout?: "desktop" | "phone" | "still";
-  readonly people?: readonly CallPerson[];
-  readonly name?: string;
-  readonly time?: string;
-  /** The width the preview is drawn at before the page measures it, which keeps the prerendered page close. */
-  readonly initialWidth: number;
-  /** A fixed width; without it the preview fills its container. */
-  readonly width?: number;
-  /** The height the call is drawn at, for a window taller than the layout's own. */
-  readonly height?: number;
-};
-
-/**
- * A still drawing of the call in the call's real proportions. It is drawn at the call's own size and scaled to fit,
- * so the landing page shows the call without loading the call itself.
- */
-export function CallPreview({ label, layout = "desktop", people = TEAM_CALL, name = "Q9 team", time = "12:08", initialWidth, width, height }: CallPreviewProps) {
-  const base = layout === "phone" ? PHONE : layout === "still" ? STILL : DESKTOP;
-  const stage = height ? { ...base, height } : base;
-  const frame = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState((width ?? initialWidth) / stage.width);
+  const [draft, setDraft] = useState("");
+  const messagesEnd = useRef<HTMLDivElement>(null);
+  const rejoin = useRef<HTMLButtonElement>(null);
+  const leave = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const element = frame.current;
-    if (width !== undefined || !element) return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setScale(entry.contentRect.width / stage.width);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [stage.width, width]);
+    if (still || left) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let tick = 0;
+    const interval = window.setInterval(() => {
+      setSeconds((value) => value + 1);
+      tick++;
+      if (reduced.matches) return;
+      if (tick % 3 === 0)
+        setSpeaker((value) => {
+          for (let offset = 1; offset <= people.length; offset++) {
+            const next = (value + offset) % people.length;
+            const person = people[next];
+            if (person && !person.you && !person.muted) return next;
+          }
+          return value;
+        });
+      if (tick % 11 === 4) setToast(name === "Q9 team" ? (tick % 22 < 11 ? "Malik Haddad" : "Nora Patel") : tick % 22 < 11 ? "June Park" : "Omar Farouk");
+      if (tick % 11 === 7) setToast("");
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [left, name, people, still]);
+
+  useEffect(() => {
+    if (chat) messagesEnd.current?.scrollIntoView({ block: "nearest" });
+  }, [messages, chat]);
+  useEffect(() => {
+    if (left) rejoin.current?.focus();
+  }, [left]);
 
   return (
-    <div ref={frame} className="cfit" role="img" aria-label={label} style={{ width, aspectRatio: `${stage.width} / ${stage.height}` }}>
-      <div className={layout === "phone" ? "cl cph" : "cl"} style={{ width: stage.width, height: stage.height, transform: `scale(${scale})` }} aria-hidden="true">
-        {layout === "desktop" ? <DesktopChrome name={name} time={time} people={people} /> : null}
-        {layout === "phone" ? <PhoneChrome name={name} time={time} /> : null}
-        <Tiles stage={stage} people={people} />
+    <div className={`xwrap${still ? " still" : ""}`} role="group" aria-label={label}>
+      <div className={`xcall${chat ? " chat" : ""}${sharing ? " sharing" : ""}`} data-theme={light ? "light" : "dark"}>
+        {!still && !left ? (
+          <div className="xhd">
+            <div className="xname">
+              <b>{name}</b>
+              <span className="xt">
+                {Math.floor(seconds / 60)
+                  .toString()
+                  .padStart(2, "0")}
+                :{(seconds % 60).toString().padStart(2, "0")}
+              </span>
+              {sharing ? (
+                <span className="xshare">
+                  <Icon name="share" />
+                  You are sharing
+                </span>
+              ) : null}
+            </div>
+            <span className="xpill" aria-label={`${people.length} people in this preview`}>
+              <Faces names={people.slice(0, 3).map((p) => p.name)} size={24} />
+              <b>{people.length}</b>
+            </span>
+          </div>
+        ) : null}
+        {!left ? (
+          <div className="xstage">
+            {people.map((person, index) => (
+              <div key={person.name} className={`xtile${(still ? person.speaking : index === speaker) ? " spk" : ""}`} data-cam={person.you ? camera : person.camera} data-mic={person.you ? mic : !person.muted} data-hand={person.you && hand}>
+                {(person.you ? camera : person.camera) ? (
+                  <CameraPicture name={person.name} />
+                ) : (
+                  <div className="xtr">
+                    <Avatar name={person.name} size={132} tile />
+                  </div>
+                )}
+                {person.you && hand ? (
+                  <span className="xhand">
+                    <Icon name="hand" />
+                    Raised
+                  </span>
+                ) : null}
+                <div className="xtag">
+                  <span>{person.you ? `${person.name.split(" ")[0]} (You)` : person.name}</span>
+                  {(person.you ? !mic : person.muted) ? <Icon name="micOff" /> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {!still && !left ? (
+          <>
+            {chat ? (
+              <div className="xchat">
+                <div className="xch">
+                  Chat
+                  <button type="button" className="xrb sm" aria-label="Close preview chat" onClick={() => setChat(false)}>
+                    <Icon name="x" />
+                  </button>
+                </div>
+                <div className="xmsgs" role="log" aria-label="Preview messages">
+                  {messages.map((message, index) => (
+                    <div className={`xm${message.who === "You" ? " me" : ""}`} key={index}>
+                      <b>{message.who}</b>
+                      <span>{message.text}</span>
+                    </div>
+                  ))}
+                  <div ref={messagesEnd} />
+                </div>
+                <form
+                  className="xform"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!draft.trim()) return;
+                    setMessages((value) => [...value, { who: "You", text: draft.trim() }]);
+                    setDraft("");
+                  }}
+                >
+                  <input aria-label="Message the preview call" placeholder="Message everyone" value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={1000} />
+                  <button type="submit" className="xrb" aria-label="Send preview message" disabled={!draft.trim()}>
+                    <Icon name="arrowR" />
+                  </button>
+                </form>
+              </div>
+            ) : null}
+            <div className="xdock">
+              <span className="xsplit">
+                <button type="button" className="xrb" data-on={mic} aria-pressed={mic} aria-label={mic ? "Mute microphone" : "Unmute microphone"} onClick={() => setMic((value) => !value)}>
+                  <Icon name={mic ? "mic" : "micOff"} />
+                </button>
+                <span className="xcaret" aria-hidden="true">
+                  <Icon name="down" />
+                </span>
+              </span>
+              <span className="xsplit">
+                <button type="button" className="xrb" data-on={camera} aria-pressed={camera} aria-label={camera ? "Turn camera off" : "Turn camera on"} onClick={() => setCamera((value) => !value)}>
+                  <Icon name="cam" />
+                  {!camera ? <span className="camera-slash" /> : null}
+                </button>
+                <span className="xcaret" aria-hidden="true">
+                  <Icon name="down" />
+                </span>
+              </span>
+              <button type="button" className={`xrb${sharing ? " active" : ""}`} aria-label="Share screen" aria-pressed={sharing} onClick={() => setSharing((value) => !value)}>
+                <Icon name="share" />
+              </button>
+              <button type="button" className={`xrb${hand ? " active" : ""}`} aria-label="Raise hand" aria-pressed={hand} onClick={() => setHand((value) => !value)}>
+                <Icon name="hand" />
+              </button>
+              <button type="button" className={`xrb${chat ? " active" : ""}`} aria-label="Open preview chat" aria-expanded={chat} onClick={() => setChat((value) => !value)}>
+                <Icon name="chat" />
+              </button>
+              <button type="button" className={`xrb${light ? " active" : ""}`} aria-label="Toggle preview light theme" aria-pressed={light} onClick={() => setLight((value) => !value)}>
+                <Icon name="sun" />
+              </button>
+              <button
+                ref={leave}
+                type="button"
+                className="xrb leave"
+                aria-label="Leave preview call"
+                onClick={() => {
+                  setLeft(true);
+                  setToast("");
+                }}
+              >
+                <Icon name="hang" />
+              </button>
+            </div>
+            {toast ? (
+              <div className="xtoast show" role="status">
+                <Avatar name={toast} size={28} />
+                {toast} joined
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        {left ? (
+          <div className="xleft">
+            <div>
+              <b>You left the call</b>
+              <p>Everyone else is still talking.</p>
+              <button
+                ref={rejoin}
+                type="button"
+                className="btn pri"
+                onClick={() => {
+                  setLeft(false);
+                  requestAnimationFrame(() => leave.current?.focus());
+                }}
+              >
+                Rejoin
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
