@@ -13,7 +13,8 @@ defmodule ChalkSync.Transport.SocketV1Test do
     seed_participants(host, [host])
     client = connect_live(port, host)
 
-    assert {:error, :timeout, client} = Client.recv_frame(client, 70_000)
+    Process.sleep(70_000)
+    assert {:ok, _projections, client} = Client.drain(client)
     client = Client.send_json(client, %{"type" => "ping"})
     assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
 
@@ -30,7 +31,12 @@ defmodule ChalkSync.Transport.SocketV1Test do
     seed_participants(host, [host])
     client = connect_live(port, host)
 
-    assert {:closed, 1001, "heartbeat timeout", _client} = Client.recv(client, 105_000)
+    started = System.monotonic_time(:millisecond)
+
+    assert {:closed, 1001, "heartbeat timeout", _client} =
+             recv_until_closed(client, started + 105_000)
+
+    assert System.monotonic_time(:millisecond) - started >= 80_000
   end
 
   test "wire events correlate edge headers with verified hello identity", %{port: port} do
@@ -340,6 +346,15 @@ defmodule ChalkSync.Transport.SocketV1Test do
                  identity.admission_lifecycle_intent_id
                )
     end)
+  end
+
+  defp recv_until_closed(client, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    case Client.recv(client, remaining) do
+      {:json, _projection, client} -> recv_until_closed(client, deadline)
+      result -> result
+    end
   end
 
   defp command(client, command_id, name, payload) do
