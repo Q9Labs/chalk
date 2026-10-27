@@ -16,6 +16,7 @@ tokens = Enum.map(fixture.identities, fn identity ->
     "episode_id" => identity.episode.episode_id,
     "participant_id" => identity.participant_id,
     "participant_generation" => identity.participant_generation,
+    "admission_lifecycle_intent_id" => identity.admission_lifecycle_intent_id,
     "role" => identity.role,
     "capabilities" => identity.capabilities,
     "issued_at" => 1,

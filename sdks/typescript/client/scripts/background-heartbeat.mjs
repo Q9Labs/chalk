@@ -33,7 +33,7 @@ try {
       buffer = buffer.split('\n').at(-1);
     });
   });
-  await build({ entryPoints: [resolve(process.env.HEARTBEAT_SDK_ENTRY)], bundle: true, platform: 'browser', format: 'esm', outfile: join(directory, 'client.js') });
+  await build({ entryPoints: [resolve(process.env.HEARTBEAT_SDK_ENTRY)], nodePaths: [join(root, 'sdks/typescript/client/node_modules'), join(root, 'node_modules')], bundle: true, platform: 'browser', format: 'esm', outfile: join(directory, 'client.js') });
   const bundle = await readFile(join(directory, 'client.js'));
   server = createServer((request, response) => {
     if (request.url === '/client.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); return; }
