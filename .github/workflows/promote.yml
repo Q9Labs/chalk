@@ -182,7 +182,7 @@ jobs:
         run: exit 1
   github-release:
     needs: [select, result]
-    if: needs.result.result == 'success'
+    if: ${{ !cancelled() && needs.result.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

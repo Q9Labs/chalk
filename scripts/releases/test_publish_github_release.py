@@ -10,6 +10,11 @@ SCRIPT = Path(__file__).with_name('publish_github_release.py')
 
 
 class PublishReleaseTest(unittest.TestCase):
+    def test_promotion_release_can_run_when_rollback_is_skipped(self):
+        workflow = (SCRIPT.parents[2] / '.github/workflows/promote.yml').read_text()
+        job = workflow.split('  github-release:\n', 1)[1]
+        self.assertIn("if: ${{ !cancelled() && needs.result.result == 'success' }}", job)
+
     def test_channels_publish_verified_commit_and_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
