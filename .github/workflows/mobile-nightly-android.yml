@@ -47,7 +47,7 @@ jobs:
         if: steps.cut.outputs.verified == 'true'
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
         if: steps.cut.outputs.verified == 'true'
       - name: Install dependencies
