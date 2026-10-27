@@ -875,6 +875,100 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     end
   end
 
+  @tag :readiness_due_lag
+  test "a seat held for 90 seconds stays ready through confirmation", %{connections: connections} do
+    readiness = start_lifecycle_readiness()
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    schedule_join_expiry(connection, fixture, 30)
+
+    health = assert_lifecycle_ready(readiness)
+    assert health.dependencies.database.oldest_pending_lifecycle_intent_ms == 0
+    assert health.dependencies.database.lifecycle_intents.pending == 1
+    assert health.dependencies.database.lifecycle_intents.due == 0
+
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(fixture.identity)
+    health = assert_lifecycle_ready(readiness)
+    assert health.dependencies.database.lifecycle_intents.pending == 0
+  end
+
+  @tag :readiness_due_lag
+  test "join expiry lag starts when due and recovers after expiry", %{connections: connections} do
+    readiness = start_lifecycle_readiness()
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    schedule_join_expiry(connection, fixture, -10)
+
+    health = assert_lifecycle_ready(readiness)
+    assert health.dependencies.database.oldest_pending_lifecycle_intent_ms >= 10_000
+    assert health.dependencies.database.oldest_pending_lifecycle_intent_ms < 30_000
+    assert health.dependencies.database.lifecycle_intents.due == 1
+
+    schedule_join_expiry(connection, fixture, -31)
+
+    Readiness.probe_now(readiness)
+    health = Readiness.probe_now(readiness)
+    refute Readiness.ready?(readiness)
+    assert health.status == "unready"
+    assert health.dependencies.reason == "lifecycle_intent_lag"
+
+    assert {:ok, %{result: :superseded}} =
+             Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
+
+    health = assert_lifecycle_ready(readiness)
+    assert health.dependencies.database.lifecycle_intents.pending == 0
+    assert [["left", "expired", false]] = entry_row(connection, fixture)
+  end
+
+  defp schedule_join_expiry(connection, fixture, seconds_until_due) do
+    Postgrex.query!(
+      connection,
+      "update participant_join_seats set expires_at = now() + $2::integer * interval '1 second' where participant_id = $1",
+      [UUID.dump!(fixture.identity.participant_id), seconds_until_due]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents intent
+      set created_at = seat.expires_at - interval '120 seconds', next_attempt_at = seat.expires_at
+      from participant_join_seats seat
+      where intent.lifecycle_intent_id = $1 and seat.participant_id = intent.participant_id
+      """,
+      [UUID.dump!(fixture.lifecycle_intent_id)]
+    )
+  end
+
+  defp start_lifecycle_readiness do
+    start_supervised!({ChalkSync.Fanout.PostgresNotifications, url: @database_url})
+    start_supervised!({ChalkSync.LifecycleConsumer, poll_interval_ms: 60_000})
+    ChalkSync.LifecycleConsumer.health()
+    start_supervised!({ExternalOperationConsumer, poll_interval_ms: 60_000})
+    start_supervised!({ChalkSync.Retention.Scheduler, auto_run?: false})
+
+    # Boot probes check the real dependencies without requiring background poll freshness.
+    start_supervised!(
+      {Readiness,
+       name: nil,
+       auto_probe?: false,
+       success_span_ms: 0,
+       probe_fun: fn -> Probe.run(boot?: true) end}
+    )
+  end
+
+  defp assert_lifecycle_ready(readiness) do
+    Readiness.probe_now(readiness)
+    Readiness.probe_now(readiness)
+    health = Readiness.probe_now(readiness)
+    assert health.status == "ready"
+    assert Readiness.ready?(readiness)
+    health
+  end
+
   test "readiness retains bounded diagnostics for an aged retrying lifecycle intent", %{
     connections: connections
   } do
