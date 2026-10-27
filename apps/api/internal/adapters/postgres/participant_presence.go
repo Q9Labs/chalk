@@ -76,9 +76,6 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 				JourneyName: "participant.connection_expired", Payload: payload,
 				JourneyAttributes: attributes,
 			}, participant)
-			if err != nil {
-				span.RecordError(err)
-			}
 			span.SetAttributes(attribute.Bool("reserved", err == nil))
 			span.End()
 			if err != nil {
@@ -93,11 +90,11 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 func participantPresenceExpiryAttributes(expired sqlc.ExpiredParticipantPresenceRow) map[string]string {
 	participant := expired.Participant
 	attributes := map[string]string{
-		"tenant_id":      utilities.IDFromBytes(participant.TenantID.Bytes).String(),
-		"episode_id":     utilities.IDFromBytes(participant.EpisodeID.Bytes).String(),
-		"participant_id": utilities.IDFromBytes(participant.ID.Bytes).String(),
-		"expiry_path":    "missing_lease",
-		"joined_age_ms":  strconv.FormatInt(expired.PresenceAgeMs, 10),
+		"tenant_id":           utilities.IDFromBytes(participant.TenantID.Bytes).String(),
+		"episode_id":          utilities.IDFromBytes(participant.EpisodeID.Bytes).String(),
+		"participant_id_hash": fmt.Sprintf("%x", sha256.Sum256([]byte(utilities.IDFromBytes(participant.ID.Bytes).String()))),
+		"expiry_path":         "missing_lease",
+		"joined_age_ms":       strconv.FormatInt(expired.PresenceAgeMs, 10),
 	}
 	if expired.HasPresenceLease {
 		attributes["expiry_path"] = "lease_expired"

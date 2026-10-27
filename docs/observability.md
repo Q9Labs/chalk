@@ -53,17 +53,19 @@ prove the shape of an earlier production failure.
 
 Every v1 `sync.websocket.closed` event includes `socket_age_ms` and
 `heartbeat_gap_ms` alongside its existing close reason and verified Tenant,
-Episode and participant IDs. Ages use the server's monotonic clock. A null
+Episode IDs and a SHA-256 `participant_id_hash`, not the raw participant ID.
+Ages use the server's monotonic clock. A null
 heartbeat gap means no application ping was observed before the socket closed.
 
 The API's `participant.presence.expire` span and the durable
-`participant.connection_expired` journey root carry those three IDs and an
+`participant.connection_expired` journey root carry the Tenant and Episode IDs,
+the same participant hash, and an
 `expiry_path`. `lease_expired` includes `last_seen_age_ms`, inferred from the
 lease deadline minus the existing 120-second renewal TTL. `missing_lease`
 includes `joined_age_ms` instead: there was no observed heartbeat to age.
 The span's `reserved` attribute distinguishes a successful reservation from a
 failed attempt; only a committed transaction retains the durable journey root.
-No token, participant name or media payload is added.
+No token, raw participant or user identity, error text, or media payload is added.
 
 ## Alerts
 

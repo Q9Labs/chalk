@@ -311,16 +311,21 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   end
 
   defp assert_expiry_evidence(ctx, path, age_key, minimum_age_ms) do
+    participant_hash =
+      :crypto.hash(:sha256, ctx.identity.participant_id) |> Base.encode16(case: :lower)
+
     [[attributes]] =
       Postgrex.query!(
         ctx.connection,
-        "select attributes from observability_journey_events where name='participant.connection_expired' and attributes->>'participant_id'=$1 order by occurred_at desc limit 1",
-        [ctx.identity.participant_id]
+        "select attributes from observability_journey_events where name='participant.connection_expired' and attributes->>'participant_id_hash'=$1 order by occurred_at desc limit 1",
+        [participant_hash]
       ).rows
 
     assert attributes["tenant_id"] == ctx.fixture.episode.tenant_id
     assert attributes["episode_id"] == ctx.fixture.episode.episode_id
-    assert attributes["participant_id"] == ctx.identity.participant_id
+    assert attributes["participant_id_hash"] == participant_hash
+    refute Map.has_key?(attributes, "participant_id")
+    refute inspect(attributes) =~ ctx.identity.participant_id
     assert attributes["expiry_path"] == path
     assert String.to_integer(attributes[age_key]) >= minimum_age_ms
     if path == "missing_lease", do: refute(Map.has_key?(attributes, "last_seen_age_ms"))
