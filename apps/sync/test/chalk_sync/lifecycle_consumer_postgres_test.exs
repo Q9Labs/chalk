@@ -882,15 +882,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
-    Postgrex.query!(
-      connection,
-      """
-      update sync_lifecycle_intents
-      set created_at = now() - interval '90 seconds', next_attempt_at = now() + interval '30 seconds'
-      where lifecycle_intent_id = $1
-      """,
-      [UUID.dump!(fixture.lifecycle_intent_id)]
-    )
+    schedule_join_expiry(connection, fixture, 30)
 
     health = assert_lifecycle_ready(readiness)
     assert health.dependencies.database.oldest_pending_lifecycle_intent_ms == 0
@@ -909,29 +901,14 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
 
-    Postgrex.query!(
-      connection,
-      """
-      update sync_lifecycle_intents
-      set created_at = now() - interval '130 seconds', next_attempt_at = now() - interval '10 seconds'
-      where lifecycle_intent_id = $1
-      """,
-      [UUID.dump!(fixture.lifecycle_intent_id)]
-    )
+    schedule_join_expiry(connection, fixture, -10)
 
     health = assert_lifecycle_ready(readiness)
     assert health.dependencies.database.oldest_pending_lifecycle_intent_ms >= 10_000
     assert health.dependencies.database.oldest_pending_lifecycle_intent_ms < 30_000
     assert health.dependencies.database.lifecycle_intents.due == 1
 
-    Postgrex.query!(
-      connection,
-      """
-      update sync_lifecycle_intents set next_attempt_at = now() - interval '31 seconds'
-      where lifecycle_intent_id = $1
-      """,
-      [UUID.dump!(fixture.lifecycle_intent_id)]
-    )
+    schedule_join_expiry(connection, fixture, -31)
 
     Readiness.probe_now(readiness)
     health = Readiness.probe_now(readiness)
@@ -939,18 +916,31 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert health.status == "unready"
     assert health.dependencies.reason == "lifecycle_intent_lag"
 
-    Postgrex.query!(
-      connection,
-      "update participant_join_seats set expires_at = now() - interval '31 seconds' where participant_id = $1",
-      [UUID.dump!(fixture.identity.participant_id)]
-    )
-
     assert {:ok, %{result: :superseded}} =
              Postgres.apply_lifecycle_intent(fixture.episode, fixture.lifecycle_intent_id)
 
     health = assert_lifecycle_ready(readiness)
     assert health.dependencies.database.lifecycle_intents.pending == 0
     assert [["left", "expired", false]] = entry_row(connection, fixture)
+  end
+
+  defp schedule_join_expiry(connection, fixture, seconds_until_due) do
+    Postgrex.query!(
+      connection,
+      "update participant_join_seats set expires_at = now() + $2::integer * interval '1 second' where participant_id = $1",
+      [UUID.dump!(fixture.identity.participant_id), seconds_until_due]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents intent
+      set created_at = seat.expires_at - interval '120 seconds', next_attempt_at = seat.expires_at
+      from participant_join_seats seat
+      where intent.lifecycle_intent_id = $1 and seat.participant_id = intent.participant_id
+      """,
+      [UUID.dump!(fixture.lifecycle_intent_id)]
+    )
   end
 
   defp start_lifecycle_readiness do

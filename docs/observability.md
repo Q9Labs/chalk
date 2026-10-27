@@ -62,9 +62,14 @@ failures directly to Discord.
 
 When `/readyz` reports `lifecycle_intent_lag`, its cached dependency snapshot
 retains the database observations from that failed probe. `database.lifecycle_intents`
-reports pending, due, and retrying counts, plus the oldest pending intent's attempt
+reports pending, due, and retrying counts, plus the oldest lag-eligible intent's attempt
 count and allowlisted error code (`other` for unknown codes; `null` before a failure).
-The oldest pending age includes scheduled retries, not only work currently due.
+Unattempted participant joins age from `next_attempt_at`, when their held seat is
+due to expire, not from creation. Before that time they count as pending but do
+not contribute lag. Other intents and attempted joins still age from creation,
+including scheduled retries, so retry backoff cannot hide stuck work. The legacy
+`oldest_pending_lifecycle_intent_ms` field reports this lag age; the oldest intent's
+diagnostics use the same ordering and are null when no pending work is lag-eligible.
 Use these fields to distinguish undiscovered backlog from repeated delivery failures;
 they do not establish the underlying cause of a `dependency_unavailable` result.
 The response contains no intent, Episode, participant, or Tenant identifiers.

@@ -406,6 +406,15 @@ defmodule ChalkSync.Operations.Probe do
 
   defp pending_age_query do
     """
+    with pending_intents as (
+      select lifecycle_intent_id, next_attempt_at, attempt_count, last_error_code,
+        case
+          when intent_name = 'participant_joined' and attempt_count = 0 then next_attempt_at
+          else created_at
+        end as lag_since
+      from sync_lifecycle_intents
+      where status = 'pending'
+    )
     select
       pending.oldest_age_ms,
       (
@@ -426,19 +435,18 @@ defmodule ChalkSync.Operations.Probe do
       oldest.attempt_count, oldest.last_error_code
     from (
       select
-        coalesce((extract(epoch from (now() - min(created_at))) * 1000)::bigint, 0)
+        greatest((extract(epoch from (now() - min(lag_since))) * 1000)::bigint, 0)
           as oldest_age_ms,
         count(*) as total,
         count(*) filter (where next_attempt_at <= now()) as due,
         count(*) filter (where attempt_count > 0) as retrying
-      from sync_lifecycle_intents
-      where status = 'pending'
+      from pending_intents
     ) pending
     left join lateral (
       select attempt_count, last_error_code
-      from sync_lifecycle_intents
-      where status = 'pending'
-      order by created_at, lifecycle_intent_id
+      from pending_intents
+      where lag_since <= now()
+      order by lag_since, lifecycle_intent_id
       limit 1
     ) oldest on true
     """
