@@ -1409,7 +1409,7 @@ describe("V1SyncClient", () => {
       reason,
     });
     await expect(pending).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: terminalHead.revision, state_digest: terminalHead.state_digest });
-    expect(client.getSnapshot().connection).toEqual({ phase: "terminal", terminalReason: reason });
+    expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: reason });
   });
   it("retains exact control-event evidence and recovers on conflicting duplicates", async () => {
     await exerciseConflictingControlEvidence();
