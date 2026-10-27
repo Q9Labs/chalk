@@ -73,6 +73,11 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts --filter '@q9labsai/chalk-mobile...'
           pnpm --filter @q9labsai/chalk-mobile run test:ios-scene
 
+      - name: Check Android release automation
+        run: |
+          bash apps/mobile/scripts/release/test-build-signed-android.sh
+          bash apps/mobile/scripts/release/test-publish-nightly-android.sh
+
       - name: Compare native fingerprints
         id: compare
         continue-on-error: true

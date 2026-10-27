@@ -4,6 +4,7 @@ import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
 import * as SecureStore from "expo-secure-store";
 import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
 import { Platform } from "react-native";
+import { getApiBaseURL } from "./mobile-config";
 
 const ARRIVAL_KEY_PREFIX = "chalk_mobile_public_arrival_v1.";
 const ARRIVAL_INDEX_PREFIX = "chalk_mobile_public_arrival_index_v1.";
@@ -43,7 +44,19 @@ export type SpaceOperationObserver = (operation: SpaceOperation, state: SpaceOpe
 
 export function parseSpaceLink(input: string): SpaceRoute | null {
   const inviteLink = input.trim();
-  const invite = parseChalkInviteLink(inviteLink);
+  let parseInput = inviteLink;
+  if (getApiBaseURL() === "https://nightly-api.chalkmeet.com") {
+    try {
+      const url = new URL(inviteLink);
+      if (url.protocol === "https:" && url.hostname === "nightly.chalkmeet.com" && !url.username && !url.password && !url.port) {
+        url.hostname = "chalkmeet.com";
+        parseInput = url.toString();
+      }
+    } catch {
+      // Invite codes are not URLs and remain valid inputs.
+    }
+  }
+  const invite = parseChalkInviteLink(parseInput);
   if (!invite) return null;
   return {
     kind: "space",

@@ -64,7 +64,7 @@ gradle_properties="$gradle_user_home/keystore.properties"
 chmod 600 "$gradle_properties"
 export CHALK_ANDROID_KEYSTORE_PROPERTIES="$gradle_properties"
 export GRADLE_USER_HOME="$gradle_user_home"
-export CHALK_APP_VARIANT=production
+export CHALK_APP_VARIANT=${CHALK_APP_VARIANT:-production}
 
 expected_keystore_sha256=$(jq -er '.android.keystore_sha256' "$manifest")
 expected_certificate_sha256=$(jq -er '.android.certificate_sha256' "$manifest")
@@ -87,6 +87,8 @@ if [[ "$actual_keystore_sha256" != "$expected_keystore_sha256" || \
 fi
 
 echo "Running Chalk Android tests and signed release build."
+version_code=${CHALK_ANDROID_VERSION_CODE:-$(jq -er '.android.version_code' "$manifest")}
+[[ "$version_code" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid Android version code." >&2; exit 1; }
 gradle_build_dir=$(mktemp -d "$output_dir/.chalk-gradle-build.XXXXXX")
 chmod 700 "$gradle_build_dir"
 (
@@ -95,6 +97,7 @@ chmod 700 "$gradle_build_dir"
   cd "$mobile_root/android"
   ./gradlew --no-daemon \
     -Pchalk.androidBuildDirectory="$gradle_build_dir" \
+    -Pchalk.versionCode="$version_code" \
     :app:testDebugUnitTest :app:bundleRelease
 )
 
@@ -113,7 +116,6 @@ fi
 
 timestamp=${CHALK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
 version_name=$(jq -er '.android.version_name' "$manifest")
-version_code=$(jq -er '.android.version_code' "$manifest")
 output_bundle="$output_dir/chalk-android-$version_name-$version_code-$timestamp.aab"
 cp "$built_bundle" "$output_bundle"
 

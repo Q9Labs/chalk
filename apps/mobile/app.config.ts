@@ -8,13 +8,14 @@ const FIGTREE_WEIGHTS = ["Regular", "Medium", "SemiBold", "Bold"] as const;
 
 export type MobileExpoExtra = {
   readonly buildProfile: string;
+  readonly apiBaseURL?: string;
   readonly eas: {
     readonly projectId: string;
   };
 };
 
 export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
-  const extra: MobileExpoExtra = { buildProfile, eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } };
+  const extra: MobileExpoExtra = { buildProfile, ...(buildProfile === "nightly" ? { apiBaseURL: "https://nightly-api.chalkmeet.com" } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } };
 
   return {
     expo: {
