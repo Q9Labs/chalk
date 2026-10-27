@@ -50,6 +50,13 @@ try {
           callback(...args);
         }, delay);
       };
+      const NativeSocket = WebSocket;
+      globalThis.WebSocket = class extends NativeSocket {
+        constructor(...args) {
+          super(...args);
+          this.addEventListener('close', event => console.log(JSON.stringify({event:'wire_close',code:event.code,reason:event.reason})));
+        }
+      };
       const nativeClose = WebSocket.prototype.close;
       WebSocket.prototype.close = function(code, reason) {
         console.log(JSON.stringify({event:'client_close',code,reason}));
@@ -75,7 +82,7 @@ try {
   log('browser', { version: browser.version(), durationMs:duration, graceSeconds:10 });
   const context = await browser.newContext();
   const pages = [];
-  let hiddenClosed = false, lateTimers = 0;
+  let hiddenClosed = false, lateTimers = 0, observerLostParticipant = false;
   for (const name of ['hidden','visible']) {
     const page = await context.newPage(); pages.push(page);
     const cdp = await context.newCDPSession(page);
@@ -98,6 +105,7 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}/${name}`);
     await page.waitForFunction(()=>window.client?.getSnapshot().connection.phase==='live');
   }
+  const hiddenParticipantId=await pages[0].evaluate(()=>window.client.getSnapshot().participantId);
   await pages[1].bringToFront();
   const visibility=await pages[0].evaluate(()=>document.visibilityState);
   log('hidden_started',{visibility});
@@ -106,13 +114,15 @@ try {
   while(Date.now()-started<duration) {
     await new Promise(resolveTick=>setTimeout(resolveTick,30000));
     const snapshot=await pages[1].evaluate(()=>{
-      const s=window.client.getSnapshot();return {connection:s.connection,presence:s.presence,participants:s.control?.participants};
+      const s=window.client.getSnapshot();return {connection:s.connection,presence:s.presence};
     });
-    log('observer',{elapsedMs:Date.now()-started,...snapshot});
+    const connected=snapshot.presence?.items.filter(item=>item.state==='connected').map(item=>item.participantId) ?? [];
+    if(!connected.includes(hiddenParticipantId)) observerLostParticipant=true;
+    log('observer',{elapsedMs:Date.now()-started,connection:snapshot.connection,connectedCount:connected.length,hiddenConnected:connected.includes(hiddenParticipantId)});
   }
   const snapshot=await pages[0].evaluate(()=>({visibility:document.visibilityState,connection:window.client.getSnapshot().connection}));
-  log('result',{hiddenClosed,lateTimers,...snapshot});
-  if(process.env.HEARTBEAT_EXPECT_SURVIVAL==='1' && (hiddenClosed || lateTimers<10 || snapshot.connection.phase!=='live')) throw new Error('hidden participant did not survive proven throttling');
+  log('result',{hiddenClosed,lateTimers,observerLostParticipant,...snapshot});
+  if(process.env.HEARTBEAT_EXPECT_SURVIVAL==='1' && (hiddenClosed || observerLostParticipant || lateTimers<10 || snapshot.connection.phase!=='live')) throw new Error('hidden participant did not survive proven throttling');
 } finally {
   await browser?.close();
   if(server) await new Promise(resolveClose=>server.close(resolveClose));
