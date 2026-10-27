@@ -933,6 +933,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* transition("left");
         });
       const syncNeedsRecovery = (snapshot: V1EpisodeSnapshot): boolean => active(model) && (snapshot.connection.phase === "connecting" || snapshot.connection.phase === "recovering" || snapshot.connection.phase === "terminal");
+      const mediaNeedsRecovery = (snapshot: ConnectionMediaSnapshot): boolean => active(model) && (snapshot.connection.phase === "recovering" || (snapshot.connection.phase === "failed" && snapshot.failure?.recoverable === true));
       const recordFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.sync(() => {
           diagnostics.record({ event: "connection_failed", state: model.state, epoch: model.epoch, code: failure.code, ...(failure.sync ? { sync: failure.sync } : {}) });
@@ -951,7 +952,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const phase = mediaDiagnosticPhase(snapshot);
           if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
           model.mediaSnapshot = snapshot;
-          if (active(model) && (snapshot.connection.phase === "recovering" || (snapshot.connection.phase === "failed" && snapshot.failure?.recoverable))) yield* recover("media");
+          if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
       const handleMediaFailure = (): Effect.Effect<void> => (model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void);
