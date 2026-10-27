@@ -210,7 +210,6 @@
     "test": "pnpm exec vitest run",
     "test:webhooks-package": "pnpm run build && node ./scripts/check-webhook-package.mjs",
     "test:server-package": "pnpm run build && node ./scripts/check-server-package.mjs",
-    "test:sync-background-heartbeat": "node ./scripts/background-heartbeat.mjs",
     "test:sync-browser": "pnpm run build && node ./scripts/real-browser-sync.mjs",
     "test:sync-node-restart": "pnpm run build && node ./scripts/real-node-restart-sync.mjs",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
