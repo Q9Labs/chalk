@@ -160,6 +160,10 @@ from that verified credential. The `sdk.connection_report` warning includes
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
 media signaling. Parse `report` as JSON when querying the API log dataset.
+Rejected reports emit `sdk.connection_report.rejected` with the same trace ID
+and verified participant hash, plus a bounded `reason` identifying the failed
+schema, label, ordering, size, or range check. Rejected values, bodies, and decoder
+error messages never enter the log.
 
 There are no tokens, names, emails, IP addresses, URLs, peer close reasons, error
 messages, media contents, or arbitrary payloads in the report body. The SDK
@@ -167,7 +171,8 @@ allows one report per participant per minute across connections in the same
 module instance; the API enforces six per participant per ten minutes through
 its existing limiter. The SDK holds one pending report while offline, retries a
 transport failure once on a later browser `online` event, bounds each upload to
-five seconds, and discards it on disposal. An HTTP response, including rejection,
+five seconds, and discards it on disposal. An `online` event during an active
+upload is retained for that retry if the upload subsequently fails. An HTTP response, including rejection,
 is final. Reports are best effort: closing/reloading the page, expired credentials,
 or failure before obtaining a signed access grant can prevent delivery. Diagnostics
 do not request credentials, change call recovery, or use persistent storage.

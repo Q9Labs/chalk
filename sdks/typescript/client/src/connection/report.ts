@@ -41,6 +41,7 @@ export class ConnectionReporter {
   #pending: PendingReport | null = null;
   #unsubscribe: (() => void) | undefined;
   #controller: AbortController | null = null;
+  #retryOnReconnect = false;
   #disposed = false;
 
   constructor(options: ReporterOptions) {
@@ -81,8 +82,7 @@ export class ConnectionReporter {
   dispose(): void {
     this.#disposed = true;
     this.#controller?.abort();
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
+    this.#stopListening();
     this.#pending = null;
     this.#events.length = 0;
   }
@@ -111,6 +111,7 @@ export class ConnectionReporter {
     if (!events.length) return;
     this.#pending = { access, report, attempts: 0 };
     this.#unsubscribe = this.#options.subscribeOnline(() => {
+      this.#retryOnReconnect = true;
       void this.#flush();
     });
     void this.#flush();
@@ -118,6 +119,7 @@ export class ConnectionReporter {
   async #flush(): Promise<void> {
     const pending = this.#pending;
     if (!pending || this.#controller || this.#disposed || !this.#options.online()) return;
+    this.#retryOnReconnect = false;
     const controller = new AbortController();
     this.#controller = controller;
     pending.attempts += 1;
@@ -132,10 +134,14 @@ export class ConnectionReporter {
     } finally {
       globalThis.clearTimeout(timer);
       this.#controller = null;
-      if (!this.#pending) {
-        this.#unsubscribe?.();
-        this.#unsubscribe = undefined;
-      }
+      if (!this.#pending) this.#stopListening();
+      if (this.#retryOnReconnect) void this.#flush();
     }
+  }
+
+  #stopListening(): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = undefined;
+    this.#retryOnReconnect = false;
   }
 }

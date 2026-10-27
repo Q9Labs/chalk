@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseParsedAccessGrant } from "../access/grant";
 import { ConnectionReporter, type ConnectionReport } from "./report";
 
@@ -14,7 +14,7 @@ function fixture(online = true) {
   let listener: (() => void) | undefined;
   const sent: ConnectionReport[] = [];
   let failures = 0;
-  const create = () =>
+  const create = (upload?: () => Promise<void>) =>
     new ConnectionReporter({
       traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
       now: () => now,
@@ -28,6 +28,7 @@ function fixture(online = true) {
       },
       send: async (_access, report) => {
         sent.push(report);
+        await upload?.();
         if (failures-- > 0) throw new TypeError("network");
       },
     });
@@ -104,6 +105,30 @@ describe("automatic connection reports", () => {
     expect(test.sent[0]?.events[0]?.heartbeat_gap_ms).toBe(60000);
     expect(test.listening()).toBe(false);
     reporter.dispose();
+  });
+  it.each([false, true])("retries a reconnect received during an active upload, with retry failure %s", async (retryFails) => {
+    const firstUpload = Promise.withResolvers<void>();
+    const test = fixture();
+    const reporter = test.create(() => {
+      if (test.sent.length === 1) return firstUpload.promise;
+      if (retryFails) return Promise.reject(new TypeError("network"));
+      return Promise.resolve();
+    });
+    try {
+      fail(reporter);
+      expect(test.sent).toHaveLength(1);
+      test.reconnect();
+      test.reconnect();
+      firstUpload.reject(new TypeError("interrupted upload"));
+      await vi.waitFor(() => expect(test.sent).toHaveLength(2));
+      await vi.waitFor(() => expect(test.listening()).toBe(false));
+      expect(test.sent[1]).toEqual(test.sent[0]);
+      test.reconnect();
+      await settled();
+      expect(test.sent).toHaveLength(2);
+    } finally {
+      reporter.dispose();
+    }
   });
   it("bounds failed upload retries and removes its reconnect listener on disposal", async () => {
     const test = fixture();

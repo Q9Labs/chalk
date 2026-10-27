@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const connectionReportFixture = `{"version":1,"trigger":"join_failed","events":[{"event":"space_join_span","elapsed_ms":0,"step":"join","outcome":"started"},{"event":"sync_socket_close","elapsed_ms":400,"close_code":1006,"duration_ms":400},{"event":"connection_failed","elapsed_ms":401,"state":"joining","code":"sync_start_failed"}]}`
@@ -195,5 +196,75 @@ func TestConnectionReportCustomerOriginAndTenantIsolation(t *testing.T) {
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("foreign tenant: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestConnectionReportRejectionEvidence(t *testing.T) {
+	cases := []struct {
+		name, body, reason string
+		status             int
+	}{
+		{"schema", strings.Replace(connectionReportFixture, `"version":1`, `"version":1,"private-field@example.test":"sensitive-value"`, 1), "schema", 400},
+		{"trailing", connectionReportFixture + `{}`, "trailing_json", 400},
+		{"oversized", connectionReportFixture + strings.Repeat(" ", ConnectionReportBodyLimit), "body_too_large", 413},
+		{"version", strings.Replace(connectionReportFixture, `"version":1`, `"version":2`, 1), "version", 400},
+		{"trigger", strings.Replace(connectionReportFixture, `"trigger":"join_failed"`, `"trigger":"sensitive-value"`, 1), "trigger", 400},
+		{"count", `{"version":1,"trigger":"join_failed","events":[]}`, "event_count", 400},
+		{"event label", strings.Replace(connectionReportFixture, "sync_socket_close", "sensitive-value", 1), "event_label", 400},
+		{"negative time", strings.Replace(connectionReportFixture, `"elapsed_ms":0`, `"elapsed_ms":-1`, 1), "elapsed_range", 400},
+		{"large time", strings.Replace(connectionReportFixture, `"elapsed_ms":0`, `"elapsed_ms":2147483648`, 1), "elapsed_range", 400},
+		{"order", `{"version":1,"trigger":"join_failed","events":[{"event":"state_changed","elapsed_ms":2},{"event":"state_changed","elapsed_ms":1}]}`, "event_order", 400},
+		{"state label", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"sensitive-value"`, 1), "state_label", 400},
+		{"code label", strings.Replace(connectionReportFixture, "sync_start_failed", "192.0.2.1", 1), "code_label", 400},
+		{"attempt", `{"version":1,"trigger":"join_failed","events":[{"event":"recovery_attempt","elapsed_ms":0,"attempt":-1}]}`, "attempt_range", 400},
+		{"duration", `{"version":1,"trigger":"join_failed","events":[{"event":"sync_socket_close","elapsed_ms":0,"duration_ms":-1}]}`, "duration_ms_range", 400},
+		{"heartbeat", `{"version":1,"trigger":"join_failed","events":[{"event":"sync_socket_close","elapsed_ms":0,"heartbeat_gap_ms":2147483648}]}`, "heartbeat_gap_ms_range", 400},
+		{"close code", `{"version":1,"trigger":"join_failed","events":[{"event":"sync_socket_close","elapsed_ms":0,"close_code":5000}]}`, "close_code_range", 400},
+		{"HTTP status", `{"version":1,"trigger":"join_failed","events":[{"event":"media_http_error","elapsed_ms":0,"http_status":200}]}`, "http_status_range", 400},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			subject := participantMediaSubject(t)
+			router := chi.NewRouter()
+			router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))
+			connectionReportEndpoint(&participantMediaVerifierStub{subject: subject}).Mount(router, DefaultRateLimitOptions())
+			traceID := trace.TraceID{1}
+			span := trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled})
+			request := httptest.NewRequest(http.MethodPost, "/tenants/11111111-1111-4111-8111-111111111111/connection-reports", strings.NewReader(tc.body))
+			request = request.WithContext(trace.ContextWithSpanContext(request.Context(), span))
+			request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != tc.status {
+				t.Fatalf("status=%d, want=%d", response.Code, tc.status)
+			}
+			var rejected int
+			for _, line := range strings.Split(logs.String(), "\n") {
+				if !strings.Contains(line, `"event":"sdk.connection_report.rejected"`) {
+					continue
+				}
+				rejected++
+				var record struct {
+					Reason          string `json:"reason"`
+					TraceID         string `json:"trace_id"`
+					ParticipantHash string `json:"participant_id_hash"`
+				}
+				if err := json.Unmarshal([]byte(line), &record); err != nil {
+					t.Fatal(err)
+				}
+				if record.Reason != tc.reason || record.TraceID != traceID.String() || record.ParticipantHash != fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))) {
+					t.Fatalf("wrong rejection evidence: %s", line)
+				}
+			}
+			if rejected != 1 {
+				t.Fatalf("rejection records=%d, want=1", rejected)
+			}
+			for _, private := range []string{"private-field@example.test", "sensitive-value", "192.0.2.1", subject.ParticipantID.String(), participantMediaCredential} {
+				if strings.Contains(logs.String(), private) {
+					t.Fatalf("private input entered rejection logs: %s", private)
+				}
+			}
+		})
 	}
 }

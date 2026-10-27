@@ -79,43 +79,70 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 	decoder.DisallowUnknownFields()
 	var report connectionReport
 	if err := decoder.Decode(&report); err != nil {
-		return report, connectionReportDecodeError(err)
+		return report, connectionReportDecodeError(r, err, "schema")
 	}
 	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
-		return report, connectionReportDecodeError(err)
+		return report, connectionReportDecodeError(r, err, "trailing_json")
 	}
-	if report.Version != 1 || !slices.Contains(ConnectionReportFieldEnum("trigger"), report.Trigger) || len(report.Events) == 0 || len(report.Events) > ConnectionReportEventLimit {
-		return report, apiErrorInvalidRequest
+	if report.Version != 1 {
+		return report, rejectConnectionReport(r, "version")
+	}
+	if !slices.Contains(ConnectionReportFieldEnum("trigger"), report.Trigger) {
+		return report, rejectConnectionReport(r, "trigger")
+	}
+	if len(report.Events) == 0 || len(report.Events) > ConnectionReportEventLimit {
+		return report, rejectConnectionReport(r, "event_count")
 	}
 	var previous int64
 	for _, event := range report.Events {
-		if !slices.Contains(ConnectionReportFieldEnum("event"), event.Event) || event.ElapsedMS < previous || event.ElapsedMS > ConnectionReportMaxMilliseconds {
-			return report, apiErrorInvalidRequest
+		if !slices.Contains(ConnectionReportFieldEnum("event"), event.Event) {
+			return report, rejectConnectionReport(r, "event_label")
+		}
+		if event.ElapsedMS < 0 || event.ElapsedMS > ConnectionReportMaxMilliseconds {
+			return report, rejectConnectionReport(r, "elapsed_range")
+		}
+		if event.ElapsedMS < previous {
+			return report, rejectConnectionReport(r, "event_order")
 		}
 		previous = event.ElapsedMS
 		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
-				return report, apiErrorInvalidRequest
+				return report, rejectConnectionReport(r, field+"_label")
 			}
 		}
-		for _, value := range []*int64{event.Attempt, event.DurationMS, event.HeartbeatGapMS} {
+		for field, value := range map[string]*int64{"attempt": event.Attempt, "duration_ms": event.DurationMS, "heartbeat_gap_ms": event.HeartbeatGapMS} {
 			if value != nil && (*value < 0 || *value > ConnectionReportMaxMilliseconds) {
-				return report, apiErrorInvalidRequest
+				return report, rejectConnectionReport(r, field+"_range")
 			}
 		}
 		if event.CloseCode != nil && (*event.CloseCode < 1000 || *event.CloseCode > 4999) {
-			return report, apiErrorInvalidRequest
+			return report, rejectConnectionReport(r, "close_code_range")
 		}
 		if event.HTTPStatus != nil && (*event.HTTPStatus < 400 || *event.HTTPStatus > 599) {
-			return report, apiErrorInvalidRequest
+			return report, rejectConnectionReport(r, "http_status_range")
 		}
 	}
 	return report, nil
 }
 
-func connectionReportDecodeError(err error) error {
+func connectionReportDecodeError(r *http.Request, err error, reason string) error {
 	var oversized *http.MaxBytesError
 	if errors.As(err, &oversized) {
+		return rejectConnectionReport(r, "body_too_large")
+	}
+	return rejectConnectionReport(r, reason)
+}
+
+// Reasons are fixed labels from the checks above, never decoder errors or input.
+func rejectConnectionReport(r *http.Request, reason string) error {
+	ctx := r.Context()
+	logger := observability.RequestLogger(ctx)
+	if subject, ok := accessgrants.SubjectFromContext(ctx); ok {
+		logger = logger.With("participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))))
+	}
+	logger.WarnContext(ctx, "Rejected SDK connection report", "event", "sdk.connection_report.rejected",
+		"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(), "reason", reason)
+	if reason == "body_too_large" {
 		return apiErrorPayloadTooLarge
 	}
 	return apiErrorInvalidRequest
