@@ -72,12 +72,20 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
       setSeconds((value) => value + 1);
       tick++;
       if (reduced.matches) return;
-      if (tick % 3 === 0) setSpeaker((value) => (value + 1) % people.length);
+      if (tick % 3 === 0)
+        setSpeaker((value) => {
+          for (let offset = 1; offset <= people.length; offset++) {
+            const next = (value + offset) % people.length;
+            const person = people[next];
+            if (person && !person.you && !person.muted) return next;
+          }
+          return value;
+        });
       if (tick % 11 === 4) setToast(name === "Q9 team" ? (tick % 22 < 11 ? "Malik Haddad" : "Nora Patel") : tick % 22 < 11 ? "June Park" : "Omar Farouk");
       if (tick % 11 === 7) setToast("");
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [left, name, people.length, still]);
+  }, [left, name, people, still]);
 
   useEffect(() => {
     if (chat) messagesEnd.current?.scrollIntoView({ block: "nearest" });
@@ -107,7 +115,7 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
               ) : null}
             </div>
             <span className="xpill" aria-label={`${people.length} people in this preview`}>
-              <Faces names={people.map((p) => p.name)} size={24} />
+              <Faces names={people.slice(0, 3).map((p) => p.name)} size={24} />
               <b>{people.length}</b>
             </span>
           </div>

@@ -728,33 +728,6 @@ html:has(.site[data-chalk-theme="light"]) {
     line-height: 1.55;
   }
 
-  & .doors {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 56px;
-    margin-top: 56px;
-  }
-
-  & .door h2 {
-    margin-bottom: 6px;
-    font-size: 17px;
-    line-height: 1.3;
-  }
-
-  & .door > p {
-    max-width: 460px;
-    margin-bottom: 18px;
-    color: var(--chalk-muted-text);
-    font-size: 14.5px;
-  }
-
-  & .drow {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
   & .joinwrap {
     flex: 1;
     min-width: 260px;
@@ -772,247 +745,6 @@ html:has(.site[data-chalk-theme="light"]) {
     padding-bottom: 120px;
   }
 
-  /* ---------- the call, drawn still with the page's own tokens, so it follows the theme ---------- */
-
-  & .cfit {
-    position: relative;
-    overflow: hidden;
-    border-radius: 12px;
-    background: var(--chalk-canvas);
-  }
-
-  & .cfit > .cl {
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-  }
-
-  & .cl {
-    overflow: hidden;
-    background: var(--chalk-canvas);
-    color: var(--chalk-text);
-  }
-
-  & .cl svg.site-icon {
-    width: 20px;
-    height: 20px;
-  }
-
-  & .chd {
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 60px;
-    padding: 0 16px 0 24px;
-  }
-
-  & .ctl {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  & .ctm {
-    color: var(--chalk-muted-text);
-    font-weight: 500;
-  }
-
-  & .ctl svg.site-icon {
-    width: 14px;
-    height: 14px;
-    margin-left: -4px;
-    color: var(--chalk-muted-text);
-  }
-
-  & .chr {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  & .cpill {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 40px;
-    padding: 0 14px 0 8px;
-    border-radius: 999px;
-    background: var(--chalk-surface);
-    font-size: 14px;
-  }
-
-  & .cpill .faces .av {
-    box-shadow: 0 0 0 2px var(--chalk-surface);
-  }
-
-  & .crb {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--chalk-raised);
-  }
-
-  & .chr .crb {
-    width: 40px;
-    height: 40px;
-    background: var(--chalk-surface);
-  }
-
-  & .crb.leave {
-    background: var(--chalk-danger);
-    color: #fff;
-  }
-
-  & .ctile {
-    position: absolute;
-    overflow: hidden;
-    border-radius: 12px;
-    background: var(--chalk-tile);
-  }
-
-  & .ctile svg.cam {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  & .ctile .ctr {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-  }
-
-  & .ctile.spk::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    box-shadow:
-      inset 0 0 0 3px rgba(255, 255, 255, 0.9),
-      inset 0 0 0 4px rgba(0, 0, 0, 0.35);
-  }
-
-  & .ctag {
-    position: absolute;
-    bottom: 8px;
-    left: 8px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    height: 24px;
-    padding: 0 8px;
-    border-radius: 6px;
-    background: rgba(12, 14, 18, 0.75);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  & .ctag svg.site-icon {
-    width: 14px;
-    height: 14px;
-    color: #ff6b6b;
-  }
-
-  & .cdock {
-    position: absolute;
-    right: 0;
-    bottom: 20px;
-    left: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
-
-  & .csplit {
-    display: flex;
-    align-items: center;
-    height: 44px;
-    border-radius: 999px;
-    background: var(--chalk-raised);
-  }
-
-  & .csplit i {
-    display: grid;
-    place-items: center;
-    width: 48px;
-    height: 44px;
-    padding-left: 4px;
-  }
-
-  & .csplit i.car {
-    width: 36px;
-    padding: 0 6px 0 0;
-    color: var(--chalk-muted-text);
-  }
-
-  & .csplit i.car svg.site-icon {
-    width: 16px;
-    height: 16px;
-  }
-
-  & .cgap {
-    width: 8px;
-  }
-
-  & .ccorner {
-    position: absolute;
-    bottom: 20px;
-  }
-
-  & .ccorner.l {
-    left: 20px;
-  }
-
-  & .ccorner.r {
-    right: 20px;
-  }
-
-  & .ccorner .bd {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--chalk-accent);
-    box-shadow: 0 0 0 2px var(--chalk-raised);
-  }
-
-  &[data-chalk-theme="light"] .cl :is(.crb:not(.leave), .csplit, .cpill) {
-    box-shadow: 0 0 0 1px var(--chalk-line);
-  }
-
-  & .cl.cph .chd {
-    justify-content: center;
-    height: 52px;
-    padding: 0 16px;
-  }
-
-  & .cl.cph .cdock {
-    bottom: 36px;
-    gap: 12px;
-  }
-
-  & .cl.cph .crb {
-    width: 52px;
-    height: 52px;
-  }
-
-  /* The hero call sits in a raised frame, so on the dark page it reads as a product surface, not a hole. */
   & .hframe {
     padding: 8px;
     border: 1px solid var(--chalk-line-strong);
@@ -1023,17 +755,6 @@ html:has(.site[data-chalk-theme="light"]) {
   &[data-chalk-theme="light"] .hframe {
     border-color: transparent;
     box-shadow: var(--raise);
-  }
-
-  & .hframe.phone {
-    display: none;
-    width: max-content;
-    margin: 0 auto;
-    border-radius: 32px;
-  }
-
-  & .hframe.phone .cfit {
-    border-radius: 24px;
   }
 
   /* ---------- landing sections: spacing does the work, not rules and boxes ---------- */
@@ -1110,55 +831,6 @@ html:has(.site[data-chalk-theme="light"]) {
   &[data-chalk-theme="light"] :is(.surf, .host, .mtr) {
     border-color: transparent;
     box-shadow: var(--raise);
-  }
-
-  & .cols3 {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 40px;
-    margin-top: 56px;
-  }
-
-  & .cols3 > div {
-    min-width: 0;
-  }
-
-  & .cols3 h3 {
-    margin-bottom: 4px;
-    font-size: 16px;
-  }
-
-  & .cols3 > div > p {
-    margin-bottom: 16px;
-    color: var(--chalk-muted-text);
-    font-size: 14.5px;
-  }
-
-  & .stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 40px;
-    margin-top: 56px;
-  }
-
-  & .stat strong {
-    display: block;
-    font: 500 68px/1 var(--chalk-font-mono);
-    letter-spacing: -0.05em;
-  }
-
-  & .stat b {
-    display: block;
-    margin-top: 16px;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  & .stat span {
-    display: block;
-    margin-top: 2px;
-    color: var(--chalk-muted-text);
-    font-size: 14px;
   }
 
   & .fine {
@@ -1248,19 +920,6 @@ html:has(.site[data-chalk-theme="light"]) {
 
   /* ---------- landing: product fragments, in the call's card style ---------- */
 
-  & .lpanel {
-    padding: 6px;
-    font-size: 14px;
-  }
-
-  & .lp-h {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 14px 12px 12px 14px;
-  }
-
   & .lp-h b {
     display: block;
     font-size: 17px;
@@ -1275,48 +934,12 @@ html:has(.site[data-chalk-theme="light"]) {
     font-size: 12.5px;
   }
 
-  & .lp-live {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    margin: 0 2px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background: var(--chalk-raised);
-  }
-
   & .lp-live .faces .av {
     box-shadow: 0 0 0 2px var(--chalk-raised);
   }
 
-  & .lp-sub {
-    padding: 16px 14px 6px;
-    color: var(--chalk-muted-text);
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  & .lp-row {
-    display: grid;
-    grid-template-columns: 96px 52px 64px 96px 1fr;
-    align-items: center;
-    gap: 12px;
-    min-height: 44px;
-    padding: 0 14px;
-    border-radius: 12px;
-  }
-
   & .lp-row .faces .av {
     box-shadow: 0 0 0 2px var(--chalk-surface);
-  }
-
-  & .lp-k {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    color: var(--chalk-muted-text);
   }
 
   & .lp-k svg.site-icon {
@@ -1527,10 +1150,6 @@ html:has(.site[data-chalk-theme="light"]) {
     & .h2 {
       font-size: 50px;
     }
-
-    & .stat strong {
-      font-size: 60px;
-    }
   }
 }
 
@@ -1614,17 +1233,6 @@ html:has(.site[data-chalk-theme="light"]) {
       font-size: 16px;
     }
 
-    & .doors {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 36px;
-      margin-top: 36px;
-    }
-
-    & .drow {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
     & .drow > .btn {
       width: 100%;
     }
@@ -1641,14 +1249,6 @@ html:has(.site[data-chalk-theme="light"]) {
     & .hvis {
       margin-top: 44px;
       padding-bottom: 64px;
-    }
-
-    & .hframe.wide {
-      display: none;
-    }
-
-    & .hframe.phone {
-      display: block;
     }
 
     & .band {
@@ -1670,30 +1270,9 @@ html:has(.site[data-chalk-theme="light"]) {
       gap: 40px;
     }
 
-    & .cols3 {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 40px;
-      margin-top: 40px;
-    }
-
-    & .stats {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 32px;
-    }
-
-    & .stat strong {
-      font-size: 52px;
-    }
-
     & .code pre {
       padding: 14px;
       font-size: 12.5px;
-    }
-
-    & .lp-row {
-      grid-template-columns: 1fr auto;
-      gap: 4px 12px;
-      padding: 8px 12px;
     }
 
     & .lp-row > .num,
@@ -1886,26 +1465,8 @@ html:has(.site[data-chalk-theme="light"]) {
   padding-bottom: 120px;
 }
 
-.site .mav {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  border-radius: 50%;
-  background: var(--c);
-  color: #fff;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1;
-  box-shadow: 0 0 0 2px var(--mavring, var(--chalk-canvas));
-}
 .site .sx-f2 .mav,
-.site .xstack .mav {
-  margin-left: -6px;
-}
 .site .sx-f2 .mav:first-child,
-.site .xstack .mav:first-child {
-  margin-left: 0;
-}
 
 /* link section */
 #product .split {
@@ -2106,16 +1667,6 @@ html:has(.site[data-chalk-theme="light"]) {
 .site .aftercard .mplay {
   width: 100%;
   height: auto;
-}
-.site .aftercard .mplay .cfit {
-  position: absolute;
-  inset: 0;
-  container-type: inline-size;
-}
-.site .aftercard .mplay .cfit > .cl {
-  width: 1440px;
-  height: 810px;
-  transform: scale(calc(100cqw / 1440px)) !important;
 }
 .site .aftercard .mplay {
   cursor: pointer;
@@ -2376,9 +1927,6 @@ html:has(.site[data-chalk-theme="light"]) {
   width: 30px;
   height: 48px;
   color: var(--x-muted);
-}
-.site .xrb .i-off {
-  display: none;
 }
 .site .xrb[data-on="false"] .i-on {
   display: none;
@@ -3218,4 +2766,16 @@ html:has(.site[data-chalk-theme="light"]) {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+.site .xtile.spk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--x-ring);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.site .xwrap.still .xtile.spk::after {
+  border-width: 1px;
 }
