@@ -166,3 +166,34 @@ func TestConnectionReportRateLimitUsesVerifiedParticipant(t *testing.T) {
 		t.Fatalf("other participant status=%d", got)
 	}
 }
+
+func TestConnectionReportCustomerOriginAndTenantIsolation(t *testing.T) {
+	verifier := &participantMediaVerifierStub{subject: participantMediaSubject(t)}
+	origin := "https://customer.example"
+	router := NewRouter(Options{ParticipantMediaVerify: verifier,
+		CORS:      CORSOptions{TenantOrigins: &corsTestTenantAuthorizer{allowed: map[string]map[string]bool{corsTestTenantID: {origin: true}}}},
+		RateLimit: DefaultRateLimitOptions(),
+	})
+	for _, method := range []string{http.MethodOptions, http.MethodPost} {
+		request := httptest.NewRequest(method, "/v1/tenants/"+corsTestTenantID+"/connection-reports", strings.NewReader(connectionReportFixture))
+		request.Header.Set("Origin", origin)
+		if method == http.MethodOptions {
+			request.Header.Set("Access-Control-Request-Method", "POST")
+			request.Header.Set("Access-Control-Request-Headers", "authorization,content-type,traceparent")
+		} else {
+			request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+		}
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != origin {
+			t.Fatalf("customer %s: %d %s", method, response.Code, response.Body.String())
+		}
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/tenants/55555555-5555-4555-8555-555555555555/connection-reports", strings.NewReader(connectionReportFixture))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("foreign tenant: %d %s", response.Code, response.Body.String())
+	}
+}

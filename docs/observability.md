@@ -139,3 +139,48 @@ from an edge rejection; an empty reason must not be labeled as a server timeout.
 `sync_connect_failed`, `sync_dial_timeout`, and `connection_failed` identify
 telemetry events, not public error codes. Retries can still succeed within the
 startup budget.
+
+### Automatic browser connection reports
+
+The TypeScript Connection SDK keeps the latest 64 connection events in memory
+from construction, without installing a recorder. A failed join, terminal
+connection failure, or exhausted recovery freezes one report and posts it to
+`POST /v1/tenants/{tenant_id}/connection-reports`. Successful joins, normal leaves,
+and successful recovery do not upload it. Sync socket opens/closes include codes
+and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
+attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
+signaling and WebRTC, not a media WebSocket.
+
+The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
+labels, and authenticates the participant media credential against the route's
+Tenant. It deliberately does not require an active participant or passing Sync
+readiness: those can be the failure being reported. Identity comes exclusively
+from that verified credential. The `sdk.connection_report` warning includes
+`tenant_id`, `space_id`, `episode_id`, SHA-256 `participant_id_hash` (the same
+format as presence expiry and Sync close events), `trigger`, and a compact JSON
+string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
+media signaling. Parse `report` as JSON when querying the API log dataset.
+
+There are no tokens, names, emails, IP addresses, URLs, peer close reasons, error
+messages, media contents, or arbitrary payloads in the report body. The SDK
+allows one report per participant per minute across connections in the same
+module instance; the API enforces six per participant per ten minutes through
+its existing limiter. The SDK holds one pending report while offline, retries a
+transport failure once on a later browser `online` event, bounds each upload to
+five seconds, and discards it on disposal. An HTTP response, including rejection,
+is final. Reports are best effort: closing/reloading the page, expired credentials,
+or failure before obtaining a signed access grant can prevent delivery. Diagnostics
+do not request credentials, change call recovery, or use persistent storage.
+
+Reproduce both a join failure and a full 60-second offline drop against the local
+API/Postgres/Sync stack (only remote vendor services are fixtures) on Instabox:
+
+```sh
+box run -- 'bash scripts/gates/instabox-run.sh --browser env GOMAXPROCS=1 ERL_FLAGS="+S 1:1" DASHBOARD_ENGINE_DEADLINE_SECONDS=600 bash apps/web/tests/dashboard/real-engine.sh pnpm --filter web exec node tests/dashboard/connection-reports-browser.mjs'
+```
+
+The proof writes allowlisted evidence under `artifacts/connection-reports/`:
+accepted API report log lines, matching Sync close evidence, the actual report
+bodies, and trace correlation. It checks reconnect delivery, caps/redaction,
+normal-call silence, and clean rejoin. The harness owns and stops its browser,
+servers, and disposable database.

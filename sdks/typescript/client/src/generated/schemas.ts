@@ -2401,6 +2401,11 @@ export const RenegotiateCloudflareSFU429ResponseHeadersSchema = Schema.Struct({
 });
 export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
 
+export const ReportConnectionFailurePathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type ReportConnectionFailurePathParams = typeof ReportConnectionFailurePathParamsSchema.Type;
+
 export const ReportConnectionFailureRequestBodySchema = ConnectionReportRequestSchema;
 export type ReportConnectionFailureRequestBody = typeof ReportConnectionFailureRequestBodySchema.Type;
 
@@ -5764,7 +5769,7 @@ export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
 ]);
 export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
 
-export const ReportConnectionFailureErrorSchema = Schema.Union([AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema]);
+export const ReportConnectionFailureErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ReportConnectionFailureError = typeof ReportConnectionFailureErrorSchema.Type;
 
 export const RequestRecordingExportErrorSchema = Schema.Union([

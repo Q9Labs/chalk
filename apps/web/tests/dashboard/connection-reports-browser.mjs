@@ -61,7 +61,7 @@ try {
     });
   assert.equal(reports.length, 1);
   assert.equal(reports[0].report.trigger, "join_failed");
-  assert(reports[0].report.events.some((event) => event.event === "space_join_span" && event.step === "access_initialize"));
+  assert(reports[0].report.events.some((event) => event.event === "space_join_span" && event.step === "wait_for_sync_live"));
   assert(reports[0].report.events.some((event) => event.event === "sync_socket_close" && event.close_code === 1013));
   assert(reports[0].report.events.some((event) => event.event === "connection_failed"));
   mode = "live";
