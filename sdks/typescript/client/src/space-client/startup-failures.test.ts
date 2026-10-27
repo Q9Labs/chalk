@@ -656,6 +656,7 @@ describe("public client exhausted recovery", () => {
         const dialCount = sockets.length;
         await vi.advanceTimersByTimeAsync(60_000);
         expect(sockets).toHaveLength(dialCount);
+        vi.useRealTimers();
         await liveBrowser();
         await client.join({ microphone: false, camera: false });
         expect(client.getSnapshot().connection.status).toBe("live");
