@@ -27,10 +27,10 @@ import { Chalk } from "${resolve("sdks/typescript/react/src/components/chalk/Cha
 const participant = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
 const recovery = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
 const deadline = Date.now() + 300000;
-const digest = await computeV1StateDigest({ revision: 1, stateSchemaVersion: 1, stateDigest: "0".repeat(64), status: "active", admissionPolicy: "open", deadlineAtMs: deadline, deadlineGeneration: 1, roleCapabilities: { owner: [] }, recording: null, participants: [{ participantId: participant, displayName: "You", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: [] }, { participantId: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22", displayName: "Remote participant", handRaised: false, admissionRevision: 1, role: "member", eligibleRoles: [], capabilities: [] }], admissionRequests: [] });
+const digest = await computeV1StateDigest({ revision: 1, stateSchemaVersion: 1, stateDigest: "0".repeat(64), status: "active", admissionPolicy: "open", deadlineAtMs: deadline, deadlineGeneration: 1, roleCapabilities: { owner: [], member: [] }, recording: null, participants: [{ participantId: participant, displayName: "You", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: [] }, { participantId: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22", displayName: "Remote participant", handRaised: false, admissionRevision: 1, role: "member", eligibleRoles: [], capabilities: [] }], admissionRequests: [] });
 const head = { revision: 1, state_schema_version: 1, state_digest: digest };
 await fetch("/frames", { method: "POST", body: JSON.stringify([
-  { type: "welcome", protocol: 1, participant_id: participant, participant_generation: 1, recovery_id: recovery, head, mode: "snapshot", entry_confirmation: true, entry_generation: 1, snapshot: { control_revision: 1, state_schema_version: 1, state_digest: digest, status: "active", admission_policy: "open", deadline_at_ms: deadline, deadline_generation: 1, role_capabilities: { owner: [] }, recording: null, participants: [{ participant_id: participant, display_name: "You", hand_raised: false, admission_revision: 1, role: "owner", capabilities: [] }, { participant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22", display_name: "Remote participant", hand_raised: false, admission_revision: 1, role: "member", capabilities: [] }], admission_requests: [] } },
+  { type: "welcome", protocol: 1, participant_id: participant, participant_generation: 1, recovery_id: recovery, head, mode: "snapshot", entry_confirmation: true, entry_generation: 1, snapshot: { control_revision: 1, state_schema_version: 1, state_digest: digest, status: "active", admission_policy: "open", deadline_at_ms: deadline, deadline_generation: 1, role_capabilities: { owner: [], member: [] }, recording: null, participants: [{ participant_id: participant, display_name: "You", hand_raised: false, admission_revision: 1, role: "owner", capabilities: [] }, { participant_id: "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22", display_name: "Remote participant", hand_raised: false, admission_revision: 1, role: "member", capabilities: [] }], admission_requests: [] } },
   ...["media", "presence"].map(stream => ({ type: "projection_snapshot", stream, projection_id: recovery, sequence: 0, items: [] })),
   { type: "recovery_complete", recovery_id: recovery, head }
 ]) });
@@ -171,7 +171,7 @@ try {
       const context = await browser.newContext({ viewport: { width, height }, recordVideo: { dir: resolve(output, "video"), size: { width, height } } });
       try {
         const page = await context.newPage();
-        page.on("pageerror", (error) => console.error("pageerror", error.message));
+        page.on("pageerror", (error) => console.error("pageerror", error.stack));
         await page.goto(`http://127.0.0.1:${server.address().port}`);
         await page.waitForFunction(() => window.proof?.client.getSnapshot().connection.status === "live");
         assert.equal(await page.getByText("Remote participant", { exact: true }).count(), 1);
