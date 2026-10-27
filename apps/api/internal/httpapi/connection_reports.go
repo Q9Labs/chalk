@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -22,6 +23,11 @@ const ConnectionReportEventLimit = 64
 const ConnectionReportMaxMilliseconds = 2147483647
 
 var connectionReportParticipantLimit = ratelimit.Policy{Name: "connection_reports.participant", Limit: 6, Window: 10 * time.Minute}
+
+type connectionReportRequest struct {
+	TenantID utilities.ID
+	Report   connectionReport
+}
 
 type connectionReport struct {
 	Version int                     `json:"version"`
@@ -117,20 +123,36 @@ func connectionReportDecodeError(err error) error {
 
 // A still-valid signed credential is enough: a failed join or expired presence
 // must be able to report without active-participant or readiness authorization.
-func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connectionReport, struct{}] {
-	return Post("/v1/connection-reports", "/connection-reports", "reportConnectionFailure", decodeConnectionReport,
-		func(ctx context.Context, report connectionReport) (struct{}, error) {
+func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connectionReportRequest, struct{}] {
+	return Post("/v1/tenants/{tenant_id}/connection-reports", "/tenants/{tenant_id}/connection-reports", "reportConnectionFailure", func(r *http.Request) (connectionReportRequest, error) {
+		tenantID, err := tenantIDRequest(r)
+		if err != nil {
+			return connectionReportRequest{}, err
+		}
+		report, err := decodeConnectionReport(r)
+		return connectionReportRequest{TenantID: tenantID, Report: report}, err
+	},
+		func(ctx context.Context, request connectionReportRequest) (struct{}, error) {
 			subject, ok := accessgrants.SubjectFromContext(ctx)
 			if !ok {
 				return struct{}{}, apiErrorUnauthenticated
 			}
+			if subject.TenantID != request.TenantID {
+				return struct{}{}, apiErrorForbidden
+			}
+			report := request.Report
+			encoded, err := json.Marshal(report)
+			if err != nil {
+				return struct{}{}, apiErrorInternal
+			}
 			observability.RequestLogger(ctx).WarnContext(ctx, "SDK connection failure", "event", "sdk.connection_report",
 				"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
 				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "report", report)
+				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
 			return struct{}{}, nil
 		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(connectionReportParticipantLimit).
+		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("ConnectionReportRequest", connectionReport{}, ConnectionReportBodyLimit).
 		RespondsNoBody(http.StatusNoContent).
-		Errors(apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable)
+		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable)
 }

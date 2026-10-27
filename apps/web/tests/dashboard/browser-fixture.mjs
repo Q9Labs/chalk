@@ -9,7 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
 // Owns the real dashboard/Sync processes and synthetic signed-in browser.
-export async function createDashboardProofFixture({ recordingName, devicesMissing = false } = {}) {
+export async function createDashboardProofFixture({ recordingName, devicesMissing = false, syncObservability = false } = {}) {
   assert(process.env.DASHBOARD_TEST_API_ORIGIN, "Run through real-engine.sh");
   const apiOrigin = process.env.DASHBOARD_TEST_API_ORIGIN;
   const webPort = process.env.CHALK_JOIN_WEB_PORT || process.env.CHALK_DASHBOARD_WEB_PORT || "18797";
@@ -115,6 +115,7 @@ export async function createDashboardProofFixture({ recordingName, devicesMissin
     await writeFile(
       config,
       `
+${syncObservability ? "Application.put_env(:chalk_sync, :observability, [enabled: true])\nLogger.configure_backend(:console, metadata: [:trace_id, :span_id])" : ""}
 Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
 Application.put_env(:chalk_sync, :database_url, System.fetch_env!("CHALK_DATABASE_URL"))
 Application.put_env(:chalk_sync, :instance_id, "dashboard-join-proof")

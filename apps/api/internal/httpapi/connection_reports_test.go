@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,17 @@ import (
 const connectionReportFixture = `{"version":1,"trigger":"join_failed","events":[{"event":"space_join_span","elapsed_ms":0,"step":"join","outcome":"started"},{"event":"sync_socket_close","elapsed_ms":400,"close_code":1006,"duration_ms":400},{"event":"connection_failed","elapsed_ms":401,"state":"joining","code":"sync_start_failed"}]}`
 
 func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
+	runtime, err := observability.Start(context.Background(), observability.Config{Environment: "test", Service: "connection-report-test", Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		ctx, cancel := observability.TelemetryShutdownContext()
+		defer cancel()
+		if err := runtime.Shutdown(ctx); err != nil {
+			t.Error(err)
+		}
+	}()
 	var logs bytes.Buffer
 	verifier := &participantMediaVerifierStub{subject: participantMediaSubject(t)}
 	router := chi.NewRouter()
@@ -26,7 +38,7 @@ func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 	router.Use(observability.OTelHTTPMiddleware())
 	connectionReportEndpoint(verifier).Mount(router, DefaultRateLimitOptions())
 	send := func(body string, auth bool) int {
-		r := httptest.NewRequest(http.MethodPost, "/connection-reports", strings.NewReader(body))
+		r := httptest.NewRequest(http.MethodPost, "/tenants/11111111-1111-4111-8111-111111111111/connection-reports", strings.NewReader(body))
 		if auth {
 			r.Header.Set("Authorization", "Bearer "+participantMediaCredential)
 		}
@@ -48,7 +60,20 @@ func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 			continue
 		}
 		found = true
-		for _, expected := range []string{participantHash, verifier.subject.EpisodeID.String(), "0af7651916cd43dd8448eb211c80319c", `"close_code":1006`, `"trigger":"join_failed"`} {
+		var logged struct {
+			Report string `json:"report"`
+		}
+		if err := json.Unmarshal([]byte(line), &logged); err != nil {
+			t.Fatal(err)
+		}
+		var report connectionReport
+		if err := json.Unmarshal([]byte(logged.Report), &report); err != nil {
+			t.Fatal(err)
+		}
+		if report.Events[1].CloseCode == nil || *report.Events[1].CloseCode != 1006 {
+			t.Fatal("missing close code")
+		}
+		for _, expected := range []string{participantHash, verifier.subject.EpisodeID.String(), "0af7651916cd43dd8448eb211c80319c", `"trigger":"join_failed"`} {
 			if !strings.Contains(line, expected) {
 				t.Errorf("missing %s in %s", expected, line)
 			}
@@ -97,7 +122,7 @@ func TestConnectionReportRejectsUnboundedOrPrivateInput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			router := chi.NewRouter()
 			connectionReportEndpoint(&participantMediaVerifierStub{subject: participantMediaSubject(t)}).Mount(router, DefaultRateLimitOptions())
-			request := httptest.NewRequest(http.MethodPost, "/connection-reports", strings.NewReader(tc.body))
+			request := httptest.NewRequest(http.MethodPost, "/tenants/11111111-1111-4111-8111-111111111111/connection-reports", strings.NewReader(tc.body))
 			request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -115,7 +140,7 @@ func TestConnectionReportRateLimitUsesVerifiedParticipant(t *testing.T) {
 	limits.Now = func() time.Time { return time.Unix(1000, 0) }
 	connectionReportEndpoint(verifier).Mount(router, limits)
 	send := func(auth bool) int {
-		request := httptest.NewRequest(http.MethodPost, "/connection-reports", strings.NewReader(connectionReportFixture))
+		request := httptest.NewRequest(http.MethodPost, "/tenants/11111111-1111-4111-8111-111111111111/connection-reports", strings.NewReader(connectionReportFixture))
 		if auth {
 			request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
 		}

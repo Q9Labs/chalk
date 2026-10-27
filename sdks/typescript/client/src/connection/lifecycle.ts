@@ -170,7 +170,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const clock = yield* Clock.Clock;
       const context = yield* Effect.context<ConnectionAccessService | ConnectionPlatformService | Clock.Clock>();
       const serviceScope = yield* Effect.scope;
-      const diagnostics = new ConnectionDiagnostics({ now: () => clock.currentTimeMillisUnsafe(), ...options.diagnostics });
+      const reporter = platform.createConnectionReporter?.(access.currentUnsafe);
+      const diagnostics = new ConnectionDiagnostics({
+        now: () => clock.currentTimeMillisUnsafe(),
+        ...options.diagnostics,
+        onEvent: (event) => {
+          reporter?.recordDiagnostic(event);
+          options.diagnostics?.onEvent?.(event);
+        },
+      });
+      const onTransportDiagnostic = (event: import("./report").ConnectionReportTransportEvent) => reporter?.recordTransport(event);
       const snapshotRef = yield* SubscriptionRef.make<ConnectionLifecycleSnapshot>(idleSnapshot());
       const queue = yield* Queue.unbounded<Work>();
       const listeners = new Set<() => void>();
@@ -480,6 +489,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                         if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
                         return replacement.media;
                       }),
+                    onTransportDiagnostic,
+                    traceparent: reporter?.traceparent,
                     onFailure: () => enqueueBackground(handleMediaFailure()),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
@@ -490,7 +501,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const sync = yield* trace(
               "create_sync_client",
               Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, traceparent: reporter?.traceparent }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
               }),
             );
@@ -850,7 +861,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               model.syncBindingCleanup?.();
               model.sync = null;
               const sync = yield* Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, traceparent: reporter?.traceparent }),
                 catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
               });
               model.sync = sync;
@@ -937,6 +948,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
+          if (snapshot.connection.phase !== model.mediaSnapshot?.connection.phase || snapshot.connection.peerConnectionState !== model.mediaSnapshot?.connection.peerConnectionState) {
+            onTransportDiagnostic({ event: "media_state", phase: snapshot.connection.peerConnectionState ?? snapshot.connection.phase });
+          }
           model.mediaSnapshot = snapshot;
           if (active(model) && (snapshot.connection.phase === "recovering" || (snapshot.connection.phase === "failed" && snapshot.failure?.recoverable))) yield* recover("media");
           yield* publish();
@@ -1010,6 +1024,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           model.closed = true;
+          reporter?.dispose();
           accessReplacementUnsubscribe();
           foregroundUnsubscribe?.();
           if (activeJoin) yield* Fiber.interrupt(activeJoin);

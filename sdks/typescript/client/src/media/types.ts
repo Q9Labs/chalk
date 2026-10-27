@@ -1,3 +1,4 @@
+import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import type { MediaPublication, MediaPublicationSource } from "./plane";
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
@@ -95,6 +96,8 @@ export type CloudflareSFURestartOptions = {
 };
 export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
 export type CloudflareSFUHTTPTransportOptions = {
+  readonly traceparent?: string;
+  readonly onDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly apiBaseURL: string;
   readonly credential?: CloudflareSFUCredentialProvider;
   /** @deprecated Use credential so refreshed media access is read before every request. */

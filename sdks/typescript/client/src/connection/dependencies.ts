@@ -1,3 +1,4 @@
+import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
@@ -77,6 +78,8 @@ export type ConnectionMediaFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
+  readonly traceparent?: string;
+  readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly onFailure: (error: unknown) => void;
   readonly onScreenEnded: () => void;
 };
@@ -84,6 +87,8 @@ export type ConnectionSyncFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
+  readonly traceparent?: string;
+  readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
 };
 export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];
@@ -95,6 +100,7 @@ export type ConnectionChatFileFactoryInput = {
 };
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
+  readonly createConnectionReporter?: (access: () => ParsedAccessGrant | null) => ConnectionReporter | undefined;
   readonly cancelPendingAdmission?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<boolean>;
   readonly mediaDevices: ConnectionMediaDevices;
   readonly createMediaClient: (input: ConnectionMediaFactoryInput) => ConnectionMediaClient;
