@@ -636,6 +636,21 @@ describe("public client exhausted recovery", () => {
       for (let second = 0; second < 15 && !errors.some((error) => error.code === code); second++) await vi.advanceTimersByTimeAsync(1000);
       expect(client.getSnapshot().connection.lastError).toMatchObject({ code, recoverable: true });
       expect(errors).toContainEqual(expect.objectContaining({ code, recoverable: true }));
+      if (stage === "sync") {
+        expect(client.getSnapshot().connection.status).toBe("failed");
+        expect(client.getSnapshot().participants.roster).toEqual([]);
+        expect(client.getSnapshot().media.remote).toEqual([]);
+        const dialCount = sockets.length;
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(sockets).toHaveLength(dialCount);
+        await liveBrowser();
+        await client.join({ microphone: false, camera: false });
+        expect(client.getSnapshot().connection.status).toBe("live");
+        expect(client.getSnapshot().participants.roster).not.toHaveLength(0);
+        expect(client.getSnapshot().connection.lastError).toBeNull();
+      } else {
+        expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      }
     } finally {
       client.dispose();
       if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);

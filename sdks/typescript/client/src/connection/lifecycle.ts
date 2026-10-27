@@ -673,8 +673,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   Effect.gen(function* () {
                     if (model.epoch !== epoch || !active(model)) return;
                     const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
-                    model.failure = toFailure(lifecycleFailure(code, true, "Connection interrupted. Reconnecting in the background."));
                     diagnostics.record({ event: "recovery_exhausted", state: model.state, epoch, code });
+                    if (plan.kind === "sync") {
+                      yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
+                      return;
+                    }
+                    model.failure = toFailure(lifecycleFailure(code, true, "Connection interrupted. Reconnecting in the background."));
                     yield* publish();
                   }),
                 );
