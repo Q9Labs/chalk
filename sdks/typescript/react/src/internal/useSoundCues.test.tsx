@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import { ChalkProvider } from "../bindings/context";
 import { createPreviewClient, createSnapshot } from "../test-support/preview-client";
 import { useSoundCues } from "./useSoundCues";
+import type { Participant, SpaceSnapshot } from "@q9labsai/chalk-client";
 
 it("synthesizes a quiet reaction tone only while Sounds is enabled", async () => {
   const start = vi.fn();
@@ -44,7 +45,6 @@ it("synthesizes a quiet reaction tone only while Sounds is enabled", async () =>
         </ChalkProvider>,
       ),
     );
-    window.dispatchEvent(new MouseEvent("click"));
     await react("first");
     expect(start).toHaveBeenCalledOnce();
     expect(stop.mock.calls[0]?.[0]).toBeLessThanOrEqual(0.3);
@@ -76,3 +76,72 @@ it("synthesizes a quiet reaction tone only while Sounds is enabled", async () =>
   }
   expect(close).toHaveBeenCalledOnce();
 });
+
+it("chimes for new remote joins, not self, initial rosters, reconnects, or bursts", async () => {
+  const play = vi.fn();
+  const createPlayer = () => ({ play, dispose: vi.fn() });
+  let now = 0;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+  const base = createSnapshot();
+  const client = createPreviewClient({ ...base, connection: { ...base.connection, status: "joining" }, self: { ...base.self, participantId: "self" } });
+  const root = createRoot(document.createElement("div"));
+  function Sounds({ enabled }: { enabled: boolean }) {
+    useSoundCues(enabled, createPlayer);
+    return null;
+  }
+  const render = (enabled: boolean) =>
+    act(async () =>
+      root.render(
+        <ChalkProvider client={client}>
+          <Sounds enabled={enabled} />
+        </ChalkProvider>,
+      ),
+    );
+  const update = (roster: readonly string[], status: SpaceSnapshot["connection"]["status"] = "live") =>
+    act(async () =>
+      client.updateSnapshot((snapshot) => ({
+        ...snapshot,
+        connection: { ...snapshot.connection, status },
+        participants: { ...snapshot.participants, roster: roster.map(participant) },
+      })),
+    );
+  const joins = () => play.mock.calls.filter(([cue]) => cue === "join");
+  try {
+    await render(true);
+    await update(["existing"]);
+    await update(["existing", "self"]);
+    expect(joins()).toHaveLength(0);
+    await update(["existing", "self", "remote"]);
+    expect(joins()).toHaveLength(1);
+    now = 1000;
+    await update(["existing", "self", "remote", "burst-1", "burst-2"]);
+    expect(joins()).toHaveLength(1);
+    now = 3000;
+    await update(["existing", "self", "remote", "burst-1", "burst-2", "later"]);
+    expect(joins()).toHaveLength(2);
+    now = 6000;
+    await update(["self", "remote", "burst-1", "burst-2", "later"]);
+    await update(["existing", "self", "remote", "burst-1", "burst-2", "later"]);
+    expect(joins()).toHaveLength(2);
+    await update([], "reconnecting");
+    await update(["existing", "self", "remote", "joined-while-offline"]);
+    await update(["existing", "self", "remote", "joined-while-offline"]);
+    expect(joins()).toHaveLength(2);
+    await render(false);
+    await update(["self", "muted-join"]);
+    await render(true);
+    await update(["self"]);
+    await update(["self", "muted-join"]);
+    expect(joins()).toHaveLength(2);
+    await update(["self", "muted-join", "new-join"]);
+    expect(joins()).toHaveLength(3);
+  } finally {
+    await act(async () => root.unmount());
+    client.dispose();
+    clock.mockRestore();
+  }
+});
+
+function participant(participantId: string): Participant {
+  return { participantId, displayName: participantId, role: "member", eligibleRoles: [], capabilities: [], handRaised: false, media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" }, presence: { state: "connected", speaking: false, activeSpeaker: false } };
+}
