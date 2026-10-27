@@ -78,7 +78,8 @@ export async function routeMobileLink(input: string | null): Promise<SpaceRoute 
   } catch {
     return null;
   }
-  if ((url.protocol === "https:" || url.protocol === "http:") && (url.hostname === "chalkmeet.com" || url.hostname === "chalk.q9labs.ai")) {
+  const isNightlyHost = url.hostname === "nightly.chalkmeet.com" && getApiBaseURL() === "https://nightly-api.chalkmeet.com";
+  if ((url.protocol === "https:" || url.protocol === "http:") && (url.hostname === "chalkmeet.com" || url.hostname === "chalk.q9labs.ai" || isNightlyHost)) {
     // Linking.openURL would send an associated URL straight back to this app.
     if (Platform.OS === "android") {
       const browsers = await getCustomTabsSupportingBrowsersAsync();

@@ -44,6 +44,14 @@ it("accepts nightly call links only when connected to the nightly API", () => {
   vi.mocked(getApiBaseURL).mockReturnValue("https://api.chalkmeet.com");
 });
 
+it("opens unrecognised nightly links in the browser when using the nightly API", async () => {
+  vi.mocked(getApiBaseURL).mockReturnValue("https://nightly-api.chalkmeet.com");
+  const link = "https://nightly.chalkmeet.com/abc-defg-hij?utm_source=chat";
+  expect(await routeMobileLink(link)).toBeNull();
+  expect(openBrowserAsync).toHaveBeenCalledWith(link, { browserPackage: "test.browser" });
+  vi.mocked(getApiBaseURL).mockReturnValue("https://api.chalkmeet.com");
+});
+
 it("uses an invite code as the route key when a short link has no slug", () => {
   expect(parseSpaceLink("https://chalkmeet.com/abc-defg-hij")).toEqual({
     kind: "space",
