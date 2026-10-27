@@ -25,6 +25,7 @@ jobs:
       baseline_run_id: ${{ steps.plan.outputs.baseline_run_id }}
       baseline_artifact_id: ${{ steps.plan.outputs.baseline_artifact_id }}
       recorder_control: ${{ steps.plan.outputs.recorder_control }}
+      previous_nightly_sha: ${{ steps.plan.outputs.previous_nightly_sha }}
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
@@ -93,3 +94,20 @@ jobs:
         run: |
           python3 scripts/releases/release.py record
           test "$DEPLOY_RESULT" = success && test "$PROOF_RESULT" = passed && test "$WEB_E2E_RESULT" = passed
+  github-release:
+    needs: [plan, record]
+    if: needs.plan.outputs.should_cut == 'true' && needs.record.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish verified nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: nightly
+          TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
+          PREVIOUS_SHA: ${{ needs.plan.outputs.previous_nightly_sha }}
+        run: python3 scripts/releases/publish_github_release.py

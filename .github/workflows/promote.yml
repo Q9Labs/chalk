@@ -180,3 +180,20 @@ jobs:
       - name: Refused or skipped promotion stays red
         if: always() && (needs.approve.result != 'success' || needs.release.result == 'skipped')
         run: exit 1
+  github-release:
+    needs: [select, result]
+    if: ${{ !cancelled() && needs.result.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish verified production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: production
+          TARGET_SHA: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+          PREVIOUS_SHA: ${{ fromJSON(needs.select.outputs.selection).previous.target_sha }}
+        run: python3 scripts/releases/publish_github_release.py

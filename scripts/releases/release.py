@@ -158,6 +158,7 @@ def plan(github, args):
     if cut:
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
+        result['previous_nightly_sha'] = payload(held[0])['target_sha'] if held else ''
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
         recorder_control = baseline['recorder_control']
