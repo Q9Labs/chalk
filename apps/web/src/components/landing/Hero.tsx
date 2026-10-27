@@ -9,7 +9,7 @@ import { CallPreview } from "./CallPreview";
 
 const INSTALL = "pnpm add @q9labsai/chalk-react";
 
-export function JoinForm() {
+function JoinForm() {
   const id = useId();
   const [invalid, setInvalid] = useState(false);
 

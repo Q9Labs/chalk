@@ -71,7 +71,7 @@ export function Dither({ kind }: { readonly kind: Kind }) {
         : kind === "footer"
           ? ramp(base, IS_NIGHTLY ? nightAnchor : SLATE, dark ? [0, 0.08, 0.16, 0.24] : [0, 0.04, 0.08, 0.12], 1)
           : ramp(IS_NIGHTLY && kind === "cta" && dark ? NAVY : base, kind === "speed" ? SLATE : IS_NIGHTLY ? nightAnchor : TEAL, levels, dark ? 1 : 1.2);
-    function draw() {
+    const draw = () => {
       if (kind === "footer") host.style.setProperty("--footer-tint", `rgb(${palette[3]?.join(",")})`);
       const rect = host.getBoundingClientRect();
       const W = rect.width,
@@ -119,7 +119,7 @@ export function Dither({ kind }: { readonly kind: Kind }) {
         }
       }
       context.putImageData(image, 0, 0);
-    }
+    };
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(host);
