@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { CallPreview } from "./CallPreview";
@@ -16,6 +18,31 @@ const WHO_CAME = [
 ] as const;
 
 export function AfterSection() {
+  const [position, setPosition] = useState(942);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (!playing) return;
+    const interval = window.setInterval(
+      () =>
+        setPosition((value) => {
+          if (value >= 2769) {
+            setPlaying(false);
+            return 2770;
+          }
+          return value + 1;
+        }),
+      1000,
+    );
+    return () => window.clearInterval(interval);
+  }, [playing]);
+  function seek(at: string) {
+    const [minutes = "0", seconds = "0"] = at.split(":");
+    setPosition(Number(minutes) * 60 + Number(seconds));
+    setPlaying(true);
+  }
+  const timestamp = `${Math.floor(position / 60)
+    .toString()
+    .padStart(2, "0")}:${(position % 60).toString().padStart(2, "0")}`;
   return (
     <section className="band" aria-labelledby="after-title">
       <div className="ctn">
@@ -23,25 +50,23 @@ export function AfterSection() {
           After the call, it’s all there.
         </h2>
         <p className="sub">Open any past session to watch the recording, search the transcript and see who came and when.</p>
-        <div className="cols3">
+        <div className="aftercard">
           <div>
-            <h3>Recording</h3>
+            <h3 id="recording">Recording</h3>
             <p>Turn it on in the call, and it’s saved to the session.</p>
-            <div className="mplay">
-              <CallPreview label="A paused recording of a call with four people, at 15:42 of 46:10" layout="still" initialWidth={380} />
+            <button type="button" className="mplay" aria-label={`${playing ? "Pause" : "Play"} example recording at ${timestamp}`} onClick={() => setPlaying((value) => !value)}>
+              <CallPreview label="Example recording frame" still />
               <span className="mp-btn" aria-hidden="true">
-                <Icon name="play" />
+                {playing ? "Ⅱ" : <Icon name="play" />}
               </span>
               <span className="mp-bar" aria-hidden="true">
-                <i />
+                <i style={{ width: `${(position / 2770) * 100}%` }} />
               </span>
-              <span className="mp-t mono" aria-hidden="true">
-                15:42 / 46:10
-              </span>
-            </div>
+              <span className="mp-t mono">{timestamp} / 46:10</span>
+            </button>
           </div>
           <div>
-            <h3>Transcript</h3>
+            <h3 id="transcript">Transcript</h3>
             <p>Search it, and jump to the moment someone said it.</p>
             <div className="mtr">
               <span className="mtr-q">
@@ -49,7 +74,7 @@ export function AfterSection() {
                 Friday<em>2 matches</em>
               </span>
               {TRANSCRIPT.map((line) => (
-                <div key={line.at} className="mtr-l">
+                <button type="button" key={line.at} className="mtr-l" onClick={() => seek(line.at)} aria-label={`Seek recording to ${line.at}: ${line.name}`}>
                   <span className="mono">{line.at}</span>
                   <div>
                     <b>{line.name}</b>
@@ -59,15 +84,15 @@ export function AfterSection() {
                       {line.after}
                     </p>
                   </div>
-                </div>
+                </button>
               ))}
-              <div className="mtr-l">
+              <button type="button" className="mtr-l" onClick={() => seek("02:04")} aria-label="Seek recording to 02:04: Akash Rao">
                 <span className="mono">02:04</span>
                 <div>
                   <b>Akash Rao</b>
                   <p>Yes. The recording fix lands Monday.</p>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
           <div>

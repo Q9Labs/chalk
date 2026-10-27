@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AfterSection } from "../components/landing/AfterSection";
+import { CtaSection } from "../components/landing/CtaSection";
 import { EmbedSection } from "../components/landing/EmbedSection";
 import { Hero } from "../components/landing/Hero";
 import { LinkSection } from "../components/landing/LinkSection";
@@ -69,8 +70,9 @@ function LandingPage() {
         <SpeedSection />
         <EmbedSection />
         <OpenSourceSection />
+        <CtaSection />
       </main>
-      <SiteFooter />
+      <SiteFooter dither />
       {/* In the body, not the head, so it can't shift the head's scripts out of step during hydration. */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
     </SiteRoot>

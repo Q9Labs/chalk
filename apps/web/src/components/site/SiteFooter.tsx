@@ -1,9 +1,11 @@
+import { Dither } from "../landing/Dither";
 import { GITHUB_URL, SIGN_IN_HREF, START_CALL_HREF } from "./links";
 import { Lockup } from "./Lockup";
 
-export function SiteFooter() {
+export function SiteFooter({ dither = false }: { readonly dither?: boolean }) {
   return (
-    <footer className="foot">
+    <footer className={dither ? "foot dither-footer" : "foot"}>
+      {dither ? <Dither kind="footer" /> : null}
       <div className="ctn">
         <div className="top">
           <div className="brand">
