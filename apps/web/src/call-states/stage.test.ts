@@ -318,7 +318,7 @@ it.each(["dark", "light"])("the board follow proof action follows Nora in %s", a
     if ("click" in action) await page.getByRole(action.role ?? "button", { name: action.click, exact: true }).click({ timeout: 5000 });
   }
   await page.locator(".chalk-board-chip").filter({ hasText: "Following Nora" }).waitFor();
-  expect(await page.getByRole("button", { name: "Stop following Nora", exact: true }).isVisible()).toBe(true);
+  expect(await page.locator(".chalk-board-chip").filter({ hasText: "Following Nora" }).getByRole("button", { name: "Stop", exact: true }).isVisible()).toBe(true);
 });
 
 it("reads the real engine history for keyboard edits and resets it after shared clear", async () => {
