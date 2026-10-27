@@ -3,6 +3,7 @@ import { createV1SyncClient, InMemoryV1PendingTargetStore } from "../sync";
 import type { SpaceClientOptions } from "./types";
 import { createSpaceClient, SpaceClientError } from "./index";
 import { createSpaceClientForPlatform } from "./space-client";
+import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { computeV1StateDigest } from "../sync/v1-reducer";
 import type { V1ControlState } from "../sync/v1-types";
 import type { ClientFailure } from "./types";
@@ -562,6 +563,57 @@ describe("public client capture warnings", () => {
 });
 
 describe("public client exhausted recovery", () => {
+  it("keeps recovering media when Sync has already reconnected", async () => {
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    try {
+      await client.join({ microphone: false, camera: false });
+      const live = platform.sync.getSnapshot();
+      vi.useFakeTimers();
+      platform.emitSync({ ...live, connection: { phase: "connecting" } });
+      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering" } });
+      await vi.advanceTimersByTimeAsync(500);
+      platform.emitSync(live);
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      expect(client.getSnapshot().connection.lastError?.code).not.toBe("connection.sync_recovery_exhausted");
+      platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live" } });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
+  it.each(["hidden", "suspended"] as const)("does not terminate Sync recovery for time spent %s", async (interruption) => {
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    try {
+      await client.join({ microphone: false, camera: false });
+      const live = platform.sync.getSnapshot();
+      vi.useFakeTimers();
+      platform.emitSync({ ...live, connection: { phase: "connecting" } });
+      await vi.advanceTimersByTimeAsync(500);
+      if (interruption === "hidden") {
+        vi.stubGlobal("document", { visibilityState: "hidden" });
+        await vi.advanceTimersByTimeAsync(30_000);
+      } else {
+        vi.setSystemTime(Date.now() + 30_000);
+        await vi.advanceTimersByTimeAsync(10_000);
+      }
+      expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      expect(client.getSnapshot().connection.lastError).toBeNull();
+      vi.stubGlobal("document", { visibilityState: "visible" });
+      platform.emitSync(live);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
   it("surfaces snapshot failure through the public client without starting another recovery", async () => {
     const sockets = await liveBrowser(true);
     const client = makeClient(async () => accessGrant());
