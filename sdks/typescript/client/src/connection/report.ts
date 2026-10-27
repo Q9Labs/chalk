@@ -1,22 +1,46 @@
-import type { ConnectionReportDelivery, ReporterOptions } from "./report-delivery";
+import type { ParsedAccessGrant } from "../access/grant";
 import type { ConnectionDiagnostic } from "./diagnostics";
 
 import type { ConnectionReport, ConnectionReportTransportEvent } from "../transport-diagnostics";
 export type { ConnectionReport, ConnectionReportTransportEvent } from "../transport-diagnostics";
 type ReportEvent = ConnectionReport["events"][number];
 const MAX_EVENTS = 64;
+const MAX_BYTES = 32768;
 const MAX_MS = 2147483647;
+const COOLDOWN_MS = 60000;
+// Shared by connections in this SDK instance; bounded even across repeated joins.
+const participantCooldowns = new Map<string, number>();
 const milliseconds = (value: number) => Math.max(0, Math.min(MAX_MS, Math.round(Number.isFinite(value) ? value : 0)));
 const optionalMilliseconds = (value: number | null | undefined) => (value == null ? undefined : milliseconds(value));
+
+function reserveParticipantReport(access: ParsedAccessGrant, now: number): boolean {
+  const key = `${access.subject.tenantId}:${access.subject.participantId}`;
+  for (const [participant, until] of participantCooldowns) if (until <= now) participantCooldowns.delete(participant);
+  if (participantCooldowns.has(key)) return false;
+  if (participantCooldowns.size >= 128) participantCooldowns.delete(participantCooldowns.keys().next().value ?? "");
+  participantCooldowns.set(key, now + COOLDOWN_MS);
+  return true;
+}
+
+type ReporterOptions = {
+  readonly traceparent: string;
+  readonly now: () => number;
+  readonly access: () => ParsedAccessGrant | null;
+  readonly send: (access: ParsedAccessGrant, report: ConnectionReport, signal: AbortSignal, traceparent: string) => Promise<void>;
+  readonly online: () => boolean;
+  readonly subscribeOnline: (listener: () => void) => () => void;
+};
+
+type PendingReport = { readonly access: ParsedAccessGrant; readonly report: ConnectionReport; attempts: number };
 
 /** Only SDK-owned enums and numeric facts enter this buffer. No generic logging. */
 export class ConnectionReporter {
   readonly #events: ReportEvent[] = [];
   readonly #startedAt: number;
   readonly #options: ReporterOptions;
-  #delivery: ConnectionReportDelivery | undefined;
-  #waiting = false;
+  #pending: PendingReport | null = null;
   #unsubscribe: (() => void) | undefined;
+  #controller: AbortController | null = null;
   #disposed = false;
 
   constructor(options: ReporterOptions) {
@@ -56,9 +80,10 @@ export class ConnectionReporter {
 
   dispose(): void {
     this.#disposed = true;
-    this.#delivery?.dispose();
+    this.#controller?.abort();
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
+    this.#pending = null;
     this.#events.length = 0;
   }
 
@@ -75,33 +100,42 @@ export class ConnectionReporter {
     if (this.#events.length > MAX_EVENTS) this.#events.shift();
   }
   #report(trigger: ConnectionReport["trigger"]): void {
-    if (this.#disposed || this.#waiting) return;
+    if (this.#disposed || this.#pending) return;
     const access = this.#options.access();
     // Never turn diagnostics into an anonymous ingestion or credential-refresh path.
     if (!access) return;
-    const report: ConnectionReport = { version: 1, trigger, events: this.#events.slice() };
-    if (this.#delivery) {
-      this.#delivery.report(access, report);
-      return;
+    if (!reserveParticipantReport(access, this.#options.now())) return;
+    const events = this.#events.slice();
+    const report: ConnectionReport = { version: 1, trigger, events };
+    while (events.length && new TextEncoder().encode(JSON.stringify(report)).byteLength > MAX_BYTES) events.shift();
+    if (!events.length) return;
+    this.#pending = { access, report, attempts: 0 };
+    this.#unsubscribe = this.#options.subscribeOnline(() => {
+      void this.#flush();
+    });
+    void this.#flush();
+  }
+  async #flush(): Promise<void> {
+    const pending = this.#pending;
+    if (!pending || this.#controller || this.#disposed || !this.#options.online()) return;
+    const controller = new AbortController();
+    this.#controller = controller;
+    pending.attempts += 1;
+    const timer = globalThis.setTimeout(() => controller.abort(), 5000);
+    try {
+      await this.#options.send(pending.access, pending.report, controller.signal, this.traceparent);
+      this.#pending = null;
+    } catch {
+      // Best effort: one reconnect retry only. Reporting must not recover the call
+      // or recursively report its own failures.
+      if (pending.attempts >= 2) this.#pending = null;
+    } finally {
+      globalThis.clearTimeout(timer);
+      this.#controller = null;
+      if (!this.#pending) {
+        this.#unsubscribe?.();
+        this.#unsubscribe = undefined;
+      }
     }
-    this.#waiting = true;
-    const load = () => {
-      if (this.#disposed || !this.#options.online()) return;
-      this.#unsubscribe?.();
-      this.#unsubscribe = undefined;
-      void import("./report-delivery")
-        .then(({ ConnectionReportDelivery }) => {
-          if (this.#disposed) return;
-          this.#delivery = new ConnectionReportDelivery(this.#options);
-          this.#waiting = false;
-          this.#delivery.report(access, report);
-        })
-        .catch(() => {
-          // Loading failure is best effort too; never interrupt or recover the call.
-          this.#waiting = false;
-        });
-    };
-    if (this.#options.online()) load();
-    else this.#unsubscribe = this.#options.subscribeOnline(load);
   }
 }

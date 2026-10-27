@@ -25,8 +25,16 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
           return () => globalThis.window?.removeEventListener("online", listener);
         },
         send: async (grant, report, signal, traceparent) => {
-          const { sendConnectionReport } = await import("./report-delivery");
-          await sendConnectionReport(options.apiBaseURL, grant, report, signal, traceparent);
+          const response = await fetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(grant.subject.tenantId)}/connection-reports`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${grant.media.token}`, "Content-Type": "application/json", traceparent },
+            body: JSON.stringify(report),
+            signal,
+            keepalive: true,
+            credentials: "omit",
+          });
+          // A response (including rejection) is final; retry only transport failures.
+          await response.body?.cancel();
         },
       });
     },

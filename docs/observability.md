@@ -169,9 +169,12 @@ its existing limiter. The SDK holds one pending report while offline, retries a
 transport failure once on a later browser `online` event, bounds each upload to
 five seconds, and discards it on disposal. An HTTP response, including rejection,
 is final. Reports are best effort: closing/reloading the page, expired credentials,
-or failure before obtaining a signed access grant can prevent delivery. Delivery code is loaded only after a terminal failure and once the browser is online;
-the capture buffer is available before joining. Diagnostics
+or failure before obtaining a signed access grant can prevent delivery. Diagnostics
 do not request credentials, change call recovery, or use persistent storage.
+
+The automatic capture and authenticated report contract add about 1.3 KiB of loaded
+compressed JavaScript. The call fixture and production-route JavaScript caps allow
+2 KiB for this feature; timing, CSS, and lifecycle-leak limits are unchanged.
 
 Reproduce both a join failure and a full 60-second offline drop against the local
 API/Postgres/Sync stack (only remote vendor services are fixtures) on Instabox:
