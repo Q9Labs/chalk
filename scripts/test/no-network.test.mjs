@@ -19,6 +19,20 @@ for (const [transport, request] of [
   });
 }
 
+for (const [name, options] of [
+  ["localhost", { host: "localhost", port: 0 }],
+  ["IPv6 loopback", { host: "::1", port: 0 }],
+  ["default host", { port: 0 }],
+  ["null host", { host: null, port: 0 }],
+  ["Unix socket", { path: "/tmp/chalk-network-guard-missing.sock" }],
+]) {
+  test(`allows ${name}`, () => {
+    const request = `import { connect } from "node:net"; connect(${JSON.stringify(options)}).on("error", () => {}).on("connect", function () { this.destroy(); });`;
+    const result = spawnSync(process.execPath, [runner, process.execPath, "--input-type=module", "--eval", request], { encoding: "utf8", timeout: 10_000 });
+    assert.equal(result.status, 0, result.stderr);
+  });
+}
+
 test("allows real loopback HTTP, but blocks a redirect to a remote host", () => {
   const result = spawnSync(
     process.execPath,

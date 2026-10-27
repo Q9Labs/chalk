@@ -23,6 +23,7 @@ function connectionHostname(options, host) {
   return typeof host === "string" ? host : "localhost";
 }
 
-function isLocal(hostname = "localhost") {
+function isLocal(hostname) {
+  hostname ??= "localhost";
   return localHosts.has(hostname) || (isIP(hostname) === 4 && hostname.startsWith("127."));
 }
