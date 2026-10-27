@@ -195,6 +195,8 @@ describe("public client startup failure contract", () => {
       close() {}
     }
     vi.stubGlobal("WebSocket", PreHandshakeFailureSocket);
+    // Keep retry jitter away from the deadline: its snapshot precedes async cleanup.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
     const debug = vi.fn();
     const client = makeClient(async () => accessGrant(), 10_000, { debug });
     const errors: ClientFailure[] = [];
@@ -216,6 +218,7 @@ describe("public client startup failure contract", () => {
     } finally {
       client.dispose();
       await vi.advanceTimersByTimeAsync(1);
+      random.mockRestore();
     }
   });
 
