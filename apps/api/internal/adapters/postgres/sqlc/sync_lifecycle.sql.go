@@ -149,12 +149,13 @@ select control.tenant_id, control.space_id, control.episode_id
 from sync_episode_control control
 where $1::timestamptz <= clock_timestamp()
     and exists (
-        select 1 from participant_presence_leases lease
-        join participants p on p.tenant_id=lease.tenant_id and p.space_id=lease.space_id
-            and p.episode_id=lease.episode_id and p.id=lease.participant_id and p.generation=lease.generation
+        select 1 from participants p
         join episodes e on e.tenant_id=p.tenant_id and e.space_id=p.space_id and e.id=p.episode_id
-        where lease.tenant_id=control.tenant_id and lease.space_id=control.space_id
-            and lease.episode_id=control.episode_id and lease.expires_at <= clock_timestamp()
+        left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
+            and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
+        where p.tenant_id=control.tenant_id and p.space_id=control.space_id
+            and p.episode_id=control.episode_id
+            and coalesce(lease.expires_at, p.joined_at + interval '120 seconds') <= clock_timestamp()
             and p.status='active' and e.status='active'
     )
 order by control.episode_id
@@ -1011,10 +1012,11 @@ const expiredParticipantPresence = `-- name: ExpiredParticipantPresence :many
 select p.id, p.name, p.metadata, p.capabilities, p.tenant_id, p.space_id, p.episode_id, p.account_id, p.identity_id, p.media_connection_id, p.media_connection_generation, p.generation, p.status, p.role, p.joined_at, p.left_at, p.updated_at, p.created_at, p.first_joined_at, p.last_left_reason, coalesce(seat.issued_entry_generation, 0)::bigint as entry_generation from participants p
 left join participant_join_seats seat on seat.tenant_id=p.tenant_id and seat.space_id=p.space_id
     and seat.episode_id=p.episode_id and seat.participant_id=p.id and seat.generation=p.generation
-join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
+left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
     and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
 where p.tenant_id=$1 and p.space_id=$2 and p.episode_id=$3
-    and p.status='active' and lease.expires_at <= clock_timestamp()
+    and p.status='active'
+    and coalesce(lease.expires_at, p.joined_at + interval '120 seconds') <= clock_timestamp()
 order by p.id
 for update of p
 limit $4

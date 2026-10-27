@@ -217,6 +217,10 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
   end
 
   test "a legacy joined participant without a first socket expires while the host stays", ctx do
+    fixture =
+      SyncPostgres.seed_webhook_endpoint(ctx.fixture, ctx.connection, ["participant.left"])
+
+    ctx = %{ctx | fixture: fixture}
     healthy_identity = Enum.at(ctx.fixture.identities, 1)
     healthy = connect(ctx.port, healthy_identity)
 
@@ -234,13 +238,54 @@ defmodule ChalkSync.Transport.DroppedPresencePostgresTest do
       [UUID.dump!(ctx.identity.participant_id)]
     )
 
+    Postgrex.query!(
+      ctx.connection,
+      "update sync_presence_runtime set recover_after=clock_timestamp()+interval '120 seconds' where singleton",
+      []
+    )
+
+    assert tick(ctx) == 0
+    allow_expiry(ctx.connection)
     healthy = ping(healthy)
     assert tick(ctx) == 1
     assert eventually(fn -> participant_status(ctx, ctx.identity) == "left" end)
     assert participant_status(ctx, healthy_identity) == "active"
     assert episode_status(ctx) == "active"
+
+    {:json, %{"payload" => %{"participant_id" => participant_id}}, healthy} =
+      recv_until(healthy, fn
+        {:json, %{"type" => "event", "name" => "participant_left"}, _} -> true
+        _ -> false
+      end)
+
+    assert participant_id == ctx.identity.participant_id
+
+    [[left_at, body]] =
+      Postgrex.query!(
+        ctx.connection,
+        "select p.left_at,e.body from participants p join webhook_events e on e.tenant_id=p.tenant_id and e.resource_id=p.id and e.event_name='participant.left' where p.id=$1",
+        [UUID.dump!(ctx.identity.participant_id)]
+      ).rows
+
+    assert Jason.decode!(body)["data"]["object"]["left_at"] ==
+             left_at |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+
     assert tick(ctx) == 0
     Client.close_tcp(healthy)
+  end
+
+  test "a first socket cancels missing-lease expiry before the claim", ctx do
+    Postgrex.query!(
+      ctx.connection,
+      "update participants set joined_at=clock_timestamp()-interval '121 seconds' where id=$1",
+      [UUID.dump!(ctx.identity.participant_id)]
+    )
+
+    first_socket = connect(ctx.port, ctx.identity)
+    assert tick(ctx) == 0
+    assert participant_status(ctx, ctx.identity) == "active"
+    assert_no_leave(ctx)
+    Client.close_tcp(first_socket)
   end
 
   test "reconnect before the expiry claim cancels participant departure", ctx do
