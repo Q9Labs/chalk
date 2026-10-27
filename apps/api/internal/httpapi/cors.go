@@ -21,8 +21,9 @@ type TenantOriginAuthorizer interface {
 }
 
 type CORSOptions struct {
-	AllowedOrigins []string
-	TenantOrigins  TenantOriginAuthorizer
+	AllowedOrigins   []string
+	TenantOrigins    TenantOriginAuthorizer
+	ChatParticipants ChatParticipantVerifier
 }
 
 func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handler) http.Handler {
@@ -42,7 +43,7 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 			if origin != "" {
 				w.Header().Add("Vary", "Origin")
 			}
-			allowedOrigin, policy, err := requestAllowedCORSOrigin(r, origin, allowed, allowAnyOrigin, options.TenantOrigins)
+			allowedOrigin, policy, err := requestAllowedCORSOrigin(r, origin, allowed, allowAnyOrigin, options)
 			if err != nil {
 				recordCORSDecision(r.Context(), policy, "unavailable")
 				writeError(w, http.StatusServiceUnavailable, "cors.policy_unavailable", "CORS policy is unavailable")
@@ -88,7 +89,7 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 		})
 		limited := rateLimit(rateLimits, corsPolicyLookupRateLimit)(serve)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if requiresTenantOriginLookup(r, r.Header.Get("Origin"), allowed, options.TenantOrigins) {
+			if requiresTenantOriginLookup(r, r.Header.Get("Origin"), allowed, options) {
 				limited.ServeHTTP(w, r)
 				return
 			}
@@ -97,16 +98,23 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 	}
 }
 
-func requiresTenantOriginLookup(r *http.Request, origin string, allowed map[string]struct{}, tenantOrigins TenantOriginAuthorizer) bool {
+func requiresTenantOriginLookup(r *http.Request, origin string, allowed map[string]struct{}, options CORSOptions) bool {
 	tenantID, tenantScoped := tenantIDFromCORSPath(r.URL.Path)
-	if !tenantScoped || tenantID.IsZero() || origin == "" || tenantOrigins == nil {
+	if origin == "" || options.TenantOrigins == nil {
+		return false
+	}
+	if (!tenantScoped || tenantID.IsZero()) && !(isChatAttachmentPath(r.URL.Path) && options.ChatParticipants != nil && r.Method != http.MethodOptions) {
 		return false
 	}
 	_, deploymentOrigin := allowedCORSOrigin(origin, allowed, false)
 	return !deploymentOrigin
 }
 
-func requestAllowedCORSOrigin(r *http.Request, origin string, allowed map[string]struct{}, allowAnyOrigin bool, tenantOrigins TenantOriginAuthorizer) (string, string, error) {
+func requestAllowedCORSOrigin(r *http.Request, origin string, allowed map[string]struct{}, allowAnyOrigin bool, options CORSOptions) (string, string, error) {
+	tenantOrigins := options.TenantOrigins
+	if isChatAttachmentPath(r.URL.Path) && options.ChatParticipants != nil && tenantOrigins != nil {
+		return chatAttachmentCORSOrigin(r, origin, allowed, options)
+	}
 	tenantID, tenantScoped := tenantIDFromCORSPath(r.URL.Path)
 	if !tenantScoped {
 		allowedOrigin, ok := allowedCORSOrigin(origin, allowed, allowAnyOrigin)
@@ -166,4 +174,43 @@ func allowedCORSOrigin(origin string, allowed map[string]struct{}, allowAnyOrigi
 	}
 
 	return "", false
+}
+
+func isChatAttachmentPath(path string) bool {
+	return path == "/v1/chat/attachments/uploads" || strings.HasPrefix(path, "/v1/chat/attachments/uploads/") || (strings.HasPrefix(path, "/v1/chat/attachments/") && strings.HasSuffix(path, "/download"))
+}
+
+func chatAttachmentCORSOrigin(r *http.Request, origin string, allowed map[string]struct{}, options CORSOptions) (string, string, error) {
+	if deploymentOrigin, ok := allowedCORSOrigin(origin, allowed, false); ok {
+		return deploymentOrigin, "deployment", nil
+	}
+	if origin == "" {
+		return "", "tenant", nil
+	}
+	// Preflight has no participant credential. Authorize data responses against the
+	// verified participant's Tenant, never a caller-supplied Tenant hint.
+	if r.Method == http.MethodOptions {
+		return origin, "tenant", nil
+	}
+	token, ok := bearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		return "", "tenant", nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
+	defer cancel()
+	subject, valid, err := options.ChatParticipants.VerifyChatParticipant(ctx, token)
+	if err != nil {
+		return "", "tenant", err
+	}
+	if !valid {
+		return "", "tenant", nil
+	}
+	allowedOrigin, err := options.TenantOrigins.AllowsOrigin(ctx, subject.TenantID, origin)
+	if err != nil {
+		return "", "tenant", err
+	}
+	if !allowedOrigin {
+		return "", "tenant", nil
+	}
+	return origin, "tenant", nil
 }

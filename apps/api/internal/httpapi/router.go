@@ -112,7 +112,9 @@ func NewRouter(options Options) http.Handler {
 	if len(options.Middleware) > 0 {
 		r.Use(options.Middleware...)
 	}
-	r.Use(allowCORS(options.CORS, options.RateLimit))
+	cors := options.CORS
+	cors.ChatParticipants = options.ChatParticipants
+	r.Use(allowCORS(cors, options.RateLimit))
 	if options.LocalSystemToken != "" {
 		r.Use(acceptLocalSystemToken(options.LocalSystemToken))
 	}
