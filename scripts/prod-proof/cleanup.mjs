@@ -2,6 +2,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { check, request, save, waitFor, errorEvidence, ProofError } from "./runtime.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
+import { requestEpisodeEnd } from "./episode-end.mjs";
 
 export function runLabel(runId) {
   check(/^[A-Za-z0-9_-]{1,51}$/.test(runId), "Invalid proof run ID");
@@ -138,7 +139,7 @@ function isProofSpace(space) {
   return [!space.archived, Boolean(runId), space.name === `chalk-proof:${runId}`].every(Boolean);
 }
 async function endEpisode(call, path, episode) {
-  if (episode.status !== "ended") await call("POST", `${path}/${episode.id}/end`, {});
+  if (episode.status !== "ended") await requestEpisodeEnd(call, `${path}/${episode.id}`);
   await waitFor("cleanup Episode ended", async () => (await call("GET", `${path}/${episode.id}`)).status === "ended", 60_000, 1000, AbortSignal.timeout(60_000));
 }
 async function sweepSpace(call, base, space, runId, now) {
