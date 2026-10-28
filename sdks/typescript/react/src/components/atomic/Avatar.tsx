@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Facehash } from "@q9labsai/facehash/react";
 import { cn } from "../../utils/cn";
 import { getParticipantAvatarRecipe } from "../../utils/colorGenerator";
@@ -48,14 +48,10 @@ const statusColorMap = {
 };
 
 export const Avatar = React.memo(({ name, src, size = "md", status, className, style, gradientPreference, generated = true, animated = true }: AvatarProps) => {
-  const [imageError, setImageError] = useState(false);
-  const hasUploadedImage = Boolean(src) && !imageError;
+  const [image, setImage] = useState({ src, name, generated, failed: false });
+  if (image.src !== src || image.name !== name || image.generated !== generated) setImage({ src, name, generated, failed: false });
+  const hasUploadedImage = Boolean(src) && !image.failed;
   const shouldShowGeneratedAvatar = generated && Boolean(name) && !hasUploadedImage;
-
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Reset existing avatar fallback when its source changes.
-  useEffect(() => {
-    setImageError(false);
-  }, [src, name, generated]);
 
   const avatarRecipe = useMemo(() => getParticipantAvatarRecipe(name || "unknown", gradientPreference), [gradientPreference, name]);
   const { size: pxSize, fontSize } = sizeMap[size];
@@ -63,7 +59,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
   return (
     <div className={cn("relative inline-flex shrink-0 rounded-full", className)} style={{ width: pxSize, height: pxSize, ...style }} role="img" aria-label={`Avatar for ${name || "Unknown"}`}>
       {hasUploadedImage ? (
-        <img src={src || ""} alt={name} className="h-full w-full rounded-full object-cover" onError={() => setImageError(true)} />
+        <img src={src || ""} alt={name} className="h-full w-full rounded-full object-cover" onError={() => setImage({ src, name, generated, failed: true })} />
       ) : shouldShowGeneratedAvatar ? (
         <div aria-hidden="true" className="h-full w-full overflow-hidden rounded-full">
           <GeneratedFacehash name={name || "guest"} size={pxSize} variant="flat" interactive={false} intensity3d="subtle" enableBlink={animated} colors={[...avatarRecipe.facehashColors]} />

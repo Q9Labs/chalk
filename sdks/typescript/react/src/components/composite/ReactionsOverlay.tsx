@@ -59,13 +59,13 @@ function TileReaction({ reaction, root }: { readonly reaction: ActiveReaction; r
   const [host, setHost] = useState<Element | null>(null);
   const emoji = useRef<HTMLSpanElement>(null);
   const reduced = usePrefersReducedMotion();
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing reaction host lookup and cancellable animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Resolve the committed participant tile as the reaction portal host; render-time DOM lookup can see the previous stage.
   useEffect(() => {
     const frame = root.current?.closest("[data-part=call-frame]");
     const tile = Array.from(frame?.querySelectorAll<HTMLElement>("[data-stage-item]") ?? []).find((element) => element.dataset.stageItem === reaction.participantId && element.getAttribute("aria-hidden") !== "true");
     setHost(tile?.firstElementChild ?? root.current);
   }, [reaction.participantId, root]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing reaction host lookup and cancellable animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate the mounted reaction in its resolved host; cancel the animation on cleanup.
   useEffect(() => {
     const element = emoji.current;
     if (!element || !host) return;

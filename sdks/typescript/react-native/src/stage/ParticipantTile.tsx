@@ -73,7 +73,7 @@ export const ParticipantTile = memo(function ParticipantTile({ id, width, height
   const tile = useSpaceSelector(select, shallowEqual);
   const slot = useDevScenario().videoSlots?.[id];
   const level = useSharedValue(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native speaking-level animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate the native speaking-level shared value from committed tile activity.
   useEffect(() => {
     level.value = withTiming(tile.speaking ? 0.6 : 0, timings.level);
   }, [level, tile.speaking]);

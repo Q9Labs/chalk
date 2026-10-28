@@ -31,7 +31,7 @@ export function Limbo({ state, callName, recording }: LimboProps): React.JSX.Ele
   const actionRef = useRef<View>(null);
   const consent = recording && (state.kind === "joining" || state.kind === "knocking") ? <Consent /> : null;
   // The mockup moves focus to the card's button when a state with one appears.
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native accessibility focus and reduced-motion animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Move native accessibility focus to the mounted action when the limbo state changes.
   useEffect(() => {
     const node = actionRef.current && findNodeHandle(actionRef.current);
     if (node) AccessibilityInfo.setAccessibilityFocus(node);
@@ -133,7 +133,7 @@ function Spinner(): React.JSX.Element {
   const { colors } = useTheme();
   const reduceMotion = useReducedMotion();
   const turn = useSharedValue(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native accessibility focus and reduced-motion animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Run the native waiting spinner unless reduced motion is requested; cancel the loop on cleanup.
   useEffect(() => {
     if (reduceMotion) return;
     turn.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1);

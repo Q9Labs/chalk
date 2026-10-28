@@ -176,7 +176,7 @@ export function Stage({
     return new Map(next.map((id, index) => [id, index + 1]));
   }, [ordered]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage/board subscriptions and layout reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Remember committed tile order and speakers; abandoned renders must not rewrite stage history.
   useEffect(() => {
     orderRef.current = ordered.map((item) => item.id);
     const speaking = speakingParticipantId(ordered);
@@ -253,12 +253,12 @@ export function Stage({
     }
     return placement;
   };
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage/board subscriptions and layout reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Prune placement history only after tiles commit their departure, preserving interrupted-layout continuity.
   useEffect(() => {
     const present = new Set(displayed.tiles.map(({ item }) => item.id));
     for (const id of contentPlacements.current.keys()) if (!present.has(id)) contentPlacements.current.delete(id);
   }, [displayed.tiles]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage/board subscriptions and layout reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Remove leaving tiles at their animation deadline; cancel the expiry timeout when the displayed set changes.
   useEffect(() => {
     const departing = displayed.tiles.filter((tile) => tile.leaving);
     if (!departing.length) return;
@@ -267,7 +267,7 @@ export function Stage({
     return () => clearTimeout(timer);
   }, [displayed]);
   const tilesRef = useRef<HTMLDivElement>(null);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage/board subscriptions and layout reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Observe mounted screen-share video dimensions and prune stale aspects; remove capture listeners on cleanup.
   useEffect(() => {
     const root = tilesRef.current;
     if (!root) return;

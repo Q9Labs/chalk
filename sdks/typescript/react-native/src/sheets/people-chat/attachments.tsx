@@ -29,7 +29,7 @@ export type AttachmentSource = { readonly state: "loading" } | { readonly state:
 export function useAttachmentSource(attachment: ChatAttachment): AttachmentSource {
   const client = useSpaceClient();
   const [source, setSource] = useState<AttachmentSource>({ state: "loading" });
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native attachment resolution and stale-result cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Resolve the remote attachment and native image dimensions; ignore late results after replacement or unmount.
   useEffect(() => {
     let live = true;
     resolveUrl(client, attachment)

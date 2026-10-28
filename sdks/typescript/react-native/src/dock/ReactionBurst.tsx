@@ -28,7 +28,7 @@ export const ReactionBurst = memo(function ReactionBurst({ participantId }: { re
 function FloatingEmoji({ reaction }: { readonly reaction: ActiveReaction }): React.JSX.Element {
   const reduceMotion = useReducedMotion();
   const progress = useSharedValue(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing cancellable native reaction animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Start the mounted reaction shared-value animation on the UI runtime.
   useEffect(() => {
     progress.value = withTiming(1, { duration: DURATION, easing: easings.easeOut });
   }, [progress]);

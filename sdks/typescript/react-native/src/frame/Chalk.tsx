@@ -52,7 +52,7 @@ export type ChalkProps = {
  * off, and draws everything inside the safe area in portrait, landscape and on iPad.
  */
 export function Chalk({ client, colorScheme, onColorSchemeChange, soundsEnabled, onSoundsEnabledChange, ...frame }: ChalkProps): React.JSX.Element {
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native client ownership and event subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Release shared native sound resources when the Chalk frame unmounts.
   useEffect(() => releaseSounds, []);
   return (
     <GestureHandlerRootView style={styles.root}>

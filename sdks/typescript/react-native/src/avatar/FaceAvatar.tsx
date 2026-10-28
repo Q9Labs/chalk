@@ -48,7 +48,7 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
   const lookX = useSharedValue(0);
   const lookY = useSharedValue(0);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native avatar fallback lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Run the native blink loop unless reduced motion is requested; cancel its shared-value animation on cleanup.
   useEffect(() => {
     if (reduceMotion) {
       blink.value = 1;
@@ -61,7 +61,7 @@ export const FaceAvatar = memo(function FaceAvatar({ name, size, style = "subtle
     return () => cancelAnimation(blink);
   }, [blink, reduceMotion, scene]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native avatar fallback lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Schedule occasional native gaze changes; clear the interval when motion settings change.
   useEffect(() => {
     if (!lookAround || reduceMotion) return;
     const timer = setInterval(() => {

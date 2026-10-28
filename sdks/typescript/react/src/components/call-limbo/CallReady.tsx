@@ -23,17 +23,17 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
     onClose();
     cardRef.current?.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
   };
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing focus restoration and cancellable entrance/QR animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Return focus to the call-link trigger when the card closes.
   useEffect(() => {
     if (!open && cardRef.current?.contains(document.activeElement)) cardRef.current.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
   }, [open]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing focus restoration and cancellable entrance/QR animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Fade the mounted QR code with Web Animations; cancel it when dependencies change.
   useEffect(() => {
     if (!showQR || reducedMotion) return;
     const animation = qrRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
     return () => animation?.cancel();
   }, [showQR, reducedMotion]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing focus restoration and cancellable entrance/QR animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Retain the card through its exit and stage entry on a frame; cancel frame and timeout on cleanup.
   useEffect(() => {
     if (open) setPresent(true);
     const frame = requestAnimationFrame(() => setEntered(open));

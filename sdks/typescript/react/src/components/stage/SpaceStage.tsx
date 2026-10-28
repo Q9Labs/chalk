@@ -40,17 +40,18 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
   );
   const [following, setFollowing] = useState<string | null | undefined>(undefined);
   const boardOpen = whiteboard?.isOpen === true && Boolean(whiteboard.props);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage layout and participant reconciliation.
-  useEffect(() => {
+  const [wasBoardOpen, setWasBoardOpen] = useState(boardOpen);
+  if (wasBoardOpen !== boardOpen) {
+    setWasBoardOpen(boardOpen);
     if (!boardOpen) setFollowing(undefined);
-  }, [boardOpen]);
+  }
   const canFollow = boardOpen && Boolean(whiteboard?.sendView);
   const target = following === undefined ? whiteboard?.presenterId : following;
   const followed = canFollow && tiles.some((tile) => tile.id === target && !tile.isLocal) ? (target ?? null) : null;
   const activePin = items.some((item) => item.id === pin) ? pin : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage layout and participant reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Clear departed pins through the host onPinnedChange callback after commit; also reconcile selected shares.
   useEffect(() => {
     if (pin !== activePin) setPin(activePin);
     if (selectedShare !== activeShare) setSelectedShare(activeShare);

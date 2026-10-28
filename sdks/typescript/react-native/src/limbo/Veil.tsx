@@ -19,7 +19,7 @@ const LIFT_FROM = 0.6;
 export function Veil({ level }: { readonly level: VeilLevel }): React.JSX.Element {
   const { colors } = useTheme();
   const opacity = useSharedValue(OPACITY[level]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native veil transition lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Synchronize native veil opacity and animate its release on committed level changes.
   useEffect(() => {
     if (level !== "none") {
       opacity.value = OPACITY[level];

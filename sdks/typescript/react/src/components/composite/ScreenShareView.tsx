@@ -60,7 +60,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       setPending(false);
     }
   };
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing picture-in-picture event listener cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Mirror picture-in-picture events from the mounted video; remove both listeners when media changes.
   useEffect(() => {
     const video = root.current?.querySelector("video");
     if (!video) return;

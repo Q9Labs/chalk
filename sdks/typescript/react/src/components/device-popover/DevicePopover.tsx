@@ -40,7 +40,7 @@ export interface DevicePopoverProps {
 
 function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   const [level, setLevel] = useState(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing audio-meter and preview-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the microphone meter AudioContext and sampling interval; disconnect, close and clear them on track replacement.
   useEffect(() => {
     if (!track || track.readyState !== "live") return;
     const context = new AudioContext();
@@ -71,7 +71,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
   const video = useRef<HTMLVideoElement>(null);
   const [unavailable, setUnavailable] = useState(false);
   const trackEnabled = track?.enabled;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing audio-meter and preview-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Acquire a camera preview for the mounted open popover; release late captures and the owned preview on cleanup.
   useEffect(() => {
     const element = video.current;
     if (!element || !open) return;

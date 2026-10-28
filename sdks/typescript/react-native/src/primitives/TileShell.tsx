@@ -28,7 +28,7 @@ export const TileShell = memo(function TileShell({ children, selected = false, s
   const radius = phone ? radii.tilePhone : radii.tile;
   const live = useSharedValue(0);
   const showRing = speaking && cameraOn;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native speaking-ring animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate the native speaking-ring shared value when visibility commits.
   useEffect(() => {
     live.value = withTiming(showRing ? 1 : 0, timings.scrim);
   }, [live, showRing]);

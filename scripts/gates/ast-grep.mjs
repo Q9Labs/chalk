@@ -25,7 +25,7 @@ function addSourceRule(id, message, rule, { files, ignores, constraints } = {}) 
 
 addSourceRule(
   "forbid-sdk-use-effect",
-  "SDK effects need an explicit per-call exception with a reason; prefer subscriptions and event handlers.",
+  "SDK effects need a per-call synchronization or lifecycle reason; derive render state and handle user actions without effects.",
   {
     any: [
       pattern("useEffect($$$ARGS)"),
@@ -47,7 +47,7 @@ addSourceRule(
       },
     ],
   },
-  { files: ["sdks/typescript/react/**", "sdks/typescript/react-native/**"] },
+  { files: ["sdks/typescript/react/**", "sdks/typescript/react-native/**"], ignores: [...tests, "**/__tests__/**", "**/test/**", "**/tests/**", "**/dist/**", "**/node_modules/**"] },
 );
 
 const dynamicCodeExclusions = [...tests, "**/__tests__/**", "**/test/**", "**/dist/**", "**/coverage/**", "**/node_modules/**"];

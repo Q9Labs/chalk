@@ -32,7 +32,7 @@ export function CallCard({ state, onClose, interactive = true, children, panel, 
   const drawerRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing drawer focus entry and restoration.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Move focus into the committed open drawer and remember its opener.
   useEffect(() => {
     if (!interactive || state !== "open") return;
     const drawer = drawerRef.current;
@@ -41,7 +41,7 @@ export function CallCard({ state, onClose, interactive = true, children, panel, 
     drawer.focus({ preventScroll: true });
   }, [interactive, state]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing drawer focus entry and restoration.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Restore the connected opener when the drawer starts closing.
   useEffect(() => {
     if (!interactive || state !== "closing") return;
     const opener = openerRef.current;

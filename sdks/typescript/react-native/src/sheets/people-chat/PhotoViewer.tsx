@@ -37,7 +37,7 @@ export function PhotoViewer({ viewing, onChange, onClose }: PhotoViewerProps): R
   const photo = photos[index] ?? photos[0];
   const count = photos.length;
   useBackHandler(true, onClose);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native photo-viewer accessibility focus.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Focus the mounted photo close control through the native accessibility API.
   useEffect(() => {
     const node = closeRef.current && findNodeHandle(closeRef.current);
     if (node) AccessibilityInfo.setAccessibilityFocus(node);
