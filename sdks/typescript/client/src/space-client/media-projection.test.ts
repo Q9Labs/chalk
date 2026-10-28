@@ -140,6 +140,30 @@ it("does not wait for reconciliation to apply a manual mute", async () => {
   }
 });
 
+it("keeps a rejected enable unconfirmed until failed-command cleanup converges it off", async () => {
+  const test = scenario();
+  try {
+    await test.join();
+    await test.client.media.setMicrophoneEnabled(false);
+    test.command.mockImplementationOnce(async () => {
+      test.track.enabled = true;
+      test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: test.track }] });
+      throw new Error("lost acknowledgement");
+    });
+    await expect(test.client.media.setMicrophoneEnabled(true)).rejects.toThrow();
+    expect(test.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+    expect(test.received.enabled).toBe(false);
+    await vi.waitFor(() => expect(test.command.mock.calls).toEqual([[false], [true], [false]]));
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
+    expect(test.track.enabled).toBe(false);
+    expect(test.received.enabled).toBe(false);
+    expect(test.command).toHaveBeenCalledTimes(3);
+  } finally {
+    test.dispose();
+  }
+});
+
 it("reconciles again after a Sync reconnect instead of revoking a healthy publication", async () => {
   const test = scenario();
   try {
