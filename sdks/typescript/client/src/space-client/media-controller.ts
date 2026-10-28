@@ -1008,7 +1008,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number): void {
     const state = this.#sources[source];
-    if (state.desired.revision !== revision || ports.sync.getSnapshot().control?.status === "ended") return;
+    if (state.desired.revision !== revision || state.forcedRevision === revision || ports.sync.getSnapshot().control?.status === "ended") return;
     state.forcedRevision = revision;
     state.localEnabled = false;
     this.#pauseTracks(source);
