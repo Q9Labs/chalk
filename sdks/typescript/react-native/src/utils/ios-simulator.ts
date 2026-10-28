@@ -8,6 +8,20 @@ const EMPTY_RTP_CAPABILITIES = Object.freeze({
 
 const CHALK_SIMULATOR_PATCHED = "__chalkSimulatorPatched";
 
+interface CapabilityTarget {
+  getCapabilities?: unknown;
+}
+
+interface SimulatorMediaDevices {
+  enumerateDevices?: unknown;
+}
+
+interface SimulatorWebRtcModule {
+  mediaDevices?: SimulatorMediaDevices;
+  RTCRtpSender?: CapabilityTarget;
+  RTCRtpReceiver?: CapabilityTarget;
+}
+
 function createEmptyRtpCapabilities() {
   return {
     codecs: [...EMPTY_RTP_CAPABILITIES.codecs],
@@ -24,8 +38,8 @@ function markPatched(target: object, key: string) {
   });
 }
 
-function patchWebRtcCapabilities(target: any) {
-  if (!target || typeof target.getCapabilities !== "function" || target.getCapabilities[CHALK_SIMULATOR_PATCHED] === true) {
+function patchWebRtcCapabilities(target: CapabilityTarget | undefined) {
+  if (!target || typeof target.getCapabilities !== "function" || (CHALK_SIMULATOR_PATCHED in target.getCapabilities && target.getCapabilities[CHALK_SIMULATOR_PATCHED] === true)) {
     return;
   }
 
@@ -62,7 +76,7 @@ function patchNativeWebRtcCapabilities(nativeModule: Record<string, unknown> | u
   });
 }
 
-function patchMediaDeviceEnumeration(mediaDevices: Record<string, unknown> | undefined) {
+function patchMediaDeviceEnumeration(mediaDevices: SimulatorMediaDevices | undefined) {
   if (!mediaDevices) {
     return;
   }
@@ -95,12 +109,12 @@ export function getIosSimulatorMediaMessage(): string {
   return IOS_SIMULATOR_MEDIA_MESSAGE;
 }
 
-export function ensureIosSimulatorWebRtcSafety(webRtcModule?: any): void {
+export function ensureIosSimulatorWebRtcSafety(webRtcModule?: SimulatorWebRtcModule): void {
   if (!isIosSimulator()) {
     return;
   }
 
-  const scope = globalThis as any;
+  const scope: SimulatorWebRtcModule & { navigator?: { mediaDevices?: SimulatorMediaDevices } } = globalThis;
   const nativeWebRtcModule = NativeModules.WebRTCModule as Record<string, unknown> | undefined;
   const patchedMediaDevices = webRtcModule?.mediaDevices ?? scope.mediaDevices ?? scope.navigator?.mediaDevices;
   const sender = webRtcModule?.RTCRtpSender ?? scope.RTCRtpSender;

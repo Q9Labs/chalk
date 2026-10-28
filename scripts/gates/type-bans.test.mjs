@@ -4,23 +4,29 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { compareBaseline } from "./explicit-any.mjs";
+import { compareBaseline, findExplicitAny } from "./explicit-any.mjs";
 import { implicitAnyIsForbidden } from "./implicit-any.mjs";
 
-test("Oxlint rejects explicit any and the baseline does not hide an added occurrence", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "chalk-any-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const source = join(root, "example.ts");
-  const binary = process.env.OXLINT_BIN ?? resolve("node_modules/.bin/oxlint");
-  const run = () => spawnSync(binary, ["-A", "all", "-D", "typescript/no-explicit-any", "-f", "json", source], { encoding: "utf8" });
-  await writeFile(source, "const explicit: any = 1;\nconst safe: unknown = 1;\n");
-  const bad = run();
-  assert.equal(bad.status, 1, bad.stderr);
-  assert.equal(JSON.parse(bad.stdout).diagnostics.length, 1);
-  await writeFile(source, "const safe: unknown = 1;\n");
-  assert.equal(run().status, 0);
+test("syntax rejects explicit any even behind lint and compiler suppressions", () => {
+  for (const file of ["example.ts", "example.tsx", "example.mts", "example.cts", "example.d.ts"]) {
+    const findings = findExplicitAny(file, "// oxlint-disable\n// eslint-disable-next-line @typescript-eslint/no-explicit-any -- fixture\n// @ts-nocheck\nexport type Unsafe<T = any> = [any, (...args: any[]) => T];\n");
+    assert.equal(findings.length, 3, file);
+    assert.ok(findings.every((finding) => finding.file === file && finding.line === 4));
+    assert.equal(new Set(findings.map((finding) => finding.fingerprint)).size, 1);
+    assert.deepEqual(findExplicitAny(file, 'const any = "any"; // any\ntype Safe = { any: unknown };\n'), []);
+  }
+});
+
+test("the baseline rejects added, duplicated, moved, changed, and stale exceptions", () => {
   const old = { fingerprint: "old", file: "example.ts" };
   assert.deepEqual(compareBaseline([old, old], [{ fingerprint: "old", count: 1 }]), { added: [old], removed: 0 });
+  assert.deepEqual(compareBaseline([], [{ fingerprint: "old", count: 1 }]), { added: [], removed: 1 });
+  const [original] = findExplicitAny("example.ts", "type Unsafe = any;");
+  const baseline = [{ ...original, count: 1 }];
+  for (const changed of [findExplicitAny("example.ts", "type Renamed = any;"), findExplicitAny("moved.ts", "type Unsafe = any;")]) {
+    assert.deepEqual(compareBaseline(changed, baseline), { added: changed, removed: 1 });
+  }
+  assert.deepEqual(compareBaseline(findExplicitAny("example.ts", "\n  type Unsafe = any;\n"), baseline), { added: [], removed: 0 });
 });
 
 test("the shared TypeScript config rejects implicit any", async (t) => {

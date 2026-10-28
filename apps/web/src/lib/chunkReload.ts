@@ -30,15 +30,15 @@ export function installChunkLoadAutoReload() {
   };
 
   window.addEventListener("unhandledrejection", (event) => {
-    const reason: any = (event as any).reason;
-    const msg = typeof reason?.message === "string" ? reason.message : typeof reason === "string" ? reason : "";
+    const reason: unknown = event.reason;
+    const msg = (typeof reason === "object" || typeof reason === "function") && reason !== null && "message" in reason && typeof reason.message === "string" ? reason.message : typeof reason === "string" ? reason : "";
     if (!msg) return;
     if (!matchesChunkLoadFailure(msg)) return;
     reload();
   });
 
   window.addEventListener("error", (event) => {
-    const msg = typeof (event as any).message === "string" ? (event as any).message : "";
+    const msg = typeof event.message === "string" ? event.message : "";
     if (!msg) return;
     if (!matchesChunkLoadFailure(msg)) return;
     reload();
