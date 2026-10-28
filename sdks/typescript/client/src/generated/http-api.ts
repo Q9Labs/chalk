@@ -759,6 +759,23 @@ const episodesGroup = HttpApiGroup.make("episodes")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getParticipantEpisodeStatus", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/episode-status", {
+      params: S.GetParticipantEpisodeStatusPathParamsSchema,
+      success: S.GetParticipantEpisodeStatusResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("issueEpisodeParticipantSyncToken", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/sync-token", {
       params: S.IssueEpisodeParticipantSyncTokenPathParamsSchema,
       success: S.IssueEpisodeParticipantSyncTokenResponseSchema.pipe(HttpApiSchema.status(201)),

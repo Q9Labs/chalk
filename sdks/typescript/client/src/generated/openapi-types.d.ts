@@ -661,6 +661,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/episode-status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get participant episode status */
+    get: operations["getParticipantEpisodeStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications": {
     parameters: {
       query?: never;
@@ -1611,6 +1628,10 @@ export interface components {
       has_more: boolean;
       next_cursor: string | null;
       page_size: number;
+    };
+    ParticipantEpisodeStatus: {
+      /** @enum {string} */
+      status: "active" | "ending" | "ended";
     };
     /** Format: uuid */
     ParticipantId: string;
@@ -6483,6 +6504,88 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ParticipantJoinCancellation"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getParticipantEpisodeStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantEpisodeStatus"];
         };
       };
       /** @description Bad Request */

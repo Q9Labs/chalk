@@ -102,6 +102,7 @@ export type ConnectionChatFileFactoryInput = {
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
   readonly createConnectionReporter?: (access: () => ParsedAccessGrant | null) => ConnectionReporter | undefined;
+  readonly getEpisodeStatus?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<"active" | "ending" | "ended">;
   readonly cancelPendingAdmission?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<boolean>;
   readonly mediaDevices: ConnectionMediaDevices;
   readonly createMediaClient: (input: ConnectionMediaFactoryInput) => ConnectionMediaClient;

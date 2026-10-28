@@ -98,6 +98,26 @@ describe("media recovery deadline", () => {
     });
   });
 
+  it.each(["restart", "scheduled refresh"] as const)("lets Episode end win a rejected %s", async (source) => {
+    const test = mediaRecoveryFixture();
+    test.status.mockResolvedValue("ending");
+    if (source === "restart") test.restart.mockRejectedValue(new CloudflareSFUError("Close rejected during end", "signaling_failed", { status: 403 }));
+    else {
+      const original = test.access.getMockImplementation();
+      if (!original) throw new Error("Missing access provider");
+      test.access.mockImplementation(async (request) => {
+        if (request.reason === "scheduled_refresh") throw new ChalkAPIError({ code: "access.invalid", status: 403, retryable: false });
+        return original(request);
+      });
+    }
+    await test.run(async (lifecycle) => {
+      if (source === "restart") test.mediaPhase("failed");
+      await test.advanceTo(observed.accessRefreshed + 100);
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "left", episodeEnded: true, failure: null });
+      expect(lifecycle.getDiagnostics().filter((event) => event.event === "connection_failed")).toEqual([]);
+    });
+  });
+
   it("ignores a queued rejection for a binding replaced by a newer recovery grant", async () => {
     const test = mediaRecoveryFixture();
     test.restart.mockRejectedValue(new Error("Temporary media failure"));
@@ -204,6 +224,7 @@ function mediaRecoveryFixture(backoffMs?: readonly number[], conflictSource: "se
     platform.media.emit({ ...snapshot, failure: phase === "failed" ? { code: "peer_connection_failed", recoverable: true } : null, connection: { ...snapshot.connection, phase } });
   };
   const restart = vi.fn(async () => {});
+  const status = vi.fn<NonNullable<import("./dependencies").ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue("active");
   const media = platform.dependencies.createMediaClient({ access: parseParsedAccessGrant(opaqueAccessGrant(1)), credential: async () => "unused", onFailure: () => {}, onScreenEnded: () => {} });
   const stopMedia = vi.spyOn(media, "stop");
   const stopSync = vi.spyOn(platform.sync, "stop");
@@ -223,6 +244,7 @@ function mediaRecoveryFixture(backoffMs?: readonly number[], conflictSource: "se
     startedAt,
     access,
     restart,
+    status,
     stopMedia,
     stopSync,
     createSync,
@@ -257,6 +279,7 @@ function mediaRecoveryFixture(backoffMs?: readonly number[], conflictSource: "se
               dependencies: {
                 ...platform.dependencies,
                 clock,
+                getEpisodeStatus: status,
                 createSyncClient: createSync,
                 createMediaClient: (input) => {
                   failMedia = input.onFailure;

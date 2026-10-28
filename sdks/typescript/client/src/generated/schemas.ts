@@ -609,6 +609,11 @@ export const MembershipListSchema = Schema.Struct({
 });
 export type MembershipList = typeof MembershipListSchema.Type;
 
+export const ParticipantEpisodeStatusSchema = Schema.Struct({
+  status: Schema.Literals(["active", "ending", "ended"]),
+});
+export type ParticipantEpisodeStatus = typeof ParticipantEpisodeStatusSchema.Type;
+
 export const ParticipantJoinCancellationSchema = Schema.Struct({
   cancelled: Schema.Boolean,
 });
@@ -1810,6 +1815,24 @@ export const GetEpisodeAttendance429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
+
+export const GetParticipantEpisodeStatusPathParamsSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  participant_id: ParticipantIdSchema,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetParticipantEpisodeStatusPathParams = typeof GetParticipantEpisodeStatusPathParamsSchema.Type;
+
+export const GetParticipantEpisodeStatusResponseSchema = ParticipantEpisodeStatusSchema;
+export type GetParticipantEpisodeStatusResponse = typeof GetParticipantEpisodeStatusResponseSchema.Type;
+
+export const GetParticipantEpisodeStatus429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
 
 export const GetProblemReportAvailabilityPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -5343,6 +5366,19 @@ export const GetEpisodeErrorSchema = Schema.Union([
 ]);
 export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
 
+export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+]);
+export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatusErrorSchema.Type;
+
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
 
@@ -6106,6 +6142,7 @@ export const ChalkOperationPolicies = {
   findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getTenant: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

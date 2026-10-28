@@ -128,7 +128,7 @@ export class SpaceClientCore {
   }
   endEpisode(): ClientEffect<void> {
     return this.#connection
-      .runCommand(({ sync }) => foreign(() => sync.endEpisode()).pipe(Effect.tap(() => this.#connection.confirmEpisodeEnded)))
+      .runCommand(({ sync }) => this.#connection.runEpisodeEnd(foreign(() => sync.endEpisode())))
       .pipe(Effect.tap(() => this.#connection.leave()))
       .pipe(Effect.asVoid, Effect.mapError(normalizeClientError));
   }
