@@ -88,10 +88,10 @@ export class ConnectionReporter {
       ...(event.heartbeat_gap_ms == null ? {} : { heartbeat_gap_ms: milliseconds(event.heartbeat_gap_ms) }),
       ...(event.close_code == null ? {} : { close_code: event.close_code }),
       ...(event.http_status == null ? {} : { http_status: event.http_status }),
-      ...(event.source == null ? {} : { source: event.source }),
-      ...(event.publication_state == null ? {} : { publication_state: event.publication_state }),
-      ...(event.projection_state == null ? {} : { projection_state: event.projection_state }),
-      ...(event.outcome == null ? {} : { outcome: event.outcome }),
+      source: event.source,
+      publication_state: event.publication_state,
+      projection_state: event.projection_state,
+      outcome: event.outcome,
     });
     if (event.event === "media_projection_mismatch") this.#report("media_projection_mismatch");
   }
