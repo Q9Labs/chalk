@@ -14,7 +14,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     const contexts = [];
     try {
       const open = async (participant) => {
-        const context = await browser.newContext(device);
+        const context = await browser.newContext({ ...device, permissions: ["camera", "microphone"] });
         contexts.push(context);
         await context.addInitScript(installAgreementProbe);
         const page = await context.newPage();
