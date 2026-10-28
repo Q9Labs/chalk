@@ -1,13 +1,13 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join as joinPath } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
-import { webMediaFixture, incomingAudioLevel } from "../scripts/web-proof/media.mjs";
+import { webMediaFixture, incomingAudioLevel, audioEvidence } from "../scripts/web-proof/media.mjs";
 
 const output = process.env.CHALK_CLASS_OUTPUT ?? ".private/class-checklist";
 const names = ["Teacher", "Student", "Admin"];
@@ -122,6 +122,10 @@ async function classroom(scenario: string, check: (pages: Page[], contexts: Brow
     await shot(pages, `${scenario}-joined`);
     await check(pages, contexts);
   } catch (error) {
+    if (scenario === "C5-C6" || scenario === "media-control") {
+      const evidence = await Promise.all(pages.map(async (page, index) => ({ role: names[index], ...(await page.evaluate(audioEvidence).catch((cause: unknown) => ({ error: String(cause) }))) })));
+      await writeFile(`${output}/${scenario}-audio.json`, JSON.stringify(evidence, null, 2));
+    }
     await shot(pages, `${scenario}-failure`);
     throw error;
   } finally {
@@ -395,6 +399,10 @@ async function recoveredMedia(pages: Page[]) {
   }
   await roster(pages);
 }
+
+test("Media control: fresh native browsers receive both directions and restarted share", async () => {
+  await classroom("media-control", recoveredMedia);
+});
 
 test("C5/C6 slow: visible 140-second drop, one Rejoin, live media and restarted share", async () => {
   await classroom("C5-C6", async (pages, contexts) => {
