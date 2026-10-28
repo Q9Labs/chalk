@@ -87,7 +87,6 @@ vi.mock("../lib/local-space-client", () => ({
 export function getSpacePageTestMocks(): typeof spacePageTestMocks {
   return spacePageTestMocks;
 }
-export const spacePageTestToken = "cspi1.test-capability";
 export const spacePageTestArrival = {
   state: "admitted",
   arrival_handle: "arrival-11111111",

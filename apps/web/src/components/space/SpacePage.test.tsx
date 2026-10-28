@@ -4,7 +4,8 @@ import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestArrival, spacePageTestToken } from "../../__tests__/space-page.test-support";
+import { getSpacePageTestMocks, resetSpacePageTestMocks, spacePageTestArrival } from "../../__tests__/space-page.test-support";
+import { spacePageTestToken } from "../../__tests__/space-page.fixture";
 import { reloadRejoinStorageKey, writeReloadRejoin } from "@q9labsai/chalk-client";
 import { SpacePage } from "./SpacePage";
 
