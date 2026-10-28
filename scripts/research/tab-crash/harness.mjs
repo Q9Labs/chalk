@@ -109,7 +109,13 @@ async function run(version, constrained) {
   const browser = await chromium.launch({headless:true,args,executablePath}); browsers.push(browser);
   const browserCDP = await browser.newBrowserCDPSession();
   const context = await browser.newContext({permissions:['camera','microphone']});
-  await context.route('**/*', route => ['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+  await context.route('**/*', route => {
+    const url=new URL(route.request().url());
+    if(!['127.0.0.1','localhost'].includes(url.hostname))return route.abort();
+    if(url.pathname.endsWith('/cancel-join'))return route.abort('connectionfailed');
+    if(url.pathname.includes('/media/sfu/'))return; // Stalled signalling retains the real native peer/offer path.
+    return route.continue();
+  });
   await context.addInitScript({path:join(root,'scripts/research/tab-crash/instrument.js')});
   await context.routeWebSocket(/\/v1\/sync/, socket => { active.blockedSockets++; /* Deliberately never connect to real Sync. */ });
   const page = await context.newPage();
@@ -152,6 +158,7 @@ async function run(version, constrained) {
     const next=(n+1)*59000+125000;const wait=next-(Date.now()-runStart);if(wait>0)await delay(wait);
     await sample(page,cdp,browserCDP,'soak',runName,n);
   }
+  await request(`/v1/tenants/${tenant.id}/spaces/${space.id}/episodes/${active.episode.id}/end`,{});
   for(let cycle=1;cycle<=21;cycle++) {
     await fixture();await navigate();await joinPage();
     await sample(page,cdp,browserCDP,'pending',runName,cycle);
