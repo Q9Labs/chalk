@@ -19,6 +19,8 @@ export type AccessContext = {
   readonly replaceMediaConnection: boolean;
   /** Automatic replacement succeeds only while this media binding is current. Omit for explicit takeover. */
   readonly expectedMediaConnectionId?: string;
+  /** Forward unchanged for replay-safe recovery. Never log credentials. */
+  readonly currentMediaToken?: string;
   readonly signal?: AbortSignal;
 };
 /**

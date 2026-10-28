@@ -170,6 +170,10 @@ without this optional field keep the legacy replacement/takeover behavior, so
 the API can deploy before the SDK. A lifecycle attempt uses its fresh binding
 without an additional inner replacement; fast failures produce at most twelve
 replacement grants and track requests in the default foreground minute.
+Recovery also forwards the browser's `currentMediaToken` for the existing
+encrypted replay mechanism. A lost response replays the committed grant only
+while its replacement binding remains current; a later takeover invalidates it.
+Never log the credential or substitute another tab's backend-retained token.
 
 Failed media acquisition/start spans and media recovery reports include
 `media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,

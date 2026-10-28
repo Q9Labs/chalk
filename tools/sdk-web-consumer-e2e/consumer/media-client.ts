@@ -10,6 +10,7 @@ type PeerState = {
   readonly remoteByMid: Map<string, MediaSource>;
   readonly offerer: boolean;
   makingOffer: boolean;
+  negotiateAgain: boolean;
 };
 
 type FixtureMediaClientInput = {
@@ -224,7 +225,10 @@ export class FixtureMediaClient {
 
   async #applyRemoteDescription(remote: string, peer: PeerState, description: RTCSessionDescriptionInit): Promise<void> {
     await peer.connection.setRemoteDescription(description);
-    if (description.type !== "offer") return;
+    if (description.type !== "offer") {
+      if (peer.negotiateAgain) await this.#negotiate(remote, peer);
+      return;
+    }
     for (const transceiver of peer.connection.getTransceivers()) {
       const source = transceiver.mid ? peer.remoteByMid.get(transceiver.mid) : undefined;
       if (!source) continue;
@@ -245,7 +249,7 @@ export class FixtureMediaClient {
     const existing = this.#peers.get(remote);
     if (existing) return existing;
     const connection = registerPeer(new RTCPeerConnection());
-    const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), offerer: this.#participantId < remote, makingOffer: false };
+    const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), offerer: this.#participantId < remote, makingOffer: false, negotiateAgain: false };
     this.#peers.set(remote, peer);
     // Reserve both directions before the first offer. An answering participant
     // may finish capture after that offer; replaceTrack must not require it to
@@ -278,6 +282,13 @@ export class FixtureMediaClient {
   }
 
   async #negotiate(remote: string, peer: PeerState): Promise<void> {
+    // Capture changes can arrive together. Do not replace an outstanding offer
+    // before its answer, or attach tracks to an obsolete negotiation.
+    if (peer.makingOffer || peer.connection.signalingState !== "stable") {
+      peer.negotiateAgain = true;
+      return;
+    }
+    peer.negotiateAgain = false;
     peer.makingOffer = true;
     try {
       const offer = await peer.connection.createOffer();

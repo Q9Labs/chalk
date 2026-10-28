@@ -19,8 +19,9 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 	for _, takeoverDuringIssue := range []bool{false, true} {
 		t.Run(map[bool]string{false: "takeover between recovery attempts", true: "takeover during credential issuance"}[takeoverDuringIssue], func(t *testing.T) {
 			subject := participantMediaSubject(t)
+			subject.CloudflareConnectionID = "tab-a"
 			repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: "tab-a"}
-			_, private, err := ed25519.GenerateKey(rand.Reader)
+			public, private, err := ed25519.GenerateKey(rand.Reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -28,19 +29,34 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			credential, err := issuer.Issue(context.Background(), subject)
+			if err != nil {
+				t.Fatal(err)
+			}
 			fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
 			active := accessgrants.NewActiveAuthorizer(repo)
-			endpoint := issueAccessGrantEndpoint(fixture, fixture, &participantMediaVerifierStub{subject: subject}, active, active, fixture, fixture, fixture, fixture)
+			endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 			ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
 			expected := repo.connection
-			request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
+			request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, CurrentMediaToken: credential.Token, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
+			missingCredential := request
+			missingCredential.Body.CurrentMediaToken = ""
+			if _, err := endpoint.handle(ctx, missingCredential); err == nil || fixture.created != 0 {
+				t.Fatal("conditional recovery must require a replay credential before allocation")
+			}
 			// A obtains fresh grants while its SFU restarts fail. Each retry must
 			// compare against the binding returned by the preceding grant.
 			for second := 0; second < 20; second += 5 {
-				if _, err := endpoint.handle(ctx, request); err != nil {
+				grant, err := endpoint.handle(ctx, request)
+				if err != nil {
 					t.Fatal(err)
 				}
 				expected = repo.connection
+				request.Body.CurrentMediaToken = grant.Media.Token
 			}
 			created := fixture.created
 			if takeoverDuringIssue {
@@ -80,6 +96,60 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 				t.Fatal("explicit takeover did not replace media")
 			}
 		})
+	}
+}
+
+func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
+	subject := participantMediaSubject(t)
+	subject.CloudflareConnectionID = "tab-a"
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "chalk", KeyID: "key", PrivateKey: private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := issuer.Issue(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
+	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
+	active := accessgrants.NewActiveAuthorizer(repo)
+	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
+	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
+	expected := subject.CloudflareConnectionID
+	request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, CurrentMediaToken: credential.Token, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
+	committed, err := endpoint.handle(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The browser never receives this response and retries its original request.
+	replayed, err := endpoint.handle(ctx, request)
+	if err != nil {
+		t.Fatalf("lost replacement response was not replayed: %v", err)
+	}
+	if replayed.Media.Token != committed.Media.Token || fixture.created != 1 {
+		t.Fatal("retry must replay the winning grant without allocating media")
+	}
+	// A subsequent explicit takeover must invalidate the old replay too.
+	takeover := request
+	takeover.Body.ExpectedMediaConnectionID = nil
+	if _, err := endpoint.handle(ctx, takeover); err != nil {
+		t.Fatal(err)
+	}
+	winner := repo.connection
+	_, err = endpoint.handle(ctx, request)
+	if err == nil || accessGrantAPIError(err).Code != "participant.connection_superseded" {
+		t.Fatal("superseded replay must conflict")
+	}
+	if repo.connection != winner || fixture.created != 2 {
+		t.Fatal("stale replay displaced the takeover or allocated media")
 	}
 }
 

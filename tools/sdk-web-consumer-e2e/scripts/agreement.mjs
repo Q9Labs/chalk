@@ -116,6 +116,10 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     const unmute = invoke(pages[0], "setMicrophoneEnabled", true).catch((error) => error);
     await unmute;
     await waitForState(pages[0], "live", recoveryTimeoutMs);
+    // Reconnect may reject the interrupted command. Its settled UI must still
+    // agree before a fresh user unmute restores audible capture.
+    await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
+    await invoke(pages[0], "setMicrophoneEnabled", true);
     await enabledCapture(pages);
     await assertAgreement(pages);
   });

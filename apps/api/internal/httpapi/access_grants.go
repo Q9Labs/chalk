@@ -115,7 +115,8 @@ func issueAccessGrantEndpoint(
 			)
 			currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
 			replaceMediaConnection := request.Body.ReplaceMediaConnection
-			if !replaceMediaConnection {
+			conditionalReplacement := replaceMediaConnection && request.Body.ExpectedMediaConnectionID != nil
+			if !replaceMediaConnection || conditionalReplacement {
 				stage = "media_token"
 				if currentToken == "" {
 					return accessGrantResponse{}, apiErrorMediaTokenRequired
@@ -124,7 +125,7 @@ func issueAccessGrantEndpoint(
 				if err != nil && !errors.Is(err, accessgrants.ErrExpired) {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
-				replaceMediaConnection = errors.Is(err, accessgrants.ErrExpired)
+				replaceMediaConnection = replaceMediaConnection || errors.Is(err, accessgrants.ErrExpired)
 				if routeErr := accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
 					TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 					ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
@@ -151,24 +152,22 @@ func issueAccessGrantEndpoint(
 				return accessGrantResponse{}, apiErrorForbidden
 			}
 			previous := subject
-			conditionalReplacement := replaceMediaConnection && request.Body.ExpectedMediaConnectionID != nil
 			if conditionalReplacement {
 				expected := strings.TrimSpace(*request.Body.ExpectedMediaConnectionID)
 				if expected == "" {
 					return accessGrantResponse{}, apiErrorInvalidRequest
 				}
+				if subject.CloudflareConnectionID != expected {
+					return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
+				}
 				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": expected}})
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
-				// Reject stale recovery before allocating a provider session. The final
-				// compare-and-swap also fences a takeover during provider issuance.
-				if err := generations.CheckParticipantMediaConnection(ctx, previous); err != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
 			}
-			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
-			if implicitReplacement {
+			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || conditionalReplacement
+			if replayReplacement {
+				subject = previous
 				stage = "media_replay"
 				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, accessgrants.RefreshRequestHash(currentToken))
 				if err != nil {
@@ -242,7 +241,7 @@ func issueAccessGrantEndpoint(
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
 			stage = "media_binding"
-			if implicitReplacement {
+			if replayReplacement {
 				body, err := json.Marshal(response)
 				if err != nil {
 					return accessGrantResponse{}, err
@@ -252,10 +251,6 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 				if err := generations.CompleteParticipantMediaRefresh(ctx, previous, subject, replay); err != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
-			} else if conditionalReplacement {
-				if err := generations.ReplaceParticipantMediaConnection(ctx, previous, subject); err != nil {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
 			} else if replaceMediaConnection {
