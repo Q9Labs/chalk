@@ -9,9 +9,7 @@
     {
       "phase": "student-first",
       "connection": "live",
-      "roles": [
-        "collaborator"
-      ]
+      "roles": ["collaborator"]
     },
     {
       "phase": "teacher-joined",
