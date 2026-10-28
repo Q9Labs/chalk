@@ -20,6 +20,28 @@ import (
 
 const connectionReportFixture = `{"version":1,"trigger":"join_failed","events":[{"event":"space_join_span","elapsed_ms":0,"step":"join","outcome":"started"},{"event":"sync_socket_close","elapsed_ms":400,"close_code":1006,"duration_ms":400},{"event":"connection_failed","elapsed_ms":401,"state":"joining","code":"sync_start_failed"}]}`
 
+func TestMediaProjectionMismatchReport(t *testing.T) {
+	const body = `{"version":1,"trigger":"media_projection_mismatch","events":[{"event":"media_projection_mismatch","elapsed_ms":3000,"source":"microphone","publication_state":"on","projection_state":"off","duration_ms":2750,"attempt":2,"outcome":"started"}]}`
+	for _, test := range []struct {
+		name, body string
+		valid      bool
+	}{
+		{"microphone", body, true},
+		{"camera", strings.ReplaceAll(body, "microphone", "camera"), true},
+		{"private source", strings.ReplaceAll(body, "microphone", "private iPad label"), false},
+		{"private state", strings.ReplaceAll(body, `"publication_state":"on"`, `"publication_state":"private"`), false},
+		{"negative duration", strings.ReplaceAll(body, `"duration_ms":2750`, `"duration_ms":-1`), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+			_, err := decodeConnectionReport(request)
+			if (err == nil) != test.valid {
+				t.Fatalf("valid=%v, err=%v", test.valid, err)
+			}
+		})
+	}
+}
+
 func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 	runtime, err := observability.Start(context.Background(), observability.Config{Environment: "test", Service: "connection-report-test", Version: "test"})
 	if err != nil {

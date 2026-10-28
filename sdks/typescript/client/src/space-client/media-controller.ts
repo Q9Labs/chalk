@@ -9,6 +9,7 @@ import { V1SyncError } from "../sync/v1-error";
 import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
+import { MediaProjectionReconciler } from "./media-projection-reconciler";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
@@ -128,6 +129,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeScreenEnded: (() => void) | null = null;
   #unsubscribePorts: (() => void) | null = null;
+  #unsubscribeMicrophone: (() => void) | null = null;
+  readonly #projection: MediaProjectionReconciler;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
     this.#store = store;
@@ -135,6 +138,24 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#gates = gates;
     this.#now = now;
     this.#fork = fork;
+    this.#projection = new MediaProjectionReconciler({
+      now,
+      schedule: connection.scheduleUnsafe,
+      cancel: connection.cancelScheduleUnsafe,
+      changed: () => this.#publish(),
+      report: (event) => connection.recordTransportDiagnostic(event),
+      send: (source, observation) =>
+        Effect.runPromise(
+          this.#gates.get(source)!.withPermit(
+            Effect.suspend(() => {
+              const ports = this.#ports;
+              const state = this.#sources[source];
+              if (!ports || !this.#syncLive || state.desired.revision !== observation.revision || !this.#projection.isCurrent(source, observation)) return Effect.void;
+              return this.#send(ports, source, state.desired, observation.enabled);
+            }),
+          ),
+        ),
+    });
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
     this.#unsubscribeScreenEnded = connection.subscribeScreenEnded(() => this.#handleScreenEnded());
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
@@ -258,6 +279,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#fork(this.#refreshDevices().pipe(Effect.ignore));
   }
   dispose(): void {
+    this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(cancelledCaptureError()));
     this.#cancelCaptures();
     for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
@@ -706,6 +728,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #setTrack(source: MediaSource, track: MediaStreamTrack): void {
     if (source !== "camera") {
+      if (source === "microphone") {
+        this.#unsubscribeMicrophone?.();
+        const changed = () => {
+          if (this.#track(source) !== track) return;
+          if (track.muted || track.readyState === "ended") this.#fork(this.#act("microphone", false).pipe(Effect.ignore));
+          this.#publish();
+        };
+        for (const event of ["mute", "unmute", "ended"]) track.addEventListener(event, changed);
+        this.#unsubscribeMicrophone = () => {
+          for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
+        };
+      }
       this.#tracks.set(source, track);
       return;
     }
@@ -719,6 +753,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
+      if (source === "microphone") {
+        this.#unsubscribeMicrophone?.();
+        this.#unsubscribeMicrophone = null;
+      }
       this.#tracks.delete(source);
       return;
     }
@@ -729,6 +767,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     } else this.#transitionCamera({ status: "ended" });
   }
   #clearTracks(): void {
+    this.#unsubscribeMicrophone?.();
+    this.#unsubscribeMicrophone = null;
     this.#tracks.clear();
     this.#transitionCamera({ status: "idle" });
   }
@@ -962,6 +1002,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribePause = null;
     this.#unsubscribeSync = null;
     this.#ports = ports;
+    this.#projection.reset();
     this.#syncLive = false;
     this.#bindCamera(ports);
     if (!ports) {
@@ -1000,7 +1041,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const publications = new Map<MediaSource, RecoveryPublication>();
     const own = (snapshot.media?.items ?? []).filter((item) => item.participantId === snapshot.participantId && item.enabled && item.publicationId !== null);
     for (const item of own) {
-      if (item.source === "screen_audio" || item.publicationId === null) continue;
+      // Mic/camera reconcile their actual publication after reconnect. Only a screen
+      // lease is revoked by a missing recovered projection.
+      if (item.source !== "screen" || item.publicationId === null) continue;
       const state = this.#sources[item.source];
       if (state.localEnabled && state.sentRevision === state.desired.revision) publications.set(item.source, { revision: state.sentRevision, publicationId: item.publicationId });
     }
@@ -1030,6 +1073,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
+      this.#publish();
     });
   }
   #bindCamera(ports: ConnectionPorts | null): void {
@@ -1108,9 +1152,36 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const current = this.#store.getSnapshot();
     const snapshot = this.#ports?.media.getSnapshot();
     const state = this.#connection.getSnapshot().state;
+    const sync = this.#ports?.sync.getSnapshot();
+    for (const source of ["microphone", "camera"] as const) {
+      const publication = snapshot?.localTracks.find((item) => item.source === source);
+      const track = publication?.track ?? this.#track(source);
+      const projection = sync?.media?.items.find((item) => item.participantId === sync.participantId && item.source === source);
+      this.#projection.observe(
+        source,
+        state === "live" && sync?.connection.phase === "live" && !this.#pendingSources.has(source)
+          ? {
+              revision: this.#sources[source].desired.revision,
+              publicationId: publication?.publicationId ?? null,
+              enabled: !!(publication?.enabled && track?.enabled && track.readyState === "live" && !track.muted && this.#sources[source].localEnabled),
+              projectedEnabled: projection?.enabled ?? false,
+              projectedPublicationId: projection?.publicationId ?? null,
+            }
+          : null,
+      );
+    }
+    const confirmedLocal = (source: "microphone" | "camera") => {
+      const media = localMedia(source, this.#localTracks(), snapshot, this.#sources[source].localEnabled, state, this.#pendingSources.has(source) && this.#sources[source].desired.enabled);
+      if (!this.#sources[source].desired.enabled) return { ...media, state: this.#projection.state(source) === "failed" ? ("failed" as const) : ("disabled" as const) };
+      if (media.track && (media.track.readyState === "ended" || media.track.muted)) return { ...media, state: "disabled" as const };
+      const convergence = this.#projection.state(source);
+      if (convergence) return { ...media, state: convergence };
+      if (media.state === "enabled" && (state !== "live" || sync?.connection.phase !== "live")) return { ...media, state: "requesting" as const };
+      return media;
+    };
     const local = Object.freeze({
-      microphone: localMedia("microphone", this.#localTracks(), snapshot, this.#sources.microphone.localEnabled, state, this.#pendingSources.has("microphone") && this.#sources.microphone.desired.enabled),
-      camera: localMedia("camera", this.#localTracks(), snapshot, this.#sources.camera.localEnabled, state, this.#pendingSources.has("camera") && this.#sources.camera.desired.enabled),
+      microphone: confirmedLocal("microphone"),
+      camera: confirmedLocal("camera"),
       screen: localMedia("screen", this.#localTracks(), snapshot, false, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
