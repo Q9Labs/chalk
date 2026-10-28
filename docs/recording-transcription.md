@@ -35,7 +35,7 @@ flowchart LR
   fleet --> capture[Disposable capture worker<br/>c-2 baseline; smaller profile gated]
   capture --> temp[Private R2<br/>encrypted sequenced bundles]
   api --> kms[AWS KMS<br/>context-bound data keys]
-  temp --> render[NYC1 c-8 render worker<br/>libx264]
+  temp --> render[CPU render worker<br/>libx264]
   kms --> capture
   kms --> render
   render --> artifact[Private R2<br/>MP4 + transcript source]
@@ -82,12 +82,12 @@ The implementation is split at stable boundaries:
    the operation before acknowledging it.
 2. The API admits the request only against qualified, public-safe pool health,
    then creates generation- and fence-bound jobs.
-3. The reconciler supplies an SGP1 CPU-Optimized `c-2` capture node. The worker
+3. The reconciler supplies a qualified CPU-Optimized `c-2` capture node. The worker
    joins the SFU as a controlled subscriber and writes encrypted sequenced
    bundles to a recording-scoped temporary R2 prefix.
 4. Episode end closes the capture plan. The API validates continuity, checksums,
    sizes, codecs, and object ownership before accepting capture.
-5. A deadline-aware scaler supplies an NYC1 CPU-Optimized `c-8` render node. The
+5. A deadline-aware scaler supplies a qualified CPU-Optimized `c-8` render node. The
    measured profile uses eight browser frame producers and `libx264`; GPU render
    remains an optional, separately qualified configuration.
 6. The API verifies the MP4 in R2, atomically commits the artifact, and issues
