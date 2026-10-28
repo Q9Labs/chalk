@@ -30,7 +30,8 @@ async function server(handler, port) {
 }
 function child(command, args, env, logName, cwd = root) {
   const log = join(task, logName);
-  const proc = spawn(command, args, { cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const owner = "import ctypes,os,signal,sys; parent=os.getppid(); ctypes.CDLL(None).prctl(1,signal.SIGKILL); os.getppid()==parent or sys.exit(125); os.execvp(sys.argv[1],sys.argv[1:])";
+  const proc = spawn('python3', ['-c', owner, command, ...args], { cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   const chunks = []; proc.stdout.on('data', data => chunks.push(data)); proc.stderr.on('data', data => chunks.push(data));
   proc.on('exit', () => writeFile(log, Buffer.concat(chunks))); children.push(proc); return proc;
 }
@@ -92,7 +93,14 @@ async function run(version, constrained) {
   const css = await bundle(version);
   const args = ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required','--disable-dev-shm-usage'];
   if (constrained) args.push('--js-flags=--max-old-space-size=256','--renderer-process-limit=1');
-  const browser = await chromium.launch({headless:true,args}); browsers.push(browser);
+  let executablePath;
+  if (constrained) {
+    execFileSync('sudo',['mkdir','-p','/sys/fs/cgroup/chalk-crash-browser']);
+    execFileSync('sudo',['tee','/sys/fs/cgroup/chalk-crash-browser/memory.max'],{input:'1073741824',stdio:['pipe','ignore','inherit']});
+    executablePath=join(task,'limited-chromium.sh');
+    await writeFile(executablePath,`#!/bin/bash\nprintf '%s' "$$" | sudo tee /sys/fs/cgroup/chalk-crash-browser/cgroup.procs >/dev/null\nexec ${JSON.stringify(chromium.executablePath())} "$@"\n`,{mode:0o755});
+  }
+  const browser = await chromium.launch({headless:true,args,executablePath}); browsers.push(browser);
   const browserCDP = await browser.newBrowserCDPSession();
   const context = await browser.newContext({permissions:['camera','microphone']});
   await context.route('**/*', route => ['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
@@ -121,12 +129,13 @@ async function run(version, constrained) {
     const state=sql(`select transition_participant_join_seat(tenant_id,space_id,episode_id,participant_id,generation,'expire') from participant_join_seats where participant_id='${id}'`);
     if(state!=='expired') throw new Error(`seat not expired: ${state}`);
   };
-  emit({run:runName,chromium:browser.version(),profile:constrained?'256 MiB V8 old space, 4x CPU throttle':'default',begin:true});
+  emit({run:runName,chromium:browser.version(),profile:constrained?'1 GiB browser cgroup, 256 MiB V8 old space, 4x CPU throttle':'default',begin:true});
   // One full-duration incident: seven real grants over ~13 s, actual 120 s seat,
   // stale refresh and retries until seven minutes have elapsed.
   await fixture(); await navigate(); await join();
   for(let n=1;n<7;n++) {await delay(2100);await page.evaluate(async()=>{ const response=await fetch('/access',{method:'POST'}); if(response.status!==201)throw new Error(`burst grant ${response.status}`);await response.json(); });}
   await sample(page,cdp,browserCDP,'soak-burst',runName,0);
+  await page.screenshot({path:join(out,`${runName}-burst.png`)});
   const remaining=125000-(Date.now()-runStart); if(remaining>0) await delay(remaining);
   expire(true);
   await page.reload();await page.waitForFunction(()=>window.__ready);await join();
@@ -148,7 +157,9 @@ async function run(version, constrained) {
     await sample(page,cdp,browserCDP,'disposed-gc',runName,cycle);
     await request(`/v1/tenants/${tenant.id}/spaces/${space.id}/episodes/${active.episode.id}/end`,{});
   }
-  await context.close();await browser.close();emit({run:runName,complete:true});
+  await context.close();await browser.close();
+  if(constrained)emit({run:runName,memoryEvents:await readFile('/sys/fs/cgroup/chalk-crash-browser/memory.events','utf8')});
+  emit({run:runName,complete:true});
 }
 
 try {
@@ -178,6 +189,7 @@ try {
       res.setHeader('Content-Type','text/html');res.end(`<!doctype html><style>html,body,#root{margin:0;height:100%;width:100%}${active.css}</style><div id="root"></div><script>window.__space=${JSON.stringify(active.space.slug)}</script><script type="module" src="/app.js"></script>`);
     }catch(error){emit({httpError:error.message});res.writeHead(500);res.end('harness failure');}
   },8090);
+  await bundle('5.2.0'); await bundle('master');
   for(const version of ['5.2.0','master'])for(const low of [false,true])await run(version,low);
 } catch(error) {emit({failure:error.stack});process.exitCode=1;}
 finally {

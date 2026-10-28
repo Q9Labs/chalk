@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export GOTOOLCHAIN=auto
 cd "$(dirname "$0")/../../.."
 task_dir="$(mktemp -d "$HOME/chalk-tab-crash.XXXXXX")"
 export CRASH_TASK_DIR="$task_dir"
