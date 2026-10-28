@@ -28,10 +28,11 @@ type Harness = {
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
   readonly peerStates: typeof peerStates;
-  readonly accessRequests: () => number;
+  readonly accessReasons: () => readonly string[];
   readonly agreementSnapshot: () => SpaceSnapshot;
   readonly interruptMicrophone: typeof interruptMicrophone;
   readonly connectionHistory: () => readonly string[];
+  readonly connectionErrorHistory: () => readonly string[];
   readonly previewCommandContract?: PreviewClientCommand;
 };
 
@@ -41,7 +42,7 @@ declare global {
   }
 }
 
-let accessRequests = 0;
+const accessReasons: string[] = [];
 const socketBaseURL = location.origin.replace(/^http/u, "ws");
 const fixtureUser = new URL(location.href).searchParams.get("fixtureUser");
 const createFixtureSpaceClient: typeof createSpaceClient = (options) =>
@@ -61,7 +62,7 @@ const client = createFixtureSpaceClient({
   space: "fixture-space",
   baseUrl: location.origin,
   getAccess: async (context) => {
-    accessRequests += 1;
+    accessReasons.push(context.reason);
     const accessURL = fixtureUser ? `/api/chalk/access?fixtureUser=${encodeURIComponent(fixtureUser)}` : "/api/chalk/access";
     const response = await fetch(accessURL, {
       method: "POST",
@@ -75,12 +76,17 @@ const client = createFixtureSpaceClient({
 
 function installHarness(nextClient: SpaceClient): void {
   const history: string[] = [];
+  const errors: string[] = [];
   nextClient.subscribe(() => {
-    const status = nextClient.getSnapshot().connection.status;
+    const connection = nextClient.getSnapshot().connection;
+    const status = connection.status;
     if (history.at(-1) !== status) history.push(status);
+    const code = connection.lastError?.code;
+    if (code && errors.at(-1) !== code) errors.push(code);
   });
   window.__chalk = {
     connectionHistory: () => history,
+    connectionErrorHistory: () => errors,
     agreementSnapshot: () => nextClient.getSnapshot(),
     interruptMicrophone,
     join: () => joinFromHarness(nextClient),
@@ -101,7 +107,7 @@ function installHarness(nextClient: SpaceClient): void {
     snapshot: () => publicSnapshot(nextClient.getSnapshot()),
     resources: resourceCounts,
     peerStates,
-    accessRequests: () => accessRequests,
+    accessReasons: () => accessReasons,
   };
 }
 
