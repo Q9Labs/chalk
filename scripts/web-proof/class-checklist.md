@@ -32,6 +32,13 @@ local stack and writes case outcomes/timings and screenshots under
 `.private/class-checklist/run-<CHALK_CLASS_RUN>/`. A setup failure before a case
 starts is **blocked**, not passed; a dependent C6 is not run if C5 fails.
 
+Every roster convergence and media toggle also runs the shared participant
+agreement invariant: local controls, each peer's badges, per-sender playback
+energy, and advancing decoded video must agree. The fast packed-consumer gate
+uses the same invariant; its full PR matrix adds independent Sync/media faults
+in Chromium and iPad-profile WebKit. Recovery proof deadlines read the SDK's
+actual recovery defaults rather than racing them with a shorter fixed wait.
+
 C2 and C7 share one eight-minute background interval. C5 and C6 share a recovered
 call, so a failing 60-second recovery does not prevent the media check after a
 successful 140-second recovery. The student is muted with its camera off during background; another tab
