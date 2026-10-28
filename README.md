@@ -60,6 +60,7 @@ Use the small command surface for inspection and cleanup:
 
 ```bash
 pnpm dev:status
+node scripts/dev/cli.mjs status --ready  # exit 0 only when this checkout owns a ready runtime
 pnpm dev:logs                 # all services
 pnpm dev:logs -- api          # one service
 pnpm dev:smoke
@@ -68,6 +69,10 @@ pnpm dev --fresh              # recreate this checkout's local fixture
 pnpm dev:reset                # destructive: asks before removing local state
 pnpm dev:reset -- --yes       # skip only the confirmation prompt
 ```
+
+Only one local Chalk runtime can own a machine at a time. Worktrees share its
+ports, database, and containers; `dev:status` identifies the owning checkout.
+The `--ready` check uses the supervisor's recorded state, not a live health probe.
 
 `pnpm dev` also creates a local Tenant and Space with the `cf_sfu` media plane and
 prints their ids in the ready summary. Use that Space for local end-to-end runs.

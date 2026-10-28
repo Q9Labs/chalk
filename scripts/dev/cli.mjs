@@ -24,6 +24,11 @@ export async function runCli(argv = process.argv.slice(2), { cwd = process.cwd()
     const startup = runCommand(args.command, config, { supervisor: args.command === "start" ? supervisor : undefined, service: args.service, yes: args.yes, output, hooks: commandHooks });
     shutdown?.attachStartup(startup);
     const result = await startup;
+    if (args.command === "status" && args.ready) {
+      const owner = await readOwner(config);
+      const ready = owner && owner.checkout === config.root && owner.state === "ready" && !result.stale && (await validateOwnedPid(owner.supervisorPid));
+      return { code: ready ? 0 : 1, result, config };
+    }
     if (args.command === "status" && (result.stale || ["degraded", "reload-failed", "failed"].includes(result.state || result.status))) {
       return { code: 1, result, config };
     }

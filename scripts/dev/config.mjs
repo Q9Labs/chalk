@@ -9,7 +9,6 @@ export const DevCommand = Object.freeze({
   START: "start",
   STATUS: "status",
   LOGS: "logs",
-  SMOKE: "smoke",
   STOP: "stop",
   RESET: "reset",
   HELP: "help",
@@ -46,6 +45,7 @@ export function parseArguments(argv = []) {
   let service;
   let fresh = false;
   let yes = false;
+  let ready = false;
   const positionals = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -69,6 +69,10 @@ export function parseArguments(argv = []) {
       fresh = true;
       continue;
     }
+    if (token === "--ready") {
+      ready = true;
+      continue;
+    }
     if (token === "--yes" || token === "-y") {
       yes = true;
       continue;
@@ -88,7 +92,8 @@ export function parseArguments(argv = []) {
     throw failure(FailureKind.CONFIG, `unexpected argument: ${positionals.join(" ")}`, { stage: "arguments" });
   }
   if (command === DevCommand.LOGS) service = positionals[0];
-  return { command, profile, service, fresh, yes };
+  if (ready && command !== DevCommand.STATUS) throw failure(FailureKind.CONFIG, "--ready is only available for status", { stage: "arguments" });
+  return { command, profile, service, fresh, yes, ready };
 }
 
 function numberFromEnv(env, name, fallback) {
