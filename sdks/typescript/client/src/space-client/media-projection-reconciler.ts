@@ -16,12 +16,13 @@ type Mismatch = {
   reported: boolean;
   failed: boolean;
   timer: unknown;
+  readonly controller: AbortController;
 };
 type Options = {
   readonly now: () => number;
   readonly schedule: (callback: () => void, milliseconds: number) => unknown;
   readonly cancel: (timer: unknown) => void;
-  readonly send: (source: Source, observation: Observation) => Promise<void>;
+  readonly send: (source: Source, observation: Observation, signal: AbortSignal) => Promise<void>;
   readonly report: (event: ConnectionReportTransportEvent) => void;
   readonly changed: () => void;
 };
@@ -51,7 +52,7 @@ export class MediaProjectionReconciler {
       return;
     }
     this.#clear(source);
-    const mismatch: Mismatch = { observation, startedAt: this.#options.now(), attempts: 0, inFlight: false, reported: false, failed: false, timer: undefined };
+    const mismatch: Mismatch = { observation, startedAt: this.#options.now(), attempts: 0, inFlight: false, reported: false, failed: false, timer: undefined, controller: new AbortController() };
     this.#mismatches.set(source, mismatch);
     mismatch.timer = this.#options.schedule(() => this.#tick(source, mismatch), GRACE_MS);
   }
@@ -72,8 +73,11 @@ export class MediaProjectionReconciler {
 
   #clear(source: Source): void {
     const mismatch = this.#mismatches.get(source);
-    if (mismatch) this.#options.cancel(mismatch.timer);
     this.#mismatches.delete(source);
+    if (mismatch) {
+      this.#options.cancel(mismatch.timer);
+      mismatch.controller.abort();
+    }
   }
 
   #tick(source: Source, mismatch: Mismatch): void {
@@ -81,6 +85,7 @@ export class MediaProjectionReconciler {
     const duration = this.#options.now() - mismatch.startedAt;
     if (duration >= DEADLINE_MS || (mismatch.attempts >= MAX_ATTEMPTS && !mismatch.inFlight)) {
       mismatch.failed = true;
+      mismatch.controller.abort();
       this.#report(source, mismatch, "failed");
       this.#options.changed();
       return;
@@ -95,7 +100,7 @@ export class MediaProjectionReconciler {
     mismatch.attempts += 1;
     mismatch.inFlight = true;
     void this.#options
-      .send(source, mismatch.observation)
+      .send(source, mismatch.observation, mismatch.controller.signal)
       .catch(() => {
         // Failure is represented by the bounded attempt budget and terminal UI state.
       })

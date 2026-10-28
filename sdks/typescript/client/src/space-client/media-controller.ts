@@ -144,16 +144,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
       cancel: connection.cancelScheduleUnsafe,
       changed: () => this.#publish(),
       report: (event) => connection.recordTransportDiagnostic(event),
-      send: (source, observation) =>
+      send: (source, observation, signal) =>
         Effect.runPromise(
           this.#gates.get(source)!.withPermit(
             Effect.suspend(() => {
               const ports = this.#ports;
               const state = this.#sources[source];
               if (!ports || !this.#syncLive || state.desired.revision !== observation.revision || !this.#projection.isCurrent(source, observation)) return Effect.void;
-              return this.#send(ports, source, state.desired, observation.enabled);
+              return this.#send(ports, source, state.desired, observation.enabled, signal);
             }),
           ),
+          { signal },
         ),
     });
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
@@ -622,7 +623,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
     return this.#serialize("microphone", this.#serialize("camera", publish));
   }
-  #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
+  #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean, signal?: AbortSignal): Effect.Effect<void, unknown> {
     const command = this.#mediaAction(
       enabled,
       foreign(async () => {
@@ -631,7 +632,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled");
         const state = this.#sources[source];
         state.sentRevision = intent.revision;
-        await (source === "microphone" ? ports.sync.setMicrophoneEnabled(enabled) : source === "camera" ? ports.sync.setCameraEnabled(enabled) : ports.sync.setScreenShareEnabled(enabled));
+        const send = source === "microphone" ? ports.sync.setMicrophoneEnabled : source === "camera" ? ports.sync.setCameraEnabled : ports.sync.setScreenShareEnabled;
+        await (signal ? send.call(ports.sync, enabled, { signal }) : send.call(ports.sync, enabled));
       }).pipe(
         Effect.andThen(enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void),
         Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"), catch: (cause) => cause })),
@@ -1217,9 +1219,9 @@ function livePublication(publication: ConnectionMediaSnapshot["localTracks"][num
 }
 function confirmedLocalMedia(media: MediaSlice["local"][MediaSource], desired: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource] {
   if (!desired) return { ...media, state: convergence === "failed" ? "failed" : "disabled" };
+  if (convergence) return { ...media, state: convergence };
   if (media.state === "requesting") return media;
   if (media.track && !liveTrack(media.track)) return { ...media, state: "disabled" };
-  if (convergence) return { ...media, state: convergence };
   if (media.state === "enabled" && !live) return { ...media, state: "requesting" };
   return media;
 }
