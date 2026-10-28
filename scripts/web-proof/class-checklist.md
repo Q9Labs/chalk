@@ -28,7 +28,7 @@ still selects the existing call and board suites. No model assertions or cache
 entries are used. Retries remain disabled. Each fresh invocation starts its own
 local stack and writes case outcomes/timings and screenshots under
 `.private/class-checklist/run-<CHALK_CLASS_RUN>/`. A setup failure before a case
-starts is **blocked**, not passed; a dependent C6 is not run if C4 fails.
+starts is **blocked**, not passed; a dependent C6 is not run if C5 fails.
 
 C2 and C7 share one eight-minute background interval. C5 and C6 share a recovered
 call, so a failing 60-second recovery does not prevent the media check after a

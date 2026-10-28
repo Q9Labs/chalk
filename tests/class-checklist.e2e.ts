@@ -243,6 +243,7 @@ test("C1: five consecutive joins reach the live call within ten seconds", async 
 test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up", async () => {
   await classroom("C2-C7", async (pages, contexts) => {
     const [teacher, student] = pages;
+    await student.bringToFront();
     const mute = student.getByRole("button", { name: "Mute microphone", exact: true });
     if (await mute.count()) await mute.click();
     const camera = student.getByRole("button", { name: "Turn off camera", exact: true });
@@ -290,6 +291,7 @@ test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up
       const before = await paintedPixels(student);
       await stroke(teacher, 0.65);
       const drawn = Date.now();
+      await student.bringToFront();
       await expect.poll(() => student.locator(".chalk-board").getAttribute("data-elements"), { timeout: 5000 }).toBe("2");
       await expect.poll(() => paintedPixels(student), { timeout: 5000 }).toBeGreaterThan(before + 10);
       expect(Date.now() - drawn).toBeLessThan(5000);
@@ -338,6 +340,7 @@ async function recoveredMedia(pages: Page[]) {
     [pages[0], "Student"],
     [pages[1], "Teacher"],
   ] satisfies [Page, string][]) {
+    await page.bringToFront();
     await expect.poll(() => page.evaluate(incomingAudioLevel), { timeout: 10_000 }).toBeGreaterThan(0);
     const video = page
       .locator('[data-part="stage-tile"]')
@@ -371,6 +374,7 @@ async function recoveredMedia(pages: Page[]) {
     const start = Date.now();
     await pages[0].getByRole("button", { name: "Share screen", exact: true }).click();
     for (const page of pages.slice(1)) {
+      await page.bringToFront();
       const video = page.locator('[data-stage-item^="screen"] video');
       await video.waitFor({ timeout: 10_000 });
       const frames = () => video.evaluate((element: HTMLVideoElement) => element.getVideoPlaybackQuality().totalVideoFrames);
@@ -380,6 +384,7 @@ async function recoveredMedia(pages: Page[]) {
     }
     expect(Date.now() - start).toBeLessThan(10_000);
     await shot(pages, `C6-share-${attempt}`);
+    await pages[0].bringToFront();
     await pages[0].getByRole("button", { name: "Stop sharing", exact: true }).click();
     for (const page of pages.slice(1)) await page.locator('[data-stage-item^="screen"]').waitFor({ state: "detached" });
   }
