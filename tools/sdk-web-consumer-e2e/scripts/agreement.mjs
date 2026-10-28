@@ -9,9 +9,10 @@ const mediaControls = [
   { source: "camera", title: "Camera", action: "setCameraEnabled", command: "set_camera_enabled", onLabel: "Turn on camera", shortcut: "Control+e" },
 ];
 
-export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device, fast = false }) {
+export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device, fast = false, checkCameraFrames = true }) {
   const failures = [];
-  const scenario = scenarioRunner({ browser, baseURL, invoke, waitForState, device, failures, fault });
+  const agree = (pages, options) => assertAgreement(pages, { ...options, checkCameraFrames });
+  const scenario = scenarioRunner({ browser, baseURL, invoke, waitForState, device, failures, fault, agree });
   async function fault(configuration) {
     const response = await fetch(`${baseURL}/test/fault`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ participant: "agreementalice", ...configuration }) });
     assert.equal(response.ok, true, `Fault injection HTTP ${response.status}`);
@@ -34,7 +35,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     await fault({ clear: true });
     const replacement = await open("agreementalice");
     await enabledCapture([replacement, pages[1]]);
-    await assertAgreement([replacement, pages[1]], { timeoutMs: recoveryTimeoutMs });
+    await agree([replacement, pages[1]], { timeoutMs: recoveryTimeoutMs });
     return replacement;
   }
   async function recoverPausedSource(page, { source, onLabel }) {
@@ -49,7 +50,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
   async function recoverPausedCapture(pages) {
     // Transport recovery may preserve capture or revoke stale consent. Before
     // any new tap, the person's controls and the class must already agree.
-    await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
+    await agree(pages, { timeoutMs: recoveryTimeoutMs });
     for (const page of pages) for (const control of mediaControls) await recoverPausedSource(page, control);
     await enabledCapture(pages);
   }
@@ -58,7 +59,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await invoke(owner, action, enabled);
       const state = await owner.evaluate(() => window.__chalk.snapshot().localMedia);
       assert.equal(state[source].state, enabled ? "enabled" : "disabled");
-      await assertAgreement(pages);
+      await agree(pages);
     }
   }
   await scenario("join and every microphone/camera toggle", async (pages) => {
@@ -79,7 +80,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         await scenario(`Sync ${source} update ${projection}: fail closed and one-tap recovery`, async (pages, _open, evidence) => {
           const { commands, reports } = evidence.get(pages[0]);
           await invoke(pages[0], action, false);
-          await assertAgreement(pages);
+          await agree(pages);
           const initialCommands = commands.length;
           await fault({ projection, durationMs: 12_000 });
           const unmute = invoke(pages[0], action, true).catch((error) => error);
@@ -96,7 +97,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
             await pages[0].getByText(`${title} didn’t reach the call. Turn it on to try again.`, { exact: true }).waitFor();
           }
           assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false, "Failed capture must be physically paused");
-          await assertAgreement(pages);
+          await agree(pages);
           await wait(2000);
           const mismatch = reports.filter((report) => report.trigger === "media_projection_mismatch");
           const expectedReports = projection === "reject" ? [] : [{ source, attempt: 0, outcome: "failed" }];
@@ -107,12 +108,12 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
           );
           assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 1, "The monitor must not send automatic repair targets");
           await fault({ clear: true });
-          await assertAgreement(pages);
+          await agree(pages);
           // Use the person's actual control, not a second SDK enable that could
           // hide a toggle which merely cancels an already failed action.
           await clickControl(pages[0], onLabel);
           await enabledCapture(pages);
-          await assertAgreement(pages);
+          await agree(pages);
           assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 2, "One fresh tap sends exactly one enable");
           assert.equal(reports.filter((report) => report.trigger === "media_projection_mismatch").length, expectedReports.length);
         });
@@ -121,30 +122,30 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     for (const { source, action, onLabel, shortcut } of mediaControls) {
       await scenario(`Sync ${source} confirms within grace`, async (pages, _open, evidence) => {
         await invoke(pages[0], action, false);
-        await assertAgreement(pages);
+        await agree(pages);
         await fault({ projection: "delay", durationMs: 2000 });
         await invoke(pages[0], action, true);
         await wait(300);
         await truth(pages);
         await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
         await enabledCapture(pages);
-        await assertAgreement(pages);
+        await agree(pages);
         assert.equal(evidence.get(pages[0]).reports.length, 0);
       });
       await scenario(`Pending ${source} cancels with shortcut and recovers with button`, async (pages, _open, evidence) => {
         await invoke(pages[0], action, false);
-        await assertAgreement(pages);
+        await agree(pages);
         await fault({ projection: "drop", durationMs: 12_000 });
         await invoke(pages[0], action, true);
         assert.equal((await pages[0].evaluate(() => window.__chalk.snapshot())).localMedia[source].state, "requesting", "Unconfirmed capture must remain pending");
         await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
         await pages[0].keyboard.press(shortcut);
-        await assertAgreement(pages);
+        await agree(pages);
         assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false);
         await fault({ clear: true });
         await clickControl(pages[0], onLabel);
         await enabledCapture(pages);
-        await assertAgreement(pages);
+        await agree(pages);
         assert.equal(evidence.get(pages[0]).reports.length, 0);
       });
     }
@@ -152,22 +153,22 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
   async function interruptionCases() {
     await scenario("Sync reconnect during unmute", async (pages) => {
       await invoke(pages[0], "setMicrophoneEnabled", false);
-      await assertAgreement(pages);
+      await agree(pages);
       await fault({ syncReconnect: true });
       const unmute = invoke(pages[0], "setMicrophoneEnabled", true).catch((error) => error);
       await unmute;
       await waitForState(pages[0], "live", recoveryTimeoutMs);
       // Reconnect may reject the interrupted command. Its settled UI must still
       // agree before a fresh user unmute restores audible capture.
-      await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
+      await agree(pages, { timeoutMs: recoveryTimeoutMs });
       await invoke(pages[0], "setMicrophoneEnabled", true);
       await enabledCapture(pages);
-      await assertAgreement(pages);
+      await agree(pages);
     });
     for (const event of ["mute", "ended"])
       await scenario(`OS microphone ${event}`, async (pages) => {
         await invoke(pages[0], "interruptMicrophone", event);
-        await assertAgreement(pages);
+        await agree(pages);
         assert.notEqual((await pages[0].evaluate(() => window.__chalk.snapshot())).localMedia.microphone.state, "enabled", "Interrupted capture must not remain normal On");
         if (event === "mute") {
           // The OS returns the device, but that event is not fresh consent.
@@ -176,11 +177,11 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
             Object.defineProperty(track, "muted", { configurable: true, value: false });
             track.dispatchEvent(new Event("unmute"));
           });
-          await assertAgreement(pages);
+          await agree(pages);
         }
         await clickControl(pages[0], "Unmute microphone");
         await enabledCapture(pages);
-        await assertAgreement(pages);
+        await agree(pages);
       });
   }
   async function recoveryCases() {
@@ -200,7 +201,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         await truth(pages);
         await waitForState(pages[0], "live", recoveryTimeoutMs);
         await recoverPausedCapture(pages);
-        await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
+        await agree(pages, { timeoutMs: recoveryTimeoutMs });
         assert.equal((await pages[0].evaluate(() => window.__chalk.connectionHistory())).includes("failed"), false, "Media loss became terminal while Sync was healthy");
         assert.equal((await pages[0].evaluate(() => window.__chalk.connectionErrorHistory())).includes("connection.media_recovery_exhausted"), false, "Media recovery exhausted early, even if a later background attempt succeeded");
       });
@@ -231,7 +232,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       // The superseded tab must not regain publication authority in the background.
       await waitForState(pages[0], "failed", recoveryTimeoutMs);
       assert.deepEqual(await pages[0].evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
-      await assertAgreement([replacement, pages[1]]);
+      await agree([replacement, pages[1]]);
     });
   }
   if (failures.length) throw new AggregateError(failures, `${failures.length} media agreement scenarios failed`);
@@ -296,7 +297,7 @@ async function closeScenario(contexts, invoke) {
 }
 
 function scenarioRunner(options) {
-  const { failures, fault, invoke } = options;
+  const { failures, fault, invoke, agree } = options;
   return async (name, run) => {
     const filter = process.env.CHALK_AGREEMENT_CASE;
     if (filter && !name.includes(filter)) return;
@@ -307,7 +308,7 @@ function scenarioRunner(options) {
       const open = (participant) => openParticipant(participant, options, contexts, evidence);
       const pages = [await open("agreementalice"), await open("agreementbob")];
       await enabledCapture(pages);
-      await assertAgreement(pages);
+      await agree(pages);
       await run(pages, open, evidence);
       process.stdout.write(`[agreement] ${name}: passed ${Date.now() - start}ms\n`);
     } catch (error) {

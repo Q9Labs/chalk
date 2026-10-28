@@ -41,6 +41,11 @@ Synthetic camera frames keep changing; synthetic audio is a continuous tone.
 The existing packed-artifacts PR check also runs the fault matrix in Chromium
 and Playwright WebKit with the full `iPad Pro 11` device profile (touch, mobile,
 viewport, scale and user agent). This is WebKit emulation, not a physical iPad.
+macOS WebKit and Chromium require advancing camera frames. Linux WebKit marks
+only that frame assertion as a known engine stall; all microphone, control,
+projection and badge assertions remain enabled. The [platform evidence and
+five-trial results](camera-engine-evidence.md) explain the exception. Codec
+selection is unchanged.
 
 ```sh
 node tools/sdk-web-consumer-e2e/scripts/run.mjs --browsers=chromium,webkit --agreement-only
@@ -67,6 +72,9 @@ button recovery. These cases require the passive projection fix (#597); they
 intentionally fail against product code without that fix.
 
 The fixture deliberately separates physical publications from Sync projections.
+Clearing prepared capture retains the advertised publication for reuse, like
+the production adapter; only explicit forced retirement removes it. This keeps
+the OS-ended-camera cleanup gap visible instead of silently repairing it.
 It exercises the real packed SpaceClient and React UI, but replaces the provider
 and Sync transport adapters. The SDK selector regression in
 `sdks/typescript/client/src/space-client/media-agreement.test.ts` independently checks the

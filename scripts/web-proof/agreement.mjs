@@ -110,9 +110,8 @@ function microphoneIssues(received, on, prefix) {
   return [`${prefix} playback energy ${energy}${detail}`];
 }
 
-function cameraIssues(received, previous, on, prefix) {
-  const currentFrames = (received ?? {}).frames;
-  const previousFrames = (previous ?? {}).frames;
+function cameraIssues({ frames: currentFrames } = {}, { frames: previousFrames } = {}, { on, prefix, checkCameraFrames }) {
+  if (!checkCameraFrames) return [];
   const advancing = currentFrames > previousFrames + 1;
   return advancing === on ? [] : [`${prefix} frames ${previousFrames} -> ${currentFrames}`];
 }
@@ -123,14 +122,14 @@ function projectionIssues(participant, source, owner, observer) {
   return [];
 }
 
-function observerIssues(before, owner, observer) {
+function observerIssues(before, owner, observer, checkCameraFrames) {
   const participant = observer.participants.find((participant) => participant.id === owner.self);
   const received = observer.received.find((participant) => participant.id === owner.self);
   const previous = before.find((item) => item.self === observer.self)?.received.find((item) => item.id === owner.self);
   return ["microphone", "camera"].flatMap((source) => {
     const on = owner.local[source] === "enabled";
     const prefix = `${owner.self} ${source}: ${observer.self}`;
-    const playback = source === "microphone" ? microphoneIssues(received, on, prefix) : cameraIssues(received, previous, on, prefix);
+    const playback = source === "microphone" ? microphoneIssues(received, on, prefix) : cameraIssues(received, previous, { on, prefix, checkCameraFrames });
     return [...projectionIssues(participant, source, owner, observer), ...badgeIssues(participant, source, on, prefix), ...playback];
   });
 }
@@ -144,17 +143,17 @@ function identityIssues(samples) {
   return samples.length < 2 || new Set(samples.map((sample) => sample.self)).size !== samples.length ? ["agreement requires at least two distinct participant identities"] : [];
 }
 
-export function agreementIssues(before, after) {
+export function agreementIssues(before, after, { checkCameraFrames = true } = {}) {
   const issues = identityIssues(after);
   for (const owner of after) {
     if (!owner.self) issues.push("missing self identity");
     issues.push(...controlIssues(owner));
-    issues.push(...after.filter((observer) => observer.self !== owner.self).flatMap((observer) => observerIssues(before, owner, observer)));
+    issues.push(...after.filter((observer) => observer.self !== owner.self).flatMap((observer) => observerIssues(before, owner, observer, checkCameraFrames)));
   }
   return issues;
 }
 
-export async function assertAgreement(endpoints, { timeoutMs = 15_000 } = {}) {
+export async function assertAgreement(endpoints, { timeoutMs = 15_000, checkCameraFrames = true } = {}) {
   const sample = () => Promise.all(endpoints.map((endpoint) => endpoint.evaluate(sampleAgreement)));
   const deadline = Date.now() + timeoutMs;
   let issues;
@@ -162,10 +161,10 @@ export async function assertAgreement(endpoints, { timeoutMs = 15_000 } = {}) {
     const before = await sample();
     await wait(350);
     const after = await sample();
-    issues = agreementIssues(before, after);
+    issues = agreementIssues(before, after, { checkCameraFrames });
     if (!issues.length) return after;
   } while (Date.now() < deadline);
-  assert.deepEqual(issues, [], "Media agreement: owner controls, every observer badge, audible capture and advancing video must agree");
+  assert.deepEqual(issues, [], "Media agreement: owner controls, every observer badge and required playback must agree");
 }
 
 export function truthIssues(samples) {
