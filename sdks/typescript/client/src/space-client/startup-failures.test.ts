@@ -677,7 +677,7 @@ describe("public client exhausted recovery", () => {
       expect(sockets[1]?.closed).toBe(true);
       expect(sockets[1]?.sent).not.toContain("hello");
       expect(client.getSnapshot().self.participantId).not.toBe(replacementId);
-      await vi.advanceTimersByTimeAsync(11000);
+      await vi.advanceTimersByTimeAsync(61000);
       expect(client.getSnapshot().connection.lastError?.code).toBe("connection.sync_recovery_exhausted");
       const replacementSockets = await liveBrowser(false, { entryConfirmation: true, participantId: replacementId });
       const retry = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
@@ -705,7 +705,7 @@ describe("public client exhausted recovery", () => {
       await client.join({ microphone: false, camera: false });
       vi.useFakeTimers();
       window.dispatchEvent(new Event("offline"));
-      await vi.advanceTimersByTimeAsync(11000);
+      await vi.advanceTimersByTimeAsync(61000);
       expect(client.getSnapshot().connection.lastError?.code).toBe("connection.sync_recovery_exhausted");
       const retry = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
       await vi.advanceTimersByTimeAsync(1);
@@ -801,7 +801,7 @@ describe("public client exhausted recovery", () => {
         peer.dispatchEvent(new Event("connectionstatechange"));
       }
       const code = `connection.${stage}_recovery_exhausted`;
-      for (let second = 0; second < 15 && !errors.some((error) => error.code === code); second++) await vi.advanceTimersByTimeAsync(1000);
+      for (let second = 0; second < 65 && !errors.some((error) => error.code === code); second++) await vi.advanceTimersByTimeAsync(1000);
       expect(client.getSnapshot().connection.lastError).toMatchObject({ code, recoverable: true });
       expect(errors).toContainEqual(expect.objectContaining({ code, recoverable: true }));
       const exhausted = diagnostics.filter((event) => event.event === "recovery_exhausted");

@@ -220,7 +220,7 @@ try {
   const failures = final.flatMap(s => s.states.filter(state => state.connection.status === "failed"));
   report.failures = failures;
   report.stage = "complete";
-  report.result = failures.length === 0 && final.every(s => s.connection.status === "live" && !s.connection.failure) ? "passed" : "failed";
+  report.result = failures.length === 0 && final.every(s => s.connection.status === "live" && !s.connection.lastError) ? "passed" : "failed";
   await writeFile(`${output}/report.json`, JSON.stringify(report,null,2));
   assert.equal(report.result,"passed");
 } catch (error) {

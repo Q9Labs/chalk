@@ -25,7 +25,8 @@ type MediaRecoveryAttempt = {
 // A 10s dial can fail and retry before the overall join gives up.
 const START_TIMEOUT_MS = 30000;
 const LEAVE_TIMEOUT_MS = 5000;
-const RECOVERY_BUDGET_MS = 10000;
+// The lifecycle must allow the transport's existing recovery window to finish.
+const RECOVERY_BUDGET_MS = MEDIA_RECOVERY_TIMEOUT_MS;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5000;
 const RECONNECT_GRACE_MS = 250;
