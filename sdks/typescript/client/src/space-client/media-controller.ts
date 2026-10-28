@@ -152,6 +152,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               const ports = this.#ports;
               const state = this.#sources[source];
               if (!ports || !this.#syncLive || state.desired.revision !== observation.revision || !this.#projection.isCurrent(source, observation)) return Effect.void;
+              if (state.result.revision === state.desired.revision && state.result.status === "failed" && state.result.cleanup) return this.#executeRevision(ports, source, state.desired, signal);
               return this.#send(ports, source, state.desired, observation.enabled, signal);
             }),
           ),
@@ -442,11 +443,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
       yield* cleanup;
     });
   }
-  #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
+  #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, signal?: AbortSignal): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
       const state = this.#sources[source];
       if (state.result.revision === intent.revision && state.result.status === "failed") {
-        yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
+        yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false, signal));
         if (state.result.revision === intent.revision && state.result.status === "failed") state.result.cleanup = false;
         return;
       }
@@ -469,7 +470,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const previous = intent.previousEnabled;
       // This is the result of this operation, never an inference from a projection.
       // An Off failure cannot undo the user's local pause; its remote cleanup remains pending.
-      if (state.desired.revision === intent.revision) state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
+      if (state.desired.revision !== intent.revision) return;
+      state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
+      if (state.result.cleanup) {
+        state.localEnabled = false;
+        this.#pauseTracks(source);
+        ports.media.setLocalSourceIntent?.(source, false);
+      }
     });
   }
   #prepareDevice(ports: ConnectionPorts, source: "microphone" | "camera", intent: MediaIntent): Effect.Effect<void, unknown> {
@@ -1049,9 +1056,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const publications = new Map<MediaSource, RecoveryPublication>();
     const own = (snapshot.media?.items ?? []).filter((item) => item.participantId === snapshot.participantId && item.enabled && item.publicationId !== null);
     for (const item of own) {
-      // Mic/camera reconcile their actual publication after reconnect. Only a screen
-      // lease is revoked by a missing recovered projection.
-      if (item.source !== "screen" || item.publicationId === null) continue;
+      // A full snapshot does not replay moderation stops. Missing recovered
+      // publications therefore revoke the old action, never authorize a restart.
+      if (item.source === "screen_audio" || item.publicationId === null) continue;
       const state = this.#sources[item.source];
       if (state.localEnabled && state.sentRevision === state.desired.revision) publications.set(item.source, { revision: state.sentRevision, publicationId: item.publicationId });
     }
@@ -1173,7 +1180,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#projection.observe(source, {
       revision: state.desired.revision,
       publicationId: publication?.publicationId ?? null,
-      enabled: state.desired.enabled && state.forcedRevision !== state.desired.revision && livePublication(publication),
+      enabled: state.desired.enabled && state.forcedRevision !== state.desired.revision && !(state.result.revision === state.desired.revision && state.result.status === "failed" && state.result.cleanup) && livePublication(publication),
       projectedEnabled: projection.enabled,
       projectedPublicationId: projection.publicationId,
     });

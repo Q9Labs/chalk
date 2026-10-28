@@ -134,6 +134,7 @@ it("does not wait for reconciliation to apply a manual mute", async () => {
     await test.join();
     const off = test.client.media.setMicrophoneEnabled(false);
     await vi.waitFor(() => expect(test.track.enabled).toBe(false));
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
     await off;
     expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
@@ -166,7 +167,31 @@ it("keeps a rejected enable unconfirmed until failed-command cleanup converges i
   }
 });
 
-it("reconciles again after a Sync reconnect instead of revoking a healthy publication", async () => {
+it("retries rejected enable cleanup toward off without republishing audio", async () => {
+  const test = scenario();
+  try {
+    await test.join();
+    await test.client.media.setMicrophoneEnabled(false);
+    test.command.mockImplementationOnce(async () => {
+      test.track.enabled = true;
+      test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: test.track }] });
+      test.project(true);
+      throw new Error("lost acknowledgement");
+    });
+    test.command.mockRejectedValueOnce(new Error("cleanup rejected"));
+    await expect(test.client.media.setMicrophoneEnabled(true)).rejects.toThrow();
+    expect(test.track.enabled).toBe(false);
+    expect(test.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+    await vi.waitFor(() => expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true, false, false]), { timeout: 2000 });
+    expect(test.command).toHaveBeenLastCalledWith(false, { signal: expect.any(AbortSignal) });
+    expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
+    expect(test.received.enabled).toBe(false);
+  } finally {
+    test.dispose();
+  }
+});
+
+it("preserves a moderation stop recovered through a full Sync snapshot until a fresh user action", async () => {
   const test = scenario();
   try {
     await test.join();
@@ -174,6 +199,26 @@ it("reconciles again after a Sync reconnect instead of revoking a healthy public
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
     test.project(false);
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
+    await vi.waitFor(() => expect(test.track.enabled).toBe(false));
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(test.command).not.toHaveBeenCalled();
+    await test.client.media.setMicrophoneEnabled(true);
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
+    expect(test.received.enabled).toBe(true);
+  } finally {
+    test.dispose();
+  }
+});
+
+it("restarts reconciliation after reconnect when no previously confirmed publication was revoked", async () => {
+  const test = scenario();
+  try {
+    await test.join();
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
     await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true, { signal: expect.any(AbortSignal) }), { timeout: 2000 });
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");

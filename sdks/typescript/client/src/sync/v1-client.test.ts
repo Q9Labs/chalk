@@ -1487,6 +1487,8 @@ describe("V1SyncClient", () => {
     const mediaPlane = new BlockingMediaPlane();
     const { client, socket } = await liveClient({ clock, mediaPlane });
     const controller = new AbortController();
+    const observed: string[] = [];
+    const unsubscribe = client.subscribe((snapshot) => observed.push(snapshot.localMedia.microphone));
     try {
       const cancelled = expect(client.setMicrophoneEnabled(true, { requestId: commandIds[0], signal: controller.signal })).rejects.toMatchObject({ code: "cancelled" });
       const late = { type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null } as const;
@@ -1494,6 +1496,7 @@ describe("V1SyncClient", () => {
       await settle();
       controller.abort();
       await cancelled;
+      expect(observed.at(-1)).toBe("unknown");
       socket.receive(late);
       mediaPlane.complete({ outcome: "confirmed", errorCode: null });
       await settle();
@@ -1508,6 +1511,7 @@ describe("V1SyncClient", () => {
       expect(client.getSnapshot().localMedia.microphone).toBe("disabled");
       expect(mediaPlane.targets.at(-1)).toEqual({ operationId: commandIds[1], participantId: ownerId, source: "microphone", enabled: false });
     } finally {
+      unsubscribe();
       client.stop();
     }
   });

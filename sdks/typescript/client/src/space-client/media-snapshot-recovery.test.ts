@@ -21,16 +21,13 @@ describe("recovery publication authority", () => {
       if (newerAction) {
         await vi.waitFor(() => expect(command).toHaveBeenLastCalledWith(false));
         expect(close).not.toHaveBeenCalled();
-      } else if (source === "screen") {
+      } else {
         await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
         expect(track.enabled).toBe(false);
         expect(command).toHaveBeenCalledExactlyOnceWith(true);
         // A fresh On remains available; recovery never writes the user's desired intent.
         await setEnabled(true);
         expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, true]);
-      } else {
-        expect(close).not.toHaveBeenCalled();
-        expect(track.enabled).toBe(true);
       }
     } finally {
       client.dispose();

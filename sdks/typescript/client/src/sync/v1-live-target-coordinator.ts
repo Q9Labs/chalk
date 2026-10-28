@@ -110,6 +110,8 @@ export class V1LiveTargetCoordinator {
       this.#removeTarget(operationId);
       this.#localMedia[deferred.source] = "unknown";
       rejectV1Deferred(deferred, new V1SyncError("Media target cancelled", "cancelled"));
+      // Abort can run inside a media snapshot subscriber; publish after it unwinds.
+      queueMicrotask(() => this.#options.stateChanged());
     };
     signal.addEventListener("abort", abort, { once: true });
     return promise.finally(() => signal.removeEventListener("abort", abort));
