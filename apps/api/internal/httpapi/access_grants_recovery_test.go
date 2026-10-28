@@ -83,6 +83,60 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 	}
 }
 
+func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
+	subject := participantMediaSubject(t)
+	subject.CloudflareConnectionID = "tab-a"
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "chalk", KeyID: "key", PrivateKey: private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := issuer.Issue(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
+	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
+	active := accessgrants.NewActiveAuthorizer(repo)
+	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
+	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
+	expected := subject.CloudflareConnectionID
+	request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, CurrentMediaToken: credential.Token, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
+	committed, err := endpoint.handle(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The browser never receives this response and retries its original request.
+	replayed, err := endpoint.handle(ctx, request)
+	if err != nil {
+		t.Fatalf("lost replacement response was not replayed: %v", err)
+	}
+	if replayed.Media.Token != committed.Media.Token || fixture.created != 1 {
+		t.Fatal("retry must replay the winning grant without allocating media")
+	}
+	// A subsequent explicit takeover must invalidate the old replay too.
+	takeover := request
+	takeover.Body.ExpectedMediaConnectionID = nil
+	if _, err := endpoint.handle(ctx, takeover); err != nil {
+		t.Fatal(err)
+	}
+	winner := repo.connection
+	_, err = endpoint.handle(ctx, request)
+	if err == nil || accessGrantAPIError(err).Code != "participant.connection_superseded" {
+		t.Fatal("superseded replay must conflict")
+	}
+	if repo.connection != winner || fixture.created != 2 {
+		t.Fatal("stale replay displaced the takeover or allocated media")
+	}
+}
+
 type recoveryGrantPlane struct {
 	refreshGrantPlane
 }

@@ -7,6 +7,25 @@ import { ConnectionAccessService, makeConnectionAccessLayer } from "./manager";
 import { accessGrant } from "./grant.test.helpers";
 
 describe("ConnectionAccessService", () => {
+  it("keeps explicit rejoin unconditional while automatic recovery compares its binding", async () => {
+    const requests: ConnectionAccessRequest[] = [];
+    const provider = (request: ConnectionAccessRequest) => {
+      requests.push(request);
+      return Effect.succeed(accessGrant(120_000, String(requests.length), `connection-${requests.length}`));
+    };
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* ConnectionAccessService;
+        yield* service.initialize();
+        yield* service.refresh("media_recovery", true);
+        yield* service.refreshAfterRejection();
+      }).pipe(Effect.provide(makeConnectionAccessLayer(provider)), Effect.provide(TestClock.layer())),
+    );
+    expect(requests[1]).toMatchObject({ replaceMediaConnection: true, expectedMediaConnectionId: "connection-1" });
+    expect(requests[2]).toMatchObject({ reason: "access_retry", replaceMediaConnection: true });
+    expect(requests[2]?.expectedMediaConnectionId).toBeUndefined();
+  });
+
   it("classifies an initial provider timeout as unavailable", async () => {
     const program = Effect.gen(function* () {
       const service = yield* ConnectionAccessService;
