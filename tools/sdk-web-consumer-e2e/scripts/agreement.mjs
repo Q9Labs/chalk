@@ -124,12 +124,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         const unmute = invoke(pages[0], action, true).catch((error) => error);
         // Hold Sync behind a successful publication, rather than delaying capture.
         await wait(300);
-        let failure;
-        try {
-          await truth(pages);
-        } catch (error) {
-          failure = error;
-        }
+        await truth(pages);
         const outcome = await unmute;
         if (projection === "reject") {
           // An explicit command rejection already revokes capture. The monitor
@@ -159,7 +154,6 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         await assertAgreement(pages);
         assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 2, "One fresh tap sends exactly one enable");
         assert.equal(reports.filter((report) => report.trigger === "media_projection_mismatch").length, expectedReports.length);
-        if (failure) throw failure;
       });
   for (const { source, action, onLabel, shortcut } of mediaControls) {
     await scenario(`Sync ${source} confirms within grace`, async (pages, _open, evidence) => {
@@ -179,6 +173,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await assertAgreement(pages);
       await fault({ projection: "drop", durationMs: 12_000 });
       await invoke(pages[0], action, true);
+      assert.equal((await pages[0].evaluate(() => window.__chalk.snapshot())).localMedia[source].state, "requesting", "Unconfirmed capture must remain pending");
       await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
       await pages[0].keyboard.press(shortcut);
       await assertAgreement(pages);
