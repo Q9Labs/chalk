@@ -34,8 +34,8 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         return page;
       };
       const pages = [await open("agreementalice"), await open("agreementbob")];
-      await assertAgreement(pages);
       await enabledCapture(pages);
+      await assertAgreement(pages);
       await run(pages, open);
       process.stdout.write(`[agreement] ${name}: passed ${Date.now() - start}ms\n`);
     } catch (error) {
@@ -116,6 +116,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     const unmute = invoke(pages[0], "setMicrophoneEnabled", true).catch((error) => error);
     await unmute;
     await waitForState(pages[0], "live", recoveryTimeoutMs);
+    await enabledCapture(pages);
     await assertAgreement(pages);
   });
   for (const event of ["mute", "ended"])

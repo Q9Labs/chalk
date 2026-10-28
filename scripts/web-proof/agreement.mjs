@@ -69,7 +69,7 @@ export async function sampleAgreement() {
   return { self, local, controls, participants, received };
 }
 
-export function agreementIssues(before, after, { advancing = true } = {}) {
+export function agreementIssues(before, after) {
   const issues = [];
   if (after.length < 2 || new Set(after.map((sample) => sample.self)).size !== after.length) issues.push("agreement requires at least two distinct participant identities");
   for (const owner of after) {
@@ -85,7 +85,7 @@ export function agreementIssues(before, after, { advancing = true } = {}) {
         const badge = participant?.[source === "microphone" ? "badgeMicrophone" : "badgeCamera"];
         if (badge !== undefined && badge !== on) issues.push(`${owner.self} ${source}: ${observer.self} badge disagrees`);
         if (source === "microphone" && Boolean(received?.energy > 0.00001) !== on) issues.push(`${owner.self} microphone: ${observer.self} playback energy ${received?.energy}${received?.audio === undefined ? "" : ` ${JSON.stringify(received.audio)}`}`);
-        if (source === "camera" && advancing && Boolean(received && previous && received.frames > previous.frames + 1) !== on) issues.push(`${owner.self} camera: ${observer.self} frames ${previous?.frames} -> ${received?.frames}`);
+        if (source === "camera" && Boolean(received && previous && received.frames > previous.frames + 1) !== on) issues.push(`${owner.self} camera: ${observer.self} frames ${previous?.frames} -> ${received?.frames}`);
       }
     }
   }
