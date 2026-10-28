@@ -24,7 +24,7 @@ test("Kotlin-only native module changes do not select JavaScript/TypeScript stru
 });
 
 test("structural rules include changed manifests and type bans follow TypeScript inputs", () => {
-  for (const file of ["apps/web/src/lib/chunkReload.ts", "packages/ui/package.json", "apps/api/openapi.yaml"]) {
+  for (const file of ["apps/web/src/lib/chunkReload.ts", "packages/ui/package.json", "apps/api/sqlc.yaml"]) {
     const task = createGatePlan([file]).tasks.find((entry) => entry.id === "ast-grep");
     assert.equal(task?.selected, true, file);
     assert.deepEqual(task?.command, ["node", "scripts/gates/ast-grep.mjs", file]);
