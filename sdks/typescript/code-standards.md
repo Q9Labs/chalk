@@ -8,10 +8,8 @@ it, and never imitate its style.
 
 ## Structure
 
-- One responsibility per file, ~300 lines max. A cohesive state machine (e.g.
-  the sync protocol client) may exceed that only when splitting would scatter
-  coupled state — and even then, pure helpers, frame builders, and validation
-  move to sibling modules.
+- Keep each file cohesive. Split out independent concerns when doing so makes
+  the code easier to navigate, but keep coupled state together.
 - Each subsystem exposes its public surface through a module entrypoint named index.ts; everything
   else is internal. Don't re-export internals "just in case".
 - Specific imports from sibling modules; no deep imports into another package's
@@ -53,9 +51,9 @@ it, and never imitate its style.
 ## Functions and control flow
 
 The most important rule in this document: **a function must earn its name.**
-Extract a helper only when it is reused, or when it isolates a genuinely
-separate concern with meaningful inputs and outputs. Never wrap a single
-expression or single call that is used once:
+Extract helpers when they make the code easier to understand, such as by
+separating a concern or sharing logic. Avoid one-use wrappers that hide a
+simple expression or call:
 
 ```ts
 // Bad — four hops to learn one line of truth
@@ -76,9 +74,9 @@ Same rule for module helpers: `clockFrom(options)` hiding
 The test: if inlining a helper makes the caller _easier_ to read, inline it.
 
 - Early returns over nesting; handle the failure or trivial case first.
-- Flat, explicit data flow — a reader should trace any behavior through at most
-  two or three functions, each doing visible work.
-- Loops: `for...of`; no spread-accumulators (`acc = [...acc, x]`) inside loops.
+- Keep data flow explicit and avoid unnecessary layers of calls.
+- Use a loop form that fits the task. Avoid spread-accumulators
+  (`acc = [...acc, x]`) inside loops because they copy the accumulator each time.
 - Regex literals at module top level, not recreated per call.
 
 ## Errors
