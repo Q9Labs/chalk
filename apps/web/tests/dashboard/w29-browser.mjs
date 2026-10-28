@@ -10,6 +10,7 @@ import { build } from "../../../../tools/sdk-web-consumer-e2e/node_modules/esbui
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, syncObservability: true });
 const { context, repository, apiOrigin, origin, syncOrigin, tenantId, syncLog } = fixture;
+const syncEndpoint = new URL("/v1/sync", syncOrigin).href.replace(/^http/, "ws");
 const out = resolve(repository, "artifacts/w29");
 await mkdir(out, { recursive: true });
 const { createChalkServerClient } = await import(`${repository}/sdks/typescript/client/dist/server/index.js`);
@@ -128,7 +129,7 @@ export const synchronizeChalkStaffDisplayName = () => {};
       define: { "process.env.NODE_ENV": '"production"' },
       logLevel: "silent",
     });
-    const modes = process.env.W29_MODES?.split(",") ?? ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"];
+    const modes = process.env.W29_MODES?.split(",") ?? ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead", "cookie_small", "cookie_large", "cookie_huge"];
     for (const mode of modes) {
       const cookieCount = mode === "cookie_small" ? 1 : mode === "cookie_large" ? 8 : mode === "cookie_huge" ? 40 : 0;
       if (cookieCount) await context.addCookies(Array.from({ length: cookieCount }, (_, i) => ({ name: `w29_cookie_${i}`, value: "x".repeat(mode === "cookie_small" ? 100 : 3800), url: origin, sameSite: "Lax" })));
@@ -150,7 +151,7 @@ export const synchronizeChalkStaffDisplayName = () => {};
       });
       if (mode === "slow_cpu") await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       const began = Date.now();
-      await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: ["live", "slow_cpu", "clock_ahead"].includes(mode) || cookieCount ? syncOrigin : faultURL });
+      await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: ["live", "slow_cpu", "clock_ahead"].includes(mode) || cookieCount ? syncEndpoint : faultURL });
       await page.waitForFunction(() => window.audit.some((row) => row.event === "join_ok" || row.event === "join_failed"), null, { timeout: 45000 });
       const audit = await page.evaluate(() => window.audit);
       const result = {
