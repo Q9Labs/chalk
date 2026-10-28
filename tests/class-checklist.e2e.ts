@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join as joinPath } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { webMediaFixture, incomingAudioLevel, audioEvidence } from "../scripts/web-proof/media.mjs";
+import { assertAgreement } from "../scripts/web-proof/agreement.mjs";
 
 const output = process.env.CHALK_CLASS_OUTPUT ?? ".private/class-checklist";
 const names = ["Teacher", "Student", "Admin"];
@@ -155,6 +156,7 @@ async function classroom(scenario: string, check: (pages: Page[], contexts: Brow
     await join(pages[1], "Student", url);
     await join(pages[2], "Admin", url);
     await roster(pages);
+    await assertAgreement(pages);
     await shot(pages, `${scenario}-joined`);
     await check(
       pages,
@@ -372,7 +374,9 @@ async function enableMedia(pages: Page[]) {
   for (const page of pages.slice(0, 2)) {
     await page.bringToFront();
     await page.getByRole("button", { name: "Unmute microphone", exact: true }).click();
+    await assertAgreement(pages);
     await page.getByRole("button", { name: "Turn on camera", exact: true }).click();
+    await assertAgreement(pages);
   }
 }
 
@@ -384,6 +388,7 @@ async function advancingFrames(video: Locator) {
 }
 
 async function receivedMedia(pages: Page[]) {
+  await assertAgreement(pages);
   for (const [page, remote] of [
     [pages[0], "Student"],
     [pages[1], "Teacher"],

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
+import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
@@ -222,6 +223,11 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   const guests = await launchGuests(run, space, episode, rejoin ? null : await generateVoice(run.directory, run.signal), receiver.origin, rejoin);
   const { pages } = guests;
   useSDK(pages[0]);
+  await waitFor("both guests receive each other's camera and microphone", async () =>
+    (await Promise.all(pages.map((page) => page.evaluate(() => window.proofClient.getSnapshot().media.remote.filter((entry) => entry.source === "camera" || entry.source === "microphone").length)))).every((count) => count === 2),
+  );
+  await Promise.all(pages.map((page) => page.evaluate(playProofMedia)));
+  await save(`${run.directory}/media-agreement.json`, await assertAgreement(pages));
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);

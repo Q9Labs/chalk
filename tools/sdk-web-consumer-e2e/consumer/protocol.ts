@@ -14,7 +14,7 @@ export type SpaceState = {
 
 export type ServerMessage =
   | { readonly type: "state"; readonly state: SpaceState }
-  | { readonly type: "ack"; readonly id: string }
+  | { readonly type: "ack"; readonly id: string; readonly error?: string }
   | { readonly type: "collaboration_event"; readonly event: { readonly type: "reaction"; readonly reaction: ChalkReactionEvent } | { readonly type: "chat_message"; readonly message: ChalkChatMessage } }
   | { readonly type: "collaboration_result"; readonly id: string; readonly reaction?: ChalkReactionEvent; readonly message?: ChalkChatMessage; readonly messages?: readonly ChalkChatMessage[] }
   | { readonly type: "directed_request"; readonly request: V1DirectedRequest }

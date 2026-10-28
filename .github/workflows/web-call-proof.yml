@@ -42,6 +42,7 @@ jobs:
       CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
       EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
       E2E_TELEMETRY_DISABLED: "1"
+      CHALK_PROOF_WEBKIT: "1"
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -74,10 +75,10 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ steps.web-browser-key.outputs.key }}
       - name: Install web engine Chromium before the proof
-        run: pnpm exec e2e-web install chromium --with-deps
+        run: pnpm exec e2e-web install chromium webkit --with-deps
       - uses: ./.github/actions/setup-playwright
         with:
-          browsers: chromium
+          browsers: chromium webkit
           verify-engine: true
       - name: Save web engine browser cache
         if: steps.web-browser-cache.outputs.cache-hit != 'true'
