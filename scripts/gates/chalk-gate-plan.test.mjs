@@ -52,6 +52,22 @@ test("design-token and worklet checks follow their SDK inputs into the CI checks
   assert.equal(laneGroup("native-quality"), "checks");
 });
 
+test("token scanner, exception, baseline and CI changes retain executable token lanes in CI", () => {
+  const reactInputs = ["sdks/typescript/react/scripts/check-token-reach.mjs", "sdks/typescript/react/scripts/token-exceptions.json", "sdks/typescript/react/scripts/token-reach-baseline.json", "sdks/typescript/react/src/theme.ts", "packages/ui/src/styles/index.css"];
+  const nativeInputs = ["sdks/typescript/react-native/scripts/check-tokenized-styles.mjs", "sdks/typescript/react-native/src/theme/tokens.ts"];
+  const sharedInputs = ["scripts/gates/color-source.mjs", "scripts/gates/design-tokens.test.mjs", ".github/workflows/gate.yml", "gate.config.ts"];
+  for (const file of [...reactInputs, ...nativeInputs, ...sharedInputs]) {
+    const plan = createGatePlan([file]);
+    const checks = laneGroupLanes(plan.tasks, "checks").filter(({ selected }) => selected);
+    assert.ok(ciJobs([file]).rootGroups.includes("checks"), file);
+    const ids = sharedInputs.includes(file) ? ["react-tokens", "native-quality"] : reactInputs.includes(file) ? ["react-tokens"] : ["native-quality"];
+    for (const id of ids) {
+      const lane = checks.find((task) => task.id === id);
+      assert.ok(lane?.command.some((part) => /check-token|check:tokens/u.test(part)), `${file}: ${id} must execute a scanner`);
+    }
+  }
+});
+
 test("dependency changes select the package boundary check", () => {
   assert.equal(boundaryTask(["pnpm-lock.yaml"])?.selected, true);
 });

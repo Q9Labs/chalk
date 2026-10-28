@@ -3,25 +3,29 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { colorSource, literalColorPattern, namedColorPattern } from "../../../../scripts/gates/color-source.mjs";
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const componentRoot = resolve(scriptDir, "../src/components");
 const baselinePath = join(scriptDir, "token-reach-baseline.json");
 const patterns = [
-  ["literal", /#[\da-f]{3,8}\b|\b(?:rgb|hsl)a?\(/giu],
-  ["token-opacity", /(?:bg|text|border|ring|fill|stroke)-\[var\(--chalk-[a-z-]+\)\]\/\d+/giu],
+  ["literal", literalColorPattern],
+  ["named-color", namedColorPattern],
   ["legacy-variable", /var\(--(?:accent|background|border|card|destructive|foreground|muted|popover|primary|ring|secondary|success|warning)(?:-[a-z-]+)?\)/giu],
   [
     "palette-utility",
-    /(?<![a-z\d_-])(?:[a-z-]+:)*!?(?:bg|text|border|ring|fill|stroke)-(?:(?:slate|gray|grey|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+|background(?:-secondary|-tertiary)?|black|card(?:-foreground)?|chalk-(?:bg|border|error|text)-[a-z-]+|destructive(?:-foreground)?|foreground(?:-muted|-primary|-secondary)?|input|muted(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground)?|ring|secondary(?:-foreground)?|success|tile|warning|white)(?:\/\d+)?\b/giu,
+    /(?<![a-z\d_-])(?:[a-z-]+:)*!?(?:bg|text|border(?:-[xysetblr])?|ring(?:-offset)?|fill|stroke|outline|shadow|decoration|divide|from|via|to|accent|caret)-(?:(?:slate|gray|grey|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+|background(?:-secondary|-tertiary)?|black|card(?:-foreground)?|chalk-(?:bg|border|error|text)-[a-z-]+|destructive(?:-foreground)?|foreground(?:-muted|-primary|-secondary)?|input|muted(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground)?|ring|secondary(?:-foreground)?|success|tile|warning|white)(?:\/\d+)?\b/giu,
   ],
 ];
 
-export async function findTokenViolations(root = componentRoot) {
+export async function findTokenViolations(root = componentRoot, approvedExceptions = defaultExceptions) {
   const violations = [];
+  const seen = new Set();
   for (const file of await sourceFiles(root)) {
     const sourcePath = relative(root, file).replaceAll("\\", "/");
-    const text = withoutNarrowDataPalette(sourcePath, await readFile(file, "utf8"));
-    const withoutClosedTokens = text.replace(/(?:bg|text|border|ring|fill|stroke)-\[var\(--chalk-[a-z-]+\)\]/giu, "");
+    seen.add(sourcePath);
+    const text = withoutExceptions(sourcePath, colorSource(await readFile(file, "utf8"), file), approvedExceptions);
+    const withoutClosedTokens = text.replace(/(?:bg|text|border(?:-[xysetblr])?|ring(?:-offset)?|fill|stroke|outline|shadow|decoration|divide|from|via|to|accent|caret)-(?:\[var\(--chalk-[a-z-]+\)\]|\(--chalk-[a-z-]+\))/giu, (match) => " ".repeat(match.length));
     for (const [rule, pattern] of patterns) {
       const input = rule === "legacy-variable" || rule === "palette-utility" ? withoutClosedTokens : text;
       for (const match of input.matchAll(pattern)) {
@@ -33,6 +37,7 @@ export async function findTokenViolations(root = componentRoot) {
       }
     }
   }
+  if (root === componentRoot) for (const { file } of approvedExceptions) if (!seen.has(file)) throw new Error(`Token exception file no longer exists: ${file}`);
   return violations;
 }
 
@@ -50,16 +55,23 @@ async function sourceFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
+    if (entry.name === "node_modules" || /\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(entry.name)) continue;
     if (entry.isDirectory()) files.push(...(await sourceFiles(path)));
     else if (entry.isFile() && /\.(?:[cm]?[jt]sx?|css)$/u.test(entry.name)) files.push(path);
   }
   return files;
 }
 
-function withoutNarrowDataPalette(sourcePath, text) {
-  if (/\.test\.tsx?$/u.test(sourcePath)) return "";
-  if (sourcePath === "theme.ts") return text.replace(/export const THEME_PALETTES = \[[\s\S]*?\] as const;/u, "export const THEME_PALETTES = [] as const;");
-  if (sourcePath === "atomic/ReactionBubble.tsx") return text.replace(/const BASE_PARTICLE_COLORS = \[[^\]]+\];/u, "const BASE_PARTICLE_COLORS = [];");
+const defaultExceptions = JSON.parse(await readFile(join(scriptDir, "token-exceptions.json"), "utf8"));
+
+function withoutExceptions(sourcePath, text, exceptions) {
+  for (const { file, snippet, reason } of exceptions) {
+    if (file !== sourcePath) continue;
+    if (!reason.trim()) throw new Error(`Token exception needs a reason: ${file}`);
+    const index = text.indexOf(snippet);
+    if (index === -1 || text.indexOf(snippet, index + snippet.length) !== -1) throw new Error(`Token exception must match exactly once: ${file}: ${snippet}`);
+    text = text.slice(0, index) + snippet.replace(/[^\r\n]/gu, " ") + text.slice(index + snippet.length);
+  }
   return text;
 }
 

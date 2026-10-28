@@ -15,7 +15,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
-  const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning, #dcb740)" };
+  const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning)" };
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusScope = useRef<HTMLElement>(null);

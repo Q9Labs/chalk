@@ -52,7 +52,7 @@ export function MediaRequestDialog({ request, onDecline, onAllow, onActionError 
         </button>
         <button
           type="button"
-          className="rounded-lg bg-[var(--chalk-app-control-primary)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--chalk-app-control-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55"
+          className="rounded-lg bg-[var(--chalk-app-control-primary)] px-3 py-2 text-sm font-medium text-[var(--chalk-on-overlay)] hover:bg-[var(--chalk-app-control-primary-hover)] disabled:cursor-not-allowed disabled:opacity-55"
           onClick={() => runAction("allow")}
           disabled={isExpired || pendingAction !== null}
         >
