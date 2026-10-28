@@ -9,7 +9,10 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 )
 
 func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
@@ -25,8 +28,7 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			fixture := &refreshGrantPlane{issuer: issuer}
-			fixture.connectionID = func() string { return fmt.Sprintf("connection-%d", fixture.created) }
+			fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
 			active := accessgrants.NewActiveAuthorizer(repo)
 			endpoint := issueAccessGrantEndpoint(fixture, fixture, &participantMediaVerifierStub{subject: subject}, active, active, fixture, fixture, fixture, fixture)
 			ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
@@ -79,4 +81,21 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 			}
 		})
 	}
+}
+
+type recoveryGrantPlane struct {
+	refreshGrantPlane
+}
+
+func (f *recoveryGrantPlane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
+	join, err := f.refreshGrantPlane.CreateJoin(ctx, input)
+	if err == nil {
+		join.ClientPayload["connectionId"] = fmt.Sprintf("connection-%d", f.created)
+	}
+	return join, err
+}
+
+func (f *recoveryGrantPlane) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
+	return &service, nil
 }

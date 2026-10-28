@@ -41,7 +41,10 @@ export type AccessGrant = {
 export type AccessGrantProvider = () => ParsedAccessGrant | Promise<ParsedAccessGrant>;
 export class AccessGrantError extends TypeError {
   readonly code = "access.invalid" as const;
-  constructor(message = "Access grant is invalid") {
+  constructor(
+    message = "Access grant is invalid",
+    readonly reason?: "connection_superseded",
+  ) {
     super(message);
     this.name = "AccessGrantError";
   }
@@ -53,10 +56,14 @@ class AccessUnavailableError extends Error {
     this.name = "AccessUnavailableError";
   }
 }
-function requireSuccessfulResponse(response: Response): void {
+async function requireSuccessfulResponse(response: Response): Promise<void> {
   if (response.ok) return;
   const status = response.status;
   if (status === 408 || status === 425 || status === 429 || status >= 500) throw new AccessUnavailableError(status);
+  if (status === 409) {
+    const body: unknown = await response.json().catch(() => null);
+    if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "code" in body.error && body.error.code === "participant.connection_superseded") throw new AccessGrantError(undefined, "connection_superseded");
+  }
   throw new AccessGrantError(`Access grant request failed with HTTP ${status}`);
 }
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
@@ -95,7 +102,7 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
 }
 export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAccessGrant> {
   if (typeof Response !== "undefined" && value instanceof Response) {
-    requireSuccessfulResponse(value);
+    await requireSuccessfulResponse(value);
     try {
       return parseParsedAccessGrant(await value.json());
     } catch (error) {
@@ -107,7 +114,7 @@ export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAc
 }
 export async function requireAccessGrant(value: unknown): Promise<AccessGrant> {
   if (typeof Response !== "undefined" && value instanceof Response) {
-    requireSuccessfulResponse(value);
+    await requireSuccessfulResponse(value);
     try {
       return parseAccessGrant(await value.json());
     } catch (error) {

@@ -1164,12 +1164,10 @@ function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
   return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}) });
 }
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
-  return lifecycleFailure(
-    value.code === "access.invalid" ? "invalid_access" : "access_unavailable",
-    value.code === "access.unavailable",
-    value.code === "access.invalid" ? "Access was rejected. Another tab or device may be using it. Rejoin explicitly to continue." : "Could not reach the Space. Check your network and try again.",
-    value.cause,
-  );
+  const cause = value.cause;
+  const superseded = cause instanceof AccessGrantError ? cause.reason === "connection_superseded" : typeof cause === "object" && cause !== null && "code" in cause && cause.code === "participant.connection_superseded";
+  const rejectedMessage = superseded ? "Access was rejected. Another tab or device may be using it. Rejoin explicitly to continue." : "Access was rejected";
+  return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? rejectedMessage : "Could not reach the Space. Check your network and try again.", value.cause);
 }
 function captureFailure(cause: unknown): ConnectionLifecycleFailure {
   if (cause instanceof ConnectionError && cause.cause === undefined) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);

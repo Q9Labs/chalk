@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManualClock } from "../../tests/helpers/manual-clock";
-import { parseParsedAccessGrant } from "../access/grant";
+import { parseParsedAccessGrant, requireParsedAccessGrant } from "../access/grant";
 import { ChalkAPIError } from "../server/errors";
 import { CloudflareSFUError } from "../media";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
@@ -110,8 +110,8 @@ describe("media recovery deadline", () => {
     });
   });
 
-  it("preserves a takeover at recovery second 20 when the old tab retries at second 25", async () => {
-    const test = mediaRecoveryFixture();
+  it.each(["server", "response"] as const)("preserves a takeover at recovery second 20 with a %s conflict at second 25", async (conflictSource) => {
+    const test = mediaRecoveryFixture(undefined, conflictSource);
     test.restart.mockRejectedValue(new Error("Temporary media failure"));
     await test.run(async (lifecycle) => {
       test.mediaPhase("failed");
@@ -141,7 +141,7 @@ describe("media recovery deadline", () => {
   });
 });
 
-function mediaRecoveryFixture(backoffMs?: readonly number[]) {
+function mediaRecoveryFixture(backoffMs?: readonly number[], conflictSource: "server" | "response" = "server") {
   const platform = createCoreTestPlatform();
   const manual = new ManualClock();
   const startedAt = Date.now();
@@ -159,7 +159,10 @@ function mediaRecoveryFixture(backoffMs?: readonly number[]) {
   const createSync = vi.fn(platform.dependencies.createSyncClient);
   let failMedia: (cause: unknown, binding?: string) => void = () => {};
   const access = vi.fn(async (request: ConnectionAccessRequest) => {
-    if (request.replaceMediaConnection && request.expectedMediaConnectionId !== undefined && request.expectedMediaConnectionId !== binding) throw new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false });
+    if (request.replaceMediaConnection && request.expectedMediaConnectionId !== undefined && request.expectedMediaConnectionId !== binding) {
+      if (conflictSource === "response") return requireParsedAccessGrant(Response.json({ error: { code: "participant.connection_superseded" } }, { status: 409 }));
+      throw new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false });
+    }
     if (request.replaceMediaConnection) binding = `connection-${++generation}`;
     const grant = opaqueAccessGrant(generation, String(generation), binding);
     const expires_at = new Date(startedAt + (request.reason === "join" ? observed.accessRefreshed + 60000 : 3600000)).toISOString();

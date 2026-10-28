@@ -358,7 +358,6 @@ func (r *refreshGrantRepository) SetParticipantMediaConnection(_ context.Context
 type refreshGrantPlane struct {
 	replacementGrantFixture
 	beforeCreate func()
-	connectionID func() string
 	created      int
 	resumed      int
 	issuer       accessgrants.Issuer
@@ -372,9 +371,6 @@ func (f *refreshGrantPlane) CreateJoin(ctx context.Context, input mediaplane.Cre
 	join, err := f.replacementGrantFixture.CreateJoin(ctx, input)
 	if err == nil {
 		join.ClientPayload["stunServer"] = "stun:stun.cloudflare.com:3478"
-		if f.connectionID != nil {
-			join.ClientPayload["connectionId"] = f.connectionID()
-		}
 	}
 	return join, err
 }

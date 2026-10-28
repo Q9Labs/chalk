@@ -1062,6 +1062,7 @@ it.each([401, 403])("current-generation poll %s during real ICE recovery require
       ...platform,
       dependencies: {
         ...platform.dependencies,
+        createConnectionReporter: () => undefined,
         createMediaClient: (input) => {
           onFailure = input.onFailure;
           return bindConnectionMediaClient(harness.client, (grant) => harness.client.restart("provider" in grant ? grant.clientPayload : grant));
