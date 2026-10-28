@@ -769,7 +769,7 @@ const styles = `.call-card-tabs {
   padding: 0;
   border: 0;
   margin: 0;
-  background: var(--chalk-overlay-strong);
+  background: var(--chalk-photo-viewer-overlay);
   color: var(--chalk-on-overlay);
 }
 .call-photo-viewer::backdrop { background: transparent; }
