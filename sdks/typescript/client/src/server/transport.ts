@@ -115,7 +115,9 @@ function setOptionalHeader(headers: Headers, name: string, value: string | undef
 }
 
 async function responseError(response: Response, retryable: boolean): Promise<ChalkAPIError> {
-  return new ChalkAPIError({ code: errorCode(await errorBody(response)), requestId: requestId(response.headers), retryable: retryable && retryableStatuses.has(response.status), status: response.status });
+  const code = errorCode(await errorBody(response));
+  const pendingReplacement = response.status === 409 && code === "participant.media_replacement_pending";
+  return new ChalkAPIError({ code, requestId: requestId(response.headers), retryable: pendingReplacement || (retryable && retryableStatuses.has(response.status)), status: response.status });
 }
 
 async function errorBody(response: Response): Promise<unknown> {

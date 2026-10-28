@@ -6511,7 +6511,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch"]
+            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch", "participant.media_replacement_pending"]
           },
           "413": {
             "content": {

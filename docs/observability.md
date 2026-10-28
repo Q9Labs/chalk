@@ -174,6 +174,11 @@ Recovery also forwards the browser's `currentMediaToken` for the existing
 encrypted replay mechanism. A lost response replays the committed grant only
 while its replacement binding remains current; a later takeover invalidates it.
 Never log the credential or substitute another tab's backend-retained token.
+An identical conditional request still being issued returns HTTP 409 with
+`participant.media_replacement_pending`. The SDK treats this as temporarily
+unavailable, keeps Sync/media recovery alive, and retries with the same
+credential and expected binding. Pending retries allocate no additional SFU
+session; only another binding's takeover returns the terminal superseded code.
 
 Failed media acquisition/start spans and media recovery reports include
 `media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,

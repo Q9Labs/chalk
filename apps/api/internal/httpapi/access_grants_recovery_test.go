@@ -204,6 +204,16 @@ type recoveryGrantPlane struct {
 	refreshGrantPlane
 }
 
+func (r *refreshGrantRepository) ReserveParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, reservation string, requestHash [32]byte) error {
+	if r.connection == previous {
+		return r.ReplaceParticipantMediaConnection(ctx, key, generation, previous, reservation)
+	}
+	if r.connection == reservation || r.replays[requestHash].connection == r.connection {
+		return accessgrants.ErrRefreshPending
+	}
+	return accessgrants.ErrConnectionSuperseded
+}
+
 func (f *recoveryGrantPlane) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	join, err := f.refreshGrantPlane.CreateJoin(ctx, input)
 	if err == nil {

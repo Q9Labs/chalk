@@ -14,6 +14,7 @@ type ActiveRepository interface {
 	SetParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
 	CheckParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string) error
 	ReplaceParticipantMediaConnection(context.Context, synctokens.SubjectKey, int64, string, string) error
+	ReserveParticipantMediaRefresh(context.Context, synctokens.SubjectKey, int64, string, string, [32]byte) error
 	LoadParticipantMediaRefresh(context.Context, synctokens.SubjectKey, int64, [32]byte) (*StoredRefreshReplay, error)
 	CompleteParticipantMediaRefresh(context.Context, synctokens.SubjectKey, int64, string, string, RefreshReplay) error
 }
@@ -80,6 +81,12 @@ func (a ActiveAuthorizer) ReplaceParticipantMediaConnection(ctx context.Context,
 	return a.repository.ReplaceParticipantMediaConnection(ctx, synctokens.SubjectKey{
 		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
 	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, next.CloudflareConnectionID)
+}
+
+func (a ActiveAuthorizer) ReserveParticipantMediaRefresh(ctx context.Context, previous, reservation Subject, requestHash [32]byte) error {
+	return a.repository.ReserveParticipantMediaRefresh(ctx, synctokens.SubjectKey{
+		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
+	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, reservation.CloudflareConnectionID, requestHash)
 }
 
 func (a ActiveAuthorizer) LoadParticipantMediaRefresh(ctx context.Context, subject Subject, requestHash [32]byte) (*StoredRefreshReplay, error) {

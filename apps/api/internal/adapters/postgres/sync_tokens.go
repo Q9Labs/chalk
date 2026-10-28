@@ -88,6 +88,42 @@ func replaceParticipantMediaConnection(ctx context.Context, tx pgx.Tx, key synct
 	return nil
 }
 
+func (r EpisodeLifecycleRepository) ReserveParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, previous, reservation string, requestHash [32]byte) error {
+	return r.transaction(ctx, func(_ *sqlc.Queries, tx pgx.Tx) error {
+		var binding string
+		var bindingGeneration int64
+		err := tx.QueryRow(ctx, `select coalesce(media_connection_id,''),coalesce(media_connection_generation,0) from participants
+ where tenant_id=$1 and space_id=$2 and episode_id=$3 and id=$4 and generation=$5 and status='active' for update`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation).Scan(&binding, &bindingGeneration)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return accessgrants.ErrConnectionSuperseded
+		}
+		if err != nil {
+			return fmt.Errorf("lock participant media refresh: %w", err)
+		}
+		if bindingGeneration != generation || binding == "" || binding == previous {
+			return replaceParticipantMediaConnection(ctx, tx, key, generation, previous, reservation)
+		}
+		if binding == reservation {
+			return accessgrants.ErrRefreshPending
+		}
+		// Re-read replay after taking the participant lock: issuance may have
+		// committed between the caller's replay lookup and this reservation.
+		var replayed bool
+		err = tx.QueryRow(ctx, `select exists(select 1 from participant_media_refreshes
+ where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and participant_generation=$5
+ and request_hash=$6 and connection_id=$7 and created_at + ($8::bigint * interval '1 second') > clock_timestamp())`,
+			uuid(key.TenantID), uuid(key.SpaceID), uuid(key.EpisodeID), uuid(key.ParticipantID), generation, requestHash[:], binding, int64(accessgrants.RefreshReplayWindow/time.Second)).Scan(&replayed)
+		if err != nil {
+			return fmt.Errorf("check committed participant media refresh: %w", err)
+		}
+		if replayed {
+			return accessgrants.ErrRefreshPending
+		}
+		return accessgrants.ErrConnectionSuperseded
+	})
+}
+
 func (r EpisodeLifecycleRepository) LoadParticipantMediaRefresh(ctx context.Context, key synctokens.SubjectKey, generation int64, requestHash [32]byte) (*accessgrants.StoredRefreshReplay, error) {
 	var stored *accessgrants.StoredRefreshReplay
 	err := r.transaction(ctx, func(_ *sqlc.Queries, tx pgx.Tx) error {

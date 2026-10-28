@@ -25,6 +25,7 @@ type ParticipantGenerationAuthorizer interface {
 	BindParticipantMediaConnection(context.Context, accessgrants.Subject) error
 	CheckParticipantMediaConnection(context.Context, accessgrants.Subject) error
 	ReplaceParticipantMediaConnection(context.Context, accessgrants.Subject, accessgrants.Subject) error
+	ReserveParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, [32]byte) error
 	LoadParticipantMediaRefresh(context.Context, accessgrants.Subject, [32]byte) (*accessgrants.StoredRefreshReplay, error)
 	CompleteParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, accessgrants.RefreshReplay) error
 }
@@ -169,7 +170,8 @@ func issueAccessGrantEndpoint(
 			if replayReplacement {
 				subject = previous
 				stage = "media_replay"
-				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, accessgrants.RefreshRequestHash(currentToken))
+				requestHash := accessgrants.RefreshRequestHash(currentToken)
+				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, requestHash)
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
@@ -193,13 +195,19 @@ func issueAccessGrantEndpoint(
 					replaceMediaConnection = false
 				} else {
 					stage = "media_binding"
-					reservationID, err := utilities.NewID()
-					if err != nil {
-						return accessGrantResponse{}, err
-					}
 					reservation := previous
-					reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
-					if err := generations.ReplaceParticipantMediaConnection(ctx, previous, reservation); err != nil {
+					if conditionalReplacement {
+						reservation.CloudflareConnectionID = fmt.Sprintf("replacement:%x", requestHash)
+						err = generations.ReserveParticipantMediaRefresh(ctx, previous, reservation, requestHash)
+					} else {
+						reservationID, idErr := utilities.NewID()
+						if idErr != nil {
+							return accessGrantResponse{}, idErr
+						}
+						reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
+						err = generations.ReplaceParticipantMediaConnection(ctx, previous, reservation)
+					}
+					if err != nil {
 						return accessGrantResponse{}, accessGrantRefreshError(err)
 					}
 					original := previous

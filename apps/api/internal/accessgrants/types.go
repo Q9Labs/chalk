@@ -23,6 +23,7 @@ var (
 	ErrExpired              = errors.New("participant media credential expired")
 	ErrLifetimeExceeded     = errors.New("participant media credential lifetime exceeded")
 	ErrConnectionSuperseded = errors.New("participant media connection superseded")
+	ErrRefreshPending       = errors.New("participant media replacement is pending")
 	ErrGenerationMismatch   = errors.New("participant media generation mismatch")
 	ErrSubjectMismatch      = errors.New("participant media credential subject mismatch")
 )

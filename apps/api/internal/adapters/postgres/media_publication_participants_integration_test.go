@@ -92,6 +92,55 @@ func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *te
 	if err := repository.CheckParticipantMediaConnection(ctx, key, 1, "initial-join"); err != nil {
 		t.Fatalf("current expired connection cannot recover: %v", err)
 	}
+	t.Run("conditional reservation distinguishes own retries from takeovers", func(t *testing.T) {
+		replay, err := accessgrants.SealRefreshReplay("signed-conditional-request", []byte(`{"winning":"conditional-grant"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		reserve := func() error {
+			return repository.ReserveParticipantMediaRefresh(ctx, key, 1, "initial-join", "replacement:conditional", replay.RequestHash)
+		}
+		if err := reserve(); err != nil {
+			t.Fatal(err)
+		}
+		if err := reserve(); !errors.Is(err, accessgrants.ErrRefreshPending) {
+			t.Fatalf("identical pending reservation must be retryable: %v", err)
+		}
+		if err := repository.ReserveParticipantMediaRefresh(ctx, key, 1, "initial-join", "replacement:other", accessgrants.RefreshRequestHash("other-request")); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+			t.Fatalf("another replacement id must not coalesce: %v", err)
+		}
+		if err := repository.ReserveParticipantMediaRefresh(ctx, key, 2, "initial-join", "replacement:conditional", replay.RequestHash); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+			t.Fatalf("another generation must not coalesce: %v", err)
+		}
+		other := key
+		other.ParticipantID = accountTenantIntegrationID(t)
+		if err := repository.ReserveParticipantMediaRefresh(ctx, other, 1, "initial-join", "replacement:conditional", replay.RequestHash); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+			t.Fatalf("another participant must not coalesce: %v", err)
+		}
+		if err := repository.CompleteParticipantMediaRefresh(ctx, key, 1, "replacement:conditional", "conditional-winner", replay); err != nil {
+			t.Fatal(err)
+		}
+		// The first request can commit after a duplicate's replay lookup but
+		// before that duplicate attempts to reserve the binding.
+		if err := reserve(); !errors.Is(err, accessgrants.ErrRefreshPending) {
+			t.Fatalf("concurrently committed own replay must remain retryable: %v", err)
+		}
+		if err := repository.SetParticipantMediaConnection(ctx, key, 1, "tab-b-takeover"); err != nil {
+			t.Fatal(err)
+		}
+		if err := reserve(); !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
+			t.Fatalf("real takeover must remain terminal: %v", err)
+		}
+		if err := repository.SetParticipantMediaConnection(ctx, key, 1, "initial-join"); err != nil {
+			t.Fatal(err)
+		}
+		if err := reserve(); err != nil {
+			t.Fatalf("released original binding must permit a fresh attempt: %v", err)
+		}
+		if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "replacement:conditional", "initial-join"); err != nil {
+			t.Fatal(err)
+		}
+	})
 	if err := repository.ReplaceParticipantMediaConnection(ctx, key, 1, "initial-join", "replacement:reservation"); err != nil {
 		t.Fatalf("reserve expired connection replacement: %v", err)
 	}
