@@ -8,6 +8,8 @@ The public contract lists these webhook Event types:
 | Space       | `space.created`, `space.updated`, `space.archived`, `space.restored` |
 | Episode     | `episode.started`, `episode.ended`                                   |
 | Participant | `participant.joined`, `participant.left`                             |
+| Recording   | `recording.started`, `recording.completed`, `recording.failed`       |
+| Transcript  | `transcript.started`, `transcript.completed`, `transcript.failed`    |
 
 Create an endpoint with a version, URL, enabled flag, and event list. The management client uses an idempotency key for mutating requests:
 
@@ -43,6 +45,4 @@ Run this Effect on your authenticated backend with a server-only API key (pass `
 
 List deliveries by `state`, `event_type`, `page_size`, and `cursor`. Delivery detail includes each attempt's outcome, HTTP status, timing, latency, and stable error code. A known Event without a typed handler is retryable; an authenticated unknown Event is acknowledged with `200` and `outcome: "ignored"`.
 
-<Callout tone="note" title="Artifact Event schemas are reserved">
-  `recording.*` and `transcript.*` Event names exist in the version 1 schemas, but they are reserved and unavailable for subscriptions until Chalk enables their production pipelines.
-</Callout>
+Recording and Transcript Events depend on the corresponding capabilities being enabled.
