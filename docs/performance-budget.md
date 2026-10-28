@@ -144,111 +144,18 @@ commits the reason and new measurements separately from product changes.
 
 ## Baseline
 
-The production baseline is `d3cb32526401f033327b8449d01050e600c84cd7`.
-The measurement overlay adds fixtures and instrumentation, without changing SDK,
-UI, whiteboard, production route or call-component source. Baseline and clean
-measurements use this same production code. The proposer rejects a report whose
-source revision differs from the pinned baseline.
+The production baseline is `d3cb32526401f033327b8449d01050e600c84cd7`. The
+measurement overlay adds fixtures and instrumentation without changing product
+source. The proposer rejects reports from another source revision. The baseline
+was recorded on 2026-10-18 using five contexts on a dedicated 8-vCPU, 16-GiB
+runner with Chromium `151.0.7922.34`. These bootstrap limits are not
+physical-device smoothness targets.
 
-Recorded 2026-10-18 on a dedicated `c-8` (8 vCPU, 16 GiB), Intel Xeon
-Platinum 8280 at 2.70 GHz, Linux x64, Chromium `151.0.7922.34`.
-Each row contains five independent contexts. Cells are **median [minimum–maximum] / budget**.
-These are bootstrap regression limits, not acceptable physical-device smoothness targets.
-
-### Frames
-
-| Device / scenario        | Frame p95 (ms)            | Missed 60 Hz opportunities (%) |
-| ------------------------ | ------------------------- | ------------------------------ |
-| laptop / calm-six        | 66.7 [66.7–66.7] / 89     | 57.4 [55.0–58.4] / 61          |
-| laptop / grid-24         | 66.7 [66.7–100.0] / 120   | 61.8 [61.4–65.0] / 67          |
-| laptop / panels          | 66.8 [66.7–83.3] / 101    | 67.3 [66.4–67.7] / 71          |
-| laptop / spotlight-share | 66.8 [66.7–100.0] / 120   | 60.1 [58.6–63.1] / 66          |
-| laptop / board           | 83.3 [66.7–83.4] / 110    | 59.1 [57.2–60.7] / 63          |
-| laptop / reactions       | 100.0 [66.8–100.1] / 130  | 76.1 [75.3–79.7] / 82          |
-| laptop / reconnect       | 99.9 [99.9–100.0] / 130   | 62.3 [62.2–62.4] / 66          |
-| laptop / first-load      | 100.1 [100.0–133.4] / 159 | 63.5 [63.0–69.3] / 72          |
-| phone / calm-six         | 33.4 [33.4–33.4] / 47     | 50.0 [50.0–50.0] / 53          |
-| phone / grid-24          | 33.4 [33.4–33.4] / 47     | 50.0 [50.0–50.6] / 53          |
-| phone / panels           | 50.0 [50.0–66.7] / 82     | 48.2 [46.7–53.3] / 56          |
-| phone / spotlight-share  | 33.4 [33.4–33.4] / 47     | 50.0 [50.0–50.0] / 53          |
-| phone / board            | 16.8 [16.8–33.2] / 44     | 3.7 [2.3–6.3] / 9              |
-| phone / reactions        | 33.4 [33.4–33.4] / 47     | 50.0 [50.0–50.0] / 53          |
-| phone / reconnect        | 33.4 [33.4–33.4] / 47     | 50.6 [50.3–50.8] / 54          |
-| phone / first-load       | 83.3 [50.0–83.4] / 110    | 59.4 [58.2–60.6] / 63          |
-
-### Blocking and input
-
-| Device / scenario        | Long tasks   | Blocking (ms)          | Trusted interaction (ms)  |
-| ------------------------ | ------------ | ---------------------- | ------------------------- |
-| laptop / calm-six        | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| laptop / grid-24         | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| laptop / panels          | 5 [4–6] / 9  | 105 [63–117] / 160     | 384.0 [368.0–440.0] / 530 |
-| laptop / spotlight-share | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| laptop / board           | 0 [0–0] / 2  | 0 [0–0] / 25           | 200.0 [192.0–272.0] / 337 |
-| laptop / reactions       | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| laptop / reconnect       | 1 [1–1] / 4  | 25 [24–28] / 58        | 0.0 [0.0–0.0] / 24        |
-| laptop / first-load      | 5 [5–5] / 9  | 625 [560–710] / 842    | 0.0 [0.0–0.0] / 24        |
-| phone / calm-six         | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| phone / grid-24          | 0 [0–1] / 4  | 0 [0–12] / 39          | 0.0 [0.0–0.0] / 24        |
-| phone / panels           | 4 [3–7] / 11 | 247 [214–283] / 351    | 304.0 [272.0–344.0] / 420 |
-| phone / spotlight-share  | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| phone / board            | 0 [0–0] / 2  | 0 [0–0] / 25           | 96.0 [96.0–104.0] / 144   |
-| phone / reactions        | 0 [0–0] / 2  | 0 [0–0] / 25           | 0.0 [0.0–0.0] / 24        |
-| phone / reconnect        | 3 [3–3] / 6  | 83 [70–96] / 136       | 0.0 [0.0–0.0] / 24        |
-| phone / first-load       | 5 [5–5] / 9  | 1026 [975–1065] / 1308 | 0.0 [0.0–0.0] / 24        |
-
-Zero interaction observations in non-interactive scenarios are not latency measurements.
-
-### Memory and first render
-
-| Device / scenario        | JS heap (MiB)         | DOM nodes               | First call (ms)               |
-| ------------------------ | --------------------- | ----------------------- | ----------------------------- |
-| laptop / calm-six        | 10.5 [10.3–10.7] / 16 | 1496 [1496–1496] / 1920 | —                             |
-| laptop / grid-24         | 10.6 [10.4–11.3] / 16 | 5194 [5194–5194] / 6543 | —                             |
-| laptop / panels          | 11.7 [11.7–11.8] / 17 | 1924 [1924–1924] / 2455 | —                             |
-| laptop / spotlight-share | 10.4 [10.0–10.8] / 15 | 1732 [1732–1732] / 2215 | —                             |
-| laptop / board           | 13.4 [10.4–14.1] / 19 | 1792 [1445–1792] / 2290 | —                             |
-| laptop / reactions       | 10.5 [10.3–10.6] / 16 | 1554 [1554–1554] / 1993 | —                             |
-| laptop / reconnect       | 10.9 [10.9–10.9] / 16 | 1517 [1517–1517] / 1947 | —                             |
-| laptop / first-load      | 9.6 [9.5–9.7] / 14    | 1496 [1496–1496] / 1920 | 1391.4 [1360.0–1530.7] / 1861 |
-| phone / calm-six         | 10.4 [10.4–10.7] / 15 | 1534 [1534–1534] / 1968 | —                             |
-| phone / grid-24          | 10.4 [9.5–11.2] / 16  | 5234 [5234–5234] / 6593 | —                             |
-| phone / panels           | 11.6 [11.6–12.4] / 17 | 1814 [1814–1814] / 2318 | —                             |
-| phone / spotlight-share  | 10.6 [10.6–10.6] / 16 | 1746 [1746–1746] / 2233 | —                             |
-| phone / board            | 13.3 [10.5–13.7] / 19 | 2003 [1623–2003] / 2554 | —                             |
-| phone / reactions        | 10.5 [10.5–10.7] / 16 | 1592 [1592–1592] / 2040 | —                             |
-| phone / reconnect        | 10.8 [10.1–10.8] / 16 | 1555 [1555–1555] / 1994 | —                             |
-| phone / first-load       | 9.6 [9.6–9.6] / 15    | 1534 [1534–1534] / 1968 | 1918.7 [1889.8–1973.8] / 2499 |
-
-### Loaded bundles
-
-Every repeated bundle observation was identical at the displayed precision.
-The board row includes its lazy code; other fixture scenarios share the initial graph.
-
-| Entry / scenario            | JS gzip KiB [range] / budget | CSS gzip KiB [range] / budget |
-| --------------------------- | ---------------------------- | ----------------------------- |
-| Call-state entry / calm-six | 370.7 [370.7–370.7] / 382    | 52.3 [52.3–52.3] / 54         |
-| Call-state entry / board    | 721.1 [721.1–721.1] / 743    | 52.3 [52.3–52.3] / 54         |
-| Actual call route / initial | 450.3 / 464                  | 30.1 / 32                     |
-
-### Calibration and interpretation
-
-Both blank-page controls had a 16.7 ms median and 16.8 ms p95.
-Paused-video p95 was 16.8 ms (laptop) and 16.7 ms (phone). Removing CPU
-throttling while leaving synthetic video active gave 66.7 ms and 33.4 ms.
-This isolates substantial synthetic-video/compositor cost, not a 15 Hz headless
-clock cap. The 4×/6× profiles remain CPU stress settings from the brief, not
-hardware-calibrated equivalents; the controls remain stable at both factors.
-
-All 24 fixture cameras have live synthetic tracks. Chromium decoded 21 visible
-videos in the first laptop Grid sample and eight in the phone sample; off-screen
-videos were suspended. This is a 24-camera UI workload, not 24 simultaneous
-native video decoders. That optimization is retained rather than bypassed.
-
-The highest-priority follow-up is real-media device profiling and reducing panel
-presentation delay. Do not widen the frame/interaction limits to claim smoothness.
-Deterministic bundle limits are the strongest immediate shipping guard. Memory
-and DOM headroom are deliberately conservative until the integrated redesign is measured.
+The [original baseline tables and calibration results](https://github.com/Q9Labs/chalk/blob/1a8e9c7270229517e95c2472934254aed527d605/docs/performance-budget.md#baseline)
+remain in Git history. The synthetic-video controls showed substantial compositor
+cost; the 4× and 6× settings are CPU stress profiles, not calibrated devices.
+Off-screen fixture videos may be suspended, so the 24-camera workload does not
+imply 24 simultaneous decoders.
 
 ## API references
 
@@ -356,51 +263,18 @@ Do not widen a count budget to absorb a real leak. Finite 20-cycle tests cannot
 prove absence of slower leaks, browser/native leaks, production SDK media leaks,
 or leaks triggered only by real transports, device changes or long sessions.
 
-### Calibration and known findings (2026-10-18)
+### Calibration and historical findings
 
-Count calibration used shared 4-vCPU machines; historical timing verification used the
-dedicated 8-core reference runner described above. Shared-run timing numbers are
-not comparable with the reference budgets. Only complete 21-sample journeys
-count toward the calibration spread; an interrupted three-repeat command is not
-a successful full run.
+Count calibration used shared 4-vCPU machines. Whole-run and tail heap limits
+leave headroom for measured startup, JIT, and cache growth; fixed count budgets
+independently catch retained resources. Timing measurements from those machines
+are not comparable with the 8-vCPU reference budgets.
 
-Blank-page controls measured heap slopes of 0.000012 MiB/sample without the
-observer and 0.000852 with it. The idle call without instrumentation initially
-grew by 0.0386 MiB/sample over 20 cycles, but over 120 cycles its overall slope was
-0.00440 and its final 21-sample slope was 0.00312. Panel and layout controls over
-60 cycles had final 21-sample slopes of 0.0172 and 0.00946 respectively. These
-controls expose startup/JIT/cache growth, not a zero-allocation call. Across
-completed ordinary journey observations, early whole-run heap slopes reached
-about 0.073 MiB/cycle and final-ten slopes about 0.044. The 0.1/3 MiB whole-run
-limits and 0.05 tail limit leave headroom above those observations; the fixed
-count budgets independently catch smaller retained resources.
-
-In the 2026-10-18 run, fresh guest IDs exposed retained participant IDs in the
-stage's `seenAtRef` map. One warm guest plus 20 cycles left 21 guest keys, growing
-by one per cycle, above the `rosterCacheKeys` budget. Current code prunes IDs no
-longer present in the stage. A fresh leak run is needed to establish whether the
-journey now passes; this historical result does not establish current status.
-
-The dedicated reference run also measured laptop panel layout shift at a median
-0.3287 (five samples: 0.2544–0.3477), above the unchanged 0.05 limit. Attribution
-includes the drawer's changing width and the call controls moving horizontally
-(one recorded controls rectangle moved from x=215 to x=378.47). These entries
-have recent input, which this interaction-focused signal intentionally includes.
-Do not interpret it as standard Core Web Vitals CLS. The same run's phone
-first-load frame p95 exceeded its existing timing limit (116.6 ms versus 110 ms);
-that limit was not widened either. The combined command took 18.79 minutes,
-confirming the need for the separate leak lane.
-
-The final separate reference lanes took 9.98 minutes for timing and 8.94 for
-leaks, including their builds and self-tests. Both reported no measurement
-errors. Timing failed only the panel shift (median 0.3388); leaks failed only
-the retained guest keys. The phone first-load timing passed that repetition.
-All 22 focused metric/routing tests, resource lifecycle probes, injected fault
-checks, the uninjected 20-cycle panel comparison and the web typecheck passed.
-At least four complete observations cover every ordinary journey's original
-counters; the newer guest-key counter has five People observations and at least two per
-other ordinary journey. This finite spread is calibration evidence, not a claim
-that all counts were collected on every earlier revision.
+The 2026-10-18 reference runs failed the panel layout-shift and guest-key leak
+limits. The stage now prunes departed IDs, but a fresh leak run is needed to
+establish current status. The panel signal includes recent input and is not
+standard Core Web Vitals CLS. See the [historical calibration and findings](https://github.com/Q9Labs/chalk/blob/1a8e9c7270229517e95c2472934254aed527d605/docs/performance-budget.md#calibration-and-known-findings-2026-10-18)
+for measurements and methodology.
 
 ### Additional rendering signals
 
