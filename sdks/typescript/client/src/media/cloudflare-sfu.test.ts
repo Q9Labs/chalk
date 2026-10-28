@@ -59,10 +59,11 @@ it("does not end an automatic replacement when an obsolete local publication get
     await vi.waitFor(() => expect(publishing).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-1" })));
     offset = 270000;
     foreground();
-    await vi.waitFor(() => expect(publishing).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-2" })));
+    await vi.waitFor(() => expect(harness.peers).toHaveLength(2));
     rejectOld(new CloudflareSFUError("old publication rejected", "signaling_failed", { status: 403 }));
     await publication;
     await vi.waitFor(() => expect(reported).toHaveBeenCalled());
+    await vi.waitFor(() => expect(publishing).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-2" })));
     finishReplacement();
     await vi.waitFor(() => {
       expect(harness.client.getSnapshot().connection.phase).toBe("live");
@@ -103,6 +104,7 @@ it("preserves callback-only startup poll rejection behavior while Sync is still 
         },
         createSyncClient: () => ({
           ...platform.sync,
+          extendEpisode: async () => ({ type: "ack", command_id: "extend", delivery: "original", outcome: "satisfied", revision: 1, state_digest: "digest" }),
           start: async () => {
             await syncEntry;
             await platform.sync.start();
@@ -118,7 +120,7 @@ it("preserves callback-only startup poll rejection behavior while Sync is still 
     enterSync();
     await joining;
     // A command crosses the lifecycle queue after the pending failure callback.
-    await client.media.setMicrophoneEnabled(false);
+    await client.extendEpisode(1);
     expect(client.getSnapshot().connection.status).toBe("live");
     expect(getAccess.mock.calls.map(([request]) => request.reason)).toEqual(["join"]);
     expect(harness.peers).toHaveLength(1);
