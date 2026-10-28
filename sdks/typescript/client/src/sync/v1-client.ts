@@ -11,7 +11,7 @@ import { V1CommandScheduler, type V1OperationFrameFactory } from "./v1-command-s
 import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferred, type V1Deferred as Deferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
 import { frameSignature } from "./v1-frame-signature";
-import { V1LiveTargetCoordinator, type V1LiveTargetOptions } from "./v1-live-target-coordinator";
+import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
@@ -348,13 +348,13 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!Number.isSafeInteger(minutes) || minutes < 1) throw new V1SyncError("episode extension must be a positive whole number of minutes", "invalid_payload");
     return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "extend_episode", payload: { extension_seconds: minutes * 60 } }), options);
   }
-  setMicrophoneEnabled(enabled: boolean, options?: V1LiveTargetOptions): Promise<V1SelfMediaTargetResult> {
+  setMicrophoneEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
     return this.#sendLiveTarget("set_microphone_enabled", "microphone", enabled, options);
   }
-  setCameraEnabled(enabled: boolean, options?: V1LiveTargetOptions): Promise<V1SelfMediaTargetResult> {
+  setCameraEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
     return this.#sendLiveTarget("set_camera_enabled", "camera", enabled, options);
   }
-  setScreenShareEnabled(enabled: boolean, options?: V1LiveTargetOptions): Promise<V1SelfMediaTargetResult> {
+  setScreenShareEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
     return this.#sendLiveTarget("set_screen_share_enabled", "screen", enabled, options);
   }
   requestUnmute(participantId: string, options?: RequestOptions): Promise<V1DirectedRequestResult> {
@@ -369,7 +369,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #sendOperation(createFrame: V1OperationFrameFactory, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#commandScheduler.sendOperation(createFrame, this.#liveTargets.pendingCount + this.#requests.size, options);
   }
-  #sendLiveTarget(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: V1LiveTargetOptions): Promise<V1SelfMediaTargetResult> {
+  #sendLiveTarget(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
     return this.#liveTargets.send(name, source, enabled, options);
   }
   #sendDirectedRequest(name: "request_unmute" | "request_start_camera", participantId: string, options?: RequestOptions): Promise<V1DirectedRequestResult> {

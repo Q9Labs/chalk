@@ -4,7 +4,6 @@ import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot 
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult, V1MediaPause } from "../sync/v1-types";
-import type { V1LiveTargetOptions } from "../sync/v1-live-target-coordinator";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
 import { Context, Layer } from "effect";
@@ -43,9 +42,9 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly getSnapshot: () => V1EpisodeSnapshot;
   readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;
   readonly leave: () => Promise<V1CommandResult>;
-  readonly setMicrophoneEnabled: (enabled: boolean, options?: V1LiveTargetOptions) => Promise<V1SelfMediaTargetResult>;
-  readonly setCameraEnabled: (enabled: boolean, options?: V1LiveTargetOptions) => Promise<V1SelfMediaTargetResult>;
-  readonly setScreenShareEnabled: (enabled: boolean, options?: V1LiveTargetOptions) => Promise<V1SelfMediaTargetResult>;
+  readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
+  readonly setCameraEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
+  readonly setScreenShareEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
   readonly setHandRaised: (raised: boolean) => Promise<V1CommandResult>;
   readonly setDisplayName: (displayName: string) => Promise<V1CommandResult>;
   readonly setAdmissionPolicy: (policy: V1AdmissionTarget) => Promise<V1CommandResult>;

@@ -21,7 +21,7 @@ it("shows connecting as off and allows an immediate cancel, then explains failur
     expect(cancel).toHaveBeenCalledOnce();
     expect(toggle).not.toHaveBeenCalled();
     await act(async () => root.render(<DevicePopover type="mic" isActive={false} warning onToggle={toggle} devices={[]} onDeviceChange={() => {}} />));
-    expect(element.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("Microphone unavailable. Try turning it on again.");
+    expect(element.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("Microphone didn’t reach the call. Try turning it on again.");
     expect(element.querySelector('button[aria-label="Unmute microphone"]')).not.toBeNull();
   } finally {
     await act(async () => root.unmount());

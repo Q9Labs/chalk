@@ -1482,39 +1482,6 @@ describe("V1SyncClient", () => {
     await expect(client.setMicrophoneEnabled(true, { requestId: commandIds[0] })).rejects.toMatchObject({ code: "media_plane_unavailable" });
     expect(socket.sent.length).toBe(sentBefore);
   });
-  it.each(["authorization", "local media"] as const)("cancels expired self-media work awaiting %s and ignores late completion", async (stage) => {
-    const clock = new TestClock();
-    const mediaPlane = new BlockingMediaPlane();
-    const { client, socket } = await liveClient({ clock, mediaPlane });
-    const controller = new AbortController();
-    const observed: string[] = [];
-    const unsubscribe = client.subscribe((snapshot) => observed.push(snapshot.localMedia.microphone));
-    try {
-      const cancelled = expect(client.setMicrophoneEnabled(true, { requestId: commandIds[0], signal: controller.signal })).rejects.toMatchObject({ code: "cancelled" });
-      const late = { type: "live_target_result", operation_id: commandIds[0], name: "set_microphone_enabled", outcome: "confirmed", error_code: null } as const;
-      if (stage === "local media") socket.receive(late);
-      await settle();
-      controller.abort();
-      await cancelled;
-      expect(observed.at(-1)).toBe("unknown");
-      socket.receive(late);
-      mediaPlane.complete({ outcome: "confirmed", errorCode: null });
-      await settle();
-      expect(client.getSnapshot().localMedia.microphone).toBe("unknown");
-      expect(mediaPlane.targets).toHaveLength(stage === "local media" ? 1 : 0);
-      const next = client.setMicrophoneEnabled(false, { requestId: commandIds[1] });
-      socket.receive({ type: "live_target_result", operation_id: commandIds[1], name: "set_microphone_enabled", outcome: "confirmed", error_code: null });
-      await settle();
-      mediaPlane.complete({ outcome: "confirmed", errorCode: null });
-      await expect(next).resolves.toMatchObject({ mediaPlaneOutcome: "confirmed" });
-      clock.advance(60000);
-      expect(client.getSnapshot().localMedia.microphone).toBe("disabled");
-      expect(mediaPlane.targets.at(-1)).toEqual({ operationId: commandIds[1], participantId: ownerId, source: "microphone", enabled: false });
-    } finally {
-      unsubscribe();
-      client.stop();
-    }
-  });
   it("retries the local MediaPlane with one operation ID and bounds retry exhaustion", async () => {
     const mediaPlane = new TestMediaPlane();
     mediaPlane.results.push({ outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "retryable_failure", errorCode: "device_busy" }, { outcome: "retryable_failure", errorCode: "device_busy" });

@@ -172,7 +172,7 @@ export function DevicePopover({
           </button>
         }
       >
-        {warning ? `${mic ? "Microphone" : "Camera"} unavailable. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label}
+        {warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label}
       </ChalkTooltip>
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
@@ -221,7 +221,7 @@ export function DevicePopover({
         )}
       </ChalkMenu>
       {warning ? (
-        <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} unavailable. Try turning it on again.`}>
+        <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>
           <span className="sr-only">{mic ? "Microphone" : "Camera"} unavailable. Try turning it on again.</span>
         </span>

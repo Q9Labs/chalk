@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConnectionSyncClient } from "../connection/dependencies";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
+import { control } from "./terminal.test.helpers";
 
 const sources = ["microphone", "camera", "screen"] as const;
 const receipt = { operationId: "r7", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" } as const;
@@ -222,7 +223,7 @@ describe("independent r7 ordering", () => {
     }
   });
 
-  it.each(sources)("scopes an explicit host pause to the sent %s generation", async (source) => {
+  it.each(sources)("scopes an explicit host pause to the current %s action", async (source) => {
     const close = vi.fn(async () => undefined);
     const { platform, client, command, track, setEnabled } = createConvergenceScenario(source, { media: { closeForcedLocalPublication: close } });
     try {
@@ -258,6 +259,8 @@ describe("independent r7 ordering", () => {
       await setEnabled(true);
       const off = setEnabled(false);
       await vi.waitFor(() => expect(local).toHaveBeenCalledOnce());
+      // The committed control head is the evidence that this stop predates On.
+      platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, revision: 2 } });
       const on = setEnabled(true);
       await drain();
       platform.emitMediaPause({ source, revision: 2 });

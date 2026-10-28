@@ -15,6 +15,7 @@ function scenario(source: "microphone" | "camera" = "microphone") {
     ...base,
     dependencies: {
       ...base.dependencies,
+      clock: { ...base.dependencies.clock, setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds), clearTimeout: (timer) => globalThis.clearTimeout(timer) },
       createConnectionReporter: (access: ConstructorParameters<typeof ConnectionReporter>[0]["access"]) =>
         new ConnectionReporter({
           access,
@@ -70,15 +71,20 @@ function scenario(source: "microphone" | "camera" = "microphone") {
   };
 }
 
-it("repairs an enabled publication stuck muted in Sync and opens the receiver audio gate", async () => {
-  const test = scenario();
+it.each(["microphone", "camera"] as const)("fails closed when %s never reaches the class; a fresh tap enables playable media", async (source) => {
+  const test = scenario(source);
   try {
     await test.join();
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("requesting");
+    expect(test.client.getSnapshot().media.local[source].state).toBe("requesting");
     expect(test.received.enabled).toBe(false);
-    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true, { signal: expect.any(AbortSignal) }), { timeout: 2000 });
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
-    expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
+    await vi.waitFor(() => expect(test.client.getSnapshot().media.local[source].state).toBe("failed"), { timeout: 3000 });
+    expect(test.track.enabled).toBe(false);
+    expect(test.received.enabled).toBe(false);
+    expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
+    expect(test.command).not.toHaveBeenCalled();
+    await (source === "microphone" ? test.client.media.setMicrophoneEnabled(true) : test.client.media.setCameraEnabled(true));
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("enabled");
     expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
     expect(test.received.enabled).toBe(true);
     expect(test.received.readyState).toBe("live");
@@ -88,54 +94,69 @@ it("repairs an enabled publication stuck muted in Sync and opens the receiver au
   }
 });
 
-it("automatically reports a persistent mismatch through the connection reporter", async () => {
+it("automatically reports a persistent mismatch once, with zero retries and no raw text", async () => {
   const test = scenario();
-  test.command.mockResolvedValue({ operationId: "stale", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
   try {
     await test.join();
-    await vi.waitFor(() => expect(test.reports).toHaveLength(1), { timeout: 4000 });
+    await vi.waitFor(() => expect(test.reports).toHaveLength(1), { timeout: 3000 });
     expect(test.reports[0]?.trigger).toBe("media_projection_mismatch");
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", attempt: 2, outcome: "started" });
+    expect(test.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", attempt: 0, outcome: "failed" });
     expect(test.reports[0]?.events.at(-1)?.duration_ms).toBeGreaterThanOrEqual(2000);
-    await vi.waitFor(() => expect(test.client.getSnapshot().media.local.microphone.state).toBe("failed"), { timeout: 2000 });
-    expect(test.command).toHaveBeenCalledTimes(3);
-    expect(test.received.enabled).toBe(false);
+    expect(test.command).not.toHaveBeenCalled();
+    expect(test.track.enabled).toBe(false);
   } finally {
     test.dispose();
   }
 });
 
-it.each(["mute", "ended"] as const)("turns an iPadOS %s mic off on both sides, never advertising a dead source", async (event) => {
+it.each(["mute", "ended"] as const)("pauses an iPadOS %s microphone locally without changing another client's projection", async (event) => {
   const test = scenario();
   try {
     await test.join();
     test.project(true);
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
-    if (event === "mute") Object.assign(test.track, { muted: true });
-    else Object.assign(test.track, { readyState: "ended" });
+    Object.assign(test.track, event === "mute" ? { muted: true } : { readyState: "ended" });
     test.track.dispatchEvent(new Event(event));
-    expect(test.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
-    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(false));
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
-    expect(test.received.enabled).toBe(false);
+    expect(test.track.enabled).toBe(false);
     Object.assign(test.track, { muted: false });
     test.track.dispatchEvent(new Event("unmute"));
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
-    // Resuming an interrupted browser source requires an explicit user unmute.
-    expect(test.command).toHaveBeenCalledTimes(1);
+    expect(test.command).not.toHaveBeenCalled();
+    // Receiver gating is still authoritative; it is not rewritten by local OS events.
+    expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
   } finally {
     test.dispose();
   }
 });
 
-it("does not wait for reconciliation to apply a manual mute", async () => {
+it("applies a manual mute immediately, without waiting for the grace", async () => {
   const test = scenario();
   try {
     await test.join();
     const off = test.client.media.setMicrophoneEnabled(false);
     await vi.waitFor(() => expect(test.track.enabled).toBe(false));
-    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    await off;
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
+    expect(test.received.enabled).toBe(false);
+  } finally {
+    test.dispose();
+  }
+});
+
+it("uses the actual publication track for the local control after replacement", async () => {
+  const test = scenario();
+  try {
+    await test.join();
+    test.track.enabled = false;
+    const replacement = mediaTrack();
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: replacement }] });
+    test.project(true);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
+    expect(test.client.getSnapshot().media.local.microphone.track).toBe(replacement);
+    const off = test.client.media.setMicrophoneEnabled(false);
+    expect(replacement.enabled).toBe(false);
     await off;
     expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
   } finally {
@@ -143,31 +164,28 @@ it("does not wait for reconciliation to apply a manual mute", async () => {
   }
 });
 
-it("keeps a rejected enable unconfirmed until failed-command cleanup converges it off", async () => {
+it("keeps a mute action while live capture awaits Sync, and enforces mute on offline replacements", async () => {
   const test = scenario();
   try {
     await test.join();
+    test.project(true);
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
+    expect(test.track.enabled).toBe(true);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("requesting");
     await test.client.media.setMicrophoneEnabled(false);
-    test.command.mockImplementationOnce(async () => {
-      test.track.enabled = true;
-      test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: test.track }] });
-      throw new Error("lost acknowledgement");
-    });
-    await expect(test.client.media.setMicrophoneEnabled(true)).rejects.toThrow();
-    expect(test.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
-    expect(test.received.enabled).toBe(false);
-    await vi.waitFor(() => expect(test.command.mock.calls).toEqual([[false], [true], [false]]));
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
-    expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
     expect(test.track.enabled).toBe(false);
-    expect(test.received.enabled).toBe(false);
-    expect(test.command).toHaveBeenCalledTimes(3);
+    const replacement = mediaTrack();
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: "offline-replacement", track: replacement }] });
+    expect(replacement.enabled).toBe(false);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(test.command).not.toHaveBeenCalled();
   } finally {
     test.dispose();
   }
 });
 
-it("retries rejected enable cleanup toward off without republishing audio", async () => {
+it("does not automatically send cleanup after a rejected enable", async () => {
   const test = scenario();
   try {
     await test.join();
@@ -176,22 +194,21 @@ it("retries rejected enable cleanup toward off without republishing audio", asyn
       test.track.enabled = true;
       test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: test.track }] });
       test.project(true);
-      throw new Error("lost acknowledgement");
+      throw new Error("private provider message");
     });
-    test.command.mockRejectedValueOnce(new Error("cleanup rejected"));
     await expect(test.client.media.setMicrophoneEnabled(true)).rejects.toThrow();
     expect(test.track.enabled).toBe(false);
     expect(test.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
-    await vi.waitFor(() => expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true, false, false]), { timeout: 2000 });
-    expect(test.command).toHaveBeenLastCalledWith(false, { signal: expect.any(AbortSignal) });
-    expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
-    expect(test.received.enabled).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+    expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
+    expect(test.reports.at(-1)?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", attempt: 0 });
+    expect(JSON.stringify(test.reports)).not.toContain("private provider");
   } finally {
     test.dispose();
   }
 });
 
-it("preserves a moderation stop recovered through a full Sync snapshot until a fresh user action", async () => {
+it("preserves a recovered host stop until fresh consent", async () => {
   const test = scenario();
   try {
     await test.join();
@@ -200,102 +217,45 @@ it("preserves a moderation stop recovered through a full Sync snapshot until a f
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
     test.project(false);
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
-    await vi.waitFor(() => expect(test.track.enabled).toBe(false));
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
+    expect(test.track.enabled).toBe(false);
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
     expect(test.command).not.toHaveBeenCalled();
     await test.client.media.setMicrophoneEnabled(true);
     expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
-    expect(test.received.enabled).toBe(true);
   } finally {
     test.dispose();
   }
 });
 
-it("reconciles publication identity after reconnect when recovery still confirms enabled consent", async () => {
-  const test = scenario();
-  try {
-    await test.join();
-    test.project(true);
-    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
-    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
-    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: "replacement", track: test.track }] });
-    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
-    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true, { signal: expect.any(AbortSignal) }), { timeout: 2000 });
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
-    expect(test.received.enabled).toBe(true);
-  } finally {
-    test.dispose();
-  }
-});
-
-it("releases an expired repair so a manual retry and mute do not wait for its late completion", async () => {
-  const test = scenario();
-  const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
-  let finish = () => {};
-  try {
-    await test.join();
-    test.project(true);
-    vi.useFakeTimers();
-    test.command.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = () => resolve({ operationId: "late", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
-        }),
-    );
-    test.project(false);
-    await vi.advanceTimersByTimeAsync(8750);
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("failed");
-    expect(test.command.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
-    vi.useRealTimers();
-    const retry = test.client.media.setMicrophoneEnabled(true);
-    await vi.waitFor(() => expect(test.command).toHaveBeenCalledTimes(2));
-    await retry;
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
-    await test.client.media.setMicrophoneEnabled(false);
-    finish();
-    await Promise.resolve();
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
-    expect(test.received.enabled).toBe(false);
-  } finally {
-    finish();
-    test.dispose();
-    schedule.mockRestore();
-  }
-});
-
-it.each(["microphone", "camera"] as const)("fails closed when a live %s publication cannot converge", async (source) => {
+it.each(["microphone", "camera"] as const)("never resumes failed %s capture or sends repairs as publications churn", async (source) => {
   const test = scenario(source);
-  const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
   try {
     await test.join();
     test.project(true);
-    test.command.mockResolvedValue({ operationId: "stale", name: source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
     vi.useFakeTimers();
-    // A live replacement publication exists while Sync still names the old one.
-    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: "audio-replacement", track: test.track }] });
-    test.observer.media.emit({ ...test.observer.media.getSnapshot(), remoteTracks: [{ ...test.publication, publicationId: "audio-replacement", track: test.received }] });
-    await vi.advanceTimersByTimeAsync(3750);
-    expect(test.command).toHaveBeenCalledTimes(3);
-    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
-    expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
-    expect(test.received.enabled).toBe(true);
-    expect(test.track.enabled, "off-looking failed control must not keep transmitting").toBe(false);
-    await vi.advanceTimersByTimeAsync(10000);
-    expect(test.command).toHaveBeenCalledTimes(3);
+    for (let i = 0; i < 20; ++i) {
+      const replacement = Object.assign(mediaTrack(), { kind: test.track.kind });
+      test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: `replacement-${i}`, track: replacement }] });
+      await vi.advanceTimersByTimeAsync(1000);
+      if (i >= 2) expect(replacement.enabled).toBe(false);
+    }
     expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
     expect(test.track.enabled).toBe(false);
+    // Round-one P1: receiver's stale gate may be on, but this capture must be off.
+    expect(test.received.enabled).toBe(true);
+    expect(test.command).not.toHaveBeenCalled();
+    expect(test.reports).toHaveLength(1);
+    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "on", projection_state: "on", duration_ms: 2000, attempt: 0, outcome: "failed" });
   } finally {
     vi.useRealTimers();
     test.dispose();
-    schedule.mockRestore();
   }
 });
 
-it("automatically reports an off publication stuck on in Sync even while the mute command is pending", async () => {
+it("reports off/on drift while a manual mute is pending without sending an extra command", async () => {
   const test = scenario();
-  const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
   let finish = () => {};
   try {
     await test.join();
@@ -307,15 +267,17 @@ it("automatically reports an off publication stuck on in Sync even while the mut
           finish = () => resolve({ operationId: "pending", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
         }),
     );
-    void test.client.media.setMicrophoneEnabled(false).catch(() => undefined);
-    await vi.advanceTimersByTimeAsync(2750);
+    const off = test.client.media.setMicrophoneEnabled(false);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(test.reports).toHaveLength(1);
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source: "microphone", publication_state: "off", projection_state: "on", duration_ms: 2750, attempt: 0 });
+    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", duration_ms: 2000, attempt: 0 });
     expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    finish();
+    await off;
   } finally {
     finish();
+    vi.useRealTimers();
     test.dispose();
-    schedule.mockRestore();
   }
 });
