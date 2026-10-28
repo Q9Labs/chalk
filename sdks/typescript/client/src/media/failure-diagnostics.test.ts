@@ -4,6 +4,22 @@ import { CloudflareSFUError } from "./types";
 import { createCloudflareSFUHTTPTransport } from "./transport";
 
 describe("media failure diagnostics", () => {
+  it("preserves a marked fetch failure that has its own transport cause", async () => {
+    const error = new TypeError("private fetch URL", { cause: new Error("private host and port") });
+    const transport = createCloudflareSFUHTTPTransport({
+      apiBaseURL: "https://private.test",
+      bearerToken: "private",
+      tenantId: "t",
+      spaceId: "s",
+      episodeId: "e",
+      participantId: "p",
+      fetch: async () => {
+        throw error;
+      },
+    });
+    await expect(transport.listPublications()).rejects.toBe(error);
+    expect(classifyMediaFailure(new Error("wrapper", { cause: error }), "peer_connection")).toEqual({ media_error_kind: "network", media_error_step: "sfu_publications" });
+  });
   it.each(["tracks", "close_tracks", "renegotiate", "publications"] as const)("preserves error identity and identifies the SFU %s call", async (operation) => {
     const error = new TypeError("private URL and token");
     const transport = createCloudflareSFUHTTPTransport({

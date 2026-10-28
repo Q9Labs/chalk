@@ -42,6 +42,7 @@ function unwrapMediaFailure(error: unknown, step: MediaFailureStep) {
   for (let depth = 0; depth < 8; depth++) {
     if (typeof error !== "object" || error === null) break;
     step = steps.get(error) ?? step;
+    if (fetchFailures.has(error)) break;
     if (!("cause" in error) || error.cause === undefined) break;
     error = error.cause;
   }
