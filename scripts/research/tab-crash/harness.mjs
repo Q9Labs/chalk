@@ -62,13 +62,14 @@ async function bundle(version) {
   const hostPlugin={name:'host-integration',setup(plugin){plugin.onResolve({filter:/^crash-host-whiteboard$/},()=>({path:process.env.CRASH_HOST_WHITEBOARD ?? join(root,'.private/crash-host-whiteboard.ts')}));}};
   const entry = join(version === '5.2.0' ? published : root, 'crash-entry.jsx');
   await writeFile(entry, await readFile(join(root,'scripts/research/tab-crash/page.jsx')));
-  const result = await build({ entryPoints: [entry], bundle: true, write: false, format: 'esm', target: 'chrome120', minify: true, sourcemap: 'inline',
+  const result = await build({ entryPoints: [entry], bundle: true, write: false, format: 'esm', target: 'chrome120', minify: true, sourcemap: 'external',
     outdir: out, define: { 'process.env.NODE_ENV': '"production"' }, jsx: 'automatic',
     loader: { '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl', '.svg': 'dataurl' },
     nodePaths:[join(root,'sdks/typescript/react/node_modules')],
     plugins: [hostPlugin,...(version === '5.2.0' ? [] : [{ name:'workspace-source', setup(plugin) { plugin.onResolve({filter:/^@q9labsai\//}, args => paths[args.path] ? {path:join(root,paths[args.path])} : undefined); } }])],
   });
   asset = result.outputFiles.find(file => file.path.endsWith('.js')).text;
+  await writeFile(join(out,`${version}.js.map`),result.outputFiles.find(file=>file.path.endsWith('.js.map')).contents);
   const css = result.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
   return css;
 }
@@ -158,6 +159,7 @@ async function run(version, constrained) {
   // One full-duration incident: seven real grants over ~13 s, actual 120 s seat,
   // stale refresh and retries until seven minutes have elapsed.
   await fixture(); await navigate(); await joinPage();
+  await sample(page,cdp,browserCDP,'soak-pending',runName,0);
   for(let n=1;n<7;n++) {await delay(2100);await page.evaluate(async()=>{ const response=await fetch('/access',{method:'POST'}); if(response.status!==201)throw new Error(`burst grant ${response.status}`);await response.json(); });}
   await sample(page,cdp,browserCDP,'soak-burst',runName,0);
   await page.screenshot({path:join(out,`${runName}-burst.png`)});
