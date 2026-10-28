@@ -20,10 +20,9 @@ it("keeps the shared join alive when its first waiter is interrupted", async () 
           const client = yield* createEffectSpaceClient({ space: "test", getAccess }, platform);
           const first = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }));
           yield* Effect.promise(() => vi.waitFor(() => expect(getAccess).toHaveBeenCalledOnce()));
-          const second = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }));
-          yield* Effect.yieldNow;
+          const second = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }), { startImmediately: true });
           yield* Fiber.interrupt(first);
-          const third = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }));
+          const third = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }), { startImmediately: true });
           release();
           expect(Exit.isSuccess(yield* Fiber.await(second))).toBe(true);
           expect(Exit.isSuccess(yield* Fiber.await(third))).toBe(true);
@@ -54,8 +53,7 @@ it("cancels the owned admission and all join waiters on explicit leave", async (
           const client = yield* createEffectSpaceClient({ space: "test", getAccess }, platform);
           const first = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }));
           yield* Effect.promise(() => vi.waitFor(() => expect(getAccess).toHaveBeenCalledOnce()));
-          const second = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }));
-          yield* Effect.yieldNow;
+          const second = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }), { startImmediately: true });
           yield* client.leave();
           expect(Exit.isFailure(yield* Fiber.await(first))).toBe(true);
           expect(Exit.isFailure(yield* Fiber.await(second))).toBe(true);

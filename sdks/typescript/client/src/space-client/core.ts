@@ -121,20 +121,13 @@ export class SpaceClientCore {
     return Effect.uninterruptible(
       Effect.suspend(() => {
         if (this.#joining) return Effect.succeed(this.#joining);
-        return Effect.forkIn(
-          this.#join(options).pipe(
-            Effect.ensuring(
-              Effect.sync(() => {
-                this.#joining = null;
-              }),
-            ),
-          ),
-          this.#scope,
-          { startImmediately: false, uninterruptible: false },
-        ).pipe(
+        return Effect.forkIn(this.#join(options), this.#scope, { startImmediately: true, uninterruptible: false }).pipe(
           Effect.tap((join) =>
             Effect.sync(() => {
               this.#joining = join;
+              join.addObserver(() => {
+                if (this.#joining === join) this.#joining = null;
+              });
             }),
           ),
         );
