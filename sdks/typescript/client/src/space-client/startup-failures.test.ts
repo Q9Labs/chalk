@@ -604,6 +604,29 @@ describe("public client exhausted recovery", () => {
     }
   });
 
+  it.each([15_000, 30_000])("recovers a %i ms foreground interruption without stopping the call", async (outageMs) => {
+    vi.useFakeTimers();
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    try {
+      const joining = client.join({ microphone: false, camera: false });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await joining;
+      const live = platform.sync.getSnapshot();
+      platform.emitSync({ ...live, connection: { phase: "connecting" } });
+      await vi.advanceTimersByTimeAsync(outageMs);
+      expect(client.getSnapshot().connection.status).toBe("reconnecting");
+      expect(client.getSnapshot().connection.lastError).toBeNull();
+      platform.emitSync(live);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().connection.lastError).toBeNull();
+    } finally {
+      client.dispose();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(1);
+    }
+  });
+
   it.each(["hidden", "suspended"] as const)("does not terminate Sync recovery for time spent %s", async (interruption) => {
     vi.useFakeTimers();
     const platform = createCoreTestPlatform();
