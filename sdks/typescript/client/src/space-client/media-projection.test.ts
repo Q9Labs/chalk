@@ -263,6 +263,30 @@ it("releases an expired repair so a manual retry and mute do not wait for its la
   }
 });
 
+it("review: terminal mismatch must not leave an off-looking microphone transmitting", async () => {
+  const test = scenario();
+  const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
+  try {
+    await test.join();
+    test.project(true);
+    test.command.mockResolvedValue({ operationId: "stale", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
+    vi.useFakeTimers();
+    // A live replacement publication exists while Sync still names the old one.
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: "audio-replacement", track: test.track }] });
+    test.observer.media.emit({ ...test.observer.media.getSnapshot(), remoteTracks: [{ ...test.publication, publicationId: "audio-replacement", track: test.received }] });
+    await vi.advanceTimersByTimeAsync(3750);
+    expect(test.command).toHaveBeenCalledTimes(3);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("failed");
+    expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
+    expect(test.received.enabled).toBe(true);
+    expect(test.track.enabled, "off-looking failed control must not keep transmitting").toBe(false);
+  } finally {
+    vi.useRealTimers();
+    test.dispose();
+    schedule.mockRestore();
+  }
+});
+
 it("automatically reports an off publication stuck on in Sync even while the mute command is pending", async () => {
   const test = scenario();
   const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
