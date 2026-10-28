@@ -61,6 +61,61 @@ currently no managed host-replacement path. A genuinely new host needs this
 alert-only installation repeated before alerts are considered healthy; the native
 freshness monitor remains enabled independently and detects a missing collector.
 
+## Connection-report rules
+
+The first monitor also evaluates [connection-reports.apl](connection-reports.apl).
+It still uses the existing Discord notifier and the same three-monitor allowance.
+The API/Sync traffic monitor's thresholds and five-positive-run delay are unchanged.
+
+| Failure                    | Accepted report                                                            | Threshold                                        |
+| -------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------ |
+| `join_failed`              | Trigger `join_failed`, without a `media_start_failed` diagnostic           | At least one affected participant in ten minutes |
+| `media_start_failed`       | Trigger `join_failed`, with a `media_start_failed` diagnostic              | At least one affected participant in ten minutes |
+| `media_recovery_exhausted` | Trigger `recovery_exhausted`, with a `media_recovery_exhausted` diagnostic | At least one affected participant in ten minutes |
+
+Each rule groups by Tenant ID, Episode ID and failure. Repeated uploads and
+multiple matching diagnostics count once per participant within that group.
+A failed media start is the more specific join-failure category, not a second
+alert for the same failed join. Only accepted `sdk.connection_report` API events
+count: rejected uploads, ordinary state changes, connection-loss reports and
+retries that recover without exhaustion do not. Permission/device failures that
+actually stop a join still count; do not hide a real class failure as noise.
+
+The monitor checks every minute, with `Above 0`, one positive run, per-group
+notifications, no repeat-every-run and no no-data alert. Waiting for several
+people to fail would miss a single-person class interruption. The ten-minute
+window tolerates ingestion delay and deduplicates repeat reports. It is not a
+ten-minute delivery guarantee: an offline client, rate limit, broken exporter,
+or delayed/rejected report can still prevent or delay an alert.
+
+Messages include the sanitized database Tenant name plus its stable ID, the
+Episode ID, failure, affected-participant count and first report time in **PKT**
+(UTC+05:00, including date rollover). The new collector exports the already
+sanitized name as `chalk_alert_tenant_name`; install its alert-only binary before
+enabling these rules. Without a matching snapshot, the message uses the Tenant
+ID instead of dropping the failure. Counts and the evaluation clock are not part
+of the notification group; its first-report time stays fixed while that first
+report remains in the window. A continuing incident can open a new group when
+the oldest report ages out or the Tenant name changes. Threshold closure is not
+proof that anyone recovered or rejoined.
+
+**MEDIA_STATE_MISMATCH_SLOT:** the named slot in the APL is intentionally inactive
+until the SDK/API lane confirms the persistent mismatch trigger and fields.
+Transient `media_state` diagnostics and a local mic icon alone must not page.
+The class checklist covers the mic-on/remote-muted symptom in the meantime.
+
+Run the offline provisioning tests from this directory:
+
+```sh
+python3 test_monitors.py
+```
+
+With `AXIOM_TOKEN` and `AXIOM_ORG_ID` supplied privately, add `--live` to execute
+the real expanded monitor query against synthetic Axiom datatables. This proves
+single-person thresholds, tenant/Episode isolation, duplicate suppression,
+noise exclusions, missing-name fallback and PKT date rollover without ingesting
+events or changing monitors. It does not prove Discord receipt or live SDK reports.
+
 ## Reconcile the native monitors
 
 Load these values privately: `AXIOM_TOKEN` (monitor/notifier management),
@@ -74,6 +129,22 @@ python3 infrastructure/observability/production-alerts/provision.py --apply --di
 # Enable only after the collector snapshots and Discord destination are verified:
 python3 infrastructure/observability/production-alerts/provision.py --apply
 ```
+
+For a release that keeps the existing alerts enabled, validate with the first
+command, install the updated alert-only collector, then run the final `--apply`
+command. Do not stage all existing monitors with `--disabled` during a live class.
+Confirm the native monitor evaluation and actual Discord receipt after release.
+To undo only the connection-report rules while keeping the previous job, traffic
+and freshness queries enabled, run from the repository root with the same private
+environment:
+
+```sh
+python3 infrastructure/observability/production-alerts/provision.py --apply --without-connection-reports
+```
+
+This undo leaves the collector's harmless sanitized-name field in place and
+reconciles only the same three monitor names and notifier. It does not disable
+the collector or any application unit.
 
 Only the three exact monitor names and the exact notifier name are reconciled;
 unrelated configuration is untouched. Provisioning without a webhook is permitted

@@ -9,6 +9,33 @@ Teacher, Student and Admin use separate native Chromium processes/contexts.
 Capture inputs are generated; admission, transport, decoding and UI are real.
 See [the runner instructions](../../../scripts/web-proof/class-checklist.md).
 
+## In-class response: 28 October 2026 failures
+
+These are operator checks, not additional browser-proof passes. Record the
+Episode ID and time in **PKT**. Use the agreed fallback call if recovery fails;
+do not keep the class waiting through repeated retries.
+
+### W33: audio/video cannot reconnect while chat or the board still works
+
+1. Spot frozen or missing media and a persistent reconnecting notice; working chat does not prove media is healthy.
+2. For missing audio, ask the affected person to mute, then unmute. Confirm another person can hear them.
+3. If media is still broken, rejoin once. Use **Report a problem** before leaving when available.
+4. If rejoining does not restore media, move to the agreed fallback and report the Episode ID and PKT time.
+
+### W34: joining fails after a slow camera/microphone start
+
+1. Spot a long camera/microphone startup followed by a failed join or **Try again**. Do not assume it is a permission denial.
+2. Check the browser's camera/microphone permission and selected devices, then rejoin once.
+3. Use **Report a problem** when available; include the Episode ID and PKT time. Automatic reports do not prove delivery to support.
+4. If the join still fails, move to the agreed fallback.
+
+### W35: microphone looks on locally but classmates see muted and hear nothing
+
+1. Compare both views: ask a classmate whether the person appears muted and whether they can hear them. A local mic-on icon is not proof of sound.
+2. Ask the affected person to mute, then unmute. Check the classmate's badge and received audio again.
+3. If still silent, use **Report a problem** when available, then rejoin once. Record the Episode ID, PKT time and device/browser.
+4. If classmates still cannot hear them, move to the agreed fallback. Do not ask others to override their mute controls.
+
 ## Coverage before this change
 
 No complete C1–C7 case had full real-stack coverage at the baseline.

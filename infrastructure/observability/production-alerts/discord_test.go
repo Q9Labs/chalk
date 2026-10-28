@@ -27,7 +27,7 @@ func TestDiscordJoinedGroupsDoNotIndexPastValues(t *testing.T) {
 
 func renderDiscord(t *testing.T, data map[string]interface{}) string {
 	t.Helper()
-	body, err := os.ReadFile("discord-body.tmpl")
+	body, err := os.ReadFile(alertTestFile("discord-body.tmpl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +61,38 @@ func discordGroup(item snapshot) string {
 	return "\n" + strings.Join([]string{item.Tenant, item.Rule, item.Headline, item.Summary, item.Next, item.Engineers}, "\n") + "\n"
 }
 
+func TestDiscordConnectionReportsIdentifyTheClassAndAffectedPeople(t *testing.T) {
+	for _, failure := range []string{"join_failed", "media_start_failed", "media_recovery_exhausted"} {
+		for _, action := range []string{"Open", "Closed"} {
+			t.Run(failure+"-"+action, func(t *testing.T) {
+				item := snapshot{
+					Tenant: "synthetic", Rule: "connection-report", Headline: "A class connection failed",
+					Summary:   "Tenant: Example school (synthetic). Episode: episode-a. Failure: " + failure + ". First reported: 2026-10-28T03:05:00 PKT.",
+					Next:      "In class: mute then unmute; rejoin once. Use Report a problem. If still broken, use the agreed fallback.",
+					Engineers: "For engineers: connection-report; search this Episode ID: episode-a.",
+				}
+				content := renderDiscord(t, map[string]interface{}{"Action": action, "Value": 2, "GroupKeys": []string{"alert_message"}, "GroupValues": []string{discordGroup(item)}})
+				for _, required := range []string{"Example school (synthetic)", "episode-a", failure, "2026-10-28T03:05:00 PKT"} {
+					if !strings.Contains(content, required) {
+						t.Fatalf("missing %q in %s", required, content)
+					}
+				}
+				if action == "Open" {
+					for _, required := range []string{"Affected participants: 2.", "Report a problem", "fallback"} {
+						if !strings.Contains(content, required) {
+							t.Fatalf("missing %q in %s", required, content)
+						}
+					}
+				} else if !strings.Contains(content, "does not prove the earlier failure was fixed") {
+					t.Fatal(content)
+				}
+			})
+		}
+	}
+}
+
 func TestDiscordFinalTextForEveryRuleAndClosure(t *testing.T) {
-	body, err := os.ReadFile("testdata/discord-messages.json")
+	body, err := os.ReadFile(alertTestFile("testdata/discord-messages.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

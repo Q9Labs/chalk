@@ -10,11 +10,18 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"text/template"
 	"time"
 )
+
+func alertTestFile(name string) string {
+	_, source, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(source), name)
+}
 
 func TestIngestRejectsPartialAcceptanceWithoutLeakingResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +46,7 @@ func TestIngestRejectsUnexpectedSuccessBody(t *testing.T) {
 }
 
 func TestDiscordTemplateProducesPlainMessagesAndHonestClosure(t *testing.T) {
-	body, err := os.ReadFile("discord-body.tmpl")
+	body, err := os.ReadFile(alertTestFile("discord-body.tmpl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +86,7 @@ func TestTenantNamesCannotBreakDiscordJSON(t *testing.T) {
 	for _, raw := range []string{"Example school", "@everyone\n```\x01\x7f\x85\u202e\" school", strings.Repeat("学", 100)} {
 		item := snapshot{Rule: "recording", Tenant: "synthetic", TenantName: raw, Value: 1}
 		formatMessage(&item)
-		body, err := os.ReadFile("discord-body.tmpl")
+		body, err := os.ReadFile(alertTestFile("discord-body.tmpl"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,6 +103,19 @@ func TestTenantNamesCannotBreakDiscordJSON(t *testing.T) {
 		}
 		if !strings.Contains(item.Summary, "Tenant:") {
 			t.Fatal("missing attribution")
+		}
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ingested struct {
+			TenantName string `json:"chalk_alert_tenant_name"`
+		}
+		if err := json.Unmarshal(encoded, &ingested); err != nil {
+			t.Fatal(err)
+		}
+		if ingested.TenantName != safeTenantName(raw) {
+			t.Fatal("connection-report enrichment must ingest only the sanitized Tenant name")
 		}
 	}
 }
@@ -239,7 +259,7 @@ func TestStateSQLSeparatesFailuresAndClearsTenantGroups(t *testing.T) {
 }
 
 func TestClosedMessagesPreserveTenantContext(t *testing.T) {
-	body, err := os.ReadFile("discord-body.tmpl")
+	body, err := os.ReadFile(alertTestFile("discord-body.tmpl"))
 	if err != nil {
 		t.Fatal(err)
 	}

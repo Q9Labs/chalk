@@ -70,7 +70,12 @@ No token, raw participant or user identity, error text, or media payload is adde
 ## Alerts
 
 Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue
-recordings and transcripts or exhausted webhooks, and stale collector state.
+recordings and transcripts or exhausted webhooks plus terminal SDK connection
+reports, and stale collector state. The connection-report rules alert on one
+affected participant per Tenant, Episode and failure in ten minutes, evaluated
+every minute. Messages include the first report's PKT time; a cleared threshold
+does not prove the person rejoined or recovered. A media-state-mismatch rule has
+a named slot until its SDK/API report fields are confirmed.
 The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
 An independent uptime Worker checks API/Sync health and readiness and reports

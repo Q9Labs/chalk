@@ -23,7 +23,7 @@ var stateSQL string
 
 type snapshot struct {
 	Tenant        string     `json:"chalk_alert_tenant"`
-	TenantName    string     `json:"-"`
+	TenantName    string     `json:"chalk_alert_tenant_name"`
 	ExpiresAt     *time.Time `json:"-"`
 	UnknownExpiry int64      `json:"-"`
 	Time          string     `json:"_time"`
@@ -110,7 +110,8 @@ func message(rule string) (headline, impact, next string) {
 func formatMessage(item *snapshot) {
 	item.Headline, item.Summary, item.Next = message(item.Rule)
 	if item.Tenant != "" {
-		item.Summary = "Tenant: " + safeTenantName(item.TenantName) + ". " + item.Summary
+		item.TenantName = safeTenantName(item.TenantName)
+		item.Summary = "Tenant: " + item.TenantName + ". " + item.Summary
 	}
 	if item.ExpiresAt != nil {
 		if item.ExpiresAt.Before(time.Now()) {

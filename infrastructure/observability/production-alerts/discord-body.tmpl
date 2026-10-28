@@ -18,6 +18,7 @@
 {{- end -}}
 {{- $start = $i -}}{{- end -}}{{- end -}}
 {{- $count := "" -}}{{- if or (eq $rule "recording") (eq $rule "export") (eq $rule "transcript") (eq $rule "webhook") -}}{{- $count = printf " Affected items: %v." $.Value -}}{{- end -}}
+{{- if eq $rule "connection-report" -}}{{- $count = printf " Affected participants: %v." $.Value -}}{{- end -}}
 {{- $message := printf "%s\n%s%s\n%s\n%s" $headline $summary $count $next $engineers -}}
 {{- if eq $.Action "Closed" -}}{{- $message = printf "The alert threshold is no longer exceeded\nEarlier alert: %s. %s\nThis does not prove the earlier failure was fixed. An engineer must check the earlier message and affected records; do not treat this as recovery.\n%s" $headline $summary $engineers -}}{{- end -}}
 {{- $candidate := $message -}}{{- if $content -}}{{- $candidate = printf "%s\n\n%s" $content $message -}}{{- end -}}

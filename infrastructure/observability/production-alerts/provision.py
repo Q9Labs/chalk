@@ -32,10 +32,25 @@ def api(method, path, payload=None):
         raise RuntimeError(f"Axiom {method} {path} request failed") from None
 
 
+def monitor_definitions(variables, disabled=False, without_connection_reports=False):
+    monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
+    branch = ""
+    if not without_connection_reports:
+        query = Path(__file__).with_name("connection-reports.apl").read_text()
+        branch = " | union (\n" + query + "\n) | summarize value=max(value) by alert_message"
+    for monitor in monitors:
+        monitor["aplQuery"] = monitor["aplQuery"].replace("${CONNECTION_REPORT_BRANCH}", branch)
+        for key, value in variables.items():
+            monitor["aplQuery"] = monitor["aplQuery"].replace("${" + key + "}", value)
+        monitor["disabled"] = disabled
+    return monitors
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="Create/update production configuration")
     parser.add_argument("--disabled", action="store_true", help="Stage monitors without evaluating or notifying")
+    parser.add_argument("--without-connection-reports", action="store_true", help="Undo the connection-report rules without disabling existing alerts")
     args = parser.parse_args()
     variables = {}
     for name in ("LOG_DATASET", "TRACE_DATASET"):
@@ -43,11 +58,7 @@ def main():
         if not re.fullmatch(r"[A-Za-z0-9_-]+", value):
             raise RuntimeError(f"{name} must be a private dataset name")
         variables[name] = value
-    monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
-    for monitor in monitors:
-        for key, value in variables.items():
-            monitor["aplQuery"] = monitor["aplQuery"].replace("${" + key + "}", value)
-        monitor["disabled"] = args.disabled
+    monitors = monitor_definitions(variables, args.disabled, args.without_connection_reports)
     if not args.apply:
         print(f"Validated {len(monitors)} monitor definitions; no production changes")
         return
