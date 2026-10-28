@@ -94,7 +94,9 @@ try {
       if (!browserType) throw new TypeError(`Unknown browser: ${browserName}`);
       try {
         const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
-        const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+        // SDK-driven join is not a trusted DOM gesture. Let the fixture's
+        // synthetic tone run; receiver proof still samples the real gated sink.
+        const browser = await browserType.launch({ headless: true, ...(browserName === "chromium" ? { args: ["--autoplay-policy=no-user-gesture-required"] } : {}), ...(executablePath ? { executablePath } : {}) });
         try {
           if (!arguments_.has("--agreement-only")) {
             await proveToastLayering(browser, baseURL);
