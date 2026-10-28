@@ -228,6 +228,7 @@ export class FixtureMediaClient {
     for (const transceiver of peer.connection.getTransceivers()) {
       const source = transceiver.mid ? peer.remoteByMid.get(transceiver.mid) : undefined;
       if (!source) continue;
+      transceiver.direction = "sendrecv";
       peer.senders.set(source, transceiver.sender);
       const local = this.#local.get(source);
       if (local?.enabled) {
