@@ -8,6 +8,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "tsup";
 import { chromium } from "playwright";
+import { recoveryBudgets } from "./recovery-budgets.mjs";
+
+const budgets = recoveryBudgets();
 
 const output = resolve(process.argv[2] ?? ".private/connection-lost-proof");
 await mkdir(output, { recursive: true });
@@ -181,7 +184,12 @@ try {
         await page.waitForTimeout(750); // Allow a real heartbeat round-trip before disconnecting.
         const live = await page.evaluate(() => window.proof.snapshot());
         await context.setOffline(true);
-        await page.waitForFunction(() => window.proof.client.getSnapshot().connection.lastError?.code === "connection.sync_recovery_exhausted", null, { timeout: 45000 });
+        // Start transport loss deterministically; offline alone can leave an
+        // established WebSocket alive until its heartbeat timeout.
+        for (const socket of sockets) socket.destroy();
+        const disconnectedAt = Date.now();
+        await page.waitForFunction(() => window.proof.client.getSnapshot().connection.lastError?.code === "connection.sync_recovery_exhausted", null, { timeout: budgets.timeoutMs });
+        assert.ok(Date.now() - disconnectedAt >= budgets.syncMs, "Sync exhausted before its real recovery budget");
         const exhausted = await page.evaluate(() => ({ ...window.proof.snapshot(), diagnostics: window.proof.diagnostics }));
         if (revision === "before") {
           assert.equal(exhausted.connection.status, "reconnecting");

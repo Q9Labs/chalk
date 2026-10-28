@@ -30,6 +30,7 @@ type Harness = {
   readonly accessRequests: () => number;
   readonly agreementSnapshot: () => SpaceSnapshot;
   readonly interruptMicrophone: typeof interruptMicrophone;
+  readonly connectionHistory: () => readonly string[];
   readonly previewCommandContract?: PreviewClientCommand;
 };
 
@@ -72,7 +73,13 @@ const client = createFixtureSpaceClient({
 });
 
 function installHarness(nextClient: SpaceClient): void {
+  const history: string[] = [];
+  nextClient.subscribe(() => {
+    const status = nextClient.getSnapshot().connection.status;
+    if (history.at(-1) !== status) history.push(status);
+  });
   window.__chalk = {
+    connectionHistory: () => history,
     agreementSnapshot: () => nextClient.getSnapshot(),
     interruptMicrophone,
     join: () => joinFromHarness(nextClient),

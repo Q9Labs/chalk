@@ -329,13 +329,13 @@ function invoke(page, action, argument) {
   );
 }
 
-function waitForState(page, state) {
-  return waitFor(page, (snapshot, expected) => snapshot.state === expected, state);
+function waitForState(page, state, timeoutMs) {
+  return waitFor(page, (snapshot, expected) => snapshot.state === expected, state, timeoutMs);
 }
 
-async function waitFor(page, predicate, argument) {
+async function waitFor(page, predicate, argument, timeoutMs = 10_000) {
   try {
-    await page.waitForFunction(([source, value]) => Function("snapshot", "value", `return (${source})(snapshot, value)`)(window.__chalk.snapshot(), value), [String(predicate), argument], { timeout: 10_000 });
+    await page.waitForFunction(([source, value]) => Function("snapshot", "value", `return (${source})(snapshot, value)`)(window.__chalk.snapshot(), value), [String(predicate), argument], { timeout: timeoutMs });
   } catch (error) {
     const snapshot = await page.evaluate(() => window.__chalk.snapshot());
     process.stderr.write(`[packed-e2e] timed out with snapshot ${JSON.stringify(snapshot)}\n`);
