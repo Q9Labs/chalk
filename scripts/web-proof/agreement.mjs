@@ -58,7 +58,7 @@ export async function sampleAgreement() {
       await context.close();
     }
     const frames = video && !video.paused && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
-    received.push({ id: participant.id, energy, frames, audio: audio ? { paused: audio.paused, muted: audio.muted, contextTracks: audio.srcObject.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })) } : null });
+    received.push({ id: participant.id, energy, frames, audio: audio ? { paused: audio.paused, muted: audio.muted, contextTracks: audio.srcObject?.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })) ?? [] } : null });
     if (tile && snapshot) {
       participant.badgeMicrophone = !tile.querySelector('[aria-label="Muted"]');
       participant.badgeCamera = Boolean(tile.querySelector("video"));
