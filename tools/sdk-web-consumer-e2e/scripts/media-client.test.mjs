@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
 
-const { outputFiles } = await build({ entryPoints: [new URL("../consumer/media-client.ts", import.meta.url).pathname], bundle: true, platform: "node", format: "esm", write: false });
+// Preflight runs before SDK artifacts are built. Use the real error class's
+// source, not a mock, while the clean consumer later imports the packed class.
+const { outputFiles } = await build({
+  entryPoints: [new URL("../consumer/media-client.ts", import.meta.url).pathname],
+  alias: { "@q9labsai/chalk-client": fileURLToPath(new URL("../../../sdks/typescript/client/src/media/types.ts", import.meta.url)) },
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  write: false,
+});
 const { FixtureMediaClient } = await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}`);
 
 for (const source of ["microphone", "camera", "screen"]) {

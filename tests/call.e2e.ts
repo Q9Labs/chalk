@@ -7,9 +7,11 @@ import { audioEvidence, incomingAudioLevel, remoteVideoFrames } from "../scripts
 // creates the Space with the proof Tenant key; the browser never receives it.
 test("the real web app and SDK guest receive live video and audio", async ({ app, browser, screen }) => {
   await withProofCall({ app, screen }, async (guest) => {
-    await screen.getByRole("button", "Unmute microphone", { exact: true }).click();
-    await screen.getByRole("button", "Turn on camera", { exact: true }).click();
     await guest.ready;
+    await guest.agreement(browser);
+    await screen.getByRole("button", "Unmute microphone", { exact: true }).click();
+    await guest.agreement(browser);
+    await screen.getByRole("button", "Turn on camera", { exact: true }).click();
     await guest.agreement(browser);
     for (const [off, on] of [
       ["Mute microphone", "Unmute microphone"],
