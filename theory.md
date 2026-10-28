@@ -113,7 +113,7 @@ Postgres is the durable authority. A transaction locks one Tenant-scoped Episode
 
 ## Tracker maintenance
 
-tracker.yaml owns current status. Each entry is one Participant-visible or operational outcome with a plain title, a one- or two-sentence summary of what exists and what's missing, and the concrete steps left. Entries are deliberately unplanned: scoping and design happen when someone picks the work up. Evidence, test runs and verification logs live in docs or scratch notes, not in the tracker. The owner sets priority.
+Follow the [tracker workflow](README.md#tracker-workflow). Each entry describes one Participant-visible or operational outcome. Use a plain title, a one- or two-sentence summary of what exists and what is missing, and the concrete steps left. Scope and design the work when someone picks it up. Keep evidence, test runs, and verification logs in docs or scratch notes. The owner sets priority.
 
 Split an entry when its steps can ship separately, and merge entries that duplicate work. Put a step in the entry that must finish first. Delete an entry when its work is done: the code is the record of what works.
 
