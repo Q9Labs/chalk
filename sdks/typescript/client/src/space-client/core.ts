@@ -88,6 +88,7 @@ export class SpaceClientCore {
     [TEvent in ClientEventName]: Set<ClientEventHandler<TEvent>>;
   } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set() };
   #disposed = false;
+  #joining: ClientEffect<void> | null = null;
   #episodeEnded = false;
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
@@ -114,6 +115,26 @@ export class SpaceClientCore {
   }
   subscribe = (listener: () => void): (() => void) => this.#store.subscribe(listener);
   join(options: JoinOptions = {}): ClientEffect<void> {
+    return Effect.suspend(
+      () =>
+        this.#joining ??
+        Effect.cached(
+          this.#join(options).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                this.#joining = null;
+              }),
+            ),
+          ),
+        ).pipe(
+          Effect.flatMap((join) => {
+            this.#joining = join;
+            return join;
+          }),
+        ),
+    );
+  }
+  #join(options: JoinOptions): ClientEffect<void> {
     return Effect.sync(() => this.#requireActive()).pipe(
       Effect.andThen(this.#connection.configureJoin(options)),
       Effect.tap(() => Effect.sync(() => this.controllers.media.configure(options))),
