@@ -728,18 +728,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #setTrack(source: MediaSource, track: MediaStreamTrack): void {
     if (source !== "camera") {
-      if (source === "microphone") {
-        this.#unsubscribeMicrophone?.();
-        const changed = () => {
-          if (this.#track(source) !== track) return;
-          if (track.muted || track.readyState === "ended") this.#fork(this.#act("microphone", false).pipe(Effect.ignore));
-          this.#publish();
-        };
-        for (const event of ["mute", "unmute", "ended"]) track.addEventListener(event, changed);
-        this.#unsubscribeMicrophone = () => {
-          for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
-        };
-      }
+      if (source === "microphone") this.#watchMicrophone(track);
       this.#tracks.set(source, track);
       return;
     }
@@ -750,6 +739,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (this.#camera.status === "live" && this.#camera.track === track) this.#transitionCamera({ status: "ended" });
     };
     this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
+  }
+  #watchMicrophone(track: MediaStreamTrack): void {
+    this.#unsubscribeMicrophone?.();
+    const changed = () => {
+      if (this.#track("microphone") !== track) return;
+      if (track.muted || track.readyState === "ended") this.#fork(this.#act("microphone", false).pipe(Effect.ignore));
+      this.#publish();
+    };
+    for (const event of ["mute", "unmute", "ended"]) track.addEventListener(event, changed);
+    this.#unsubscribeMicrophone = () => {
+      for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
+    };
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
@@ -1148,40 +1149,44 @@ class MediaControllerRuntime implements MediaControllerEffects {
     // The browser Stop sharing button is a user action, just like our Stop control.
     this.#fork(this.#stopScreen().pipe(Effect.ignore));
   }
+  #observeProjections(): void {
+    const ports = this.#ports;
+    if (!ports || !this.#syncLive) {
+      this.#projection.reset();
+      return;
+    }
+    this.#observeProjection(ports, "microphone");
+    this.#observeProjection(ports, "camera");
+  }
+  #observeProjection(ports: ConnectionPorts, source: "microphone" | "camera"): void {
+    if (this.#pendingSources.has(source)) {
+      this.#projection.observe(source, null);
+      return;
+    }
+    const sync = ports.sync.getSnapshot();
+    const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
+    const projection = sync.media?.items.find((item) => item.participantId === sync.participantId && item.source === source);
+    this.#projection.observe(source, {
+      revision: this.#sources[source].desired.revision,
+      publicationId: publication?.publicationId ?? null,
+      enabled: this.#sources[source].localEnabled && livePublication(publication),
+      projectedEnabled: projection?.enabled ?? false,
+      projectedPublicationId: projection?.publicationId ?? null,
+    });
+  }
+  #confirmedLocal(source: "microphone" | "camera"): MediaSlice["local"][MediaSource] {
+    const state = this.#sources[source];
+    const media = localMedia(source, this.#localTracks(), this.#ports?.media.getSnapshot(), state.localEnabled, this.#connection.getSnapshot().state, this.#pendingSources.has(source) && state.desired.enabled);
+    return confirmedLocalMedia(media, state.desired.enabled, this.#syncLive, this.#projection.state(source));
+  }
   #publish(): void {
     const current = this.#store.getSnapshot();
     const snapshot = this.#ports?.media.getSnapshot();
     const state = this.#connection.getSnapshot().state;
-    const sync = this.#ports?.sync.getSnapshot();
-    for (const source of ["microphone", "camera"] as const) {
-      const publication = snapshot?.localTracks.find((item) => item.source === source);
-      const track = publication?.track ?? this.#track(source);
-      const projection = sync?.media?.items.find((item) => item.participantId === sync.participantId && item.source === source);
-      this.#projection.observe(
-        source,
-        state === "live" && sync?.connection.phase === "live" && !this.#pendingSources.has(source)
-          ? {
-              revision: this.#sources[source].desired.revision,
-              publicationId: publication?.publicationId ?? null,
-              enabled: !!(publication?.enabled && track?.enabled && track.readyState === "live" && !track.muted && this.#sources[source].localEnabled),
-              projectedEnabled: projection?.enabled ?? false,
-              projectedPublicationId: projection?.publicationId ?? null,
-            }
-          : null,
-      );
-    }
-    const confirmedLocal = (source: "microphone" | "camera") => {
-      const media = localMedia(source, this.#localTracks(), snapshot, this.#sources[source].localEnabled, state, this.#pendingSources.has(source) && this.#sources[source].desired.enabled);
-      if (!this.#sources[source].desired.enabled) return { ...media, state: this.#projection.state(source) === "failed" ? ("failed" as const) : ("disabled" as const) };
-      if (media.track && (media.track.readyState === "ended" || media.track.muted)) return { ...media, state: "disabled" as const };
-      const convergence = this.#projection.state(source);
-      if (convergence) return { ...media, state: convergence };
-      if (media.state === "enabled" && (state !== "live" || sync?.connection.phase !== "live")) return { ...media, state: "requesting" as const };
-      return media;
-    };
+    this.#observeProjections();
     const local = Object.freeze({
-      microphone: confirmedLocal("microphone"),
-      camera: confirmedLocal("camera"),
+      microphone: this.#confirmedLocal("microphone"),
+      camera: this.#confirmedLocal("camera"),
       screen: localMedia("screen", this.#localTracks(), snapshot, false, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
@@ -1198,6 +1203,19 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
+}
+function liveTrack(track: MediaStreamTrack): boolean {
+  return track.enabled && track.readyState === "live" && !track.muted;
+}
+function livePublication(publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
+  return !!publication?.enabled && liveTrack(publication.track);
+}
+function confirmedLocalMedia(media: MediaSlice["local"][MediaSource], desired: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource] {
+  if (!desired) return { ...media, state: convergence === "failed" ? "failed" : "disabled" };
+  if (media.track && !liveTrack(media.track)) return { ...media, state: "disabled" };
+  if (convergence) return { ...media, state: convergence };
+  if (media.state === "enabled" && !live) return { ...media, state: "requesting" };
+  return media;
 }
 function cancelledCaptureError(): ConnectionError {
   return new ConnectionError({ code: "invalid_state", action: null, recoverable: false, message: "Media capture was cancelled before its result could be used" });
