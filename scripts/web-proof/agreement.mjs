@@ -18,76 +18,138 @@ export function installAgreementProbe() {
 export async function sampleAgreement() {
   await window.proofPlayMedia?.();
   const cameraShown = (video) => Boolean(video?.srcObject && getComputedStyle(video.parentElement).opacity !== "0");
-  const snapshot = window.__chalk?.agreementSnapshot?.() ?? window.proofClient?.getSnapshot();
+  const isOn = (label, suffix = "") => Boolean(document.querySelector(`button[aria-label="${label}"]${suffix}`));
+  function readSnapshot() {
+    return window.__chalk?.agreementSnapshot?.() ?? window.proofClient?.getSnapshot();
+  }
+  const snapshot = readSnapshot();
   const tiles = [...document.querySelectorAll('[data-part="stage-tile"][data-participant-id]')];
   const localTile = tiles.find((tile) => tile.dataset.tour === "local-video");
-  const self = snapshot?.self.participantId ?? localTile?.dataset.participantId;
-  const controls = localTile
-    ? {
-        microphone: Boolean(document.querySelector('button[aria-label="Mute microphone"]:not([disabled])')),
-        camera: Boolean(document.querySelector('button[aria-label="Turn off camera"]:not([disabled])')),
-      }
-    : null;
-  const local = snapshot
-    ? Object.fromEntries(["microphone", "camera"].map((source) => [source, snapshot.media.local[source].state]))
-    : {
-        microphone: document.querySelector('button[aria-label="Mute microphone"]') ? "enabled" : "disabled",
-        camera: document.querySelector('button[aria-label="Turn off camera"]') ? "enabled" : "disabled",
-      };
-  const participants = snapshot
-    ? snapshot.participants.roster.map((participant) => ({ id: participant.participantId, microphone: participant.media.microphone === "active", camera: participant.media.camera === "active" }))
-    : tiles.map((tile) => ({ id: tile.dataset.participantId, microphone: !tile.querySelector('[aria-label="Muted"]'), camera: cameraShown(tile.querySelector("video")) }));
+  function selfId() {
+    return snapshot?.self.participantId ?? localTile?.dataset.participantId;
+  }
+  const self = selfId();
+  function controlState() {
+    if (!localTile) return null;
+    return { microphone: isOn("Mute microphone", ":not([disabled])"), camera: isOn("Turn off camera", ":not([disabled])") };
+  }
+  function localState() {
+    if (snapshot) return Object.fromEntries(["microphone", "camera"].map((source) => [source, snapshot.media.local[source].state]));
+    return { microphone: isOn("Mute microphone") ? "enabled" : "disabled", camera: isOn("Turn off camera") ? "enabled" : "disabled" };
+  }
+  function participantStates() {
+    if (snapshot) return snapshot.participants.roster.map((participant) => ({ id: participant.participantId, microphone: participant.media.microphone === "active", camera: participant.media.camera === "active" }));
+    return tiles.map((tile) => ({ id: tile.dataset.participantId, microphone: !tile.querySelector('[aria-label="Muted"]'), camera: cameraShown(tile.querySelector("video")) }));
+  }
+  function videoFrames(video) {
+    if (!cameraShown(video)) return 0;
+    if ([video.paused, video.readyState < 2, video.videoWidth <= 0].some(Boolean)) return 0;
+    return video.getVideoPlaybackQuality().totalVideoFrames;
+  }
+  function audioState(audio) {
+    if (!audio) return null;
+    const contextTracks = audio.srcObject?.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })) ?? [];
+    return { paused: audio.paused, muted: audio.muted, contextTracks };
+  }
+  function playingAudio(audio) {
+    if (!audio?.srcObject) return false;
+    return [!audio.paused, !audio.muted, audio.volume > 0].every(Boolean);
+  }
+  async function audioEnergy(audio) {
+    if (!playingAudio(audio)) return 0;
+    const context = new AudioContext();
+    await context.resume();
+    const source = context.createMediaStreamSource(audio.srcObject);
+    const analyser = context.createAnalyser();
+    source.connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    let energy = 0;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      analyser.getFloatTimeDomainData(samples);
+      energy = Math.max(energy, samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+    }
+    source.disconnect();
+    await context.close();
+    return energy;
+  }
+  function participantVideo(tile, id) {
+    return tile?.querySelector("video") ?? [...document.querySelectorAll("video[data-participant-id]")].find((element) => element.dataset.participantId === id);
+  }
+  function participantAudio(id) {
+    return window.__agreementAudio?.findLast((element) => element.dataset.participantId === id && element.srcObject);
+  }
+  function badges(participant, tile) {
+    if (!tile || !snapshot) return;
+    participant.badgeMicrophone = !tile.querySelector('[aria-label="Muted"]');
+    participant.badgeCamera = cameraShown(tile.querySelector("video"));
+  }
+  const controls = controlState();
+  const local = localState();
+  const participants = participantStates();
   const received = [];
   for (const participant of participants.filter((participant) => participant.id !== self)) {
     const tile = tiles.find((tile) => tile.dataset.participantId === participant.id);
-    const video = tile?.querySelector("video") ?? [...document.querySelectorAll("video[data-participant-id]")].find((element) => element.dataset.participantId === participant.id);
-    const audio = window.__agreementAudio?.findLast((element) => element.dataset.participantId === participant.id && element.srcObject);
-    const audioStream = audio?.srcObject;
-    let energy = 0;
-    if (audio && audioStream && !audio.paused && !audio.muted && audio.volume > 0) {
-      const context = new AudioContext();
-      await context.resume();
-      const source = context.createMediaStreamSource(audioStream);
-      const analyser = context.createAnalyser();
-      source.connect(analyser);
-      const samples = new Float32Array(analyser.fftSize);
-      for (let attempt = 0; attempt < 5; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        analyser.getFloatTimeDomainData(samples);
-        energy = Math.max(energy, samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
-      }
-      source.disconnect();
-      await context.close();
-    }
-    const frames = cameraShown(video) && !video.paused && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
-    received.push({ id: participant.id, energy, frames, audio: audio ? { paused: audio.paused, muted: audio.muted, contextTracks: audio.srcObject?.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })) ?? [] } : null });
-    if (tile && snapshot) {
-      participant.badgeMicrophone = !tile.querySelector('[aria-label="Muted"]');
-      participant.badgeCamera = cameraShown(tile.querySelector("video"));
-    }
+    const video = participantVideo(tile, participant.id);
+    const audio = participantAudio(participant.id);
+    received.push({ id: participant.id, energy: await audioEnergy(audio), frames: videoFrames(video), audio: audioState(audio) });
+    badges(participant, tile);
   }
   return { self, local, controls, participants, received };
 }
 
+function badgeIssues(participant, source, on, prefix) {
+  const badge = participant?.[source === "microphone" ? "badgeMicrophone" : "badgeCamera"];
+  return [badge !== undefined, badge !== on].every(Boolean) ? [`${prefix} badge disagrees`] : [];
+}
+
+function microphoneIssues(received, on, prefix) {
+  const { energy, audio } = received ?? {};
+  if (Boolean(energy > 0.00001) === on) return [];
+  const detail = audio === undefined ? "" : ` ${JSON.stringify(audio)}`;
+  return [`${prefix} playback energy ${energy}${detail}`];
+}
+
+function cameraIssues(received, previous, on, prefix) {
+  const currentFrames = (received ?? {}).frames;
+  const previousFrames = (previous ?? {}).frames;
+  const advancing = currentFrames > previousFrames + 1;
+  return advancing === on ? [] : [`${prefix} frames ${previousFrames} -> ${currentFrames}`];
+}
+
+function projectionIssues(participant, source, owner, observer) {
+  const on = owner.local[source] === "enabled";
+  if (!participant || participant[source] !== on) return [`${owner.self} ${source}: local ${owner.local[source]}, ${observer.self} projection ${participant?.[source]}`];
+  return [];
+}
+
+function observerIssues(before, owner, observer) {
+  const participant = observer.participants.find((participant) => participant.id === owner.self);
+  const received = observer.received.find((participant) => participant.id === owner.self);
+  const previous = before.find((item) => item.self === observer.self)?.received.find((item) => item.id === owner.self);
+  return ["microphone", "camera"].flatMap((source) => {
+    const on = owner.local[source] === "enabled";
+    const prefix = `${owner.self} ${source}: ${observer.self}`;
+    const playback = source === "microphone" ? microphoneIssues(received, on, prefix) : cameraIssues(received, previous, on, prefix);
+    return [...projectionIssues(participant, source, owner, observer), ...badgeIssues(participant, source, on, prefix), ...playback];
+  });
+}
+
+function controlIssues(owner) {
+  if (!owner.controls) return [];
+  return ["microphone", "camera"].flatMap((source) => (owner.controls[source] !== (owner.local[source] === "enabled") ? [`${owner.self} ${source}: own button disagrees with SDK state`] : []));
+}
+
+function identityIssues(samples) {
+  return samples.length < 2 || new Set(samples.map((sample) => sample.self)).size !== samples.length ? ["agreement requires at least two distinct participant identities"] : [];
+}
+
 export function agreementIssues(before, after) {
-  const issues = [];
-  if (after.length < 2 || new Set(after.map((sample) => sample.self)).size !== after.length) issues.push("agreement requires at least two distinct participant identities");
+  const issues = identityIssues(after);
   for (const owner of after) {
     if (!owner.self) issues.push("missing self identity");
-    for (const source of ["microphone", "camera"]) if (owner.controls && owner.controls[source] !== (owner.local[source] === "enabled")) issues.push(`${owner.self} ${source}: own button disagrees with SDK state`);
-    for (const observer of after.filter((observer) => observer.self !== owner.self)) {
-      const participant = observer.participants.find((participant) => participant.id === owner.self);
-      const received = observer.received.find((participant) => participant.id === owner.self);
-      const previous = before.find((item) => item.self === observer.self)?.received.find((item) => item.id === owner.self);
-      for (const source of ["microphone", "camera"]) {
-        const on = owner.local[source] === "enabled";
-        if (!participant || participant[source] !== on) issues.push(`${owner.self} ${source}: local ${owner.local[source]}, ${observer.self} projection ${participant?.[source]}`);
-        const badge = participant?.[source === "microphone" ? "badgeMicrophone" : "badgeCamera"];
-        if (badge !== undefined && badge !== on) issues.push(`${owner.self} ${source}: ${observer.self} badge disagrees`);
-        if (source === "microphone" && Boolean(received?.energy > 0.00001) !== on) issues.push(`${owner.self} microphone: ${observer.self} playback energy ${received?.energy}${received?.audio === undefined ? "" : ` ${JSON.stringify(received.audio)}`}`);
-        if (source === "camera" && Boolean(received && previous && received.frames > previous.frames + 1) !== on) issues.push(`${owner.self} camera: ${observer.self} frames ${previous?.frames} -> ${received?.frames}`);
-      }
-    }
+    issues.push(...controlIssues(owner));
+    issues.push(...after.filter((observer) => observer.self !== owner.self).flatMap((observer) => observerIssues(before, owner, observer)));
   }
   return issues;
 }
@@ -122,9 +184,12 @@ export function truthIssues(samples) {
 
 // SDK release guests have no React UI. Play the SDK's gated received tracks.
 export async function playProofMedia() {
-  for (const remote of window.proofClient.getSnapshot().media.remote) {
+  function proofElement(remote) {
     const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
-    const element = existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
+    return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
+  }
+  for (const remote of window.proofClient.getSnapshot().media.remote) {
+    const element = proofElement(remote);
     element.dataset.participantId = remote.participantId;
     element.dataset.proofSource = remote.source;
     if (element.srcObject?.getTracks()[0] !== remote.track) element.srcObject = new MediaStream([remote.track]);

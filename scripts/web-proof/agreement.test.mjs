@@ -3,7 +3,9 @@ import test from "node:test";
 import { agreementIssues, truthIssues } from "./agreement.mjs";
 
 function pair({ silent = false, stale = false, badge = true } = {}) {
-  return ["a", "b"].map((self) => ({ self, local: { microphone: "enabled", camera: "enabled" }, participants: [{ id: self === "a" ? "b" : "a", microphone: badge, camera: true }], received: [{ id: self === "a" ? "b" : "a", energy: silent && self === "b" ? 0 : 0.01, frames: stale ? 10 : 20 }] }));
+  const otherId = (self) => (self === "a" ? "b" : "a");
+  const energy = (self) => (silent && self === "b" ? 0 : 0.01);
+  return ["a", "b"].map((self) => ({ self, local: { microphone: "enabled", camera: "enabled" }, participants: [{ id: otherId(self), microphone: badge, camera: true }], received: [{ id: otherId(self), energy: energy(self), frames: stale ? 10 : 20 }] }));
 }
 
 test("a healthy peer does not mask another sender's missing audio", () => {
