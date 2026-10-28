@@ -14,18 +14,19 @@ see [gate operations](../scripts/gates/README.md) for runner setup:
 box run -- 'pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && node apps/web/scripts/check-call-performance.mjs --self-test --bundle-only'
 ```
 
-The focused timing gate is `pnpm run gate -- --lane call-performance --files
+The focused performance gate is `pnpm run gate -- --lane call-performance --files
 apps/web/src/call-states/performance.tsx`; the lifecycle gate uses `--lane
 call-leaks` instead. Run both on Instabox. The root gate selects both for web,
 React SDK, UI, whiteboard and dependency changes, and full gates. The PR Gate
 workflow already runs this root gate and installs Chromium.
 The pre-commit fast profile deliberately does not run browser measurements.
 
-Gate lanes enforce bundle size and lifecycle leaks everywhere, including
-GitHub Actions. Timing limits are not enforced by gate mode on uncalibrated runners: `--gate` runs select bundle-only mode,
-while `--gate --leaks-only` still measures and enforces leaks. This is an
-explicit policy, not an automatic retry or a pass after noisy timing failures.
-Direct diagnostic runs must use `--bundle-only` until this runner has calibrated limits.
+Gate lanes enforce bundle size and lifecycle leaks on GitHub Actions. Without the
+legacy source-commit marker, [`--gate` selects bundle-only mode](../apps/web/scripts/check-call-performance.mjs)
+and does not enforce timing limits. The checked-in GitHub workflow and Instabox
+helper do not set that marker. The `--gate --leaks-only` lane still enforces leak budgets.
+Recalibrate timing limits on the current runner before treating its timings as
+budget results. Direct diagnostic runs must use `--bundle-only` until then.
 `--skip-build` reuses a previously built harness only for diagnosis.
 
 The console prints measured median/budget pairs. JSON defaults to
@@ -78,8 +79,8 @@ controls distinguish a capped browser clock from loaded rendering costs.
 A blank-page rAF control runs before each device. Full timing runs fail if its
 p95 exceeds 25 ms or its median falls below 12 ms: a capped or overloaded clock
 must not silently pass. The report retains cadence and host load. Shared
-GitHub runners are not a controlled timing environment, so their timing values
-are diagnostic only; deterministic gzip limits remain enforced there.
+GitHub runners are not a controlled timing environment; deterministic gzip
+limits remain enforced there.
 
 Fixture cameras are painted canvases, 640×360, repainted every 500 ms and
 captured at 4 fps; the screen is 1280×720. This measures UI plus synthetic media
@@ -374,13 +375,11 @@ about 0.073 MiB/cycle and final-ten slopes about 0.044. The 0.1/3 MiB whole-run
 limits and 0.05 tail limit leave headroom above those observations; the fixed
 count budgets independently catch smaller retained resources.
 
-Fresh guest IDs expose a real failure in the current SDK: the stage's
-`seenAtRef` map retains departed participant IDs. One warm guest plus 20 cycles
-leaves 21 guest keys, growing by one per cycle. The `rosterCacheKeys` budget stays
-at 0.1 keys/cycle with a fixed allowance of one, so the gate remains red until
-the SDK is fixed. The measurement lane deliberately does not edit SDK components.
-Full leave clears the map by unmounting; repeated guest departure while the call
-stays mounted is the failing journey.
+In the 2026-10-18 run, fresh guest IDs exposed retained participant IDs in the
+stage's `seenAtRef` map. One warm guest plus 20 cycles left 21 guest keys, growing
+by one per cycle, above the `rosterCacheKeys` budget. Current code prunes IDs no
+longer present in the stage. A fresh leak run is needed to establish whether the
+journey now passes; this historical result does not establish current status.
 
 The dedicated reference run also measured laptop panel layout shift at a median
 0.3287 (five samples: 0.2544–0.3477), above the unchanged 0.05 limit. Attribution
