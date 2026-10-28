@@ -128,7 +128,10 @@ function createAudioTrack(): MediaStreamTrack {
   const track = destination.stream.getAudioTracks()[0];
   if (!track) throw new TypeError("Audio capture did not return a track");
   const stop = track.stop.bind(track);
+  let released = false;
   track.stop = () => {
+    if (released) return;
+    released = true;
     stop();
     oscillator.stop();
     void context.close();
