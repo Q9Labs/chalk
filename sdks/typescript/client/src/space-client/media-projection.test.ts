@@ -5,8 +5,10 @@ import type { ConnectionSyncClient } from "../connection/dependencies";
 import { ConnectionReporter, type ConnectionReport } from "../connection/report";
 
 afterEach(() => vi.useRealTimers());
+let reportSequence = 0;
 
 function scenario() {
+  const reportClockOffset = ++reportSequence * 120000;
   const base = createCoreTestPlatform();
   const reports: ConnectionReport[] = [];
   const platform = {
@@ -16,7 +18,7 @@ function scenario() {
       createConnectionReporter: (access: ConstructorParameters<typeof ConnectionReporter>[0]["access"]) =>
         new ConnectionReporter({
           access,
-          now: Date.now,
+          now: () => Date.now() + reportClockOffset,
           traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
           online: () => true,
           subscribeOnline: () => () => {},
@@ -209,6 +211,33 @@ it("releases an expired repair so a manual retry and mute do not wait for its la
     await Promise.resolve();
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
     expect(test.received.enabled).toBe(false);
+  } finally {
+    finish();
+    test.dispose();
+    schedule.mockRestore();
+  }
+});
+
+it("automatically reports an off publication stuck on in Sync even while the mute command is pending", async () => {
+  const test = scenario();
+  const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
+  let finish = () => {};
+  try {
+    await test.join();
+    test.project(true);
+    vi.useFakeTimers();
+    test.command.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ operationId: "pending", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
+        }),
+    );
+    void test.client.media.setMicrophoneEnabled(false).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(2750);
+    expect(test.reports).toHaveLength(1);
+    expect(test.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source: "microphone", publication_state: "off", projection_state: "on", duration_ms: 2750, attempt: 0 });
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
   } finally {
     finish();
     test.dispose();

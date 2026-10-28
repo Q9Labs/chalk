@@ -23,6 +23,7 @@ type Options = {
   readonly schedule: (callback: () => void, milliseconds: number) => unknown;
   readonly cancel: (timer: unknown) => void;
   readonly send: (source: Source, observation: Observation, signal: AbortSignal) => Promise<void>;
+  readonly ready: (source: Source) => boolean;
   readonly report: (event: ConnectionReportTransportEvent) => void;
   readonly changed: () => void;
 };
@@ -96,7 +97,11 @@ export class MediaProjectionReconciler {
     }
     // One in-flight target per source. Ordinary snapshots cannot replenish the budget.
     mismatch.timer = this.#options.schedule(() => this.#tick(source, mismatch), 1000);
-    if (mismatch.inFlight || mismatch.attempts >= MAX_ATTEMPTS) return;
+    this.#attempt(source, mismatch);
+  }
+
+  #attempt(source: Source, mismatch: Mismatch): void {
+    if (!this.#options.ready(source) || mismatch.inFlight || mismatch.attempts >= MAX_ATTEMPTS) return;
     mismatch.attempts += 1;
     mismatch.inFlight = true;
     void this.#options

@@ -7,10 +7,24 @@ function fixture(send: ConstructorParameters<typeof MediaProjectionReconciler>[0
   vi.useFakeTimers();
   const report = vi.fn();
   const changed = vi.fn();
-  const reconciler = new MediaProjectionReconciler({ now: Date.now, schedule: setTimeout, cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>), send, report, changed });
+  const ready = vi.fn(() => true);
+  const reconciler = new MediaProjectionReconciler({ now: Date.now, schedule: setTimeout, cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>), send, ready, report, changed });
   const observation = { revision: 1, publicationId: "publication-1", enabled: true, projectedEnabled: false, projectedPublicationId: null };
-  return { reconciler, observation, send, report, changed };
+  return { reconciler, observation, send, ready, report, changed };
 }
+
+it("reports a mismatch while a normal target is pending without sending concurrent repairs", async () => {
+  const { reconciler, observation, send, ready, report } = fixture();
+  ready.mockReturnValue(false);
+  reconciler.observe("microphone", observation);
+  await vi.advanceTimersByTimeAsync(2750);
+  expect(send).not.toHaveBeenCalled();
+  expect(report).toHaveBeenCalledExactlyOnceWith({ event: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", duration_ms: 2750, attempt: 0, outcome: "started" });
+  ready.mockReturnValue(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(send).toHaveBeenCalledOnce();
+  reconciler.reset();
+});
 
 it("waits for the matching projection, not a successful target acknowledgement", async () => {
   const { reconciler, observation, send } = fixture();

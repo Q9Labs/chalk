@@ -144,6 +144,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       cancel: connection.cancelScheduleUnsafe,
       changed: () => this.#publish(),
       report: (event) => connection.recordTransportDiagnostic(event),
+      ready: (source) => !this.#pendingSources.has(source),
       send: (source, observation, signal) =>
         Effect.runPromise(
           this.#gates.get(source)!.withPermit(
@@ -1165,10 +1166,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#observeProjection(ports, "camera");
   }
   #observeProjection(ports: ConnectionPorts, source: "microphone" | "camera"): void {
-    if (this.#pendingSources.has(source)) {
-      this.#projection.observe(source, null);
-      return;
-    }
     const sync = ports.sync.getSnapshot();
     const state = this.#sources[source];
     const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
