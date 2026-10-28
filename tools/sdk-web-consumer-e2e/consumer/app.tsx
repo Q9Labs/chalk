@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { ToastLayeringFixture } from "./toast-layering";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
-import { fixtureClock, fixtureMediaDevices, resourceCounts, interruptMicrophone } from "./resource-ledger";
+import { fixtureClock, fixtureMediaDevices, resourceCounts, interruptMicrophone, peerStates } from "./resource-ledger";
 import { bindFixtureSyncClient, FixtureSyncClient } from "./sync-client";
 
 type Harness = {
@@ -27,6 +27,7 @@ type Harness = {
   readonly setDisplayName: SpaceClient["participants"]["renameSelf"];
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
+  readonly peerStates: typeof peerStates;
   readonly accessRequests: () => number;
   readonly agreementSnapshot: () => SpaceSnapshot;
   readonly interruptMicrophone: typeof interruptMicrophone;
@@ -99,6 +100,7 @@ function installHarness(nextClient: SpaceClient): void {
     setDisplayName: nextClient.participants.renameSelf,
     snapshot: () => publicSnapshot(nextClient.getSnapshot()),
     resources: resourceCounts,
+    peerStates,
     accessRequests: () => accessRequests,
   };
 }

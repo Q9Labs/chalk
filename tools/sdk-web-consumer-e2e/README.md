@@ -48,9 +48,12 @@ node tools/sdk-web-consumer-e2e/scripts/run.mjs --browsers=chromium,webkit --agr
 
 Faults cover independent dropped/delayed/rejected Sync media projections,
 Sync reconnect during unmute, OS microphone mute/end, media-only recovery
-unavailable for 12 seconds, transient SFU 401/403, and same-participant tab
+unavailable for 12 seconds (both a held dial and repeated 503s), current-binding
+SFU 401/403, and same-participant tab
 takeover during recovery. Each scenario reports its duration, continues after
 failures to collect the remaining cases, and checks agreement after recovery.
+Current authorization denial must terminate with truthful UI and released
+resources; agreement is checked again after a fresh authorized join.
 `--agreement-fast` limits this to join/toggles for the root gate.
 
 The fixture deliberately separates physical publications from Sync projections.
