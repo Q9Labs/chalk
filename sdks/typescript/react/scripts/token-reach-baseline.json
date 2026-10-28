@@ -140,20 +140,6 @@
     "count": 1
   },
   {
-    "file": "chalk-ui/common.ts",
-    "rule": "palette-utility",
-    "value": "focus-visible:ring-offset-1",
-    "fingerprint": "7c4b7a63110fa6e829783c1cc49133e1f751d74a7129455f9f156677cd0651b3",
-    "count": 1
-  },
-  {
-    "file": "chalk-ui/common.ts",
-    "rule": "palette-utility",
-    "value": "focus-within:ring-offset-1",
-    "fingerprint": "c26af16f42a0fe8843a1051bb650d58b1b2ed3a00f7505c3de553e67a2991269",
-    "count": 1
-  },
-  {
     "file": "composite/ChatPanel.tsx",
     "rule": "token-opacity",
     "value": "bg-[var(--chalk-app-danger)]/10",
@@ -291,20 +277,6 @@
     "rule": "palette-utility",
     "value": "text-white",
     "fingerprint": "9a6d997ef2de0f12d0969935f47615418deef458c26beec2ce075e6674613bd6",
-    "count": 1
-  },
-  {
-    "file": "control-bar/control-bar-button.tsx",
-    "rule": "palette-utility",
-    "value": "ring-offset-2",
-    "fingerprint": "eb2c37637f93ec0a4b37be7525f6ab8bcb1be4535da46124a6481a8886e86814",
-    "count": 1
-  },
-  {
-    "file": "control-bar/control-bar-button.tsx",
-    "rule": "palette-utility",
-    "value": "focus-visible:ring-offset-2",
-    "fingerprint": "fffef1afad62242e31ba3be4408899deda8e6638cf67c2f5fcebbb4dfb2db39a",
     "count": 1
   },
   {

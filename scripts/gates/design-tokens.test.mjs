@@ -10,13 +10,13 @@ test("React token check finds each raw color and palette utility without flaggin
   const root = await mkdtemp(join(tmpdir(), "chalk-react-tokens-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const component = join(root, "example.tsx");
-  await writeFile(component, 'const good = "placeholder:text-[var(--chalk-app-text-muted,var(--chalk-muted-text))]";\nconst bad = "#fff #000 bg-blue-500";\n');
+  await writeFile(component, 'const good = "placeholder:text-[var(--chalk-app-text-muted,var(--chalk-muted-text))] ring-offset-2 focus-visible:ring-offset-1";\nconst bad = "#fff #000 bg-blue-500";\n');
   const violations = await findTokenViolations(root);
   assert.deepEqual(violations.map(({ value }) => value).sort(), ["#000", "#fff", "bg-blue-500"].sort());
 
   const baseline = violations.map(({ fingerprint }) => ({ fingerprint, count: 1 }));
   assert.deepEqual(compareBaseline(violations, baseline), { added: [], removed: 0 });
-  await writeFile(component, 'const good = "placeholder:text-[var(--chalk-app-text-muted,var(--chalk-muted-text))]";\nconst bad = "#fff #000 bg-blue-500";\nconst another = "bg-blue-500";\n');
+  await writeFile(component, 'const good = "placeholder:text-[var(--chalk-app-text-muted,var(--chalk-muted-text))] ring-offset-2 focus-visible:ring-offset-1";\nconst bad = "#fff #000 bg-blue-500";\nconst another = "bg-blue-500";\n');
   const result = compareBaseline(await findTokenViolations(root), baseline);
   assert.equal(result.added.length, 1, "existing debt must not hide a new occurrence");
   assert.equal(result.removed, 0);

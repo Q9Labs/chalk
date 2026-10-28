@@ -12,7 +12,7 @@ const patterns = [
   ["legacy-variable", /var\(--(?:accent|background|border|card|destructive|foreground|muted|popover|primary|ring|secondary|success|warning)(?:-[a-z-]+)?\)/giu],
   [
     "palette-utility",
-    /(?<![a-z\d_-])(?:[a-z-]+:)*!?(?:bg|text|border|ring|fill|stroke)-(?:[a-z]+-\d+|background(?:-secondary|-tertiary)?|black|card(?:-foreground)?|chalk-(?:bg|border|error|text)-[a-z-]+|destructive(?:-foreground)?|foreground(?:-muted|-primary|-secondary)?|input|muted(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground)?|ring|secondary(?:-foreground)?|success|tile|warning|white)(?:\/\d+)?\b/giu,
+    /(?<![a-z\d_-])(?:[a-z-]+:)*!?(?:bg|text|border|ring|fill|stroke)-(?:(?:slate|gray|grey|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+|background(?:-secondary|-tertiary)?|black|card(?:-foreground)?|chalk-(?:bg|border|error|text)-[a-z-]+|destructive(?:-foreground)?|foreground(?:-muted|-primary|-secondary)?|input|muted(?:-foreground)?|popover(?:-foreground)?|primary(?:-foreground)?|ring|secondary(?:-foreground)?|success|tile|warning|white)(?:\/\d+)?\b/giu,
   ],
 ];
 
