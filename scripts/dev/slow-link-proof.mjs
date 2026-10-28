@@ -86,17 +86,26 @@ try {
     let grant = admission.access;
     let first = true;
     let accessQueue = Promise.resolve();
-    // Chrome's fake-media UI substitutes "Fake audio" for display capture.
-    // Fake only microphones; use the real tab picker and getDisplayMedia.
-    const browser = await chromium.launch({
-      channel: "chromium",
-      headless: true,
-      ignoreDefaultArgs: ["--mute-audio"],
-      args: ["--disable-audio-output", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk share audio tone", "--enable-usermedia-screen-capturing"],
+    const browser = browsers[0] ?? await chromium.launch({
+      channel: "chromium", headless: true,
+      args: ["--no-sandbox", "--disable-dev-shm-usage", "--autoplay-policy=no-user-gesture-required"],
     });
-    browsers.push(browser);
+    if (!browsers.includes(browser)) browsers.push(browser);
     const context = await browser.newContext({ permissions: ["microphone", "camera"] });
     await context.addInitScript(() => {
+      window.peers = [];
+      const NativePeer = RTCPeerConnection;
+      globalThis.RTCPeerConnection = class extends NativePeer {
+        constructor(...args) { super(...args); window.peers.push(this); }
+      };
+      const NativeSocket = WebSocket;
+      globalThis.WebSocket = class extends NativeSocket {
+        constructor(...args) {
+          super(...args);
+          this.addEventListener("close", event => console.log(JSON.stringify({event:"wire_close",at:Date.now(),code:event.code,reason:event.reason})));
+        }
+        close(code, reason) { console.log(JSON.stringify({event:"client_close",at:Date.now(),code,reason})); super.close(code,reason); }
+      };
       navigator.mediaDevices.getUserMedia = async () => {
         const context = new AudioContext();
         const oscillator = context.createOscillator();
@@ -166,11 +175,18 @@ try {
   const setLink = (...args) => { for (const dev of tcDevices) tc("qdisc", "change", "dev", dev, "parent", "1:3", "handle", "30:", "netem", ...args); };
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const sample = async label => {
-    const snapshots = await Promise.all(pages.map(page => page.evaluate(() => ({connection:client.getSnapshot().connection, states:window.states}))));
+    const snapshots = await Promise.all(pages.map(page => page.evaluate(async () => {
+      const rtp = [];
+      for (const peer of window.peers) for (const stat of (await peer.getStats()).values()) {
+        if (stat.type === "inbound-rtp" || stat.type === "outbound-rtp") rtp.push({type:stat.type, bytes:stat.bytesReceived ?? stat.bytesSent,packets:stat.packetsReceived ?? stat.packetsSent});
+      }
+      return {connection:client.getSnapshot().connection, states:window.states,rtp};
+    })));
     console.log(JSON.stringify({event:"sample", label, at:Date.now(), snapshots}));
     report.assertions.push({label,snapshots});
     return snapshots;
   };
+  await sample("baseline");
   report.stage = "slow working link";
   setLink("delay", "1200ms", "200ms", "loss", "2%", "rate", "256kbit");
   await wait(45000);
@@ -181,8 +197,10 @@ try {
     report.stage = `outage ${seconds}s`;
     console.log(JSON.stringify({event:"outage_start",seconds,at:Date.now()}));
     setLink("loss", "100%");
+    await Promise.all(pages.map(page => page.context().setOffline(true)));
     await wait(seconds * 1000);
     setLink("delay", "0ms");
+    await Promise.all(pages.map(page => page.context().setOffline(false)));
     console.log(JSON.stringify({event:"outage_end",seconds,at:Date.now()}));
     await wait(25000);
     const snapshots = await sample(`after ${seconds}s outage`);
@@ -194,8 +212,10 @@ try {
     }
   }
   const final = await sample("final");
+  const failures = final.flatMap(s => s.states.filter(state => state.connection.status === "failed"));
+  report.failures = failures;
   report.stage = "complete";
-  report.result = final.every(s => s.connection.status === "live" && !s.connection.failure) ? "passed" : "failed";
+  report.result = failures.length === 0 && final.every(s => s.connection.status === "live" && !s.connection.failure) ? "passed" : "failed";
   await writeFile(`${output}/report.json`, JSON.stringify(report,null,2));
   assert.equal(report.result,"passed");
 } finally {
