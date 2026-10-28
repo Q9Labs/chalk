@@ -412,7 +412,7 @@ describe("failed join admission cleanup", () => {
     );
   });
 
-  it("includes the failed SFU fetch in an exhausted media recovery report", async () => {
+  it.each(["restart", "snapshot", "access"] as const)("includes the %s cause in an exhausted media recovery report", async (source) => {
     const platform = createCoreTestPlatform();
     const reports: ConnectionReport[] = [];
     let grants = 0;
@@ -430,20 +430,24 @@ describe("failed join admission cleanup", () => {
     const layer = makeConnectionLifecycleLayer({
       apiBaseURL: "https://api.chalk.test",
       syncURL: "wss://sync.chalk.test/v1/sync",
-      access: async () => parseParsedAccessGrant(opaqueAccessGrant(1, "recovery", `connection-${++grants}`)),
+      access: async () => {
+        grants++;
+        if (source === "access" && grants > 1) throw new DOMException("private refresh URL", "NetworkError");
+        return parseParsedAccessGrant(opaqueAccessGrant(1, "recovery", `connection-${grants}`));
+      },
       recovery: { budgetMs: 100, maxAttempts: 1 },
       dependencies: {
         ...platform.dependencies,
         createMediaClient: (input) => ({
           ...platform.dependencies.createMediaClient(input),
           restart: async () => {
-            await transport.listPublications();
+            if (source === "restart") await transport.listPublications();
           },
         }),
         createConnectionReporter: (access) =>
           new ConnectionReporter({
             access,
-            now: () => 200000000,
+            now: () => 200000000 + ["restart", "snapshot", "access"].indexOf(source) * 61000,
             traceparent: "fixture",
             online: () => true,
             subscribeOnline: () => () => undefined,
@@ -457,11 +461,20 @@ describe("failed join admission cleanup", () => {
       Effect.gen(function* () {
         yield* lifecycle.join();
         const snapshot = platform.media.getSnapshot();
-        platform.media.emit({ ...snapshot, connection: { ...snapshot.connection, phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
+        platform.media.emit({ ...snapshot, connection: { ...snapshot.connection, phase: "failed" }, failure: { code: "media_failed", recoverable: true, diagnostic: { media_error_kind: "NotReadableError", media_error_step: "local_capture" } } });
         yield* Effect.promise(() => vi.waitFor(() => expect(reports).toHaveLength(1)));
         expect(reports[0]).toMatchObject({
           trigger: "recovery_exhausted",
-          events: expect.arrayContaining([expect.objectContaining({ event: "recovery_exhausted", code: "media_recovery_exhausted", media_error_kind: "network", media_error_step: "sfu_publications", granted_audio: "not_granted", granted_video: "not_granted" })]),
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              event: "recovery_exhausted",
+              code: "media_recovery_exhausted",
+              media_error_kind: source === "snapshot" ? "NotReadableError" : "network",
+              media_error_step: source === "snapshot" ? "local_capture" : source === "access" ? "access_refresh" : "sfu_publications",
+              granted_audio: "not_granted",
+              granted_video: "not_granted",
+            }),
+          ]),
         });
         expect(JSON.stringify(reports)).not.toContain("private");
       }),

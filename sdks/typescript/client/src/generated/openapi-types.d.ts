@@ -1367,7 +1367,7 @@ export interface components {
         /** @enum {string} */
         media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
         /** @enum {string} */
-        media_error_step?: "local_capture" | "peer_connection" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications";
+        media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications";
         /** @enum {string} */
         outcome?: "started" | "succeeded" | "failed" | "cancelled";
         /** @enum {string} */

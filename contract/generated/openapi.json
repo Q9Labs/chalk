@@ -12900,7 +12900,7 @@
                   "type": "string"
                 },
                 "media_error_step": {
-                  "enum": ["local_capture", "peer_connection", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"],
+                  "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"],
                   "type": "string"
                 },
                 "outcome": {

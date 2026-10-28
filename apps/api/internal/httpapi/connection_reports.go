@@ -61,7 +61,7 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "media_error_kind":
 		return []string{"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"}
 	case "media_error_step":
-		return []string{"local_capture", "peer_connection", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"}
+		return []string{"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"}
 	case "granted_audio", "granted_video":
 		return []string{"granted", "not_granted", "unknown"}
 	case "trigger":

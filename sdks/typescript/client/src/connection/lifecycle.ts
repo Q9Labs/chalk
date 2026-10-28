@@ -844,7 +844,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         }).pipe(
           Effect.tapError((cause) =>
             Effect.sync(() => {
-              mediaFailure = { ...(cause.cause === undefined ? (model.media?.getSnapshot().failure?.diagnostic ?? classifyMediaFailure(cause, "peer_connection")) : classifyMediaFailure(cause, "peer_connection")), ...grantedMedia };
+              const step = cause.code === "access_unavailable" || cause.code === "invalid_access" ? "access_refresh" : "peer_connection";
+              const snapshotDiagnostic = cause.cause === undefined && step === "peer_connection" ? model.media?.getSnapshot().failure?.diagnostic : undefined;
+              mediaFailure = { ...(snapshotDiagnostic ?? classifyMediaFailure(cause, step)), ...grantedMedia };
             }),
           ),
           Effect.tap(() =>
@@ -1010,7 +1012,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               "media_start_failed",
               "The media client could not apply a replacement access grant",
             ).pipe(
-              (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "Automatic media replacement did not finish")),
+              (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "Automatic media replacement did not finish", new CloudflareSFUError("Automatic media replacement deadline expired", "negotiation_timeout"))),
               Effect.tapError((cause) =>
                 Effect.sync(() => {
                   mediaFailure = { ...classifyMediaFailure(cause, "peer_connection"), ...grantedMedia };
