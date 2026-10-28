@@ -1,5 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
+  "_comment": "JS limits include bounded media failure reporting (#596): measured 466.4 KiB on the route and 384.1 KiB in call scenarios. Compacting the classifier did not fit the old limits. Round up by 1 KiB plus 1 KiB of headroom for media recovery (#594) and mic-state sync (#597); all other limits stay unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
@@ -31,7 +32,7 @@
     "firstCallMs": 2499,
     "jsGzipKiB": 743,
     "cssGzipKiB": 54,
-    "routeJsGzipKiB": 466,
+    "routeJsGzipKiB": 468,
     "routeCssGzipKiB": 32,
     "videoDroppedFramePercent": 5,
     "layoutShift": 0.05
@@ -46,7 +47,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1920,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -59,7 +60,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 6543,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -72,7 +73,7 @@
         "interactionMs": 530,
         "heapMiB": 17,
         "domNodes": 2455,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -85,7 +86,7 @@
         "interactionMs": 24,
         "heapMiB": 15,
         "domNodes": 2215,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -111,7 +112,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1993,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -124,7 +125,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1947,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -138,7 +139,7 @@
         "heapMiB": 14,
         "domNodes": 1920,
         "firstCallMs": 1861,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -153,7 +154,7 @@
         "interactionMs": 24,
         "heapMiB": 15,
         "domNodes": 1968,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -166,7 +167,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 6593,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -179,7 +180,7 @@
         "interactionMs": 420,
         "heapMiB": 17,
         "domNodes": 2318,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -192,7 +193,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 2233,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -218,7 +219,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 2040,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -231,7 +232,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1994,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -245,7 +246,7 @@
         "heapMiB": 15,
         "domNodes": 1968,
         "firstCallMs": 2499,
-        "jsGzipKiB": 384,
+        "jsGzipKiB": 386,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
