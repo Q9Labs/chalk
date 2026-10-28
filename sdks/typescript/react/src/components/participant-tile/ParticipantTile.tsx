@@ -107,6 +107,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   return (
     <TileShell
       label={`Video tile for ${participant.displayName}`}
+      participantId={participant.id}
       accentColor={colors.primary}
       pinned={pinned}
       ring={following}

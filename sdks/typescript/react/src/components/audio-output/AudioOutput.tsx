@@ -203,6 +203,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       // Create audio element if it doesn't exist
       if (!audioEl) {
         audioEl = new Audio();
+        audioEl.dataset.participantId = id;
         audioEl.autoplay = true;
         // Not muted - we want to hear remote audio!
         audioEl.muted = false;

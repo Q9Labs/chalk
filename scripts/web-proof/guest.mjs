@@ -3,6 +3,7 @@ import { createRun } from "../prod-proof/runtime.mjs";
 import { launchGuests, stats } from "../prod-proof/media.mjs";
 import { save } from "../prod-proof/runtime.mjs";
 import { playIncomingAudio } from "./media.mjs";
+import { assertAgreement, playProofMedia } from "./agreement.mjs";
 import { boardDraw, boardElements, boardOpen, boardView } from "./board.mjs";
 import { guestConfig } from "./environment.mjs";
 
@@ -66,6 +67,11 @@ async function prepareGuest(directory) {
     }));
   return {
     ready,
+    async agreement(browser) {
+      const guest = await ready;
+      await guest.pages[0].evaluate(playProofMedia);
+      return assertAgreement([browser, guest.pages[0]]);
+    },
     async playAudio() {
       const guest = await ready;
       await save(`${directory}/sdk-before-playback.json`, await stats(guest.pages));
