@@ -196,7 +196,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       let emittedPorts: ConnectionPorts | null = null;
       let foregroundRecoveryDeadline = 0;
       let pendingEpisodeEnd: Deferred.Deferred<void> | null = null;
-      let rejectionCheck: { readonly epoch: number; readonly binding: string | undefined } | null = null;
+      let rejectionCheck: { readonly epoch: number; readonly binding: string | undefined; failure: ConnectionLifecycleFailure } | null = null;
       const model: Model = {
         state: "idle",
         sync: null,
@@ -1047,15 +1047,28 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const scope = model.activeScope;
           const epoch = model.epoch;
           const binding = access.currentUnsafe()?.media.clientPayload.connectionId;
-          if (!scope || (rejectionCheck?.epoch === epoch && rejectionCheck.binding === binding)) return;
-          const check = { epoch, binding };
+          if (!scope) return;
+          if (rejectionCheck?.epoch === epoch && rejectionCheck.binding === binding) {
+            if (failure.code === "invalid_access") rejectionCheck.failure = failure;
+            return;
+          }
+          const check = { epoch, binding, failure };
           rejectionCheck = check;
           const releaseBinding = binding ? yield* access.holdMediaBinding(binding) : Effect.void;
           // Keep the lifecycle queue free: Sync's end and local Leave must still
           // run while the authoritative read (or the local End) is in flight.
           yield* Effect.forkIn(
             resolveMediaRejection(failure).pipe(
-              Effect.flatMap((resolved) => enqueue(Effect.suspend(() => (model.epoch === epoch && active(model) ? (resolved === failure && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410 ? recover("media") : commitSnapshotFailure(resolved)) : Effect.void)))),
+              Effect.flatMap((resolved) =>
+                enqueue(
+                  Effect.suspend(() => {
+                    if (model.epoch !== epoch || !active(model)) return Effect.void;
+                    const finalFailure = resolved === failure ? check.failure : resolved;
+                    if (finalFailure === failure && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410) return recover("media");
+                    return commitSnapshotFailure(finalFailure);
+                  }),
+                ),
+              ),
               Effect.ensuring(
                 Effect.gen(function* () {
                   if (rejectionCheck === check) rejectionCheck = null;

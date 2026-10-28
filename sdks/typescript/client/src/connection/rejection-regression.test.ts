@@ -180,3 +180,29 @@ function mediaRecoveryFixture() {
       ),
   };
 }
+
+it.each([
+  { first: 410, next: 403, status: "active" },
+  { first: 410, next: 403, status: "ending" },
+  { first: 403, next: 410, status: "active" },
+] as const)("preserves rejection priority for $first then $next while Episode is $status", async ({ first, next, status }) => {
+  const test = mediaRecoveryFixture();
+  let answer!: (status: "active" | "ending") => void;
+  test.status.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  await test.run(async (lifecycle) => {
+    test.failMedia(new CloudflareSFUError("First rejection", "signaling_failed", { status: first }));
+    await test.advanceTo(100);
+    test.failMedia(new CloudflareSFUError("Second rejection", "signaling_failed", { status: next }));
+    await test.advanceTo(200);
+    answer(status);
+    await test.advanceTo(500);
+    if (status === "active") expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
+    else expect(lifecycle.getSnapshot()).toMatchObject({ state: "left", failure: null, episodeEnded: true });
+    expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+  });
+});
