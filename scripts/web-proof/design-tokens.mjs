@@ -39,11 +39,11 @@ createRoot(document.getElementById("root")).render(<main data-chalk data-chalk-t
   <div className="proof-grid">
     <section><h2>Muted, hand raised, weak connection</h2><ParticipantTileSurface participant={{id:"fixture",displayName:"Alex Rivera",isLocal:true,isMuted:true,isHandRaised:true,handRaiseOrder:2,connectionQuality:1,isSpeaking:true}} mediaVisible={false} generatedAvatars={false} animatedAvatars={false} onClick={() => window.proof.pinned++} /></section>
     <section><h2>Local screen share</h2><div style={{height:240}}><ScreenSharePresentation sharedByName="You" isLocal primary media={<div style={{height:"100%",background:"linear-gradient(135deg,var(--chalk-app-panel),var(--chalk-app-canvas))"}} />} mediaVisible capture={{surface:"monitor",label:"Demo display"}} onStopSharing={async () => {window.proof.stopped++}} onChangeShare={async () => {}} /></div></section>
-    <section><h2>Media request</h2><MediaRequestDialog request={{requestId:"fixture",kind:"unmute",expiresAt:new Date(Date.now()+300000).toISOString(),actorParticipantId:"alex",actorDisplayName:"Alex"}} onDecline={() => {}} onAllow={() => {window.proof.allowed++}} /></section>
+    <section className="proof-request"><h2>Media request</h2><MediaRequestDialog request={{requestId:"fixture",kind:"unmute",expiresAt:new Date(Date.now()+300000).toISOString(),actorParticipantId:"alex",actorDisplayName:"Alex"}} onDecline={() => {}} onAllow={() => {window.proof.allowed++}} /></section>
     <section><h2>Raised hand and file types</h2><div className="proof-card"><button className="chalk-shell-raise" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M8 12V5a1 1 0 0 1 2 0v6-7a1 1 0 0 1 2 0v7-6a1 1 0 0 1 2 0v7-3a1 1 0 0 1 2 0v8c0 6-9 7-11 2l-2-4a1 1 0 0 1 2-1l3 3"/></svg>Hand raised</button><div className="proof-files">{["pdf","docx","xlsx","pptx"].map(extension => <span key={extension} className="call-file-type" data-extension={extension}>{extension.toUpperCase()}</span>)}</div><p>Extension labels preserve meaning without color.</p></div></section>
   </div>
-  <div id="opacity-bg" className="bg-[var(--chalk-app-danger)]/10" style={{height:4}} />
-  <div id="opacity-border" className="border border-[var(--chalk-app-danger)]/35" style={{height:4}} />
+  <div id="opacity-bg" className="bg-[var(--chalk-app-danger)]/10" style={{display:"none"}} />
+  <div id="opacity-border" className="border border-[var(--chalk-app-danger)]/35" style={{display:"none"}} />
 </main>);
 `,
 );
@@ -90,7 +90,7 @@ for (const revision of ["before", "after"]) {
         : [],
   });
 }
-const layout = `html,body{margin:0;font:14px system-ui;background:var(--chalk-canvas);color:var(--chalk-text)}main{padding:24px;max-width:1440px;margin:auto}header{margin-bottom:20px}h1{font-size:22px;margin:0}h2{font-size:14px;margin:0 0 10px}p{color:var(--chalk-muted-text)}.proof-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.proof-card{padding:20px;border:1px solid var(--chalk-line);border-radius:12px;background:var(--chalk-surface)}.proof-files{display:flex;gap:12px;margin-top:20px}.proof-grid section{min-width:0}@media(max-width:640px){main{padding:16px}.proof-grid{grid-template-columns:1fr;gap:20px}}`;
+const layout = `html,body{margin:0;font:14px system-ui;background:var(--chalk-canvas);color:var(--chalk-text)}main{padding:24px;max-width:1440px;margin:auto}header{margin-bottom:20px}h1{font-size:22px;margin:0}h2{font-size:14px;margin:0 0 10px}p{color:var(--chalk-muted-text)}.proof-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.proof-card{padding:20px;border:1px solid var(--chalk-line);border-radius:12px;background:var(--chalk-surface)}.proof-files{display:flex;gap:12px;margin-top:20px}.proof-grid section{min-width:0}.proof-request{position:relative;min-height:260px}@media(max-width:640px){main{padding:16px}.proof-grid{grid-template-columns:1fr;gap:20px}}`;
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, "http://localhost");
   if (url.pathname === "/styles.css") response.writeHead(200, { "content-type": "text/css" }).end(await readFile(resolve(output, "styles.css")));
