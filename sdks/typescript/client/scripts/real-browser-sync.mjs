@@ -123,7 +123,8 @@ async function startFaultProxy(upstreamUrl) {
       incoming.destroy();
       return;
     }
-    const outgoing = createConnection({ host: upstream.hostname, port: Number(upstream.port || 80) });
+    const host = upstream.hostname.startsWith("[") ? upstream.hostname.slice(1, -1) : upstream.hostname;
+    const outgoing = createConnection({ host, port: Number(upstream.port || 80) });
     sockets.add(incoming);
     sockets.add(outgoing);
     incoming.on("error", () => outgoing.destroy());
