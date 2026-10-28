@@ -1,6 +1,5 @@
 // Run on Instabox with a dedicated development SFU application, never production.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
@@ -44,12 +43,12 @@ const localFetch = async (input, init) => {
   }
   return response;
 };
-const runtime = createChalkSupervisor(config, { serviceSpecs: services, adapters: { fetchImpl: localFetch }, output: () => undefined });
+const runtime = createChalkSupervisor({ ...config, webJoinPath: "/" }, { serviceSpecs: services, adapters: { fetchImpl: localFetch }, output: () => undefined });
 let server;
 let chalk;
 let episode;
 const browsers = [];
-const tcDevices = [];
+const networkSessions = [];
 const pages = [];
 const report = { stack: "local API + Sync, dedicated development Cloudflare SFU", assertions: [] };
 const browserBundle = await build({
@@ -173,22 +172,24 @@ try {
   const [sharer, listener] = pages;
   for (const page of pages) await page.waitForFunction(() => client.getSnapshot().connection.status === "live" && client.getSnapshot().media.local.microphone.state === "enabled");
 
-  const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" });
-  const device = execFileSync("sh", ["-c", "ip route show default | awk '{print $5; exit}'"], { encoding: "utf8" }).trim();
-  for (const dev of ["lo", device]) {
-    tc("qdisc", "add", "dev", dev, "root", "handle", "1:", "prio");
-    tcDevices.push(dev);
-    tc("qdisc", "add", "dev", dev, "parent", "1:3", "handle", "30:", "netem", "delay", "0ms");
-    if (dev === "lo") {
-      for (const port of [config.ports.api, config.ports.sync]) for (const side of ["sport", "dport"]) tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "1", "u32", "match", "ip", side, String(port), "0xffff", "flowid", "1:3");
-    } else {
-      for (const side of ["sport", "dport"]) tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "1", "u32", "match", "ip", side, "22", "0xffff", "flowid", "1:1");
-      tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "2", "u32", "match", "ip", "dst", "0.0.0.0/0", "flowid", "1:3");
-    }
+  for (const page of pages) {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Network.enable");
+    networkSessions.push(session);
   }
-  const setLink = (...args) => {
-    for (const dev of tcDevices) tc("qdisc", "change", "dev", dev, "parent", "1:3", "handle", "30:", "netem", ...args);
-  };
+  const setLink = (conditions) =>
+    Promise.all(
+      networkSessions.map((session) =>
+        session.send("Network.emulateNetworkConditions", {
+          offline: false,
+          latency: 0,
+          downloadThroughput: -1,
+          uploadThroughput: -1,
+          packetLoss: 0,
+          ...conditions,
+        }),
+      ),
+    );
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const sample = async (label) => {
     const snapshots = await Promise.all(
@@ -234,19 +235,19 @@ try {
   };
   await proveMediaFlow("baseline");
   report.stage = "slow working link";
-  setLink("delay", "1200ms", "200ms", "loss", "2%", "rate", "256kbit");
+  await setLink({ latency: 2400, downloadThroughput: 32000, uploadThroughput: 32000, packetLoss: 2 });
   await wait(45000);
   await sample("45s slow link");
   await proveMediaFlow("slow working link");
-  setLink("delay", "0ms");
+  await setLink({});
   await wait(10000);
   for (const seconds of [5, 15, 30]) {
     report.stage = `outage ${seconds}s`;
     console.log(JSON.stringify({ event: "outage_start", seconds, at: Date.now() }));
-    setLink("loss", "100%");
+    await setLink({ offline: true, packetLoss: 100 });
     await Promise.all(pages.map((page) => page.context().setOffline(true)));
     await wait(seconds * 1000);
-    setLink("delay", "0ms");
+    await setLink({});
     await Promise.all(pages.map((page) => page.context().setOffline(false)));
     console.log(JSON.stringify({ event: "outage_end", seconds, at: Date.now() }));
     await wait(25000);
@@ -273,7 +274,7 @@ try {
   throw error;
 } finally {
   await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
-  for (const dev of tcDevices) execFileSync("sudo", ["tc", "qdisc", "del", "dev", dev, "root"], { stdio: "ignore" });
+  for (const session of networkSessions) await session.detach();
   for (const browser of browsers) await browser.close();
   if (episode && chalk) await chalk.episodes.end(space.id, episode.id).catch((error) => console.error(error.message));
   if (server) await new Promise((resolve) => server.close(resolve));

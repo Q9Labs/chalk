@@ -21,6 +21,7 @@
     "dev:logs": "node scripts/dev/cli.mjs logs",
     "dev:stop": "node scripts/dev/cli.mjs stop",
     "dev:reset": "node scripts/dev/cli.mjs reset",
+    "dev:slow-link-proof": "node scripts/dev/slow-link-proof.mjs",
     "dev:smoke": "node scripts/dev/media-smoke.mjs .private/chalk-dev/manifest.json",
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
