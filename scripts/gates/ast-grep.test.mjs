@@ -16,10 +16,11 @@ test("ast-grep enforces the migrated rules on real files without flagging allowe
   const effectSource = (suffix) => `import React, { useEffect, useEffect as effect } from "react";\nuseEffect(() => {}, []);\nReact.useEffect(() => {}, []);\neffect(() => {}, []);\n// ast-grep-ignore: chalk.forbid-sdk-use-effect-${suffix} -- Existing lifecycle cleanup.\nuseEffect(() => {}, []);\n`;
   await write("sdks/typescript/react/src/effect.ts", effectSource("ts"));
   await write("sdks/typescript/react-native/src/effect.tsx", effectSource("tsx"));
+  await write("sdks/typescript/react/src/no-reason.ts", "// ast-grep-ignore: chalk.forbid-sdk-use-effect-ts\nuseEffect(() => {}, []);\n");
   await write("apps/web/src/effect.ts", effectSource("ts"));
   await write(
     "apps/web/src/checks.ts",
-    `eval("bad");\nnew Function("bad");\nsetTimeout("bad", 10);\nsetInterval(\`bad\`, 10);\nsetTimeout(handler, 10, "safe argument");\n// @ts-ignore\nconsole.log("bad");\nprocess.env.FOO;\nlocalStorage.setItem("token", value);\nlocalStorage.setItem("theme", value);\n`,
+    `eval("bad");\nnew Function("bad");\nsetTimeout("bad", 10);\nsetInterval(\`bad\`, 10);\nsetTimeout(handler, 10, "safe argument");\n// @ts-ignore\nconsole.log("bad");\nprocess.env.FOO;\nlocalStorage.setItem("token", value);\nlocalStorage.setItem("theme", value);\n// oxlint-disable-next-line typescript/no-explicit-any\nconst unsafe: any = value;\n// oxlint-disable-next-line typescript/no-explicit-any -- Legacy interop boundary.\nconst allowed: any = value;\n`,
   );
   await write("apps/web/src/checks.test.ts", `test.only("bad", () => {});\ndescribe.skip("bad", () => {});\n`);
   await write("sdks/typescript/client/src/import.ts", `import { x } from "../../../apps/web/x";\n`);
@@ -45,6 +46,7 @@ test("ast-grep enforces the migrated rules on real files without flagging allowe
     ["chalk.forbid-string-timers-ts", 2],
     ["chalk.forbid-focused-or-skipped-tests-ts", 2],
     ["chalk.forbid-unjustified-ts-ignore-ts", 1],
+    ["chalk.forbid-unjustified-suppression-ts", 2],
     ["chalk.forbid-console-in-app-code-ts", 1],
     ["chalk.forbid-direct-process-env-ts", 1],
     ["chalk.forbid-raw-token-storage-ts", 1],
@@ -59,5 +61,5 @@ test("ast-grep enforces the migrated rules on real files without flagging allowe
     findings.length,
     [...counts.values()].reduce((sum, count) => sum + count, 0),
   );
-  assert.equal(findings.length, 23, JSON.stringify(findings.map(({ ruleId, file, range }) => ({ ruleId, file, range }))));
+  assert.equal(findings.length, 25, JSON.stringify(findings.map(({ ruleId, file, range }) => ({ ruleId, file, range }))));
 });

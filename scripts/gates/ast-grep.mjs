@@ -70,6 +70,19 @@ addSourceRule(
   },
 );
 
+addSourceRule(
+  "forbid-unjustified-suppression",
+  "Structural and lint suppressions need a same-line reason after --.",
+  {
+    all: [
+      { kind: "comment" },
+      { regex: "^\\s*(?://|/\\*)\\s*(?:ast-grep-ignore|(?:eslint|oxlint)-disable(?:-next-line|-line)?)(?:\\s|:|\\*/|$)" },
+      { not: { regex: "--\\s*[^\\s*]" } },
+    ],
+  },
+  { ignores: [...tests, "**/__tests__/**", "**/routeTree.gen.ts", "**/generated/**", "**/openapi-generated/**"] },
+);
+
 addSourceRule("forbid-console-in-app-code", "Route application logging through the repo logger or an approved diagnostics module.", anyPattern("console.log($$$ARGS)", "console.error($$$ARGS)"), {
   files: appSources,
   ignores: [...tests, "**/debug/**", "**/diagnostics/**", "sdks/typescript/client/src/wide-events/**", "sdks/typescript/react/src/utils/debug*.ts", "sdks/typescript/react/src/components/composite/DiagnosticErrorSheet.tsx"],
