@@ -126,7 +126,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     (settings: WebJoinSettings = defaultJoinOptions) => {
       const normalizedDisplayName = settings.displayName.trim();
       const inviteToken = inviteCode ?? spaceInviteToken();
-      if (!normalizedDisplayName || spaceAccess || pending || preparing) return;
+      if (!normalizedDisplayName || (spaceAccess && !terminal) || pending || preparing) return;
       setDisplayName(normalizedDisplayName);
       setEntranceSettings({ displayName: normalizedDisplayName, ...devicesOff });
       try {
@@ -141,7 +141,13 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       cancelRequested.current = false;
       setError(null);
       setPreparing(true);
-      const preparation = arrive(client, normalizedDisplayName, slug, inviteToken);
+      const preparation = terminal
+        ? terminal.cleanup().then(() => {
+            if (!active.current) return Promise.reject(new Error("Space entry was closed."));
+            setTerminal(null);
+            return arrive(client, normalizedDisplayName, slug, inviteToken);
+          })
+        : arrive(client, normalizedDisplayName, slug, inviteToken);
       void preparation
         .then(async (result) => {
           try {
@@ -173,7 +179,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           if (active.current) setPreparing(false);
         });
     },
-    [client, complete, defaultJoinOptions, inviteCode, navigatePublicSpace, pending, preparing, slug, spaceAccess],
+    [client, complete, defaultJoinOptions, inviteCode, navigatePublicSpace, pending, preparing, slug, spaceAccess, terminal],
   );
   useEffect(() => {
     if (automaticName || reloadMarker) return;
@@ -285,9 +291,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
                   }
                 : undefined
             }
-            rejoinDisabled={Boolean(spaceAccess) || preparing}
+            rejoinDisabled={preparing}
             onRejoin={() => {
-              setTerminal(null);
               start(entranceSettings ?? defaultJoinOptions);
             }}
             onHome={() => {
