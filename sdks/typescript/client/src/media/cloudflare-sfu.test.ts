@@ -139,6 +139,20 @@ it("keeps startup poll rejection interrupted while Sync commands remain availabl
     harness.client.stop();
   }
 });
+it.each(["microphone", "camera", "screen"] as const)("does not replace an SFU connection when pausing unpublished %s", async (source) => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const harness = createHarness({ replaceMediaConnection });
+  try {
+    await harness.client.start(fakeStream());
+    await harness.client.closeForcedLocalPublication(source);
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.client.getSnapshot().connection.phase).toBe("live");
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("retires only its own timed-out %s publication and accepts one fresh enable", async (source) => {
   const harness = createHarness();
   const track = new FakeTrack("timed-out", source === "microphone" ? "audio" : "video");

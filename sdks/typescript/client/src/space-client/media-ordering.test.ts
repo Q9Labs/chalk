@@ -248,17 +248,16 @@ describe("independent r7 ordering", () => {
 
   it.each(sources)("does not apply an old host pause to a queued %s action", async (source) => {
     const pause = barrier();
-    const close = vi.fn(async () => undefined);
-    const local = vi.fn(async () => {
+    const close = vi.fn(async () => {
       await pause.promise;
-      return { outcome: "confirmed" as const, errorCode: null };
     });
+    const local = vi.fn(async () => ({ outcome: "confirmed" as const, errorCode: null }));
     const { platform, client, command, setEnabled } = createConvergenceScenario(source, { media: { setLocalPublicationTarget: local, closeForcedLocalPublication: close } });
     try {
       await client.join({ microphone: false, camera: false });
       await setEnabled(true);
       const off = setEnabled(false);
-      await vi.waitFor(() => expect(local).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
       // The committed control head is the evidence that this stop predates On.
       platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, revision: 2 } });
       const on = setEnabled(true);
@@ -266,7 +265,8 @@ describe("independent r7 ordering", () => {
       platform.emitMediaPause({ source, revision: 2 });
       pause.release();
       await Promise.all([off, on]);
-      expect(close).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledExactlyOnceWith(source);
+      expect(local).not.toHaveBeenCalled();
       expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, true]);
     } finally {
       pause.release();

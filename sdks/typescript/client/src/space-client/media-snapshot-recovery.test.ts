@@ -20,7 +20,8 @@ describe("recovery publication authority", () => {
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
       if (newerAction) {
         await vi.waitFor(() => expect(command).toHaveBeenLastCalledWith(false));
-        expect(close).not.toHaveBeenCalled();
+        // Only the explicit Off closes it; recovery must not close it again.
+        expect(close).toHaveBeenCalledExactlyOnceWith(source);
       } else {
         await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
         expect(track.enabled).toBe(false);

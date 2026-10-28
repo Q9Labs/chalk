@@ -271,9 +271,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async closeForcedLocalPublication(source: MediaPublicationSource): Promise<void> {
     this.setLocalSourceIntent(source, false);
+    const publicationId = this.#localTracks.get(source)?.providerPublicationId ?? this.#reusableLocalPublicationIds.get(source);
+    const audioPublicationId = source === "screen" ? (this.#localTracks.get("screen_audio")?.providerPublicationId ?? this.#reusableLocalPublicationIds.get("screen_audio")) : null;
     await this.#retireLocalPublication(source);
     if (source === "screen") await this.#retireLocalPublication("screen_audio");
-    if (!this.#replaceMediaConnection) return;
+    if ((!publicationId && !audioPublicationId) || !this.#replaceMediaConnection) return;
     const generation = this.#generation;
     await this.#serializeSDP(async () => {
       const existing = new Set([...this.#localTracks.values()].filter((state) => state.source !== source && state.providerPublicationId !== null));
