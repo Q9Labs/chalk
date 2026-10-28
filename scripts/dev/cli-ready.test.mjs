@@ -15,7 +15,13 @@ test("status --ready succeeds only for a live, ready owner of this checkout", as
 
   assert.equal((await runCli(["status"], options)).code, 0);
   assert.equal((await status()).code, 1);
+  await owner({ checkout: root, supervisorPid: process.pid, state: "ready", supervisorExpectedCommand: "not-the-running-supervisor" });
+  assert.equal((await status()).code, 1);
   await owner({ checkout: root, supervisorPid: process.pid, state: "ready" });
+  assert.equal((await status()).code, 1);
+  await owner({ checkout: root, supervisorPid: process.pid, state: "ready", supervisorExpectedCommand: "node" });
+  assert.equal((await status()).code, 0);
+  await owner({ checkout: root, supervisorPid: process.pid, state: "ready", supervisor: { expectedCommand: "node" } });
   assert.equal((await status()).code, 0);
   await owner({ checkout: `${root}-other`, supervisorPid: process.pid, state: "ready" });
   assert.equal((await status()).code, 1);

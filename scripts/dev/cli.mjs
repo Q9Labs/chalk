@@ -26,7 +26,8 @@ export async function runCli(argv = process.argv.slice(2), { cwd = process.cwd()
     const result = await startup;
     if (args.command === "status" && args.ready) {
       const owner = await readOwner(config);
-      const ready = owner && owner.checkout === config.root && owner.state === "ready" && !result.stale && (await validateOwnedPid(owner.supervisorPid));
+      const expectedCommand = owner?.supervisorExpectedCommand || owner?.supervisor?.expectedCommand;
+      const ready = owner && owner.checkout === config.root && owner.state === "ready" && !result.stale && expectedCommand && (await validateOwnedPid(owner.supervisorPid, { expectedCommand }));
       return { code: ready ? 0 : 1, result, config };
     }
     if (args.command === "status" && (result.stale || ["degraded", "reload-failed", "failed"].includes(result.state || result.status))) {
