@@ -130,7 +130,11 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             <span data-part="tile-menu" className="absolute top-2 right-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100">
               <ChalkMenu
                 trigger={
-                  <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
+                  <button
+                    type="button"
+                    aria-label={`More options for ${participant.displayName}`}
+                    className="grid h-8 w-8 place-items-center rounded-full bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"
+                  >
                     <StageIcon name="more" size={18} />
                   </button>
                 }
