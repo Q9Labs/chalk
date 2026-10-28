@@ -34,6 +34,7 @@ async function roster(pages: Page[], timeout = 10_000) {
 }
 
 async function join(page: Page, name: string, url: string) {
+  await page.bringToFront();
   await page.goto(url);
   await page.getByLabel("Your name", { exact: true }).fill(name);
   const start = Date.now();
@@ -140,6 +141,7 @@ async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => P
 }
 
 async function rejoin(student: Page, pages: Page[]) {
+  await student.bringToFront();
   const start = Date.now();
   await student.getByRole("button", { name: "Rejoin", exact: true }).click();
   await roster(pages);
@@ -147,12 +149,14 @@ async function rejoin(student: Page, pages: Page[]) {
 }
 
 async function chat(sender: Page, receivers: Page[], text: string) {
+  await sender.bringToFront();
   const start = Date.now();
   const input = sender.getByRole("textbox", { name: "Message", exact: true });
   if (!(await input.isVisible())) await sender.getByRole("button", { name: "Chat", exact: true }).click();
   await input.fill(text);
   await input.press("Enter");
   for (const page of receivers) {
+    await page.bringToFront();
     if (!(await page.getByRole("textbox", { name: "Message", exact: true }).isVisible())) await page.getByRole("button", { name: "Chat", exact: true }).click();
     await page.getByText(text, { exact: true }).waitFor({ timeout: 5000 });
   }
@@ -160,6 +164,7 @@ async function chat(sender: Page, receivers: Page[], text: string) {
 }
 
 async function stroke(page: Page, y: number) {
+  await page.bringToFront();
   const board = page.locator(".chalk-board[data-ready]");
   await board.waitFor();
   if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
@@ -224,6 +229,7 @@ test("C1: five consecutive joins reach the live call within ten seconds", async 
     classroom(async (pages) => {
       // The initial entrance is join 1; exercise four more admissions without reload.
       for (let attempt = 2; attempt <= 5; attempt++) {
+        await pages[1].bringToFront();
         await pages[1].getByRole("region", { name: "Space stage", exact: true }).hover();
         await pages[1].getByRole("button", { name: "Leave call", exact: true }).click();
         await pages[1].getByRole("button", { name: "Rejoin", exact: true, disabled: false }).waitFor();
