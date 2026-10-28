@@ -98,7 +98,14 @@ export class FixtureMediaClient {
     this.#bootstrap = fixtureBootstrap(input);
     this.#publish("recovering");
     this.#closeNetwork();
-    await this.#connect();
+    try {
+      await this.#connect();
+    } catch (cause) {
+      const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
+      this.#snapshot = this.#makeSnapshot("failed", { code: "signaling_failed", recoverable: status !== 401 && status !== 403 });
+      this.#emit();
+      throw cause;
+    }
     this.#sendPublications();
     this.#publish("live");
   }
