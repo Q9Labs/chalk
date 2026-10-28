@@ -15,7 +15,7 @@ export interface ReconnectingOverlayProps {
 export const ReconnectingOverlay = memo(function ReconnectingOverlay({ isVisible, status, onRetry, onLeft, message, showNotice }: ReconnectingOverlayProps) {
   const reconnecting = isVisible && status === "reconnecting";
   const [elapsed, setElapsed] = useState(false);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing reconnect clock and announcement lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Delay the reconnect notice and reset it on recovery; cancel the timeout on replacement.
   useEffect(() => {
     setElapsed(false);
     if (!reconnecting) return;

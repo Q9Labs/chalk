@@ -164,7 +164,7 @@ function EmojiButton({ emoji, name, onPress, testID }: { readonly emoji: Reactio
 function CopyLinkRow({ link }: { readonly link: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
   const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native sheet focus lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Clear the event-created copy-feedback reset timeout when the sheet unmounts.
   useEffect(() => () => clearTimeout(reset.current ?? undefined), []);
   const copy = useCallback(async () => {
     await setStringAsync(link);

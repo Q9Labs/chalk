@@ -31,7 +31,7 @@ export function useSoundCues(enabled: boolean, createPlayer: (options: { readonl
       }, 0);
   }, []);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing sound event subscriptions and audio cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Own the sound player and client subscriptions; dispose audio, subscriptions and queued failure cues on replacement.
   useEffect(() => {
     const player = createPlayerRef.current({ outputDeviceId });
     playerRef.current = player;

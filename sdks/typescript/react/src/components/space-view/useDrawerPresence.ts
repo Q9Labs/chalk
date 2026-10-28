@@ -16,7 +16,7 @@ export function useDrawerPresence<T>(panel: T | null, exitMs: number): DrawerPre
   const [retained, setRetained] = useState<T | null>(panel);
   const [state, setState] = useState<DrawerState>(panel === null ? "closed" : "open");
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing cancellable drawer presence transitions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [animation] Retain the closing panel through its exit timeout; cancel removal if a panel reopens.
   useEffect(() => {
     if (panel !== null) {
       setRetained(panel);

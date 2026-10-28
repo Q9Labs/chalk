@@ -71,9 +71,9 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       if (press.current) clearTimeout(press.current.timer);
       press.current = null;
     };
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Cancel the event-created long-press timer when the message unmounts.
     useEffect(() => () => cancelPress(), []);
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Focus the mounted reaction bar and listen for outside presses; remove the listener when it closes.
     useEffect(() => {
       if (!reactionBarOpen) return;
       messageRef.current?.querySelector<HTMLButtonElement>(".call-reaction-bar button")?.focus({ preventScroll: true });
@@ -87,7 +87,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     const [downloading, setDownloading] = useState(false);
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const downloadController = useRef<AbortController | null>(null);
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Abort an in-flight attachment download when its message unmounts.
     useEffect(() => () => downloadController.current?.abort(), []);
     const downloadPhoto = async () => {
       if (!photo || downloading) return;
@@ -122,7 +122,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     };
     const [photoClosing, setPhotoClosing] = useState(false);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Clear the reaction-close timeout when its message unmounts.
     useEffect(
       () => () => {
         if (closeTimer.current) clearTimeout(closeTimer.current);

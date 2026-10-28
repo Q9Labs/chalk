@@ -46,7 +46,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
   const latest = useRef({ colors, soundsEnabled });
   latest.current = { colors, soundsEnabled };
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client-event and native permission subscriptions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Diff client snapshots into native call notices and sounds; unsubscribe when the client or toast owner changes.
   useEffect(() => {
     let previous = client.getSnapshot();
     return client.subscribe(() => {
@@ -138,7 +138,7 @@ function useResumedAfterSettings(permission: Permission | undefined, toasts: Toa
   const client = useSpaceClient();
   const { colors } = useTheme();
   const shown = useRef(false);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client-event and native permission subscriptions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Report restored permission only once the client is live; unsubscribe from client changes on cleanup.
   useEffect(() => {
     if (!permission) return;
     const check = () => {

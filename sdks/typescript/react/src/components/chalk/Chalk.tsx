@@ -113,7 +113,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
     return createSpaceClient({ space: props.space, getAccess: getLatestAccess });
   }, [getLatestAccess, props.space, suppliedClient]);
   const client = suppliedClient ?? ownedClient!;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Leave and dispose only the client created by this component when ownership ends.
   useEffect(() => {
     if (!ownedClient) return;
     return () => {
@@ -159,16 +159,21 @@ function SpaceExperience(
   const previousStatus = useRef(connection.status);
   const hasObservedStatus = useRef(false);
   const autoJoinAttempted = useRef(false);
-  const previousClient = useRef(client);
+  const [previousClient, setPreviousClient] = useState(client);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [retryPending, setRetryPending] = useState(false);
-  const [episodeEnded, setEpisodeEnded] = useState(connection.episodeEnded);
+  const [episodeEnded, setEpisodeEnded] = useState(false);
   const [handledTerminal, setHandledTerminal] = useState<ChalkProps["terminalState"]>(undefined);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
-  useEffect(() => setHandledTerminal(undefined), [props.terminalState]);
+  const [previousTerminal, setPreviousTerminal] = useState(props.terminalState);
+  if (previousTerminal !== props.terminalState) {
+    setPreviousTerminal(props.terminalState);
+    setHandledTerminal(undefined);
+  }
   const spaceName = props.spaceName ?? props.space ?? "Space";
-  if (previousClient.current !== client) {
-    previousClient.current = client;
+  if (previousClient !== client) {
+    setPreviousClient(client);
+    setJoinError(null);
+    setEpisodeEnded(false);
     previousStatus.current = connection.status;
     hasObservedStatus.current = false;
     autoJoinAttempted.current = false;
@@ -191,13 +196,7 @@ function SpaceExperience(
     setRetryPending(true);
     void join(defaultJoinOptions(props)).finally(() => setRetryPending(false));
   }, [join, props]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
-  useEffect(() => setJoinError(null), [client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
-  useEffect(() => {
-    setEpisodeEnded(false);
-  }, [client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Track episodeEnded events for this client; return the client unsubscribe function.
   useEffect(
     () =>
       client.on("episodeEnded", () => {
@@ -205,13 +204,13 @@ function SpaceExperience(
       }),
     [client],
   );
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Start the automatic join once when the committed client becomes idle; the client owns join cancellation.
   useEffect(() => {
     if (connection.status !== "idle" || autoJoinAttempted.current) return;
     autoJoinAttempted.current = true;
     void join(defaultJoinOptions(props));
   }, [connection.status, join, props.defaults?.camera, props.defaults?.microphone, props.displayName]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Notify host callbacks of committed connection transitions, excluding reconnects and the initial snapshot.
   useEffect(() => {
     const previous = previousStatus.current;
     if (hasObservedStatus.current) {
@@ -296,13 +295,13 @@ function SpaceSurface(
   }, []);
   const whiteboardTransport = client.whiteboard.transport();
   const whiteboardAvailable = props.features?.whiteboard !== false;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Preload the whiteboard stylesheet only when the committed call supports a board.
   useEffect(() => {
     if (whiteboardAvailable) preloadWhiteboardStylesheet();
   }, [whiteboardAvailable]);
   const whiteboardSubscription = useWhiteboardSceneSubscription(whiteboardTransport, whiteboardAvailable);
   const setWhiteboardPresentation = whiteboardSubscription.status === "ready" ? bindWhiteboardPresentation(whiteboardSubscription.transport) : undefined;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Reconcile whiteboard loading/failure into command-error state without overriding a later command error on unrelated renders.
   useEffect(() => {
     if (whiteboardSubscription.status === "failed") setCommandError(whiteboardSubscription.error.message);
     else if (whiteboardSubscription.status === "loading" || whiteboardSubscription.status === "ready") setCommandError(null);
@@ -377,16 +376,16 @@ function defaultJoinOptions(props: ChalkProps): JoinOptions {
   return { ...(displayName ? { displayName } : {}), microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
 }
 function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): void {
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward participantJoined events to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("participantJoined", (event) => callbacks.onParticipantJoined?.(event)), [callbacks.onParticipantJoined, client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward participantLeft events to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("participantLeft", (event) => callbacks.onParticipantLeft?.(event)), [callbacks.onParticipantLeft, client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward episodeEnded events to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("episodeEnded", (event) => callbacks.onEpisodeEnded?.(event)), [callbacks.onEpisodeEnded, client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward screenShareStarted events to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("screenShareStarted", (event) => callbacks.onScreenShareStarted?.(event)), [callbacks.onScreenShareStarted, client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward screenShareStopped events to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("screenShareStopped", (event) => callbacks.onScreenShareStopped?.(event)), [callbacks.onScreenShareStopped, client]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing client ownership, join state, and callback subscriptions unchanged.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward client errors to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("error", (event) => callbacks.onError?.(event)), [callbacks.onError, client]);
 }

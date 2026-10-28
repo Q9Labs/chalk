@@ -114,7 +114,7 @@ export function EmbeddedWhiteboard({
     await exportBoardImage(value);
   }, []);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing embedded native board lifecycle and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Resolve native whiteboard assets asynchronously; ignore results after this load attempt is superseded.
   useEffect(() => {
     let active = true;
     setLoadError(null);
@@ -133,7 +133,7 @@ export function EmbeddedWhiteboard({
     };
   }, [loadAttempt, onError, rendererURLOverride]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing embedded native board lifecycle and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Start one whiteboard controller for this renderer and transport; stop it and clear its notices on cleanup.
   useEffect(() => {
     setCompatibilityNotice(null);
     const controller = new ChalkWhiteboardController({
@@ -198,17 +198,17 @@ export function EmbeddedWhiteboard({
     };
   }, [clearNotices, toasts, handleControllerError, handleControllerMetric, handleControllerUserExport, journeyId, localParticipantColor, rendererPort, theme, traceparent, tracestate, transport]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing embedded native board lifecycle and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Send committed board changes to the imperative whiteboard controller without recreating its session.
   useEffect(() => {
     controllerRef.current?.setBoard(board);
   }, [board]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing embedded native board lifecycle and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Send committed drawing capabilities to the running whiteboard controller without restarting it.
   useEffect(() => {
     controllerRef.current?.setCapabilities({ canDraw, canClear });
   }, [canClear, canDraw]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing embedded native board lifecycle and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Send committed viewport measurements to the running whiteboard controller.
   useEffect(() => {
     if (viewport) controllerRef.current?.setViewport(viewport);
   }, [viewport]);

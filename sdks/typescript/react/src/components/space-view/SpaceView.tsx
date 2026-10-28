@@ -152,7 +152,7 @@ export function SpaceView({
   const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
   const [limitWarning, setLimitWarning] = useState<{ id: string; minutes: number } | null>(null);
   const countdown = callCountdown(deadline, now);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing call-view focus, theme, and overlay lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh the call-limit clock each second; clear the interval when the deadline changes.
   useEffect(() => {
     if (!deadline) return;
     const tick = () => setNow(Date.now());
@@ -160,7 +160,7 @@ export function SpaceView({
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [deadline]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing call-view focus, theme, and overlay lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Emit warnings only when the committed countdown crosses a threshold; preserve a dismissed warning between ticks.
   useEffect(() => {
     const previous = previousCountdown.current;
     const next = callCountdown(deadline, now, previous?.deadline === deadline ? previous?.seconds : undefined);
@@ -171,6 +171,11 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
+  const [previousInitialPanel, setPreviousInitialPanel] = useState(initialPanel);
+  if (previousInitialPanel !== initialPanel) {
+    setPreviousInitialPanel(initialPanel);
+    setActivePanel(initialPanel);
+  }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
@@ -195,9 +200,7 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, self.displayName],
   );
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing call-view focus, theme, and overlay lifecycle.
-  useEffect(() => setActivePanel(initialPanel), [initialPanel]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing call-view focus, theme, and overlay lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Open the participants drawer when admission inputs change; do not force it open on every render after a user closes it.
   useEffect(() => {
     if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
   }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
@@ -253,10 +256,11 @@ export function SpaceView({
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing call-view focus, theme, and overlay lifecycle.
-  useEffect(() => {
+  const [previousBoardOpen, setPreviousBoardOpen] = useState(whiteboard?.isOpen);
+  if (previousBoardOpen !== whiteboard?.isOpen) {
+    setPreviousBoardOpen(whiteboard?.isOpen);
     if (!whiteboard?.isOpen) setBoardToasts([]);
-  }, [whiteboard?.isOpen]);
+  }
   const showBoardToast = useCallback((toast: BoardToast | null) => {
     if (!toast) {
       setBoardToasts([]);

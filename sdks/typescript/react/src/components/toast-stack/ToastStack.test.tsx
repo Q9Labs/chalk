@@ -81,7 +81,6 @@ it("folds every notice, by its whole id, in a call shorter than 620px", async ()
 it("announces rich folded notices as text without mounting caller code or hidden controls", async () => {
   const mounted = vi.fn();
   function Message() {
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Observe committed toast state in the existing lifecycle test.
     useEffect(mounted, []);
     return <a href="https://example.com/help">Camera help</a>;
   }
@@ -124,7 +123,6 @@ it("keeps a rich stable-ID toast mounted, focused and on its original expiry acr
   const mounted = vi.fn();
   const dismissed = vi.fn();
   function Message() {
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Observe committed toast state in the existing lifecycle test.
     useEffect(mounted, []);
     return <button>Open chat</button>;
   }
@@ -150,7 +148,6 @@ it("keeps a rich stable-ID toast mounted, focused and on its original expiry acr
 it("shows the newest three in a call 620px tall and announces folded rich messages without mounting them", async () => {
   const mounts: string[] = [];
   function Message({ text }: { readonly text: string }) {
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Observe committed toast state in the existing lifecycle test.
     useEffect(() => {
       mounts.push(text);
     }, [text]);

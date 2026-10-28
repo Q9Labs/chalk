@@ -29,7 +29,7 @@ export function useChatAttachmentPreviews(attachments: readonly ChatAttachment[]
     setFailedAttachmentIds((current) => new Set(current).add(attachmentId));
   }, []);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing attachment URL resolution and stale-result cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Resolve missing remote image URLs and prune attachment caches; ignore completions for attachments no longer present.
   useEffect(() => {
     if (!resolveUrl) return;
     setResolvedUrls((current) => {

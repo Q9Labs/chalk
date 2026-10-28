@@ -1,5 +1,5 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
 import { shareQr } from "./share-qr";
 import { ShellIcon } from "../control-bar/ShellIcon";
@@ -43,15 +43,16 @@ export function CallDialog({
   const [includeDiagnostics, setIncludeDiagnostics] = useState(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState("");
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing call-detail clock and focus lifecycle.
-  useEffect(() => {
+  const [session, setSession] = useState({ kind, open });
+  if (session.kind !== kind || session.open !== open) {
+    setSession({ kind, open });
     if (open && kind === "report") {
       setText("");
       setIncludeDiagnostics(false);
       setError("");
       setStatus("idle");
     }
-  }, [kind, open]);
+  }
   return (
     <span
       ref={(element) => {

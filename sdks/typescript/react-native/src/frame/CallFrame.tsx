@@ -76,7 +76,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
     setLeftByChoice(false);
     client.join({ displayName, microphone: false, camera: false }).catch(() => undefined);
   }, [client, displayName]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native frame accessibility and layout lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Auto-join the committed idle client; the client owns call and join cancellation.
   useEffect(() => {
     if (client.getSnapshot().connection.status === "idle") join();
   }, [client, join]);
@@ -117,7 +117,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
   }, [canEnd, exit]);
 
   const devScenario = useDevScenario();
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native frame accessibility and layout lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [development] Apply externally selected sheet and leave-menu scenarios after commit, preserving later user interaction.
   useEffect(() => {
     if (devScenario.sheet && devScenario.sheet !== "route") setSheet(devScenario.sheet);
     if (devScenario.menu === "leave") setLeaveMenuOpen(true);
@@ -127,7 +127,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
   const boardVisible = useStageView().boardOpen ?? sharedBoard;
   const chrome = useLandscapeChrome({ fades: layout.arrangement === "landscape" && sheet === null && !layered, boardVisible });
   const chromeOpacity = useSharedValue(1);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native frame accessibility and layout lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate committed chrome visibility on the native UI runtime.
   useEffect(() => {
     chromeOpacity.value = withTiming(chrome.hidden ? 0 : 1, timings.fade);
   }, [chrome.hidden, chromeOpacity]);

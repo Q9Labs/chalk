@@ -37,7 +37,6 @@ vi.mock("@excalidraw/excalidraw", async () => {
     CaptureUpdateAction: { NEVER: "NEVER" },
     getSceneVersion: () => 0,
     Excalidraw({ excalidrawAPI, onChange }: { excalidrawAPI: (api: object) => void; onChange: (elements: readonly object[], state: object, files: object) => void }) {
-      // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Exercise the mounted collaboration API in the existing integration fixture.
       useEffect(() => {
         excalidrawAPI(api);
         onChange([], state, {});

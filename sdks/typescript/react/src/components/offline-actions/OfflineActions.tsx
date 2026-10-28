@@ -18,7 +18,7 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false, ha
   const reconnecting = requestedReconnecting || connection.status === "reconnecting";
   const reconnectingNoticeDue = useTrueFor(reconnecting, RECONNECTING_GRACE_MS);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing offline-policy and delayed-status behavior.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Set the client offline policy to send after mounting; changing durable queue policy during render is unsafe.
   useEffect(() => {
     void client.offline.setPolicy("send");
   }, [client]);
@@ -39,7 +39,7 @@ export function OfflineActions({ reconnecting: requestedReconnecting = false, ha
 
 function useTrueFor(value: boolean, milliseconds: number): boolean {
   const [elapsed, setElapsed] = useState(false);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing offline-policy and delayed-status behavior.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Delay the offline notice for this value and duration; reset and cancel the timeout on replacement.
   useEffect(() => {
     setElapsed(false);
     if (!value) return;

@@ -45,7 +45,7 @@ export function MovingFrame({ frame, children, style, testID }: MovingFrameProps
   const mounted = useRef(false);
 
   const { x, y, width, height } = frame;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native layout animation lifecycle.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Retarget the native frame from its currently displayed geometry on the UI runtime, preserving interrupted motion.
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;

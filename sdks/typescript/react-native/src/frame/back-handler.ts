@@ -8,7 +8,7 @@ import { BackHandler } from "react-native";
 export function useBackHandler(active: boolean, onBack: () => void): void {
   const latest = useRef(onBack);
   latest.current = onBack;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing native hardware-back listener cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Consume hardware Back while this layer is active; remove the native subscription when inactive.
   useEffect(() => {
     if (!active) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
