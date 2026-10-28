@@ -18,15 +18,38 @@ test("application and SDK source changes select the package boundary check", () 
   }
 });
 
-test("Kotlin-only native module changes select the compatibility lint", () => {
+test("Kotlin-only native module changes do not select JavaScript/TypeScript structural rules", () => {
   const file = "sdks/typescript/react-native/android/src/main/kotlin/ai/q9labs/chalk/reactnative/ChalkAudioRouteModule.kt";
-  const semgrep = createGatePlan([file]).tasks.find((task) => task.id === "semgrep");
-  assert.equal(semgrep?.selected, true);
-  assert.deepEqual(semgrep?.command, ["bash", "scripts/gates/semgrep.sh", file]);
+  assert.equal(createGatePlan([file]).tasks.find((task) => task.id === "ast-grep")?.selected, false);
+});
+
+test("structural rules include changed manifests and type bans follow TypeScript inputs", () => {
+  for (const file of ["apps/web/src/lib/chunkReload.ts", "packages/ui/package.json", "apps/api/openapi.yaml"]) {
+    const task = createGatePlan([file]).tasks.find((entry) => entry.id === "ast-grep");
+    assert.equal(task?.selected, true, file);
+    assert.deepEqual(task?.command, ["node", "scripts/gates/ast-grep.mjs", file]);
+  }
+  assert.equal(createGatePlan(["apps/web/src/lib/chunkReload.ts"]).tasks.find((task) => task.id === "explicit-any")?.selected, true);
+  assert.equal(createGatePlan(["docs/contract-codegen.md"]).tasks.find((task) => task.id === "explicit-any")?.selected, false);
+  assert.equal(laneGroup("explicit-any"), "checks");
 });
 
 test("documentation-only changes do not select the package boundary check", () => {
   assert.equal(boundaryTask(["docs/contract-codegen.md"])?.selected, false);
+});
+
+test("design-token and worklet checks follow their SDK inputs into the CI checks group", () => {
+  const selected = (file, id) => createGatePlan([file]).tasks.find((task) => task.id === id)?.selected;
+  assert.equal(selected("sdks/typescript/react/src/components/CallReady.tsx", "react-tokens"), true);
+  assert.equal(selected("packages/ui/src/styles/index.css", "react-tokens"), true);
+  assert.equal(selected("sdks/typescript/react-native/src/theme/tokens.ts", "native-quality"), true);
+  assert.equal(selected("sdks/typescript/react-native/src/theme/tokens.ts", "react-tokens"), false);
+  assert.equal(selected("docs/contract-codegen.md", "react-tokens"), false);
+  assert.equal(selected("docs/contract-codegen.md", "native-quality"), false);
+  assert.equal(selected("pnpm-lock.yaml", "react-tokens"), true);
+  assert.equal(selected("pnpm-lock.yaml", "native-quality"), true);
+  assert.equal(laneGroup("react-tokens"), "checks");
+  assert.equal(laneGroup("native-quality"), "checks");
 });
 
 test("dependency changes select the package boundary check", () => {

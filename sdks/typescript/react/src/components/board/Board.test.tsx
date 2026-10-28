@@ -172,7 +172,7 @@ vi.mock("@excalidraw/excalidraw", async () => {
     convertToExcalidrawElements: (elements: readonly object[]) => elements.map((element, index) => ({ ...element, id: `note-${index}`, version: 1, isDeleted: false })),
     Excalidraw({ excalidrawAPI, onChange }: { excalidrawAPI: (value: ReturnType<typeof createEngine>["api"]) => void; onChange: Change }) {
       const [engine] = useState(createEngine);
-      // nosemgrep: chalk.forbid-sdk-use-effect -- Exercise the mounted board API in the existing integration fixture.
+      // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Exercise the mounted board API in the existing integration fixture.
       useEffect(() => {
         excalidrawAPI(engine.api);
         onChange([], engine.api.getAppState(), {});

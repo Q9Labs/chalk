@@ -5,9 +5,9 @@ const sourceRoot = join(process.cwd(), "src");
 const tokenSources = new Set(["theme/tokens.ts"]);
 const sourceFilePattern = /\.(?:ts|tsx)$/u;
 const styleLiteralPatterns = [
-  /\b(?:backgroundColor|border\w*Color|color|fill|placeholderTextColor|shadowColor|stroke|stopColor)\s*:\s*["'](?:#[0-9a-f]{3,8}|rgba?\([^)]*\)|white|black|transparent)["']/giu,
-  /\bboxShadow\s*:\s*["'][^"']*(?:#[0-9a-f]{3,8}|rgba?\()/giu,
-  /\b(?:color|fill|placeholderTextColor|stroke)\s*=\s*["'](?:#[0-9a-f]{3,8}|rgba?\([^)]*\)|white|black|transparent)["']/giu,
+  /\b(?:backgroundColor|border\w*Color|color|fill|placeholderTextColor|shadowColor|stroke|stopColor)\s*:\s*["'](?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([^)]*\)|white|black|transparent|red|green|blue|yellow|orange|purple|gray|grey)["']/giu,
+  /\bboxShadow\s*:\s*["'][^"']*(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\()/giu,
+  /\b(?:color|fill|placeholderTextColor|stroke)\s*=\s*["'](?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([^)]*\)|white|black|transparent|red|green|blue|yellow|orange|purple|gray|grey)["']/giu,
 ];
 
 const violations = [];

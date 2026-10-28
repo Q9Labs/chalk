@@ -4,7 +4,7 @@ export function ChalkCopyButton({ text, label = "Copy link", announcement = "Lin
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing clipboard feedback timer cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing clipboard feedback timer cleanup.
   useEffect(() => () => clearTimeout(timer.current), []);
   const copy = async () => {
     try {

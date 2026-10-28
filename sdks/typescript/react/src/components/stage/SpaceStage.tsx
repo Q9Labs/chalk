@@ -40,7 +40,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
   );
   const [following, setFollowing] = useState<string | null | undefined>(undefined);
   const boardOpen = whiteboard?.isOpen === true && Boolean(whiteboard.props);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing stage layout and participant reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage layout and participant reconciliation.
   useEffect(() => {
     if (!boardOpen) setFollowing(undefined);
   }, [boardOpen]);
@@ -50,7 +50,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
   const activePin = items.some((item) => item.id === pin) ? pin : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing stage layout and participant reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing stage layout and participant reconciliation.
   useEffect(() => {
     if (pin !== activePin) setPin(activePin);
     if (selectedShare !== activeShare) setSelectedShare(activeShare);

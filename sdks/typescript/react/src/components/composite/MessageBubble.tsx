@@ -71,9 +71,9 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       if (press.current) clearTimeout(press.current.timer);
       press.current = null;
     };
-    // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
     useEffect(() => () => cancelPress(), []);
-    // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
     useEffect(() => {
       if (!reactionBarOpen) return;
       messageRef.current?.querySelector<HTMLButtonElement>(".call-reaction-bar button")?.focus({ preventScroll: true });
@@ -87,7 +87,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     const [downloading, setDownloading] = useState(false);
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const downloadController = useRef<AbortController | null>(null);
-    // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
     useEffect(() => () => downloadController.current?.abort(), []);
     const downloadPhoto = async () => {
       if (!photo || downloading) return;
@@ -122,7 +122,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     };
     const [photoClosing, setPhotoClosing] = useState(false);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing press, download, and attachment lifecycle cleanup.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing press, download, and attachment lifecycle cleanup.
     useEffect(
       () => () => {
         if (closeTimer.current) clearTimeout(closeTimer.current);

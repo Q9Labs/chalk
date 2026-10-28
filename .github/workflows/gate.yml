@@ -156,10 +156,6 @@ jobs:
           key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
           restore-keys: go-root-checks-${{ runner.os }}-
 
-      - name: Install Semgrep
-        if: matrix.group == 'checks'
-        run: pipx install semgrep==1.179.0
-
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 

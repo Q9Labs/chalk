@@ -23,9 +23,9 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const dock = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [canCaptureDisplay, setCanCaptureDisplay] = useState(false);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing browser capability and fullscreen subscriptions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing browser capability and fullscreen subscriptions.
   useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing browser capability and fullscreen subscriptions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing browser capability and fullscreen subscriptions.
   useEffect(() => {
     const changed = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", changed);

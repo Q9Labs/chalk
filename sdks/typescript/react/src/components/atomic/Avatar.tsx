@@ -52,7 +52,7 @@ export const Avatar = React.memo(({ name, src, size = "md", status, className, s
   const hasUploadedImage = Boolean(src) && !imageError;
   const shouldShowGeneratedAvatar = generated && Boolean(name) && !hasUploadedImage;
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Reset existing avatar fallback when its source changes.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Reset existing avatar fallback when its source changes.
   useEffect(() => {
     setImageError(false);
   }, [src, name, generated]);

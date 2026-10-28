@@ -64,10 +64,7 @@ function localExists(file, target, repoPath = true) {
   return [path.dirname(file), owner, "."].some((base) => existsSync(path.resolve(root, base, clean)));
 }
 function isRepoPath(value) {
-  return (
-    !/\s|[<>|=]|^[@~/#]|:\/\//.test(value) &&
-    (/^(?:\.\.?\/|apps\/|packages\/|sdks\/|scripts\/|docs\/|contract\/|infrastructure\/|tools\/|\.github\/|\.semgrep\/)/.test(value) || /(?:^|\/)[\w.-]+\.(?:mdx?|[cm]?js|[jt]sx?|json|ya?ml|sh|go|exs?|css|html|toml|sql|proto|lock)(?::\d[\d,:-]*)?$/.test(value))
-  );
+  return !/\s|[<>|=]|^[@~/#]|:\/\//.test(value) && (/^(?:\.\.?\/|apps\/|packages\/|sdks\/|scripts\/|docs\/|contract\/|infrastructure\/|tools\/|\.github\/)/.test(value) || /(?:^|\/)[\w.-]+\.(?:mdx?|[cm]?js|[jt]sx?|json|ya?ml|sh|go|exs?|css|html|toml|sql|proto|lock)(?::\d[\d,:-]*)?$/.test(value));
 }
 for (const file of docs) {
   const lines = readFileSync(path.join(root, file), "utf8").split(/\r?\n/);

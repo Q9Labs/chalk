@@ -22,13 +22,13 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
   const [lifetime, setLifetime] = useState({ identity, exiting: false });
   if (lifetime.identity !== identity) setLifetime({ identity, exiting: false });
   const exiting = lifetime.identity === identity && lifetime.exiting;
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing toast lifetime and exit animation cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing toast lifetime and exit animation cleanup.
   useEffect(() => {
     if (duration === Infinity) return;
     const timer = setTimeout(() => setLifetime({ identity, exiting: true }), duration);
     return () => clearTimeout(timer);
   }, [duration, identity]);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing toast lifetime and exit animation cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing toast lifetime and exit animation cleanup.
   useEffect(() => {
     if (!exiting) return;
     const timer = setTimeout(() => dismissRef.current(), 160);

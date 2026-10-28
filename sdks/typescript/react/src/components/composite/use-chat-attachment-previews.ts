@@ -29,7 +29,7 @@ export function useChatAttachmentPreviews(attachments: readonly ChatAttachment[]
     setFailedAttachmentIds((current) => new Set(current).add(attachmentId));
   }, []);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing attachment URL resolution and stale-result cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing attachment URL resolution and stale-result cleanup.
   useEffect(() => {
     if (!resolveUrl) return;
     setResolvedUrls((current) => {
