@@ -8,6 +8,7 @@ type PeerState = {
   readonly connection: RTCPeerConnection;
   readonly senders: Map<MediaSource, RTCRtpSender>;
   readonly remoteByMid: Map<string, MediaSource>;
+  readonly offerer: boolean;
   makingOffer: boolean;
 };
 
@@ -224,6 +225,16 @@ export class FixtureMediaClient {
   async #applyRemoteDescription(remote: string, peer: PeerState, description: RTCSessionDescriptionInit): Promise<void> {
     await peer.connection.setRemoteDescription(description);
     if (description.type !== "offer") return;
+    for (const transceiver of peer.connection.getTransceivers()) {
+      const source = transceiver.mid ? peer.remoteByMid.get(transceiver.mid) : undefined;
+      if (!source) continue;
+      peer.senders.set(source, transceiver.sender);
+      const local = this.#local.get(source);
+      if (local?.enabled) {
+        await transceiver.sender.replaceTrack(local.track);
+        transceiver.sender.setStreams(new MediaStream([local.track]));
+      }
+    }
     const answer = await peer.connection.createAnswer();
     await peer.connection.setLocalDescription(answer);
     this.#sendSignal(remote, { description: peer.connection.localDescription!, mids: this.#localMids(peer) });
@@ -233,18 +244,18 @@ export class FixtureMediaClient {
     const existing = this.#peers.get(remote);
     if (existing) return existing;
     const connection = registerPeer(new RTCPeerConnection());
-    const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), makingOffer: false };
+    const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), offerer: this.#participantId < remote, makingOffer: false };
     this.#peers.set(remote, peer);
     // Reserve both directions before the first offer. An answering participant
     // may finish capture after that offer; replaceTrack must not require it to
     // win a second negotiation just to send its initial microphone/camera.
-    for (const source of ["microphone", "camera"] as const) {
+    for (const source of peer.offerer ? (["microphone", "camera"] as const) : []) {
       const local = this.#local.get(source);
       const track = local?.enabled ? local.track : null;
       const transceiver = connection.addTransceiver(track ?? (source === "microphone" ? "audio" : "video"), { direction: "sendrecv", streams: track ? [new MediaStream([track])] : [] });
       peer.senders.set(source, transceiver.sender);
     }
-    for (const [source, local] of this.#local) if (source !== "microphone" && source !== "camera" && local.enabled) peer.senders.set(source, connection.addTrack(local.track, new MediaStream([local.track])));
+    for (const [source, local] of this.#local) if (peer.offerer && source !== "microphone" && source !== "camera" && local.enabled) peer.senders.set(source, connection.addTrack(local.track, new MediaStream([local.track])));
     connection.addEventListener("icecandidate", (event) => this.#sendSignal(remote, { candidate: event.candidate?.toJSON() ?? null }));
     connection.addEventListener("track", (event) => {
       const mid = event.transceiver.mid;
@@ -258,7 +269,7 @@ export class FixtureMediaClient {
   async #addSender(peer: PeerState, source: MediaSource, track: MediaStreamTrack): Promise<void> {
     const sender = peer.senders.get(source);
     if (sender) await sender.replaceTrack(track);
-    else peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
+    else if (peer.offerer) peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
   }
 
   async #renegotiateAll(): Promise<void> {
