@@ -189,16 +189,29 @@ test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up
     const cover = await contexts[1].newPage();
     await cover.bringToFront();
     expect(await student.evaluate(() => document.visibilityState)).toBe("hidden");
+    for (const page of pages)
+      await page.evaluate(() => {
+        const root = document.documentElement;
+        root.dataset.classRosterLost = "false";
+        root.dataset.classForegrounded = "false";
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") root.dataset.classForegrounded = "true";
+        });
+        new MutationObserver(() => {
+          const labels = [...document.querySelectorAll('button[aria-label^="Video tile for "]')].map((button) => button.getAttribute("aria-label"));
+          if (["Teacher", "Student", "Admin"].some((name) => !labels.includes(`Video tile for ${name}`))) root.dataset.classRosterLost = "true";
+        }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label"] });
+      });
     const failures = [];
     await checkCase("C2", async () => {
       // Wall time is essential: intensive background timer throttling starts after five minutes.
-      const start = Date.now();
-      while (Date.now() - start < 480_000) {
-        await wait(Math.min(20_000, 480_000 - (Date.now() - start)));
-        expect(await student.evaluate(() => document.visibilityState)).toBe("hidden");
-        for (const page of pages) for (const name of names) expect(await tile(page, name).count()).toBe(1);
-        if (Date.now() - start > 360_000 && (await teacher.locator(".chalk-board").getAttribute("data-elements")) === "0") await stroke(teacher, 0.35);
-      }
+      await wait(360_000);
+      await stroke(teacher, 0.35);
+      await wait(120_000);
+      expect(await student.evaluate(() => document.visibilityState)).toBe("hidden");
+      expect(await student.locator("html").getAttribute("data-class-foregrounded")).toBe("false");
+      for (const page of pages) expect(await page.locator("html").getAttribute("data-class-roster-lost")).toBe("false");
+      await roster(pages);
       await shot(pages, "C2-hidden");
     }).catch((error: unknown) => failures.push(error));
     await checkCase("C7", async () => {
