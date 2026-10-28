@@ -1,9 +1,9 @@
 [
   {
     "name": "Chalk user-facing job and webhook failures",
-    "description": "The message names the Tenant from the database and counts affected Recordings or exhausted deliveries. Test Tenants remain visible, not silently suppressed.",
+    "description": "Tenant-attributed job failures and terminal SDK join/media reports. One affected participant in ten minutes alerts on the next evaluation. Normal retries and transient media changes do not count; test Tenants remain visible.",
     "type": "Threshold",
-    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' | summarize arg_max(_time, chalk_alert_value, chalk_alert_headline, chalk_alert_summary, chalk_alert_next, chalk_alert_engineers) by chalk_alert_rule, chalk_alert_tenant | extend alert_message=strcat('\\n', chalk_alert_tenant, '\\n', chalk_alert_rule, '\\n', chalk_alert_headline, '\\n', chalk_alert_summary, '\\n', chalk_alert_next, '\\n', chalk_alert_engineers, '\\n') | summarize value=max(chalk_alert_value) by alert_message",
+    "aplQuery": "['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' | summarize arg_max(_time, chalk_alert_value, chalk_alert_headline, chalk_alert_summary, chalk_alert_next, chalk_alert_engineers) by chalk_alert_rule, chalk_alert_tenant | extend alert_message=strcat('\\n', chalk_alert_tenant, '\\n', chalk_alert_rule, '\\n', chalk_alert_headline, '\\n', chalk_alert_summary, '\\n', chalk_alert_next, '\\n', chalk_alert_engineers, '\\n') | summarize value=max(chalk_alert_value) by alert_message${CONNECTION_REPORT_BRANCH}",
     "columnName": "value",
     "operator": "Above",
     "threshold": 0,

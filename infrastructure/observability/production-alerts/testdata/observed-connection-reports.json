@@ -1,0 +1,361 @@
+[
+  {
+    "case": "w33",
+    "provenance": "Observed accepted API SDK report, 28 October 2026. Identities and wall-clock time replaced; diagnostic events unchanged.",
+    "envelope": {
+      "_time": "2026-10-27T22:05:00Z",
+      "service.name": "chalk-api",
+      "attributes.event": "sdk.connection_report",
+      "attributes.trigger": "recovery_exhausted",
+      "attributes.tenant_id": "observed-school",
+      "attributes.episode_id": "observed-w33",
+      "attributes.participant_id_hash": "synthetic-w33"
+    },
+    "report": {
+      "version": 1,
+      "trigger": "recovery_exhausted",
+      "events": [
+        {
+          "event": "state_changed",
+          "elapsed_ms": 6,
+          "state": "joining"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 7,
+          "state": "joining",
+          "step": "join",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 7,
+          "state": "joining",
+          "step": "acquire_initial_media",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 670,
+          "state": "joining",
+          "step": "acquire_initial_media",
+          "outcome": "succeeded",
+          "duration_ms": 663
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 670,
+          "state": "joining",
+          "step": "access_initialize",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 671,
+          "state": "joining",
+          "step": "access_initialize",
+          "outcome": "succeeded",
+          "duration_ms": 0
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 671,
+          "state": "joining",
+          "step": "create_media_client",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 674,
+          "state": "joining",
+          "step": "create_media_client",
+          "outcome": "succeeded",
+          "duration_ms": 3
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 674,
+          "state": "joining",
+          "step": "create_sync_client",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 674,
+          "state": "joining",
+          "step": "create_sync_client",
+          "outcome": "succeeded",
+          "duration_ms": 0
+        },
+        {
+          "event": "media_state",
+          "elapsed_ms": 674,
+          "phase": "new"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 675,
+          "state": "joining",
+          "step": "start_media",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 675,
+          "state": "joining",
+          "step": "wait_for_sync_live",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 675,
+          "state": "joining",
+          "step": "start_sync",
+          "outcome": "started"
+        },
+        {
+          "event": "sync_socket_open",
+          "elapsed_ms": 1179,
+          "attempt": 1,
+          "duration_ms": 496
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 1627,
+          "state": "joining",
+          "step": "wait_for_sync_live",
+          "outcome": "succeeded",
+          "duration_ms": 952
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 1627,
+          "state": "joining",
+          "step": "start_sync",
+          "outcome": "succeeded",
+          "duration_ms": 952
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 1853,
+          "state": "joining",
+          "step": "start_media",
+          "outcome": "succeeded",
+          "duration_ms": 1179
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 1853,
+          "state": "joining",
+          "step": "confirm_entered",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 1854,
+          "state": "joining",
+          "step": "confirm_entered",
+          "outcome": "succeeded",
+          "duration_ms": 0
+        },
+        {
+          "event": "state_changed",
+          "elapsed_ms": 1854,
+          "state": "live"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 1854,
+          "state": "live",
+          "step": "join",
+          "outcome": "succeeded",
+          "duration_ms": 1847
+        },
+        {
+          "event": "access_refreshed",
+          "elapsed_ms": 10834,
+          "state": "live"
+        },
+        {
+          "event": "media_state",
+          "elapsed_ms": 47243,
+          "phase": "disconnected"
+        },
+        {
+          "event": "state_changed",
+          "elapsed_ms": 47493,
+          "state": "reconnecting"
+        },
+        {
+          "event": "recovery_attempt",
+          "elapsed_ms": 47494,
+          "state": "reconnecting",
+          "attempt": 1
+        },
+        {
+          "event": "media_state",
+          "elapsed_ms": 57234,
+          "phase": "failed"
+        },
+        {
+          "event": "recovery_attempt",
+          "elapsed_ms": 57341,
+          "state": "reconnecting",
+          "attempt": 2
+        },
+        {
+          "event": "recovery_exhausted",
+          "elapsed_ms": 57502,
+          "state": "reconnecting",
+          "code": "media_recovery_exhausted",
+          "heartbeat_gap_ms": 311
+        }
+      ]
+    },
+    "expected_failure": "media_recovery_exhausted",
+    "expected_count": 1
+  },
+  {
+    "case": "w34",
+    "provenance": "Observed accepted API SDK report, 28 October 2026. Identities and wall-clock time replaced; diagnostic events unchanged.",
+    "envelope": {
+      "_time": "2026-10-27T22:05:00Z",
+      "service.name": "chalk-api",
+      "attributes.event": "sdk.connection_report",
+      "attributes.trigger": "join_failed",
+      "attributes.tenant_id": "observed-school",
+      "attributes.episode_id": "observed-w34",
+      "attributes.participant_id_hash": "synthetic-w34"
+    },
+    "report": {
+      "version": 1,
+      "trigger": "join_failed",
+      "events": [
+        {
+          "event": "state_changed",
+          "elapsed_ms": 7,
+          "state": "joining"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 7,
+          "state": "joining",
+          "step": "join",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 7,
+          "state": "joining",
+          "step": "acquire_initial_media",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13963,
+          "state": "joining",
+          "step": "acquire_initial_media",
+          "outcome": "succeeded",
+          "duration_ms": 13956
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13963,
+          "state": "joining",
+          "step": "access_initialize",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13964,
+          "state": "joining",
+          "step": "access_initialize",
+          "outcome": "succeeded",
+          "duration_ms": 1
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13964,
+          "state": "joining",
+          "step": "create_media_client",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13965,
+          "state": "joining",
+          "step": "create_media_client",
+          "outcome": "succeeded",
+          "duration_ms": 2
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13965,
+          "state": "joining",
+          "step": "create_sync_client",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13965,
+          "state": "joining",
+          "step": "create_sync_client",
+          "outcome": "succeeded",
+          "duration_ms": 0
+        },
+        {
+          "event": "media_state",
+          "elapsed_ms": 13965,
+          "phase": "new"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13966,
+          "state": "joining",
+          "step": "start_media",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13966,
+          "state": "joining",
+          "step": "wait_for_sync_live",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 13966,
+          "state": "joining",
+          "step": "start_sync",
+          "outcome": "started"
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 14062,
+          "state": "joining",
+          "step": "start_media",
+          "outcome": "failed",
+          "code": "media_start_failed",
+          "duration_ms": 96
+        },
+        {
+          "event": "space_join_span",
+          "elapsed_ms": 14062,
+          "state": "joining",
+          "step": "join",
+          "outcome": "failed",
+          "code": "media_start_failed",
+          "duration_ms": 14056
+        },
+        {
+          "event": "connection_failed",
+          "elapsed_ms": 14063,
+          "state": "joining",
+          "code": "media_start_failed"
+        }
+      ]
+    },
+    "expected_failure": "media_start_failed",
+    "expected_count": 1
+  }
+]
