@@ -69,6 +69,12 @@ scripts/prod-proof/integrator-session.test.mjs`, in `pnpm test`, and in Gate's
 required `self-test` lane. It covers setup longer than the three-minute empty
 linger, early access, simultaneous Join, and refresh serialization.
 
+Every two-guest media proof now checks each participant's local microphone and
+camera state against every other participant's Sync-derived media state and
+actual playback: nonzero audio energy and advancing video frames. It saves
+the media-agreement JSON artifact alongside the recording and RTP evidence.
+The deployed web proof also checks rendered badges in Chromium and WebKit.
+
 ## Configuration and ownership
 
 By default, the local command reads the 1Password item `Chalk production proof Tenant`. It holds

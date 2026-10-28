@@ -16,6 +16,7 @@ export function installAgreementProbe() {
 
 // Self-contained for serialization by both Playwright and the e2e runner.
 export async function sampleAgreement() {
+  await window.proofPlayMedia?.();
   const snapshot = window.__chalk?.agreementSnapshot?.() ?? window.proofClient?.getSnapshot();
   const tiles = [...document.querySelectorAll('[data-part="stage-tile"][data-participant-id]')];
   const localTile = tiles.find((tile) => tile.dataset.tour === "local-video");
