@@ -1366,3 +1366,44 @@ it("ignores obsolete 403 even when the replacement peer has failed", async () =>
     harness.client.stop();
   }
 });
+
+it("real SFU rejection must not replace its binding while status is unavailable", async () => {
+  const platform = createCoreTestPlatform();
+  let onFailure: (cause: unknown, binding?: string) => void = () => {};
+  const harness = createHarness({ onError: (cause, binding) => onFailure(cause, binding) });
+  let binding = 1;
+  const getAccess = vi.fn<SpaceClientOptions["getAccess"]>(async (request) => {
+    if (request.replaceMediaConnection) binding++;
+    return opaqueAccessGrant(binding, String(binding), `connection-${binding}`);
+  });
+  const statusRead = vi.fn(async () => {
+    throw new Error("Status API unavailable");
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "test", getAccess },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createConnectionReporter: () => undefined,
+        getEpisodeStatus: statusRead,
+        createMediaClient: (input) => {
+          onFailure = input.onFailure;
+          return bindConnectionMediaClient(harness.client, (grant) => harness.client.restart("provider" in grant ? grant.clientPayload : grant));
+        },
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.peers[0].setStates("failed", "failed");
+    const rejection = new CloudflareSFUError("Current SFU publication poll rejected", "signaling_failed", { status: 403 });
+    vi.spyOn(harness.transport, "listPublications").mockRejectedValue(rejection);
+    await expect(harness.client.refreshRemotePublications()).rejects.toBe(rejection);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(binding).toBe(1);
+  } finally {
+    client.dispose();
+    harness.client.stop();
+  }
+});

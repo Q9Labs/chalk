@@ -1,3 +1,4 @@
+import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
 import { ConnectionReporter } from "./report";
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
@@ -48,7 +49,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
         cache: "no-store",
         credentials: "omit",
       });
-      if (!response.ok) throw new Error(`Episode status unavailable: HTTP ${response.status}`);
+      if (!response.ok) throw new EpisodeStatusError(response.status, retryAfterMilliseconds(response.headers.get("Retry-After"), Date.now()));
       const body: unknown = await response.json();
       if (typeof body === "object" && body !== null && "status" in body && (body.status === "active" || body.status === "ending" || body.status === "ended")) return body.status;
       throw new TypeError("Invalid Episode status");

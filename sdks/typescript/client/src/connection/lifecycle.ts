@@ -1,3 +1,4 @@
+import { EpisodeStatusError, episodeStatusRetryDelay } from "./episode-status";
 import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
@@ -77,6 +78,7 @@ export type ConnectionLifecycleCapability = {
     }>,
   ) => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly getSyncToken: () => Effect.Effect<string, ConnectionLifecycleFailure>;
+  readonly confirmEpisodeEnded: Effect.Effect<void>;
   readonly runEpisodeEnd: <A, E>(operation: Effect.Effect<A, E>) => Effect.Effect<A, E>;
   readonly join: () => Effect.Effect<void, ConnectionLifecycleFailure>;
   readonly leave: () => Effect.Effect<void, ConnectionLifecycleFailure>;
@@ -997,30 +999,40 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         return model.episodeEndConfirmed || snapshot?.control?.status === "ended" || snapshot?.connection.terminalReason === "episode_ended";
       };
       const waitForPendingEpisodeEnd = Effect.suspend(() => (pendingEpisodeEnd ? Deferred.await(pendingEpisodeEnd) : Effect.void));
-      const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure> =>
+      const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure> => {
+        if (!needsEpisodeCheck(failure)) return Effect.succeed(failure);
+        const epoch = model.epoch;
+        const original = access.currentUnsafe();
+        if (!original) return Effect.succeed(failure);
+        return checkMediaRejection(failure, original, epoch);
+      };
+      const checkMediaRejection = (failure: ConnectionLifecycleFailure, original: ParsedAccessGrant, epoch: number): Effect.Effect<ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
-          if (!needsEpisodeCheck(failure)) return failure;
-          const grant = access.currentUnsafe();
-          const epoch = model.epoch;
-          if (!grant) return failure;
-          while (model.epoch === epoch && access.currentUnsafe()?.media.clientPayload.connectionId === grant.media.clientPayload.connectionId) {
+          let attempt = 0;
+          let refreshedAfterAuthRejection = false;
+          while (model.epoch === epoch) {
             yield* waitForPendingEpisodeEnd;
             if (episodeHasEnded()) return lifecycleFailure("episode_ended", false, "The Episode has ended");
-            // The API reads the primary Episode row, whose ending state precedes
-            // media teardown. Never infer revocation from an unavailable read.
-            const status = yield* Effect.tryPromise({
-              try: (signal) => (platform.getEpisodeStatus ? platform.getEpisodeStatus(grant, signal) : Promise.reject(new Error("Episode status lookup unavailable"))),
-              catch: () => null,
-            }).pipe(
-              Effect.timeout(3000),
-              Effect.catch(() => Effect.succeed(null)),
-            );
+            const current = access.currentUnsafe();
+            const grant = sameBindingCredential(current, original);
+            const result = yield* readEpisodeStatus(platform.getEpisodeStatus, grant);
             yield* waitForPendingEpisodeEnd;
-            if (status !== null) return episodeHasEnded() || status !== "active" ? lifecycleFailure("episode_ended", false, "The Episode has ended") : failure;
-            yield* Effect.sleep(1000);
+            if (episodeHasEnded() || statusIsEnded(result.status)) return lifecycleFailure("episode_ended", false, "The Episode has ended");
+            if (result.status === "active") return failure;
+            const error = result.cause;
+            if (statusCredentialsRejected(error)) {
+              if (refreshedAfterAuthRejection) return lifecycleFailure("invalid_access", false, "Episode status credentials were rejected");
+              refreshedAfterAuthRejection = true;
+              yield* access.refresh("scheduled_refresh", false).pipe(Effect.catch(() => Effect.succeed(null)));
+              continue;
+            }
+            yield* Effect.sleep(episodeStatusRetryDelay(attempt++, error));
           }
-          return lifecycleFailure("invalid_state", false, "The media binding changed");
-        });
+          return lifecycleFailure("invalid_state", false, "The connection changed");
+        }).pipe(
+          Effect.timeout(60000),
+          Effect.catch(() => Effect.succeed(episodeHasEnded() ? lifecycleFailure("episode_ended", false, "The Episode has ended") : lifecycleFailure("access_unavailable", true, "Could not confirm Episode status. Rejoin to try again."))),
+        );
       const commitSnapshotFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (failure.code === "episode_ended") return yield* finishEpisodeEnded();
@@ -1038,24 +1050,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (!scope || (rejectionCheck?.epoch === epoch && rejectionCheck.binding === binding)) return;
           const check = { epoch, binding };
           rejectionCheck = check;
+          const releaseBinding = binding ? yield* access.holdMediaBinding(binding) : Effect.void;
           // Keep the lifecycle queue free: Sync's end and local Leave must still
           // run while the authoritative read (or the local End) is in flight.
           yield* Effect.forkIn(
             resolveMediaRejection(failure).pipe(
-              Effect.flatMap((resolved) =>
-                enqueue(
-                  Effect.suspend(() =>
-                    model.epoch === epoch && active(model) && access.currentUnsafe()?.media.clientPayload.connectionId === binding
-                      ? resolved.code !== "episode_ended" && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410
-                        ? recover("media")
-                        : commitSnapshotFailure(resolved)
-                      : Effect.void,
-                  ),
-                ),
-              ),
+              Effect.flatMap((resolved) => enqueue(Effect.suspend(() => (model.epoch === epoch && active(model) ? (resolved === failure && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410 ? recover("media") : commitSnapshotFailure(resolved)) : Effect.void)))),
               Effect.ensuring(
-                Effect.sync(() => {
+                Effect.gen(function* () {
                   if (rejectionCheck === check) rejectionCheck = null;
+                  if (model.activeScope === scope) yield* releaseBinding;
                 }),
               ),
             ),
@@ -1189,6 +1193,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (intent.camera !== undefined) model.intent.camera = intent.camera;
           }),
         getSyncToken: () => access.getSyncToken().pipe(Effect.mapError(accessFailure)),
+        confirmEpisodeEnded: Effect.sync(() => {
+          model.episodeEndConfirmed = true;
+        }),
         runEpisodeEnd: (operation) =>
           Effect.gen(function* () {
             const completed = yield* Deferred.make<void>();
@@ -1434,4 +1441,21 @@ function syncStartupFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFai
 // The expired seat cannot reconnect with the same grant; only a new admission can retry it.
 function syncAutoRecoverable(snapshot: V1EpisodeSnapshot, failure: ConnectionLifecycleFailure): boolean {
   return failure.recoverable && snapshot.connection.terminalReason !== "entry_timeout";
+}
+
+function statusIsEnded(status: string | null): boolean {
+  return status === "ending" || status === "ended";
+}
+function statusCredentialsRejected(error: unknown): error is EpisodeStatusError {
+  return error instanceof EpisodeStatusError && (error.status === 401 || error.status === 403);
+}
+function readEpisodeStatus(read: ConnectionDependencies["getEpisodeStatus"], grant: ParsedAccessGrant) {
+  return Effect.tryPromise({
+    try: (signal) => (read ? read(grant, signal) : Promise.reject(new Error("Episode status lookup unavailable"))),
+    catch: (cause) => cause,
+  }).pipe(Effect.timeout(3000), Effect.match({ onSuccess: (status) => ({ status, cause: null }), onFailure: (cause) => ({ status: null, cause }) }));
+}
+
+function sameBindingCredential(current: ParsedAccessGrant | null, original: ParsedAccessGrant): ParsedAccessGrant {
+  return current?.media.clientPayload.connectionId === original.media.clientPayload.connectionId ? current : original;
 }

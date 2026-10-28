@@ -1,4 +1,4 @@
-import { Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import type { ConnectionAccessRequest } from "../connection/dependencies";
@@ -135,4 +135,69 @@ it("rejects a server-selected replacement that changes the participant generatio
   });
   const result = await Effect.runPromise(program.pipe(Effect.provide(makeConnectionAccessLayer(provider)), Effect.provide(TestClock.layer())));
   expect(result.code).toBe("access.invalid");
+});
+
+it("holds automatic replacement without locking out same-binding credential refresh", async () => {
+  const requests: ConnectionAccessRequest[] = [];
+  const provider = (request: ConnectionAccessRequest) => {
+    requests.push(request);
+    return Effect.succeed(accessGrant(requests.length === 1 ? 1000 : 120000, String(requests.length), request.replaceMediaConnection ? "connection-2" : "connection-1"));
+  };
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.initialize();
+      const release = yield* service.holdMediaBinding("connection-1");
+      const pending = yield* Effect.forkChild(service.refresh("media_recovery", true), { startImmediately: true });
+      yield* TestClock.adjust("1 second");
+      const fresh = yield* service.ensureFresh("scheduled_refresh");
+      expect(fresh.media.clientPayload.connectionId).toBe("connection-1");
+      expect(requests).toHaveLength(2);
+      expect(requests[1]?.replaceMediaConnection).toBe(false);
+      yield* release;
+      const replaced = yield* Fiber.join(pending);
+      expect(replaced.media.clientPayload.connectionId).toBe("connection-2");
+      expect(requests).toHaveLength(3);
+    }).pipe(Effect.provide(makeConnectionAccessLayer(provider, 0)), Effect.provide(TestClock.layer())),
+  );
+});
+
+it("does not commit a replacement already in flight when its binding is held", async () => {
+  const program = Effect.gen(function* () {
+    const replacement = yield* Deferred.make<ParsedAccessGrant>();
+    return yield* Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.initialize();
+      const pending = yield* Effect.forkChild(service.refresh("media_recovery", true).pipe(Effect.flip), { startImmediately: true });
+      yield* Effect.yieldNow;
+      const release = yield* service.holdMediaBinding("connection-1");
+      yield* Deferred.succeed(replacement, accessGrant(120000, "replacement", "connection-2"));
+      const failure = yield* Fiber.join(pending);
+      expect(failure.code).toBe("access.invalid");
+      expect(service.currentUnsafe()?.media.clientPayload.connectionId).toBe("connection-1");
+      yield* release;
+    }).pipe(Effect.provide(makeConnectionAccessLayer((request) => (request.replaceMediaConnection ? Deferred.await(replacement) : Effect.succeed(accessGrant(120000, "initial", "connection-1"))))));
+  });
+  await Effect.runPromise(program.pipe(Effect.provide(TestClock.layer())));
+});
+
+it("clears held replacement waiters without issuing another grant", async () => {
+  const requests: ConnectionAccessRequest[] = [];
+  const provider = (request: ConnectionAccessRequest) => {
+    requests.push(request);
+    return Effect.succeed(accessGrant(120000, "initial", "connection-1"));
+  };
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* ConnectionAccessService;
+      yield* service.initialize();
+      yield* service.holdMediaBinding("connection-1");
+      const pending = yield* Effect.forkChild(service.refresh("media_recovery", true).pipe(Effect.flip), { startImmediately: true });
+      yield* Effect.yieldNow;
+      yield* service.clear;
+      const failure = yield* Fiber.join(pending);
+      expect(failure.code).toBe("access.unavailable");
+      expect(requests).toHaveLength(1);
+    }).pipe(Effect.provide(makeConnectionAccessLayer(provider)), Effect.provide(TestClock.layer())),
+  );
 });

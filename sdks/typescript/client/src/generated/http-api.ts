@@ -770,6 +770,7 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
