@@ -33,6 +33,7 @@ export function createProfilePlan(profile, runDirectory) {
     step("sync_v1_replay", ["mix", "sync.breaker.v1", "--replay", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),
     step("typescript_sync_and_whiteboard", ["pnpm", "--dir", "sdks/typescript/client", "exec", "vitest", "run", "src/sync", "src/whiteboard"]),
     step("whiteboard_collaboration", ["pnpm", "--dir", "packages/whiteboard", "exec", "vitest", "run", "src/collab", "src/embedded"]),
+    step("browser_reconnection", ["pnpm", "--dir", "sdks/typescript/client", "run", "test:sync-browser"]),
   ];
 
   if (profile === "correctness") return correctness;
@@ -50,7 +51,6 @@ export function createProfilePlan(profile, runDirectory) {
     step("topology_profile", ["scripts/gates/with-sync-topology.sh", "--", "apps/sync/scripts/reliability-harness", "topology"]),
     step("soak_and_load", ["apps/sync/scripts/with-reliability-postgres", "apps/sync/scripts/reliability-soak"]),
     step("node_process_restart", ["apps/sync/scripts/with-reliability-postgres", "pnpm", "--dir", "sdks/typescript/client", "run", "test:sync-node-restart"]),
-    step("real_browser", ["apps/sync/scripts/with-reliability-postgres", "pnpm", "--dir", "sdks/typescript/client", "run", "test:sync-browser"]),
   ];
 }
 
@@ -69,7 +69,8 @@ function gitSha() {
 function relevantWorkingTreeFingerprint() {
   const scope = [
     ".github/workflows",
-    "apps/api/migrations",
+    "apps/api/db/migrations",
+    "apps/api/scripts/db-migrate.sh",
     "apps/sync",
     "package.json",
     "packages/whiteboard",
@@ -78,8 +79,7 @@ function relevantWorkingTreeFingerprint() {
     "sdks/typescript/client/package.json",
     "sdks/typescript/client/scripts/real-browser-sync.mjs",
     "sdks/typescript/client/scripts/real-node-restart-sync.mjs",
-    "sdks/typescript/client/src/sync",
-    "sdks/typescript/client/src/whiteboard",
+    "sdks/typescript/client/src",
   ];
   const digest = createHash("sha256");
   digest.update(gitOutput(["diff", "--binary", "HEAD", "--", ...scope]));

@@ -15,7 +15,7 @@ test("maps the three triggers to one harness with explicit profiles", () => {
 
   assert.deepEqual(
     correctness.map((step) => step.name),
-    ["sync_full_gate", "sync_v1_breaker", "sync_v1_replay", "typescript_sync_and_whiteboard", "whiteboard_collaboration"],
+    ["sync_full_gate", "sync_v1_breaker", "sync_v1_replay", "typescript_sync_and_whiteboard", "whiteboard_collaboration", "browser_reconnection"],
   );
   assert.equal(correctness[0].env.TSX_TSCONFIG_PATH, undefined);
   assert.match(correctness[1].env.TSX_TSCONFIG_PATH, /apps\/sync\/scripts\/tsconfig\.wire-sdk\.json$/);
@@ -28,7 +28,7 @@ test("maps the three triggers to one harness with explicit profiles", () => {
   assert.deepEqual(topology[2].command.slice(0, 3), ["mix", "test", "test/chalk_sync/reliability/postgres_failover_profile_test.exs"]);
   assert.deepEqual(
     release.map((step) => step.name),
-    ["correctness_profile", "topology_profile", "soak_and_load", "node_process_restart", "real_browser"],
+    ["correctness_profile", "topology_profile", "soak_and_load", "node_process_restart"],
   );
   assert.deepEqual(release[1].command, ["scripts/gates/with-sync-topology.sh", "--", "apps/sync/scripts/reliability-harness", "topology"]);
 });

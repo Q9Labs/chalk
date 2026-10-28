@@ -10,18 +10,22 @@ One harness owns Sync reliability. Triggers select how deeply it runs:
 
 The correctness profile runs the full PostgreSQL-backed Sync suite with zero
 skips, the replayed v1 breaker, the TypeScript Sync client, and the separate
-whiteboard transport. The topology profile starts real Sync OS processes and a
+whiteboard transport. It also uses Chromium and the real SDK against Sync and
+Postgres, cuts its connection, queues an action, and checks recovery after the
+connection returns. This local TCP partition does not reproduce Cloudflare or
+prove the entire call stack. The topology profile starts real Sync OS processes and a
 PostgreSQL primary/standby pair, then covers cross-node convergence, client
 partitions, unclean node loss, whiteboard fanout, and database promotion. The
 release profile includes both profiles plus concurrent multi-node load, process
-restart recovery, and a real Chromium client.
+restart recovery.
 
 Every profile fails on the first missing or failed proof. It writes a read-only
 manifest under “apps/sync/.artifacts/reliability/” with the commit, relevant
 working-tree fingerprint, exact commands, durations, verdict, and reproducer.
-CI uploads that directory so a green check has reviewable evidence.
+The scheduled and manual reliability workflow uploads that directory.
 
-Run the profiles from the repository root:
+Run the profiles from the repository root. The correctness and release profiles
+need Chromium installed for Playwright.
 
 ```bash
 scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
@@ -33,7 +37,7 @@ The release command provisions its own databases when no test database URL is
 set. `CHALK_SYNC_SOAK_CLIENTS`, `CHALK_SYNC_SOAK_COMMANDS`,
 `CHALK_SYNC_SOAK_COMMAND_INTERVAL_MS`, `CHALK_SYNC_SOAK_DURATION_SECONDS`, and
 `CHALK_SYNC_SOAK_P95_BUDGET_MS` tune the sustained workload without changing
-the correctness oracle. Release CI runs it for at least five minutes.
+the correctness oracle. The manually dispatched release profile sets it to five minutes.
 
 ## Crash-recovery contract
 

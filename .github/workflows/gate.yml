@@ -408,8 +408,12 @@ jobs:
             apps/sync/_build
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
 
-      # The correctness harness runs the full Sync gate first, then the breaker, replay, and SDK sync tests,
-      # against one PostgreSQL container.
+      - name: Install Chromium for the browser reconnection proof
+        uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
+
+      # The correctness harness uses one isolated PostgreSQL database for the Sync and SDK proofs.
       - name: Run the Sync gate and correctness harness
         run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
 
