@@ -213,7 +213,7 @@ defmodule ChalkSync.Reliability.SoakProfileTest do
         assert frames["ack"]["outcome"] == "committed"
         assert frames["ack"]["revision"] == expected_revision
         assert frames["event"]["revision"] == expected_revision
-        {client, 0}
+        {Wire.acknowledge_control_event(client, frames["event"]), 0}
 
       {:closed, 1012, reason, _client}
       when reason in ["delivery recovery required", "dependency unavailable"] ->
