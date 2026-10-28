@@ -227,7 +227,6 @@ func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService Tenant
 		createEpisodeEndpoint(lifecycle, authorizer),
 		listEpisodesEndpoint(lifecycle, authorizer),
 		getEpisodeEndpoint(lifecycle, authorizer),
-		participantEpisodeStatusEndpoint(lifecycle, mediaVerifier),
 		getEpisodeAttendanceEndpoint(lifecycle, authorizer),
 		listSpaceLiveEpisodesEndpoint(lifecycle, authorizer),
 		listSpaceActivityEndpoint(lifecycle, authorizer),

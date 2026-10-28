@@ -1051,6 +1051,101 @@ async function withTimedHarness(exercise: (harness: ReturnType<typeof createHarn
     vi.useRealTimers();
   }
 }
+it.each([
+  { operation: "publications", status: 401 },
+  { operation: "publications", status: 403 },
+  { operation: "close_tracks", status: 410 },
+] as const)("host End racing guest $operation HTTP $status ends both clients cleanly", async ({ operation, status }) => {
+  // Production ordering: the API commits `ending`, then SFU teardown rejects
+  // guest requests before the durable Sync end reaches that guest.
+  let episodeStatus: "active" | "ending" = "active";
+  const ack = Promise.withResolvers<Awaited<ReturnType<import("../connection/dependencies").ConnectionSyncClient["endEpisode"]>>>();
+  const result = { type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" } as const;
+  const hostPlatform = createCoreTestPlatform();
+  const host = createSpaceClientForPlatform(
+    { space: "test", getAccess: async () => opaqueAccessGrant("owner") },
+    {
+      ...hostPlatform,
+      dependencies: {
+        ...hostPlatform.dependencies,
+        createConnectionReporter: () => undefined,
+        createSyncClient: () => ({
+          ...hostPlatform.sync,
+          endEpisode: async () => {
+            episodeStatus = "ending";
+            return ack.promise;
+          },
+        }),
+      },
+    },
+  );
+  const guestPlatform = createCoreTestPlatform();
+  let onFailure: (cause: unknown, binding?: string) => void = () => {};
+  const harness = createHarness({ onError: (cause, binding) => onFailure(cause, binding) });
+  const guest = createSpaceClientForPlatform(
+    { space: "test", getAccess: async () => opaqueAccessGrant("guest") },
+    {
+      ...guestPlatform,
+      dependencies: {
+        ...guestPlatform.dependencies,
+        createConnectionReporter: () => undefined,
+        getEpisodeStatus: async () => episodeStatus,
+        createMediaClient: (input) => {
+          onFailure = input.onFailure;
+          return bindConnectionMediaClient(harness.client, (grant) => harness.client.restart("provider" in grant ? grant.clientPayload : grant));
+        },
+      },
+    },
+  );
+  const ended = vi.fn();
+  const error = vi.fn();
+  guest.on("episodeEnded", ended);
+  guest.on("error", error);
+  const http = createCloudflareSFUHTTPTransport({
+    apiBaseURL: "https://api.chalk.test",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    episodeId: "episode-1",
+    participantId: "participant-1",
+    bearerToken: "test-credential",
+    fetch: vi.fn(async () => new Response(null, { status })),
+  });
+  let ending: Promise<void> | undefined;
+  try {
+    await host.join({ microphone: false, camera: false });
+    await guest.join({ microphone: false, camera: false });
+    if (operation === "close_tracks") {
+      harness.client.prepareLocalTrack("microphone", new FakeTrack("mic", "audio") as unknown as MediaStreamTrack);
+      await harness.client.setLocalPublicationTarget({ operationId: "on", participantId: "participant-1", source: "microphone", enabled: true });
+    }
+    ending = host.endEpisode();
+    await vi.waitFor(() => expect(episodeStatus).toBe("ending"));
+    if (operation === "publications") {
+      vi.spyOn(harness.transport, "listPublications").mockImplementation(() => http.listPublications());
+      await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ options: { status } });
+    } else {
+      vi.spyOn(harness.transport, "closeTracks").mockImplementation((input) => http.closeTracks(input));
+      await expect(harness.client.closeForcedLocalPublication("microphone")).rejects.toMatchObject({ options: { status } });
+    }
+    await vi.waitFor(() => expect(guest.getSnapshot().connection.status).toBe("left"));
+    expect(ended).toHaveBeenCalledOnce();
+    expect(error).not.toHaveBeenCalled();
+    expect(guest.getSnapshot().connection.lastError).toBeNull();
+    // No Sync end was delivered to the guest; host End is still in flight.
+    expect(guestPlatform.sync.getSnapshot().control?.status).not.toBe("ended");
+    expect(host.getSnapshot().connection.status).toBe("live");
+    ack.resolve(result);
+    await ending;
+    expect(host.getSnapshot().connection.status).toBe("left");
+  } finally {
+    ack.resolve(result);
+    await ending?.catch(() => undefined);
+    host.dispose();
+    guest.dispose();
+    harness.client.stop();
+  }
+});
+
 it.each([401, 403])("current-generation poll %s during real ICE recovery requires rejoin", async (status) => {
   const platform = createCoreTestPlatform();
   let onFailure: (cause: unknown, binding?: string) => void = () => {};

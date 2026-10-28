@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -25,6 +24,7 @@ func (v *participantEpisodeVerifierStub) Verify(context.Context, string) (access
 }
 
 type participantEpisodeLookupStub struct {
+	EpisodeLifecycleService
 	status string
 	err    error
 	calls  int
@@ -100,9 +100,8 @@ func TestParticipantEpisodeStatusDoesNotInferActiveOnReadFailure(t *testing.T) {
 
 func requestParticipantEpisodeStatus(t *testing.T, lookup *participantEpisodeLookupStub, verifier ParticipantMediaVerifier, route accessgrants.Subject, authenticated bool) *httptest.ResponseRecorder {
 	t.Helper()
-	router := chi.NewRouter()
-	participantEpisodeStatusEndpoint(lookup, verifier).Mount(router, RateLimitOptions{})
-	path := fmt.Sprintf("/tenants/%s/spaces/%s/episodes/%s/participants/%s/episode-status", route.TenantID, route.SpaceID, route.EpisodeID, route.ParticipantID)
+	router := NewRouter(Options{Episodes: lookup, ParticipantMediaVerify: verifier})
+	path := fmt.Sprintf("/v1/tenants/%s/spaces/%s/episodes/%s/participants/%s/episode-status", route.TenantID, route.SpaceID, route.EpisodeID, route.ParticipantID)
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	if authenticated {
 		request.Header.Set("Authorization", "Bearer "+participantMediaCredential)

@@ -1,3 +1,4 @@
+import type { ParticipantEpisodeStatus } from "../generated/schemas";
 import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
@@ -102,7 +103,7 @@ export type ConnectionChatFileFactoryInput = {
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
   readonly createConnectionReporter?: (access: () => ParsedAccessGrant | null) => ConnectionReporter | undefined;
-  readonly getEpisodeStatus?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<"active" | "ending" | "ended">;
+  readonly getEpisodeStatus?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<ParticipantEpisodeStatus["status"]>;
   readonly cancelPendingAdmission?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<boolean>;
   readonly mediaDevices: ConnectionMediaDevices;
   readonly createMediaClient: (input: ConnectionMediaFactoryInput) => ConnectionMediaClient;

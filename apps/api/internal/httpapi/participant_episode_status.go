@@ -42,8 +42,8 @@ func participantEpisodeStatusEndpoint(service EpisodeLookup, verifier Participan
 		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier), noStoreParticipantEpisodeStatus).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantEpisodeStatus", participantEpisodeStatusResponse{}).
-		Errors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID,
-			apiErrorUnauthenticated, apiErrorForbidden, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
+		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func noStoreParticipantEpisodeStatus(next http.Handler) http.Handler {

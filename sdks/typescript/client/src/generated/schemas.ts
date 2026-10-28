@@ -1827,13 +1827,6 @@ export type GetParticipantEpisodeStatusPathParams = typeof GetParticipantEpisode
 export const GetParticipantEpisodeStatusResponseSchema = ParticipantEpisodeStatusSchema;
 export type GetParticipantEpisodeStatusResponse = typeof GetParticipantEpisodeStatusResponseSchema.Type;
 
-export const GetParticipantEpisodeStatus429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
-
 export const GetProblemReportAvailabilityPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
 });
@@ -5370,12 +5363,12 @@ export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
   ParticipantInvalidIdErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestRateLimitedErrorSchema,
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
 ]);
 export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatusErrorSchema.Type;
 

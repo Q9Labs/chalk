@@ -61,6 +61,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints := make([]RouteEndpoint, 0)
 	endpoints = append(endpoints, problemReportEndpoints(nil, nil, RateLimitOptions{})...)
 	endpoints = append(endpoints, cancelParticipantJoinEndpoint(nil, nil))
+	endpoints = append(endpoints, participantEpisodeStatusEndpoint(nil, nil))
 	endpoints = append(endpoints, connectionReportEndpoint(nil))
 	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
 

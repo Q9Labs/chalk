@@ -470,6 +470,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (model.state === "live") return;
           if (model.state === "leaving" || model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Cannot join an inactive Connection"));
           model.epoch += 1;
+          pendingEpisodeEnd = null;
+          rejectionCheck = null;
           grantedMedia = { granted_audio: "unknown", granted_video: "unknown" };
           mediaFailure = undefined;
           model.failure = null;
@@ -553,7 +555,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 Effect.gen(function* () {
                   stopStream(stream);
                   const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
-                  const failure = (yield* resolveMediaRejection(originalFailure)) ?? lifecycleFailure("invalid_state", false, "The media binding changed");
+                  const failure = yield* resolveMediaRejection(originalFailure);
                   if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
                     span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "episode_ended" });
                     yield* finishEpisodeEnded();
@@ -990,16 +992,20 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* finishTerminalSnapshot();
         });
       const needsEpisodeCheck = (failure: ConnectionLifecycleFailure) => failure.code === "invalid_access" || (failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410);
-      const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure | null> =>
+      const episodeHasEnded = () => {
+        const snapshot = model.sync?.getSnapshot();
+        return model.episodeEndConfirmed || snapshot?.control?.status === "ended" || snapshot?.connection.terminalReason === "episode_ended";
+      };
+      const waitForPendingEpisodeEnd = Effect.suspend(() => (pendingEpisodeEnd ? Deferred.await(pendingEpisodeEnd) : Effect.void));
+      const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           if (!needsEpisodeCheck(failure)) return failure;
           const grant = access.currentUnsafe();
           const epoch = model.epoch;
           if (!grant) return failure;
           while (model.epoch === epoch && access.currentUnsafe()?.media.clientPayload.connectionId === grant.media.clientPayload.connectionId) {
-            if (pendingEpisodeEnd) yield* Deferred.await(pendingEpisodeEnd);
-            const ended = () => model.episodeEndConfirmed || model.sync?.getSnapshot().control?.status === "ended" || model.sync?.getSnapshot().connection.terminalReason === "episode_ended";
-            if (ended()) return lifecycleFailure("episode_ended", false, "The Episode has ended");
+            yield* waitForPendingEpisodeEnd;
+            if (episodeHasEnded()) return lifecycleFailure("episode_ended", false, "The Episode has ended");
             // The API reads the primary Episode row, whose ending state precedes
             // media teardown. Never infer revocation from an unavailable read.
             const status = yield* Effect.tryPromise({
@@ -1009,12 +1015,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               Effect.timeout(3000),
               Effect.catch(() => Effect.succeed(null)),
             );
-            if (pendingEpisodeEnd) yield* Deferred.await(pendingEpisodeEnd);
-            if (ended() || status === "ending" || status === "ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
-            if (status === "active") return failure;
+            yield* waitForPendingEpisodeEnd;
+            if (status !== null) return episodeHasEnded() || status !== "active" ? lifecycleFailure("episode_ended", false, "The Episode has ended") : failure;
             yield* Effect.sleep(1000);
           }
-          return null;
+          return lifecycleFailure("invalid_state", false, "The media binding changed");
         });
       const commitSnapshotFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -1040,7 +1045,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               Effect.flatMap((resolved) =>
                 enqueue(
                   Effect.suspend(() =>
-                    model.epoch === epoch && active(model) && access.currentUnsafe()?.media.clientPayload.connectionId === binding && resolved
+                    model.epoch === epoch && active(model) && access.currentUnsafe()?.media.clientPayload.connectionId === binding
                       ? resolved.code !== "episode_ended" && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410
                         ? recover("media")
                         : commitSnapshotFailure(resolved)
@@ -1187,11 +1192,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         runEpisodeEnd: (operation) =>
           Effect.gen(function* () {
             const completed = yield* Deferred.make<void>();
+            const epoch = model.epoch;
             pendingEpisodeEnd = completed;
             return yield* operation.pipe(
               Effect.tap(() =>
                 Effect.sync(() => {
-                  model.episodeEndConfirmed = true;
+                  if (model.epoch === epoch) model.episodeEndConfirmed = true;
                 }),
               ),
               Effect.ensuring(

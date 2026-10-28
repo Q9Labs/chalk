@@ -6615,12 +6615,9 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Too Many Requests */
-      429: {
+      /** @description Not Found */
+      404: {
         headers: {
-          "Retry-After": number;
-          "X-RateLimit-Limit": number;
-          "X-RateLimit-Remaining": number;
           [name: string]: unknown;
         };
         content: {
