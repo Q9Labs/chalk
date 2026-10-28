@@ -59,3 +59,67 @@ for (const source of ["microphone", "camera"]) {
     }
   });
 }
+
+test("clearing an ended camera preserves its advertised publication until explicit retirement", async (t) => {
+  const socket = installSignaling(t);
+  const client = fixtureClient();
+  const camera = {
+    enabled: true,
+    readyState: "live",
+    kind: "video",
+    stop() {
+      this.readyState = "ended";
+    },
+  };
+  const target = { operationId: "camera", participantId: "self", source: "camera", enabled: true };
+  try {
+    await client.start({ getTracks: () => [camera] });
+    const original = socket.publications().find((item) => item.source === "camera");
+    assert.equal(original.enabled, true);
+    camera.stop();
+    await client.clearPreparedLocalTrack("camera", { stopTrack: false });
+    assert.deepEqual(client.getSnapshot().localTracks, []);
+    assert.deepEqual(socket.publications(), [original], "Detaching capture must not retire the provider advertisement");
+    await client.setLocalPublicationTarget({ ...target, enabled: false });
+    assert.deepEqual(socket.publications(), [original], "An absent-source Off is satisfied without closing the reusable publication");
+    const replacement = { ...camera, enabled: true, readyState: "live" };
+    client.prepareLocalTrack("camera", replacement);
+    await client.setLocalPublicationTarget(target);
+    assert.equal(socket.publications()[0].publicationId, original.publicationId, "A prepared replacement reuses the advertised publication");
+    await client.clearPreparedLocalTrack("camera", { stopTrack: false });
+    assert.equal(replacement.readyState, "live", "The controller owns a retained preview track");
+    assert.equal(replacement.enabled, false);
+    await client.closeForcedLocalPublication("camera");
+    assert.deepEqual(socket.publications(), [], "Forced retirement must also close a publication whose capture was already cleared");
+    client.prepareLocalTrack("camera", replacement);
+    client.setLocalSourceIntent("camera", true);
+    await client.setLocalPublicationTarget(target);
+    assert.notEqual(socket.publications()[0].publicationId, original.publicationId);
+  } finally {
+    client.stop();
+  }
+});
+
+function installSignaling(t) {
+  const messages = [];
+  class Socket extends EventTarget {
+    static OPEN = 1;
+    readyState = 1;
+    constructor() {
+      super();
+      queueMicrotask(() => this.dispatchEvent(new Event("open")));
+    }
+    send(message) {
+      messages.push(JSON.parse(message));
+    }
+    close() {
+      this.readyState = 3;
+      this.dispatchEvent(new Event("close"));
+    }
+  }
+  const original = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
+  Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: Socket });
+  t.after(() => Object.defineProperty(globalThis, "WebSocket", original));
+  t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 200 }));
+  return { publications: () => messages.findLast((message) => message.type === "publications").publications };
+}
