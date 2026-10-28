@@ -1,7 +1,7 @@
-// Run on Instabox with a dedicated development SFU application, never production.
+// Run on an isolated Instabox against local development or nightly, never production.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
@@ -16,17 +16,38 @@ const { chromium } = requireClient("playwright");
 const { build } = requireClient("esbuild");
 const root = process.cwd();
 const fixtureMarker = createHash("sha256").update(root).digest("hex").slice(0, 12);
-const output = resolve("artifacts/slow-link");
+const output = resolve(process.env.CHALK_SLOW_LINK_OUTPUT ?? "artifacts/slow-link");
 await mkdir(output, { recursive: true });
 // The caller supplies this private file over SSH stdin, outside the source snapshot.
-const credentials = JSON.parse(await readFile(process.env.CHALK_DEVELOPMENT_CREDENTIALS ?? "/root/chalk-development.json", "utf8"));
-assert.equal(credentials.environment, "development");
-assert.equal(credentials.source, "chalk-local-dev");
-assert.ok(credentials.appId && credentials.appSecret);
+const nightly = process.env.CHALK_SLOW_LINK_TARGET === "nightly";
+assert.ok(!process.env.CHALK_SLOW_LINK_TARGET || nightly, "only the explicit nightly remote target is supported");
+const credentials = JSON.parse(await readFile(process.env.CHALK_SLOW_LINK_CREDENTIALS ?? process.env.CHALK_DEVELOPMENT_CREDENTIALS ?? "/root/chalk-development.json", "utf8"));
+assert.equal(credentials.environment, nightly ? "nightly" : "development");
+if (nightly) {
+  for (const [field, protocol, hostname] of [
+    ["api_url", "https:", "nightly-api.chalkmeet.com"],
+    ["sync_url", "wss:", "nightly-sync.chalkmeet.com"],
+  ]) {
+    const url = new URL(credentials[field]);
+    assert.equal(url.protocol, protocol);
+    assert.equal(url.hostname, hostname);
+    assert.ok(!url.username && !url.password && !url.search && !url.hash);
+  }
+  const origin = new URL(credentials.proof_origin);
+  assert.equal(origin.protocol, "http:");
+  assert.equal(origin.hostname, "127.0.0.1");
+  assert.ok(origin.port && origin.pathname === "/" && !origin.username && !origin.password && !origin.search && !origin.hash);
+  assert.ok(credentials.api_key?.startsWith("chalk_sk_") && credentials.tenant_id);
+} else {
+  assert.equal(credentials.source, "chalk-local-dev");
+  assert.ok(credentials.appId && credentials.appSecret);
+}
 let systemToken;
 let tenant;
 let space;
-const config = resolveDevConfig({ root, fresh: true, env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "300000", CHALK_DEV_WEB_PORT: "4870" }, requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"], secretResolver: async () => credentials });
+const config = nightly
+  ? { urls: { api: credentials.api_url, web: credentials.proof_origin }, ports: { web: Number(new URL(credentials.proof_origin).port) } }
+  : resolveDevConfig({ root, fresh: true, env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "300000", CHALK_DEV_WEB_PORT: "4870" }, requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"], secretResolver: async () => credentials });
 const services = [
   { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
   { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` } },
@@ -46,7 +67,7 @@ const localFetch = async (input, init) => {
   }
   return response;
 };
-const runtime = createChalkSupervisor({ ...config, webJoinPath: "/" }, { serviceSpecs: services, adapters: { fetchImpl: localFetch }, output: () => undefined });
+const runtime = nightly ? undefined : createChalkSupervisor({ ...config, webJoinPath: "/" }, { serviceSpecs: services, adapters: { fetchImpl: localFetch }, output: () => undefined });
 let server;
 let chalk;
 let episode;
@@ -57,11 +78,12 @@ const packetFilters = [];
 const dropChain = `${packetChain}_DROP`;
 let lossPulse;
 let lossPulseEnd;
-let dropChainCreated = false;
-let packetChainCreated = false;
-const iptables = (...args) => execFileSync("sudo", ["iptables", ...args], { stdio: "pipe" });
+const chains = [];
+const firewalls = ["iptables", "ip6tables"];
+const firewall = (program, ...args) => execFileSync("sudo", [program, ...args], { stdio: "pipe" });
+const tcpChain = `${packetChain}_TCP`;
 const pages = [];
-const report = { stack: "local API + Sync, dedicated development Cloudflare SFU", assertions: [] };
+const report = { stack: nightly ? "nightly API + Sync + SFU" : "local API + Sync, dedicated development Cloudflare SFU", sdkRevision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), assertions: [], outages: [] };
 const browserBundle = await build({
   stdin: {
     contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: context => window.proofAccess(context)}, {syncUrl,onConnectionDiagnostic:diagnostic => console.log(JSON.stringify({event:"diagnostic",at:Date.now(),diagnostic}))}); window.states = []; window.client.subscribe(() => { const connection = client.getSnapshot().connection; if (JSON.stringify(connection) !== JSON.stringify(window.states.at(-1)?.connection)) { const event = {at:Date.now(),connection}; window.states.push(event); console.log(JSON.stringify(event)); } }); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
@@ -76,11 +98,28 @@ const browserBundle = await build({
 await build({ entryPoints: ["sdks/typescript/client/src/server/index.ts"], bundle: true, outfile: `${output}/server.mjs`, platform: "node", format: "esm" });
 const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(`${output}/server.mjs`).href);
 try {
-  report.stage = "start local stack";
-  await runtime.start();
-  assert.equal(runtime.status().state, "ready");
-  assert.ok(tenant && space && systemToken, "bootstrap must create an isolated local fixture");
-  chalk = createChalkServerClient({ apiBaseURL: config.urls.api, tenantId: tenant.id, apiKey: systemToken });
+  report.stage = nightly ? "create isolated nightly Space" : "start local stack";
+  if (!nightly) {
+    await runtime.start();
+    assert.equal(runtime.status().state, "ready");
+    assert.ok(tenant && space && systemToken, "bootstrap must create an isolated local fixture");
+  }
+  chalk = createChalkServerClient({ apiBaseURL: config.urls.api, tenantId: nightly ? credentials.tenant_id : tenant.id, apiKey: nightly ? credentials.api_key : systemToken });
+  if (nightly) {
+    const runId = randomUUID();
+    space = await chalk.spaces.create({
+      name: `Slow link proof ${runId}`,
+      slug: `slow-link-${runId}`,
+      mediaPlane: "cf_sfu",
+      recordingPolicy: "disabled",
+      transcriptionPolicy: "disabled",
+      defaultEpisodeDurationSeconds: 1800,
+      maximumEpisodeDurationSeconds: 1800,
+      lingerWindowSeconds: 60,
+      admissionPolicy: { mode: "open" },
+    });
+    report.fixture = { spaceId: space.id };
+  }
   episode = await chalk.episodes.create(space.id, {});
   server = createServer((request, response) => {
     response.setHeader("Content-Type", "text/html");
@@ -90,7 +129,7 @@ try {
   });
   server.listen(config.ports.web, "127.0.0.1");
   await once(server, "listening");
-  report.stage = "join two development participants";
+  report.stage = "join two synthetic participants";
   const admissions = await Promise.all([0, 1].map((index) => chalk.participants.admit(space.id, episode.id, { name: `Slow link ${index}`, role: "owner" })));
   for (let index = 0; index < 2; index++) {
     let admission = admissions[index];
@@ -176,12 +215,11 @@ try {
     await page.goto(config.urls.web);
     await page.addScriptTag({ content: browserBundle.outputFiles[0].text });
     try {
-      await page.evaluate(({ slug, api, sync, name }) => window.joinProof(slug, api, sync, name), { slug: space.slug, api: config.urls.api, sync: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: `Slow link ${index}` });
+      await page.evaluate(({ slug, api, sync, name }) => window.joinProof(slug, api, sync, name), { slug: space.slug, api: config.urls.api, sync: nightly ? credentials.sync_url : `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: `Slow link ${index}` });
     } finally {
       await writeFile(`${output}/network-${index}.json`, JSON.stringify(network, null, 2));
     }
   }
-  const [sharer, listener] = pages;
   for (const page of pages) await page.waitForFunction(() => client.getSnapshot().connection.status === "live" && client.getSnapshot().media.local.microphone.state === "enabled");
 
   for (const page of pages) {
@@ -189,20 +227,37 @@ try {
     await session.send("Network.enable");
     networkSessions.push(session);
   }
-  iptables("-N", packetChain);
-  packetChainCreated = true;
-  iptables("-A", packetChain, "-j", "RETURN");
-  iptables("-N", dropChain);
-  dropChainCreated = true;
-  iptables("-A", dropChain, "-j", "DROP");
-  for (const [direction, port] of [
-    ["OUTPUT", "--dport"],
-    ["INPUT", "--sport"],
-  ]) {
-    iptables("-I", direction, "-p", "udp", "!", port, "53", "-j", packetChain);
-    packetFilters.push({ direction, port });
+  for (const program of firewalls) {
+    for (const chain of [dropChain, packetChain, tcpChain]) {
+      firewall(program, "-N", chain);
+      chains.push({ program, chain });
+      firewall(program, "-A", chain, "-j", chain === dropChain ? "DROP" : "RETURN");
+    }
+    for (const [direction, port] of [
+      ["OUTPUT", "--dport"],
+      ["INPUT", "--sport"],
+    ]) {
+      for (const args of [
+        ["-p", "udp", "!", port, "53", "-j", packetChain],
+        ["-p", "tcp", port, "443", "-j", tcpChain],
+      ]) {
+        firewall(program, "-I", direction, ...args);
+        packetFilters.push({ program, direction, args });
+      }
+    }
   }
-  const setPacketLoss = (blocked) => iptables("-R", packetChain, "1", "-j", blocked ? dropChain : "RETURN");
+  const setPacketLoss = (blocked) => {
+    for (const program of firewalls) firewall(program, "-R", packetChain, "1", "-j", blocked ? dropChain : "RETURN");
+  };
+  const droppedPackets = () =>
+    firewalls.reduce((total, program) => {
+      const counters = firewall(program, "-L", dropChain, "-v", "-n", "-x").toString();
+      return total + Number(counters.match(/^\s*(\d+)\s+\d+\s+DROP/m)?.[1] ?? 0);
+    }, 0);
+  const setFullOutage = (blocked) => {
+    setPacketLoss(blocked);
+    for (const program of firewalls) firewall(program, "-R", tcpChain, "1", "-j", blocked ? dropChain : "RETURN");
+  };
   const setLink = (conditions) =>
     Promise.all(
       networkSessions.map((session) =>
@@ -224,7 +279,8 @@ try {
           const rtp = [];
           for (const peer of window.peers)
             for (const stat of (await peer.getStats()).values()) {
-              if (stat.type === "inbound-rtp" || stat.type === "outbound-rtp") rtp.push({ type: stat.type, bytes: stat.bytesReceived ?? stat.bytesSent, packets: stat.packetsReceived ?? stat.packetsSent });
+              if (stat.kind === "audio" && (stat.type === "inbound-rtp" || stat.type === "outbound-rtp"))
+                rtp.push({ id: stat.id, type: stat.type, bytes: stat.bytesReceived ?? stat.bytesSent, packets: stat.packetsReceived ?? stat.packetsSent, energy: stat.totalAudioEnergy ?? 0, samples: stat.totalSamplesReceived ?? 0, concealed: stat.concealedSamples ?? 0 });
             }
           return { connection: client.getSnapshot().connection, states: window.states, rtp };
         }),
@@ -257,10 +313,13 @@ try {
       const flowing = pages.every((_page, index) =>
         ["inbound-rtp", "outbound-rtp"].every((type) => {
           const bytes = (snapshot) => snapshot.rtp.filter((stat) => stat.type === type).reduce((total, stat) => total + stat.bytes, 0);
-          return bytes(after[index]) > bytes(before[index]);
+          const sameStreamAdvanced = after[index].rtp.some(
+            (stat) => stat.type === type && stat.bytes > (before[index].rtp.find((previous) => previous.id === stat.id)?.bytes ?? 0) && (type !== "inbound-rtp" || stat.energy > (before[index].rtp.find((previous) => previous.id === stat.id)?.energy ?? 0)),
+          );
+          return bytes(after[index]) > 0 && sameStreamAdvanced;
         }),
       );
-      if (flowing) return;
+      if (flowing) return { at: Date.now(), snapshots: after };
       if (after.some((snapshot) => snapshot.connection.status === "failed")) break;
     }
     assert.fail(`${label}: every participant must send and receive fresh RTP within 30 seconds`);
@@ -276,7 +335,7 @@ try {
   await wait(45000);
   await sample("45s slow link");
   await proveMediaFlow("slow working link");
-  report.packetLossCounters = iptables("-L", dropChain, "-v", "-n", "-x").toString();
+  report.packetLossCounters = firewalls.map((program) => firewall(program, "-L", dropChain, "-v", "-n", "-x").toString()).join("\n");
   assert.match(report.packetLossCounters, /^\s*[1-9]\d*\s+\d+\s+DROP/m, "kernel must actually drop media packets");
   clearInterval(lossPulse);
   clearTimeout(lossPulseEnd);
@@ -285,9 +344,12 @@ try {
   await wait(10000);
   for (const seconds of [5, 15, 30]) {
     report.stage = `outage ${seconds}s`;
-    console.log(JSON.stringify({ event: "outage_start", seconds, at: Date.now() }));
+    const outage = { seconds, startedAt: Date.now(), droppedPacketsBefore: droppedPackets() };
+    report.outages.push(outage);
+    console.log(JSON.stringify({ event: "outage_start", seconds, at: outage.startedAt }));
     await Promise.all(pages.map((page) => page.context().setOffline(true)));
-    setPacketLoss(true);
+    setFullOutage(true);
+    outage.kernelBlockedAt = Date.now();
     await setLink({ offline: true, packetLoss: 100 });
     await wait(3000);
     const silenceStart = await sample(`${seconds}s outage: loss window start`);
@@ -295,20 +357,27 @@ try {
     const silenceEnd = await sample(`${seconds}s outage: loss window end`);
     const receivedBytes = (snapshot) => snapshot.rtp.filter((stat) => stat.type === "inbound-rtp").reduce((total, stat) => total + stat.bytes, 0);
     for (let index = 0; index < pages.length; index++) assert.ok(receivedBytes(silenceEnd[index]) <= receivedBytes(silenceStart[index]), `participant ${index} must receive no new media during the outage`);
-    setPacketLoss(false);
+    outage.droppedPacketsAfter = droppedPackets();
+    assert.ok(outage.droppedPacketsAfter > outage.droppedPacketsBefore, "kernel must drop traffic during every full outage");
+    const restoredAt = Date.now();
+    setFullOutage(false);
     await setLink({});
     await Promise.all(pages.map((page) => page.context().setOffline(false)));
-    console.log(JSON.stringify({ event: "outage_end", seconds, at: Date.now() }));
-    await wait(25000);
-    await Promise.all(pages.map((page) => page.waitForFunction(() => client.getSnapshot().connection.status !== "reconnecting", undefined, { timeout: 40000 }).catch((error) => console.log(JSON.stringify({ event: "recovery_wait", message: error.message })))));
+    console.log(JSON.stringify({ event: "outage_end", seconds, at: restoredAt }));
+    outage.restoredAt = restoredAt;
+    outage.measuredInterruptionMs = restoredAt - outage.startedAt;
+    await Promise.all(pages.map((page) => page.waitForFunction(() => client.getSnapshot().connection.status === "live" || client.getSnapshot().connection.status === "failed", undefined, { timeout: 65000 })));
     const snapshots = await sample(`after ${seconds}s outage`);
-    if (snapshots.some((s) => s.connection.status !== "live")) {
-      console.log(JSON.stringify({ event: "try_again", at: Date.now() }));
-      await Promise.all(pages.map((page) => page.evaluate(() => client.join({ displayName: "Slow link retry", microphone: true, camera: false })).catch((error) => console.log(JSON.stringify({ event: "retry_error", message: error.message })))));
-      await wait(10000);
-      await sample(`retry after ${seconds}s outage`);
-    }
-    await proveMediaFlow(`after ${seconds}s outage`);
+    assert.ok(
+      snapshots.every((snapshot) => snapshot.connection.status === "live" && !snapshot.connection.lastError),
+      "automatic recovery must return every participant to live without an error",
+    );
+    outage.liveAfterRestoreMs = snapshots.map((snapshot) => snapshot.states.find((state) => state.at >= restoredAt && state.connection.status === "live")?.at - restoredAt);
+    assert.ok(outage.liveAfterRestoreMs.every(Number.isFinite), "both participants must have a fresh live transition after restoration");
+    const media = await proveMediaFlow(`after ${seconds}s outage`);
+    outage.bidirectionalAudioAfterRestoreMs = media.at - restoredAt;
+    outage.terminalStates = snapshots.flatMap((snapshot) => snapshot.states.filter((state) => ["failed", "ended"].includes(state.connection.status)));
+    assert.equal(outage.terminalStates.length, 0, "no terminal state or manual retry is allowed");
   }
   const final = await sample("final");
   const failures = final.flatMap((s) => s.states.filter((state) => state.connection.status === "failed"));
@@ -320,23 +389,19 @@ try {
 } catch (error) {
   report.result = "failed";
   report.error = error.message;
+  report.requestId = error.requestId;
   throw error;
 } finally {
   await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
   clearInterval(lossPulse);
   clearTimeout(lossPulseEnd);
-  for (const { direction, port } of packetFilters) iptables("-D", direction, "-p", "udp", "!", port, "53", "-j", packetChain);
-  if (packetChainCreated) {
-    iptables("-F", packetChain);
-    iptables("-X", packetChain);
-  }
-  if (dropChainCreated) {
-    iptables("-F", dropChain);
-    iptables("-X", dropChain);
-  }
+  for (const { program, direction, args } of packetFilters) firewall(program, "-D", direction, ...args);
+  for (const { program, chain } of [...chains].reverse()) firewall(program, "-F", chain);
+  for (const { program, chain } of [...chains].reverse()) firewall(program, "-X", chain);
   for (const session of networkSessions) await session.detach();
   for (const browser of browsers) await browser.close();
   if (episode && chalk) await chalk.episodes.end(space.id, episode.id).catch((error) => console.error(error.message));
   if (server) await new Promise((resolve) => server.close(resolve));
-  await runtime.stop();
+  if (nightly && space && chalk) await chalk.spaces.archive(space.id);
+  await runtime?.stop();
 }
