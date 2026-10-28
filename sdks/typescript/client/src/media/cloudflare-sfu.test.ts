@@ -142,6 +142,29 @@ it.each(["microphone", "camera"] as const)("ownership: a late response cannot re
   }
 });
 
+it.each(["microphone", "camera"] as const)("reuses a confirmed %s publication for device handoff, then retires it on pause", async (source) => {
+  const harness = createHarness();
+  const kind = source === "microphone" ? "audio" : "video";
+  const old = new FakeTrack("old-device", kind);
+  const fresh = new FakeTrack("new-device", kind);
+  try {
+    await harness.client.start(fakeStream(old));
+    const publicationId = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    await harness.client.clearPreparedLocalTrack(source, { stopTrack: false });
+    harness.client.prepareLocalTrack(source, fresh as unknown as MediaStreamTrack);
+    await harness.client.setLocalPublicationTarget({ operationId: "device-handoff", participantId: "participant-1", source, enabled: true });
+    expect(harness.transport.addInputs).toHaveLength(1);
+    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).toBe(publicationId);
+    expect(fresh.enabled).toBe(true);
+    await harness.client.closeForcedLocalPublication(source);
+    expect(fresh.enabled).toBe(false);
+    expect(harness.transport.localPublications.size).toBe(0);
+  } finally {
+    old.stop();
+    harness.client.stop();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("ownership: production replacement fences an in-flight %s publication", async (source) => {
   const replace = vi.fn(async () => {
     // BindParticipantMediaConnection makes publications on the prior connection inactive.

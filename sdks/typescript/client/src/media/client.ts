@@ -37,7 +37,6 @@ type OwnedLocalPublication = {
   readonly state: LocalTrackState;
   transceiver: RTCRtpTransceiver;
   readonly trackName: string;
-  readonly reusedTransceiver: boolean;
   readonly connection: RTCPeerConnection;
   readonly connectionId: string;
   readonly generation: number;
@@ -65,8 +64,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #locallyPausedSources = new Set<MediaPublicationSource>();
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
   readonly #ownedPublications = new Set<OwnedLocalPublication>();
-  readonly #reusableLocalTransceivers = new Map<MediaPublicationSource, RTCRtpTransceiver>();
-  readonly #reusableLocalPublicationIds = new Map<MediaPublicationSource, string>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -142,11 +139,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireActive();
     validateTrackSource(source, track);
     if (this.#localTracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
+    const reusable = [...this.#ownedPublications].find((item) => item.state.source === source && item.connection === this.#connection && item.lifecycle.kind === "confirmed");
     const state: LocalTrackState = {
       source,
       track,
-      transceiver: this.#reusableLocalTransceivers.get(source) ?? null,
-      providerPublicationId: this.#reusableLocalPublicationIds.get(source) ?? null,
+      transceiver: reusable?.transceiver ?? null,
+      providerPublicationId: reusable?.lifecycle.kind === "confirmed" ? reusable.lifecycle.handle.publicationId : null,
       pendingOperationId: null,
       pendingTrackName: null,
       desiredEnabled: false,
@@ -154,8 +152,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       endedListener: null,
       clearing: null,
     };
-    this.#reusableLocalTransceivers.delete(source);
-    this.#reusableLocalPublicationIds.delete(source);
     if (source === "screen") {
       state.endedListener = () => {
         if (this.#localTracks.get("screen") === state) this.#invokeListener(() => this.#onScreenEnded?.());
@@ -192,10 +188,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     if (state.enabled) await this.#setPreparedTrackEnabled(state, false);
     if (this.#localTracks.get(source) !== state) return;
-    if (state.transceiver && state.providerPublicationId) {
-      this.#reusableLocalTransceivers.set(source, state.transceiver);
-      this.#reusableLocalPublicationIds.set(source, state.providerPublicationId);
-    }
     this.#removeOwnedLocalTrack(state, stopTrack);
     this.#localTracks.delete(source);
     this.#publishSnapshot();
@@ -310,8 +302,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const state = this.#localTracks.get(source);
     const publications = [...this.#ownedPublications].filter((item) => item.state.source === source);
     for (const publication of publications) this.#markPublicationRetiring(publication);
-    this.#reusableLocalTransceivers.delete(source);
-    this.#reusableLocalPublicationIds.delete(source);
     if (state) {
       state.track.enabled = false;
       state.desiredEnabled = false;
@@ -335,15 +325,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
-    if (phase.kind !== "retiring" || !phase.handle) return;
+    if (phase.kind !== "retiring") return;
     const { connection, connectionId, generation, transceiver, state } = publication;
-    const { mid, publicationId } = phase.handle;
     try {
       if (!phase.detached) {
         await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
         transceiver.stop();
         phase.detached = true;
       }
+      if (!phase.handle) return;
+      const { mid, publicationId } = phase.handle;
       const offer = await connection.createOffer();
       await connection.setLocalDescription(offer);
       const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks: [{ mid, source: state.source, publicationId }], force: false }), { generation, connectionId });
@@ -383,8 +374,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#remotePullRetryAfter.clear();
     this.#disposeConnection(false);
-    this.#reusableLocalTransceivers.clear();
-    this.#reusableLocalPublicationIds.clear();
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#negotiatedGeneration = null;
@@ -427,8 +416,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollAfterCurrent = false;
     this.#disposeConnection(true);
     this.#fenceLocalPublications();
-    this.#reusableLocalTransceivers.clear();
-    this.#reusableLocalPublicationIds.clear();
     this.#clearRemoteTracks();
     for (const state of this.#localTracks.values()) this.#removeOwnedLocalTrack(state);
     this.#localTracks.clear();
@@ -563,7 +550,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
     const reusedTransceiver = state.transceiver !== null;
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
-    const publication: OwnedLocalPublication = { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, reusedTransceiver, connection, connectionId: this.#bootstrap.connectionId, generation, lifecycle: { kind: "pending" } };
+    const publication: OwnedLocalPublication = { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, generation, lifecycle: { kind: "pending" } };
     this.#ownedPublications.add(publication);
     if (reusedTransceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);
@@ -658,23 +645,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #discardLocalPublications(publications: readonly OwnedLocalPublication[]): Promise<void> {
     for (const publication of publications) {
-      const { state, transceiver, reusedTransceiver } = publication;
+      const { state, transceiver } = publication;
       this.#markPublicationRetiring(publication);
+      if (state.transceiver === transceiver) {
+        state.transceiver = null;
+        state.providerPublicationId = null;
+        state.enabled = false;
+        state.track.enabled = false;
+      }
+    }
+    for (const publication of publications) {
       await this.#closeOwnedPublication(publication);
-      if (reusedTransceiver) {
-        try {
-          await transceiver.sender.replaceTrack(null);
-        } catch (error) {
-          this.#reportError(error);
-        }
-        continue;
-      }
-      try {
-        transceiver.stop();
-      } catch (error) {
-        this.#reportError(error);
-      }
-      if (state.transceiver === transceiver) state.transceiver = null;
     }
   }
   async #rollbackLocalOffer(connection: RTCPeerConnection): Promise<void> {
@@ -1057,8 +1038,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#fenceLocalPublications();
     const connectionEpoch = ++this.#connectionEpoch;
     this.#disposeConnection(false);
-    this.#reusableLocalTransceivers.clear();
-    this.#reusableLocalPublicationIds.clear();
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#bootstrap = bootstrap;
