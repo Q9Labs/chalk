@@ -225,8 +225,11 @@ Its event includes allowlisted `source` (`microphone`/`camera`), `publication_st
 and `projection_state` (`on`/`off`), mismatch `duration_ms`, retry count in `attempt`,
 and `outcome` (`started`/`failed`). Publication IDs and device labels are excluded.
 The sender waits 750 ms before repair, makes at most three self-media target
-attempts, and stops after eight seconds even if a target hangs. Reconnect or a
-new user intent/publication starts a fresh budget. The existing report cooldown
+attempts, and applies an eight-second deadline on the retry tick even if a target hangs.
+Exhaustion pauses capture before exposing failure and revokes the old action;
+later publication/projection changes cannot silently re-enable it. Recovery retains
+old intent revisions across Sync replacement, including unconfirmed publications.
+A recovered off/missing source requires a new user action. The existing report cooldown
 also applies to these reports; it can suppress a subsequent exhaustion upload.
 Receiver projection gating remains unchanged: bypassing it would defeat moderation.
 Rejected reports emit `sdk.connection_report.rejected` with the same trace ID

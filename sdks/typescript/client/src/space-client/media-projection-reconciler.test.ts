@@ -8,9 +8,10 @@ function fixture(send: ConstructorParameters<typeof MediaProjectionReconciler>[0
   const report = vi.fn();
   const changed = vi.fn();
   const ready = vi.fn(() => true);
-  const reconciler = new MediaProjectionReconciler({ now: Date.now, schedule: setTimeout, cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>), send, ready, report, changed });
+  const failed = vi.fn();
+  const reconciler = new MediaProjectionReconciler({ now: Date.now, schedule: setTimeout, cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>), send, ready, report, changed, failed });
   const observation = { revision: 1, publicationId: "publication-1", enabled: true, projectedEnabled: false, projectedPublicationId: null };
-  return { reconciler, observation, send, ready, report, changed };
+  return { reconciler, observation, send, ready, report, changed, failed };
 }
 
 it("reports a mismatch while a normal target is pending without sending concurrent repairs", async () => {
@@ -43,7 +44,7 @@ it("waits for the matching projection, not a successful target acknowledgement",
 });
 
 it.each(["microphone", "camera"] as const)("bounds %s retries, reports the mismatch, and does not flap on snapshots", async (source) => {
-  const { reconciler, observation, send, report } = fixture(
+  const { reconciler, observation, send, report, failed } = fixture(
     vi.fn(async () => {
       throw new Error("private device label");
     }),
@@ -60,6 +61,10 @@ it.each(["microphone", "camera"] as const)("bounds %s retries, reports the misma
     { event: "media_projection_mismatch", source, publication_state: "on", projection_state: "off", duration_ms: 3750, attempt: 3, outcome: "failed" },
   ]);
   expect(JSON.stringify(report.mock.calls)).not.toContain("private");
+  expect(failed).toHaveBeenCalledExactlyOnceWith(source, observation);
+  reconciler.observe(source, { ...observation, enabled: false, projectedEnabled: false });
+  expect(reconciler.state(source)).toBe("failed");
+  expect(send).toHaveBeenCalledTimes(3);
   reconciler.reset();
   reconciler.observe(source, observation);
   await vi.advanceTimersByTimeAsync(750);
@@ -67,7 +72,7 @@ it.each(["microphone", "camera"] as const)("bounds %s retries, reports the misma
   reconciler.reset();
 });
 
-it("expires even a hung target, cancels on leave, and rechecks a new publication ID", async () => {
+it("expires hung work, cancels on leave, and requires a fresh intent after failure", async () => {
   const { reconciler, observation, send } = fixture(vi.fn(() => new Promise<void>(() => {})));
   reconciler.observe("microphone", observation);
   await vi.advanceTimersByTimeAsync(8750);
@@ -75,6 +80,8 @@ it("expires even a hung target, cancels on leave, and rechecks a new publication
   expect(send).toHaveBeenCalledOnce();
   expect(vi.mocked(send).mock.calls[0]?.[2].aborted).toBe(true);
   reconciler.observe("microphone", { ...observation, publicationId: "replacement" });
+  expect(reconciler.state("microphone")).toBe("failed");
+  reconciler.observe("microphone", { ...observation, revision: 2, publicationId: "replacement" });
   expect(reconciler.state("microphone")).toBe("requesting");
   reconciler.reset();
   await vi.advanceTimersByTimeAsync(10000);

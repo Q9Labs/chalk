@@ -7,7 +7,7 @@ import { ConnectionReporter, type ConnectionReport } from "../connection/report"
 afterEach(() => vi.useRealTimers());
 let reportSequence = 0;
 
-function scenario() {
+function scenario(source: "microphone" | "camera" = "microphone") {
   const reportClockOffset = ++reportSequence * 120000;
   const base = createCoreTestPlatform();
   const reports: ConnectionReport[] = [];
@@ -28,10 +28,10 @@ function scenario() {
         }),
     },
   };
-  const track = mediaTrack();
-  const received = mediaTrack();
+  const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
+  const received = Object.assign(mediaTrack(), { kind: track.kind });
   const observer = createCoreTestPlatform();
-  const publication = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "audio-1" };
+  const publication = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
   const project = (enabled: boolean) => {
     const media = { projectionId: "media", sequence: 1, items: [{ ...publication, enabled }] };
     platform.emitSync({ ...platform.sync.getSnapshot(), media });
@@ -41,9 +41,9 @@ function scenario() {
     track.enabled = enabled;
     platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, enabled, track }] });
     project(enabled);
-    return { operationId: "repair", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
+    return { operationId: "repair", name: source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
   });
-  const client = capturedClient(platform, track, { sync: { setMicrophoneEnabled: command } });
+  const client = capturedClient(platform, track, { sync: { setMicrophoneEnabled: command, setCameraEnabled: command } });
   const peer = capturedClient(observer, mediaTrack());
   return {
     reports,
@@ -58,7 +58,7 @@ function scenario() {
     peer,
     join: async () => {
       await peer.join({ microphone: false, camera: false });
-      await client.join({ microphone: true, camera: false });
+      await client.join({ microphone: source === "microphone", camera: source === "camera" });
       project(false);
       observer.media.emit({ ...observer.media.getSnapshot(), remoteTracks: [{ ...publication, track: received }] });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });
@@ -213,12 +213,14 @@ it("preserves a moderation stop recovered through a full Sync snapshot until a f
   }
 });
 
-it("restarts reconciliation after reconnect when no previously confirmed publication was revoked", async () => {
+it("reconciles publication identity after reconnect when recovery still confirms enabled consent", async () => {
   const test = scenario();
   try {
     await test.join();
+    test.project(true);
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: "replacement", track: test.track }] });
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
     await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true, { signal: expect.any(AbortSignal) }), { timeout: 2000 });
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
@@ -263,23 +265,27 @@ it("releases an expired repair so a manual retry and mute do not wait for its la
   }
 });
 
-it("review: terminal mismatch must not leave an off-looking microphone transmitting", async () => {
-  const test = scenario();
+it.each(["microphone", "camera"] as const)("fails closed when a live %s publication cannot converge", async (source) => {
+  const test = scenario(source);
   const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
   try {
     await test.join();
     test.project(true);
-    test.command.mockResolvedValue({ operationId: "stale", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
+    test.command.mockResolvedValue({ operationId: "stale", name: source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
     vi.useFakeTimers();
     // A live replacement publication exists while Sync still names the old one.
     test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: "audio-replacement", track: test.track }] });
     test.observer.media.emit({ ...test.observer.media.getSnapshot(), remoteTracks: [{ ...test.publication, publicationId: "audio-replacement", track: test.received }] });
     await vi.advanceTimersByTimeAsync(3750);
     expect(test.command).toHaveBeenCalledTimes(3);
-    expect(test.client.getSnapshot().media.local.microphone.state).toBe("failed");
+    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
     expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
     expect(test.received.enabled).toBe(true);
     expect(test.track.enabled, "off-looking failed control must not keep transmitting").toBe(false);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(test.command).toHaveBeenCalledTimes(3);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
+    expect(test.track.enabled).toBe(false);
   } finally {
     vi.useRealTimers();
     test.dispose();

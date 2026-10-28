@@ -1,15 +1,15 @@
 import { expect, it, vi } from "vitest";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
-import { mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
-import { observeMicrophonePublication } from "./terminal.test.helpers";
+import { createConvergenceScenario, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 
-it("does not automatically reverse an offline host mute when Sync must be replaced", async () => {
+it.each(["microphone", "camera"] as const)("does not reverse an offline %s stop when Sync is replaced", async (source) => {
   const first = createCoreTestPlatform();
   const next = createCoreTestPlatform();
-  const track = mediaTrack();
+  const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
+  const publication = { participantId: "participant-1", source, enabled: true, publicationId: "old-publication" };
   const command = vi.fn(async (enabled: boolean) => {
-    next.emitSync({ ...next.sync.getSnapshot(), media: { projectionId: "replacement", sequence: 2, items: [{ participantId: "participant-1", source: "microphone", enabled, publicationId: "old-publication" }] } });
+    next.emitSync({ ...next.sync.getSnapshot(), media: { projectionId: "replacement", sequence: 2, items: [{ ...publication, enabled }] } });
     return { operationId: "repair", name: "set_microphone_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const };
   });
   let creations = 0;
@@ -20,28 +20,33 @@ it("does not automatically reverse an offline host mute when Sync must be replac
       dependencies: {
         ...first.dependencies,
         mediaDevices: { getUserMedia: async () => mediaStream(track) },
-        createSyncClient: () => ({ ...(creations++ === 0 ? first.sync : next.sync), setMicrophoneEnabled: command }),
+        createSyncClient: () => ({ ...(creations++ === 0 ? first.sync : next.sync), setMicrophoneEnabled: command, setCameraEnabled: command }),
       },
     },
   );
   try {
-    await client.join({ microphone: true, camera: false });
-    observeMicrophonePublication(first, track);
-    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
-    next.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "idle" }, media: { projectionId: "replacement", sequence: 1, items: [{ participantId: "participant-1", source: "microphone", enabled: false, publicationId: "old-publication" }] } });
+    await client.join({ microphone: source === "microphone", camera: source === "camera" });
+    first.media.emit({ ...first.media.getSnapshot(), localTracks: [{ ...publication, track }] });
+    first.emitSync({ ...first.sync.getSnapshot(), media: { projectionId: "media", sequence: 1, items: [publication] } });
+    expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+    next.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "idle" }, media: { projectionId: "replacement", sequence: 1, items: [{ ...publication, enabled: false }] } });
     first.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
     await vi.waitFor(() => expect(creations).toBe(2), { timeout: 3000 });
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"), { timeout: 3000 });
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
+    expect(track.enabled).toBe(false);
+    expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+    await (source === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true));
+    expect(command).toHaveBeenCalledExactlyOnceWith(true);
   } finally {
     client.dispose();
   }
 });
 
-it("does not resurrect an unconfirmed publication after an offline host mute and an in-place recovery", async () => {
+it.each(["microphone", "camera"] as const)("does not resurrect unconfirmed %s consent after an offline stop", async (source) => {
   const platform = createCoreTestPlatform();
-  const track = mediaTrack();
+  const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
   const command = vi.fn(async (_enabled: boolean) => ({ operationId: "repair", name: "set_microphone_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const }));
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
@@ -50,13 +55,13 @@ it("does not resurrect an unconfirmed publication after an offline host mute and
       dependencies: {
         ...platform.dependencies,
         mediaDevices: { getUserMedia: async () => mediaStream(track) },
-        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }),
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, setCameraEnabled: command }),
       },
     },
   );
   try {
-    await client.join({ microphone: true, camera: false });
-    const publication = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "old-publication" };
+    await client.join({ microphone: source === "microphone", camera: source === "camera" });
+    const publication = { participantId: "participant-1", source, enabled: true, publicationId: "old-publication" };
     platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });
     platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media", sequence: 1, items: [{ ...publication, enabled: false }] } });
     platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
@@ -66,7 +71,39 @@ it("does not resurrect an unconfirmed publication after an offline host mute and
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
+    expect(track.enabled).toBe(false);
+    expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+    await (source === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true));
+    expect(command).toHaveBeenCalledExactlyOnceWith(true);
   } finally {
     client.dispose();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("does not send stale %s consent when pending capture finishes after recovery", async (source) => {
+  const test = createConvergenceScenario(source);
+  let finish = () => {};
+  test.capture.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => resolve(mediaStream(test.track));
+      }),
+  );
+  try {
+    await test.client.join({ microphone: false, camera: false });
+    const enabling = test.setEnabled(true);
+    const result = expect(enabling).rejects.toBeDefined();
+    await vi.waitFor(() => expect(test.capture).toHaveBeenCalledOnce());
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 1, items: [] } });
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
+    finish();
+    await result;
+    expect(test.command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
+    expect(test.track.stop).toHaveBeenCalled();
+  } finally {
+    finish();
+    test.client.dispose();
   }
 });

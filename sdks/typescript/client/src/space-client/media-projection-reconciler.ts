@@ -25,6 +25,7 @@ type Options = {
   readonly send: (source: Source, observation: Observation, signal: AbortSignal) => Promise<void>;
   readonly ready: (source: Source) => boolean;
   readonly report: (event: ConnectionReportTransportEvent) => void;
+  readonly failed: (source: Source, observation: Observation) => void;
   readonly changed: () => void;
 };
 
@@ -32,6 +33,13 @@ const GRACE_MS = 750;
 const REPORT_AFTER_MS = 2000;
 const DEADLINE_MS = 8000;
 const MAX_ATTEMPTS = 3;
+
+function projectionMatches(observation: Observation): boolean {
+  return observation.enabled === observation.projectedEnabled && (!observation.enabled || observation.publicationId === observation.projectedPublicationId);
+}
+function sameTarget(first: Observation, second: Observation): boolean {
+  return first.revision === second.revision && first.publicationId === second.publicationId && first.enabled === second.enabled;
+}
 
 /** Publication truth is reconciled with the server projection, never inferred from an ack. */
 export class MediaProjectionReconciler {
@@ -44,11 +52,13 @@ export class MediaProjectionReconciler {
 
   observe(source: Source, observation: Observation | null): void {
     const previous = this.#mismatches.get(source);
-    if (!observation || (observation.enabled === observation.projectedEnabled && (!observation.enabled || observation.publicationId === observation.projectedPublicationId))) {
+    // Expiry revokes this action. Track/projection changes cannot renew consent.
+    if (observation && previous?.failed && previous.observation.revision === observation.revision) return;
+    if (!observation || projectionMatches(observation)) {
       this.#clear(source);
       return;
     }
-    if (previous && previous.observation.revision === observation.revision && previous.observation.publicationId === observation.publicationId && previous.observation.enabled === observation.enabled) {
+    if (previous && sameTarget(previous.observation, observation)) {
       previous.observation = observation;
       return;
     }
@@ -65,7 +75,7 @@ export class MediaProjectionReconciler {
 
   isCurrent(source: Source, observation: Observation): boolean {
     const mismatch = this.#mismatches.get(source);
-    return !!mismatch && !mismatch.failed && mismatch.observation.revision === observation.revision && mismatch.observation.publicationId === observation.publicationId && mismatch.observation.enabled === observation.enabled;
+    return !!mismatch && !mismatch.failed && sameTarget(mismatch.observation, observation);
   }
 
   reset(): void {
@@ -88,6 +98,7 @@ export class MediaProjectionReconciler {
       mismatch.failed = true;
       mismatch.controller.abort();
       this.#report(source, mismatch, "failed");
+      this.#options.failed(source, mismatch.observation);
       this.#options.changed();
       return;
     }
