@@ -5,11 +5,12 @@
 // MEDIA_STATE_MISMATCH_SLOT: add the confirmed report trigger/code here when the SDK/API contract lands. Do not alert on transient media_state events.
 | extend diagnostic=toarray(report.events)
 | mv-expand diagnostic
-| summarize media_start=countif(diagnostic.code == 'media_start_failed'), media_recovery=countif(diagnostic.code == 'media_recovery_exhausted') by _time, tenant_id, episode_id, participant, trigger
+| extend media_error_kind=tostring(diagnostic.media_error_kind), media_error_step=tostring(diagnostic.media_error_step), cause_order=iff(isnotempty(diagnostic.media_error_kind) or isnotempty(diagnostic.media_error_step), tolong(diagnostic.elapsed_ms), -1)
+| summarize media_start=countif(diagnostic.code == 'media_start_failed'), media_recovery=countif(diagnostic.code == 'media_recovery_exhausted'), arg_max(cause_order, media_error_kind, media_error_step) by _time, tenant_id, episode_id, participant, trigger
 | extend failure=case(trigger == 'join_failed' and media_start > 0, 'media_start_failed', trigger == 'join_failed', 'join_failed', trigger == 'recovery_exhausted' and media_recovery > 0, 'media_recovery_exhausted', '')
 | where isnotempty(failure)
-| summarize first_seen=min(_time) by tenant_id, episode_id, failure, participant
-| summarize value=count(), first_seen=min(first_seen) by tenant_id, episode_id, failure
+| summarize first_seen=min(_time), last_seen=max(_time), arg_max(_time, media_error_kind, media_error_step) by tenant_id, episode_id, failure, participant
+| summarize value=count(), first_seen=min(first_seen), arg_max(last_seen, media_error_kind, media_error_step) by tenant_id, episode_id, failure
 | join kind=leftouter (
     ['${LOG_DATASET}']
     | where chalk_alert_stream == 'production-state-v2' and isnotempty(chalk_alert_tenant)
@@ -18,4 +19,5 @@
     | project tenant_id=chalk_alert_tenant, tenant_name
   ) on tenant_id
 | extend tenant=iff(isempty(tenant_name) or tenant_name == tenant_id, tenant_id, strcat(tenant_name, ' (', tenant_id, ')')), first_pkt=replace_string('Z', '', tostring(datetime_add('hour', 5, todatetime(first_seen))))
-| project value, alert_message=strcat('\n', tenant_id, '\nconnection-report\nA class connection failed\nTenant: ', tenant, '. Episode: ', episode_id, '. Failure: ', failure, '. First reported: ', first_pkt, ' PKT.\nIn class: mute then unmute for missing audio; rejoin once if still broken. Use Report a problem when available. If rejoining does not restore the call, use the agreed fallback.\nFor engineers: connection-report; open the API log dataset and search this Episode ID: ', episode_id, '. Count is distinct affected participants in ten minutes.\n')
+| extend media_error_kind=iff(isempty(media_error_kind), 'unknown', media_error_kind), media_error_step=iff(isempty(media_error_step), 'unknown', media_error_step)
+| project value, alert_message=strcat('\n', tenant_id, '\nconnection-report\nA class connection failed\nTenant: ', tenant, '. Episode: ', episode_id, '. Failure: ', failure, '. First reported: ', first_pkt, ' PKT. Latest media_error_kind: ', media_error_kind, '; media_error_step: ', media_error_step, '.\nIn class: mute then unmute for missing audio; rejoin once if still broken. Use Report a problem when available. If rejoining does not restore the call, use the agreed fallback.\nFor engineers: connection-report; open the API log dataset and search this Episode ID: ', episode_id, '. Count is distinct affected participants in ten minutes.\n')

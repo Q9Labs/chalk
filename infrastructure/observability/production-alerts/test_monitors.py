@@ -62,16 +62,25 @@ class MonitorTests(unittest.TestCase):
 
         def report(tenant="school-one", episode="episode-a", participant="hash-a",
                    trigger="join_failed", codes=("media_start_failed",),
-                   event="sdk.connection_report", service="chalk-api"):
-            rows.append({"service": service, "event": event, "tenant": tenant,
+                   event="sdk.connection_report", service="chalk-api",
+                   kind="NotReadableError", step="local_capture", at="2026-10-27T22:05:00Z"):
+            rows.append({"at": at, "service": service, "event": event, "tenant": tenant,
                          "episode": episode, "participant": participant,
                          "trigger": trigger, "report": json.dumps({"version": 1,
-                             "trigger": trigger, "events": [{"event": "connection_failed", "code": code} for code in codes]})})
+                             "trigger": trigger, "events": [
+                                 {"event": "space_join_span", "elapsed_ms": 0, "media_error_kind": "NotAllowedError", "media_error_step": "local_capture"}
+                             ] + [{"event": "connection_failed", "elapsed_ms": index + 1,
+                                 "code": code, "media_error_kind": kind, "media_error_step": step} for index, code in enumerate(codes)] + [
+                                 {"event": "state_changed", "elapsed_ms": 64}
+                             ]})})
 
         report(codes=("media_start_failed", "media_start_failed"))
         report()  # A duplicate upload is not another affected person.
-        report(participant="hash-b")
-        report(participant="hash-c", codes=("access_unavailable",))
+        report(participant="hash-b", kind="network", step="sfu_tracks", at="2026-10-27T22:06:00Z")
+        report(participant="hash-c", codes=("access_unavailable",), kind="", step="")
+        rows[-1]["report"] = json.dumps({"version": 1, "trigger": "join_failed", "events": [
+            {"event": "connection_failed", "elapsed_ms": 1, "code": "access_unavailable"}
+        ]})  # An older SDK report has no cause fields at all.
         report(participant="hash-d", trigger="recovery_exhausted", codes=("media_recovery_exhausted",))
         report(tenant="school-two")
         report(episode="episode-b")
@@ -94,7 +103,7 @@ class MonitorTests(unittest.TestCase):
         }
         schema = ",".join("['" + field + "']:string" for field in fields)
         fixture = "let FixtureLogs=datatable(_time:datetime,chalk_alert_value:long," + schema + ")[" + ",".join(
-            "datetime(2026-10-27T22:05:00Z)," + str(row.get("value", 0)) + "," +
+            "datetime(" + row.get("at", "2026-10-27T22:05:00Z") + ")," + str(row.get("value", 0)) + "," +
             ",".join(json.dumps(row.get(key, "")) for key in fields.values()) for row in rows
         ) + "];\n"
         query = monitor_definitions(VARIABLES)[0]["aplQuery"].replace("['fixture-logs']", "FixtureLogs")
@@ -125,6 +134,12 @@ class MonitorTests(unittest.TestCase):
                 self.assertIn("03:05:00 PKT", summary)
                 episode = summary.split("Episode: ")[1].split(".")[0]
                 failure = summary.split("Failure: ")[1].split(".")[0]
+                if failure == "join_failed":
+                    self.assertIn("media_error_kind: unknown; media_error_step: unknown", summary)
+                elif lines[1] == "school-one" and episode == "episode-a" and failure == "media_start_failed":
+                    self.assertIn("media_error_kind: network; media_error_step: sfu_tracks", summary)
+                else:
+                    self.assertIn("media_error_kind: NotReadableError; media_error_step: local_capture", summary)
                 actual[lines[1], episode, failure] = row["value"]
                 self.assertIn("Report a problem", lines[5])
                 if lines[1] == "school-one":

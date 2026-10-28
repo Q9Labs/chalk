@@ -99,6 +99,12 @@ report remains in the window. A continuing incident can open a new group when
 the oldest report ages out or the Tenant name changes. Threshold closure is not
 proof that anyone recovered or rejoined.
 
+Messages also show `media_error_kind` and `media_error_step` from the latest
+affected participant report, selecting that report's last diagnostic with either
+cause field. Missing fields in older SDK reports display `unknown`, not a guessed
+permission or network cause. Causes do not split the affected-participant count;
+a changed latest cause can open a new notification group.
+
 **MEDIA_STATE_MISMATCH_SLOT:** the named slot in the APL is intentionally inactive
 until the SDK/API lane confirms the persistent mismatch trigger and fields.
 Transient `media_state` diagnostics and a local mic icon alone must not page.

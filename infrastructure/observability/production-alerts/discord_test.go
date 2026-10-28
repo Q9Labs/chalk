@@ -67,12 +67,12 @@ func TestDiscordConnectionReportsIdentifyTheClassAndAffectedPeople(t *testing.T)
 			t.Run(failure+"-"+action, func(t *testing.T) {
 				item := snapshot{
 					Tenant: "synthetic", Rule: "connection-report", Headline: "A class connection failed",
-					Summary:   "Tenant: Example school (synthetic). Episode: episode-a. Failure: " + failure + ". First reported: 2026-10-28T03:05:00 PKT.",
+					Summary:   "Tenant: Example school (synthetic). Episode: episode-a. Failure: " + failure + ". First reported: 2026-10-28T03:05:00 PKT. Latest media_error_kind: NotReadableError; media_error_step: local_capture.",
 					Next:      "In class: mute then unmute; rejoin once. Use Report a problem. If still broken, use the agreed fallback.",
 					Engineers: "For engineers: connection-report; search this Episode ID: episode-a.",
 				}
 				content := renderDiscord(t, map[string]interface{}{"Action": action, "Value": 2, "GroupKeys": []string{"alert_message"}, "GroupValues": []string{discordGroup(item)}})
-				for _, required := range []string{"Example school (synthetic)", "episode-a", failure, "2026-10-28T03:05:00 PKT"} {
+				for _, required := range []string{"Example school (synthetic)", "episode-a", failure, "2026-10-28T03:05:00 PKT", "media_error_kind: NotReadableError", "media_error_step: local_capture"} {
 					if !strings.Contains(content, required) {
 						t.Fatalf("missing %q in %s", required, content)
 					}
