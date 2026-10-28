@@ -493,7 +493,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                       }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
-                    onFailure: () => enqueueBackground(Effect.suspend(() => handleMediaSnapshot(media, media.getSnapshot()))),
+                    onFailure: () => enqueueBackground(handleMediaFailure()),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)),
@@ -959,6 +959,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
+      const handleMediaFailure = (): Effect.Effect<void> => (model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void);
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
         Effect.gen(function* () {
           const media = model.media;
