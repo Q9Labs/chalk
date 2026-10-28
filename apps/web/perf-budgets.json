@@ -1,6 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
-  "_comment": "JS limits include bounded media failure reporting (#596): measured 466.4 KiB on the route and 384.1 KiB in call scenarios. Compacting the classifier did not fit the old limits. Round up by 1 KiB plus 1 KiB of headroom for media recovery (#594) and mic-state sync (#597); all other limits stay unchanged.",
+  "_comment": "JS limits preserve bounded media failure reporting (#596): master measures 466.446 KiB on the route and 384.115 KiB in call scenarios. Compacting the classifier did not fit the old limits. Including media recovery (#594) and mic-state sync (#597) measures 468.243/385.808 KiB; 469/386 are the smallest whole-KiB limits above that combined build. All other limits stay unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
@@ -32,7 +32,7 @@
     "firstCallMs": 2499,
     "jsGzipKiB": 743,
     "cssGzipKiB": 54,
-    "routeJsGzipKiB": 468,
+    "routeJsGzipKiB": 469,
     "routeCssGzipKiB": 32,
     "videoDroppedFramePercent": 5,
     "layoutShift": 0.05
