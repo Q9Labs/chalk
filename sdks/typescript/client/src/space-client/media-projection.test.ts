@@ -141,7 +141,9 @@ it.each(["microphone", "camera"] as const)("accepts a healthy %s confirmation ju
   }
 });
 
-it.each(["microphone", "camera"] as const)("closes only its own %s after a late confirmation and recovers with one tap", async (source) => {
+const lateConfirmationCases = (["microphone", "camera"] as const).flatMap((source) => (["during", "after"] as const).map((tap) => ({ source, tap })));
+
+it.each(lateConfirmationCases)("closes only its own $source after a late confirmation and recovers with one tap $tap closure", async ({ source, tap }) => {
   let finishClose = () => {};
   const closing = new Promise<void>((resolve) => {
     finishClose = resolve;
@@ -167,10 +169,21 @@ it.each(["microphone", "camera"] as const)("closes only its own %s after a late 
     test.project(true);
     expect(test.track.enabled).toBe(false);
     expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
+    if (tap === "after") {
+      finishClose();
+      await close.mock.results[0]?.value;
+      expect(test.command).not.toHaveBeenCalled();
+      expect(test.track.enabled).toBe(false);
+      expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
+      expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
+      expect(test.received.enabled).toBe(false);
+    }
     const on = source === "microphone" ? test.client.media.setMicrophoneEnabled(true) : test.client.media.setCameraEnabled(true);
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(test.command).not.toHaveBeenCalled();
-    finishClose();
+    if (tap === "during") {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(test.command).not.toHaveBeenCalled();
+      finishClose();
+    }
     await on;
     expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
     expect(close).toHaveBeenCalledOnce();
