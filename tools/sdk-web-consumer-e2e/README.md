@@ -56,6 +56,16 @@ Current authorization denial must terminate with truthful UI and released
 resources; agreement is checked again after a fresh authorized join.
 `--agreement-fast` limits this to join/toggles for the root gate.
 
+Microphone and camera projection cases exercise the passive design: pending
+capture offers cancellation, persistent drift pauses local capture after ten
+seconds and shows an off control with a visible notice, and one fresh tap
+restores confirmed playback. The fixture counts Sync commands and diagnostic
+uploads to reject automatic repair targets or duplicate mismatch reports. A
+late projection must not restore paused capture. Separate cases cover a
+confirmation within the grace period and shortcut cancellation followed by
+button recovery. These cases require the passive projection fix (#597); they
+intentionally fail against product code without that fix.
+
 The fixture deliberately separates physical publications from Sync projections.
 It exercises the real packed SpaceClient and React UI, but replaces the provider
 and Sync transport adapters. The SDK selector regression in
