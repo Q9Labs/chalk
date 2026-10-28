@@ -306,7 +306,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
           if (this.#sources[source].desired.revision !== revision) return resume(Effect.void);
           if (ports && !this.#canUsePorts(ports)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
           const state = this.#connection.getSnapshot().state;
-          if (state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live" && this.#store.getSnapshot().connection.status === "live") return resume(Effect.void);
+          const phases = [state, this.#ports?.sync.getSnapshot().connection.phase, this.#store.getSnapshot().connection.status];
+          if (phases.every((phase) => phase === "live")) return resume(Effect.void);
           if (!["joining", "reconnecting", "live"].includes(state)) resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
         };
         this.#readinessChecks.add(check);
