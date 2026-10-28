@@ -147,6 +147,7 @@ async function rejoin(student: Page, pages: Page[]) {
 }
 
 async function chat(sender: Page, receivers: Page[], text: string) {
+  const start = Date.now();
   const input = sender.getByRole("textbox", { name: "Message", exact: true });
   if (!(await input.isVisible())) await sender.getByRole("button", { name: "Chat", exact: true }).click();
   await input.fill(text);
@@ -155,6 +156,7 @@ async function chat(sender: Page, receivers: Page[], text: string) {
     if (!(await page.getByRole("textbox", { name: "Message", exact: true }).isVisible())) await page.getByRole("button", { name: "Chat", exact: true }).click();
     await page.getByText(text, { exact: true }).waitFor({ timeout: 5000 });
   }
+  expect(Date.now() - start).toBeLessThan(5000);
 }
 
 async function stroke(page: Page, y: number) {
@@ -168,6 +170,17 @@ async function stroke(page: Page, y: number) {
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * y, { steps: 15 });
   await page.mouse.up();
+}
+
+async function paintedPixels(page: Page) {
+  return page.locator(".chalk-board canvas").evaluate((canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Whiteboard drawing canvas has no 2D context");
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let ink = 0;
+    for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 32) ink++;
+    return ink;
+  });
 }
 
 async function drop(student: Page, context: BrowserContext, duration: number, pages: Page[]) {
@@ -255,10 +268,17 @@ test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up
     }).catch((error: unknown) => failures.push(error));
     await checkCase("C7", async () => {
       await cover.close();
+      const shown = Date.now();
       await student.bringToFront();
       await expect.poll(() => student.locator(".chalk-board").getAttribute("data-elements"), { timeout: 10_000 }).toBe("1");
+      await expect.poll(() => paintedPixels(student), { timeout: 10_000 }).toBeGreaterThan(0);
+      expect(Date.now() - shown).toBeLessThan(10_000);
+      const before = await paintedPixels(student);
       await stroke(teacher, 0.65);
+      const drawn = Date.now();
       await expect.poll(() => student.locator(".chalk-board").getAttribute("data-elements"), { timeout: 5000 }).toBe("2");
+      await expect.poll(() => paintedPixels(student), { timeout: 5000 }).toBeGreaterThan(before + 10);
+      expect(Date.now() - drawn).toBeLessThan(5000);
       await chat(student, pages, "C7 student chat after eight minutes hidden");
       await roster(pages);
       await shot(pages, "C7");

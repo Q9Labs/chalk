@@ -14,7 +14,8 @@ const config = resolveDevConfig({
   requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"],
   secretResolver: async () => credentials,
 });
-const runtime = createChalkSupervisor(config);
+// The web router uses a pathless _space layout; do not rely on dev's old route scanner.
+const runtime = createChalkSupervisor({ ...config, webJoinPath: "/space" });
 let child;
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => (child ? child.kill(signal) : void runtime.stop()));
 try {
