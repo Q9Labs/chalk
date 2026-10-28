@@ -44,12 +44,19 @@ async function participant() {
 }
 async function pageFor(bundle, seat, { hold = 0, initialGrant = true, clockAhead = false } = {}) {
   const page = await context.newPage();
-  if (clockAhead) await page.addInitScript(() => { const actualNow = Date.now; Date.now = () => actualNow() + 360000; });
+  if (clockAhead)
+    await page.addInitScript(() => {
+      const actualNow = Date.now;
+      Date.now = () => actualNow() + 360000;
+    });
   const grants = [];
   let current = seat.access;
   let initial = initialGrant;
   await page.exposeBinding("access", async (_source, request) => {
-    if (initial) { initial = false; return current; }
+    if (initial) {
+      initial = false;
+      return current;
+    }
     const at = Date.now();
     current = await server.participants.issueAccess(space.id, episode.id, seat.id, { participantGeneration: current.subject.participant_generation, currentMediaToken: current.media.token }, { replaceMediaConnection: request.replaceMediaConnection ?? false });
     grants.push({ at, status: 201, participant_hash: hash(seat.id) });
@@ -67,7 +74,9 @@ try {
   const thSource = resolve(repository, "artifacts/w29-th-source.tsx");
   const thHash = hash(await readFile(thSource, "utf8"));
   const adapters = resolve(out, "th-adapters.jsx");
-  await writeFile(adapters, `import React from "react";
+  await writeFile(
+    adapters,
+    `import React from "react";
 export const api = { chalkActions: { getClassroomAccess: "access", handoffClassroom: "handoff", markOperationsEnded: "end", restartClassroom: "restart" } };
 export class ConvexError extends Error {}
 export function useSafeAction(name) { return React.useMemo(() => (args) => window.access({ ...args, preparation: true }), [name]); }
@@ -81,7 +90,8 @@ export const createChalkLeaveCleanupController = () => ({ handlePageHide() {} })
 export const retainChalkClient = () => () => {};
 export const superviseChalkWhiteboardController = (controller) => ({ controller, dispose() {} });
 export const synchronizeChalkStaffDisplayName = () => {};
-`);
+`,
+  );
   await mkdir(oldRoot, { recursive: true });
   const npmResponse = await fetch("https://registry.npmjs.org/@q9labsai/chalk-client/5.2.0");
   assert(npmResponse.ok);
@@ -98,7 +108,26 @@ export const synchronizeChalkStaffDisplayName = () => {};
   for (const version of ["5.2.0", "775c0b991"]) {
     const bundle = resolve(out, `${version}.js`);
     const sdk = version === "5.2.0" ? resolve(oldRoot, "package/dist/effect.js") : resolve(repository, "sdks/typescript/client/src/space-client/space-client.ts");
-    await build({ absWorkingDir: resolve(repository, "apps/web"), entryPoints: ["tests/dashboard/w29-entry.jsx"], bundle: true, format: "esm", platform: "browser", outfile: bundle, nodePaths: [resolve(repository, "apps/web/node_modules")], alias: { "w29-sdk": sdk, "w29-th": thSource }, plugins: [{ name: "synthetic-th-boundaries", setup(build) { build.onResolve({ filter: /^(?:@shared-portal-ui\/|@convex\/|convex\/values$|@q9labsai\/chalk-(?:client|react)$)/u }, () => ({ path: adapters })); } }], define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent" });
+    await build({
+      absWorkingDir: resolve(repository, "apps/web"),
+      entryPoints: ["tests/dashboard/w29-entry.jsx"],
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      outfile: bundle,
+      nodePaths: [resolve(repository, "apps/web/node_modules")],
+      alias: { "w29-sdk": sdk, "w29-th": thSource },
+      plugins: [
+        {
+          name: "synthetic-th-boundaries",
+          setup(build) {
+            build.onResolve({ filter: /^(@shared-portal-ui\/|@convex\/|convex\/values$|@q9labsai\/chalk-(client|react)$)/ }, () => ({ path: adapters }));
+          },
+        },
+      ],
+      define: { "process.env.NODE_ENV": '"production"' },
+      logLevel: "silent",
+    });
     for (const mode of ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"]) {
       const seat = await participant();
       const { page, grants } = await pageFor(bundle, seat, { clockAhead: mode === "clock_ahead" });
@@ -111,7 +140,11 @@ export const synchronizeChalkStaffDisplayName = () => {};
       await page.waitForFunction(() => window.audit.some((row) => row.event === "join_ok" || row.event === "join_failed"), null, { timeout: 45000 });
       const audit = await page.evaluate(() => window.audit);
       const result = { version, mode, elapsed_ms: Date.now() - began, grants, audit, seat: sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`) };
-      if (mode === "live" || mode === "slow_cpu") assert(audit.some((row) => row.event === "join_ok"), JSON.stringify(result));
+      if (mode === "live" || mode === "slow_cpu")
+        assert(
+          audit.some((row) => row.event === "join_ok"),
+          JSON.stringify(result),
+        );
       results.push(result);
       console.log("W29_RESULT " + JSON.stringify(result));
       await page.evaluate(() => window.stopClient());
@@ -122,7 +155,10 @@ export const synchronizeChalkStaffDisplayName = () => {};
     const { page, grants } = await pageFor(bundle, seat, { hold: 4500, initialGrant: false });
     const intervals = [2456, 1842, 3479, 1776, 2168, 1766];
     await page.evaluate(() => window.prepare());
-    for (const interval of intervals) { await delay(interval); await page.evaluate(() => window.prepare()); }
+    for (const interval of intervals) {
+      await delay(interval);
+      await page.evaluate(() => window.prepare());
+    }
     await delay(50);
     await page.evaluate(() => window.unmountPreparation());
     await delay(4600);
@@ -130,19 +166,34 @@ export const synchronizeChalkStaffDisplayName = () => {};
     assert.equal(grants.length, 7);
     assert.equal(audit.filter((row) => row.event.startsWith("unexpected_prepared")).length, 0);
     assert.equal(audit.filter((row) => row.event === "socket_construct").length, 0);
-    const result = { version, mode: "preparation_dependency_churn_delayed_response", th_source_sha256: thHash, grant_offsets_ms: grants.map((row) => row.at - grants[0].at), grants, audit, participant_hash: hash(seat.id), seat_before: sql(`select state from participant_join_seats where participant_id='${seat.id}'`) };
+    const result = {
+      version,
+      mode: "preparation_dependency_churn_delayed_response",
+      th_source_sha256: thHash,
+      grant_offsets_ms: grants.map((row) => row.at - grants[0].at),
+      grants,
+      audit,
+      participant_hash: hash(seat.id),
+      seat_before: sql(`select state from participant_join_seats where participant_id='${seat.id}'`),
+    };
     if (version === "775c0b991") {
       await delay(Math.max(0, seat.created + 122000 - Date.now()));
       result.seat_after_122_seconds = sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`);
-      try { await server.participants.issueAccess(space.id, episode.id, seat.id, { participantGeneration: seat.access.subject.participant_generation, currentMediaToken: seat.access.media.token }); }
-      catch (error) { result.refresh_after_expiry = { status: error.status, code: error.code }; }
+      try {
+        await server.participants.issueAccess(space.id, episode.id, seat.id, { participantGeneration: seat.access.subject.participant_generation, currentMediaToken: seat.access.media.token });
+      } catch (error) {
+        result.refresh_after_expiry = { status: error.status, code: error.code };
+      }
     }
     results.push(result);
     console.log("W29_RESULT " + JSON.stringify(result));
     await page.close();
   }
   const syncCounts = {};
-  for (const line of syncLog.join("").split("\n")) { const match = line.match(/sync\.websocket\.(handshake|authenticated|closed)/u); if (match) syncCounts[match[0]] = (syncCounts[match[0]] ?? 0) + 1; }
+  for (const line of syncLog.join("").split("\n")) {
+    const match = line.match(/sync\.websocket\.(handshake|authenticated|closed)/u);
+    if (match) syncCounts[match[0]] = (syncCounts[match[0]] ?? 0) + 1;
+  }
   const report = { browser: fixture.browser.version(), server_revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), sdk520_package: { version: npm.version, integrity, verified: true }, syncCounts, results };
   await writeFile(resolve(out, "results.json"), JSON.stringify(report, null, 2));
   console.log("W29_FINAL " + JSON.stringify(report));

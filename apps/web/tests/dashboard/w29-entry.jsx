@@ -18,13 +18,26 @@ window.WebSocket = new Proxy(window.WebSocket, {
 let client;
 window.startClient = (options) => {
   client = createSpaceClientForPlatform(
-    { space: options.space, baseUrl: options.api, getAccess: async (request) => { record("provider", { reason: request.reason }); return window.access(request); } },
+    {
+      space: options.space,
+      baseUrl: options.api,
+      getAccess: async (request) => {
+        record("provider", { reason: request.reason });
+        return window.access(request);
+      },
+    },
     { apiBaseUrl: options.api, syncUrl: options.sync, whiteboardUrl: null, onConnectionDiagnostic: (event) => record(event.event, { code: event.code, state: event.state }) },
   );
   client.subscribe(() => record("state", { state: client.getSnapshot().connection.status, code: client.getSnapshot().connection.lastError?.code }));
-  window.joining = client.join({ microphone: false, camera: false }).then(() => record("join_ok"), (error) => record("join_failed", { code: error.code }));
+  window.joining = client.join({ microphone: false, camera: false }).then(
+    () => record("join_ok"),
+    (error) => record("join_failed", { code: error.code }),
+  );
 };
-window.stopClient = async () => { client?.dispose(); await window.joining; };
+window.stopClient = async () => {
+  client?.dispose();
+  await window.joining;
+};
 
 // The exact private integration source is supplied to the disposable runner,
 // never committed here. Only its external Convex/UI adapters are substituted.
