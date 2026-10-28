@@ -1,11 +1,17 @@
 // @vitest-environment happy-dom
 import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Chalk } from "./Chalk";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 
 vi.mock("../space-view/SpaceView", () => ({ SpaceView: () => <div>Live Space</div> }));
+
+beforeEach(() => vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true));
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 it("forgets a handled host terminal state when the host clears and later repeats it", async () => {
   const snapshot = createSnapshot([]);
