@@ -181,7 +181,7 @@ jobs:
           browsers: chromium
 
       # call-performance runs in the root gate for call rendering changes;
-      # GitHub enforces gzip budgets, while testbox enforces timing too.
+      # GitHub enforces gzip budgets; timing limits need a calibrated runner.
       # Metro reuses transforms of unchanged modules, so the mobile export takes seconds instead of a minute.
       - name: Restore Metro cache
         if: matrix.group == 'build'
