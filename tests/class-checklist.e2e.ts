@@ -173,14 +173,17 @@ async function stroke(page: Page, y: number) {
 }
 
 async function paintedPixels(page: Page) {
-  return page.locator(".chalk-board canvas").evaluate((canvas: HTMLCanvasElement) => {
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Whiteboard drawing canvas has no 2D context");
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let ink = 0;
-    for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 32) ink++;
-    return ink;
-  });
+  return page
+    .locator(".chalk-board canvas")
+    .first()
+    .evaluate((canvas: HTMLCanvasElement) => {
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Whiteboard drawing canvas has no 2D context");
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let ink = 0;
+      for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 32) ink++;
+      return ink;
+    });
 }
 
 async function drop(student: Page, context: BrowserContext, duration: number, pages: Page[]) {
@@ -204,6 +207,7 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
       installed.push(rule);
     }
     await wait(duration);
+    expect(await student.evaluate(() => document.visibilityState)).toBe("visible");
     await student.getByRole("heading", { name: "Connection lost", exact: true }).waitFor({ timeout: 1000 });
     expect(await student.getByRole("button", { name: "Rejoin", exact: true }).count()).toBe(1);
     expect(await tiles(student).count()).toBe(0);
