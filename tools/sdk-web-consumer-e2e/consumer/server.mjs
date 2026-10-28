@@ -220,7 +220,9 @@ function newConnectionId(user) {
 }
 
 function accessExpiration(reason) {
-  const lifetime = reason === "join" ? 1_300 : 300_000;
+  // The SDK refreshes 60 seconds before expiry. Start just outside that
+  // window so join can finish before a genuine scheduled refresh is due.
+  const lifetime = reason === "join" ? 61_300 : 300_000;
   return new Date(Date.now() + lifetime).toISOString();
 }
 
