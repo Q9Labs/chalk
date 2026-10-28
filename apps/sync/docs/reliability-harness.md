@@ -2,10 +2,10 @@
 
 One harness owns Sync reliability. Triggers select how deeply it runs:
 
-| Trigger           | Profile       | What blocks         |
-| ----------------- | ------------- | ------------------- |
-| Pull request      | `correctness` | Merge               |
-| Nightly schedule  | `topology`    | The scheduled check |
+| Trigger           | Profile       | What blocks                          |
+| ----------------- | ------------- | ------------------------------------ |
+| Pull request      | `correctness` | Merge                                |
+| Nightly schedule  | `topology`    | The scheduled check                  |
 | Release candidate | `release`     | Manual check; not wired to promotion |
 
 The correctness profile runs the full PostgreSQL-backed Sync suite with zero
