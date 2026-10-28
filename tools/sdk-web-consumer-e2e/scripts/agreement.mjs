@@ -27,6 +27,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       };
       const pages = [await open("agreementalice"), await open("agreementbob")];
       await assertAgreement(pages);
+      await enabledCapture(pages);
       await run(pages, open);
       process.stdout.write(`[agreement] ${name}: passed ${Date.now() - start}ms\n`);
     } catch (error) {
@@ -55,6 +56,9 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
   }
   async function truth(pages) {
     assert.deepEqual(truthIssues(await Promise.all(pages.map((page) => page.evaluate(sampleAgreement)))), []);
+  }
+  async function enabledCapture(pages) {
+    for (const page of pages) await page.waitForFunction(() => ["microphone", "camera"].every((source) => window.__chalk.snapshot().localMedia[source].state === "enabled"), null, { timeout: recoveryTimeoutMs });
   }
   await scenario("join and every microphone/camera toggle", async (pages) => {
     for (const owner of pages)
@@ -87,6 +91,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await fault({ clear: true });
       await unmute;
       await invoke(pages[0], "setMicrophoneEnabled", true);
+      await enabledCapture(pages);
       await assertAgreement(pages);
       if (failure) throw failure;
     });
@@ -117,6 +122,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await pages[1].waitForFunction((id) => window.__chalk.snapshot().chat.messages.some((item) => item.clientMessageId === id), message.clientMessageId);
       await truth(pages);
       await waitForState(pages[0], "live", recoveryTimeoutMs);
+      await enabledCapture(pages);
       await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
       assert.equal((await pages[0].evaluate(() => window.__chalk.connectionHistory())).includes("failed"), false, "Media loss became terminal while Sync was healthy");
     });
@@ -126,6 +132,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     await wait(500);
     await fault({ clear: true });
     const replacement = await open("agreementalice");
+    await enabledCapture([replacement, pages[1]]);
     await assertAgreement([replacement, pages[1]], { timeoutMs: recoveryTimeoutMs });
     // The superseded tab must not regain publication authority in the background.
     await waitForState(pages[0], "failed", recoveryTimeoutMs);
