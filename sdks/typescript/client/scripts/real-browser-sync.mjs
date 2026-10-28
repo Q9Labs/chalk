@@ -76,11 +76,10 @@ async function run() {
     await page.goto(server.url, { waitUntil: "load" });
     await page.waitForFunction(() => window.__chalkSyncFault === "ready", undefined, { timeout: browserTimeoutMs });
     proxy.partition();
-    await page.evaluate(() => { window.__chalkSyncFault = "partitioned"; });
-    await Promise.all([
-      page.waitForFunction(() => window.__chalkSyncFault === "queued", undefined, { timeout: browserTimeoutMs }),
-      proxy.waitForRejectedConnection(),
-    ]);
+    await page.evaluate(() => {
+      window.__chalkSyncFault = "partitioned";
+    });
+    await Promise.all([page.waitForFunction(() => window.__chalkSyncFault === "queued", undefined, { timeout: browserTimeoutMs }), proxy.waitForRejectedConnection()]);
     proxy.heal();
     try {
       await page.waitForFunction(() => "__chalkSyncProof" in window, undefined, { timeout: browserTimeoutMs + 1_000 });
@@ -115,7 +114,9 @@ async function startFaultProxy(upstreamUrl) {
   const sockets = new Set();
   let partitioned = false;
   let rejected;
-  const rejectedConnection = new Promise((resolveRejected) => { rejected = resolveRejected; });
+  const rejectedConnection = new Promise((resolveRejected) => {
+    rejected = resolveRejected;
+  });
   const server = createTcpServer((incoming) => {
     if (partitioned) {
       rejected();
@@ -127,8 +128,14 @@ async function startFaultProxy(upstreamUrl) {
     sockets.add(outgoing);
     incoming.on("error", () => outgoing.destroy());
     outgoing.on("error", () => incoming.destroy());
-    incoming.on("close", () => { sockets.delete(incoming); outgoing.destroy(); });
-    outgoing.on("close", () => { sockets.delete(outgoing); incoming.destroy(); });
+    incoming.on("close", () => {
+      sockets.delete(incoming);
+      outgoing.destroy();
+    });
+    outgoing.on("close", () => {
+      sockets.delete(outgoing);
+      incoming.destroy();
+    });
     incoming.pipe(outgoing);
     outgoing.pipe(incoming);
   });
@@ -146,13 +153,17 @@ async function startFaultProxy(upstreamUrl) {
       partitioned = true;
       for (const socket of sockets) socket.destroy();
     },
-    heal() { partitioned = false; },
+    heal() {
+      partitioned = false;
+    },
     async waitForRejectedConnection() {
       let timer;
       try {
         await Promise.race([
           rejectedConnection,
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("SDK did not retry during the network partition")), browserTimeoutMs); }),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("SDK did not retry during the network partition")), browserTimeoutMs);
+          }),
         ]);
       } finally {
         clearTimeout(timer);

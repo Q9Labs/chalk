@@ -83,7 +83,11 @@ function isGateDefinition(file) {
 }
 
 function isSyncReliabilityInput(file) {
-  return startsWithAny(file, ["apps/sync", "apps/api/db/migrations", "packages/whiteboard", "sdks/typescript/client/src/sync", "sdks/typescript/client/src/whiteboard"]) || ["sdks/typescript/client/src/generated/sync.ts", "sdks/typescript/client/src/generated/whiteboard-v1.ts", "sdks/typescript/client/scripts/real-browser-sync.mjs", "contract/schema/sync-v1.json", "contract/schema/whiteboard-v1.json"].includes(file) || file.startsWith("contract/schema/fixtures/sync-v1/");
+  return (
+    startsWithAny(file, ["apps/sync", "apps/api/db/migrations", "packages/whiteboard", "sdks/typescript/client/src/sync", "sdks/typescript/client/src/whiteboard"]) ||
+    ["sdks/typescript/client/src/generated/sync.ts", "sdks/typescript/client/src/generated/whiteboard-v1.ts", "sdks/typescript/client/scripts/real-browser-sync.mjs", "contract/schema/sync-v1.json", "contract/schema/whiteboard-v1.json"].includes(file) ||
+    file.startsWith("contract/schema/fixtures/sync-v1/")
+  );
 }
 
 function isKnownPath(file, workspaces) {
