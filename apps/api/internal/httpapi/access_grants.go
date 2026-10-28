@@ -57,9 +57,10 @@ type accessGrantResponse struct {
 }
 
 type issueAccessGrantBody struct {
-	ParticipantGeneration  int64  `json:"participant_generation"`
-	CurrentMediaToken      string `json:"current_media_token,omitempty"`
-	ReplaceMediaConnection bool   `json:"replace_media_connection"`
+	ParticipantGeneration     int64   `json:"participant_generation"`
+	CurrentMediaToken         string  `json:"current_media_token,omitempty"`
+	ReplaceMediaConnection    bool    `json:"replace_media_connection"`
+	ExpectedMediaConnectionID *string `json:"expected_media_connection_id,omitempty"`
 }
 
 type issueAccessGrantRequest struct {
@@ -150,6 +151,22 @@ func issueAccessGrantEndpoint(
 				return accessGrantResponse{}, apiErrorForbidden
 			}
 			previous := subject
+			conditionalReplacement := replaceMediaConnection && request.Body.ExpectedMediaConnectionID != nil
+			if conditionalReplacement {
+				expected := strings.TrimSpace(*request.Body.ExpectedMediaConnectionID)
+				if expected == "" {
+					return accessGrantResponse{}, apiErrorInvalidRequest
+				}
+				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": expected}})
+				if err != nil {
+					return accessGrantResponse{}, err
+				}
+				// Reject stale recovery before allocating a provider session. The final
+				// compare-and-swap also fences a takeover during provider issuance.
+				if err := generations.CheckParticipantMediaConnection(ctx, previous); err != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
+				}
+			}
 			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
 			if implicitReplacement {
 				stage = "media_replay"
@@ -235,6 +252,10 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 				if err := generations.CompleteParticipantMediaRefresh(ctx, previous, subject, replay); err != nil {
+					return accessGrantResponse{}, accessGrantRefreshError(err)
+				}
+			} else if conditionalReplacement {
+				if err := generations.ReplaceParticipantMediaConnection(ctx, previous, subject); err != nil {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
 			} else if replaceMediaConnection {

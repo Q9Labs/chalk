@@ -151,6 +151,26 @@ and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
 attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
 signaling and WebRTC, not a media WebSocket.
 
+Both transports default to a 60-second foreground recovery budget. Recoverable
+media failures retry throughout that budget, with default delays of 1, 2, 4,
+then 6 seconds (custom delays cannot shorten that ramp or exceed 6 seconds);
+the Sync attempt cap does not shorten media recovery. Only then does media emit
+`media_recovery_exhausted` and continue retrying in the background while Sync
+stays connected. Rejected media access requires an explicit rejoin rather than
+automatically replacing another connection's seat. The timing and rejection
+regressions are covered in
+`sdks/typescript/client/src/connection/media-recovery.test.ts`.
+
+Automatic replacement forwards `expectedMediaConnectionId` through the browser
+access context and the server SDK's refresh request. The API compares the
+corresponding `expected_media_connection_id` against the current binding before
+and after issuing credentials; a takeover returns HTTP 409 with
+`participant.connection_superseded`, which requires explicit rejoin. Requests
+without this optional field keep the legacy replacement/takeover behavior, so
+the API can deploy before the SDK. A lifecycle attempt uses its fresh binding
+without an additional inner replacement; fast failures produce at most twelve
+replacement grants and track requests in the default foreground minute.
+
 Failed media acquisition/start spans and media recovery reports include
 `media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,
 `network`, `timeout`, or `unknown`) and `media_error_step` (`local_capture`,
@@ -175,6 +195,16 @@ from that verified credential. The `sdk.connection_report` warning includes
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
 media signaling. Parse `report` as JSON when querying the API log dataset.
+An own microphone/camera publication that disagrees with the Sync projection for
+over two seconds, or exhausts reconciliation, triggers `media_projection_mismatch`.
+Its event includes allowlisted `source` (`microphone`/`camera`), `publication_state`
+and `projection_state` (`on`/`off`), mismatch `duration_ms`, retry count in `attempt`,
+and `outcome` (`started`/`failed`). Publication IDs and device labels are excluded.
+The sender waits 750 ms before repair, makes at most three self-media target
+attempts, and stops after eight seconds even if a target hangs. Reconnect or a
+new user intent/publication starts a fresh budget. The existing report cooldown
+also applies to these reports; it can suppress a subsequent exhaustion upload.
+Receiver projection gating remains unchanged: bypassing it would defeat moderation.
 Rejected reports emit `sdk.connection_report.rejected` with the same trace ID
 and verified participant hash, plus a bounded `reason` identifying the failed
 schema, label, ordering, size, or range check. Rejected values, bodies, and decoder

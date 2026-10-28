@@ -47,7 +47,7 @@ const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
-  readonly #onError: ((error: unknown) => void) | undefined;
+  readonly #onError: CloudflareSFUClientOptions["onError"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
@@ -56,6 +56,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #replaceMediaConnection: (() => Promise<CloudflareSFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
+  readonly #failureOwners = new WeakMap<Error, { readonly generation: number; readonly connectionId: string }>();
   readonly #locallyPausedSources = new Set<MediaPublicationSource>();
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
   readonly #reusableLocalTransceivers = new Map<MediaPublicationSource, RTCRtpTransceiver>();
@@ -211,7 +212,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollFailedPull = false;
     try {
       const transport = this.#requireTransport();
-      const authoritative = await (() => transport.listPublications())();
+      const authoritative = await this.#signal(() => transport.listPublications());
       this.#requireGeneration(generation);
       await this.#reconcileRemotePublications(authoritative, generation);
       this.#requireGeneration(generation);
@@ -237,6 +238,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#setSinglePublicationTarget({ ...target, source: "screen_audio" });
   }
   async #setSinglePublicationTarget(target: Omit<MediaPlaneTarget, "source"> & { readonly source: MediaPublicationSource }): Promise<MediaPlaneResult> {
+    const generation = this.#generation;
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result") return resolved.result;
     const state = resolved.value;
@@ -248,7 +250,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await this.#setPreparedTrackEnabled(state, target.enabled, target.operationId);
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
-      if (!this.#stopped) this.#reportError(error);
+      if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       return mediaTargetFailure(error);
     }
   }
@@ -289,7 +291,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #retireUnavailableLocalPublication(state: LocalTrackState): Promise<void> {
     const publicationId = state.providerPublicationId;
     if (!publicationId) return;
-    const authoritative = await (() => this.#requireTransport().listPublications())();
+    const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
     // An authorized on target can precede the old forced-off projection.
     // Never satisfy it from a browser slot whose provider track is gone.
@@ -314,6 +316,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const connection = this.#connection;
     const connectionId = this.#bootstrap.connectionId;
     this.#retiredLocalConnection = connection;
+    const generation = this.#generation;
     await this.#serializeSDP(async () => {
       if (connection !== this.#connection) return;
       const mid = requireTransceiverMid(transceiver);
@@ -322,16 +325,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const offer = await (() => connection.createOffer())();
       await (() => connection.setLocalDescription(offer))();
       try {
-        const response = await this.#requireTransport().closeTracks({
-          connectionId,
-          ...providerDescription(requireDescription(offer)),
-          tracks: [{ mid, source, publicationId }],
-          force: false,
-        });
+        const response = await this.#signal(
+          () =>
+            this.#requireTransport().closeTracks({
+              connectionId,
+              ...providerDescription(requireDescription(offer)),
+              tracks: [{ mid, source, publicationId }],
+              force: false,
+            }),
+          { generation, connectionId },
+        );
         await this.#applyProviderDescription(response, connection);
       } catch (error) {
         await this.#rollbackLocalOffer(connection);
-        if (!this.#stopped) this.#reportError(error);
+        if (connection === this.#connection && !this.#stopped) this.#reportError(error);
         throw error;
       }
     });
@@ -362,7 +369,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#negotiatedGeneration = null;
-    this.#replacementAttemptedGeneration = null;
+    this.#replacementAttemptedGeneration = options.bootstrap.connectionId !== this.#bootstrap.connectionId ? generation : null;
     // Fresh access already replaced the expired SFU connection. Replacing it
     // again before its first offer adds a serial request and abandons that connection.
     if (options.bootstrap.connectionId !== this.#bootstrap.connectionId) this.#started = false;
@@ -496,7 +503,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     // Retiring the bundled sender can expire the Cloudflare SFU connection.
     // Rebuild before publishing, retaining only other provider-authorized sources.
-    const authoritative = await (() => this.#requireTransport().listPublications())();
+    const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     this.#pauseUnavailableOtherSources(authoritative.publications, states);
     this.#replacementAttemptedGeneration = null;
     await this.#replaceMediaConnectionForRecovery(generation);
@@ -587,7 +594,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
-    const response = await (() => this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks }))();
+    const response = await this.#signal(() => this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks }), { generation, connectionId });
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection);
     return response;
@@ -793,7 +800,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       connection.addEventListener("track", onTrack);
       try {
         this.#requireGeneration(generation);
-        const response = await (() => this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }))();
+        const response = await this.#signal(() => this.#requireTransport().addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }), { generation, connectionId });
         this.#requireGeneration(generation);
         this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
         const responseTracks = response.tracks ?? [];
@@ -838,7 +845,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#applyProviderDescription(response, connection);
     const answer = await (() => connection.createAnswer())();
     await (() => connection.setLocalDescription(answer))();
-    await (() => this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) }))();
+    await this.#signal(() => this.#requireTransport().renegotiate({ connectionId, ...providerDescription(requireDescription(answer)) }), { generation, connectionId });
     this.#requireGeneration(generation);
   }
   async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection = this.#connection): Promise<void> {
@@ -1181,10 +1188,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #reportError(error: unknown): void {
+    const owner = error instanceof Error ? this.#failureOwners.get(error) : undefined;
+    if (owner && (owner.generation !== this.#generation || owner.connectionId !== this.#bootstrap.connectionId)) return;
     try {
-      this.#onError?.(error);
+      this.#onError?.(error, owner?.connectionId ?? this.#bootstrap.connectionId);
     } catch {
       // Consumer callbacks cannot prevent SFU cleanup or state reconciliation.
+    }
+  }
+  async #signal<T>(operation: () => Promise<T>, owner = { generation: this.#generation, connectionId: this.#bootstrap.connectionId }): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof Error) this.#failureOwners.set(error, owner);
+      throw error;
     }
   }
   #requireGeneration(generation: number): void {

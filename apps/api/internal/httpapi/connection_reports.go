@@ -36,22 +36,25 @@ type connectionReport struct {
 }
 
 type connectionReportEvent struct {
-	Event          string `json:"event"`
-	ElapsedMS      int64  `json:"elapsed_ms"`
-	State          string `json:"state,omitempty"`
-	Step           string `json:"step,omitempty"`
-	Outcome        string `json:"outcome,omitempty"`
-	Code           string `json:"code,omitempty"`
-	Phase          string `json:"phase,omitempty"`
-	Attempt        *int64 `json:"attempt,omitempty"`
-	DurationMS     *int64 `json:"duration_ms,omitempty"`
-	HeartbeatGapMS *int64 `json:"heartbeat_gap_ms,omitempty"`
-	CloseCode      *int64 `json:"close_code,omitempty"`
-	HTTPStatus     *int64 `json:"http_status,omitempty"`
-	MediaErrorKind string `json:"media_error_kind,omitempty"`
-	MediaErrorStep string `json:"media_error_step,omitempty"`
-	GrantedAudio   string `json:"granted_audio,omitempty"`
-	GrantedVideo   string `json:"granted_video,omitempty"`
+	Event            string `json:"event"`
+	ElapsedMS        int64  `json:"elapsed_ms"`
+	State            string `json:"state,omitempty"`
+	Step             string `json:"step,omitempty"`
+	Outcome          string `json:"outcome,omitempty"`
+	Code             string `json:"code,omitempty"`
+	Phase            string `json:"phase,omitempty"`
+	Attempt          *int64 `json:"attempt,omitempty"`
+	DurationMS       *int64 `json:"duration_ms,omitempty"`
+	HeartbeatGapMS   *int64 `json:"heartbeat_gap_ms,omitempty"`
+	CloseCode        *int64 `json:"close_code,omitempty"`
+	HTTPStatus       *int64 `json:"http_status,omitempty"`
+	MediaErrorKind   string `json:"media_error_kind,omitempty"`
+	MediaErrorStep   string `json:"media_error_step,omitempty"`
+	GrantedAudio     string `json:"granted_audio,omitempty"`
+	GrantedVideo     string `json:"granted_video,omitempty"`
+	Source           string `json:"source,omitempty"`
+	PublicationState string `json:"publication_state,omitempty"`
+	ProjectionState  string `json:"projection_state,omitempty"`
 }
 
 // These are also the OpenAPI enums. No peer text, URLs, payloads or identities
@@ -65,9 +68,13 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "granted_audio", "granted_video":
 		return []string{"granted", "not_granted", "unknown"}
 	case "trigger":
-		return []string{"join_failed", "connection_lost", "recovery_exhausted"}
+		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"}
 	case "event":
-		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error"}
+		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch"}
+	case "source":
+		return []string{"microphone", "camera"}
+	case "publication_state", "projection_state":
+		return []string{"on", "off"}
 	case "state":
 		return []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}
 	case "step":
@@ -115,7 +122,7 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 			return report, rejectConnectionReport(r, "event_order")
 		}
 		previous = event.ElapsedMS
-		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo} {
+		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo, "source": event.Source, "publication_state": event.PublicationState, "projection_state": event.ProjectionState} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
 				return report, rejectConnectionReport(r, field+"_label")
 			}

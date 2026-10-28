@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { isParsedAccessGrant, parseAccessGrant, parseParsedAccessGrant, requireParsedAccessGrant, requireAccessGrant } from "./grant";
 describe("access grant parsing", () => {
   describe.each([requireParsedAccessGrant, requireAccessGrant])("HTTP grant reader %s", (read) => {
+    it("preserves a distinct superseded-binding conflict for explicit rejoin", async () => {
+      await expect(read(Response.json({ error: { code: "participant.connection_superseded" } }, { status: 409 }))).rejects.toMatchObject({ code: "access.invalid", reason: "connection_superseded" });
+    });
     it.each([408, 425, 429, 500, 502, 503, 504, 599])("classifies HTTP %s as unavailable", async (status) => {
       await expect(read(new Response(null, { status }))).rejects.toMatchObject({ code: "access.unavailable" });
     });
