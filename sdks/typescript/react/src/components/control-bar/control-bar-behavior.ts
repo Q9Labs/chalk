@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
+import { mediaToggleTarget } from "./media-toggle";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -251,6 +252,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const live = useConnection().status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";
   const cameraEnabled = media.local.camera.state === "enabled";
+  const microphoneTarget = mediaToggleTarget(media.local.microphone.state, live);
+  const cameraTarget = mediaToggleTarget(media.local.camera.state, live);
   const screenSharing = media.local.screen.state === "enabled" || media.local.screen.state === "requesting";
   const recordingStatus = recording.current?.status;
   const isRecording = recordingStatus === "recording" || recordingStatus === "stopping";
@@ -303,6 +306,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const audioInputDevices: MediaDevice[] = media.devices.microphones.map((device) => ({ ...device, kind: "audioinput" }));
   const audioOutputDevices: MediaDevice[] = media.devices.speakers.map((device) => ({ ...device, kind: "audiooutput" }));
   const videoInputDevices: MediaDevice[] = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" }));
+  const toggleMicrophone = microphoneTarget === undefined ? undefined : () => void run(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop");
+  const toggleCamera = cameraTarget === undefined ? undefined : () => void run(() => client.media.setCameraEnabled(cameraTarget), "camera", cameraTarget ? "start" : "stop");
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
     detectDevices: false,
@@ -333,11 +338,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
-    onCancelMicrophonePending: () => void run(() => client.media.setMicrophoneEnabled(false), "microphone", "stop"),
+    onCancelMicrophonePending: toggleMicrophone,
     mediaEnableDisabled: !live,
     reactionsDisabled: !live,
     cameraPending: media.local.camera.state === "requesting",
-    onCancelCameraPending: () => void run(() => client.media.setCameraEnabled(false), "camera", "stop"),
+    onCancelCameraPending: toggleCamera,
     isVideoEnabled: cameraEnabled,
     isScreenSharing: screenSharing,
     isRecording,
@@ -385,8 +390,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         "speaker",
         "test",
       ),
-    onToggleMute: () => void run(() => client.media.setMicrophoneEnabled(!microphoneEnabled), "microphone", microphoneEnabled ? "stop" : "start"),
-    onToggleVideo: () => void run(() => client.media.setCameraEnabled(!cameraEnabled), "camera", cameraEnabled ? "stop" : "start"),
+    onToggleMute: toggleMicrophone,
+    onToggleVideo: toggleCamera,
     onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone", "select"),
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),

@@ -7,7 +7,7 @@ import { ConnectionReporter, type ConnectionReport } from "../connection/report"
 afterEach(() => vi.useRealTimers());
 let reportSequence = 0;
 
-function scenario(source: "microphone" | "camera" = "microphone") {
+function scenario(source: "microphone" | "camera" = "microphone", media: NonNullable<Parameters<typeof capturedClient>[2]>["media"] = {}) {
   const reportClockOffset = ++reportSequence * 120000;
   const base = createCoreTestPlatform();
   const reports: ConnectionReport[] = [];
@@ -44,7 +44,7 @@ function scenario(source: "microphone" | "camera" = "microphone") {
     project(enabled);
     return { operationId: "repair", name: source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" };
   });
-  const client = capturedClient(platform, track, { sync: { setMicrophoneEnabled: command, setCameraEnabled: command } });
+  const client = capturedClient(platform, track, { media, sync: { setMicrophoneEnabled: command, setCameraEnabled: command } });
   const peer = capturedClient(observer, mediaTrack());
   return {
     reports,
@@ -77,11 +77,16 @@ it.each(["microphone", "camera"] as const)("fails closed when %s never reaches t
     await test.join();
     expect(test.client.getSnapshot().media.local[source].state).toBe("requesting");
     expect(test.received.enabled).toBe(false);
-    await vi.waitFor(() => expect(test.client.getSnapshot().media.local[source].state).toBe("failed"), { timeout: 3000 });
+    test.project(true);
+    vi.useFakeTimers();
+    test.project(false);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
     expect(test.track.enabled).toBe(false);
     expect(test.received.enabled).toBe(false);
     expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(false);
     expect(test.command).not.toHaveBeenCalled();
+    vi.useRealTimers();
     await (source === "microphone" ? test.client.media.setMicrophoneEnabled(true) : test.client.media.setCameraEnabled(true));
     expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
     expect(test.client.getSnapshot().media.local[source].state).toBe("enabled");
@@ -98,13 +103,83 @@ it("automatically reports a persistent mismatch once, with zero retries and no r
   const test = scenario();
   try {
     await test.join();
-    await vi.waitFor(() => expect(test.reports).toHaveLength(1), { timeout: 3000 });
+    test.project(true);
+    vi.useFakeTimers();
+    test.project(false);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(test.reports).toHaveLength(1);
     expect(test.reports[0]?.trigger).toBe("media_projection_mismatch");
     expect(test.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", attempt: 0, outcome: "failed" });
-    expect(test.reports[0]?.events.at(-1)?.duration_ms).toBeGreaterThanOrEqual(2000);
+    expect(test.reports[0]?.events.at(-1)?.duration_ms).toBe(10000);
     expect(test.command).not.toHaveBeenCalled();
     expect(test.track.enabled).toBe(false);
   } finally {
+    test.dispose();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("accepts a healthy %s confirmation just before the ten-second deadline", async (source) => {
+  const test = scenario(source);
+  try {
+    await test.join();
+    test.project(true);
+    vi.useFakeTimers();
+    test.project(false);
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(test.track.enabled).toBe(true);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("requesting");
+    expect(test.received.enabled).toBe(false);
+    test.project(true);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("enabled");
+    expect(test.track.enabled).toBe(true);
+    expect(test.received.enabled).toBe(true);
+    expect(test.command).not.toHaveBeenCalled();
+    expect(test.reports).toHaveLength(0);
+  } finally {
+    test.dispose();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("closes only its own %s after a late confirmation and recovers with one tap", async (source) => {
+  let finishClose = () => {};
+  const closing = new Promise<void>((resolve) => {
+    finishClose = resolve;
+  });
+  const close = vi.fn(async () => {
+    await closing;
+    test.project(false);
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: test.track, enabled: false }] });
+  });
+  const test = scenario(source, { closeForcedLocalPublication: close });
+  try {
+    await test.join();
+    test.project(true);
+    vi.useFakeTimers();
+    test.project(false);
+    await vi.advanceTimersByTimeAsync(10000);
+    vi.useRealTimers();
+    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
+    expect(test.track.enabled).toBe(false);
+    await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
+    expect(test.track.enabled).toBe(false);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
+    test.project(true);
+    expect(test.track.enabled).toBe(false);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
+    const on = source === "microphone" ? test.client.media.setMicrophoneEnabled(true) : test.client.media.setCameraEnabled(true);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(test.command).not.toHaveBeenCalled();
+    finishClose();
+    await on;
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
+    expect(close).toHaveBeenCalledOnce();
+    expect(test.track.enabled).toBe(true);
+    expect(test.client.getSnapshot().media.local[source].state).toBe("enabled");
+    expect(test.received.enabled).toBe(true);
+    expect(test.reports).toHaveLength(1);
+  } finally {
+    finishClose();
     test.dispose();
   }
 });
@@ -220,7 +295,10 @@ it("does not automatically send cleanup after a rejected enable", async () => {
     await expect(test.client.media.setMicrophoneEnabled(true)).rejects.toThrow();
     expect(test.track.enabled).toBe(false);
     expect(test.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
-    await new Promise((resolve) => setTimeout(resolve, 2100));
+    test.project(false);
+    vi.useFakeTimers();
+    test.project(true);
+    await vi.advanceTimersByTimeAsync(10000);
     expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
     expect(test.reports.at(-1)?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", attempt: 0 });
     expect(JSON.stringify(test.reports)).not.toContain("private provider");
@@ -260,7 +338,7 @@ it.each(["microphone", "camera"] as const)("never resumes failed %s capture or s
       const replacement = Object.assign(mediaTrack(), { kind: test.track.kind });
       test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, publicationId: `replacement-${i}`, track: replacement }] });
       await vi.advanceTimersByTimeAsync(1000);
-      if (i >= 2) expect(replacement.enabled).toBe(false);
+      if (i >= 9) expect(replacement.enabled).toBe(false);
     }
     expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
     expect(test.track.enabled).toBe(false);
@@ -268,7 +346,7 @@ it.each(["microphone", "camera"] as const)("never resumes failed %s capture or s
     expect(test.received.enabled).toBe(true);
     expect(test.command).not.toHaveBeenCalled();
     expect(test.reports).toHaveLength(1);
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "on", projection_state: "on", duration_ms: 2000, attempt: 0, outcome: "failed" });
+    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "on", projection_state: "on", duration_ms: 10000, attempt: 0, outcome: "failed" });
   } finally {
     vi.useRealTimers();
     test.dispose();
@@ -289,9 +367,9 @@ it("reports off/on drift while a manual mute is pending without sending an extra
         }),
     );
     const off = test.client.media.setMicrophoneEnabled(false);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(10000);
     expect(test.reports).toHaveLength(1);
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", duration_ms: 2000, attempt: 0 });
+    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", duration_ms: 10000, attempt: 0 });
     expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
     finish();

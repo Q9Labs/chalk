@@ -225,7 +225,7 @@ Its event includes allowlisted `source` (`microphone`/`camera`), `publication_st
 and `projection_state` (`on`/`off`), mismatch `duration_ms`, retry count in `attempt`,
 and `outcome` (`started`/`failed`). Publication IDs and device labels are excluded.
 The monitor never sends a self-media target. Its `attempt` is always zero.
-After the two-second grace, unconfirmed live capture is paused locally before
+After the ten-second grace, unconfirmed live capture is paused locally before
 failure is shown. Only a new user action can enable again; changing publication
 identity cannot extend the grace or restore capture. Projection-on without own
 live capture is reported once but left alone: it may belong to another client of

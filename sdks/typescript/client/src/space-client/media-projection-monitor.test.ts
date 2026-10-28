@@ -17,7 +17,7 @@ it("accepts a matching authoritative projection during the grace", async () => {
   const { monitor, observation, pause, report } = fixture();
   monitor.observe("microphone", observation);
   expect(monitor.state("microphone")).toBe("requesting");
-  await vi.advanceTimersByTimeAsync(1999);
+  await vi.advanceTimersByTimeAsync(9999);
   expect(pause).not.toHaveBeenCalled();
   monitor.observe("microphone", { ...observation, projectedEnabled: true, projectedPublicationId: observation.publicationId });
   expect(monitor.state("microphone")).toBeNull();
@@ -35,7 +35,7 @@ it.each(["microphone", "camera"] as const)("pauses unconfirmed %s once and requi
   }
   expect(monitor.state(source)).toBe("failed");
   expect(pause).toHaveBeenCalledExactlyOnceWith(source, observation.revision);
-  expect(report).toHaveBeenCalledExactlyOnceWith({ event: "media_projection_mismatch", source, publication_state: "on", projection_state: "off", duration_ms: 2000, attempt: 0, outcome: "failed" });
+  expect(report).toHaveBeenCalledExactlyOnceWith({ event: "media_projection_mismatch", source, publication_state: "on", projection_state: "off", duration_ms: 10000, attempt: 0, outcome: "failed" });
   monitor.observe(source, { ...observation, projectedEnabled: true, projectedPublicationId: observation.publicationId });
   expect(monitor.state(source)).toBe("failed");
   monitor.observe(source, { ...observation, enabled: false });
@@ -50,12 +50,12 @@ it("reports projection-on without local capture once and never pauses another cl
   const foreign = { ...observation, enabled: false, publicationId: null, projectedEnabled: true, projectedPublicationId: "other-client" };
   monitor.observe("microphone", foreign);
   expect(monitor.state("microphone")).toBeNull();
-  await vi.advanceTimersByTimeAsync(2000);
+  await vi.advanceTimersByTimeAsync(10000);
   monitor.observe("microphone", { ...foreign, projectedEnabled: false });
   monitor.observe("microphone", foreign);
   await vi.advanceTimersByTimeAsync(20000);
   expect(pause).not.toHaveBeenCalled();
-  expect(report).toHaveBeenCalledExactlyOnceWith({ event: "media_projection_mismatch", source: "microphone", publication_state: "off", projection_state: "on", duration_ms: 2000, attempt: 0, outcome: "started" });
+  expect(report).toHaveBeenCalledExactlyOnceWith({ event: "media_projection_mismatch", source: "microphone", publication_state: "off", projection_state: "on", duration_ms: 10000, attempt: 0, outcome: "started" });
   monitor.reset();
 });
 
@@ -72,7 +72,7 @@ it("cancels the grace on leave", async () => {
 it("pauses late unconfirmed capture even if off/on drift was already reported", async () => {
   const { monitor, observation, pause, report } = fixture();
   monitor.observe("microphone", { ...observation, enabled: false, projectedEnabled: true, projectedPublicationId: "other-client" });
-  await vi.advanceTimersByTimeAsync(3000);
+  await vi.advanceTimersByTimeAsync(11000);
   monitor.observe("microphone", observation);
   expect(pause).toHaveBeenCalledExactlyOnceWith("microphone", observation.revision);
   expect(monitor.state("microphone")).toBe("failed");

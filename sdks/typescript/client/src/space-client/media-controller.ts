@@ -339,6 +339,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
     for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) publication.track.enabled = false;
     if (source === "screen" && this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
   }
+  #retainPause(state: SourceWorker, next: Promise<void>): void {
+    const previous = state.pause;
+    state.pause = previous
+      ? Promise.allSettled([previous, next]).then((results) => {
+          for (const result of results) if (result.status === "rejected") throw result.reason;
+        })
+      : next;
+    void state.pause.catch(() => undefined);
+  }
   #recordIntent(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): MediaIntent {
     const state = this.#sources[source];
     const controlRevision = Math.max(state.serverSequence, this.#ports?.sync.getSnapshot().control?.revision ?? -1);
@@ -354,14 +363,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const ports = this.#ports;
       if (ports) {
         ports.media.setLocalSourceIntent?.(source, false);
-        const previous = state.pause;
-        const next = this.#beginLocalPause(ports, source);
-        state.pause = previous
-          ? Promise.allSettled([previous, next]).then((results) => {
-              for (const result of results) if (result.status === "rejected") throw result.reason;
-            })
-          : next;
-        void state.pause.catch(() => undefined);
+        this.#retainPause(state, this.#beginLocalPause(ports, source));
       }
     }
     for (const check of this.#readinessChecks) check();
@@ -743,8 +745,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #setTrack(source: MediaSource, track: MediaStreamTrack): void {
     if (source !== "camera") {
-      if (source === "microphone") this.#watchMicrophone(track);
       this.#tracks.set(source, track);
+      if (source === "microphone") this.#watchMicrophone(track);
       return;
     }
     const state = this.#camera;
@@ -762,7 +764,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!track) return;
     const changed = () => {
       if (this.#microphoneWatch?.track !== track) return;
-      if ((track.muted || track.readyState === "ended") && this.#ports) this.#pausePublication(this.#ports, "microphone", this.#sources.microphone.desired.revision);
+      if (track.muted || track.readyState === "ended") {
+        track.enabled = false;
+        const state = this.#sources.microphone;
+        if (this.#ports) this.#pausePublication(this.#ports, "microphone", state.desired.revision);
+        else {
+          state.forcedRevision = state.desired.revision;
+          state.localEnabled = false;
+        }
+      }
       this.#publish();
     };
     for (const event of ["mute", "unmute", "ended"]) track.addEventListener(event, changed);
@@ -772,6 +782,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
       },
     };
+    if (track.muted || track.readyState === "ended") changed();
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
@@ -1014,7 +1025,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     state.localEnabled = false;
     this.#pauseTracks(source);
     ports.media.setLocalSourceIntent?.(source, false);
-    if (ports.media.closeForcedLocalPublication) this.#fork(foreign(() => ports.media.closeForcedLocalPublication!(source)).pipe(Effect.ignore));
+    if (ports.media.closeForcedLocalPublication)
+      this.#retainPause(
+        state,
+        Promise.resolve().then(() => ports.media.closeForcedLocalPublication!(source)),
+      );
     this.#publish();
   }
   #bind(ports: ConnectionPorts | null): void {

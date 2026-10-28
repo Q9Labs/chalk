@@ -19,7 +19,7 @@ type Options = {
   readonly changed: () => void;
 };
 
-const GRACE_MS = 2000;
+const GRACE_MS = 10000;
 
 function projectionMatches(observation: Observation): boolean {
   return observation.enabled === observation.projectedEnabled && (!observation.enabled || observation.publicationId === observation.projectedPublicationId);

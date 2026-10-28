@@ -138,6 +138,34 @@ it("keeps startup poll rejection interrupted while Sync commands remain availabl
     harness.client.stop();
   }
 });
+it.each(["microphone", "camera"] as const)("retires only its own timed-out %s publication and accepts one fresh enable", async (source) => {
+  const harness = createHarness();
+  const track = new FakeTrack("timed-out", source === "microphone" ? "audio" : "video");
+  try {
+    await harness.client.start(fakeStream(track));
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === source);
+    expect(publication?.enabled).toBe(true);
+    harness.transport.localPublications.set("another-tab", { participantId: "participant-1", source, publicationId: "another-tab" });
+    harness.client.setLocalSourceIntent(source, false);
+    await harness.client.closeForcedLocalPublication(source);
+    expect(harness.transport.closeInputs).toHaveLength(1);
+    expect(harness.transport.closeInputs[0]?.tracks).toEqual([expect.objectContaining({ source, publicationId: publication?.publicationId })]);
+    expect(harness.transport.localPublications.has(publication?.publicationId ?? "")).toBe(false);
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "late-enable", participantId: "participant-1", source, enabled: true })).resolves.toEqual({ outcome: "terminal_failure", errorCode: "local_source_paused" });
+    expect(track.enabled).toBe(false);
+    harness.client.setLocalSourceIntent(source, true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "fresh-tap", participantId: "participant-1", source, enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    const fresh = harness.client.getSnapshot().localTracks.find((item) => item.source === source);
+    expect(fresh?.enabled).toBe(true);
+    expect(fresh?.publicationId).not.toBe(publication?.publicationId);
+    expect(track.enabled).toBe(true);
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it("keeps a rejected microphone Off paused in the production adapter", async () => {
   const harness = createHarness();
   const platform = createCoreTestPlatform();
