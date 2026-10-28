@@ -13,6 +13,17 @@ const participantCooldowns = new Map<string, number>();
 const milliseconds = (value: number) => Math.max(0, Math.min(MAX_MS, Math.round(Number.isFinite(value) ? value : 0)));
 const optionalMilliseconds = (value: number | null | undefined) => (value == null ? undefined : milliseconds(value));
 
+function mediaReportFields(media: ConnectionDiagnostic["media"]): Pick<ReportEvent, "media_error_kind" | "media_error_step" | "granted_audio" | "granted_video" | "http_status"> {
+  if (!media) return {};
+  return {
+    media_error_kind: media.media_error_kind,
+    media_error_step: media.media_error_step,
+    granted_audio: media.granted_audio,
+    granted_video: media.granted_video,
+    http_status: media.http_status,
+  };
+}
+
 function reserveParticipantReport(access: ParsedAccessGrant, now: number): boolean {
   const key = `${access.subject.tenantId}:${access.subject.participantId}`;
   for (const [participant, until] of participantCooldowns) if (until <= now) participantCooldowns.delete(participant);
@@ -61,11 +72,7 @@ export class ConnectionReporter {
       duration_ms: optionalMilliseconds(diagnostic.sync?.durationMs ?? diagnostic.durationMs),
       close_code: diagnostic.sync?.closeCode ?? undefined,
       heartbeat_gap_ms: optionalMilliseconds(diagnostic.recovery?.lastHeartbeatReplyAgoMs),
-      media_error_kind: diagnostic.media?.media_error_kind,
-      media_error_step: diagnostic.media?.media_error_step,
-      granted_audio: diagnostic.media?.granted_audio,
-      granted_video: diagnostic.media?.granted_video,
-      http_status: diagnostic.media?.http_status,
+      ...mediaReportFields(diagnostic.media),
     });
     if (diagnostic.event === "recovery_exhausted") this.#report("recovery_exhausted");
     else if (diagnostic.event === "connection_failed") this.#report(diagnostic.state === "joining" ? "join_failed" : "connection_lost");

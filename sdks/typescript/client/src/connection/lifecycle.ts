@@ -10,7 +10,7 @@ import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTr
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { stopStream, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
-import { classifyMediaFailure, type GrantedMedia } from "../media/failure-diagnostics";
+import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
@@ -486,10 +486,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent));
             stream = captured.stream;
-            grantedMedia = {
-              granted_audio: stream.getTracks().some((track) => track.kind === "audio" && track.readyState === "live") ? "granted" : "not_granted",
-              granted_video: stream.getTracks().some((track) => track.kind === "video" && track.readyState === "live") ? "granted" : "not_granted",
-            };
+            grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
@@ -715,7 +712,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     }
                     const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
                     const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
-                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport, ...(mediaFailure ? { media: mediaFailure } : plan.kind === "media" ? { media: { media_error_kind: "timeout", media_error_step: "peer_connection", ...grantedMedia } } : {}) });
+                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport, media: mediaFailure, grantedMedia });
                     if (plan.kind === "sync") {
                       yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
                       return;

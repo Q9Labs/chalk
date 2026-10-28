@@ -93,14 +93,24 @@ export class ConnectionDiagnostics {
     readonly attempts: number;
     readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null;
     readonly media?: ConnectionDiagnostic["media"];
+    readonly grantedMedia: import("../media/failure-diagnostics").GrantedMedia;
   }): void {
     const { state, epoch, code, attempts, transport } = input;
+    const media: ConnectionDiagnostic["media"] =
+      input.media ??
+      (code === "media_recovery_exhausted"
+        ? {
+            media_error_kind: "timeout",
+            media_error_step: "peer_connection",
+            ...input.grantedMedia,
+          }
+        : undefined);
     this.record({
       event: "recovery_exhausted",
       state,
       epoch,
       code,
-      ...(input.media ? { media: input.media } : {}),
+      ...(media ? { media } : {}),
       recovery: {
         reference: `connection.${code}`,
         attempts,
