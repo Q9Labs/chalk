@@ -54,7 +54,7 @@ const pages = [];
 const report = { stack: "local API + Sync, dedicated development Cloudflare SFU", assertions: [] };
 const browserBundle = await build({
   stdin: {
-    contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: context => window.proofAccess(context)}, {syncUrl}); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
+    contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: context => window.proofAccess(context)}, {syncUrl}); window.states = []; window.client.subscribe(() => { const connection = client.getSnapshot().connection; if (JSON.stringify(connection) !== JSON.stringify(window.states.at(-1)?.connection)) { const event = {at:Date.now(),connection}; window.states.push(event); console.log(JSON.stringify(event)); } }); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
     resolveDir: root,
     sourcefile: "slow-link-proof.ts",
   },
@@ -86,25 +86,34 @@ try {
     let grant = admission.access;
     let first = true;
     let accessQueue = Promise.resolve();
-    const browser = browsers[0] ?? await chromium.launch({
-      channel: "chromium", headless: true,
-      args: ["--no-sandbox", "--disable-dev-shm-usage", "--autoplay-policy=no-user-gesture-required"],
-    });
+    const browser =
+      browsers[0] ??
+      (await chromium.launch({
+        channel: "chromium",
+        headless: true,
+        args: ["--no-sandbox", "--disable-dev-shm-usage", "--autoplay-policy=no-user-gesture-required"],
+      }));
     if (!browsers.includes(browser)) browsers.push(browser);
     const context = await browser.newContext({ permissions: ["microphone", "camera"] });
     await context.addInitScript(() => {
       window.peers = [];
       const NativePeer = RTCPeerConnection;
       globalThis.RTCPeerConnection = class extends NativePeer {
-        constructor(...args) { super(...args); window.peers.push(this); }
+        constructor(...args) {
+          super(...args);
+          window.peers.push(this);
+        }
       };
       const NativeSocket = WebSocket;
       globalThis.WebSocket = class extends NativeSocket {
         constructor(...args) {
           super(...args);
-          this.addEventListener("close", event => console.log(JSON.stringify({event:"wire_close",at:Date.now(),code:event.code,reason:event.reason})));
+          this.addEventListener("close", (event) => console.log(JSON.stringify({ event: "wire_close", at: Date.now(), code: event.code, reason: event.reason })));
         }
-        close(code, reason) { console.log(JSON.stringify({event:"client_close",at:Date.now(),code,reason})); super.close(code,reason); }
+        close(code, reason) {
+          console.log(JSON.stringify({ event: "client_close", at: Date.now(), code, reason }));
+          super.close(code, reason);
+        }
       };
       navigator.mediaDevices.getUserMedia = async () => {
         const context = new AudioContext();
@@ -120,7 +129,9 @@ try {
     const page = await context.newPage();
     pages.push(page);
     const network = [];
-    page.on("console", message => { if (message.type() === "log") console.log(JSON.stringify({event:"client", index, message:message.text()})); });
+    page.on("console", (message) => {
+      if (message.type() === "log") console.log(JSON.stringify({ event: "client", index, message: message.text() }));
+    });
     page.on("requestfailed", (request) => network.push({ type: "request-failed", path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
     page.on("websocket", (socket) => {
       network.push({ type: "websocket-open", path: new URL(socket.url()).pathname });
@@ -134,14 +145,14 @@ try {
         }
       });
     });
-    await page.exposeFunction("proofAccess", request => {
+    await page.exposeFunction("proofAccess", (request) => {
       const next = accessQueue.then(async () => {
         if (first) {
           first = false;
           return grant;
         }
         if (request.reason === "join") {
-          admission = await chalk.participants.admit(space.id, episode.id, {name:`Slow link ${index}`,role:"owner"});
+          admission = await chalk.participants.admit(space.id, episode.id, { name: `Slow link ${index}`, role: "owner" });
           grant = admission.access;
         } else {
           grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), request);
@@ -162,33 +173,38 @@ try {
   const [sharer, listener] = pages;
   for (const page of pages) await page.waitForFunction(() => client.getSnapshot().connection.status === "live" && client.getSnapshot().media.local.microphone.state === "enabled");
 
-  const tc = (...args) => execFileSync("sudo", ["tc", ...args], {stdio:"pipe"});
-  const device = execFileSync("sh", ["-c", "ip route show default | awk '{print $5; exit}'"], {encoding:"utf8"}).trim();
+  const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" });
+  const device = execFileSync("sh", ["-c", "ip route show default | awk '{print $5; exit}'"], { encoding: "utf8" }).trim();
   for (const dev of ["lo", device]) {
     tc("qdisc", "add", "dev", dev, "root", "handle", "1:", "prio");
     tcDevices.push(dev);
     tc("qdisc", "add", "dev", dev, "parent", "1:3", "handle", "30:", "netem", "delay", "0ms");
     if (dev === "lo") {
-      for (const port of [config.ports.api, config.ports.sync]) for (const side of ["sport", "dport"])
-        tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "1", "u32", "match", "ip", side, String(port), "0xffff", "flowid", "1:3");
+      for (const port of [config.ports.api, config.ports.sync]) for (const side of ["sport", "dport"]) tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "1", "u32", "match", "ip", side, String(port), "0xffff", "flowid", "1:3");
     } else {
-      for (const side of ["sport", "dport"])
-        tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "1", "u32", "match", "ip", side, "22", "0xffff", "flowid", "1:1");
+      for (const side of ["sport", "dport"]) tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "1", "u32", "match", "ip", side, "22", "0xffff", "flowid", "1:1");
       tc("filter", "add", "dev", dev, "protocol", "ip", "parent", "1:", "prio", "2", "u32", "match", "ip", "dst", "0.0.0.0/0", "flowid", "1:3");
     }
   }
-  const setLink = (...args) => { for (const dev of tcDevices) tc("qdisc", "change", "dev", dev, "parent", "1:3", "handle", "30:", "netem", ...args); };
-  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const sample = async label => {
-    const snapshots = await Promise.all(pages.map(page => page.evaluate(async () => {
-      const rtp = [];
-      for (const peer of window.peers) for (const stat of (await peer.getStats()).values()) {
-        if (stat.type === "inbound-rtp" || stat.type === "outbound-rtp") rtp.push({type:stat.type, bytes:stat.bytesReceived ?? stat.bytesSent,packets:stat.packetsReceived ?? stat.packetsSent});
-      }
-      return {connection:client.getSnapshot().connection, states:window.states,rtp};
-    })));
-    console.log(JSON.stringify({event:"sample", label, at:Date.now(), snapshots}));
-    report.assertions.push({label,snapshots});
+  const setLink = (...args) => {
+    for (const dev of tcDevices) tc("qdisc", "change", "dev", dev, "parent", "1:3", "handle", "30:", "netem", ...args);
+  };
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const sample = async (label) => {
+    const snapshots = await Promise.all(
+      pages.map((page) =>
+        page.evaluate(async () => {
+          const rtp = [];
+          for (const peer of window.peers)
+            for (const stat of (await peer.getStats()).values()) {
+              if (stat.type === "inbound-rtp" || stat.type === "outbound-rtp") rtp.push({ type: stat.type, bytes: stat.bytesReceived ?? stat.bytesSent, packets: stat.packetsReceived ?? stat.packetsSent });
+            }
+          return { connection: client.getSnapshot().connection, states: window.states, rtp };
+        }),
+      ),
+    );
+    console.log(JSON.stringify({ event: "sample", label, at: Date.now(), snapshots }));
+    report.assertions.push({ label, snapshots });
     return snapshots;
   };
   await sample("baseline");
@@ -200,38 +216,39 @@ try {
   await wait(10000);
   for (const seconds of [5, 15, 30]) {
     report.stage = `outage ${seconds}s`;
-    console.log(JSON.stringify({event:"outage_start",seconds,at:Date.now()}));
+    console.log(JSON.stringify({ event: "outage_start", seconds, at: Date.now() }));
     setLink("loss", "100%");
-    await Promise.all(pages.map(page => page.context().setOffline(true)));
+    await Promise.all(pages.map((page) => page.context().setOffline(true)));
     await wait(seconds * 1000);
     setLink("delay", "0ms");
-    await Promise.all(pages.map(page => page.context().setOffline(false)));
-    console.log(JSON.stringify({event:"outage_end",seconds,at:Date.now()}));
+    await Promise.all(pages.map((page) => page.context().setOffline(false)));
+    console.log(JSON.stringify({ event: "outage_end", seconds, at: Date.now() }));
     await wait(25000);
+    await Promise.all(pages.map((page) => page.waitForFunction(() => client.getSnapshot().connection.status !== "reconnecting", undefined, { timeout: 40000 }).catch((error) => console.log(JSON.stringify({ event: "recovery_wait", message: error.message })))));
     const snapshots = await sample(`after ${seconds}s outage`);
-    if (snapshots.some(s => s.connection.status !== "live")) {
-      console.log(JSON.stringify({event:"try_again",at:Date.now()}));
-      await Promise.all(pages.map(page => page.evaluate(() => client.join({displayName:"Slow link retry", microphone:true, camera:false})).catch(error => console.log(JSON.stringify({event:"retry_error",message:error.message})))));
+    if (snapshots.some((s) => s.connection.status !== "live")) {
+      console.log(JSON.stringify({ event: "try_again", at: Date.now() }));
+      await Promise.all(pages.map((page) => page.evaluate(() => client.join({ displayName: "Slow link retry", microphone: true, camera: false })).catch((error) => console.log(JSON.stringify({ event: "retry_error", message: error.message })))));
       await wait(10000);
       await sample(`retry after ${seconds}s outage`);
     }
   }
   const final = await sample("final");
-  const failures = final.flatMap(s => s.states.filter(state => state.connection.status === "failed"));
+  const failures = final.flatMap((s) => s.states.filter((state) => state.connection.status === "failed"));
   report.failures = failures;
   report.stage = "complete";
-  report.result = failures.length === 0 && final.every(s => s.connection.status === "live" && !s.connection.lastError) ? "passed" : "failed";
-  await writeFile(`${output}/report.json`, JSON.stringify(report,null,2));
-  assert.equal(report.result,"passed");
+  report.result = failures.length === 0 && final.every((s) => s.connection.status === "live" && !s.connection.lastError) ? "passed" : "failed";
+  await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
+  assert.equal(report.result, "passed");
 } catch (error) {
   report.result = "failed";
   report.error = error.message;
   throw error;
 } finally {
-  await writeFile(`${output}/report.json`, JSON.stringify(report,null,2));
-  for (const dev of tcDevices) execFileSync("sudo", ["tc","qdisc","del","dev",dev,"root"], {stdio:"ignore"});
+  await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
+  for (const dev of tcDevices) execFileSync("sudo", ["tc", "qdisc", "del", "dev", dev, "root"], { stdio: "ignore" });
   for (const browser of browsers) await browser.close();
-  if (episode && chalk) await chalk.episodes.end(space.id, episode.id).catch(error => console.error(error.message));
-  if (server) await new Promise(resolve => server.close(resolve));
+  if (episode && chalk) await chalk.episodes.end(space.id, episode.id).catch((error) => console.error(error.message));
+  if (server) await new Promise((resolve) => server.close(resolve));
   await runtime.stop();
 }
