@@ -55,7 +55,9 @@ test("React permits Tailwind 4 token opacity, fallbacks, shorthand, currentColor
 const css = \`/* color: red; #fff */ .x { color: currentColor; background: transparent; fill: url(#abc); }\`;
 const element = <a href="#abc" id="abc" className="bg-[var(--chalk-app-danger)]/10 border-[var(--chalk-app-danger)]/35 hover:!bg-[var(--chalk-overlay)]/[.14] text-(--chalk-text) ring-offset-2 focus-visible:ring-offset-1 placeholder:text-[var(--chalk-app-text-muted,var(--chalk-muted-text))]" />;
 const url = "https://example.test/#fff";
+const commented = <div>{/* #fff bg-blue-500 */}</div>;
 const pattern = /#fff/;
+const red = "var(--chalk-danger)"; const style = { color: red, fill: blue, background: navy };
 `,
   });
   assert.deepEqual(await findTokenViolations(root), []);
@@ -69,13 +71,13 @@ const bad = <svg fill={"navy"} className="focus-visible:ring-offset-red-500 outl
 const legacy = "text-[var(--chalk-text)] var(--foreground)";
 `,
     "ignored.test.tsx": `const fixture = "#fff bg-white";`,
-    "nested/extra.css": `/* #fff */ .x { color: #1234; }`,
+    "nested/extra.css": `/* #fff */ .x { color: #1234; background-color: red; }`,
   });
   const found = await findTokenViolations(root);
   assert.equal(found.filter(({ rule }) => rule === "palette-utility").length, 11);
   assert.deepEqual(
     found.filter(({ rule }) => rule === "named-color").map(({ value }) => value),
-    ["color: rebeccapurple", 'fill={"navy"'],
+    ["color: rebeccapurple", 'fill={"navy"', "background-color: red"],
   );
   assert.ok(found.some(({ value, line }) => value === "oklch(" && line === 2));
   assert.ok(found.some(({ value, line }) => value === "var(--foreground)" && line === 4));
@@ -115,4 +117,10 @@ const icon = <Icon fill={"navy"} stroke="currentColor" />;
   assert.match(result.stderr, /rebeccapurple/u);
   assert.match(result.stderr, /navy/u);
   assert.doesNotMatch(result.stderr, /:1:/u);
+});
+
+test("Native permits token-valued identifiers whose names are CSS colors", async (t) => {
+  const root = await fixture(t, { "src/example.tsx": "const red = tokens.danger; const style = { color: red, backgroundColor: navy }; const icon = <Icon fill={blue} />;" });
+  const result = spawnSync(process.execPath, [resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs")], { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
 });
