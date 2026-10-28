@@ -74,8 +74,10 @@ recordings and transcripts or exhausted webhooks plus terminal SDK connection
 reports, and stale collector state. The connection-report rules alert on one
 affected participant per Tenant, Episode and failure in ten minutes, evaluated
 every minute. Messages include the first report's PKT time; a cleared threshold
-does not prove the person rejoined or recovered. A media-state-mismatch rule has
-a named slot until its SDK/API report fields are confirmed.
+does not prove the person rejoined or recovered. Persistent media-projection
+mismatches also group by microphone/camera source and show publication/projection
+states, duration and attempt. The mismatch rule matches nothing until the SDK/API
+emit accepted `media_projection_mismatch` reports.
 The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
 An independent uptime Worker checks API/Sync health and readiness and reports

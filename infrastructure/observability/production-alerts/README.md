@@ -67,14 +67,17 @@ The first monitor also evaluates [connection-reports.apl](connection-reports.apl
 It still uses the existing Discord notifier and the same three-monitor allowance.
 The API/Sync traffic monitor's thresholds and five-positive-run delay are unchanged.
 
-| Failure                    | Accepted report                                                            | Threshold                                        |
-| -------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------ |
-| `join_failed`              | Trigger `join_failed`, without a `media_start_failed` diagnostic           | At least one affected participant in ten minutes |
-| `media_start_failed`       | Trigger `join_failed`, with a `media_start_failed` diagnostic              | At least one affected participant in ten minutes |
-| `media_recovery_exhausted` | Trigger `recovery_exhausted`, with a `media_recovery_exhausted` diagnostic | At least one affected participant in ten minutes |
+| Failure                     | Accepted report                                                                                                                                | Threshold                                        |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `join_failed`               | Trigger `join_failed`, without a `media_start_failed` diagnostic                                                                               | At least one affected participant in ten minutes |
+| `media_start_failed`        | Trigger `join_failed`, with a `media_start_failed` diagnostic                                                                                  | At least one affected participant in ten minutes |
+| `media_recovery_exhausted`  | Trigger `recovery_exhausted`, with a `media_recovery_exhausted` diagnostic                                                                     | At least one affected participant in ten minutes |
+| `media_projection_mismatch` | Trigger and diagnostic event `media_projection_mismatch`, source `microphone` or `camera`, publication/projection states opposite (`on`/`off`) | At least one affected participant in ten minutes |
 
 Each rule groups by Tenant ID, Episode ID and failure. Repeated uploads and
 multiple matching diagnostics count once per participant within that group.
+Mismatch reports also group by source, so camera and microphone details stay
+separate; opposite mismatch directions still count once per participant/source.
 A failed media start is the more specific join-failure category, not a second
 alert for the same failed join. Only accepted `sdk.connection_report` API events
 count: rejected uploads, ordinary state changes, connection-loss reports and
@@ -105,10 +108,14 @@ cause field. Missing fields in older SDK reports display `unknown`, not a guesse
 permission or network cause. Causes do not split the affected-participant count;
 a changed latest cause can open a new notification group.
 
-**MEDIA_STATE_MISMATCH_SLOT:** the named slot in the APL is intentionally inactive
-until the SDK/API lane confirms the persistent mismatch trigger and fields.
-Transient `media_state` diagnostics and a local mic icon alone must not page.
-The class checklist covers the mic-on/remote-muted symptom in the meantime.
+Mismatch messages show the latest affected report's source, `publication_state`
+and `projection_state` as publication/projection on or off, `duration_ms` in
+milliseconds and `attempt`. Missing optional duration/attempt fields display
+`unknown`. The first-report time remains PKT. The explicit mismatch event is the
+SDK's persistent-mismatch signal; transient `media_state` diagnostics, matching
+states and a local mic icon alone do not page. These rules can deploy before the
+mismatch-report contract: the mismatch predicate simply matches nothing until
+the SDK/API emit accepted reports with that trigger and diagnostic event.
 
 Run the offline provisioning tests from this directory:
 

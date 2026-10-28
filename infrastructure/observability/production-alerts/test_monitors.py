@@ -114,6 +114,77 @@ class MonitorTests(unittest.TestCase):
         return result
 
     @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
+    def test_media_projection_mismatch_sources_directions_deduplication_and_noise(self):
+        rows = [{"stream": "production-state-v2", "tenant": "school-one",
+                 "name": "Example school", "rule": "recording", "value": 0}]
+
+        def report(tenant="school-one", episode="episode-a", participant="hash-a",
+                   source="microphone", publication="on", projection="off",
+                   duration=5000, attempt=1, at="2026-10-27T22:05:00Z",
+                   trigger="media_projection_mismatch", event="media_projection_mismatch",
+                   envelope_event="sdk.connection_report"):
+            diagnostic = {"event": event, "elapsed_ms": 5000, "source": source,
+                          "publication_state": publication, "projection_state": projection}
+            if duration is not None:
+                diagnostic["duration_ms"] = duration
+            if attempt is not None:
+                diagnostic["attempt"] = attempt
+            rows.append({"at": at, "service": "chalk-api", "event": envelope_event,
+                         "tenant": tenant, "episode": episode, "participant": participant,
+                         "trigger": trigger, "report": json.dumps({"version": 1, "trigger": trigger,
+                             "events": [diagnostic, diagnostic,
+                                        {"event": "state_changed", "elapsed_ms": 6000}]})})
+
+        report()
+        report()  # Duplicate diagnostics and uploads still count one participant.
+        report(participant="hash-b", publication="off", projection="on", duration=9000,
+               attempt=2, at="2026-10-27T22:06:00Z")
+        report(source="camera", publication="off", projection="on")
+        report(tenant="school-two")
+        report(episode="episode-b")
+        report(episode="older-optional-fields", duration=None, attempt=None)
+        report(participant="noise-state", event="media_state")
+        report(participant="noise-trigger", trigger="connection_lost")
+        report(participant="noise-rejected", envelope_event="sdk.connection_report.rejected")
+        report(participant="noise-aligned-on", projection="on")
+        report(participant="noise-aligned-off", publication="off")
+        report(participant="noise-source", source="")
+        report(participant="noise-missing-state", projection="")
+
+        actual = {}
+        for table in self.query_fixture(rows)["tables"]:
+            fields = [field["name"] for field in table["fields"]]
+            for values in zip(*table["columns"]):
+                row = dict(zip(fields, values))
+                lines = row["alert_message"].split("\n")
+                summary = lines[4]
+                self.assertEqual(lines[2], "connection-report")
+                self.assertIn("Failure: media_projection_mismatch.", summary)
+                self.assertIn("2026-10-28T03:05:00 PKT", summary)
+                episode = summary.split("Episode: ")[1].split(".")[0]
+                source = summary.split("Source: ")[1].split(";")[0]
+                actual[lines[1], episode, source] = row["value"]
+                if lines[1] == "school-one":
+                    self.assertIn("Tenant: Example school (school-one).", summary)
+                else:
+                    self.assertIn("Tenant: school-two.", summary)
+                if episode == "older-optional-fields":
+                    self.assertIn("publication: on; projection: off. Duration: unknown; attempt: unknown.", summary)
+                elif source == "camera":
+                    self.assertIn("publication: off; projection: on. Duration: 5000 ms; attempt: 1.", summary)
+                elif lines[1] == "school-one" and episode == "episode-a":
+                    self.assertIn("publication: off; projection: on. Duration: 9000 ms; attempt: 2.", summary)
+                else:
+                    self.assertIn("publication: on; projection: off. Duration: 5000 ms; attempt: 1.", summary)
+        self.assertEqual(actual, {
+            ("school-one", "episode-a", "microphone"): 2,
+            ("school-one", "episode-a", "camera"): 1,
+            ("school-two", "episode-a", "microphone"): 1,
+            ("school-one", "episode-b", "microphone"): 1,
+            ("school-one", "older-optional-fields", "microphone"): 1,
+        })
+
+    @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
     def test_real_apl_single_failures_deduplication_noise_and_pkt_rollover(self):
         rows = [
             {"stream": "production-state-v2", "tenant": tenant, "name": name,
