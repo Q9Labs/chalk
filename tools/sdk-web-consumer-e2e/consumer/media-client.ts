@@ -147,6 +147,8 @@ export class FixtureMediaClient {
   }
 
   async #connect(): Promise<void> {
+    const status = await fetch(`/test/media-recovery?participant=${encodeURIComponent(this.#participantId)}`);
+    if (!status.ok) throw Object.assign(new Error(`Fixture SFU HTTP ${status.status}`), { status: status.status, code: "media_control_unavailable" });
     const token = await this.#credential();
     await new Promise<void>((resolve, reject) => {
       const socket = registerSocket(new WebSocket(`${this.#signalingURL}?token=${encodeURIComponent(token)}&connection=${encodeURIComponent(this.#bootstrap.connectionId)}`));

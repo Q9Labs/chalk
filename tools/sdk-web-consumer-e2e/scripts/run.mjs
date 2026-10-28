@@ -1,6 +1,7 @@
 import { checkDocExamples } from "./docs-examples.mjs";
 import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
+import { proveAgreementMatrix } from "./agreement.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -17,7 +18,7 @@ await run(process.execPath, ["--test", "--test-concurrency=1", "tools/sdk-web-co
 if (process.argv.includes("--preflight-only")) process.exit(0);
 
 const requireFromClient = createRequire(join(repositoryDirectory, "sdks/typescript/client/package.json"));
-const { chromium, firefox, webkit } = requireFromClient("playwright");
+const { chromium, firefox, webkit, devices } = requireFromClient("playwright");
 const arguments_ = new Set(process.argv.slice(2));
 const browsersArgument = [...arguments_].find((argument) => argument.startsWith("--browsers="));
 const requestedBrowsers = (browsersArgument?.split("=")[1] ?? "chromium,firefox,webkit").split(",").filter(Boolean);
@@ -94,9 +95,12 @@ try {
         const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
         const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
         try {
-          await proveToastLayering(browser, baseURL);
-          if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
-          else await runLaunchSmoke(browser, browserName, baseURL);
+          if (!arguments_.has("--agreement-only")) {
+            await proveToastLayering(browser, baseURL);
+            if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
+            else await runLaunchSmoke(browser, browserName, baseURL);
+          }
+          if (browserName !== "firefox") await proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device: browserName === "webkit" ? devices["iPad Pro 11"] : undefined, fast: arguments_.has("--agreement-fast") });
         } finally {
           await browser.close();
         }
