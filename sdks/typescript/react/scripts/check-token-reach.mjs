@@ -3,14 +3,14 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { colorSource, literalColorPattern, namedColorPattern } from "../../../../scripts/gates/color-source.mjs";
+import { colorSource, literalColorPattern, namedColorMatches } from "../../../../scripts/gates/color-source.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const componentRoot = resolve(scriptDir, "../src/components");
 const baselinePath = join(scriptDir, "token-reach-baseline.json");
 const patterns = [
   ["literal", literalColorPattern],
-  ["named-color", namedColorPattern],
+  ["named-color", null],
   ["legacy-variable", /var\(--(?:accent|background|border|card|destructive|foreground|muted|popover|primary|ring|secondary|success|warning)(?:-[a-z-]+)?\)/giu],
   [
     "palette-utility",
@@ -28,7 +28,7 @@ export async function findTokenViolations(root = componentRoot, approvedExceptio
     const withoutClosedTokens = text.replace(/(?:bg|text|border(?:-[xysetblr])?|ring(?:-offset)?|fill|stroke|outline|shadow|decoration|divide|from|via|to|accent|caret)-(?:\[var\(--chalk-[a-z-]+\)\]|\(--chalk-[a-z-]+\))/giu, (match) => " ".repeat(match.length));
     for (const [rule, pattern] of patterns) {
       const input = rule === "legacy-variable" || rule === "palette-utility" ? withoutClosedTokens : text;
-      for (const match of input.matchAll(pattern)) {
+      for (const match of rule === "named-color" ? namedColorMatches(input, file) : input.matchAll(pattern)) {
         const start = input.lastIndexOf("\n", match.index) + 1;
         const end = input.indexOf("\n", match.index);
         const lineText = input.slice(start, end === -1 ? undefined : end).trim();

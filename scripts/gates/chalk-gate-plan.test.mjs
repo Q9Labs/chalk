@@ -63,7 +63,10 @@ test("token scanner, exception, baseline and CI changes retain executable token 
     const ids = sharedInputs.includes(file) ? ["react-tokens", "native-quality"] : reactInputs.includes(file) ? ["react-tokens"] : ["native-quality"];
     for (const id of ids) {
       const lane = checks.find((task) => task.id === id);
-      assert.ok(lane?.command.some((part) => /check-token|check:tokens/u.test(part)), `${file}: ${id} must execute a scanner`);
+      assert.ok(
+        lane?.command.some((part) => /check-token|check:tokens/u.test(part)),
+        `${file}: ${id} must execute a scanner`,
+      );
     }
   }
 });
