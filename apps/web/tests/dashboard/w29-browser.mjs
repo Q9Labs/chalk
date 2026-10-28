@@ -10,6 +10,8 @@ import { build } from "../../../../tools/sdk-web-consumer-e2e/node_modules/esbui
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, syncObservability: true });
 const { context, repository, apiOrigin, origin, syncOrigin, tenantId, syncLog } = fixture;
+// Route-fulfilled pages need explicit permission to reach the loopback fixture.
+await context.grantPermissions(["local-network-access"], { origin });
 const syncEndpoint = new URL("/v1/sync", syncOrigin).href.replace(/^http/, "ws");
 const out = resolve(repository, "artifacts/w29");
 await mkdir(out, { recursive: true });
