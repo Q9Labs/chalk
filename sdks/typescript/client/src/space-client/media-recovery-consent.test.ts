@@ -3,7 +3,7 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 import { createConvergenceScenario, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 
-it.each(["microphone", "camera"] as const)("does not reverse an offline %s stop when Sync is replaced", async (source) => {
+it.each((["microphone", "camera"] as const).flatMap((source) => [false, true].map((stoppedBefore) => ({ source, stoppedBefore }))))("does not reverse $source consent revocation when Sync is replaced (already paused: $stoppedBefore)", async ({ source, stoppedBefore }) => {
   const first = createCoreTestPlatform();
   const next = createCoreTestPlatform();
   const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
@@ -29,7 +29,8 @@ it.each(["microphone", "camera"] as const)("does not reverse an offline %s stop 
     first.media.emit({ ...first.media.getSnapshot(), localTracks: [{ ...publication, track }] });
     first.emitSync({ ...first.sync.getSnapshot(), media: { projectionId: "media", sequence: 1, items: [publication] } });
     expect(client.getSnapshot().media.local[source].state).toBe("enabled");
-    next.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "idle" }, media: { projectionId: "replacement", sequence: 1, items: [{ ...publication, enabled: false }] } });
+    if (stoppedBefore) first.emitMediaPause({ source, revision: 2 });
+    next.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "idle" }, media: { projectionId: "replacement", sequence: 1, items: [{ ...publication, enabled: stoppedBefore }] } });
     first.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
     await vi.waitFor(() => expect(creations).toBe(2), { timeout: 3000 });
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"), { timeout: 3000 });

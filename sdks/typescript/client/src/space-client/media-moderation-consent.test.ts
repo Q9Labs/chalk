@@ -94,3 +94,22 @@ it.each(["microphone", "camera"] as const)("two clients sharing a participant ne
     b.dispose();
   }
 });
+
+it("does not ignore a host stop merely because the microphone projection is still on", async () => {
+  const test = createConvergenceScenario("microphone");
+  try {
+    await test.client.join({ microphone: false, camera: false });
+    await test.setEnabled(true);
+    const publication = { participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "fresh" };
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...publication, track: test.track }] });
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), media: { projectionId: "media", sequence: 2, items: [publication] } });
+    // This is also the judge's delayed-event fixture without any evidence that
+    // revision 2 predates the tap. Media sequence 2 is not control revision 2.
+    test.platform.emitMediaPause({ source: "microphone", revision: 2 });
+    expect(test.track.enabled).toBe(false);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(true);
+  } finally {
+    test.client.dispose();
+  }
+});

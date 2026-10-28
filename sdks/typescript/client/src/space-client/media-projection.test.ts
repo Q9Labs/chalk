@@ -185,6 +185,27 @@ it("keeps a mute action while live capture awaits Sync, and enforces mute on off
   }
 });
 
+it.each(["mute", "ended"] as const)("watches OS %s on the actual replacement microphone, not a retired capture", async (event) => {
+  const test = scenario();
+  try {
+    await test.join();
+    const replacement = mediaTrack();
+    test.platform.media.emit({ ...test.platform.media.getSnapshot(), localTracks: [{ ...test.publication, track: replacement }] });
+    test.project(true);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
+    Object.assign(replacement, event === "mute" ? { muted: true } : { readyState: "ended" });
+    replacement.dispatchEvent(new Event(event));
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(replacement.enabled).toBe(false);
+    Object.assign(replacement, { muted: false });
+    replacement.dispatchEvent(new Event("unmute"));
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(test.command).not.toHaveBeenCalled();
+  } finally {
+    test.dispose();
+  }
+});
+
 it("does not automatically send cleanup after a rejected enable", async () => {
   const test = scenario();
   try {

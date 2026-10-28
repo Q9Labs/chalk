@@ -128,7 +128,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeScreenEnded: (() => void) | null = null;
   #unsubscribePorts: (() => void) | null = null;
-  #unsubscribeMicrophone: (() => void) | null = null;
+  #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
   readonly #projection: MediaProjectionMonitor;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
@@ -205,7 +205,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     microphone: boolean;
     camera: boolean;
   }> {
-    return { microphone: this.#sources.microphone.desired.enabled, camera: this.#sources.camera.desired.enabled };
+    return { microphone: this.#hasConsent("microphone"), camera: this.#hasConsent("camera") };
   }
   captureInitial(intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<MediaStream, unknown> {
     for (const source of ["microphone", "camera"] as const) this.#sources[source].initialRevision = this.#sources[source].desired.revision;
@@ -581,6 +581,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const state = this.#sources[source];
     if (state.desired.revision !== revision || (enabling && state.forcedRevision === revision)) throw cancelledCaptureError();
   }
+  #hasConsent(source: MediaSource): boolean {
+    const state = this.#sources[source];
+    return state.desired.enabled && state.forcedRevision !== state.desired.revision;
+  }
   #resetObservations(): void {
     if (this.#connection.getSnapshot().state !== "reconnecting") this.#recovering = null;
     for (const source of MEDIA_SOURCES) {
@@ -588,12 +592,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
       state.result = { revision: state.desired.revision, status: "confirmed" };
       state.pause = null;
       state.serverSequence = -1;
-      state.forcedRevision = null;
+      // Revocation belongs to the action, not a disposable connection or Sync client.
     }
   }
   #pauseInitialTracks(): void {
     for (const source of ["microphone", "camera"] as const) {
-      const enabled = this.#sources[source].desired.enabled;
+      const enabled = this.#hasConsent(source);
       const track = this.#track(source);
       if (track && !enabled) track.enabled = false;
       this.#sources[source].localEnabled = !!track && enabled;
@@ -605,14 +609,14 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
       const tracks = stream.getTracks().filter((track) => {
         const source = track.kind === "audio" ? "microphone" : "camera";
-        const state = this.#sources[source];
-        track.enabled = state.desired.enabled;
-        if (!state.desired.enabled) {
+        const enabled = this.#hasConsent(source);
+        track.enabled = enabled;
+        if (!enabled) {
           // An omitted source was never prepared in the media plane. Release its publication ownership.
           this.#deleteTrack(source);
           if (source === "microphone") track.stop();
         }
-        return state.desired.enabled;
+        return enabled;
       });
       await media.start(streamFromTracks(tracks));
       for (const source of ["microphone", "camera"] as const) {
@@ -751,23 +755,28 @@ class MediaControllerRuntime implements MediaControllerEffects {
     };
     this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
   }
-  #watchMicrophone(track: MediaStreamTrack): void {
-    this.#unsubscribeMicrophone?.();
+  #watchMicrophone(track: MediaStreamTrack | null): void {
+    if (this.#microphoneWatch?.track === track) return;
+    this.#microphoneWatch?.unsubscribe();
+    this.#microphoneWatch = null;
+    if (!track) return;
     const changed = () => {
-      if (this.#track("microphone") !== track) return;
+      if (this.#microphoneWatch?.track !== track) return;
       if ((track.muted || track.readyState === "ended") && this.#ports) this.#pausePublication(this.#ports, "microphone", this.#sources.microphone.desired.revision);
       this.#publish();
     };
     for (const event of ["mute", "unmute", "ended"]) track.addEventListener(event, changed);
-    this.#unsubscribeMicrophone = () => {
-      for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
+    this.#microphoneWatch = {
+      track,
+      unsubscribe: () => {
+        for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
+      },
     };
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
       if (source === "microphone") {
-        this.#unsubscribeMicrophone?.();
-        this.#unsubscribeMicrophone = null;
+        this.#watchMicrophone(null);
       }
       this.#tracks.delete(source);
       return;
@@ -779,8 +788,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     } else this.#transitionCamera({ status: "ended" });
   }
   #clearTracks(): void {
-    this.#unsubscribeMicrophone?.();
-    this.#unsubscribeMicrophone = null;
+    this.#watchMicrophone(null);
     this.#tracks.clear();
     this.#transitionCamera({ status: "idle" });
   }
@@ -1149,6 +1157,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #observeProjections(): void {
     const ports = this.#ports;
+    this.#watchMicrophone(ports?.media.getSnapshot().localTracks.find((item) => item.source === "microphone")?.track ?? this.#track("microphone") ?? null);
     if (!ports) {
       this.#projection.reset();
       return;
@@ -1163,9 +1172,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#observeProjection(ports, "camera");
   }
   #enforcePause(ports: ConnectionPorts, source: "microphone" | "camera"): void {
-    const state = this.#sources[source];
     const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
-    if ((!state.desired.enabled || state.forcedRevision === state.desired.revision) && livePublication(publication)) {
+    if (!this.#hasConsent(source) && livePublication(publication)) {
       this.#pauseTracks(source);
       ports.media.setLocalSourceIntent?.(source, false);
     }
@@ -1184,14 +1192,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
   }
   #confirmedLocal(source: "microphone" | "camera"): MediaSlice["local"][MediaSource] {
-    const state = this.#sources[source];
     const publication = this.#ports?.media.getSnapshot().localTracks.find((item) => item.source === source);
     const sync = this.#ports?.sync.getSnapshot();
     const projected = sync?.media?.items.some((item) => item.participantId === sync.participantId && item.source === source && item.enabled && item.publicationId === publication?.publicationId) ?? false;
     const confirmed = this.#syncLive && livePublication(publication) && projected;
     const pending = this.#pendingSources.has(source) || this.#connection.getSnapshot().state === "joining";
     const media = { source, track: publication?.track ?? this.#track(source) ?? null, state: "disabled" } satisfies MediaSlice["local"][MediaSource];
-    return confirmedLocalMedia(media, state.desired.enabled && state.forcedRevision !== state.desired.revision, pending, confirmed, this.#syncLive, this.#projection.state(source));
+    return confirmedLocalMedia(media, this.#hasConsent(source), pending, confirmed, this.#syncLive, this.#projection.state(source));
   }
   #publish(): void {
     const current = this.#store.getSnapshot();
