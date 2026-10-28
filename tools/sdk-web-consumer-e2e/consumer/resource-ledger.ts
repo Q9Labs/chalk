@@ -85,6 +85,15 @@ export function resourceCounts() {
   };
 }
 
+export function peerStates() {
+  return [...peers].map((peer) => ({
+    connection: peer.connectionState,
+    ice: peer.iceConnectionState,
+    signaling: peer.signalingState,
+    transceivers: peer.getTransceivers().map((transceiver) => ({ mid: transceiver.mid, direction: transceiver.currentDirection, sender: transceiver.sender.track?.kind, receiver: transceiver.receiver.track.kind, muted: transceiver.receiver.track.muted })),
+  }));
+}
+
 function createVideoTrack(label: string): MediaStreamTrack {
   const canvas = document.createElement("canvas");
   canvas.width = 64;
