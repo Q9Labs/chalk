@@ -19,6 +19,7 @@
     "scripts/web-proof/fixtures/guest-media.mjs",
     "scripts/web-proof/join-startup.mjs",
     "scripts/web-proof/connection-lost.mjs",
+    "scripts/web-proof/student-first.mjs",
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "apps/api/scripts/smoke-lifecycle.mjs",
