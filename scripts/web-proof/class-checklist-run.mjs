@@ -4,7 +4,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolveDevConfig } from "../dev/config.mjs";
 import { createChalkSupervisor } from "../dev/chalk.mjs";
 
@@ -42,6 +42,7 @@ try {
   const run = process.env.CHALK_CLASS_RUN ?? "1";
   const output = `.private/class-checklist/run-${run}`;
   await mkdir(output, { recursive: true });
+  await writeFile(`${output}/cases.jsonl`, "");
   const code = await new Promise((resolve, reject) => {
     child = spawn("pnpm", ["exec", "e2e", "run", ...process.argv.slice(2)], {
       stdio: "inherit",

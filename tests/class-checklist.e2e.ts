@@ -313,9 +313,14 @@ test("C3 slow: close the student tab for three minutes then join a fresh tab", a
       await pages[1].close();
       await wait(180_000);
       pages[1] = await contexts[1].newPage();
-      await join(pages[1], "Student", url);
-      await empty.close();
+      await pages[1].bringToFront();
+      const start = Date.now();
+      // The saved entrance automatically rejoins when this browser reopens the URL.
+      await pages[1].goto(url);
+      await tile(pages[1], "Student").waitFor({ timeout: 10_000 });
       await roster(pages);
+      expect(Date.now() - start).toBeLessThan(10_000);
+      await empty.close();
       await shot(pages, "C3");
     }),
   );
