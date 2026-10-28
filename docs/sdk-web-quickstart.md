@@ -69,6 +69,20 @@ refreshState = getAccessRefreshState(renewed);
 
 The state contains the current media credential and Participant generation. Keep it in server-side storage, never logs or browser responses. A normal refresh keeps the same Participant and media connection; it does not admit another Participant. The optional final request argument makes `issueAccess` select media replacement when Chalk requests it; applications need no conditional. Keep the retained state scoped to the authenticated Participant, and validate and authorize the endpoint request before passing it on.
 
+## Retry Episode creation safely
+
+When you supply an `idempotencyKey`, keep the entire Episode creation input
+unchanged across retries and concurrent requests for the same operation.
+Recomputing `startedAt: new Date().toISOString()` with the same key returns
+`request.idempotency_conflict` (HTTP 409). Omit `startedAt` to let Chalk assign
+the start time, or persist the chosen timestamp with the key before calling.
+Replay that unchanged request to recover an Episode whose creation response
+was lost before your backend saved its ID.
+
+An active Episode with open admission accepts a collaborator before an owner
+joins. The absence of an owner is not an access-preparation error. See the
+[student-before-owner proof](proofs/student-first/README.md).
+
 ## Expose an access endpoint
 
 Create an application-owned endpoint that authenticates the current user, checks their access to the Space, and asks your server-side Chalk integration for an `AccessGrant`. Return the grant as JSON without inspecting or reshaping it. Keep the tenant API key and any server-side identity records out of browser responses.

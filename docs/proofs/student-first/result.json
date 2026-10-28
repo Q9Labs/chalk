@@ -1,0 +1,26 @@
+{
+  "result": "passed",
+  "stages": [
+    {
+      "phase": "episode-idempotency",
+      "changedTimestamp": "request.idempotency_conflict",
+      "exactReplay": "same Episode"
+    },
+    {
+      "phase": "student-first",
+      "connection": "live",
+      "roles": [
+        "collaborator"
+      ]
+    },
+    {
+      "phase": "teacher-joined",
+      "connection": "live",
+      "participants": 2,
+      "playingVideos": 2,
+      "studentClicks": 0
+    }
+  ],
+  "pageErrors": [],
+  "cleanupErrors": []
+}
