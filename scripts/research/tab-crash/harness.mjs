@@ -128,7 +128,7 @@ async function run(version, constrained) {
     active={tenant,space,episode,path,admission,grants:0,forbidden:0,blockedSockets:0,css};
   };
   const navigate = async () => {await page.goto('http://127.0.0.1:8090');await page.waitForFunction(()=>window.__ready);};
-  const join = async () => {await page.evaluate(()=>void window.__join()); await delay(constrained?1600:800);};
+  const joinPage = async () => {await page.evaluate(()=>void window.__join()); await delay(constrained?1600:800);};
   const expire = (natural=false) => {
     const id=active.admission.participant.id;
     if(!natural) sql(`update participant_join_seats set expires_at=now()-interval '1 second' where participant_id='${id}';`);
@@ -138,24 +138,24 @@ async function run(version, constrained) {
   emit({run:runName,chromium:browser.version(),profile:constrained?'1 GiB browser cgroup, 256 MiB V8 old space, 4x CPU throttle':'default',begin:true});
   // One full-duration incident: seven real grants over ~13 s, actual 120 s seat,
   // stale refresh and retries until seven minutes have elapsed.
-  await fixture(); await navigate(); await join();
+  await fixture(); await navigate(); await joinPage();
   for(let n=1;n<7;n++) {await delay(2100);await page.evaluate(async()=>{ const response=await fetch('/access',{method:'POST'}); if(response.status!==201)throw new Error(`burst grant ${response.status}`);await response.json(); });}
   await sample(page,cdp,browserCDP,'soak-burst',runName,0);
   await page.screenshot({path:join(out,`${runName}-burst.png`)});
   const remaining=125000-(Date.now()-runStart); if(remaining>0) await delay(remaining);
   expire(true);
-  await page.reload();await page.waitForFunction(()=>window.__ready);await join();
+  await page.reload();await page.waitForFunction(()=>window.__ready);await joinPage();
   if(!active.forbidden) throw new Error('stale refresh did not get real 403');
   await sample(page,cdp,browserCDP,'soak-stale-403',runName,0);
-  for(let n=1;n<=10;n++) { await page.evaluate(()=>window.__unmount());await page.evaluate(()=>window.__mount());await join(); }
+  for(let n=1;n<=10;n++) { await page.evaluate(()=>window.__unmount());await page.evaluate(()=>window.__mount());await joinPage(); }
   for(let n=0;n<5;n++) {
     const next=(n+1)*59000+125000;const wait=next-(Date.now()-runStart);if(wait>0)await delay(wait);
     await sample(page,cdp,browserCDP,'soak',runName,n);
   }
   for(let cycle=1;cycle<=21;cycle++) {
-    await fixture();await navigate();await join();
+    await fixture();await navigate();await joinPage();
     await sample(page,cdp,browserCDP,'pending',runName,cycle);
-    expire();await page.reload();await page.waitForFunction(()=>window.__ready);await join();
+    expire();await page.reload();await page.waitForFunction(()=>window.__ready);await joinPage();
     if(!active.forbidden)throw new Error('accelerated stale refresh did not get 403');
     await sample(page,cdp,browserCDP,'stale-403',runName,cycle);
     await page.evaluate(()=>window.__unmount());await delay(1000);
