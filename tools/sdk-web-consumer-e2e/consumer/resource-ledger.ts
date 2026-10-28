@@ -88,19 +88,25 @@ export function resourceCounts() {
 
 export async function peerStates() {
   return Promise.all(
-    [...peers].map(async (peer) => ({
-      connection: peer.connectionState,
-      ice: peer.iceConnectionState,
-      signaling: peer.signalingState,
-      transceivers: peer.getTransceivers().map((transceiver) => ({
-        mid: transceiver.mid,
-        direction: transceiver.currentDirection,
-        sender: transceiver.sender.track ? { kind: transceiver.sender.track.kind, enabled: transceiver.sender.track.enabled, muted: transceiver.sender.track.muted, context: audioContexts.get(transceiver.sender.track)?.state } : null,
-        receiver: transceiver.receiver.track.kind,
-        muted: transceiver.receiver.track.muted,
-      })),
-      audio: [...(await peer.getStats()).values()].filter((row) => row.kind === "audio" && ["outbound-rtp", "inbound-rtp", "media-source"].includes(row.type)).map((row) => ({ type: row.type, packetsSent: row.packetsSent, packetsReceived: row.packetsReceived, audioLevel: row.audioLevel })),
-    })),
+    [...peers].map(async (peer) => {
+      const audio: { type: string; packetsSent?: number; packetsReceived?: number; audioLevel?: number }[] = [];
+      (await peer.getStats()).forEach((row) => {
+        if (row.kind === "audio" && ["outbound-rtp", "inbound-rtp", "media-source"].includes(row.type)) audio.push({ type: row.type, packetsSent: row.packetsSent, packetsReceived: row.packetsReceived, audioLevel: row.audioLevel });
+      });
+      return {
+        connection: peer.connectionState,
+        ice: peer.iceConnectionState,
+        signaling: peer.signalingState,
+        transceivers: peer.getTransceivers().map((transceiver) => ({
+          mid: transceiver.mid,
+          direction: transceiver.currentDirection,
+          sender: transceiver.sender.track ? { kind: transceiver.sender.track.kind, enabled: transceiver.sender.track.enabled, muted: transceiver.sender.track.muted, context: audioContexts.get(transceiver.sender.track)?.state } : null,
+          receiver: transceiver.receiver.track.kind,
+          muted: transceiver.receiver.track.muted,
+        })),
+        audio,
+      };
+    }),
   );
 }
 
