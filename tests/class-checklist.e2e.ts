@@ -249,6 +249,7 @@ test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up
     if (await mute.count()) await mute.click();
     const camera = student.getByRole("button", { name: "Turn off camera", exact: true });
     if (await camera.count()) await camera.click();
+    await teacher.bringToFront();
     await teacher.getByRole("button", { name: "Board", exact: true }).click();
     const cover = await contexts[1].newPage();
     await cover.bringToFront();
@@ -321,6 +322,7 @@ test("C4/C6 slow: sixty seconds offline, one Rejoin, live two-way media and rest
     });
     await checkCase("C6", async () => {
       for (const page of pages.slice(0, 2)) {
+        await page.bringToFront();
         await page.getByRole("button", { name: "Unmute microphone", exact: true }).click();
         await page.getByRole("button", { name: "Turn on camera", exact: true }).click();
       }
@@ -357,6 +359,7 @@ test("C4/C6 slow: sixty seconds offline, one Rejoin, live two-way media and rest
         };
       });
       for (let attempt = 0; attempt < 2; attempt++) {
+        await pages[0].bringToFront();
         const start = Date.now();
         await pages[0].getByRole("button", { name: "Share screen", exact: true }).click();
         for (const page of pages.slice(1)) {

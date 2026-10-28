@@ -13,7 +13,7 @@ Chromium (`pnpm exec e2e-web install chromium --with-deps` and
 `pnpm exec playwright install --with-deps chromium`), Xvfb and Docker available:
 
 ```sh
-CHALK_CLASS_SFU_FILE=/root/class-sfu.json CHALK_CLASS_RUN=1 xvfb-run -a pnpm test:class-checklist
+GOTOOLCHAIN=auto CHALK_CLASS_SFU_FILE=/tmp/class-sfu.json CHALK_CLASS_RUN=1 xvfb-run -a pnpm test:class-checklist
 ```
 
 Supply the private JSON file over SSH, never in Git: `environment` must be
@@ -38,8 +38,16 @@ clock. It does not claim an active WebRTC connection enters intensive timer
 throttling. C4 uses Chromium network-offline emulation. C5 additionally drops
 the student's non-loopback traffic and local stack TCP traffic with a Linux
 process-group firewall rule, including SFU/UDP traffic that DevTools does not
-block. It needs root, `setpriv` and `iptables`; rules are removed in `finally`.
+block. It needs passwordless `sudo`, `setpriv` and `iptables`; rules are removed in `finally`.
 Neither test exercises a physical Wi-Fi adapter or a particular ISP.
 C6 uses distinguishable tones rather than speech
 recognition; it checks audio received both ways and advancing decoded video
 and restarted-share frames. C8/PC/ISP comparisons remain outside this suite.
+
+The harness supplies `/space` explicitly because the local launcher's route
+scanner does not recognize the current pathless layout. It also starts an
+isolated PostgreSQL container and waits for the final server (not the temporary
+entrypoint server) before handing it to the supervisor. The container and its
+anonymous data volume are removed in `finally`. No product code is changed for
+either startup workaround. Use e2e's normal `--grep` flag for a short diagnosis,
+for example append `--grep '^C1:'` to the command above.
