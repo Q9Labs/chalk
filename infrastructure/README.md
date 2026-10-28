@@ -29,13 +29,12 @@ telemetry, alerting, and end-to-end proof requirements.
 
 ## Recorder infrastructure
 
-The recorder pools are declared under [`recorder/`](recorder/). Capture uses
-separate SGP1 CPU policy and a scoped DigitalOcean provider identity; render
-uses separate TOR1 GPU policy and identity. OpenTofu owns immutable pool tags,
-outbound-only firewalls, image/release contracts, and the zero-idle capacity
-bounds. The external recorder reconciler owns Droplet creation, prewarm,
-desired capacity, fencing, and replacement, so an IaC replacement can never
-briefly exceed the 11 capture, 10 render, or 21 global caps. The root
+The recorder pools are declared under [`recorder/`](recorder/). Capture and
+render have separate policies and scoped DigitalOcean identities; the recorder
+README describes the configurable pool defaults and capacity. OpenTofu owns
+immutable pool tags, outbound-only firewalls, image/release contracts, and the
+zero-idle capacity bounds. The external recorder reconciler owns Droplet
+creation, prewarm, desired capacity, fencing, and replacement. The root
 configuration also declares the private temporary R2 lifecycle and Singapore
 AWS KMS recording KEK. The KMS policy grants data-key operations only to the
 control-plane role with the fixed environment and required recording context;

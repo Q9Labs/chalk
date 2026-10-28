@@ -78,9 +78,26 @@ After all relational commits, use `cleanup-short` with the current purge plan,
 baseline plan/receipt and private journal. It checks each object's retained
 references under its own short fence, reusing the idempotent inspect/delete/HEAD
 helper. The deadline includes the external call; no transaction spans the whole
-manifest. Then inventory/apply `backfill-short` with the explicit backfill spec,
-matching backfill baseline and before-image directory. It remains one short,
+manifest.
+
+```sh
+pnpm tenant:purge --operation cleanup-short --apply \
+  --plan /private/current-plan.json --baseline-plan /private/baseline-plan.json \
+  --backup-receipt /private/baseline-receipt.json --journal /private/cleanup.jsonl
+```
+
+Then inventory and apply `backfill-short` with an explicit backfill spec and a
+matching restore-verified backfill baseline and receipt. It remains one short,
 raise-only transaction with service Spaces and deliberate values protected.
+
+```sh
+pnpm tenant:purge --operation backfill-short --dry-run --scope /private/scope.json \
+  --backfill /private/backfill.json --plan-out /private/current-backfill-plan.json
+pnpm tenant:purge --operation backfill-short --apply \
+  --plan /private/current-backfill-plan.json --baseline-plan /private/baseline-backfill-plan.json \
+  --backup-receipt /private/baseline-backfill-receipt.json \
+  --before-images-directory /private/encrypted-backups --result-out /private/backfill-result.json
+```
 
 Outside all production transactions, authenticate each live before-image,
 materialize exactly its rows in an isolated PostgreSQL staging database, dump
@@ -92,7 +109,7 @@ the encrypted live authority files and object bytes at least 14 days.
 1. Create “scope.json” with `delete` and `keep` arrays of exact `{id, name}`
    identities. Both are required, disjoint, and together must match every current
    Tenant. New, renamed or missing identities stop the purge.
-2. Inventory with `pnpm tenant:purge --scope /private/scope.json --dry-run`.
+2. For managed production, inventory with `pnpm tenant:purge --operation purge-short --scope /private/scope.json --dry-run`.
    Supply `--objects /private/objects.json` for the reviewed object manifest.
    An object must have `key`, `etag`, `size` and an approved `owner_tenant_id`
    matching `tenants/<id>/`. Shared objects need an explicit `shared_prefixes`
@@ -120,10 +137,13 @@ the encrypted live authority files and object bytes at least 14 days.
    archive's actual digest and rejects mismatched, unverified or short-lived
    receipts. This is an operator attestation, not an automatic backup service.
 
-## Apply and resume
+## Legacy apply and resume
+
+These commands use the older all-Tenant transaction. **Do not use them on
+managed production**; use the short-transaction operations above instead.
 
 ```
-pnpm tenant:purge --apply --plan /private/plan.json \
+pnpm tenant:purge --operation purge --apply --plan /private/plan.json \
   --backup-receipt /private/backup-receipt.json --result-out /private/result.json
 pnpm tenant:purge --operation cleanup --apply --plan /private/plan.json \
   --backup-receipt /private/backup-receipt.json --journal /private/cleanup.jsonl

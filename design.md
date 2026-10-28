@@ -572,7 +572,7 @@ Sound is never the only signal. Every event also has a visible and an announced 
 
 ## 7. Performance
 
-The call must stay smooth on low-end laptops and phones. These rules shape every component, and [the performance budgets](docs/performance-budget.md) hold the measured limits and the scenarios that enforce them. The redesign meets the budgets, and a budget does not loosen to fit a design.
+The call must stay smooth on low-end laptops and phones. These rules shape every component, and [the performance budgets](docs/performance-budget.md) describe the measured limits and checks. Measure the integrated redesign against those budgets; do not loosen a budget to fit a design.
 
 - The call uses no `backdrop-filter`. Floating surfaces use the near-opaque fills in section 2.
 - The limbo blur is one static `filter` on one layer, the call layer. It never animates, and it is removed when the call returns.
