@@ -1,5 +1,7 @@
 // Run on Instabox with a dedicated development SFU application, never production.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
@@ -13,6 +15,7 @@ const requireClient = createRequire(new URL("../../sdks/typescript/client/packag
 const { chromium } = requireClient("playwright");
 const { build } = requireClient("esbuild");
 const root = process.cwd();
+const fixtureMarker = createHash("sha256").update(root).digest("hex").slice(0, 12);
 const output = resolve("artifacts/slow-link");
 await mkdir(output, { recursive: true });
 // The caller supplies this private file over SSH stdin, outside the source snapshot.
@@ -23,7 +26,7 @@ assert.ok(credentials.appId && credentials.appSecret);
 let systemToken;
 let tenant;
 let space;
-const config = resolveDevConfig({ root, env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "300000", CHALK_DEV_WEB_PORT: "4870" }, requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"], secretResolver: async () => credentials });
+const config = resolveDevConfig({ root, fresh: true, env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "300000", CHALK_DEV_WEB_PORT: "4870" }, requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"], secretResolver: async () => credentials });
 const services = [
   { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
   { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` } },
@@ -38,8 +41,8 @@ const localFetch = async (input, init) => {
       .clone()
       .json()
       .catch(() => undefined);
-    if (url.pathname === "/v1/tenants") tenant = init?.method === "POST" ? body : body.tenants?.find((entry) => entry.name.startsWith("Chalk local dev "));
-    if (/\/spaces$/u.test(url.pathname)) space = init?.method === "POST" ? body : body.spaces?.find((entry) => entry.slug.startsWith("chalk-local-"));
+    if (url.pathname === "/v1/tenants") tenant = init?.method === "POST" ? body : body.tenants?.find((entry) => entry.name === `Chalk local dev ${fixtureMarker}`);
+    if (/\/spaces$/u.test(url.pathname)) space = init?.method === "POST" ? body : body.spaces?.find((entry) => entry.slug === `chalk-local-${fixtureMarker}`);
   }
   return response;
 };
@@ -49,11 +52,19 @@ let chalk;
 let episode;
 const browsers = [];
 const networkSessions = [];
+const packetChain = `CHALK_SLOW_${process.pid}`;
+const packetFilters = [];
+const dropChain = `${packetChain}_DROP`;
+let lossPulse;
+let lossPulseEnd;
+let dropChainCreated = false;
+let packetChainCreated = false;
+const iptables = (...args) => execFileSync("sudo", ["iptables", ...args], { stdio: "pipe" });
 const pages = [];
 const report = { stack: "local API + Sync, dedicated development Cloudflare SFU", assertions: [] };
 const browserBundle = await build({
   stdin: {
-    contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: context => window.proofAccess(context)}, {syncUrl}); window.states = []; window.client.subscribe(() => { const connection = client.getSnapshot().connection; if (JSON.stringify(connection) !== JSON.stringify(window.states.at(-1)?.connection)) { const event = {at:Date.now(),connection}; window.states.push(event); console.log(JSON.stringify(event)); } }); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
+    contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: context => window.proofAccess(context)}, {syncUrl,onConnectionDiagnostic:diagnostic => console.log(JSON.stringify({event:"diagnostic",at:Date.now(),diagnostic}))}); window.states = []; window.client.subscribe(() => { const connection = client.getSnapshot().connection; if (JSON.stringify(connection) !== JSON.stringify(window.states.at(-1)?.connection)) { const event = {at:Date.now(),connection}; window.states.push(event); console.log(JSON.stringify(event)); } }); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
     resolveDir: root,
     sourcefile: "slow-link-proof.ts",
   },
@@ -80,8 +91,9 @@ try {
   server.listen(config.ports.web, "127.0.0.1");
   await once(server, "listening");
   report.stage = "join two development participants";
+  const admissions = await Promise.all([0, 1].map((index) => chalk.participants.admit(space.id, episode.id, { name: `Slow link ${index}`, role: "owner" })));
   for (let index = 0; index < 2; index++) {
-    let admission = await chalk.participants.admit(space.id, episode.id, { name: `Slow link ${index}`, role: "owner" });
+    let admission = admissions[index];
     let grant = admission.access;
     let first = true;
     let accessQueue = Promise.resolve();
@@ -177,6 +189,20 @@ try {
     await session.send("Network.enable");
     networkSessions.push(session);
   }
+  iptables("-N", packetChain);
+  packetChainCreated = true;
+  iptables("-A", packetChain, "-j", "RETURN");
+  iptables("-N", dropChain);
+  dropChainCreated = true;
+  iptables("-A", dropChain, "-j", "DROP");
+  for (const [direction, port] of [
+    ["OUTPUT", "--dport"],
+    ["INPUT", "--sport"],
+  ]) {
+    iptables("-I", direction, "-p", "udp", "!", port, "53", "-j", packetChain);
+    packetFilters.push({ direction, port });
+  }
+  const setPacketLoss = (blocked) => iptables("-R", packetChain, "1", "-j", blocked ? dropChain : "RETURN");
   const setLink = (conditions) =>
     Promise.all(
       networkSessions.map((session) =>
@@ -224,29 +250,52 @@ try {
         ),
       ),
     );
-    const before = await sample(`${label}: media start`);
-    await wait(3000);
-    const after = await sample(`${label}: media end`);
-    for (let index = 0; index < pages.length; index++)
-      for (const type of ["inbound-rtp", "outbound-rtp"]) {
-        const bytes = (snapshot) => snapshot.rtp.filter((stat) => stat.type === type).reduce((total, stat) => total + stat.bytes, 0);
-        assert.ok(bytes(after[index]) > bytes(before[index]), `${label}: participant ${index} ${type} must keep flowing`);
-      }
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const before = await sample(`${label}: media start`);
+      await wait(3000);
+      const after = await sample(`${label}: media end`);
+      const flowing = pages.every((_page, index) =>
+        ["inbound-rtp", "outbound-rtp"].every((type) => {
+          const bytes = (snapshot) => snapshot.rtp.filter((stat) => stat.type === type).reduce((total, stat) => total + stat.bytes, 0);
+          return bytes(after[index]) > bytes(before[index]);
+        }),
+      );
+      if (flowing) return;
+      if (after.some((snapshot) => snapshot.connection.status === "failed")) break;
+    }
+    assert.fail(`${label}: every participant must send and receive fresh RTP within 30 seconds`);
   };
   await proveMediaFlow("baseline");
   report.stage = "slow working link";
+  // Burst loss also exercises existing media peers; CDP alone leaves their RTP flowing.
+  lossPulse = setInterval(() => {
+    setPacketLoss(true);
+    lossPulseEnd = setTimeout(() => setPacketLoss(false), 40);
+  }, 2000);
   await setLink({ latency: 2400, downloadThroughput: 32000, uploadThroughput: 32000, packetLoss: 2 });
   await wait(45000);
   await sample("45s slow link");
   await proveMediaFlow("slow working link");
+  report.packetLossCounters = iptables("-L", dropChain, "-v", "-n", "-x").toString();
+  assert.match(report.packetLossCounters, /^\s*[1-9]\d*\s+\d+\s+DROP/m, "kernel must actually drop media packets");
+  clearInterval(lossPulse);
+  clearTimeout(lossPulseEnd);
+  setPacketLoss(false);
   await setLink({});
   await wait(10000);
   for (const seconds of [5, 15, 30]) {
     report.stage = `outage ${seconds}s`;
     console.log(JSON.stringify({ event: "outage_start", seconds, at: Date.now() }));
-    await setLink({ offline: true, packetLoss: 100 });
     await Promise.all(pages.map((page) => page.context().setOffline(true)));
-    await wait(seconds * 1000);
+    setPacketLoss(true);
+    await setLink({ offline: true, packetLoss: 100 });
+    await wait(3000);
+    const silenceStart = await sample(`${seconds}s outage: loss window start`);
+    await wait(seconds * 1000 - 3000);
+    const silenceEnd = await sample(`${seconds}s outage: loss window end`);
+    const receivedBytes = (snapshot) => snapshot.rtp.filter((stat) => stat.type === "inbound-rtp").reduce((total, stat) => total + stat.bytes, 0);
+    for (let index = 0; index < pages.length; index++) assert.ok(receivedBytes(silenceEnd[index]) <= receivedBytes(silenceStart[index]), `participant ${index} must receive no new media during the outage`);
+    setPacketLoss(false);
     await setLink({});
     await Promise.all(pages.map((page) => page.context().setOffline(false)));
     console.log(JSON.stringify({ event: "outage_end", seconds, at: Date.now() }));
@@ -274,6 +323,17 @@ try {
   throw error;
 } finally {
   await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
+  clearInterval(lossPulse);
+  clearTimeout(lossPulseEnd);
+  for (const { direction, port } of packetFilters) iptables("-D", direction, "-p", "udp", "!", port, "53", "-j", packetChain);
+  if (packetChainCreated) {
+    iptables("-F", packetChain);
+    iptables("-X", packetChain);
+  }
+  if (dropChainCreated) {
+    iptables("-F", dropChain);
+    iptables("-X", dropChain);
+  }
   for (const session of networkSessions) await session.detach();
   for (const browser of browsers) await browser.close();
   if (episode && chalk) await chalk.episodes.end(space.id, episode.id).catch((error) => console.error(error.message));
