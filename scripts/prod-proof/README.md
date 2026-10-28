@@ -21,6 +21,12 @@ Signed webhook proofs use a temporary Webhook.site receiver. Voice generation us
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Headless Chromium only.
 
+Every two-guest media proof now checks each participant's local microphone and
+camera state against every other participant's Sync-derived media state and
+actual playback: nonzero audio energy and advancing video frames. It saves
+the media-agreement JSON artifact alongside the recording and RTP evidence.
+The deployed web proof also checks rendered badges in Chromium and WebKit.
+
 ## Configuration and ownership
 
 By default, the local command reads the 1Password item `Chalk production proof Tenant`. It holds

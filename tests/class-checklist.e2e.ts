@@ -32,6 +32,7 @@ async function roster(pages: Page[], timeout = 10_000) {
     for (const name of names) await expect.poll(() => tile(page, name).count(), { timeout }).toBe(1);
     await expect.poll(() => tiles(page).count(), { timeout }).toBe(3);
   }
+  await assertAgreement(pages);
 }
 
 async function join(page: Page, name: string, url: string) {
@@ -156,7 +157,6 @@ async function classroom(scenario: string, check: (pages: Page[], contexts: Brow
     await join(pages[1], "Student", url);
     await join(pages[2], "Admin", url);
     await roster(pages);
-    await assertAgreement(pages);
     await shot(pages, `${scenario}-joined`);
     await check(
       pages,
