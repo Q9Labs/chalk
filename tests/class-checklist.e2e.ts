@@ -48,6 +48,8 @@ async function shot(pages: Page[], label: string) {
 
 async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => Promise<void>) {
   await mkdir(output, { recursive: true });
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error("The class checklist requires disposable Linux/Instabox");
   const browsers: Browser[] = [];
   const processes: ReturnType<typeof spawn>[] = [];
   const profiles: string[] = [];
@@ -60,8 +62,23 @@ async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => P
       const profile = await mkdtemp(joinPath(tmpdir(), "chalk-class-"));
       profiles.push(profile);
       const process = spawn(
-        "setpriv",
-        [`--rgid=${20000 + index}`, `--egid=${20000 + index}`, "--clear-groups", chromium.executablePath(), "--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--window-size=1440,960", "--autoplay-policy=no-user-gesture-required", "about:blank"],
+        "sudo",
+        [
+          "-n",
+          "setpriv",
+          `--reuid=${uid}`,
+          `--rgid=${20000 + index}`,
+          `--egid=${20000 + index}`,
+          "--clear-groups",
+          chromium.executablePath(),
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--remote-debugging-port=0",
+          `--user-data-dir=${profile}`,
+          "--window-size=1440,960",
+          "--autoplay-policy=no-user-gesture-required",
+          "about:blank",
+        ],
         { stdio: ["ignore", "ignore", "pipe"] },
       );
       processes.push(process);
@@ -170,7 +187,7 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
   const installed: string[][] = [];
   try {
     for (const rule of rules) {
-      await command("iptables", ["-I", "OUTPUT", ...rule]);
+      await command("sudo", ["-n", "iptables", "-I", "OUTPUT", ...rule]);
       installed.push(rule);
     }
     await wait(duration);
@@ -179,7 +196,7 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
     expect(await tiles(student).count()).toBe(0);
     await student.screenshot({ path: `${output}/offline-${duration}.png` });
   } finally {
-    for (const rule of installed.reverse()) await command("iptables", ["-D", "OUTPUT", ...rule]);
+    for (const rule of installed.reverse()) await command("sudo", ["-n", "iptables", "-D", "OUTPUT", ...rule]);
     await context.setOffline(false);
   }
   await rejoin(student, pages);

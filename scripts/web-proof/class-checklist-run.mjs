@@ -24,7 +24,7 @@ try {
   const output = `.private/class-checklist/run-${run}`;
   await mkdir(output, { recursive: true });
   const code = await new Promise((resolve, reject) => {
-    child = spawn("pnpm", ["exec", "e2e", "run"], {
+    child = spawn("pnpm", ["exec", "e2e", "run", ...process.argv.slice(2)], {
       stdio: "inherit",
       env: { ...process.env, CHALK_CLASS_CHECKLIST: "1", CHALK_CLASS_OUTPUT: output, CHALK_PROOF_WEB_URL: config.urls.web },
     });
