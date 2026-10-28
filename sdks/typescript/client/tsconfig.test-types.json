@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.check-types.json",
-  "include": ["src/space-client/error-code-compatibility.test.ts", "src/api-key-error-compatibility.test.ts"],
+  "include": ["src/space-client/error-code-compatibility.test.ts", "src/api-key-error-compatibility.test.ts", "src/space-client/promise-facade.test.ts"],
   "exclude": ["node_modules", "dist"]
 }
