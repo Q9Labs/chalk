@@ -24,7 +24,9 @@ Never point this command at production or nightly.
 
 There was no existing slow split. `CHALK_CLASS_CHECKLIST=1` selects only this
 suite and extends its per-test timeout to eleven minutes; ordinary `test:e2e`
-still selects the existing call and board suites. No model assertions or cache
+still selects the existing call and board suites. A sixth fresh-call control uses the same native-browser media assertions before
+any outage; failed media runs also save bounded sender/receiver audio evidence.
+No model assertions or cache
 entries are used. Retries remain disabled. Each fresh invocation starts its own
 local stack and writes case outcomes/timings and screenshots under
 `.private/class-checklist/run-<CHALK_CLASS_RUN>/`. A setup failure before a case
