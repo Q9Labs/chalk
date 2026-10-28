@@ -37,6 +37,22 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     await assertAgreement([replacement, pages[1]], { timeoutMs: recoveryTimeoutMs });
     return replacement;
   }
+  async function recoverPausedSource(page, { source, onLabel }) {
+    const local = await page.evaluate((source) => {
+      const local = window.__chalk.agreementSnapshot().media.local[source];
+      return { state: local.state, capturing: local.track?.enabled ?? false };
+    }, source);
+    if (local.state === "enabled") return;
+    assert.equal(local.capturing, false, "Revoked consent must leave capture physically paused");
+    await clickControl(page, onLabel);
+  }
+  async function recoverPausedCapture(pages) {
+    // Transport recovery may preserve capture or revoke stale consent. Before
+    // any new tap, the person's controls and the class must already agree.
+    await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
+    for (const page of pages) for (const control of mediaControls) await recoverPausedSource(page, control);
+    await enabledCapture(pages);
+  }
   async function toggleSource(pages, owner, { action, source }) {
     for (const enabled of [false, true]) {
       await invoke(owner, action, enabled);
@@ -183,7 +199,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         await pages[1].waitForFunction((id) => window.__chalk.snapshot().chat.messages.some((item) => item.clientMessageId === id), message.clientMessageId);
         await truth(pages);
         await waitForState(pages[0], "live", recoveryTimeoutMs);
-        await enabledCapture(pages);
+        await recoverPausedCapture(pages);
         await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
         assert.equal((await pages[0].evaluate(() => window.__chalk.connectionHistory())).includes("failed"), false, "Media loss became terminal while Sync was healthy");
         assert.equal((await pages[0].evaluate(() => window.__chalk.connectionErrorHistory())).includes("connection.media_recovery_exhausted"), false, "Media recovery exhausted early, even if a later background attempt succeeded");
