@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, writeFile, mkdir, symlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm, symlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createConnection, createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
@@ -107,6 +107,7 @@ export const synchronizeChalkStaffDisplayName = () => {};
   const tarball = resolve(out, "sdk520.tgz");
   await writeFile(tarball, archive);
   execFileSync("tar", ["-xzf", tarball, "-C", oldRoot]);
+  await rm(resolve(oldRoot, "package/node_modules"), { force: true });
   await symlink(resolve(repository, "sdks/typescript/client/node_modules"), resolve(oldRoot, "package/node_modules"));
   for (const version of ["5.2.0", "775c0b991"]) {
     const bundle = resolve(out, `${version}.js`);
