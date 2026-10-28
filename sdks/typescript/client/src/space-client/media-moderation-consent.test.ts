@@ -2,6 +2,31 @@ import { expect, it, vi } from "vitest";
 import { capturedClient, createConvergenceScenario, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform } from "./core.test.helpers";
 import { control } from "./terminal.test.helpers";
+import { ConnectionReporter, type ConnectionReport } from "../connection/report";
+
+let reportClock = 0;
+function reportedPlatform() {
+  const platform = createCoreTestPlatform();
+  const reports: ConnectionReport[] = [];
+  const offset = ++reportClock * 120000;
+  return {
+    ...platform,
+    reports,
+    dependencies: {
+      ...platform.dependencies,
+      createConnectionReporter: (access: ConstructorParameters<typeof ConnectionReporter>[0]["access"]) =>
+        new ConnectionReporter({
+          access,
+          now: () => Date.now() + offset,
+          online: () => true,
+          subscribeOnline: () => () => {},
+          send: async (_access, report) => {
+            reports.push(report);
+          },
+        }),
+    },
+  };
+}
 
 it.each(["microphone", "camera"] as const)("a host stop during pending %s capture cancels the earlier enable before send", async (source) => {
   const test = createConvergenceScenario(source);
@@ -55,45 +80,52 @@ it.each(["microphone", "camera"] as const)("an older %s stop cannot revoke conse
   }
 });
 
-it.each(["microphone", "camera"] as const)("two clients sharing a participant never automatically change each other's %s", async (source) => {
-  const first = createCoreTestPlatform();
-  const second = createCoreTestPlatform();
-  const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
-  const publication = { participantId: "participant-1", source, enabled: true, publicationId: "first-tab-publication" };
-  let sequence = 0;
-  const project = (enabled: boolean) => {
-    const media = { projectionId: "same-person", sequence: ++sequence, items: [{ ...publication, enabled }] };
-    first.emitSync({ ...first.sync.getSnapshot(), media });
-    second.emitSync({ ...second.sync.getSnapshot(), media });
-  };
-  const receipt = { operationId: "explicit", name: source === "microphone" ? ("set_microphone_enabled" as const) : ("set_camera_enabled" as const), serverOutcome: "confirmed" as const, mediaPlaneOutcome: "satisfied" as const };
-  const firstCommand = vi.fn(async (enabled: boolean) => {
-    project(enabled);
-    return receipt;
-  });
-  const secondCommand = vi.fn(async (enabled: boolean) => {
-    project(enabled);
-    return receipt;
-  });
-  const a = capturedClient(first, track, { sync: { setMicrophoneEnabled: firstCommand, setCameraEnabled: firstCommand } });
-  const b = capturedClient(second, Object.assign(mediaTrack(), { kind: track.kind }), { sync: { setMicrophoneEnabled: secondCommand, setCameraEnabled: secondCommand } });
-  try {
-    await a.join({ microphone: source === "microphone", camera: source === "camera" });
-    await b.join({ microphone: false, camera: false });
-    first.media.emit({ ...first.media.getSnapshot(), localTracks: [{ ...publication, track }] });
-    project(true);
-    await new Promise((resolve) => setTimeout(resolve, 5300));
-    expect(firstCommand).not.toHaveBeenCalled();
-    expect(secondCommand).not.toHaveBeenCalled();
-    expect(track.enabled).toBe(true);
-    expect(first.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
-    expect(a.getSnapshot().media.local[source].state).toBe("enabled");
-    expect(b.getSnapshot().media.local[source].state).toBe("disabled");
-  } finally {
-    a.dispose();
-    b.dispose();
-  }
-});
+it.each(["microphone", "camera"] as const)(
+  "two clients sharing a participant never automatically change each other's %s",
+  async (source) => {
+    const first = reportedPlatform();
+    const second = reportedPlatform();
+    const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
+    const publication = { participantId: "participant-1", source, enabled: true, publicationId: "first-tab-publication" };
+    let sequence = 0;
+    const project = (enabled: boolean) => {
+      const media = { projectionId: "same-person", sequence: ++sequence, items: [{ ...publication, enabled }] };
+      first.emitSync({ ...first.sync.getSnapshot(), media });
+      second.emitSync({ ...second.sync.getSnapshot(), media });
+    };
+    const receipt = { operationId: "explicit", name: source === "microphone" ? ("set_microphone_enabled" as const) : ("set_camera_enabled" as const), serverOutcome: "confirmed" as const, mediaPlaneOutcome: "satisfied" as const };
+    const firstCommand = vi.fn(async (enabled: boolean) => {
+      project(enabled);
+      return receipt;
+    });
+    const secondCommand = vi.fn(async (enabled: boolean) => {
+      project(enabled);
+      return receipt;
+    });
+    const a = capturedClient(first, track, { sync: { setMicrophoneEnabled: firstCommand, setCameraEnabled: firstCommand } });
+    const b = capturedClient(second, Object.assign(mediaTrack(), { kind: track.kind }), { sync: { setMicrophoneEnabled: secondCommand, setCameraEnabled: secondCommand } });
+    try {
+      await a.join({ microphone: source === "microphone", camera: source === "camera" });
+      await b.join({ microphone: false, camera: false });
+      first.media.emit({ ...first.media.getSnapshot(), localTracks: [{ ...publication, track }] });
+      project(true);
+      await new Promise((resolve) => setTimeout(resolve, 5300));
+      expect(firstCommand).not.toHaveBeenCalled();
+      expect(secondCommand).not.toHaveBeenCalled();
+      expect(track.enabled).toBe(true);
+      expect(first.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
+      expect(a.getSnapshot().media.local[source].state).toBe("enabled");
+      expect(b.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(first.reports).toHaveLength(0);
+      expect(second.reports).toHaveLength(1);
+      expect(second.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source, publication_state: "off", projection_state: "on", attempt: 0 });
+    } finally {
+      a.dispose();
+      b.dispose();
+    }
+  },
+  10000,
+);
 
 it("does not ignore a host stop merely because the microphone projection is still on", async () => {
   const test = createConvergenceScenario("microphone");
