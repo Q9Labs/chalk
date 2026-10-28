@@ -74,11 +74,7 @@ addSourceRule(
   "forbid-unjustified-suppression",
   "Structural and lint suppressions need a same-line reason after --.",
   {
-    all: [
-      { kind: "comment" },
-      { regex: "^\\s*(?://|/\\*)\\s*(?:ast-grep-ignore|(?:eslint|oxlint)-disable(?:-next-line|-line)?)(?:\\s|:|\\*/|$)" },
-      { not: { regex: "--\\s*[^\\s*]" } },
-    ],
+    all: [{ kind: "comment" }, { regex: "^\\s*(?://|/\\*)\\s*(?:ast-grep-ignore|(?:eslint|oxlint)-disable(?:-next-line|-line)?)(?:\\s|:|\\*/|$)" }, { not: { regex: "--\\s*[^\\s*]" } }],
   },
   { ignores: [...tests, "**/__tests__/**", "**/routeTree.gen.ts", "**/generated/**", "**/openapi-generated/**"] },
 );
