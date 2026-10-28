@@ -13,6 +13,8 @@ type PeerState = {
   negotiateAgain: boolean;
 };
 
+type LocalTrack = { track: MediaStreamTrack; enabled: boolean; publicationId: string | null };
+
 type FixtureMediaClientInput = {
   readonly access: {
     readonly subject: { readonly participantId: string };
@@ -32,7 +34,8 @@ export class FixtureMediaClient {
   readonly #listeners = new Set<() => void>();
   readonly #localListeners = new Set<(items: readonly MediaPublication[]) => void>();
   readonly #remoteListeners = new Set<(items: readonly MediaPublication[]) => void>();
-  readonly #local = new Map<MediaSource, { track: MediaStreamTrack; enabled: boolean }>();
+  readonly #local = new Map<MediaSource, LocalTrack>();
+  readonly #advertised = new Map<MediaSource, MediaPublication>();
   readonly #pausedSources = new Set<MediaSource>();
   readonly #onFailure: (error: unknown, binding?: string) => void;
   readonly #onScreenEnded: () => void;
@@ -44,6 +47,7 @@ export class FixtureMediaClient {
   #remotePublications: readonly MediaPublication[] = [];
   #snapshot: CloudflareSFUSnapshot;
   #socket: WebSocket | null = null;
+  #publicationSequence = 0;
 
   constructor(signalingURL: string, input: FixtureMediaClientInput) {
     this.#signalingURL = signalingURL;
@@ -63,22 +67,29 @@ export class FixtureMediaClient {
   // proved by scripts/dev/share-audio-proof.mjs, so the fake doesn't send it.
   prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
     if (source === "screen_audio") return;
+    this.#prepareSource(source, track);
+  }
+
+  #prepareSource(source: MediaSource, track: MediaStreamTrack): void {
     if (this.#pausedSources.has(source)) track.enabled = false;
-    this.#local.set(source, { track, enabled: false });
+    const publication = this.#advertised.get(source) ?? { publicationId: null };
+    this.#local.set(source, { track, enabled: false, publicationId: publication.publicationId });
     if (source === "screen") track.addEventListener("ended", this.#onScreenEnded, { once: true });
     this.#publish();
   }
 
-  async clearPreparedLocalTrack(source: MediaPublicationSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaPublicationSource, options: { readonly stopTrack?: boolean } = {}): Promise<void> {
     if (source === "screen_audio") return;
     const local = this.#local.get(source);
     if (!local) return;
     local.enabled = false;
+    local.track.enabled = false;
     await this.#detachLocalTrack(source);
-    releaseTrack(local.track);
+    if (options.stopTrack !== false) releaseTrack(local.track);
     this.#local.delete(source);
+    // Production detaches capture but keeps the provider publication for reuse.
+    // Clearing a prepared track must not silently repair a stale Sync On.
     this.#sendPublications();
-    await this.#renegotiateAll();
     this.#publish();
   }
 
@@ -90,8 +101,8 @@ export class FixtureMediaClient {
   }
 
   async start(stream: MediaStream): Promise<void> {
-    for (const track of stream.getTracks()) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
-    for (const local of this.#local.values()) local.enabled = local.track.enabled;
+    for (const track of stream.getTracks()) this.#prepareSource(track.kind === "audio" ? "microphone" : "camera", track);
+    this.#advertiseTracks();
     this.#publish("connecting");
     await this.#connect();
     this.#sendPublications();
@@ -100,7 +111,9 @@ export class FixtureMediaClient {
 
   async restart(input: CloudflareSFUBootstrap | FixtureMediaAccess): Promise<void> {
     this.#bootstrap = fixtureBootstrap(input);
-    for (const local of this.#local.values()) local.enabled = local.track.enabled;
+    this.#advertised.clear();
+    for (const local of this.#local.values()) local.publicationId = null;
+    this.#advertiseTracks();
     this.#publish("recovering");
     this.#closeNetwork();
     try {
@@ -125,6 +138,7 @@ export class FixtureMediaClient {
     for (const local of this.#local.values()) releaseTrack(local.track);
     for (const remote of this.#received.values()) releaseTrack(remote.track);
     this.#local.clear();
+    this.#advertised.clear();
     this.#received.clear();
     this.#remotePublications = [];
     this.#publish("stopped");
@@ -164,12 +178,21 @@ export class FixtureMediaClient {
 
   async closeForcedLocalPublication(source: MediaSource): Promise<void> {
     this.setLocalSourceIntent(source, false);
-    await this.setLocalPublicationTarget({ operationId: "fixture-local-pause", participantId: this.#participantId, source, enabled: false });
+    const local = this.#local.get(source);
+    if (local) {
+      local.enabled = false;
+      local.publicationId = null;
+    }
+    this.#advertised.delete(source);
+    await this.#detachLocalTrack(source);
+    this.#sendPublications();
+    this.#publish();
   }
 
-  async #applyLocalTarget(target: MediaPlaneTarget, local: { track: MediaStreamTrack; enabled: boolean }): Promise<void> {
+  async #applyLocalTarget(target: MediaPlaneTarget, local: LocalTrack): Promise<void> {
     local.enabled = target.enabled;
     local.track.enabled = target.enabled;
+    this.#advertise(target.source, local);
     if (!target.enabled) return;
     for (const peer of this.#peers.values()) await this.#addSender(peer, target.source, local.track);
     await this.#renegotiateAll();
@@ -370,11 +393,23 @@ export class FixtureMediaClient {
 
   #sendPublications(): void {
     if (this.#socket?.readyState !== WebSocket.OPEN) return;
-    this.#socket.send(JSON.stringify({ type: "publications", publications: this.#localProjection() }));
+    this.#socket.send(JSON.stringify({ type: "publications", publications: [...this.#advertised.values()] }));
+  }
+
+  #advertiseTracks(): void {
+    for (const [source, local] of this.#local) {
+      local.enabled = local.track.enabled;
+      this.#advertise(source, local);
+    }
+  }
+
+  #advertise(source: MediaSource, local: LocalTrack): void {
+    if (local.enabled && !local.publicationId) local.publicationId = `${this.#bootstrap.connectionId}|${source}|${++this.#publicationSequence}`;
+    this.#advertised.set(source, { participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.publicationId });
   }
 
   #localProjection(): readonly MediaPublication[] {
-    return [...this.#local].map(([source, local]) => ({ participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null }));
+    return [...this.#local].map(([source, local]) => ({ participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.publicationId }));
   }
 
   #removePeer(remote: string): void {
@@ -397,7 +432,7 @@ export class FixtureMediaClient {
   }
 
   #makeSnapshot(phase: CloudflareSFUSnapshot["connection"]["phase"], failure: CloudflareSFUSnapshot["failure"]): CloudflareSFUSnapshot {
-    const localTracks: readonly CloudflareSFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null, track: local.track }));
+    const localTracks: readonly CloudflareSFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.publicationId, track: local.track }));
     const remoteTracks = projectFixtureRemoteTracks(this.#remotePublications, this.#received);
     return { connection: { phase, peerConnectionState: null, iceConnectionState: null }, cursor: null, localTracks, remoteTracks, failure };
   }
