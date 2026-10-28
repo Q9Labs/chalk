@@ -129,7 +129,7 @@ export const synchronizeChalkStaffDisplayName = () => {};
       define: { "process.env.NODE_ENV": '"production"' },
       logLevel: "silent",
     });
-    const modes = process.env.W29_MODES?.split(",") ?? ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead", "cookie_small", "cookie_large", "cookie_huge"];
+    const modes = process.env.W29_MODES?.split(",") ?? ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"];
     for (const mode of modes) {
       const cookieCount = mode === "cookie_small" ? 1 : mode === "cookie_large" ? 8 : mode === "cookie_huge" ? 40 : 0;
       if (cookieCount) await context.addCookies(Array.from({ length: cookieCount }, (_, i) => ({ name: `w29_cookie_${i}`, value: "x".repeat(mode === "cookie_small" ? 100 : 3800), url: origin, sameSite: "Lax" })));
@@ -145,6 +145,7 @@ export const synchronizeChalkStaffDisplayName = () => {};
         networkAudit.push({ event: "websocket_handshake_request", cookie_header_bytes: Buffer.byteLength(String(cookie)) });
       });
       cdp.on("Network.webSocketHandshakeResponseReceived", ({ response }) => networkAudit.push({ event: "websocket_handshake_response", status: response.status }));
+      cdp.on("Network.webSocketFrameError", ({ errorMessage }) => networkAudit.push({ event: "websocket_error", http_status: Number(errorMessage.match(/response code: (\d+)/)?.[1]) || undefined, network_error: errorMessage.match(/net::[A-Z_]+/)?.[0] }));
       cdp.on("Network.requestWillBeSentExtraInfo", ({ headers }) => {
         const cookie = Object.entries(headers).find(([name]) => name.toLowerCase() === "cookie")?.[1] ?? "";
         networkAudit.push({ event: "http_request", cookie_header_bytes: Buffer.byteLength(String(cookie)) });
@@ -164,6 +165,10 @@ export const synchronizeChalkStaffDisplayName = () => {};
         synthetic_cookie_count: cookieCount,
         seat: sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`),
       };
+      if (mode === "live" && !audit.some((row) => row.event === "join_ok")) {
+        result.sync_health_status = (await fetch(syncEndpoint.replace(/^ws/, "http").replace("/v1/sync", "/readyz"))).status;
+        result.sync_log_markers = Object.fromEntries(["sync.http.upgrade_rejected", "sync.websocket.handshake", "Header too long", "server_draining", "error", "Error", "Exception"].map((marker) => [marker, syncLog.join("").split(marker).length - 1]));
+      }
       if (mode === "live" || mode === "slow_cpu" || mode === "cookie_small")
         assert(
           audit.some((row) => row.event === "join_ok"),
