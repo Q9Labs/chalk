@@ -41,11 +41,12 @@ export async function sampleAgreement() {
     const tile = tiles.find((tile) => tile.dataset.participantId === participant.id);
     const video = tile?.querySelector("video") ?? [...document.querySelectorAll("video[data-participant-id]")].find((element) => element.dataset.participantId === participant.id);
     const audio = window.__agreementAudio?.findLast((element) => element.dataset.participantId === participant.id && element.srcObject);
+    const audioStream = audio?.srcObject;
     let energy = 0;
-    if (audio && !audio.paused && !audio.muted && audio.volume > 0) {
+    if (audio && audioStream && !audio.paused && !audio.muted && audio.volume > 0) {
       const context = new AudioContext();
       await context.resume();
-      const source = context.createMediaStreamSource(audio.srcObject);
+      const source = context.createMediaStreamSource(audioStream);
       const analyser = context.createAnalyser();
       source.connect(analyser);
       const samples = new Float32Array(analyser.fftSize);
