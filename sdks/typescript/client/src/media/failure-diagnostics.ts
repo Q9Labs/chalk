@@ -7,19 +7,7 @@ export type GrantedMedia = Required<Pick<ReportEvent, "granted_audio" | "granted
 type MediaFailureStep = NonNullable<ReportEvent["media_error_step"]>;
 const steps = new WeakMap<object, MediaFailureStep>();
 const fetchFailures = new WeakSet<object>();
-const domErrorKinds = new Map<string, MediaFailureDiagnostic["media_error_kind"]>([
-  ["NotAllowedError", "NotAllowedError"],
-  ["NotReadableError", "NotReadableError"],
-  ["NotFoundError", "NotFoundError"],
-  ["OverconstrainedError", "OverconstrainedError"],
-  ["AbortError", "AbortError"],
-  ["SecurityError", "SecurityError"],
-  ["InvalidStateError", "InvalidStateError"],
-  ["OperationError", "OperationError"],
-  ["NotSupportedError", "NotSupportedError"],
-  ["TimeoutError", "timeout"],
-  ["NetworkError", "network"],
-]);
+const domErrorKinds = ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError"] as const;
 
 export function grantedMediaFromStream(stream: MediaStream): GrantedMedia {
   const liveTracks = stream.getTracks().filter((track) => track.readyState === "live");
@@ -60,7 +48,9 @@ export function classifyMediaFailure(cause: unknown, fallbackStep: MediaFailureS
     };
   }
   if (typeof DOMException !== "undefined" && error instanceof DOMException) {
-    return { media_error_kind: domErrorKinds.get(error.name) ?? "unknown", media_error_step: step };
+    const name = error.name;
+    const kind = domErrorKinds.find((kind) => kind === name) ?? (name === "TimeoutError" ? "timeout" : name === "NetworkError" ? "network" : "unknown");
+    return { media_error_kind: kind, media_error_step: step };
   }
   // Fetch rejects with TypeError; a TypeError elsewhere is not proof of a network failure.
   return { media_error_kind: error instanceof TypeError && fetchFailures.has(error) ? "network" : "unknown", media_error_step: step };
