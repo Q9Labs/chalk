@@ -10,6 +10,6 @@ test("browser recovery waits outlive actual Sync and media budgets", () => {
 });
 
 test("the proof follows a media budget change without another hardcoded timeout", () => {
-  assert.deepEqual(recoveryBudgets("const SYNC_RECOVERY_BUDGET_MS = WAIT_MS; const RECOVERY_BUDGET_MS = WAIT_MS; const WAIT_MS = 60_000;"), { syncMs: 60_000, mediaMs: 60_000, timeoutMs: 75_000 });
+  assert.deepEqual(recoveryBudgets("const RECOVERY_BUDGET_MS = WAIT_MS; const WAIT_MS = 60_000; waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS,"), { syncMs: 60_000, mediaMs: 60_000, timeoutMs: 75_000 });
   assert.throws(() => recoveryBudgets(""), /Cannot read/);
 });
