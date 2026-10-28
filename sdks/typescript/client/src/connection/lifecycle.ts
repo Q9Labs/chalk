@@ -491,7 +491,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                       }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
-                    onFailure: (cause) => enqueueBackground(handleMediaFailure(cause)),
+                    onFailure: (cause) => enqueueBackground(handleMediaFailure(media, cause)),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)),
@@ -964,9 +964,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
-      const handleMediaFailure = (cause: unknown): Effect.Effect<void> => {
-        if (active(model) && sfuAccessRejected(cause)) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
-        return model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void;
+      const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown): Effect.Effect<void> => {
+        if (media !== model.media) return Effect.void;
+        if (active(model) && media.getSnapshot().connection.phase === "failed" && sfuAccessRejected(cause)) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
+        return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
         Effect.gen(function* () {
