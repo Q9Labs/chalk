@@ -74,7 +74,7 @@ it("repairs an enabled publication stuck muted in Sync and opens the receiver au
     await test.join();
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("requesting");
     expect(test.received.enabled).toBe(false);
-    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true), { timeout: 2000 });
+    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true, { signal: expect.any(AbortSignal) }), { timeout: 2000 });
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
     expect(test.platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
     expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
@@ -173,10 +173,45 @@ it("reconciles again after a Sync reconnect instead of revoking a healthy public
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
     test.project(false);
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
-    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true), { timeout: 2000 });
+    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(true, { signal: expect.any(AbortSignal) }), { timeout: 2000 });
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
     expect(test.received.enabled).toBe(true);
   } finally {
     test.dispose();
+  }
+});
+
+it("releases an expired repair so a manual retry and mute do not wait for its late completion", async () => {
+  const test = scenario();
+  const schedule = vi.spyOn(test.platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => globalThis.setTimeout(callback, milliseconds));
+  let finish = () => {};
+  try {
+    await test.join();
+    test.project(true);
+    vi.useFakeTimers();
+    test.command.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ operationId: "late", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
+        }),
+    );
+    test.project(false);
+    await vi.advanceTimersByTimeAsync(8750);
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("failed");
+    expect(test.command.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    vi.useRealTimers();
+    const retry = test.client.media.setMicrophoneEnabled(true);
+    await vi.waitFor(() => expect(test.command).toHaveBeenCalledTimes(2));
+    await retry;
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("enabled");
+    await test.client.media.setMicrophoneEnabled(false);
+    finish();
+    await Promise.resolve();
+    expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(test.received.enabled).toBe(false);
+  } finally {
+    finish();
+    test.dispose();
+    schedule.mockRestore();
   }
 });

@@ -3,7 +3,7 @@ import { MediaProjectionReconciler } from "./media-projection-reconciler";
 
 afterEach(() => vi.useRealTimers());
 
-function fixture(send = vi.fn(async () => undefined)) {
+function fixture(send: ConstructorParameters<typeof MediaProjectionReconciler>[0]["send"] = vi.fn(async () => undefined)) {
   vi.useFakeTimers();
   const report = vi.fn();
   const changed = vi.fn();
@@ -23,6 +23,7 @@ it("waits for the matching projection, not a successful target acknowledgement",
   expect(reconciler.state("microphone")).toBe("requesting");
   reconciler.observe("microphone", { ...observation, projectedEnabled: true, projectedPublicationId: "publication-1" });
   expect(reconciler.state("microphone")).toBeNull();
+  expect(vi.mocked(send).mock.calls[0]?.[2].aborted).toBe(true);
   await vi.advanceTimersByTimeAsync(10000);
   expect(send).toHaveBeenCalledOnce();
 });
@@ -58,6 +59,7 @@ it("expires even a hung target, cancels on leave, and rechecks a new publication
   await vi.advanceTimersByTimeAsync(8750);
   expect(reconciler.state("microphone")).toBe("failed");
   expect(send).toHaveBeenCalledOnce();
+  expect(vi.mocked(send).mock.calls[0]?.[2].aborted).toBe(true);
   reconciler.observe("microphone", { ...observation, publicationId: "replacement" });
   expect(reconciler.state("microphone")).toBe("requesting");
   reconciler.reset();
